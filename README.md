@@ -1090,6 +1090,24 @@ it cannot ship, runs its `action:`s only in the run's worktree and gets only the
 workspace allows. Your per-agent model choices stay in the workspace. This repository declares its
 four flows this way. Details: [`docs/agents/engine/repository-workflows.md`](docs/agents/engine/repository-workflows.md).
 
+## Ways of working: an interview that writes your workflows
+
+On a project's page, **Ways of working** opens a drawer that proposes how to work on the
+repository instead of drawing a workflow from scratch. It shows the price first (the
+`ways-of-working` analysis seed, read-only, one or two turns); **Analyze** then reads the commit
+history (authors, merges, squash vs merge), tags and releases, CI files, test and build scripts and
+the Architecture facts, and shows the profile with its evidence ("one author, merges straight to
+main, a tag every two weeks: Solo: local merge + Release: milestone"). The interview asks only what
+the analysis could not settle (validation, budget per issue, screenshots, review rigour, and the
+team, merge or release style when the history does not say); every answer has a default from the
+profile, and **Edit profile** overrides any inferred field (team, merge, release, CI, test and
+check commands, languages). The proposed set (intake, development in the chosen style, release in
+the chosen style) is composed from the step fragments with the project's facts in the prompts.
+**Open in Builder** opens the development workflow unsaved; **Write to the repository** puts the
+files under `.multiagent/workflows/` and merges them into `.multiagent/project.yaml` (other
+entries are kept), uncommitted: you commit them. Details:
+[`docs/agents/seeds.md`](docs/agents/seeds.md) and [`docs/agents/engine.md`](docs/agents/engine.md).
+
 ## Skills
 
 Skills are reusable instructions (`SKILL.md` + support files) that the engine injects into the

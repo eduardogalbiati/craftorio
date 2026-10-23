@@ -29,6 +29,7 @@ const BUNDLED = [
   'dependency-map',
   'pipeline-anatomy',
   'quality-gate-report',
+  'ways-of-working',
 ];
 
 const SEED = 'churn-complexity';
@@ -97,7 +98,7 @@ test('#360 the workspace gets the bundled seeds when the service starts', (t) =>
   assert.equal(fs.existsSync(file), true, `${file} exists`);
 });
 
-test('#360 seeds:list lists the four bundled seeds, never run and without a tool', async (t) => {
+test('#360 seeds:list lists the bundled seeds, never run and without a tool', async (t) => {
   const { api, projectId } = await setup(t);
   const list = await call(api, 'seeds:list', { projectId });
   assert.deepEqual(list.map((r) => r.id).sort(), BUNDLED);

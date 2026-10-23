@@ -4,6 +4,7 @@
 // (seeds:estimate), runs it on "Analyze" (workflows:interview: the seeds/ways-of-working seed, read-only),
 // then shows the inferred profile with its evidence, the questions the analysis left open (each set to
 // its default from the profile), and the proposed set (workflows:compose, recomposed on every answer).
+// "Edit profile" lets the owner override any inferred field (answers named after the profile's fields).
 // "Open in Builder" opens the development workflow in the Builder unsaved (window.openSpecInBuilder);
 // "Write to the repository" writes the set to the project's .multiagent/ (uncommitted) and reloads the
 // page's Workflows block. Nothing runs before "Analyze" and nothing is written before "Write".
@@ -20,19 +21,43 @@
     release: 'ways_of_working.q_release',
     review: 'ways_of_working.q_review',
     screenshots: 'ways_of_working.q_screenshots',
+    team: 'ways_of_working.q_team',
     validate: 'ways_of_working.q_validate',
   };
-  let cur = null; // { project, el, backdrop, estimate, phase, error, result, answers, proposed, composing, writing }
+  // the profile's fields the owner may override (src/workflow-compose.js PROFILE_FIELDS): a fixed list is
+  // a select (an empty value keeps the inferred one), a command or a list of languages is free text
+  const PROFILE_EDIT = [
+    { id: 'team', label: 'ways_of_working.q_team', options: [['solo', 'ways_of_working.solo'], ['team', 'ways_of_working.team']] },
+    { id: 'merge', label: 'ways_of_working.q_merge', options: [['local', 'ways_of_working.merge_local'], ['pr', 'ways_of_working.merge_pr']] },
+    { id: 'release', label: 'ways_of_working.q_release', options: [['milestone'], ['per-merge'], ['train'], ['rc-stable']] },
+    { id: 'ci', label: 'ways_of_working.f_ci', options: [['github-actions'], ['gitlab-ci'], ['other']] },
+    { id: 'testCommand', label: 'ways_of_working.f_test_command' },
+    { id: 'checkCommand', label: 'ways_of_working.f_check_command' },
+    { id: 'languages', label: 'ways_of_working.f_languages' },
+  ];
+  let cur = null; // { project, el, backdrop, estimate, phase, error, result, answers, proposed, composing, writing, editing, seq }
 
   const estimateText = (e) => (e?.free ? t('ways_of_working.estimate_free')
     : e?.costUsd != null ? t('ways_of_working.estimate_cost', { cost: Number(e.costUsd).toFixed(2) })
       : t('ways_of_working.no_estimate_yet'));
 
+  // the inferred profile with the owner's answers of the same name (as workflow-compose.js withOverrides)
+  function effectiveProfile() {
+    const out = { ...(cur.result?.profile || {}) };
+    for (const f of PROFILE_EDIT) {
+      const v = cur.answers[f.id];
+      if (v == null || (typeof v === 'string' && !v.trim())) continue;
+      out[f.id] = f.id === 'languages' && !Array.isArray(v) ? String(v).split(',').map((s) => s.trim()).filter(Boolean) : v;
+    }
+    return out;
+  }
+
   function profileLabels(p) {
     const merge = p.merge === 'pr' ? t('ways_of_working.merge_pr') : p.merge === 'local' ? t('ways_of_working.merge_local') : t('ways_of_working.open');
-    const team = p.team === 'team' ? t('ways_of_working.team') : t('ways_of_working.solo');
+    const team = p.team === 'team' ? t('ways_of_working.team') : p.team === 'solo' ? t('ways_of_working.solo') : t('ways_of_working.open');
     const out = [`${team}: ${merge}`, `${t('ways_of_working.release')}: ${p.release || t('ways_of_working.open')}`];
     if (p.testCommand) out.push(`${t('ways_of_working.tests')}: ${p.testCommand}`);
+    if (p.checkCommand) out.push(`${t('ways_of_working.check')}: ${p.checkCommand}`);
     if (p.ci) out.push(`CI: ${p.ci}`);
     if (p.languages?.length) out.push(p.languages.join(', '));
     return out;
@@ -61,6 +86,26 @@
     </div>`;
   }
 
+  // "Edit profile": every inferred field, saved into the answers at once (Save), then recomposed
+  function profileEditHtml() {
+    const p = effectiveProfile();
+    const fields = PROFILE_EDIT.map((f) => {
+      const id = `wow-p-${f.id}`;
+      const value = f.id === 'languages' ? (p.languages || []).join(', ') : (p[f.id] ?? '');
+      const control = f.options
+        ? `<select id="${id}" data-wow-profile-field="${f.id}"><option value=""${value ? '' : ' selected'}>${t('ways_of_working.open')}</option>${f.options.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l ? t(l) : v)}</option>`).join('')}</select>`
+        : `<input type="text" id="${id}" data-wow-profile-field="${f.id}" value="${esc(String(value))}" />`;
+      return `<div class="field"><label for="${id}">${t(f.label)}</label>${control}</div>`;
+    }).join('');
+    return `<form class="wow-profile-edit" data-wow-profile data-testid="ways-of-working-profile-edit" aria-label="${t('ways_of_working.edit_profile')}">
+        ${fields}
+        <div class="row">
+          <button type="submit" class="btn primary" data-testid="ways-of-working-profile-save">${t('common.save')}</button>
+          <button type="button" class="btn ghost" data-wow-profile-cancel data-testid="ways-of-working-profile-cancel">${t('common.cancel')}</button>
+        </div>
+      </form>`;
+  }
+
   function proposedHtml() {
     if (cur.composing && !cur.proposed) return `<p class="small muted" role="status">${t('ways_of_working.composing')}</p>`;
     if (!cur.proposed) return '';
@@ -79,7 +124,9 @@
     const r = cur.result;
     return `<section class="wow-profile" data-testid="ways-of-working-profile" aria-label="${t('ways_of_working.profile')}">
         <h3 class="arch-sub">${t('ways_of_working.profile')}${r.simulated ? ` <span class="badge">${t('ways_of_working.simulated')}</span>` : ''}</h3>
-        <div class="row">${profileLabels(r.profile).map((l) => `<span class="badge cat-monitor">${esc(l)}</span>`).join('')}</div>
+        <div class="row">${profileLabels(effectiveProfile()).map((l) => `<span class="badge cat-monitor">${esc(l)}</span>`).join('')}
+          ${cur.editing ? '' : `<button type="button" class="btn ghost small" data-wow-edit-profile data-testid="ways-of-working-edit-profile">${t('ways_of_working.edit_profile')}</button>`}</div>
+        ${cur.editing ? profileEditHtml() : ''}
         ${evidenceHtml(r.evidence)}
       </section>
       <section aria-label="${t('ways_of_working.questions')}">
@@ -106,25 +153,43 @@
     cur.el.querySelector('.drawer-foot').innerHTML = footHtml();
   }
 
+  // only the latest call's answer is shown: an earlier one arriving last would show stale answers
   async function compose({ write = false } = {}) {
     const c = cur;
+    const seq = ++c.seq;
     c.composing = !write;
     c.writing = write;
     c.error = null;
     render();
     try {
-      const out = await api.workflowCompose({ projectId: c.project.id, answers: c.answers, write });
+      const out = await api.workflowCompose({ projectId: c.project.id, answers: { ...c.answers }, write });
       if (cur !== c) return null;
+      if (seq !== c.seq) return write ? out : null;
       c.proposed = out;
       return out;
     } catch (e) {
-      if (cur === c) c.error = errMsg(e);
+      if (cur === c && seq === c.seq) c.error = errMsg(e);
       return null;
     } finally {
-      c.composing = false;
-      c.writing = false;
-      if (cur === c) render();
+      if (seq === c.seq) {
+        c.composing = false;
+        c.writing = false;
+        if (cur === c) render();
+      }
     }
+  }
+
+  function saveProfile(form) {
+    for (const input of form.querySelectorAll('[data-wow-profile-field]')) {
+      const id = input.getAttribute('data-wow-profile-field');
+      const value = input.value.trim();
+      const question = cur.result?.questions?.find((q) => q.id === id);
+      if (value) cur.answers[id] = value;
+      else if (question) cur.answers[id] = question.default;
+      else delete cur.answers[id];
+    }
+    cur.editing = false;
+    compose();
   }
 
   async function analyze() {
@@ -189,6 +254,17 @@
     else if (el.closest('[data-wow-analyze]')) analyze();
     else if (el.closest('[data-wow-builder]')) openBuilder();
     else if (el.closest('[data-wow-write]')) write();
+    else if (el.closest('[data-wow-edit-profile]') || el.closest('[data-wow-profile-cancel]')) {
+      cur.editing = !!el.closest('[data-wow-edit-profile]');
+      render();
+    }
+  }
+
+  function onSubmit(e) {
+    const form = e.target.closest('[data-wow-profile]');
+    if (!form || !cur) return;
+    e.preventDefault();
+    saveProfile(form);
   }
 
   function onChange(e) {
@@ -222,8 +298,9 @@
     backdrop.onclick = close;
     el.addEventListener('click', onClick);
     el.addEventListener('change', onChange);
+    el.addEventListener('submit', onSubmit);
     document.addEventListener('keydown', onKey, true);
-    cur = { project: p, el, backdrop, estimate: undefined, phase: 'idle', error: null, result: null, answers: {}, proposed: null, composing: false, writing: false };
+    cur = { project: p, el, backdrop, estimate: undefined, phase: 'idle', error: null, result: null, answers: {}, proposed: null, composing: false, writing: false, editing: false, seq: 0 };
     const c = cur;
     render();
     let estimate = null;

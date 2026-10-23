@@ -372,8 +372,8 @@ function mergeManifest(existing, entries) {
 module.exports = {
   composeWorkflowSet,
   languageFacts,
-  mergeManifest,
   MERGE_STYLES,
+  mergeManifest,
   openQuestions,
   PROFILE_FIELDS,
   RELEASE_STYLES,

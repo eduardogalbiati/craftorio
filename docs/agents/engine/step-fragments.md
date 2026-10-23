@@ -1,6 +1,6 @@
 # Step fragments: `fragment: <name>` (#434)
 
-Step bodies several workflows share, kept once in `fragments/<name>.yaml` and included by a step's `fragment:` key.
+Step bodies several workflows share, kept once in `fragments/<name>.yaml` and included by a step's `fragment:` key; a project's workflow set composed from them by the ways-of-working interview (#487).
 
 - A fragment file is `steps: { <step id>: <body> }` (`fragments/test-pipeline.yaml`: test, suite,
   test_failed, build, build_failed, evidence, verify_change). A workflow step
@@ -25,10 +25,16 @@ validate, verify_failed), then `local-merge-pipeline` (resolve_merge, merge_bloc
 `release-pipeline` (prepare, suite, notes, approve, tag_rc, soak, tag) wired per release style
 (milestone, per-merge, train, rc-stable). The workflow keeps only what differs per project: the
 transitions, the suite's `command` (the profile's test command), the agents with the project's
-language skills and test command in their prompts, and no `ship:` (a repository workflow cannot
-ship). `openQuestions(profile)` lists what the interview asks: validation, budget, screenshots and
-review rigour always, the release and merge styles when the profile leaves them `null`.
+language skills, test command and check command in their prompts, the CLI's provider definition
+from the registry (`src/shared/providers`), and no `ship:` (a repository workflow cannot ship).
+`openQuestions(profile)` lists what the interview asks: validation, budget, screenshots and review
+rigour always, the team, release and merge styles when the profile leaves them `null`. An answer
+named after a profile field (`PROFILE_FIELDS`: team, merge, release, ci, testCommand, checkCommand,
+languages) overrides the inferred value (`withOverrides`; the drawer's "Edit profile").
 `composeWorkflowSet` is pure (YAML texts and the `.multiagent/project.yaml` manifest);
 `workflows:compose` (`src/service/areas/workflow-interview.js`) writes them into the project's
-folder only with `write: true`, uncommitted. Every composed workflow loads with `loadWorkflow` and
-`loadRepositoryWorkflow`, and opens in the Builder (`fixed` mode).
+folder only with `write: true`, uncommitted, merging the manifest into the existing one
+(`mergeManifest`: composed entries replace those of the same name, other entries, `version` and
+`requires` are kept; a manifest with errors is refused). Every composed workflow loads with
+`loadWorkflow` and `loadRepositoryWorkflow`, and opens in the Builder (`fixed` mode); its first
+save offers to replace a workspace file of the same name.

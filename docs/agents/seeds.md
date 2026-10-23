@@ -41,14 +41,17 @@ Oracle's read-only `ci_runs` tool (`src/oracle-tools.js`) with the project's own
 `seeds/ways-of-working/seed.md` reads how a repository is worked on (authors per month, merges vs
 commits straight to main, tags and their cadence, CI files, test and build scripts, the Architecture
 facts' languages, an existing `.multiagent/`) and answers a fixed model: `profile` (`team`:
-solo|team, `merge`: local|pr, `release`: milestone|per-merge|train|rc-stable, `testCommand`, `ci`,
-`languages`) and `evidence` per field (`numbers` and `commits`). A field the history cannot settle
-is `null`: the interview asks it. It is not listed only in the Seeds section: the project page's
-"Ways of working" drawer (`src/renderer/views/project/project-ways-of-working.js`) shows its
-`seeds:estimate` first and runs it through `workflows:interview`
-(`src/service/areas/workflow-interview.js`), saved under the same `architecture/` root so the Seeds
-section's estimate and history see its runs. In simulation no model runs: the area reads the
-profile from git (authors, merge commits, tags) and leaves the release style open.
+solo|team, `merge`: local|pr, `release`: milestone|per-merge|train|rc-stable, `testCommand`,
+`checkCommand`, `ci`, `languages`) and `evidence` per field (`numbers` and `commits`). A field the
+history cannot settle is `null`: the interview asks it. It is not listed only in the Seeds section:
+the project page's "Ways of working" drawer (`src/renderer/views/project/project-ways-of-working.js`)
+shows its `seeds:estimate` first and runs it through `workflows:interview`
+(`src/service/areas/workflow-interview.js`). Both callers run a seed through
+`src/service/seed-runs.js` (`runSeed`: the same "already running" guard and error map per service,
+the same `architecture/` root), so the Seeds section's estimate, history and busy state see the
+interview's runs. In simulation no model runs: the area reads the profile from git (authors, merge
+commits, tags), the test command from `detectTestCommand`, the check command from `checkCommand`
+(`src/engine/check-step.js`) and leaves the release style open.
 
 ## As a tool
 

@@ -18,6 +18,6 @@ Which field is valid where, its type and the loader's message: [the field refere
 - [The engine's modules by area (#250)](engine/run-modules.md): Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop, one module per area in `src/engine/run/` holds the rest, so an engine change touches one module.
 - [Saved pipelines (#135)](engine/saved-pipelines.md): Saved pipelines (`<workspace>/pipelines/*.yaml`): their shape, how they are checked, and how they run as a chain.
 - [Sessions and handoff notes](engine/sessions-and-handoff-notes.md): Session modes (persistent, ephemeral, handoff), handoff notes, context and request limits, the prompt cache, turn metrics and costs, idle agents.
-- [Step fragments: `fragment: <name>` (#434)](engine/step-fragments.md): Step bodies several workflows share, kept once in `fragments/<name>.yaml` and included by a step's `fragment:` key.
+- [Step fragments: `fragment: <name>` (#434)](engine/step-fragments.md): Step bodies several workflows share, kept once in `fragments/<name>.yaml` and included by a step's `fragment:` key; a project's workflow set composed from them by the ways-of-working interview (#487).
 - [A workflow as a step: `type: workflow` (#174)](engine/workflow-step.md): A step that runs another workflow as child runs: inputs, `foreach`, output, limits, stop and resume, parent and child links.
 - [Worktrees and template context](engine/worktrees-and-template-context.md): The run's worktree option, what templates can read, and transition actions.
