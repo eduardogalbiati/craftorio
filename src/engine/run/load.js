@@ -7,6 +7,7 @@
 // (WORKFLOW_CHECKS, AGENT_CHECKS, STEP_CHECKS, TRANSITION_CHECKS) give the order errors are reported in.
 // Templates are code: a template reaching `constructor` / `process`… (#474) and agent output put
 // unquoted into an action or a ship.build (#469) are refused here, before any run.
+// A repository's own workflow (#485) loads through `loadRepositoryWorkflow`: accepted, then capped.
 // With it, the YAML's vocabularies (`MACHINE_STEP_TYPES`, `isLooping` / `loopConfig`) and value parsers
 // (`toBoolean`, `parseDuration`, `parseTokens`, `parseRequests`, `renderFileList`) the run modules share.
 
@@ -442,6 +443,61 @@ function loadWorkflow(file) {
   return wf;
 }
 
+// #485: a repository's own workflow (.multiagent/workflows/, src/project-manifest.js) is code from the
+// checkout: off until the owner accepts it for its commit, and capped even then. It never ships, runs
+// its `action:`s only in the run's worktree and gives its agents only the tools of the workspace's
+// policy (Settings' repositoryWorkflowTools, else this default).
+const REPOSITORY_TOOL_POLICY = ['bash:git', 'bash:node', 'bash:npm', 'edit', 'read', 'write'];
+
+// every object of the steps' tree (nested steps, transitions, recover / on_error steps)
+function* stepNodes(node) {
+  if (Array.isArray(node)) for (const v of node) yield* stepNodes(v);
+  else if (node && typeof node === 'object') {
+    yield node;
+    for (const v of Object.values(node)) yield* stepNodes(v);
+  }
+}
+function repositoryNoShip(wf, name) {
+  if ([...stepNodes(wf.steps)].some((n) => n.ship !== undefined)) throw new Error(`Workflow "${name}" from the repository cannot ship a release: ship is for the workspace's own workflows (clone it to the workspace to ship).`);
+}
+function repositoryActionsInWorktree(wf, name) {
+  if (!wf.orchestrator?.worktree && [...stepNodes(wf.steps)].some((n) => n.action !== undefined)) throw new Error(`Workflow "${name}" from the repository runs an action outside a worktree: a repository workflow's action runs only in the run's worktree (orchestrator.worktree).`);
+}
+function repositoryToolsInPolicy(wf, name, policy) {
+  const allowed = new Set(policy);
+  const ok = (tool) => allowed.has(tool) || (allowed.has('bash') && tool.startsWith('bash:'));
+  const sources = [
+    ...Object.entries(wf.agents || {}).map(([k, a]) => [`agent "${k}"`, (a?.capabilities ?? wf.defaults?.capabilities)]),
+    ...[...stepNodes(wf.steps)].filter((n) => n.capabilities && n.id !== undefined).map((n) => [`step "${n.id}"`, n.capabilities]),
+  ];
+  for (const [where, caps] of sources) {
+    if (!caps) throw new Error(`Workflow "${name}" from the repository: ${where} declares no capabilities.tools (every tool); list its tools within the workspace's tool policy (${policy.join(', ')}).`);
+    const beyond = capabilities.normalize(caps).tools.filter((t) => !ok(t));
+    if (beyond.length) throw new Error(`Workflow "${name}" from the repository: ${where} uses ${beyond.join(', ')}, beyond the workspace's tool policy (${policy.join(', ')}).`);
+  }
+}
+
+/**
+ * Loads a repository workflow (#485): every loadWorkflow check, then refused when the owner has not
+ * accepted it and when it goes beyond the caps.
+ * @param {string} file the workflow in the run's base checkout (or the text of its accepted commit)
+ * @param {{ accepted: boolean, policy?: { tools?: string[] } }} opts
+ */
+function loadRepositoryWorkflow(file, { accepted, policy } = { accepted: false }) {
+  const name = () => path.basename(String(file), path.extname(String(file)));
+  if (!accepted) {
+    let shown = name();
+    try { shown = String(parseWorkflowFile(file)?.metadata?.name || shown); } catch { /* the file's name */ }
+    throw new Error(`Workflow "${shown}" from the repository is not accepted: accept it on the Workflows screen for this commit first.`);
+  }
+  const wf = loadWorkflow(file);
+  const shown = String(wf.metadata?.name || name());
+  repositoryNoShip(wf, shown);
+  repositoryActionsInWorktree(wf, shown);
+  repositoryToolsInPolicy(wf, shown, policy?.tools || REPOSITORY_TOOL_POLICY);
+  return wf;
+}
+
 // #286: the agents whose `effort` never reaches their CLI (the engine adds a provider's
 // effort_args only when it declares them); a templated provider or effort that resolves to
 // nothing is skipped, the run checks its resolved agents again
@@ -499,6 +555,7 @@ module.exports = {
   FALLBACK_ENTRY,
   fragmentSources,
   isLooping,
+  loadRepositoryWorkflow,
   loadWorkflow,
   loopConfig,
   MACHINE_STEP_TYPES,
@@ -506,6 +563,7 @@ module.exports = {
   parseRequests,
   parseTokens,
   renderFileList,
+  REPOSITORY_TOOL_POLICY,
   silentEfforts,
   toBoolean,
   validateModels,

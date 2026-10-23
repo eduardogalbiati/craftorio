@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const path = require('path');
 const yaml = require('js-yaml');
 const { seedBundle, bundleStatus, restoreBundled } = require('./seed');
+const { MANIFEST_FILE, readManifest } = require('./project-manifest');
 
 const BUNDLED_WORKFLOWS_DIR = path.join(__dirname, '..', 'workflows');
 const isWorkflowFile = (f) => /\.ya?ml$/i.test(f);
@@ -100,24 +101,40 @@ function addedGates(srcDir, destDir, file) {
 /**
  * Finds a workflow file. Absolute paths are used as they are; a name or relative path is looked up
  * in the folders in order (workspace first, then the bundled defaults).
- * @returns {{ file: string, dir: string|null, fallback: boolean }} fallback: found only in a later
- *   folder (e.g. the user deleted the workspace copy). Throws if not found anywhere.
+ * #485: with `repo` (a checkout of the project), a workflow its .multiagent/project.yaml declares
+ * with a `file` wins (origin 'repository'), then the folders; a malformed manifest is ignored.
+ * @returns {{ file: string, dir: string|null, fallback: boolean, origin?: string, entry?: object }}
+ *   fallback: found only in a later folder (e.g. the user deleted the workspace copy). origin (with
+ *   `repo` only): repository, workspace or bundled. Throws if not found anywhere.
  */
-function resolveWorkflow(file, dirs) {
+function resolveWorkflow(file, dirs, { repo = null } = {}) {
   if (!file) throw new Error('No workflow file given.');
   if (path.isAbsolute(file)) return { file, dir: null, fallback: false };
+  const entry = repo ? repositoryEntry(readManifest(repo).workflows, file) : null;
+  if (entry) {
+    const dir = path.join(repo, path.dirname(MANIFEST_FILE));
+    return { file: path.join(dir, ...entry.file.split('/')), dir, fallback: false, origin: 'repository', entry };
+  }
   const list = dirs.filter(Boolean);
   for (const [i, dir] of list.entries()) {
     const candidate = path.join(dir, file);
-    if (isFile(candidate)) return { file: candidate, dir, fallback: i > 0 };
+    if (isFile(candidate)) return { file: candidate, dir, fallback: i > 0, ...(repo ? { origin: i === 0 ? 'workspace' : 'bundled' } : {}) };
   }
   throw new Error(`Workflow not found: "${file}" (searched in ${list.join(', ')})`);
+}
+
+// #485: the manifest entry with a `file` a workflow name means: its name, its name + .yaml, or its
+// file's basename
+function repositoryEntry(entries, file) {
+  const want = String(file || '');
+  return (entries || []).find((e) => e.file && [e.name, `${e.name}.yaml`, path.posix.basename(e.file)].includes(want)) || null;
 }
 
 module.exports = {
   addedGates,
   BUNDLED_WORKFLOWS_DIR,
   isWorkflowFile,
+  repositoryEntry,
   resolveWorkflow,
   restoreWorkflow,
   seedWorkflows,

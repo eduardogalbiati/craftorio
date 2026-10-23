@@ -1,0 +1,23 @@
+# The workflows this repository is developed with (#485, docs/agents/engine.md "Repository workflows").
+# A bundled workflow by name; the repository's own copy by file (under .multiagent/workflows/), which
+# the owner accepts per commit on the Workflows screen. The owner's per-agent model choices stay in
+# the workspace (workflows/<name>.yaml there), never here.
+version: 1
+requires: ">=1.1"
+workflows:
+  - name: backlog-refresh
+    category: intake
+    description: Refresh the issues of the backlog
+  - name: software-development-local-hero
+    category: solo
+    description: One person, merges into the local main
+  - name: software-development
+    category: team
+    description: Pull requests, CI and CD
+  - name: release
+    category: release
+    description: Tag and publish a release
+  - name: ai-development-local-hero
+    file: workflows/ai-development-local-hero.yaml
+    category: solo
+    description: This repository's own copy of the solo flow

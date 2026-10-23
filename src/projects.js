@@ -89,6 +89,8 @@ function updateProject(dir, id, patch) {
   if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
   // the fingerprint of the declared run command the owner confirmed (#115): a changed one asks again
   if (patch.localPreviewConfirmed !== undefined) next.localPreviewConfirmed = patch.localPreviewConfirmed ? String(patch.localPreviewConfirmed) : null;
+  // #485: the repository workflows the owner accepted, { <file>: { commit, blob } } (a changed file asks again)
+  if (patch.acceptedWorkflows !== undefined) next.acceptedWorkflows = { ...(patch.acceptedWorkflows || {}) };
   // #360: each analysis seed's deterministic tool, { <seed id>: command }, run instead of the Oracle
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
   if (patch.folder !== undefined) {
