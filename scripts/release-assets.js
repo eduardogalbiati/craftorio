@@ -27,7 +27,8 @@ const APP_RUN = `#!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
 if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ] || [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null)" = "0" ]; then
   echo "Multiagent Orchestrator: starting WITHOUT Chromium's sandbox: this system forbids unprivileged user namespaces. To keep the sandbox on, allow them (your choice, it applies to the whole system): sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 (see the README, Install)." >&2
-  MULTIAGENT_NO_SANDBOX=1 exec "$HERE/app/${NAME}" --no-sandbox "$@"
+  export MULTIAGENT_NO_SANDBOX=1
+  exec "$HERE/app/${NAME}" --no-sandbox "$@"
 fi
 exec "$HERE/app/${NAME}" "$@"
 `;

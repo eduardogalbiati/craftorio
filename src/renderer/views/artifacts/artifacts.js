@@ -303,6 +303,16 @@ function artifactRunOf(path) {
   return runIdOfPath(path);
 }
 
+// Open with the system's app; artifacts:open answers why it refused (an executable, #477), shown in `msg`.
+async function openShowingRefusal(path, msg) {
+  try {
+    const err = await api.openArtifact(path);
+    if (err) throw new Error(err);
+  } catch (e) {
+    if (msg) msg.textContent = errMsg(e);
+  }
+}
+
 function renderArtifactViewer() {
   const a = state.art;
   const bar = $('#art-toolbar');
@@ -336,7 +346,7 @@ function renderArtifactViewer() {
   bar.querySelectorAll('[data-art-act]').forEach((b) => (b.onclick = async () => {
     const msg = bar.querySelector('.art-msg');
     try {
-      if (b.dataset.artAct === 'open') { const err = await api.openArtifact(d.path); if (err) throw new Error(err); }
+      if (b.dataset.artAct === 'open') await openShowingRefusal(d.path, msg);
       if (b.dataset.artAct === 'reveal') await api.openArtifact(d.path, true);
       if (b.dataset.artAct === 'copy') { await api.clipboardWrite(d.path); msg.textContent = t('artifacts.path_copied'); }
     } catch (e) {
@@ -367,7 +377,7 @@ function renderArtifactViewer() {
   }
   if (d.binary || d.text == null) {
     body.innerHTML = `${notice}<div class="art-empty"><p class="muted">${t('artifacts.preview_not_available_for_this_file')}</p><button class="btn primary" id="art-open-default">${t('artifacts.open')}</button></div>`;
-    $('#art-open-default').onclick = () => api.openArtifact(d.path).catch(() => {});
+    $('#art-open-default').onclick = () => openShowingRefusal(d.path, bar.querySelector('.art-msg'));
     return;
   }
   if (meta.kind === 'markdown' && a.mode === 'rendered') return renderMarkdownDoc(body, d.text, notice);

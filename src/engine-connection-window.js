@@ -218,8 +218,17 @@ function createEngineConnection({
     };
   });
 
-  // a blank token tests with the saved one (the page never holds it)
-  handle('engine-connection:test', ({ address, token }) => test(address, String(token || '').trim() || store.read().token));
+  // why an address is not encrypted (null when it is): the page shows the opt-in from it, the one rule (#480)
+  handle('engine-connection:check', ({ address }) => ({ insecure: conn.insecureAddress(conn.parseAddress(address)) }));
+
+  // a blank token tests with the saved one (the page never holds it); an unencrypted address needs
+  // the opt-in before any token goes out, like Save (#480)
+  handle('engine-connection:test', ({ address, token, insecure }) => {
+    const parsed = conn.parseAddress(address);
+    const unencrypted = conn.insecureAddress(parsed);
+    if (unencrypted && insecure !== true) return { ok: false, reason: 'insecure', url: parsed.url, host: parsed.host, message: unencrypted };
+    return test(address, String(token || '').trim() || store.read().token);
+  });
 
   handle('engine-connection:save', async ({ mode: want, address, token, insecure }) => {
     const saved = store.read();

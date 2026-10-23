@@ -79,7 +79,7 @@ function parseAddress(text) {
 
 // Plain http carries the token and every page in clear text (#480): fine on this computer and over
 // Tailscale (WireGuard encrypts it: 100.64.0.0/10, a *.ts.net name), anywhere else only with the
-// explicit opt-in. Mirrored by src/renderer/connection/connection.js needsOptIn (the sandboxed page).
+// explicit opt-in. The connection page asks it through engine-connection:check (one rule).
 function insecureAddress(parsed) {
   if (!parsed || parsed.error || parsed.secure) return null;
   const host = String(parsed.hostname || '').toLowerCase();

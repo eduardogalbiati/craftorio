@@ -8,7 +8,11 @@ contextBridge.exposeInMainWorld('connection', {
   // { mode: 'local' | 'remote', saved: { mode, address, hasToken, insecure? }, failure, app, remoteHost, alone }
   state: () => ipcRenderer.invoke('engine-connection:state'),
   // GET /api/version on the engine → { ok, app, contract, sameContract, message } or { ok: false, reason, message }
-  test: (address, token) => ipcRenderer.invoke('engine-connection:test', { address, token }),
+  // insecure: as for save; without it a plain-http address outside loopback and Tailscale answers
+  // { ok: false, reason: 'insecure' } before the token is sent (#480)
+  test: (address, token, insecure) => ipcRenderer.invoke('engine-connection:test', { address, token, insecure }),
+  // { insecure: why the address is not encrypted, or null }: the page shows the opt-in from it (#480)
+  check: (address) => ipcRenderer.invoke('engine-connection:check', { address }),
   // tests, saves and restarts the app → { saved, restarting, test?, message? }; insecure: the user
   // allowed a plain-http address outside loopback and Tailscale (#480)
   save: (mode, address, token, insecure) => ipcRenderer.invoke('engine-connection:save', { mode, address, token, insecure }),

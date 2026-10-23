@@ -2,6 +2,8 @@
 // program an agent wrote. main.js's `artifacts:open` and `path:open` call checkOpenable first and
 // answer its reason. Refused: an executable extension (case-insensitive) and, on POSIX, a file with
 // an executable bit; a folder (path:open) passes the mode check, an .app bundle stays refused.
+// The list is #477's plus what Windows' shell also runs on open (.com .pif .hta .wsf .reg .msc .cpl,
+// and .py/.pyw with Python installed).
 //   checkOpenable(filePath, { platform, stat }) → { ok: true } | { ok: false, reason }
 
 const fs = require('fs');
@@ -11,18 +13,30 @@ const EXECUTABLE_EXTENSIONS = new Set([
   '.app',
   '.bat',
   '.cmd',
+  '.com',
   '.command',
+  '.cpl',
   '.desktop',
   '.exe',
+  '.hta',
   '.jar',
   '.js',
+  '.jse',
   '.lnk',
+  '.msc',
   '.msi',
+  '.pif',
   '.ps1',
+  '.py',
+  '.pyw',
+  '.reg',
   '.scr',
   '.sh',
   '.url',
+  '.vbe',
   '.vbs',
+  '.wsf',
+  '.wsh',
 ]);
 
 function checkOpenable(filePath, { platform = process.platform, stat = fs.statSync } = {}) {

@@ -21,23 +21,26 @@
   const chosen = () => document.querySelector('input[name="cn-mode"]:checked')?.value || 'local';
   const fields = () => ({ address: $('#cn-address').value.trim(), token: $('#cn-token').value.trim() });
 
-  // a plain-http address outside this computer and Tailscale: not encrypted, so Save needs the opt-in
-  // (#480). Mirrors src/engine-connection.js insecureAddress, which decides (this page is sandboxed).
-  function needsOptIn(address) {
-    const raw = String(address || '').trim();
-    if (!raw) return false;
-    const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(raw);
-    if (scheme && scheme[1].toLowerCase() !== 'http') return false;
-    let host;
-    try { host = new URL(scheme ? raw : `http://${raw}`).hostname.toLowerCase(); } catch { return false; }
-    if (!host || ['localhost', '127.0.0.1', '[::1]', '::1'].includes(host) || /\.ts\.net$/.test(host)) return false;
-    const ts = /^100\.(\d+)\.\d+\.\d+$/.exec(host);
-    return !(ts && Number(ts[1]) >= 64 && Number(ts[1]) <= 127);
+  // a plain-http address outside this computer and Tailscale: not encrypted, so Test and Save need
+  // the opt-in (#480). The main process decides (engine-connection:check, its insecureAddress); the
+  // last answer for the address in the field is kept here.
+  let optInNeeded = false;
+  let checkSeq = 0;
+  async function checkAddress() {
+    const seq = ++checkSeq;
+    const address = $('#cn-address').value.trim();
+    let needed = false;
+    if (address) {
+      try { needed = !!(await api.check(address)).insecure; } catch { needed = false; }
+    }
+    if (seq !== checkSeq) return; // the field changed meanwhile: a later answer paints
+    optInNeeded = needed;
+    paintInsecure();
   }
 
   // the opt-in shows for such an address; its warning, every time it is checked
   function paintInsecure() {
-    const needed = chosen() === 'remote' && needsOptIn($('#cn-address').value);
+    const needed = chosen() === 'remote' && optInNeeded;
     $('#cn-insecure-row').classList.toggle('hidden', !needed);
     $('#cn-insecure-warning').classList.toggle('hidden', !(needed && $('#cn-insecure').checked));
   }
@@ -105,6 +108,7 @@
     $('#cn-token').placeholder = v.saved.hasToken ? t('connection.token_saved') : '';
     setResult('');
     paintMode();
+    checkAddress();
   }
 
   async function load() {
@@ -141,7 +145,7 @@
   const testNow = () => run(async () => {
     setResult(t('connection.testing'), 'busy');
     const { address, token } = fields();
-    showResult(await api.test(address, token));
+    showResult(await api.test(address, token, $('#cn-insecure').checked));
   });
 
   const save = () => run(async () => {
@@ -165,7 +169,7 @@
   });
 
   document.querySelectorAll('input[name="cn-mode"]').forEach((el) => el.addEventListener('change', () => { setResult(''); paintMode(); }));
-  $('#cn-address').addEventListener('input', () => { splitPastedUrl(); setResult(''); paintInsecure(); });
+  $('#cn-address').addEventListener('input', () => { splitPastedUrl(); setResult(''); checkAddress(); });
   $('#cn-insecure').addEventListener('change', () => { setResult(''); paintInsecure(); });
   $('#cn-token').addEventListener('input', () => setResult(''));
   $('#cn-address').addEventListener('keydown', (e) => { if (e.key === 'Enter') testNow(); });
