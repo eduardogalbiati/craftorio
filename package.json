@@ -1,6 +1,6 @@
 {
   "name": "multiagent-orchestrator",
-  "version": "1.1.2",
+  "version": "1.3.0",
   "private": true,
   "description": "Desktop app that runs multi-agent workflows defined in YAML, with Claude Code, Codex CLI and Grok Build as the agents, and records everything in a local workspace.",
   "license": "MIT",
