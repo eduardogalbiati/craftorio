@@ -308,3 +308,169 @@ test('#315: the README account section tells what is stored and what is not, and
 test('#315: scripts/docs.js no longer describes the migrations as "trial and plan"', () => {
   assert.doesNotMatch(read('scripts/docs.js'), /trial and plan/i);
 });
+
+// ---- #471: the honest threat model (README "Security model", SECURITY.md "Scope") ----------------
+
+test('#471: README has a "Security model" section that says what the engine does and does not enforce', () => {
+  const section = readmeSection(/^## Security model\b/);
+  assert.ok(section, '## Security model');
+  const text = flat(section);
+  const says = {
+    'agents run as the user': /run as (you|the user)/i,
+    'with the environment, credentials and network': /environment[^.]*credentials[^.]*network|credentials[^.]*environment[^.]*network/i,
+    'only Codex\'s sandbox is OS-enforced': /only Codex[^.]*sandbox[^.]*(OS|operating system)|Codex[^.]*sandbox[^.]*only[^.]*(OS|operating system)/i,
+    'Claude and Grok limits are prefix rules': /prefix rules/i,
+    'an allowed program steps around them': /step(s)? around|get(s)? around|bypass/i,
+    'the repository can add instructions (CLAUDE.md, AGENTS.md)': /CLAUDE\.md[^.]*AGENTS\.md|AGENTS\.md[^.]*CLAUDE\.md/,
+    'issues and PR comments are instructions too': /issues?[^.]*(PR|pull request) comments?/i,
+    'hooks until #468': /hooks[^.]*#468|#468[^.]*hooks/i,
+    'workflows, skills and seeds are code': /workflows, skills and seeds are code/i,
+    'the serve token is full control of the machine': /token[^.]*full control of the machine/i,
+    'the control endpoint file is readable by agents': /endpoint\.json/,
+    'recommendation: VM, container or Codex\'s sandbox': /\bVM\b[^.]*container[^.]*Codex/i,
+    'every secret in the environment is readable (until #470)': /secret[^.]*readable[^.]*#470|#470[^.]*secret/i,
+  };
+  for (const [what, re] of Object.entries(says)) assert.match(text, re, what);
+});
+
+test('#471: README "Agent capabilities and isolation" no longer promises enforcement or full isolation, and calls it context economy, not a security boundary', () => {
+  const parts = read('README.md').split(/^(?=##+ )/m);
+  const sub = parts.find((p) => /^###? Agent capabilities and isolation\b/.test(p.split('\n')[0]));
+  assert.ok(sub, '### Agent capabilities and isolation');
+  const text = flat(sub);
+  assert.doesNotMatch(text, /enforced by the engine/i, 'says "enforced by the engine"');
+  assert.doesNotMatch(text, /isolates fully/i, 'says "isolates fully"');
+  assert.match(text, /not a security boundary/i, 'says it is not a security boundary');
+  assert.match(text, /context economy/i, 'says it is context economy');
+  assert.doesNotMatch(flat(read('README.md')), /isolates fully|enforced by the engine/i, 'anywhere in the README');
+});
+
+test('#471: SECURITY.md has a "Scope" section: acting outside the run\'s worktree without the owner\'s click is a vulnerability, the documented model is not', () => {
+  const parts = read('SECURITY.md').split(/^(?=## )/m);
+  const scope = parts.find((p) => /^## Scope\b/.test(p.split('\n')[0]));
+  assert.ok(scope, '## Scope');
+  const text = flat(scope);
+  assert.match(text, /vulnerabilit/i, 'says which reports are vulnerabilities');
+  assert.match(text, /outside the run'?s worktree/i, 'acting outside the run\'s worktree');
+  assert.match(text, /without the owner'?s (click|approval)/i, 'without the owner\'s click');
+  assert.match(text, /documented (security |threat )?model/i, 'what the documented model is');
+  assert.match(text, /README(\.md)?[^)]*#security-model|Security model/i, 'points to the README Security model');
+});
+
+// ---- #482: open-source readiness ----------------------------------------------------------------
+
+test('#482: README has a trademark note: not affiliated with Anthropic, OpenAI or xAI; users answer for each CLI\'s terms and costs', () => {
+  const text = flat(read('README.md'));
+  assert.match(text, /not affiliated with Anthropic, OpenAI,? (or|and) xAI/i, 'not affiliated');
+  assert.match(text, /Claude Code, Codex,? and Grok are (their )?(trade)?marks|trademarks? of/i, 'the marks');
+  assert.match(text, /responsible for[^.]*terms[^.]*costs|terms[^.]*costs[^.]*responsib/i, 'terms and costs');
+});
+
+test('#482: README "Account and privacy" tells a fork to use its own Supabase project and says how long data is kept and how to delete it', () => {
+  const section = readmeSection(/^## Account and privacy\b/);
+  assert.ok(section, '## Account and privacy');
+  const text = flat(section);
+  assert.match(text, /fork[^.]*own Supabase project|own Supabase project[^.]*fork/i, 'a fork needs its own Supabase project');
+  assert.match(text, /retain|retention|kept (for|until)|keeps? [^.]*(for|until)/i, 'retention');
+  assert.match(text, /delet/i, 'deletion');
+});
+
+test('#482: the icon is no longer a placeholder: THIRD_PARTY_NOTICES.md states the origin and license of assets/icon-source.png', () => {
+  assert.doesNotMatch(flat(read('README.md')), /icon-source\.png`?,? which is a placeholder/i, 'README still says placeholder');
+  const notices = flat(read('THIRD_PARTY_NOTICES.md'));
+  assert.ok(notices.includes('icon-source.png'), 'THIRD_PARTY_NOTICES.md names assets/icon-source.png');
+  const around = notices.slice(Math.max(0, notices.indexOf('icon-source.png') - 400), notices.indexOf('icon-source.png') + 400);
+  assert.match(around, /licen[cs]e|public domain|CC0|CC BY/i, 'its license');
+});
+
+test('#482: THIRD_PARTY_NOTICES.md covers the shipped npm libraries: a production license file in resources/, dompurify\'s dual license', () => {
+  const notices = flat(read('THIRD_PARTY_NOTICES.md'));
+  assert.doesNotMatch(notices, /are not listed here/i, 'still says the npm libraries are not listed');
+  assert.match(notices, /dompurify[^|]*Apache-2\.0 OR MPL-2\.0|Apache-2\.0 OR MPL-2\.0[^|]*dompurify/i, 'dompurify (Apache-2.0 OR MPL-2.0)');
+  const m = notices.match(/resources\/[\w.-]+/);
+  assert.ok(m, 'names the license file under resources/');
+  assert.ok(exists(m[0]), `${m[0]} exists`);
+  const licenses = read(m[0]);
+  for (const lib of ['three', 'react', 'dompurify']) assert.match(licenses, new RegExp(`\\b${lib}\\b`), `${m[0]} lists ${lib}`);
+});
+
+test('#482: CODE_OF_CONDUCT.md has a confidential email contact and the full Contributor Covenant text', () => {
+  const text = flat(read('CODE_OF_CONDUCT.md'));
+  assert.match(text, /[\w.+-]+@[\w-]+(\.[\w-]+)+/, 'an email address');
+  for (const heading of ['Our Pledge', 'Our Standards', 'Enforcement Responsibilities', 'Enforcement Guidelines', 'Attribution']) {
+    assert.ok(text.includes(heading), heading);
+  }
+});
+
+test('#482: Deploy releases on a tag or a manual dispatch (not on every push to main) and tags releases as plain vX.Y.Z', () => {
+  const wf = yaml.load(read('.github/workflows/deploy.yml'));
+  const on = wf.on || {};
+  const branches = (on.push && on.push.branches) || [];
+  assert.equal(branches.includes('main'), false, 'still publishes on every push to main');
+  assert.ok('workflow_dispatch' in on || (on.push && on.push.tags), 'on a tag or workflow_dispatch');
+  const text = read('.github/workflows/deploy.yml');
+  assert.doesNotMatch(text, /-build\./, 'release tags still v<version>-build.<n>');
+});
+
+test('#482: .github/dependabot.yml updates npm, cargo and github-actions weekly', () => {
+  assert.ok(exists('.github/dependabot.yml'), '.github/dependabot.yml');
+  const cfg = yaml.load(read('.github/dependabot.yml'));
+  assert.equal(cfg.version, 2);
+  const updates = cfg.updates || [];
+  for (const eco of ['npm', 'cargo', 'github-actions']) {
+    const entries = updates.filter((u) => u['package-ecosystem'] === eco);
+    assert.ok(entries.length > 0, `${eco} entry`);
+    for (const u of entries) assert.equal(u.schedule && u.schedule.interval, 'weekly', `${eco} ${u.directory}: weekly`);
+  }
+});
+
+test('#482: a CODEOWNERS file gives every path to @eduardogalbiati', () => {
+  const file = ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS'].find(exists);
+  assert.ok(file, 'CODEOWNERS');
+  assert.match(read(file), /^\*\s+@eduardogalbiati\b/m);
+});
+
+test('#482: CONTRIBUTING.md names the good first issue and help wanted labels, has a Releasing section and points to a changelog', () => {
+  const text = read('CONTRIBUTING.md');
+  assert.match(text, /good first issue/i, 'good first issue');
+  assert.match(text, /help wanted/i, 'help wanted');
+  assert.match(text, /^##+ Releasing\b/m, 'Releasing section');
+  assert.ok(exists('CHANGELOG.md') || /GitHub Releases|\/releases\b/i.test(text), 'a CHANGELOG.md or a pointer to GitHub Releases');
+});
+
+test('#482: an environment-variable table (CONTRIBUTING.md or docs/agents/environment.md) lists the variables a contributor sets', () => {
+  const rows = ['CONTRIBUTING.md', 'docs/agents/environment.md'].filter(exists)
+    .flatMap((f) => read(f).split('\n')).filter((l) => l.trim().startsWith('|'));
+  const vars = ['MULTIAGENT_AUTH', 'MULTIAGENT_SUPABASE_URL', 'MULTIAGENT_SUPABASE_KEY', 'MULTIAGENT_WORKSPACE', 'MULTIAGENT_USER_DATA', 'MULTIAGENT_SIMULATION_ONLY', 'MULTIAGENT_SERVER_TOKEN', 'MULTIAGENT_E2E_WORKERS'];
+  const missing = vars.filter((v) => !rows.some((r) => new RegExp(`\\b${v}\\b`).test(r)));
+  assert.deepEqual(missing, [], 'variables without a table row');
+});
+
+test('#482: docs/ARCHITECTURE.md describes the engine, the service, the renderer and the native sidecars, and CONTRIBUTING.md links it', () => {
+  assert.ok(exists('docs/ARCHITECTURE.md'), 'docs/ARCHITECTURE.md');
+  const text = flat(read('docs/ARCHITECTURE.md'));
+  for (const part of [/\bengine\b/i, /\bservice\b/i, /\brenderer\b/i, /sidecar/i]) assert.match(text, part, String(part));
+  assert.match(read('CONTRIBUTING.md'), /\]\((\.\/)?docs\/ARCHITECTURE\.md\)/, 'CONTRIBUTING.md links docs/ARCHITECTURE.md');
+});
+
+test('#482: the bug report no longer suggests the old version 0.3.0', () => {
+  const form = yaml.load(read('.github/ISSUE_TEMPLATE/bug_report.yml'));
+  const placeholders = (form.body || []).map((b) => String((b.attributes && b.attributes.placeholder) || ''));
+  assert.equal(placeholders.some((p) => /\b0\.3\.0\b/.test(p)), false);
+});
+
+test('#482: no tracked file under scripts/, docs/, workflows/ or skills/ has the owner\'s alias or Windows user folder, and screenshot fixtures do not use the owner\'s first name as author', () => {
+  // built from pieces so this file never matches itself
+  const alias = new RegExp(['Ca', 'zeh'].join(''), 'i');
+  const first = ['edu', 'ardo'].join('');
+  const userDir = new RegExp(`Users[\\\\/]+${first}\\b`, 'i');
+  const nameLiteral = new RegExp(`['"\`]${first}['"\`]`);
+  const files = execFileSync('git', ['ls-files', '-z', '--', 'scripts', 'docs', 'workflows', 'skills'], { cwd: root }).toString().split('\0').filter(Boolean);
+  assert.ok(files.length > 50, 'git ls-files lists the tracked files');
+  const hits = files.filter((f) => {
+    let text;
+    try { text = fs.readFileSync(abs(f), 'utf8'); } catch { return false; }
+    return alias.test(text) || userDir.test(text) || (f.startsWith('scripts/') && nameLiteral.test(text));
+  });
+  assert.deepEqual(hits, []);
+});
