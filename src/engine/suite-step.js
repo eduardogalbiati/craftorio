@@ -74,6 +74,8 @@ const { parseAgentReport } = require('./agent-test-report');
 const { childEnv: allowlistedEnv } = require('./child-env');
 const {
   fitsCommandLine,
+  listIgnored,
+  npmScriptOf,
   overCommandLine,
   takesFileList,
   TEST_FILES_ENV,
@@ -602,15 +604,11 @@ function coverageCommand(command, cwd = null) {
   const c = String(command || '');
   if (/--experimental-test-coverage\b/.test(c)) return c;
   const withFlag = (s) => s.replace(/\bnode(\.exe)?(\s+)--test\b/, (m, exe, sp) => `node${exe || ''}${sp}--test --experimental-test-coverage`);
-  const npm = /^npm\s+(?:(test|t)|run(?:-script)?\s+([\w:.-]+))(\s+--\s+(.*))?$/.exec(c.trim());
-  if (!npm || !cwd) return withFlag(c);
-  let scripts = {};
-  try { scripts = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).scripts || {}; } catch { return c; }
-  const name = npm[2] || 'test';
-  const rest = npm[3] || '';
-  if (scripts[`${name}:coverage`]) return `npm run ${name}:coverage${rest}`;
-  const script = String(scripts[name] || '').trim();
-  if (/^node(\.exe)?\s+--test\b/.test(script) && !/[&|;<>]/.test(script)) return `${withFlag(script)}${npm[4] ? ` ${npm[4]}` : ''}`;
+  const npm = npmScriptOf(c, cwd);
+  if (!npm) return withFlag(c);
+  if (!npm.scripts) return c;
+  if (npm.coverageName) return `npm run ${npm.coverageName}${npm.rest}`;
+  if (/^node(\.exe)?\s+--test\b/.test(npm.script) && !/[&|;<>]/.test(npm.script)) return `${withFlag(npm.script)}${npm.args ? ` ${npm.args}` : ''}`;
   return c;
 }
 
@@ -753,7 +751,9 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // the command's own tree, not every process running from cwd.
 // platform (#400): whose command-line limit the filtered command (with its wrappers) must fit; #553:
 // else the files go through a list file (TEST_FILES_ENV, output `files_list`) when the runner reads
-// it, else the whole suite runs and `selection.why` and the message say why.
+// it, else the whole suite runs and `selection.why` and the message say why. A list round whose own
+// counts show more than the list (ignoredList; wholeTests: the run's whole suite's test count, 0
+// unknown) is reported as a whole run: scope `full`, `list_ignored`, and the why.
 // baseCommit (#403): the base commit the round tests on, named in the log's header.
 // slot (#455, suite-slot.js): { dir, holder, onWait(holder), pollMs }, the machine-wide `suite` slot of
 // a whole-suite round (not focused, not simulated); without `slot`, nothing is taken.
@@ -763,7 +763,7 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // confirmedOnBase (#527): the failures the base check confirmed red alone since its last green check
 // (base-health-store confirmedFailures); as a list, a failure that fails on the base too is pre-existing
 // only when it is listed there, else it counts as the run's own. null: every one is pre-existing (#211).
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null }) {
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null, wholeTests }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -847,6 +847,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   // a run that ended (not cut by the timeout, not cancelled) measures the suite for the next timeouts
   if (!mock && measure && !out.timed_out && !signal?.aborted) recordDuration(hist, out.duration_ms);
   Object.assign(out, parseCounts(text));
+  tooLong = listIgnored(out, { list, files, wholeTests, log, tooLong });
   // agent mode (#219): the coverage table is in the human-readable report
   let human = '';
   if (out.human_log) { try { human = fs.readFileSync(path.join(runDir, out.human_log), 'utf8'); } catch { human = ''; } }

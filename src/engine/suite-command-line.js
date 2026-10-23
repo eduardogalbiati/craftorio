@@ -3,7 +3,8 @@
 // `n` test files do not. #553: a selection over the limit goes to the runner as a list file named
 // by TEST_FILES_ENV (one test path per line, relative to the project) when the runner reads it
 // (takesFileList: an npm script that is `node <file>`, the file naming the variable, as this
-// project's scripts/test.js); writeFileList writes it and gives the command's extra environment.
+// project's scripts/test.js); writeFileList writes it and gives the command's extra environment;
+// ignoredList tells, by the round's own counts, a runner that ran the whole suite anyway.
 
 const fs = require('fs');
 const path = require('path');
@@ -33,19 +34,58 @@ function overCommandLine(n, platform = process.platform) {
   return `${plural(n, 'test file')} would put the command over the ${name} command-line limit of ${chars.toLocaleString('en-US')} characters`;
 }
 
+// The npm script a command runs (`npm test`, `npm run <name>`, optionally `-- <args>`; cwd: where its
+// package.json is), shared by suite-step's coverageCommand and takesFileList. → null for any other
+// command or without cwd; else { name, rest (' -- <args>' or ''), args, scripts (null when
+// package.json cannot be read), coverageName (`<name>:coverage` when that script exists), script
+// (the script that runs, trimmed: with coverage its coverageName's when there is one) }.
+function npmScriptOf(command, cwd, { coverage = false } = {}) {
+  const npm = /^npm\s+(?:(test|t)|run(?:-script)?\s+([\w:.-]+))(\s+--\s+(.*))?$/.exec(String(command || '').trim());
+  if (!npm || !cwd) return null;
+  const name = npm[2] || 'test';
+  let scripts = null;
+  try { scripts = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).scripts || {}; } catch { /* unreadable: scripts stays null */ }
+  const coverageName = scripts?.[`${name}:coverage`] ? `${name}:coverage` : null;
+  const script = String((scripts && ((coverage && coverageName && scripts[coverageName]) || scripts[name])) || '').trim();
+  return { name, rest: npm[3] || '', args: npm[4] || '', scripts, coverageName, script };
+}
+
 // #553: whether the npm script `command` runs (with coverage: its `<name>:coverage` script when there
 // is one, as suite-step's coverageCommand) is `node <file>` and that file reads the list of
 // TEST_FILES_ENV. Any other command cannot take the list.
 function takesFileList(command, cwd, coverage = false) {
-  const npm = /^npm\s+(?:(test|t)|run(?:-script)?\s+([\w:.-]+))$/.exec(String(command || '').trim());
-  if (!npm || !cwd) return false;
-  let scripts = {};
-  try { scripts = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).scripts || {}; } catch { return false; }
-  const name = npm[2] || 'test';
-  const script = String((coverage && scripts[`${name}:coverage`]) || scripts[name] || '').trim();
-  const file = /^node(?:\.exe)?\s+([^\s&|;<>-][^\s&|;<>]*\.[cm]?js)(?=\s|$)/.exec(script)?.[1];
-  if (!file || /[&|;<>]/.test(script)) return false;
+  const npm = npmScriptOf(command, cwd, { coverage });
+  if (!npm?.scripts || npm.rest) return false;
+  const file = /^node(?:\.exe)?\s+([^\s&|;<>-][^\s&|;<>]*\.[cm]?js)(?=\s|$)/.exec(npm.script)?.[1];
+  if (!file || /[&|;<>]/.test(npm.script)) return false;
   try { return fs.readFileSync(path.resolve(cwd, file), 'utf8').includes(TEST_FILES_ENV); } catch { return false; }
+}
+
+// #553: whether a round run through the list ran more than the list, by its own counts: the agent
+// reporter's per-file counts (`file_counts`) naming a file outside `files`, or as many tests as the
+// run's whole suite (`wholeTests`, its passed + failed). → why, or null when the list held.
+function ignoredList(out, { files, wholeTests = 0 }) {
+  const norm = (f) => String(f || '').split('\\').join('/').replace(/^\.\//, '');
+  const listed = new Set(files.map(norm));
+  const outside = Object.keys(out.file_counts || {}).filter((f) => !listed.has(norm(f)));
+  if (outside.length) return `the runner ran ${plural(outside.length, 'test file')} outside the list (${outside.slice(0, 3).join(', ')}${outside.length > 3 ? ', …' : ''})`;
+  const ran = (out.passed || 0) + (out.failed || 0);
+  if (wholeTests > 0 && ran >= wholeTests) return `the runner ran ${plural(ran, 'test')}, as many as the run's whole suite (${wholeTests})`;
+  return null;
+}
+
+// #553: a list round whose runner ignored the list (ignoredList) ran the whole suite (without the
+// suite slot): reported as a whole run (scope `full`, `list_ignored`, the why in selection.why).
+// → the why, or the round's `tooLong` without a list or when the list held.
+function listIgnored(out, { list, files, wholeTests, log, tooLong }) {
+  const ignored = list ? ignoredList(out, { files, wholeTests }) : null;
+  if (!ignored) return tooLong;
+  const why = `${ignored}: it ignored the list of ${TEST_FILES_ENV}`;
+  out.scope = 'full';
+  out.list_ignored = true;
+  out.selection = { ...(out.selection || { files }), why: `${out.selection?.why ? `${out.selection.why}; ` : ''}${why}, so the whole suite ran` };
+  log('warn', `suite: ${why}: reported as a whole run`);
+  return why;
 }
 
 // #553: the list file of a round whose files go through the list (`list`), in its temp folder,
@@ -61,6 +101,9 @@ function writeFileList(out, { list, tmpDir, files, logName, round, runDir }) {
 
 module.exports = {
   fitsCommandLine,
+  ignoredList,
+  listIgnored,
+  npmScriptOf,
   overCommandLine,
   takesFileList,
   TEST_FILES_ENV,

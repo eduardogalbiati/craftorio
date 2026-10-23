@@ -36,6 +36,7 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { isAgentMode, REPORTER } = require('../src/engine/agent-test-report');
 const machineSlot = require('../src/engine/machine-slot');
+const { TEST_FILES_ENV } = require('../src/engine/suite-command-line');
 const { testTimeoutMs } = require('../src/engine/test-timeouts');
 
 // decided before the variable below is set: the orchestrator's own MULTIAGENT_SIMULATION_ONLY counts
@@ -69,8 +70,8 @@ const testFiles = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes:
 // #553: the list file of a selection too long for the command line (src/engine/suite-step.js
 // TEST_FILES_ENV), read once and dropped, so the test files this run spawns never inherit it
 const listed = (() => {
-  const list = process.env.MULTIAGENT_TEST_FILES;
-  delete process.env.MULTIAGENT_TEST_FILES;
+  const list = process.env[TEST_FILES_ENV];
+  delete process.env[TEST_FILES_ENV];
   if (!list) return [];
   return fs.readFileSync(path.resolve(list), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 })();

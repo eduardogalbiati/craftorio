@@ -402,17 +402,27 @@ const methods = {
   // A `scope: affected` round (#212, see runSuiteStep): the affected files, then the whole suite once
   // in the run when they pass. #553: after the run's whole suite, pass or fail (this.wholeSuiteRun,
   // its commit as `tested` gave it), the selection takes the changes since that commit and no whole
-  // suite follows; only a whole-suite selection (a shared root changed) runs it again.
+  // suite follows; only a whole-suite selection (a shared root changed) runs it again. Only a whole
+  // suite that stands for every file counts (lastWholeRound, #364: not timed out, every failure in a
+  // known file); after it, the slow files the changes reach join the selection, since no later whole
+  // suite runs them.
   async affectedRound(step, st, once, tested) {
     const whole = this.wholeSuiteRun?.commit ? this.wholeSuiteRun : null;
     let selection;
     try { selection = this.affectedSelection(whole ? { since: whole.commit } : {}); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
     if (whole) {
       const since = `round ${whole.round}'s whole suite (${whole.commit.slice(0, 7)})`;
-      selection = { ...selection, why: selection.mode === 'affected' ? `since ${since}: ${selection.why}` : `${selection.why} again, after ${since}` };
+      const slow = selection.mode === 'affected' ? (selection.slow || []).filter((f) => !selection.files.includes(f)) : [];
+      const why = slow.length ? `${selection.why.replace(/; \d+ slow file\(s\) left to the full suite/, '')}; ${slow.length} slow file(s) run with them` : selection.why;
+      selection = {
+        ...selection,
+        files: [...selection.files, ...slow],
+        reasons: { ...selection.reasons, ...Object.fromEntries(slow.map((f) => [f, 'slow, reaches the change'])) },
+        why: selection.mode === 'affected' ? `since ${since}: ${why}` : `${selection.why} again, after ${since}`,
+      };
     }
     this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${selectionLines(selection).slice(0, 6).join('\n')}` });
-    let output = await once(selection.mode === 'affected' ? { files: selection.files, selection } : { selection });
+    let output = await once(selection.mode === 'affected' ? { files: selection.files, selection, wholeTests: whole?.tests || 0 } : { selection });
     if (output.scope === 'files') this.suiteRuns.affected = (this.suiteRuns.affected || 0) + 1;
     if (output.scope === 'files' && output.status === 'pass' && !this.fullSuitePassed && !whole) {
       const affected = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files: selection.files };
@@ -420,7 +430,7 @@ const methods = {
       output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge` }, logName: `suite-${st.visits}-full` });
       output.affected = affected;
     }
-    if (output.scope !== 'files' && (output.status === 'pass' || output.status === 'fail') && tested.commit) this.wholeSuiteRun = { round: st.visits, commit: tested.commit };
+    if (lastWholeRound([output]) && tested.commit) this.wholeSuiteRun = { round: st.visits, commit: tested.commit, tests: (output.passed || 0) + (output.failed || 0) };
     return output;
   },
 
