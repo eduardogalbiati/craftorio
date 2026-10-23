@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { gitRepo } = require('../helpers');
 const { demoRoadmap } = require('./roadmap');
 
 // Workflows › Definitions (#137): declared outputs on an edited default (modified, Restore
@@ -114,11 +115,37 @@ function demoRunHistory(ws, projectId) {
   }
 }
 
+// Repository workflows (#485): the project's folder is a git repository whose committed
+// .multiagent/project.yaml names a bundled flow (team) and its own copy of the retrospective
+// (intake), not accepted yet, so Workflows › Definitions shows "repository @ <sha>" with Accept.
+function demoRepositoryWorkflows(project, appDir) {
+  if (!project.folder) return;
+  const git = gitRepo(project.folder);
+  const dir = path.join(project.folder, '.multiagent', 'workflows');
+  fs.mkdirSync(dir, { recursive: true });
+  const retro = fs.readFileSync(path.join(appDir, 'workflows', 'run-retrospective.yaml'), 'utf8');
+  fs.writeFileSync(path.join(dir, 'issue-intake.yaml'), retro.replace('name: run-retrospective', 'name: issue-intake').replace(/description: .*/, 'description: Turns the week\'s findings into triaged issues for this repository.'));
+  fs.writeFileSync(path.join(project.folder, '.multiagent', 'project.yaml'), [
+    'version: 1',
+    'workflows:',
+    '  - name: software-development',
+    '    category: team',
+    '  - name: issue-intake',
+    '    file: workflows/issue-intake.yaml',
+    '    category: intake',
+    '',
+  ].join('\n'));
+  git(['init', '-q', '-b', 'main']);
+  git(['add', '-A']);
+  git(['commit', '-q', '-m', 'Declare the repository workflows']);
+}
+
 function seed({ appDir, args, ws, project }) {
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
   demoChildRuns(ws, project.id);
   demoRunHistory(ws, project.id);
   demoPipelines(ws, appDir);
+  demoRepositoryWorkflows(project, appDir);
 }
 
 // #254: one menu entry per tab
