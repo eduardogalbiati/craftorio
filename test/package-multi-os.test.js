@@ -112,6 +112,26 @@ test('#317 packagerOptions: the target platform and arch, and the same ignore an
   assert.match(unpacks[0], /node-pty/, 'node-pty stays unpacked from the asar');
 });
 
+test('#482 packagerOptions: the afterCopy hook puts THIRD_PARTY_LICENSES.txt in the package\'s resources folder, and resources/ stays out of app.asar', async (t) => {
+  const { packagerOptions } = load();
+  const os = require('os');
+  for (const platform of PLATFORMS) {
+    const o = packagerOptions({ platform, arch: 'x64', out: path.join(root, 'dist') });
+    assert.ok(Array.isArray(o.afterCopy) && o.afterCopy.length > 0, `${platform}: an afterCopy hook`);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pkg-482-'));
+    t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+    const buildPath = path.join(tmp, 'resources', 'app');
+    fs.mkdirSync(buildPath, { recursive: true });
+    for (const hook of o.afterCopy) await hook({ buildPath, electronVersion: '0.0.0', platform, arch: 'x64' });
+    const copied = path.join(tmp, 'resources', 'THIRD_PARTY_LICENSES.txt');
+    assert.ok(fs.existsSync(copied), `${platform}: resources/THIRD_PARTY_LICENSES.txt next to app/`);
+    assert.equal(fs.readFileSync(copied, 'utf8'), read('resources/THIRD_PARTY_LICENSES.txt'), `${platform}: the committed file`);
+    assert.equal(fs.existsSync(path.join(buildPath, 'THIRD_PARTY_LICENSES.txt')), false, `${platform}: not inside app/`);
+    const ignored = (file) => o.ignore.some((re) => (re instanceof RegExp ? re.test(file) : String(re) === file));
+    assert.equal(ignored('/resources/THIRD_PARTY_LICENSES.txt'), true, `${platform}: /resources ignored by app.asar`);
+  }
+});
+
 test('#317 packagerOptions (macOS): a bundle id and the microphone usage description for voice input', () => {
   const { packagerOptions } = load();
   for (const arch of ['arm64', 'x64']) {
