@@ -10,8 +10,19 @@
 // - data-testid="base-check-on-red": Settings › Execution's red-base choice, a <select> whose options
 //   read "Off", "Issue only" and "Issue + fix item" (values off | issue | fix); the test id is on the
 //   native <select> under the design-system control, like the time zone list (#383).
+// - data-testid="base-check-card" (#465): the Roadmap's base check line, its state in data-status; new
+//   for #527: data-status="waiting" and a text reading "waiting for the suite slot" while another run
+//   holds the machine's `suite` slot (src/engine/machine-slot.js).
+//
+// #527 (features/base-health.feature): the app is launched with its temp folder (TMP/TEMP/TMPDIR, so
+// machineSlotDir()) and MULTIAGENT_LOCKS_DIR in a folder of the scenario, never the machine's; the
+// "other run" is a suite.slot file there held by this test process (alive, this host), as
+// machine-slot.js writes it. The base check is started inside the app's main process through the
+// service's own base-health area (afterBaseMerge, kept by features/support/electron-main.js), as a
+// real run's local merge starts it, on the demo project's folder made a git repository.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { expect } = require('@playwright/test');
@@ -26,9 +37,9 @@ const failuresLine = (page) => page.getByTestId('base-failures');
 const onRedChoice = (page) => page.getByTestId('base-check-on-red');
 const stage = (page, n) => page.getByTestId('roadmap-stage').filter({ hasText: new RegExp(`\\bStage ${n}\\b`) }).first();
 
-// git with a fixed identity, never the machine's config
-function git(cwd, args) {
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(cwd, '..', 'empty.gitconfig') };
+// git with a fixed identity, never the machine's config (an empty global config: next to cwd by default)
+function git(cwd, args, globalConfig = path.join(cwd, '..', 'empty.gitconfig')) {
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: globalConfig };
   return execFileSync('git', ['-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', '-c', 'core.autocrlf=false', ...args], { cwd, env, encoding: 'utf8' }).trim();
 }
 
@@ -104,4 +115,75 @@ Then('stage {int} holds only the fix item for {string}', async ({ e2e }, n, test
 
 Then('stage {int} shows the item {string}', async ({ e2e }, n, title) => {
   await expect(stage(e2e.window, n).getByTestId('roadmap-item').filter({ hasText: title })).toHaveCount(1, { timeout: LOAD_TIMEOUT });
+});
+
+// ---- #527: the base check waits for the machine's suite slot ------------------------------------------
+
+const baseCheckCard = (page) => page.getByTestId('base-check-card').filter({ visible: true }).first();
+const OTHER_RUN = '20261023-120000-cccc3333';
+
+// The app's temp folder (machineSlotDir) and MULTIAGENT_LOCKS_DIR in a folder of this scenario, its
+// suite slot held by "another run": this test process, alive on this host (machine-slot.js's holder)
+Given("the app is open while another run holds the machine's suite slot", async ({ e2e }) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
+  const locks = path.join(tmp, 'multiagent-orchestrator', 'locks');
+  fs.mkdirSync(locks, { recursive: true });
+  const slot = path.join(locks, 'suite.slot');
+  fs.writeFileSync(slot, JSON.stringify({ pid: process.pid, host: os.hostname(), token: 'e2e-other-run', started: Date.now(), holder: OTHER_RUN }), { flag: 'wx' });
+  e2e.suiteSlot = slot;
+  await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, MULTIAGENT_LOCKS_DIR: locks } });
+  const close = e2e.close;
+  e2e.close = async () => {
+    await close();
+    try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { /* the OS temp folder cleans it */ }
+  };
+});
+
+// the demo project's folder as a git repository whose base has one commit, with a quick test script
+Given('the demo project is a git repository on the base {string}', async ({ e2e }, base) => {
+  const folder = e2e.project.folder;
+  const pkg = path.join(folder, 'package.json');
+  const data = JSON.parse(fs.readFileSync(pkg, 'utf8'));
+  data.scripts = { ...data.scripts, test: 'node -e "process.exit(0)"' };
+  fs.writeFileSync(pkg, JSON.stringify(data, null, 2));
+  const config = path.join(e2e.scratch, 'empty.gitconfig');
+  fs.writeFileSync(config, '');
+  git(folder, ['init', '-q', '-b', base], config);
+  git(folder, ['add', '-A'], config);
+  git(folder, ['commit', '-q', '-m', 'Initial commit'], config);
+});
+
+// what the service does on a real run's `worktree.merged` (src/service/areas/runs.js): not awaited,
+// the check waits for the slot in the background
+When('a merge into the base {string} starts the base check', async ({ e2e }, base) => {
+  const res = await e2e.app.evaluate((_electron, a) => {
+    const area = global.multiagentE2E?.baseHealth;
+    if (!area) return { missing: true };
+    try {
+      const check = area.afterBaseMerge({ projectId: a.projectId, runId: a.runId, mock: false }, { base: a.base, tested: 'green' });
+      check?.catch?.(() => {});
+      return { started: !!check };
+    } catch (e) { return { thrown: String(e?.message || e) }; }
+  }, { projectId: e2e.project.id, runId: '20261023-121500-dddd4444', base });
+  expect(res.missing, "the app's main process keeps the service's base-health area").toBeFalsy();
+  expect(res.thrown, 'starting the base check').toBeFalsy();
+  expect(res.started, 'the merge started a base check').toBe(true);
+});
+
+Then("the roadmap's base check reads {string}", async ({ e2e }, text) => {
+  const card = baseCheckCard(e2e.window);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toHaveAttribute('data-status', 'waiting');
+  await expect(card).toContainText(text, { ignoreCase: true });
+});
+
+When('the other run frees the suite slot', async ({ e2e }) => {
+  fs.rmSync(e2e.suiteSlot, { force: true });
+});
+
+Then("the roadmap's base check is no longer waiting", async ({ e2e }) => {
+  const card = baseCheckCard(e2e.window);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).not.toHaveAttribute('data-status', 'waiting', { timeout: LOAD_TIMEOUT });
+  await expect(card).not.toContainText('waiting for the suite slot', { ignoreCase: true });
 });
