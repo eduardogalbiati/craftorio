@@ -26,29 +26,13 @@ function connectionWindow(e2e) {
   return e2e.connectionWindow;
 }
 
-async function findConnectionWindow(e2e) {
-  for (const win of e2e.app.windows()) {
-    if (win === e2e.window || win.isClosed()) continue;
-    if (await pageRoot(win).isVisible().catch(() => false)) return win;
-  }
-  return null;
-}
-
 Given('this computer cannot encrypt the engine token', async ({ e2e }) => {
   await e2e.app.evaluate(({ safeStorage }) => {
     safeStorage.isEncryptionAvailable = () => false;
   });
 });
 
-When('I open the engine connection page', async ({ e2e }) => {
-  const change = e2e.window.getByTestId('settings-engine-change');
-  await expect(change).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await change.click();
-  await expect.poll(async () => !!(await findConnectionWindow(e2e)), { timeout: LOAD_TIMEOUT, message: 'the engine connection page opened' }).toBe(true);
-  e2e.connectionWindow = await findConnectionWindow(e2e);
-  await e2e.connectionWindow.waitForLoadState('domcontentloaded');
-});
-
+// "I open the engine connection page" is defined once, in remote-engine.steps.js (shared with #480)
 When('I choose a remote engine on the engine connection page', async ({ e2e }) => {
   const win = connectionWindow(e2e);
   await win.getByTestId('engine-connection-mode-remote').check();
