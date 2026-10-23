@@ -11,11 +11,11 @@ const path = require('path');
 const http = require('http');
 const { createMobileGatesServer } = require('../src/mobile-gates');
 
-function setup(t) {
+function setup(t, opts = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mobile-gates-481-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const service = { api: { 'runs:active': () => [] }, workspace: () => ({ root }), answerPhoneGate: () => true };
-  return createMobileGatesServer({ service, secret: 'pair-limit-test-secret-0123456789abcdef' });
+  return createMobileGatesServer({ service, secret: 'pair-limit-test-secret-0123456789abcdef', ...opts });
 }
 
 // from: the client's own address (localAddress), 127.0.0.1 or 127.0.0.2
@@ -44,4 +44,20 @@ test('#481 /pair: after repeated wrong codes from one IP, further attempts answe
 
   const { code } = m.pair();
   assert.equal(await pair('127.0.0.2', port, code), 200, 'another address is not affected');
+});
+
+test('#481 /pair: the limit is per window: once it has passed, the address gets plain refusals again (403) and pairs with a valid code', async (t) => {
+  let clock = 1_000_000;
+  const m = setup(t, { now: () => clock, linkTtlMs: 365 * 24 * 3600e3 });
+  const { port } = await m.listen(0, '127.0.0.1');
+  t.after(() => m.close());
+
+  const statuses = [];
+  for (let i = 0; i < 20; i++) statuses.push(await pair('127.0.0.1', port, `WRONG${i}`));
+  assert.equal(statuses[19], 429, `throttled within the window: ${statuses.join(',')}`);
+
+  clock += 16 * 60e3; // past the 15-minute window
+  assert.equal(await pair('127.0.0.1', port, 'WRONG-AFTER'), 403, 'the counter starts again after the window');
+  const { code } = m.pair();
+  assert.equal(await pair('127.0.0.1', port, code), 200);
 });

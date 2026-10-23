@@ -44,6 +44,33 @@ test('#481 removeWorktree: a base like --upload-pack=<program> never runs the pr
   assert.equal(fs.existsSync(marker), false, 'git took the base for an option and ran --upload-pack');
 });
 
+test('#481 prepareWorktree: names git refuses as a branch are refused as the base, naming the value', async (t) => {
+  const { scratch, work } = repos(t);
+  for (const [i, base] of ['foo.lock', 'a..b', '.hidden', 'my branch', 'x~1', 'a:b', 'feature/', 'a//b'].entries()) {
+    await assert.rejects(prepareWorktree({ repo: work, base, dir: path.join(scratch, `wt${i}`) }), /not a valid branch name/, base);
+  }
+});
+
+test('#481 prepareWorktree: common branch names are accepted as the base (start from HEAD when origin lacks them)', async (t) => {
+  const { scratch, work } = repos(t);
+  for (const [i, base] of ['feature/x', 'release/1.2.3', 'v1.0', 'recurso/ação', 'fix-123_a'].entries()) {
+    const info = await prepareWorktree({ repo: work, base, dir: path.join(scratch, `wt${i}`) });
+    assert.equal(fs.existsSync(info.dir), true, base);
+  }
+});
+
+test('#481 removeWorktree: an invalid base warns and the worktree is still removed', async (t) => {
+  const { scratch, work } = repos(t);
+  const dir = path.join(scratch, 'wt');
+  await prepareWorktree({ repo: work, base: 'main', dir });
+  const warnings = [];
+  const log = (level, msg) => { if (level === 'warn') warnings.push(msg); };
+  const res = await removeWorktree({ repo: work, dir, base: '--upload-pack=x', log });
+  assert.equal(fs.existsSync(dir), false);
+  assert.equal(res.removed, true);
+  assert.equal(warnings.some((w) => /not a valid branch name/.test(w)), true, warnings.join(' | '));
+});
+
 test('#481 prepareWorktree: a normal base (main) still starts from origin/main', async (t) => {
   const { scratch, work } = repos(t);
   const info = await prepareWorktree({ repo: work, base: 'main', dir: path.join(scratch, 'wt') });

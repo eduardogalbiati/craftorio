@@ -55,6 +55,18 @@ test('#479 npm run serve --host <a LAN address> without --insecure-http exits 1 
   assert.match(s.out(), /TLS/, 'or a reverse proxy with TLS');
 });
 
+// 127.0.0.2: an address outside the loopback names serve.js knows (so --insecure-http is needed) that
+// still never leaves this machine
+test('#479 npm run serve --host <another address> --insecure-http starts and warns about plain HTTP (VPN or TLS proxy only)', { skip: process.platform === 'darwin' && 'no 127.0.0.2 on macOS' }, async (t) => {
+  const s = serve(t, scratch(t), ['--host', '127.0.0.2', '--insecure-http']);
+  await settle(s);
+  assert.match(s.out(), /Open: http/, s.out());
+  for (let i = 0; i < 50 && !/plain HTTP/.test(s.out()); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.match(s.out(), /plain HTTP/, s.out());
+  assert.match(s.out(), /VPN/);
+  assert.match(s.out(), /TLS/);
+});
+
 test('#479 npm run serve on 127.0.0.1: the banner says the token is full control of this machine and to clear the shell history', async (t) => {
   const s = serve(t, scratch(t), ['--host', '127.0.0.1']);
   await settle(s);

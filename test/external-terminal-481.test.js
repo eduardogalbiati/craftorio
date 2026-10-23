@@ -23,6 +23,13 @@ test('#481 terminalLaunch (Windows): a title with " & | < > ^ yields a start tit
   assert.equal(title.includes('calc.exe'), true, 'the rest of the title text is kept');
 });
 
+test('#481 terminalLaunch (Windows): a title with %VAR% expands nothing (no % in the start title)', () => {
+  const launch = load().terminalLaunch({ platform: 'win32', env: {}, exists: () => true, title: 'Live terminal: %PATH% here', cwd: 'C:\\repo', file: 'claude', args: [] });
+  const title = titlePart(launch);
+  assert.equal(title.includes('%'), false, `title contains %: ${title}`);
+  assert.equal(title.includes('PATH'), true);
+});
+
 test('#481 terminalLaunch (Windows): a plain title is unchanged', () => {
   const launch = load().terminalLaunch({ platform: 'win32', env: {}, exists: () => true, title: 'Live terminal: dev', cwd: 'C:\\repo', file: 'claude', args: [] });
   assert.equal(titlePart(launch), 'Live terminal: dev');

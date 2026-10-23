@@ -108,6 +108,48 @@ test('#481 the cookie gets Secure when the request came over HTTPS (x-forwarded-
   assert.match(cookieOf(res), /;\s*Secure/i);
 });
 
+test('#479 hostAllowed: a server bound to another address (0.0.0.0, a Tailscale IP) accepts any Host; a loopback one only loopback names', () => {
+  const { hostAllowed } = require('../src/server');
+  const req = (host) => ({ headers: { host } });
+  assert.equal(hostAllowed(req('attacker.example:7300'), '0.0.0.0'), true);
+  assert.equal(hostAllowed(req('my-pc:7300'), '100.101.102.103'), true);
+  assert.equal(hostAllowed(req('attacker.example:7300'), '127.0.0.1'), false);
+  assert.equal(hostAllowed(req('attacker.example:7300'), '::ffff:127.0.0.1'), false);
+  assert.equal(hostAllowed(req('attacker.example:7300'), '::1'), false);
+  assert.equal(hostAllowed(req('localhost:7300'), '127.0.0.1'), true);
+});
+
+test('#479 isLoopbackHost: loopback names, with the port when one is required', () => {
+  const { isLoopbackHost } = require('../src/server');
+  assert.equal(isLoopbackHost('[::1]:7301', 7301), true);
+  assert.equal(isLoopbackHost('LOCALHOST:7301', 7301), true);
+  assert.equal(isLoopbackHost('127.0.0.1:7301', '7301'), true);
+  assert.equal(isLoopbackHost('localhost', 7301), false, 'no port when one is required');
+  assert.equal(isLoopbackHost('localhost:7302', 7301), false, 'another port');
+  assert.equal(isLoopbackHost('localhost'), true, 'no port required');
+  assert.equal(isLoopbackHost('localhost.attacker.example'), false);
+  assert.equal(isLoopbackHost('127.0.0.1.nip.io:7301'), false);
+  assert.equal(isLoopbackHost(undefined), false);
+});
+
+test('#479 sliding cookie: a request authorised by the cookie gets it again with Max-Age; one with the bearer token gets none', async (t) => {
+  const { port } = await start(t);
+  const byCookie = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Cookie: `multiagent_token=${encodeURIComponent(TOKEN)}` } });
+  assert.equal(byCookie.status, 200);
+  assert.match(cookieOf(byCookie), /^multiagent_token=/);
+  assert.match(cookieOf(byCookie), /;\s*Max-Age=\d+/);
+  const byBearer = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(byBearer.status, 200);
+  assert.equal(cookieOf(byBearer), '');
+});
+
+test('#479 a wrong cookie is refused (401) and gets no cookie back', async (t) => {
+  const { port } = await start(t);
+  const res = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Cookie: 'multiagent_token=wrong-token-0123456789abcdef' } });
+  assert.equal(res.status, 401);
+  assert.equal(cookieOf(res), '');
+});
+
 test('#481 the cookie has a Max-Age and no Secure over plain http (/?token= and POST /session)', async (t) => {
   const { port } = await start(t);
   const viaUrl = await request(port, { path: `/?token=${encodeURIComponent(TOKEN)}`, headers: { Host: `127.0.0.1:${port}` } });
