@@ -19,6 +19,8 @@ const root = path.join(__dirname, '..');
 const RUNNER = [
   'scripts/test.js', 'scripts/test-exit.js', 'scripts/test-reporter-agent.js', 'scripts/test-reporter-slowest.js',
   'src/engine/agent-test-report.js', 'src/engine/machine-slot.js', 'src/engine/test-timeouts.js', 'src/engine/affected-tests.js',
+  // #553: the name of the list file's variable (TEST_FILES_ENV)
+  'src/engine/suite-command-line.js',
 ];
 
 const PROBE = `const test = require('node:test');

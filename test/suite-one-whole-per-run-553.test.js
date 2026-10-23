@@ -44,10 +44,12 @@ function machineFolder(t) {
 
 // a project with two modules, each with its test, and a test of its own (test/c.test.js); the run's
 // branch changes src/x.js
-function repo(t) {
+// extra: more files of the base commit ({ path: text })
+function repo(t, { scripts = { test: 'node --test' }, extra = {} } = {}) {
   const dir = tmp(t, 'suite-553-repo-');
   const write = (f, text) => { fs.mkdirSync(path.join(dir, path.dirname(f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), text); };
-  write('package.json', JSON.stringify({ name: 'p', scripts: { test: 'node --test' } }));
+  write('package.json', JSON.stringify({ name: 'p', scripts }));
+  for (const [f, text] of Object.entries(extra)) write(f, text);
   write('src/x.js', 'module.exports = 1;\n');
   write('src/z.js', 'module.exports = 1;\n');
   write('test/x.test.js', "require('../src/x');\n");
@@ -63,27 +65,44 @@ function repo(t) {
 const TEST_PATH = /test\/[\w./-]+\.test\.js/g;
 
 // The stubbed suite command. `failing`: the test files that fail now; a whole run (no file on the
-// command, no list) runs them all, a focused run only those it selects. Each call is recorded with the
-// files it ran (null: the whole suite).
+// command, no list) runs them all (WHOLE_TESTS tests), a focused run only those it selects (one test
+// per file). `opts.whole`: how the next whole run ends ('timeout': the suite's timeout; 'unreadable':
+// exit 1 with no failing test in its log). `opts.ignoreList`: the runner ignores MULTIAGENT_TEST_FILES
+// and runs the whole suite. Each call is recorded with the files it ran (null: the whole suite).
+const WHOLE_TESTS = 1000;
 function fakeSuite() {
   const failing = new Set();
   const calls = [];
+  const opts = { whole: 'normal', ignoreList: false };
   const run = async ({ command, env, logFile }) => {
     const listFile = env?.MULTIAGENT_TEST_FILES;
     const listed = listFile ? fs.readFileSync(path.resolve(listFile), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean) : [];
     const named = String(command).match(TEST_PATH) || [];
-    const files = listed.length || named.length ? [...new Set([...listed, ...named])].sort() : null;
-    calls.push({ command, files });
+    let files = listed.length || named.length ? [...new Set([...listed, ...named])].sort() : null;
+    if (listed.length && opts.ignoreList) files = null;
+    calls.push({ command, files, listed: listed.length > 0 });
+    if (!files && opts.whole === 'timeout') {
+      opts.whole = 'normal';
+      if (logFile) fs.appendFileSync(logFile, 'ℹ tests 10\nℹ pass 10\nℹ fail 0\n');
+      return { code: null, timedOut: true, error: null };
+    }
+    if (!files && opts.whole === 'unreadable') {
+      opts.whole = 'normal';
+      if (logFile) fs.appendFileSync(logFile, 'Error: the worker crashed\n');
+      return { code: 1, timedOut: false, error: null };
+    }
     const red = [...failing].filter((f) => !files || files.includes(f));
     const blocks = red.map((f) => `test at ${f}:3:1\n✖ ${path.basename(f)} breaks (1ms)\n  Error: it broke\n`).join('\n');
-    const total = (files || ['all']).length + red.length;
+    const total = files ? files.length : WHOLE_TESTS;
     if (logFile) fs.appendFileSync(logFile, `${red.length ? `✖ failing tests:\n\n${blocks}\n` : ''}ℹ tests ${total}\nℹ pass ${total - red.length}\nℹ fail ${red.length}\n`);
     return { code: red.length ? 1 : 0, timedOut: false, error: null };
   };
-  return { run, calls, failing, wholeRuns: () => calls.filter((c) => c.files === null).length };
+  return { run, calls, failing, opts, wholeRuns: () => calls.filter((c) => c.files === null).length };
 }
 
-function engineRun(t, worktree) {
+// platform: the platform runSuite measures the command line for (#400; injected at the machine's
+// boundary so a long selection goes through the list on any machine)
+function engineRun(t, worktree, { platform } = {}) {
   const runDir = path.join(tmp(t, 'suite-553-run-'), 'runs', 'run-553');
   fs.mkdirSync(runDir, { recursive: true });
   const events = [];
@@ -95,7 +114,7 @@ function engineRun(t, worktree) {
     machine: {
       ...machineActions.real(),
       simulated: false,
-      runSuite: (opts) => suiteStep.runSuite({ ...opts, run: suite.run }),
+      runSuite: (opts) => suiteStep.runSuite({ ...opts, run: suite.run, ...(platform ? { platform } : {}) }),
       noteFailingOnMain: () => {},
       confirmedOnMain: () => [],
     },
@@ -210,4 +229,73 @@ test('#553 a whole suite that fails is not repeated when the next round\'s affec
   assert.equal(two.scope, 'files', 'the green fix round stands without a whole suite');
   assert.equal(suite.wholeRuns(), 1);
   assert.equal(fs.existsSync(path.join(runDir, 'logs', 'suite-2-full.log')), false, 'no suite-2-full.log');
+});
+
+// A whole suite that does not stand for every file (#364's rule) is not the run's whole suite: the
+// next round whose affected files pass runs the whole suite again, never a green round of 0 files.
+for (const [kind, label] of [['timeout', 'times out'], ['unreadable', 'fails without a failing test in its log ("(unrecognized failure)")']]) {
+  test(`#553 a whole suite that ${label} does not count: the next round runs the whole suite again`, async (t) => {
+    machineFolder(t);
+    const r = repo(t);
+    r.commit('src/x.js', 'module.exports = 2;\n');
+    const { suite, runDir, round } = engineRun(t, r.dir);
+
+    suite.opts.whole = kind;
+    const one = await round();
+    assert.notEqual(one.status, 'pass', one.message);
+    assert.equal(suite.wholeRuns(), 1, 'round 1 ran the whole suite');
+
+    r.commit('src/z.js', 'module.exports = 2;\n');
+    const two = await round();
+    assert.equal(suite.wholeRuns(), 2, `round 2 runs the whole suite again: ${JSON.stringify(suite.calls.map((c) => (c.files ? c.files : 'whole')))}`);
+    assert.equal(fs.existsSync(path.join(runDir, 'logs', 'suite-2-full.log')), true, 'suite-2-full.log');
+    assert.equal(two.status, 'pass', two.message);
+    assert.notEqual(two.scope, 'files', 'the round\'s result is the whole suite');
+    assert.ok((two.passed || 0) > 0, `the round ran tests, not 0 files: ${two.passed}`);
+  });
+}
+
+test('#553 a fix round through the list whose runner ignored it (as many tests as the run\'s whole suite) is reported as a whole run', async (t) => {
+  machineFolder(t);
+  // 300 test files of src/z.js with long paths: a selection over the Windows command line; a runner
+  // that reads the list (scripts/test.js, as this repository's)
+  const extra = { 'scripts/test.js': '// the files: the command line or process.env.MULTIAGENT_TEST_FILES\n' };
+  for (let i = 0; i < 300; i++) extra[`test/service/area-name-${String(i).padStart(4, '0')}.test.js`] = "require('../../src/z');\n";
+  const r = repo(t, { scripts: { test: 'node scripts/test.js' }, extra });
+  r.commit('src/x.js', 'module.exports = 2;\n');
+  const { suite, round } = engineRun(t, r.dir, { platform: 'win32' });
+
+  suite.failing.add('test/c.test.js');
+  const one = await round();
+  assert.equal(one.status, 'fail', one.message);
+  assert.equal(suite.wholeRuns(), 1);
+
+  // round 2: the change reaches the 300 files; the selection goes through the list, which the runner ignores
+  suite.failing.delete('test/c.test.js');
+  suite.opts.ignoreList = true;
+  r.commit('src/z.js', 'module.exports = 2;\n');
+  const two = await round();
+  const last = lastCall(suite);
+  assert.equal(last.listed, true, `round 2's command got the list: ${last.command}`);
+  assert.equal(two.scope, 'full', 'reported as a whole run');
+  assert.equal(two.list_ignored, true);
+  assert.match(String(two.selection?.why), /ignored the list/i, `selection.why says so: ${two.selection?.why}`);
+});
+
+test('#553 after the run\'s whole suite, a slow test file the new changes reach joins the selection', async (t) => {
+  machineFolder(t);
+  const r = repo(t, { extra: { 'test/slow/z.slow.test.js': "require('../../src/z');\n" } });
+  r.commit('src/x.js', 'module.exports = 2;\n');
+  const { suite, round } = engineRun(t, r.dir);
+
+  suite.failing.add('test/c.test.js');
+  await round();
+  assert.equal(suite.wholeRuns(), 1);
+
+  r.commit('src/z.js', 'module.exports = 2;\n');
+  const two = await round();
+  assert.equal(suite.wholeRuns(), 1, 'no second whole suite');
+  const files = lastCall(suite).files || [];
+  assert.ok(files.includes('test/slow/z.slow.test.js'), `the slow file runs with the selection: ${files}`);
+  assert.ok((two.selection?.files || []).includes('test/slow/z.slow.test.js'), 'selection.files names it');
 });
