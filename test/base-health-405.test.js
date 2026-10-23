@@ -31,6 +31,23 @@ const { fixture, git, commit } = require('./worktree-helpers');
 const load = () => require('../src/base-health');
 const loadRoadmap = () => require('../src/roadmap');
 
+// #528: runBaseCheck takes the `suite` slot (#527) in MULTIAGENT_LOCKS_DIR; each test gets its own
+// folder, so it never waits for a whole suite holding the machine's slot (the one running this file)
+let savedSlot;
+test.beforeEach(() => {
+  savedSlot = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env.MULTIAGENT_SUITE_SLOT };
+  delete process.env.MULTIAGENT_SUITE_SLOT;
+  const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'bh405-locks-'));
+  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  savedSlot.dir = locks;
+});
+test.afterEach(() => {
+  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', savedSlot.locks], ['MULTIAGENT_SUITE_SLOT', savedSlot.inherit]]) {
+    if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+  fs.rmSync(savedSlot.dir, { recursive: true, force: true, maxRetries: 3 });
+});
+
 const PROJECT = 'proj-405';
 const RED = { test: 'cart totals include tax', file: 'test/cart.test.js', error: 'expected 110, got 100' };
 const LOG_MARKER = 'LOG-405-MARKER cart totals include tax failed';

@@ -14,10 +14,30 @@
 //   cover the filing).
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { makeService, gitRepo } = require('./helpers');
 
 const loadArea = () => require('../../src/service/areas/base-health');
 const loadHealth = () => require('../../src/base-health');
+
+// #538, #539: the check takes the `suite` slot (#527) in MULTIAGENT_LOCKS_DIR; each test gets its
+// own folder, so it never waits for a whole suite holding the machine's slot (the one running this file)
+let savedSlot;
+test.beforeEach(() => {
+  savedSlot = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env.MULTIAGENT_SUITE_SLOT };
+  delete process.env.MULTIAGENT_SUITE_SLOT;
+  const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'bh405w-locks-'));
+  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  savedSlot.dir = locks;
+});
+test.afterEach(() => {
+  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', savedSlot.locks], ['MULTIAGENT_SUITE_SLOT', savedSlot.inherit]]) {
+    if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+  fs.rmSync(savedSlot.dir, { recursive: true, force: true, maxRetries: 3 });
+});
 
 const FAILURE = { test: 'cart totals include tax', file: 'test/cart.test.js', reason: 'fails on the base too' };
 
