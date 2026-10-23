@@ -171,6 +171,33 @@ test('#488 a name that exists is replaced with Replace ticked', async () => {
   assert.equal(replaced[0].includes('custom-flow'), true, replaced[0]);
 });
 
+// the preview's fingerprint and the tools a step declares (stepTools), as the service returns them
+function previewStub(name, fp, stepTools) {
+  return async (arg) => (arg && arg.preview
+    ? { ok: true, summary: { ...summaryFor(name), stepTools }, fingerprint: fp }
+    : { ok: true, file: `${arg?.name || name}.yaml`, summary: summaryFor(name) });
+}
+
+test('#488 Import sends back the fingerprint of the text the dialog showed', async () => {
+  const page = await definitions({ importWorkflow: previewStub('shared-flow', 'f00dfeed12345678', []) }, withImport('https://example.com/flows/shared-flow.yaml'));
+  const ok = page.$('[data-testid="workflow-import-confirm"]');
+  assert.equal(ok !== null, true, 'Import');
+  ok.click();
+  await settle(30);
+  const done = writes(page);
+  assert.equal(done.length, 1, 'one write');
+  assert.equal(done[0].includes('"fingerprint":"f00dfeed12345678"'), true, done[0]);
+});
+
+test('#488 the import dialog lists the tools a step declares', async () => {
+  const stepTools = [{ step: 'deploy_cluster', tools: ['bash:kubectl'] }];
+  const page = await definitions({ importWorkflow: previewStub('shared-flow', 'f00dfeed12345678', stepTools) }, withImport('https://example.com/flows/shared-flow.yaml'));
+  const box = dialog(page);
+  assert.equal(box !== null, true, 'the import dialog');
+  const text = norm(textOf(box));
+  for (const literal of ['deploy_cluster', 'bash:kubectl']) assert.equal(text.includes(literal), true, `${literal} in: ${text}`);
+});
+
 test('#488 a preview the service refuses shows its reasons and offers no Import', async () => {
   const importWorkflow = async () => { throw new Error('Step "tidy" references unknown agent "ghost".'); };
   const page = await definitions({ importWorkflow }, withImport('https://example.com/flows/ghost.yaml'));
