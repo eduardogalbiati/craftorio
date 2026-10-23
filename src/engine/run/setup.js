@@ -92,6 +92,21 @@ const methods = {
     }
   },
 
+  // #554: the owner's per-agent provider / model / effort of their workspace copy (ownerCopy), over the
+  // repository copy's; the providers that copy defines come with them (it ran with them), never over one
+  // the workflow defines. Agents the workflow lacks are skipped; this run's choice (#262) goes on top.
+  applyOwnerCopy(owner) {
+    this.ownerAgents = {};
+    const providers = owner?.providers || {};
+    for (const [name, o] of Object.entries(owner?.agents || {})) {
+      if (!Object.hasOwn(this.wf.agents, name)) continue;
+      const p = o?.provider;
+      if (p && Object.hasOwn(providers, p) && !Object.hasOwn(this.wf.providers || {}, p)) this.wf.providers = { ...this.wf.providers, [p]: providers[p] };
+      Object.assign(this.wf.agents[name], Object.fromEntries(['provider', 'model', 'effort'].filter((k) => o?.[k]).map((k) => [k, String(o[k])])));
+      this.ownerAgents[name] = true;
+    }
+  },
+
   // `agents.<name>.enabled` (a boolean or a template over the inputs) leaves an agent out of
   // the run, e.g. the contender slots of ai-arena the user did not fill. Fan-out steps run
   // without it (`min_success` is capped at the agents left); a single-agent step can't.

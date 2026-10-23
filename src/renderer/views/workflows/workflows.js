@@ -275,6 +275,7 @@ function workflowCard(w) {
       ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? t('workflows.hide_the_steps') : t('workflows.show_every_step')}"><span class="badge">${t('workflows.steps_count', { count: w.steps.length })}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
       ${used ? `<p class="small wf-used"><span class="muted">${t('workflows.used_in')}</span> ${used}</p>` : ''}
+      ${runsLine()}
       ${diff}
       <div class="row wf-actions">
         ${actions}
@@ -301,6 +302,18 @@ function workflowCard(w) {
         ${download}
         <button class="btn ghost sm" data-clone data-testid="workflow-clone" ${w.error ? 'disabled' : ''}>${t('workflows.clone')}</button>
         <button class="btn ghost sm" data-builder data-testid="workflow-open-builder" ${w.error ? 'disabled' : ''} title="${t('workflows.builder_tip_bundled')}">${t('workflows.open_in_builder')}</button>`;
+  }
+
+  // #554: which copy a project's run uses, on both cards of a workflow its repository also declares
+  // (a workspace card reads it from the first project's repository entry of the same file)
+  function runsLine() {
+    const pair = repo ? w : wfDefs.repository.find((r) => r.file === w.file && r.runsCopy);
+    if (!pair?.runsCopy) return '';
+    const commit = esc(String(pair.commit || '').slice(0, 7));
+    const runs = (pair.runsCopy === 'repository') === repo;
+    const key = repo ? (runs ? 'workflows.runs_repository' : 'workflows.runs_not_repository') : (runs ? 'workflows.runs_workspace' : 'workflows.runs_not_workspace');
+    const project = (state.projects || []).find((p) => p.id === pair.projectId)?.name || pair.projectId || '';
+    return `<p class="small wf-runs${runs ? '' : ' muted'}" data-testid="workflow-runs-line" title="${esc(t('workflows.runs_tip', { project }))}">${t(key, { commit })}</p>`;
   }
 
   // #485: what changed in a repository workflow since the commit the owner last accepted

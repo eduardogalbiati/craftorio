@@ -28,6 +28,7 @@ const {
 const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
+const workflows = require('../../workflows');
 const backlog = require('../../backlog');
 const roadmaps = require('../../roadmap');
 const agents = require('../../agents');
@@ -327,12 +328,33 @@ module.exports = (ctx) => {
   // until the owner accepted it and capped even then (src/engine/run/load.js); else, and always with
   // workspaceOnly (the Start drawer's pick), the workspace's. A path (a resumed run's recorded file)
   // is that file, unless it is a repository workflow's copy: that one is checked again
-  function runWorkflowFile(projectId, file, settings, workspaceOnly = false) {
-    const own = path.isAbsolute(String(file || '')) && !ctx.isRepositoryCopy(file);
+  // #554: the owner's edited workspace copy of that name (modified or custom) wins, unless the project
+  // prefers the repository's workflows; when the repository's copy runs, the edited copy's per-agent
+  // provider / model / effort come with it (ownerCopy, WorkflowRun)
+  function runWorkflowFile(project, file, settings, workspaceOnly = false) {
+    const projectId = project?.id || null;
+    const resumed = path.isAbsolute(String(file || ''));
+    const own = resumed && !ctx.isRepositoryCopy(file);
     const fromRepo = projectId && !workspaceOnly && !own ? ctx.repositoryWorkflow(projectId, file) : null;
     if (!fromRepo) return ctx.workflowPath(file);
-    loadRepositoryWorkflow(fromRepo.path, { accepted: fromRepo.accepted, policy: { tools: settings.repositoryWorkflowTools } });
-    return { file: fromRepo.path, fallback: false };
+    const edited = workflows.editedWorkspaceCopy([file, fromRepo.file], ctx.workflowDirs());
+    if (edited && !resumed && !project.preferRepositoryWorkflows) return ctx.workflowPath(edited);
+    const wf = loadRepositoryWorkflow(fromRepo.path, { accepted: fromRepo.accepted, policy: { tools: settings.repositoryWorkflowTools }, commit: fromRepo.commit });
+    return { file: fromRepo.path, fallback: false, ownerCopy: edited ? ownerCopy(path.join(ctx.ws.workflows, edited), wf) : null };
+  }
+
+  // #554: { agents: { <agent>: { provider?, model?, effort? } }, providers } of the owner's workspace
+  // copy, for the agents the repository's copy (wf) also has; templated values are left out
+  function ownerCopy(file, wf) {
+    let mine;
+    try { mine = loadWorkflow(file); } catch { return null; }
+    const agents = {};
+    for (const [name, a] of Object.entries(mine.agents || {})) {
+      if (!Object.hasOwn(wf.agents || {}, name)) continue;
+      const pick = Object.fromEntries(['provider', 'model', 'effort'].filter((k) => a?.[k] && !String(a[k]).includes('{{')).map((k) => [k, String(a[k])]));
+      if (Object.keys(pick).length) agents[name] = pick;
+    }
+    return Object.keys(agents).length ? { agents, providers: mine.providers || {} } : null;
   }
 
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
@@ -411,21 +433,21 @@ module.exports = (ctx) => {
       const baselineAt = Date.now();
       // the Oracle's spend (in no run folder) counts too
       const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local, extraRuns: ctx.agentUsageRuns() });
-      const wfFile = runWorkflowFile(projectId, file, settings, workspaceWorkflow);
+      const project = projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId) : null;
+      const wfFile = runWorkflowFile(project, file, settings, workspaceWorkflow);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {
         const msg = `workflow ${path.basename(wfFile.file)} is not in ${ws.workflows}; using the copy bundled with the app (${wfFile.file})`;
         console.warn(msg);
         notices.push({ level: 'warn', message: msg });
       }
-      const project = projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId) : null;
       run = new WorkflowRun({
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         ignoreInstallScripts: installScriptsOff(project, fromUrl, notices),
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
-        agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
+        agentOverrides, ownerCopy: wfFile.ownerCopy,fallbacks: settingsFallbacks(settings), models: settings.models || {},
         accounts: settingsAccounts(settings), accountCooldownMs: settingsAccountCooldownMs(settings),
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),

@@ -106,11 +106,15 @@ function addedGates(srcDir, destDir, file) {
  * @returns {{ file: string, dir: string|null, fallback: boolean, origin?: string, entry?: object }}
  *   fallback: found only in a later folder (e.g. the user deleted the workspace copy). origin (with
  *   `repo` only): repository, workspace or bundled. Throws if not found anywhere.
+ * #554: the owner's edited workspace copy (origin modified or custom) wins over the repository's
+ * copy of the same name, unless `preferRepository` (the project's "prefer the repository's workflows").
  */
-function resolveWorkflow(file, dirs, { repo = null } = {}) {
+function resolveWorkflow(file, dirs, { repo = null, preferRepository = false } = {}) {
   if (!file) throw new Error('No workflow file given.');
   if (path.isAbsolute(file)) return { file, dir: null, fallback: false };
   const entry = repo ? repositoryEntry(readManifest(repo).workflows, file) : null;
+  const edited = entry && !preferRepository ? editedWorkspaceCopy([file, `${file}.yaml`, path.posix.basename(entry.file)], dirs) : null;
+  if (edited) return { file: path.join(dirs[0], edited), dir: dirs[0], fallback: false, origin: 'workspace' };
   if (entry) {
     const dir = path.join(repo, path.dirname(MANIFEST_FILE));
     return { file: path.join(dir, ...entry.file.split('/')), dir, fallback: false, origin: 'repository', entry };
@@ -130,9 +134,18 @@ function repositoryEntry(entries, file) {
   return (entries || []).find((e) => e.file && [e.name, `${e.name}.yaml`, path.posix.basename(e.file)].includes(want)) || null;
 }
 
+// #554: the first of `names` the workspace (dirs[0]) holds as the owner's edited copy (origin
+// modified or custom against the bundled dirs[1]), or null (an untouched default copy, or none)
+function editedWorkspaceCopy(names, [workspaceDir, bundledDir] = []) {
+  if (!workspaceDir) return null;
+  const status = workflowStatus(bundledDir, workspaceDir);
+  return names.map((n) => path.basename(String(n || ''))).find((n) => ['modified', 'custom'].includes(status[n]?.origin)) || null;
+}
+
 module.exports = {
   addedGates,
   BUNDLED_WORKFLOWS_DIR,
+  editedWorkspaceCopy,
   isWorkflowFile,
   repositoryEntry,
   resolveWorkflow,

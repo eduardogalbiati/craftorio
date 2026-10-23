@@ -78,7 +78,7 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
   let workflows = cleanWorkflows(data.workflows);
   if (!workflows.length && cloned) workflows = cleanWorkflows((await projectManifest({ folder }))?.workflows?.map((w) => ({ ...w, origin: 'manifest' })));
   const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuild(workflows) : null;
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   return readProject(dir, id);
 }
@@ -95,6 +95,8 @@ function updateProject(dir, id, patch) {
   if (patch.autoEpic !== undefined) next.autoEpic = !!patch.autoEpic;
   // #472: the dependency install of a run skips the packages' scripts (--ignore-scripts)
   if (patch.ignoreInstallScripts !== undefined) next.ignoreInstallScripts = !!patch.ignoreInstallScripts;
+  // #554: the repository's copy of a workflow runs even when the workspace holds the owner's edited copy
+  if (patch.preferRepositoryWorkflows !== undefined) next.preferRepositoryWorkflows = !!patch.preferRepositoryWorkflows;
   // how to run a run's worktree from a gate (Run locally); overrides the workflow's orchestrator.local_preview
   if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
   // the fingerprint of the declared run command the owner confirmed (#115): a changed one asks again

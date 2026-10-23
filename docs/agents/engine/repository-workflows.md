@@ -9,9 +9,14 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   bundled one (`plan`, `build`, `monitor`). Invalid YAML, a non-list `workflows`, an entry without a
   name, a duplicate name, an unknown category or an unmet `requires` make the manifest malformed: the
   Workflows screen shows the error and the project runs on the workspace's workflows. No manifest: no error.
-- **Resolution** (`src/workflows.js` `resolveWorkflow`): a project's workflow of a name resolves
-  repository → workspace → bundled. The list (`workflows:list { projectId }`) carries the repository's
-  entries with `origin: 'repository'`, the commit and `accepted`.
+- **Resolution** (`src/workflows.js` `resolveWorkflow`, #554): a project's workflow of a name resolves
+  workspace (edited: `origin: modified` or `custom`) → repository → workspace (untouched `default`) →
+  bundled: the owner's edited copy wins over the repository's copy of the same name. The project's
+  setting "Prefer the repository's workflows" (`preferRepositoryWorkflows` in `<workspace>/projects/<id>.json`,
+  the project dialog) puts the repository first. The list (`workflows:list { projectId }`) carries the
+  repository's entries with `origin: 'repository'`, the commit, `accepted` and `runsCopy`
+  (`workspace` | `repository`, from `runsCopies`); both cards of the pair show the "runs:" line
+  (`workflow-runs-line`: "runs: workspace copy (your models)" / "runs: repository @ sha").
 - **Read at HEAD** (`src/service/areas/repository-workflows.js`): the committed text, never an
   uncommitted edit, copied to `<workspace>/repository-workflows/<project>/<sha>/` for the engine and the
   builder (read-only there; Clone makes a workspace copy).
@@ -25,8 +30,12 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   (`repositoryWorkflowTools` in `settings.json`, edited by hand: Settings has no field for it; else
   `repositoryToolPolicy()`, the tools the bundled workflows give their agents: `read`, `edit`, `write`
   and their `bash:<toolchain>` commands, never a bare `bash`). Each refusal names the reason.
-- **Which file a run takes**: the roadmap and `run:start { projectId }` take the repository's entry of
-  the name; the Start drawer passes `workspace: true` and runs the workspace's file, as before.
+- **Which file a run takes** (`src/service/areas/runs.js` `runWorkflowFile`): the roadmap and
+  `run:start { projectId }` take the copy the resolution picks, so a roadmap item that names the owner's
+  edited file (created before #485 too) runs it and never pauses for a repository copy it does not use:
+  acceptance is asked only when the repository copy is the one that runs, and the refusal names it
+  ("from the repository @ sha7"). The Start drawer passes `workspace: true` and runs the workspace's file,
+  as before. A resume reloads the file the run started with.
 - **Read at creation** (#486, `src/projects.js` `projectManifest`, channel `projects:manifest { url | folder }`):
   a folder's manifest from disk; a remote one through `gh api .../contents/` or `glab api .../files/.../raw`,
   else an unauthenticated raw read; never clones. No manifest: `null`; a repository nothing can read:
@@ -34,4 +43,8 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   `workflows: [{ name, origin, category }]` and `defaultWorkflow` (a name, the first solo or team one);
   `projectDefaultWorkflow(p)` gives the roadmap, the Product Owner, the chain and the Oracle that default
   before Settings' one.
-- The owner's per-agent model choices stay in the workspace: a repository copy carries none.
+- The owner's per-agent model choices stay in the workspace: a repository copy carries none. When the
+  repository copy runs and the workspace holds an edited copy of the name, that copy's
+  `agents.<name>.provider` / `model` / `effort` are layered onto the repository copy (`ownerCopy`,
+  `src/engine/run/setup.js` `applyOwnerCopy`), under the run's own choices (#262).
+  `workflow.started.agents.<name>.from` says where each agent's model came from.

@@ -59,6 +59,9 @@ test('#485 resolveWorkflow: a repository workflow resolves by its manifest name 
 test('#485 resolveWorkflow: the repository wins over the workspace for the same name', (t) => {
   const { resolveWorkflow } = load();
   const { repo, ws, bundled } = setup(t);
+  // #554: an edited (custom/modified) workspace copy wins; the repository wins over an untouched one
+  fs.renameSync(path.join(ws, 'shared.yaml'), path.join(bundled, 'shared.yaml'));
+  load().seedWorkflows(bundled, ws);
   for (const name of ['shared', 'shared.yaml']) {
     const r = resolveWorkflow(name, [ws, bundled], { repo });
     same(r.file, path.join(repo, '.multiagent', 'workflows', 'shared.yaml'));

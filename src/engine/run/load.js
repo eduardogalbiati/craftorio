@@ -502,14 +502,16 @@ function repositoryToolsInPolicy(wf, name, policy) {
  * Loads a repository workflow (#485): every loadWorkflow check, then refused when the owner has not
  * accepted it and when it goes beyond the caps.
  * @param {string} file the workflow in the run's base checkout (or the text of its accepted commit)
- * @param {{ accepted: boolean, policy?: { tools?: string[] } }} opts
+ * @param {{ accepted: boolean, policy?: { tools?: string[] }, commit?: string }} opts commit: the
+ *   commit the copy was read at (#554, named in the refusal); default: the copy's folder (its sha)
  */
-function loadRepositoryWorkflow(file, { accepted, policy } = { accepted: false }) {
+function loadRepositoryWorkflow(file, { accepted, policy, commit } = { accepted: false }) {
   const name = () => path.basename(String(file), path.extname(String(file)));
   if (!accepted) {
     let shown = name();
     try { shown = String(parseWorkflowFile(file)?.metadata?.name || shown); } catch { /* the file's name */ }
-    throw new Error(`Workflow "${shown}" from the repository is not accepted: accept it on the Workflows screen for this commit first.`);
+    const sha = String(commit || path.basename(path.dirname(String(file)))).slice(0, 7);
+    throw new Error(`Workflow "${shown}" from the repository @ ${sha} is not accepted: accept it on the Workflows screen for this commit first.`);
   }
   const wf = loadWorkflow(file);
   const shown = String(wf.metadata?.name || name());

@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const workspace = require('../../workspace');
+const projects = require('../../projects');
 const {
   loadWorkflow,
   render,
@@ -70,21 +71,43 @@ module.exports = (ctx) => {
         });
       });
     if (!projectId) return own;
-    // a workflow the manifest names without a file sits in the manifest's category for this project
-    return repositoryList(projectId, (categories) => own.map((w) => (categories[w.name] ? { ...w, category: categories[w.name] } : w)));
+    // a workflow the manifest names without a file sits in the manifest's category for this project;
+    // #554: a workspace copy the repository also declares says which of the two this project's run uses
+    return repositoryList(projectId, (categories, runs) => own.map((w) => ({
+      ...w,
+      ...(categories[w.name] ? { category: categories[w.name] } : {}),
+      ...(runs[w.file] ? { runsCopy: runs[w.file].copy, runs: runs[w.file].copy === 'workspace' ? 'runs: workspace copy (your models)' : `does not run for this project: the repository copy @ ${runs[w.file].sha} runs` } : {}),
+    })));
   }
 
-  // leading(categories): what comes first, from the categories the manifest gives the workflows it
-  // names without a file; then the manifest's error and the repository's own workflows of a project
+  // #554: which copy of each repository workflow a run of the project uses ({ <file>: { copy, sha } }):
+  // the owner's edited workspace copy of that name, unless the project prefers the repository's
+  function runsCopies(projectId, items) {
+    let prefer = false;
+    try { prefer = !!projects.readProject(ctx.ws.projects, projectId).preferRepositoryWorkflows; } catch { /* no project: the default */ }
+    return Object.fromEntries(items.map((w) => [w.file, {
+      copy: !prefer && workflows.editedWorkspaceCopy([w.file], ctx.workflowDirs()) ? 'workspace' : 'repository',
+      sha: String(w.commit || '').slice(0, 7),
+    }]));
+  }
+
+  // leading(categories, runs): what comes first, from the categories the manifest gives the workflows
+  // it names without a file and which copy runs (runsCopies); then the manifest's error and the
+  // repository's own workflows of a project
   function repositoryList(projectId, leading) {
     const repo = ctx.repositoryWorkflows(projectId);
+    const runs = runsCopies(projectId, repo.items);
     const errors = repo.errors.length ? [{ file: 'project.yaml', name: MANIFEST_FILE, origin: 'repository', projectId, error: repo.errors.join('\n'), steps: [] }] : [];
-    return [...leading(repo.categories), ...errors, ...repo.items.map((w) => {
+    return [...leading(repo.categories, runs), ...errors, ...repo.items.map((w) => {
       const item = describe(w.path, w.file, {
         origin: 'repository', projectId, commit: w.commit, accepted: w.accepted, acceptedCommit: w.acceptedCommit, diff: w.diff,
         updateAvailable: false, restorable: false, bundledVersion: null, trusted: w.accepted,
       });
-      return { ...item, ...(w.entry.category ? { category: w.entry.category } : {}), ...(w.entry.description ? { description: w.entry.description } : {}) };
+      const { copy, sha } = runs[w.file];
+      return {
+        ...item, ...(w.entry.category ? { category: w.entry.category } : {}), ...(w.entry.description ? { description: w.entry.description } : {}),
+        runsCopy: copy, runs: copy === 'repository' ? `runs: repository @ ${sha}` : 'does not run for this project: the workspace copy (your models) runs',
+      };
     })];
   }
 

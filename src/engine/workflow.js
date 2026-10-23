@@ -158,6 +158,9 @@ class WorkflowRun extends EventEmitter {
   // agentOverrides (#262): { <agent>: { provider?, model?, effort? } } this run's choice for an agent (the Start
   //   drawer's "Agents"); the workflow's values are the defaults, '' or null clears an effort. Recorded in
   //   workflow.started `agents`; an agent the workflow does not have, or an undefined provider, is refused.
+  // ownerCopy (#554): { agents: { <agent>: { provider?, model?, effort? } }, providers } the owner's edited
+  //   workspace copy of the repository workflow this run takes: under agentOverrides, over the file's values;
+  //   recorded as workflow.started `agents.<agent>.from`.
   // fallbacks (#262): { <provider>: ["<provider>:<model>", ...] } Settings' chains per provider, for an agent whose
   //   workflow declares no `fallbacks` (see fallbackChain).
   // accounts (#312): { <provider>: [{ name, dir, enabled }] } Settings' accounts per provider, in order (an
@@ -177,7 +180,7 @@ class WorkflowRun extends EventEmitter {
   //   null = no Product Owner (a simulation needs none).
   // language (#327): () => the settings' language ({ agents, issues }) or null, called at each turn: every
   //   turn's [Language] line and the output instruction follow it (src/shared/language.js); null = English.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -248,6 +251,7 @@ class WorkflowRun extends EventEmitter {
         if (typeof a[k] === 'string' && a[k].includes('{{')) a[k] = render(a[k], { inputs: this.inputs }).trim();
       }
     }
+    this.applyOwnerCopy(ownerCopy);
     this.applyAgentOverrides(agentOverrides);
     // #262: Settings' fallback chains per provider and limits per model
     validateModels(models || undefined, 'Settings models');
@@ -380,7 +384,7 @@ class WorkflowRun extends EventEmitter {
       agent_names: this.agentNames(),
       // #262: what each agent runs on in this run, its overrides applied; the overrides themselves
       // (what differs from the workflow), which a resume of this run applies again
-      agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model, effort: a.effort || null }])),
+      agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model, effort: a.effort || null, ...(this.ownerAgents?.[k] ? { from: this.agentOverrides[k] ? 'this run, over the workspace copy (your models)' : 'workspace copy (your models)' } : {}) }])),
       agent_overrides: Object.keys(this.agentOverrides).length ? this.agentOverrides : undefined,
       display: this.displayNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),

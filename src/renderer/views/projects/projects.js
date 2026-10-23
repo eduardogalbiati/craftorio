@@ -86,6 +86,8 @@ function openProjectModal(p, { fromDrawer = false, fromHeader = false } = {}) {
   scripts.checked = !!p?.ignoreInstallScripts;
   scripts.dataset.touched = '';
   scripts.onchange = () => { scripts.dataset.touched = '1'; };
+  // #554: the repository's copy of a workflow runs over the owner's edited workspace copy
+  $('#pj-prefer-repo-workflows').checked = !!p?.preferRepositoryWorkflows;
   // #486: the Workflows block, for a new project (the project's page edits the set): the repository's
   // manifest read from the folder, else from the URL before cloning (project-workflows.js)
   const wfBox = $('#pj-workflows');
@@ -147,6 +149,7 @@ async function saveProject(e) {
   data.localPreview = { cwd: kept.cwd, env: kept.env, install, command, url };
   // not a named field: FormData leaves an unchecked box out
   data.ignoreInstallScripts = $('#pj-ignore-scripts').checked;
+  data.preferRepositoryWorkflows = $('#pj-prefer-repo-workflows').checked;
   // #486: the workflows checked in the Workflows block; none keeps today's project (no set, no default)
   const workflows = editingProject ? [] : window.ProjectWorkflows.selected($('#pj-workflows'));
   if (workflows.length) data.workflows = workflows;
@@ -232,6 +235,10 @@ registerView({
       <div class="field">
         <label class="check small"><input type="checkbox" id="pj-ignore-scripts" data-testid="project-ignore-scripts" /><span>${t('projects.install_without_scripts')}</span></label>
         <div class="hint">${t('projects.install_without_scripts_hint')}</div>
+      </div>
+      <div class="field">
+        <label class="check small"><input type="checkbox" id="pj-prefer-repo-workflows" data-testid="project-prefer-repository-workflows" /><span>${t('projects.prefer_repository_workflows')}</span></label>
+        <div class="hint">${t('projects.prefer_repository_workflows_hint')}</div>
       </div>
       <p id="pj-error" class="error small"></p>
       <div class="modal-actions">
