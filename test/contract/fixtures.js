@@ -261,7 +261,10 @@ module.exports = {
   'usage:actions': { arg: { force: false }, invalid: { arg: { force: 'yes' } } },
   'usage:get': { arg: {}, invalid: { arg: { scope: 42 } } },
   'voice:mic-access': { arg: null },
+  // #487: ways of working on the contract project; compose without a previous analysis is a client error
+  'workflows:compose': { setup: project, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
   'workflows:export': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
+  'workflows:interview': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'workflows:list': { arg: null },
   'workflows:pipelines': { arg: null },
   'workspace:get': { arg: null },
