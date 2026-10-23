@@ -2,10 +2,6 @@
 // defaults) and the builder's load / save / clone.
 
 const {
-  requireId,
-  requireObject,
-} = require('../common');
-const {
   ANY,
   args,
   BOOL,
@@ -18,6 +14,10 @@ const {
   STRING,
   WORKFLOW_FILE,
 } = require('../schemas');
+const {
+  requireId,
+  requireObject,
+} = require('../common');
 
 // #485: a project's repository workflow (areas/repository-workflows.js); its channels take one
 // object { projectId, file[, commit] } (params 'repo'), the way the Workflows screen calls them
