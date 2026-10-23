@@ -2,7 +2,22 @@
 // tokens, and the environment dumps isEnvDump recognises in any segment of a command.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isEnvDump, redactBaseline, redactEnvDump } = require('../src/engine/redact-baseline');
+const { isEnvDump, redactBaseline, redactEnvDump, redactMcpConfig } = require('../src/engine/redact-baseline');
+
+test('redactMcpConfig keeps a --mcp-config file path and the other arguments', () => {
+  const args = ['-p', '--mcp-config', 'C:/ws/mcp.json', '--model', 'm'];
+  assert.deepEqual(redactMcpConfig(args), ['-p', '--mcp-config', 'C:/ws/mcp.json', '--model', 'm']);
+});
+
+test('redactMcpConfig redacts a --mcp-config argument that starts like JSON but does not parse', () => {
+  assert.deepEqual(redactMcpConfig(['--mcp-config', '{"mcpServers": {"x": {"env": {"API_TOKEN": "s3cr3t"']), ['--mcp-config', '[REDACTED]']);
+});
+
+test('redactMcpConfig redacts each env value, keeps the names and the rest of the server', () => {
+  const cfg = JSON.stringify({ mcpServers: { db: { command: 'node', args: ['srv.js'], env: { API_TOKEN: 's3cr3t', MODE: 'dev' } } } });
+  const [, out] = redactMcpConfig(['--mcp-config', cfg]);
+  assert.deepEqual(JSON.parse(out), { mcpServers: { db: { command: 'node', args: ['srv.js'], env: { API_TOKEN: '[REDACTED]', MODE: '[REDACTED]' } } } });
+});
 
 test('a PEM block cut before its END line is redacted to the end', () => {
   const out = redactBaseline('before\n-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAsecretbody');

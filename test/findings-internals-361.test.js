@@ -58,3 +58,9 @@ test('the main log keeps the last 200 console lines', () => {
   assert.match(recent[199], /log line 229$/);
   assert.equal(lines.length, 230, 'still printed');
 });
+
+// #475: finding bundles share the Recorder's baseline list (src/engine/redact-baseline.js) and its marker
+test('scrub redacts a GitLab token and a bearer token with [REDACTED], keeping the text around them', () => {
+  const out = findings.scrub({ log: ['push with glpat-AbCdEf123456_xyz', 'Authorization: Bearer abcdef0123456789'], password: 'p' });
+  assert.deepEqual(out, { log: ['push with [REDACTED]', 'Authorization: Bearer [REDACTED]'] });
+});
