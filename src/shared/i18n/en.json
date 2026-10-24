@@ -3743,6 +3743,7 @@
   "releases.open_the_run": "Open the run",
   "releases.passed_count": "{passed} passed",
   "releases.promote": "Promote",
+  "releases.promote_built_as": "Built as {version} (package.json): the packaged app reports {version} whatever the stable version, as nothing is rebuilt.",
   "releases.promote_dialog_text": "Tags the candidate's commit {commit} with the stable version and pushes only the tag: its prerelease becomes the latest release, with the same packages (no rebuild).",
   "releases.promote_title": "Promote {rc} to stable",
   "releases.promote_to_stable": "Promote to stable",

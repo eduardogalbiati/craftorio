@@ -113,6 +113,9 @@
     $('#rel-promote-title').textContent = t('releases.promote_title', { rc: rel.promote.tag });
     $('#rel-promote-text').textContent = t('releases.promote_dialog_text', { commit: String(rel.promote.commit).slice(0, 8) });
     $('#rel-promote-version').value = c?.stable || rel.data?.stable?.version || '';
+    // the version the rc was built with (package.json's, in its tag): a promotion does not rebuild it
+    const built = (/^v?(.+)-rc\.\d+$/.exec(rel.promote.tag || '') || [])[1] || '';
+    $('#rel-promote-built').textContent = built ? t('releases.promote_built_as', { version: built }) : '';
     $('#rel-promote-error').textContent = '';
     $('#rel-promote-modal').classList.remove('hidden');
     $('#rel-promote-version').focus({ preventScroll: true });
@@ -259,6 +262,7 @@
               <label for="rel-promote-version">${t('releases.stable_version')}</label>
               <input type="text" id="rel-promote-version" data-testid="stable-version-input" autocomplete="off" placeholder="${t('releases.version_placeholder')}" />
               <div class="hint">${t('releases.stable_version_hint')}</div>
+              <div id="rel-promote-built" class="hint" data-testid="promote-built-version"></div>
             </div>
             <p id="rel-promote-error" class="error small" role="alert" data-testid="promote-error"></p>
             <div class="modal-actions">

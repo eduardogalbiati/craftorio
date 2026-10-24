@@ -85,9 +85,19 @@ const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || '')
 /** The project's last shipped release, or null. */
 const lastRelease = (history) => [...(history?.releases || [])].sort(byDate).at(-1) || null;
 
+// #489: where the last stable release cuts the candidates: the date of the rc it promoted (by its
+// tag or commit), not the promotion's own time, so a later rc held or red when an older one was
+// promoted stays a candidate; the release's date when it did not come from an rc (a milestone).
+function stableBoundary(history) {
+  const last = lastRelease(history);
+  if (!last) return '';
+  const rc = objects(history?.candidates).find((c) => (last.rc && c.tag === last.rc) || (last.commit && c.commit === last.commit));
+  return String(rc?.date || last.date || '');
+}
+
 /** #489: the release candidates merged after the last stable release (all of them before the first one), oldest first. */
 function candidatesSinceStable(history) {
-  const since = String(lastRelease(history)?.date || '');
+  const since = stableBoundary(history);
   return objects(history?.candidates).filter((c) => !since || String(c.date || '') > since).sort(byDate);
 }
 

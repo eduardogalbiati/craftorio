@@ -45,7 +45,7 @@ const PERMISSIONS = [
   { id: 'commit', label: 'Commit a workflow or skill fix to the local main', does: 'Writes files under workflows/ or skills/ and commits them on the local main (never pushed).', undo: 'Undo with git revert of the commit named in the result.', default: false },
   { id: 'file-issue', label: 'File an issue for what it found', does: 'Creates a new issue in the project\'s tracker.', undo: 'No undo: close the issue yourself (the watch never closes issues).', default: false },
   // #489: the release train at the night's end
-  { id: 'promote-release', label: 'Promote a release', does: 'At the night\'s end, tags the last release candidate as the stable release when the base check is green on it and it is not on Hold (#489).', undo: 'No undo: delete the stable tag and its GitHub release yourself.', default: false },
+  { id: 'promote-release', label: 'Promote a release', does: 'At the night\'s end, tags the last release candidate as the stable release and pushes that tag (the only push the night may make) when the base check is green on it and it is not on Hold (#489).', undo: 'No undo: delete the stable tag and its GitHub release yourself.', default: false },
 ];
 const PERMISSION_IDS = PERMISSIONS.map((p) => p.id);
 const DEFAULT_PERMISSIONS = PERMISSIONS.filter((p) => p.default).map((p) => p.id);

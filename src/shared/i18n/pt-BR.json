@@ -3743,6 +3743,7 @@
   "releases.open_the_run": "Abrir a execução",
   "releases.passed_count": "{passed} passaram",
   "releases.promote": "Promover",
+  "releases.promote_built_as": "Construída como {version} (package.json): o app empacotado informa {version} qualquer que seja a versão estável, pois nada é reconstruído.",
   "releases.promote_dialog_text": "Cria a tag da versão estável no commit {commit} da candidata e envia só a tag: a prerelease vira a release mais recente, com os mesmos pacotes (sem rebuild).",
   "releases.promote_title": "Promover {rc} a estável",
   "releases.promote_to_stable": "Promover a estável",

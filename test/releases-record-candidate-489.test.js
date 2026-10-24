@@ -27,6 +27,20 @@ test('#489 recordCandidate numbers the rcs since the last stable and keeps a com
   assert.throws(() => releases.recordCandidate(dir, 'p', { commit: 'ccc', version: ' ' }), /commit and a version/);
 });
 
+test('#489 promoting an older rc keeps the later ones as candidates (the cut is the rc, not the promotion time)', async (t) => {
+  const dir = tmp(t);
+  const day = (d) => `2026-10-0${d}T00:00:00.000Z`;
+  releases.recordCandidate(dir, 'p', { commit: 'aaa', version: '1.3.0', issues: [{ number: 1, labels: ['bug'] }], date: day(1) });
+  releases.recordCandidate(dir, 'p', { commit: 'bbb', version: '1.3.0', issues: [{ number: 2, labels: ['bug'] }], date: day(2) });
+  releases.recordCandidate(dir, 'p', { commit: 'ccc', version: '1.3.0', issues: [{ number: 3, labels: ['enhancement'] }], date: day(3) });
+  await releases.promoteRelease({ dir, projectId: 'p', commit: 'bbb', version: '1.3.0', tagCommit: async () => {}, date: day(5) });
+  const h = releases.readReleases(dir, 'p');
+  assert.deepEqual(releases.candidatesSinceStable(h).map((c) => c.tag), ['v1.3.0-rc.3']);
+  assert.equal(releases.mergesSinceStable(h), 1);
+  assert.deepEqual(releases.issuesSinceStable(h).map((i) => i.number), [3]);
+  assert.equal(releases.recordCandidate(dir, 'p', { commit: 'ddd', version: '1.4.0', date: day(6) }).tag, 'v1.4.0-rc.2');
+});
+
 test('#489 a history without candidates reads as before (no candidates key)', (t) => {
   const dir = tmp(t);
   releases.recordRelease(dir, 'p', { version: 'v1', tag: 'v1', date: '2026-01-01T00:00:00Z' });
