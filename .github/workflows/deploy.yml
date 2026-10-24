@@ -1,12 +1,15 @@
-# Production release: pushing a vX.Y.Z tag (or running it by hand, which tags the commit
-# v<package.json version>) builds the packaged app for Windows, macOS and Linux (one job per OS and
-# architecture), smoke-tests each package in simulation and publishes them together as one GitHub
-# Release named after the tag. A merge to main publishes nothing (CONTRIBUTING "Releasing"). macOS
-# builds are not signed nor notarized (README "Install").
+# Releases as "rc + stable" (#489, README "Release"):
+# - a push to main (or a run by hand) builds the packaged app for Windows, macOS and Linux (one job
+#   per OS and architecture), smoke-tests each package in simulation and publishes them together as
+#   a PRERELEASE v<package.json version>-rc.N (N: the rcs of that version so far + 1), never latest;
+# - pushing a vX.Y.Z tag promotes the rc of the same commit without a rebuild: its release is
+#   renamed to the tag, marked latest and keeps its assets. A commit without an rc is refused.
+# macOS builds are not signed nor notarized (README "Install").
 name: Deploy
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -23,6 +26,7 @@ jobs:
   # Assets: MultiagentOrchestrator-<platform>-<arch>.<ext> (scripts/release-assets.js)
   build:
     name: build (${{ matrix.platform }} ${{ matrix.arch }})
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}   # a tag promotes a built rc (job promote)
     strategy:
       fail-fast: true   # a failing OS stops the release: no release without all its downloads
       matrix:
@@ -117,6 +121,7 @@ jobs:
 
   publish:
     needs: build
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -126,18 +131,37 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: assets
-      - name: Publish release
+      - name: Publish release candidate
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -l assets
           VERSION=$(node -p "require('./package.json').version")
-          TAG="v${VERSION}"
-          # a pushed tag must match package.json: the release name, its tag and the app's version agree
-          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "$TAG" ]; then
-            echo "Tag ${{ github.ref_name }} does not match package.json version $VERSION" >&2
+          # N: the rcs of this version published so far + 1 (the merges since its last stable)
+          N=$(( $(git ls-remote --tags origin "refs/tags/v${VERSION}-rc.*" | grep -vc '\^{}' || true) + 1 ))
+          RC="v${VERSION}-rc.${N}"
+          gh release create "$RC" assets/* \
+            --target "${{ github.sha }}" --title "$RC" --generate-notes --prerelease
+          echo "Release candidate published: $RC"
+
+  # A vX.Y.Z tag on a commit with an rc: that release becomes the stable one, assets reused (no build)
+  promote:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Promote the release candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          SHA="${{ github.sha }}"
+          RC=$(git ls-remote --tags origin 'refs/tags/v*-rc.*' | grep "^${SHA}" | grep -v '\^{}' \
+            | sed 's|.*refs/tags/||' | sort -V | tail -n 1)
+          if [ -z "$RC" ]; then
+            echo "No release candidate (rc) on ${SHA}: merge into main first, then tag the rc's commit" >&2
             exit 1
           fi
-          gh release create "$TAG" assets/* \
-            --target "${{ github.sha }}" --title "$TAG" --generate-notes --latest
-          echo "Release published: $TAG"
+          gh release edit "$RC" --tag "$TAG" --title "$TAG" --prerelease=false --latest
+          echo "Promoted $RC to $TAG"

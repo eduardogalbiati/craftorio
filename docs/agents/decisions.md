@@ -8,6 +8,15 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-22** (#489): releases are "rc + stable". Every merge into `main` becomes a prerelease
+  candidate `vX.Y.Z-rc.N` (built on every OS, never latest); the stable release is the last
+  candidate promoted without a rebuild (a `vX.Y.Z` tag on its commit), by the night's release train
+  when the base check is green on that commit, or on demand ("Promote to stable" on the Releases
+  screen). The train promotes alone only with the night permission "Promote a release" (off by
+  default), otherwise it proposes; a red base check or a candidate on **Hold** stops it. The stable
+  version is the label suggestion (#436) over the issues since the last stable, editable. The cut
+  line stays the manual milestone checked by the full release run. Replaces the tag-only release of
+  #482.
 - **2026-10-23** (#476): the Linux AppImage keeps its AppRun fallback to `--no-sandbox` when the
   kernel forbids unprivileged user namespaces (Ubuntu 23.10+), but only as a last resort and never
   silently: the launcher warns on stderr and sets `MULTIAGENT_NO_SANDBOX=1`, Settings › About shows

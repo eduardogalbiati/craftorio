@@ -66,7 +66,7 @@ module.exports = (ctx) => {
   // → { projectId, releases (newest first), next, line: the cut line waiting, run: the release run in progress,
   //   candidates (#489, newest first), stable: { version, bump } suggested for a promotion }
   function listReleases({ projectId } = {}) {
-    if (!projectId) return { projectId: null, releases: [], next: null, line: null, run: null, candidates: [] };
+    if (!projectId) return { projectId: null, releases: [], next: null, line: null, run: null };
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, idOf(projectId));
     const list = projectRuns(project);
@@ -91,13 +91,30 @@ module.exports = (ctx) => {
     return listReleases({ projectId });
   }
 
+  // #489: a push of the base (src/service/areas/local-push.js) is a release candidate: its tip, the
+  // version of the project's package.json, the run merged there last and the issues its commits
+  // close. A project without a package.json version records none. Returns the candidate or null.
+  function recordPushCandidate(projectId, { commits = [], issues = [] } = {}) {
+    const { ws } = ctx;
+    const project = projects.readProject(ws.projects, idOf(projectId));
+    let version = '';
+    try { version = String(JSON.parse(fs.readFileSync(path.join(project.folder, 'package.json'), 'utf8')).version || ''); } catch { return null; }
+    if (!version || !commits[0]?.sha) return null;
+    const shas = new Set(commits.map((c) => c.sha));
+    const run = projectRuns(project).find((r) => r.localMerge?.commit && shas.has(r.localMerge.commit));
+    const known = backlog.readBacklog(ws.backlog, project.id)?.issues || [];
+    const found = issues.map((n) => known.find((i) => i.number === n) || { number: n })
+      .map((i) => ({ number: i.number, ...(i.title ? { title: i.title } : {}), labels: i.labels || [] }));
+    return releases.recordCandidate(ws.releases, project.id, { commit: commits[0].sha, version, runId: run?.runId || null, issues: found });
+  }
+
   // #489: the stable release from a release candidate's commit (or its tag), without a rebuild: the
   // tag is pushed on that commit (deploy.yml promotes its GitHub release); nothing is tagged in
   // simulation. A commit without a candidate is refused with the reason.
   async function promoteRelease({ projectId, commit = '', tag = '', version = '' }) {
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, idOf(projectId));
-    const sha = commit || releases.readReleases(ws.releases, project.id).candidates.find((c) => c.tag === tag)?.commit || '';
+    const sha = commit || (releases.readReleases(ws.releases, project.id).candidates || []).find((c) => c.tag === tag)?.commit || '';
     const tagCommit = simulation.simulationOnly() ? async () => {} : (o) => releases.tagRelease({ repo: project.folder, ...o });
     const out = await releases.promoteRelease({ dir: ws.releases, projectId: project.id, commit: sha, version, tagCommit });
     markCards(project.id, out.tag);
@@ -376,6 +393,7 @@ module.exports = (ctx) => {
     markReleasedIssues,
     promoteRelease,
     readReleaseSummary,
+    recordPushCandidate,
     releaseTrain,
     roadmapRelease,
     roadmapReleases,

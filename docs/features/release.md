@@ -44,3 +44,18 @@ run as before. Shipping records the release (version, date, issues, runs, cost, 
 notes) in `<workspace>/releases/<project>.json` and marks its issues **Released** on the Backlog.
 The discovery cards linked to one of those issues (`links.issues`) are marked Released too: their
 `links.release` becomes the release's version, and a card keeps the first release that shipped it.
+
+**Release candidates and stable releases** (#489). There are two kinds of release. A **candidate**
+(`vX.Y.Z-rc.N`, N counting the merges since the last stable) is recorded for every merge into the
+base, with its run and its issues, and the project's Deploy workflow publishes it as a prerelease,
+never as the latest. The **stable** release is a candidate promoted without a rebuild: its commit is
+tagged `vX.Y.Z` and pushed, and Deploy renames that candidate's release and marks it latest. Code &
+Build › Releases lists the candidates since the last stable (newest first): **Promote to stable**
+opens a dialog with the suggested version (the #436 suggestion over the issues since the last
+stable: major on `breaking`, minor on `enhancement`, else patch), editable before you confirm; a
+commit without a candidate is refused with the reason. **Hold** keeps the night's train from
+promoting a candidate (click again to release it); the next merge makes a new candidate. The
+**release train** runs when the Night watch ends: with merges since the last stable and the base
+check green on the last candidate's commit, it promotes it when the night permission **Promote a
+release** is on (off by default), else proposes it for the morning; a red base check or a candidate
+on Hold holds it and says why. A cut line still starts the full release run above.

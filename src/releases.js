@@ -40,13 +40,15 @@ const PUSH_TIMEOUT_MS = 120e3;
 const HISTORY_LINES = 30;
 
 const releasesFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.json`);
-const emptyHistory = () => ({ releases: [], candidates: [], next: { notes: '' } });
+const emptyHistory = () => ({ releases: [], next: { notes: '' } });
 const objects = (list) => (Array.isArray(list) ? list.filter((r) => r && typeof r === 'object') : []);
+// #489: `candidates` only when the file has them (a history without one reads as before)
+const withCandidates = (list) => (Array.isArray(list) ? { candidates: objects(list) } : {});
 
 function readReleases(dir, projectId) {
   try {
     const h = JSON.parse(fs.readFileSync(releasesFile(dir, projectId), 'utf8'));
-    return { releases: objects(h?.releases), candidates: objects(h?.candidates), next: { notes: String(h?.next?.notes || '') } };
+    return { releases: objects(h?.releases), ...withCandidates(h?.candidates), next: { notes: String(h?.next?.notes || '') } };
   } catch { return emptyHistory(); }
 }
 
@@ -70,7 +72,7 @@ const writeReleases = (dir, projectId, history) => writeJsonSafe(releasesFile(di
 /** Adds a shipped release to the project's history; the next release starts with empty notes. */
 function recordRelease(dir, projectId, release) {
   const h = readReleases(dir, projectId);
-  return writeReleases(dir, projectId, { releases: [...h.releases, { ...release, status: 'shipped' }], candidates: h.candidates, next: { notes: '' } });
+  return writeReleases(dir, projectId, { releases: [...h.releases, { ...release, status: 'shipped' }], ...withCandidates(h.candidates), next: { notes: '' } });
 }
 
 /** The owner's notes of the next release (empty: generated again from its issues and runs). */
@@ -118,11 +120,30 @@ function stableVersion({ history, version = '', upTo = null } = {}) {
   return { version: s.version, bump: s.bump };
 }
 
+/**
+ * #489: records the release candidate of a push of the base (`commit`, its tip): its tag is
+ * rcTag over `version` (package.json's) and the merges since the last stable plus this one. A
+ * commit already recorded is kept as it is. Returns the candidate.
+ * @param {{ commit: string, version: string, runId?: string|null, issues?: object[], date?: string }} c
+ */
+function recordCandidate(dir, projectId, { commit, version, runId = null, issues = [], date = null }) {
+  if (!commit || !String(version || '').trim()) throw new Error('A release candidate needs a commit and a version.');
+  const h = readReleases(dir, projectId);
+  const list = objects(h.candidates);
+  const known = list.find((c) => c.commit === commit);
+  if (known) return known;
+  const tag = rcTag({ version, mergesSinceStable: mergesSinceStable(h) + 1 });
+  const cand = { tag, commit, date: date || new Date().toISOString(), runId, issues: objects(issues) };
+  writeReleases(dir, projectId, { ...h, candidates: [...list, cand] });
+  return cand;
+}
+
 /** #489: puts a release candidate on Hold (the train never promotes it) or takes it off. */
 function holdCandidate(dir, projectId, tag, held = true) {
   const h = readReleases(dir, projectId);
-  if (!h.candidates.some((c) => c.tag === tag)) throw new Error(`There is no release candidate ${tag || '(no tag)'}: refresh the Releases screen.`);
-  const candidates = h.candidates.map((c) => {
+  const list = objects(h.candidates);
+  if (!list.some((c) => c.tag === tag)) throw new Error(`There is no release candidate ${tag || '(no tag)'}: refresh the Releases screen.`);
+  const candidates = list.map((c) => {
     if (c.tag !== tag) return c;
     const { held: _, ...rest } = c;
     return held ? { ...rest, held: true } : rest;
@@ -140,7 +161,7 @@ function holdCandidate(dir, projectId, tag, held = true) {
  */
 async function promoteRelease({ dir, projectId, commit, version = '', tagCommit, date = null }) {
   const h = readReleases(dir, projectId);
-  const cand = h.candidates.find((c) => commit && c.commit === commit);
+  const cand = objects(h.candidates).find((c) => commit && c.commit === commit);
   if (!cand) throw new Error(`The commit ${String(commit || '(none)').slice(0, 8)} has no release candidate (rc): only a merge built as an rc can be promoted. Refresh the Releases screen and promote a listed candidate.`);
   const v = stableVersion({ history: h, version, upTo: cand.date }).version;
   const tag = tagName(`v${String(v).replace(/^v/i, '')}`);
@@ -488,6 +509,7 @@ module.exports = {
   promoteRelease,
   rcTag,
   readReleases,
+  recordCandidate,
   recordRelease,
   releaseCards,
   releaseNotes,

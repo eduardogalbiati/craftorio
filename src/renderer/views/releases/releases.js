@@ -158,8 +158,6 @@
         <div class="rel-head">
           <b class="rel-title"${where ? ` title="${esc(where)}"` : ''}>${esc(r.version)}</b>
           <span class="badge rel-pass">${esc(r.status || t('releases.status_shipped'))}</span>
-          ${k === 0 ? `<span class="badge rel-pass" data-testid="release-latest" title="${t('releases.latest_tip')}">${t('releases.latest')}</span>` : ''}
-          ${r.rc ? `<span class="muted small mono">${esc(t('releases.from_rc', { rc: r.rc }))}</span>` : ''}
           <span class="muted small">${r.date ? esc(dateOf(r.date)) : ''}</span>
           <span class="spacer"></span>
           ${suiteBadge('Unit', tests.unit)}${suiteBadge('E2E', tests.e2e)}
@@ -168,6 +166,10 @@
           ${r.tag ? `<button type="button" class="btn sm" data-testid="release-show-map" data-tag="${esc(r.tag)}" title="${t('releases.the_project_city_at_the_previous')}">${t('releases.show_on_the_map')}</button>` : ''}
         </div>
         ${issuesHtml(r.issues)}
+        ${k === 0 || r.rc ? `<div class="rel-head">
+          ${k === 0 ? `<span class="badge rel-pass" data-testid="release-latest" title="${t('releases.latest_tip')}">${t('releases.latest')}</span>` : ''}
+          ${r.rc ? `<span class="muted small mono">${esc(t('releases.from_rc', { rc: r.rc }))}</span>` : ''}
+        </div>` : ''}
         ${r.notes ? `<details class="rel-notes"><summary class="small muted">${t('releases.notes')}</summary><div class="md md-compact">${markdownHtml(r.notes)}</div></details>` : ''}
         ${r.summary ? `<details class="rel-notes"><summary class="small muted" data-testid="release-summary-link" data-rel-summary="${esc(r.version)}" title="${t('releases.what_the_release_run_did_its')}">${t('releases.release_summary')}</summary>
           <div class="md md-compact rel-summary" data-testid="release-summary"><p class="muted small">${t('releases.loading')}</p></div></details>` : ''}
