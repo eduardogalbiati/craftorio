@@ -139,13 +139,17 @@ jobs:
         run: |
           ls -l assets
           VERSION=$(node -p "require('./package.json').version")
-          # N: the merges (first-parent commits) since the last stable tag, the app's rule (src/releases.js rcTag)
+          # N: the candidates (one rc tag per push) since the last stable tag plus this one, the app's
+          # rule (src/releases.js recordCandidate), whatever the number of commits the push carries
           STABLE=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-rc.*' HEAD 2>/dev/null || true)
-          if [ -n "$STABLE" ]; then N=$(git rev-list --count --first-parent "${STABLE}..HEAD"); else N=1; fi
-          [ "$N" -ge 1 ] || N=1
+          if [ -n "$STABLE" ]; then PRIOR=$(git tag --list 'v*-rc.*' --merged HEAD --no-merged "$STABLE" | wc -l); else PRIOR=$(git tag --list 'v*-rc.*' --merged HEAD | wc -l); fi
+          N=$((PRIOR + 1))
+          # tag the rc here, so the next push counts it
+          git tag "v${VERSION}-rc.${N}" HEAD
           RC="v${VERSION}-rc.${N}"
+          git push origin "refs/tags/${RC}"
           gh release create "$RC" assets/* \
-            --target "${{ github.sha }}" --title "$RC" --generate-notes --prerelease
+            --verify-tag --title "$RC" --generate-notes --prerelease
           echo "Release candidate published: $RC"
 
   # A vX.Y.Z tag on a commit with an rc: that release becomes the stable one, assets reused (no build)
