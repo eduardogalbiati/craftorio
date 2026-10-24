@@ -23,6 +23,7 @@ const { readStore: readBaseHealth } = require('../../engine/base-health-store');
 const simulation = require('../../engine/simulation');
 const { loadWorkflow } = require('../../engine/workflow');
 const backlog = require('../../backlog');
+const { clientError } = require('../common');
 const night = require('../../night-watch');
 const projects = require('../../projects');
 const releases = require('../../releases');
@@ -85,9 +86,14 @@ module.exports = (ctx) => {
     };
   }
 
-  // #489: Hold on a release candidate (the night's train never promotes it), or off
+  // #489: Hold on a release candidate (the night's train never promotes it), or off. A tag that is
+  // not a candidate is refused as the client's error (400).
   function holdCandidate({ projectId, tag, held = true }) {
-    releases.holdCandidate(ctx.ws.releases, projects.readProject(ctx.ws.projects, idOf(projectId)).id, tag, held !== false);
+    const id = projects.readProject(ctx.ws.projects, idOf(projectId)).id;
+    if (!(releases.readReleases(ctx.ws.releases, id).candidates || []).some((c) => c.tag === tag)) {
+      throw clientError(`There is no release candidate ${tag || '(no tag)'}: refresh the Releases screen.`);
+    }
+    releases.holdCandidate(ctx.ws.releases, id, tag, held !== false);
     return listReleases({ projectId });
   }
 
@@ -110,13 +116,21 @@ module.exports = (ctx) => {
 
   // #489: the stable release from a release candidate's commit (or its tag), without a rebuild: the
   // tag is pushed on that commit (deploy.yml promotes its GitHub release); nothing is tagged in
-  // simulation. A commit without a candidate is refused with the reason.
+  // simulation. A commit without a candidate or a version already released is refused with the
+  // reason, before anything is tagged: the client's error (400); a tag that fails stays a 500.
   async function promoteRelease({ projectId, commit = '', tag = '', version = '' }) {
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, idOf(projectId));
     const sha = commit || (releases.readReleases(ws.releases, project.id).candidates || []).find((c) => c.tag === tag)?.commit || '';
-    const tagCommit = simulation.simulationOnly() ? async () => {} : (o) => releases.tagRelease({ repo: project.folder, ...o });
-    const out = await releases.promoteRelease({ dir: ws.releases, projectId: project.id, commit: sha, version, tagCommit });
+    let tagging = false;
+    const tagOn = simulation.simulationOnly() ? async () => {} : (o) => releases.tagRelease({ repo: project.folder, ...o });
+    const tagCommit = (o) => { tagging = true; return tagOn(o); };
+    let out;
+    try {
+      out = await releases.promoteRelease({ dir: ws.releases, projectId: project.id, commit: sha, version, tagCommit });
+    } catch (e) {
+      throw tagging ? e : clientError(e.message);
+    }
     markCards(project.id, out.tag);
     ctx.notify?.({ kind: 'run', event: 'succeeded', title: `Release ${out.tag} promoted`, body: `The release candidate ${out.rc} is the stable release ${out.tag}: its tag is on origin.`, target: { view: 'releases', projectId: project.id } }, { projectId: project.id });
     return listReleases({ projectId });
