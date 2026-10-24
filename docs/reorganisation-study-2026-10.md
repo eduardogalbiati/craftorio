@@ -7,11 +7,12 @@ faster. The fronts named so far:
 - **Project Analyser**: one project of one repository: suggested flows, system architecture, the
   project city, refactor analysis, criticality analysis, delivery speed of issues and code, open PRs.
 - **Code & Build**: what the app is today, plus the Product Owner.
-- **Settings**: configuration, AI, AI usage, Night watch and Oracle.
+- **Settings**: configuration, AI, AI usage, Night watch and Oracle (decided on 2026-10-24 as the
+  shell plus an `ai` front, section 5).
 - **Design & Plan**: ideation and documents.
 
 This study measures what exists, maps it onto those fronts, proposes a target layout and a phased
-plan, and lists the decisions the owner has to take. The figures come from `scripts/dep-map.js`
+plan, and records the decisions the owner took (section 5). The figures come from `scripts/dep-map.js`
 (run it again after each phase) and from `find`/`wc` over the tree at commit 6ed26b85 (release 1.3.0).
 
 ## 1. What exists today
@@ -230,22 +231,30 @@ the tidy alone removes the 135-file root and makes every later phase cheaper. Ph
 what the owner asked for; phase 4 is what makes "independent code and tests per front" literally
 true.
 
-## 5. Decisions for the owner
+## 5. Decisions taken by the owner (2026-10-24)
 
-1. **Horizontal or vertical fronts** (section 3). Recommendation: vertical as the end state, reached
-   in phase 4, not attempted in phase 3.
-2. **Settings as a front or as the shell.** Recommendation: shell; the front is `ai` (Oracle, Night
-   watch, agents, skills, usage).
-3. **Where arena and duo live**: Design & Plan (ideation, as today) or Code & Build (they start
-   runs). Recommendation: keep them in Plan until a user says otherwise.
-4. **The project city**: `poc/city-modes` and `generated/project-city.js` go to the Analyser; the
-   run 3D view (`run3d*`) to the UI kit. The 3D bundles are built per front by `build-3d.js`.
-5. **Dashboard/Home**: shell. Its cards are contributed by fronts (each front registers its card),
-   the way views register themselves, so Home shows only the fronts present in the build.
-6. **One `node_modules` or hoisting off**: npm workspaces hoist by default; keep it, and pin the
-   desktop app's native dependencies (`node-pty`) in `apps/desktop`.
-7. **Naming**: `fronts/` and `packages/` as above, or everything under `packages/`; the front ids
-   (`analyser`, `build`, `plan`, `ai`) become the menu group ids of #254.
+The seven questions this study raised, decided in the owner's session of 2026-10-24. They become
+the entry of [decisions.md](agents/decisions.md) when phase 0 starts; until then this section is the
+record. The study is a plan: nothing below is implemented.
+
+1. **Vertical fronts, reached in phase 4.** Phases 2 and 3 keep every channel file and domain
+   module in the engine package; in phase 4 each front takes its channels, areas and domain
+   modules, and the engine discovers channel files from the installed fronts. Not attempted in
+   phase 3, so its PRs stay small.
+2. **Settings is the shell; the fourth front is `ai`.** Settings, Setup, Usage and Account belong to
+   the shell (every front needs them). Oracle, Night watch, agents and skills form the `ai` front:
+   the menu's existing AI group (#254).
+3. **Arena and Duo stay in Design & Plan**, as ideation tools, until a user asks otherwise.
+4. **The 3D bundles split by owner.** The project city (`poc/city-modes`, `generated/project-city.js`,
+   `release-city`, `project-map`) goes to the `analyser` front; the run's 3D view (`run3d*`) goes to
+   the UI kit, since every front that shows a run can open it. `scripts/build-3d.js` builds one
+   bundle per owner.
+5. **Home is the shell, and each front registers its cards**, the way screens register themselves
+   (`registerView`), so a build shows only the cards of the fronts it ships.
+6. **npm workspaces hoist as they do by default**: one `node_modules` at the root; `node-pty` and any
+   other native module are dependencies of `apps/desktop`, where the packager rebuilds them.
+7. **Folders and ids as proposed**: `packages/{shared,engine,ui-kit}`, `fronts/{analyser,build,plan,ai}`,
+   `apps/{desktop,web}`, `content/`. The front ids become the menu group ids of #254.
 
 ## 6. Alternatives considered
 
