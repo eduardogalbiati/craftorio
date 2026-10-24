@@ -208,7 +208,10 @@ module.exports = {
   'refactor:prioritize': { setup: project, arg: ({ projectId }) => ({ projectId, mock: true }), invalid: BAD_PROJECT },
   'refactor:proposals': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'refactor:setCadence': { setup: project, arg: ({ projectId }) => ({ projectId, on: false, every: 10 }), invalid: BAD_PROJECT },
+  // #489: a project without release candidates refuses a Hold and a promotion (nothing is tagged)
+  'releases:hold': { setup: project, arg: ({ projectId }) => ({ projectId, tag: 'v1.0.0-rc.1' }), status: 400, invalid: BAD_PROJECT },
   'releases:list': { arg: {}, invalid: BAD_PROJECT },
+  'releases:promote': { setup: project, arg: ({ projectId }) => ({ projectId, commit: 'ffffffff' }), status: 400, invalid: BAD_PROJECT },
   'releases:notes': { setup: project, arg: ({ projectId }) => ({ projectId, notes: 'Contract notes.' }), invalid: BAD_PROJECT },
   'roadmap:clear': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #391: a roadmap without a pending pause returns the backlog unchanged

@@ -9,11 +9,17 @@
 // #376: a tagged release's "Show on the map" opens the project city at the previous tag in grey, what
 // the release changed in colour (window.ProjectCityRelease, views/project/project-city-release.js).
 // #436: the last three releases above the version field and "Suggest version" (window.ReleaseName).
+// #489 "rc + stable": the release candidates since the last stable (an rc per merge into main: its
+// run, its issues), each with "Hold" (the night's train skips it; no confirmation, "Take off hold"
+// undoes it) and "Promote to stable" (a dialog with the stable version suggested from the issues'
+// labels, editable; a refusal, e.g. a commit without an rc, stays in the dialog). The newest stable
+// release reads "Latest" and names the rc it came from.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, dateOf, devMode, confirmDialog, markdownHtml) and window.CurrentProject, window.showRun.
 
 (() => {
-  const rel = { projectId: null, data: null };
+  // promote: the candidate the promotion dialog is open for ({ tag, commit }), busy: a promotion in flight
+  const rel = { projectId: null, data: null, promote: null, busy: false };
 
   const plural = (n, key) => t(key, { count: n });
   const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
@@ -72,7 +78,79 @@
       </section>`;
   }
 
-  function rowHtml(r) {
+  // #489: the release candidates since the last stable (an rc per merge into main), newest first,
+  // each with its run, its issues, "Hold" and "Promote to stable"
+  function candidatesHtml(d) {
+    const list = d.candidates || [];
+    if (!list.length) return '';
+    const row = (c, k) => {
+      const held = !!c.held;
+      return `
+      <article class="rel-row rel-candidate" data-testid="release-candidate" data-held="${held}">
+        <div class="rel-head">
+          <b class="rel-title mono"${c.commit ? ` title="${esc(t('releases.commit_sha', { sha: String(c.commit).slice(0, 8) }))}"` : ''}>${esc(c.tag)}</b>
+          ${held ? `<span class="badge warn" title="${t('releases.held_tip')}">${t('releases.held')}</span>` : ''}
+          <span class="muted small">${c.date ? esc(dateOf(c.date)) : ''}</span>
+          <span class="spacer"></span>
+          ${c.runId ? `<button type="button" class="btn sm ghost mono" data-rel-run="${esc(c.runId)}" title="${t('releases.open_the_run')}">${esc(c.runId)}</button>` : ''}
+          <button type="button" class="btn sm" data-testid="hold-candidate" data-tag="${esc(c.tag)}" data-held="${held}" title="${held ? '' : t('releases.hold_tip')}">${held ? t('releases.take_off_hold') : t('releases.hold')}</button>
+          <button type="button" class="btn sm${k === 0 ? ' primary' : ''}" data-testid="promote-to-stable" data-tag="${esc(c.tag)}" data-commit="${esc(c.commit || '')}">${t('releases.promote_to_stable')}</button>
+        </div>
+        ${issuesHtml(c.issues)}
+      </article>`;
+    };
+    return `
+      <h2 class="rel-list-title">${t('releases.candidates')}</h2>
+      <p class="muted small">${t('releases.candidates_hint')}</p>
+      <div class="rel-list" data-testid="release-candidates">${list.map(row).join('')}</div>`;
+  }
+
+  // #489: the promotion's dialog: the stable version suggested for the candidate, editable; a refusal
+  // stays in the dialog (promote-error) with the version kept
+  function openPromote(btn) {
+    const c = (rel.data?.candidates || []).find((x) => x.tag === btn.dataset.tag);
+    rel.promote = { tag: btn.dataset.tag, commit: btn.dataset.commit || c?.commit || '' };
+    $('#rel-promote-title').textContent = t('releases.promote_title', { rc: rel.promote.tag });
+    $('#rel-promote-text').textContent = t('releases.promote_dialog_text', { commit: String(rel.promote.commit).slice(0, 8) });
+    $('#rel-promote-version').value = c?.stable || rel.data?.stable?.version || '';
+    $('#rel-promote-error').textContent = '';
+    $('#rel-promote-modal').classList.remove('hidden');
+    $('#rel-promote-version').focus({ preventScroll: true });
+  }
+
+  const closePromote = () => { $('#rel-promote-modal').classList.add('hidden'); rel.promote = null; };
+
+  async function confirmPromote() {
+    const version = $('#rel-promote-version').value.trim();
+    if (!version) { $('#rel-promote-error').textContent = t('releases.version_needed'); return; }
+    if (!rel.promote || rel.busy) return;
+    rel.busy = true;
+    $('#rel-promote-error').textContent = '';
+    try {
+      rel.data = await api.promoteRelease(rel.projectId, rel.promote.commit, version);
+      closePromote();
+      render();
+    } catch (e) {
+      $('#rel-promote-error').textContent = errMsg(e);
+    } finally {
+      rel.busy = false;
+    }
+  }
+
+  // #489: Hold (no confirmation: it is undone by "Take off hold") or off
+  async function hold(btn) {
+    try {
+      rel.data = btn.dataset.held === 'true'
+        ? await api.holdCandidate(rel.projectId, btn.dataset.tag, false)
+        : await api.holdCandidate(rel.projectId, btn.dataset.tag);
+      $('#rel-error').textContent = '';
+      render();
+    } catch (e) {
+      $('#rel-error').textContent = errMsg(e);
+    }
+  }
+
+  function rowHtml(r, k) {
     const tests = r.tests || {};
     const where = [r.tag && r.tag !== r.version ? t('releases.tag_name', { tag: r.tag }) : '', r.commit ? t('releases.commit_sha', { sha: String(r.commit).slice(0, 8) }) : ''].filter(Boolean).join(' · ');
     return `
@@ -80,6 +158,8 @@
         <div class="rel-head">
           <b class="rel-title"${where ? ` title="${esc(where)}"` : ''}>${esc(r.version)}</b>
           <span class="badge rel-pass">${esc(r.status || t('releases.status_shipped'))}</span>
+          ${k === 0 ? `<span class="badge rel-pass" data-testid="release-latest" title="${t('releases.latest_tip')}">${t('releases.latest')}</span>` : ''}
+          ${r.rc ? `<span class="muted small mono">${esc(t('releases.from_rc', { rc: r.rc }))}</span>` : ''}
           <span class="muted small">${r.date ? esc(dateOf(r.date)) : ''}</span>
           <span class="spacer"></span>
           ${suiteBadge('Unit', tests.unit)}${suiteBadge('E2E', tests.e2e)}
@@ -111,14 +191,14 @@
   function render() {
     const d = rel.data;
     const box = $('#rel-body');
-    if (!d?.next && !d?.releases?.length) {
+    if (!d?.next && !d?.releases?.length && !d?.candidates?.length) {
       box.innerHTML = `<div class="empty-state"><b>${t('releases.no_project_yet')}</b><p class="muted">${t('releases.choose_or_create_a_project_in')}</p></div>`;
       return;
     }
     const list = d.releases?.length
       ? d.releases.map(rowHtml).join('')
       : `<div class="empty-state"><b>${t('releases.no_release_yet')}</b><p class="muted">${t('releases.draw_a_cut_line_on_the')}</p></div>`;
-    box.innerHTML = `${nextHtml(d)}<h2 class="rel-list-title">${t('releases.shipped')}</h2><div class="rel-list" data-testid="releases-list">${list}</div>`;
+    box.innerHTML = `${nextHtml(d)}${candidatesHtml(d)}<h2 class="rel-list-title">${t('releases.shipped')}</h2><div class="rel-list" data-testid="releases-list">${list}</div>`;
   }
 
   async function refresh() {
@@ -169,15 +249,37 @@
         </div>
         <p id="rel-error" class="error small"></p>
         <div id="rel-body" class="rel-body"></div>
+        <div id="rel-promote-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rel-promote-title" data-testid="promote-dialog">
+          <form id="rel-promote-form" class="modal-card">
+            <h3 id="rel-promote-title">${t('releases.promote_to_stable')}</h3>
+            <p id="rel-promote-text" class="muted small"></p>
+            <div class="field">
+              <label for="rel-promote-version">${t('releases.stable_version')}</label>
+              <input type="text" id="rel-promote-version" data-testid="stable-version-input" autocomplete="off" placeholder="${t('releases.version_placeholder')}" />
+              <div class="hint">${t('releases.stable_version_hint')}</div>
+            </div>
+            <p id="rel-promote-error" class="error small" role="alert" data-testid="promote-error"></p>
+            <div class="modal-actions">
+              <button type="button" id="rel-promote-cancel" class="btn ghost">${t('common.cancel')}</button>
+              <button type="submit" class="btn primary" data-testid="confirm-promote">${t('releases.promote')}</button>
+            </div>
+          </form>
+        </div>
       </section>`,
     mount() {
       const box = $('#rel-body');
+      $('#rel-promote-form').addEventListener('submit', (e) => { e.preventDefault(); confirmPromote(); });
+      $('#rel-promote-cancel').addEventListener('click', closePromote);
       box.addEventListener('change', (e) => { if (e.target.id === 'rel-notes') saveNotes(e.target); });
       box.addEventListener('click', (e) => {
         const run = e.target.closest('[data-rel-run]');
         const summary = e.target.closest('[data-rel-summary]');
         const map = e.target.closest('[data-testid="release-show-map"]');
-        if (run) window.showRun(run.dataset.relRun);
+        const holdBtn = e.target.closest('[data-testid="hold-candidate"]');
+        const promote = e.target.closest('[data-testid="promote-to-stable"]');
+        if (holdBtn) hold(holdBtn);
+        else if (promote) openPromote(promote);
+        else if (run) window.showRun(run.dataset.relRun);
         else if (map) window.ProjectCityRelease?.showRelease(rel.projectId, { to: map.dataset.tag });
         else if (summary) openSummary(summary);
         else if (e.target.closest('[data-rel-start]')) start();

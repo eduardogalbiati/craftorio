@@ -24,6 +24,8 @@
 // oracle.parked, a notification naming the gate); the gate stays the owner's.
 // Limits tonight (#337, src/night-limits.js): `nightwatch:limits` sets them for the Night watch in force
 // (never under Self-healing alone); the morning summary lists the runs that went past a day limit.
+// Release train (#489): at the night's end each project's last release candidate is promoted, proposed
+// or held (ctx.releaseTrain, src/service/areas/releases.js), logged as oracle.action / oracle.escalated.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -509,7 +511,26 @@ module.exports = (ctx) => {
       const m = windowOf(r, w?.startedAt) || r.nights[0];
       if (m) ctx.notify?.(notifier.nightWatchNotice(m.summary));
     } catch (e) { console.error('Night watch summary:', e.message); }
+    await releaseTrains();
   });
+
+  // #489: the release train at the night's end, per project: the last release candidate is promoted
+  // (the promote-release permission), proposed to the owner or held; logged in the night's log
+  async function releaseTrains() {
+    if (!ctx.releaseTrain) return;
+    const allowed = night.readPermissions(dir()).allowed;
+    let list = [];
+    try { list = projects.listProjects(ctx.ws.projects); } catch (e) { console.error('Release train:', e.message); }
+    for (const p of list) {
+      try {
+        const out = await ctx.releaseTrain(p.id, { allowed });
+        if (!out || out.action === 'none') continue;
+        const target = `${p.id}/release/${out.rc}`;
+        if (out.action === 'promote') night.logNight(dir(), 'oracle.action', { kind: 'release.promote', title: `Promoted ${out.rc} to ${out.tag}`, target, projectId: p.id, permission: 'promote-release', auto: true, result: out.reason, ok: true });
+        else night.logNight(dir(), 'oracle.escalated', { target, projectId: p.id, recommendation: out.action === 'propose' ? `Promote ${out.rc} on the Releases screen` : `Release train held: ${out.rc}`, reason: out.reason });
+      } catch (e) { console.error('Release train:', p.id, e.message); }
+    }
+  }
   const timer = setInterval(tick, TICK_MS);
   timer.unref?.();
 

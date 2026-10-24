@@ -17,6 +17,13 @@
 // store is src/discovery.js of #256, handed in by the service).
 // Service: src/service/areas/releases.js; channels: src/service/channels/releases.js; screen:
 // src/renderer/views/releases/releases.js.
+// #489 "rc + stable": every merge into main is a release candidate, recorded in the history's
+// `candidates: [{ tag: 'vX.Y.Z-rc.N', commit, date, runId, issues: [{ number, title, labels }], held? }]`
+// (`rcTag`, N = `mergesSinceStable`). The stable release is a candidate promoted without a rebuild
+// (`promoteRelease`): its commit is tagged vX.Y.Z (.github/workflows/deploy.yml then turns the rc's
+// GitHub release into the latest one) and recorded with `rc`, the issues since the last stable
+// (`issuesSinceStable`) and the version src/shared/release-version.js suggests (`stableVersion`).
+// A held candidate (`holdCandidate`) is never promoted by the night's train (src/night-watch.js).
 
 const fs = require('fs');
 const path = require('path');
@@ -26,18 +33,20 @@ const {
   repoRoot,
 } = require('./engine/worktree');
 const { defaultBase, pushBase } = require('./local-push');
+const { suggestVersion } = require('./shared/release-version');
 const { writeJsonSafe } = require('./state-file');
 
 const PUSH_TIMEOUT_MS = 120e3;
 const HISTORY_LINES = 30;
 
 const releasesFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.json`);
-const emptyHistory = () => ({ releases: [], next: { notes: '' } });
+const emptyHistory = () => ({ releases: [], candidates: [], next: { notes: '' } });
+const objects = (list) => (Array.isArray(list) ? list.filter((r) => r && typeof r === 'object') : []);
 
 function readReleases(dir, projectId) {
   try {
     const h = JSON.parse(fs.readFileSync(releasesFile(dir, projectId), 'utf8'));
-    return { releases: Array.isArray(h?.releases) ? h.releases.filter((r) => r && typeof r === 'object') : [], next: { notes: String(h?.next?.notes || '') } };
+    return { releases: objects(h?.releases), candidates: objects(h?.candidates), next: { notes: String(h?.next?.notes || '') } };
   } catch { return emptyHistory(); }
 }
 
@@ -51,6 +60,7 @@ function historyError(dir, projectId) {
 // What a release history file must look like (src/state-file.js refuses a write that breaks it).
 function historyProblem(h) {
   if (!h || !Array.isArray(h.releases)) return 'releases is not a list';
+  if (h.candidates !== undefined && !Array.isArray(h.candidates)) return 'candidates is not a list';
   const bad = h.releases.find((r) => !r || !String(r.version || '').trim());
   return bad === undefined ? null : 'a release has no version';
 }
@@ -60,7 +70,7 @@ const writeReleases = (dir, projectId, history) => writeJsonSafe(releasesFile(di
 /** Adds a shipped release to the project's history; the next release starts with empty notes. */
 function recordRelease(dir, projectId, release) {
   const h = readReleases(dir, projectId);
-  return writeReleases(dir, projectId, { releases: [...h.releases, { ...release, status: 'shipped' }], next: { notes: '' } });
+  return writeReleases(dir, projectId, { releases: [...h.releases, { ...release, status: 'shipped' }], candidates: h.candidates, next: { notes: '' } });
 }
 
 /** The owner's notes of the next release (empty: generated again from its issues and runs). */
@@ -72,6 +82,80 @@ function saveNextNotes(dir, projectId, notes) {
 const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || ''));
 /** The project's last shipped release, or null. */
 const lastRelease = (history) => [...(history?.releases || [])].sort(byDate).at(-1) || null;
+
+/** #489: the release candidates merged after the last stable release (all of them before the first one), oldest first. */
+function candidatesSinceStable(history) {
+  const since = String(lastRelease(history)?.date || '');
+  return objects(history?.candidates).filter((c) => !since || String(c.date || '') > since).sort(byDate);
+}
+
+/** #489: how many merges (release candidates) came after the last stable release. */
+const mergesSinceStable = (history) => candidatesSinceStable(history).length;
+
+// the candidates since the last stable up to the one dated `upTo` (all of them without it)
+const candidatesUpTo = (history, upTo) => candidatesSinceStable(history).filter((c) => !upTo || String(c.date || '') <= String(upTo));
+
+/** #489: the issues of the candidates since the last stable release (up to the candidate dated `upTo`), each once, by number. */
+function issuesSinceStable(history, upTo = null) {
+  const found = new Map();
+  for (const c of candidatesUpTo(history, upTo)) for (const i of c.issues || []) if (i?.number && !found.has(Number(i.number))) found.set(Number(i.number), i);
+  return [...found.values()].sort((a, b) => Number(a.number) - Number(b.number));
+}
+
+/** #489: a candidate's tag, `vX.Y.Z-rc.N` (N: the merges since the last stable). */
+const rcTag = ({ version, mergesSinceStable: n }) => `v${String(version || '').trim().replace(/^v/i, '')}-rc.${Number(n) || 1}`;
+
+/**
+ * #489: the stable version of a promotion: the owner's `version` when given, else
+ * src/shared/release-version.js's suggestion over the issues since the last stable release (up to
+ * the candidate dated `upTo`, the one promoted).
+ * @returns {{ version: string, bump: string|null }}
+ */
+function stableVersion({ history, version = '', upTo = null } = {}) {
+  const own = String(version || '').trim();
+  if (own) return { version: own, bump: null };
+  const s = suggestVersion({ last: lastRelease(history)?.version || '', issues: issuesSinceStable(history, upTo) });
+  return { version: s.version, bump: s.bump };
+}
+
+/** #489: puts a release candidate on Hold (the train never promotes it) or takes it off. */
+function holdCandidate(dir, projectId, tag, held = true) {
+  const h = readReleases(dir, projectId);
+  if (!h.candidates.some((c) => c.tag === tag)) throw new Error(`There is no release candidate ${tag || '(no tag)'}: refresh the Releases screen.`);
+  const candidates = h.candidates.map((c) => {
+    if (c.tag !== tag) return c;
+    const { held: _, ...rest } = c;
+    return held ? { ...rest, held: true } : rest;
+  });
+  return writeReleases(dir, projectId, { ...h, candidates });
+}
+
+/**
+ * #489: promotes the release candidate of `commit` to the stable release, without a rebuild:
+ * `tagCommit({ tag, commit })` tags that same commit vX.Y.Z (the git boundary, injected), then the
+ * stable release is recorded with the issues since the last stable. A commit without a candidate
+ * is refused before anything is tagged.
+ * @param {{ dir: string, projectId: string, commit: string, version?: string, tagCommit: Function, date?: string }} o
+ * @returns {Promise<{ tag, version, commit, rc }>}
+ */
+async function promoteRelease({ dir, projectId, commit, version = '', tagCommit, date = null }) {
+  const h = readReleases(dir, projectId);
+  const cand = h.candidates.find((c) => commit && c.commit === commit);
+  if (!cand) throw new Error(`The commit ${String(commit || '(none)').slice(0, 8)} has no release candidate (rc): only a merge built as an rc can be promoted. Refresh the Releases screen and promote a listed candidate.`);
+  const v = stableVersion({ history: h, version, upTo: cand.date }).version;
+  const tag = tagName(`v${String(v).replace(/^v/i, '')}`);
+  if (!tag) throw new Error('A promotion needs a stable version (e.g. 1.3.0).');
+  if (h.releases.some((r) => r.tag === tag)) throw new Error(`The stable release ${tag} already exists: choose another version.`);
+  // what the candidate's commit holds: the candidates since the last stable up to it
+  const issues = issuesSinceStable(h, cand.date);
+  const runs = [...new Set(candidatesUpTo(h, cand.date).map((c) => c.runId).filter(Boolean))];
+  await tagCommit({ tag, commit });
+  recordRelease(dir, projectId, {
+    version: tag, tag, date: date || new Date().toISOString(), commit, rc: cand.tag, issues, runs,
+    notes: releaseNotes({ version: tag, issues, runs }),
+  });
+  return { tag, version: tag, commit, rc: cand.tag };
+}
 
 // A release name as a git tag: spaces become dashes, what a ref cannot hold goes ("Sprint 12: beta" → "Sprint-12-beta").
 function tagName(name) {
@@ -147,15 +231,44 @@ async function shipRelease({ repo, base = null, tag, expect = null }) {
   if (!commit) throw new Error(`The local branch ${base} does not exist.`);
   if (expect && commit !== expect) throw new Error(`The local ${base} is at ${commit.slice(0, 8)}, not at the commit the release was checked on (${String(expect).slice(0, 8)}): check the release again. Nothing was pushed.`);
   // the tag is checked before anything goes out: one that names another commit, here or on origin, ships nothing more
+  const tags = await tagsAt(root, name, commit);
+  const result = await pushBase({ repo: root, base });
+  if (result.rejected) throw new Error(`origin/${base} has commits the local ${base} has not: update the local ${base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
+  await pushTag(root, name, commit, tags);
+  return { tag: name, base, commit, pushed: !!result.pushed, commits: result.commits, issues: result.issues };
+}
+
+// The commits the tag names here and on origin ({ local, remote }, null when missing); a tag that
+// already names another commit is refused.
+async function tagsAt(root, name, commit) {
   const local = await git(['rev-parse', '--verify', '--quiet', `refs/tags/${name}^{commit}`], root).catch(() => null);
   const remote = await remoteTag(root, name);
   const taken = [local, remote].find((sha) => sha && sha !== commit);
   if (taken) throw new Error(`The tag ${name} already names another commit (${taken.slice(0, 8)}, an earlier release or Ship): choose another release name. Nothing was pushed this time.`);
-  const result = await pushBase({ repo: root, base });
-  if (result.rejected) throw new Error(`origin/${base} has commits the local ${base} has not: update the local ${base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
+  return { local, remote };
+}
+
+// Tags the commit (when the tag is missing here) and pushes the tag (when origin lacks it).
+async function pushTag(root, name, commit, { local, remote }) {
   if (!local) await git(['tag', name, commit], root);
   if (!remote) await git(['push', 'origin', `refs/tags/${name}:refs/tags/${name}`], root, { timeout: PUSH_TIMEOUT_MS, auth: true });
-  return { tag: name, base, commit, pushed: !!result.pushed, commits: result.commits, issues: result.issues };
+}
+
+/**
+ * #489: the promotion's git boundary (promoteRelease's tagCommit): tags `commit` (a release candidate
+ * already on origin) and pushes only the tag; .github/workflows/deploy.yml then turns the rc's GitHub
+ * release into the stable one, without a rebuild. The base is never pushed.
+ * @param {{ repo: string, tag: string, commit: string }} o
+ */
+async function tagRelease({ repo, tag, commit }) {
+  const name = tagName(tag);
+  const root = await repoRoot(repo);
+  if (!root) throw new Error(`${repo || '(no folder)'} is not a git repository.`);
+  await git(['check-ref-format', `refs/tags/${name}`], root).catch(() => { throw new Error(`"${name}" is not a valid tag name.`); });
+  const sha = await git(['rev-parse', '--verify', '--quiet', `${commit}^{commit}`], root).catch(() => null);
+  if (!sha) throw new Error(`The commit ${String(commit).slice(0, 8)} of the release candidate is not in ${root}: update the local base first. Nothing was tagged.`);
+  await pushTag(root, name, sha, await tagsAt(root, name, sha));
+  return { tag: name, commit: sha };
 }
 
 // The commit a tag names on origin (an annotated tag peeled), or null when origin has no such tag.
@@ -362,12 +475,18 @@ function testResults(steps = {}) {
 }
 
 module.exports = {
+  candidatesSinceStable,
   compareSemver,
   historyError,
   historyText,
+  holdCandidate,
+  issuesSinceStable,
   lastRelease,
   markReleased,
+  mergesSinceStable,
   nextRelease,
+  promoteRelease,
+  rcTag,
   readReleases,
   recordRelease,
   releaseCards,
@@ -376,7 +495,9 @@ module.exports = {
   releasesFile,
   saveNextNotes,
   shipRelease,
+  stableVersion,
   tagName,
+  tagRelease,
   testResults,
   writeReleaseVersion,
 };

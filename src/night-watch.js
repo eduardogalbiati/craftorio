@@ -23,6 +23,9 @@
 // (detectSelfHealing: memory, cost-gap, environment, repeat) are pure functions over the runs' events;
 // its report is per UTC day (selfHealingDays → nightMetrics, selfHealingMetrics).
 // Step regressions (#335, regressionFindings): over the run list, not the events; report only.
+// The release train (#489, decideReleaseTrain): at the night's end the last release candidate is
+// promoted (the promote-release permission), proposed to the owner or held (on Hold, red base check);
+// src/service/areas/releases.js acts on it and logs it as oracle.action / oracle.escalated.
 
 const fs = require('fs');
 const path = require('path');
@@ -41,6 +44,8 @@ const PERMISSIONS = [
   { id: 'dispatch', label: 'Restart the app\'s dispatch', does: 'Starts the next planned items of the running roadmaps and queues when nothing runs.', undo: 'No undo needed: nothing changes on disk (stop a run that started).', default: false },
   { id: 'commit', label: 'Commit a workflow or skill fix to the local main', does: 'Writes files under workflows/ or skills/ and commits them on the local main (never pushed).', undo: 'Undo with git revert of the commit named in the result.', default: false },
   { id: 'file-issue', label: 'File an issue for what it found', does: 'Creates a new issue in the project\'s tracker.', undo: 'No undo: close the issue yourself (the watch never closes issues).', default: false },
+  // #489: the release train at the night's end
+  { id: 'promote-release', label: 'Promote a release', does: 'At the night\'s end, tags the last release candidate as the stable release when the base check is green on it and it is not on Hold (#489).', undo: 'No undo: delete the stable tag and its GitHub release yourself.', default: false },
 ];
 const PERMISSION_IDS = PERMISSIONS.map((p) => p.id);
 const DEFAULT_PERMISSIONS = PERMISSIONS.filter((p) => p.default).map((p) => p.id);
@@ -120,6 +125,7 @@ function permissionOf(kind, params = {}) {
     case 'dispatch.restart': return 'dispatch';
     case 'workflow.commit': return 'commit';
     case 'issue.file': return 'file-issue';
+    case 'release.promote': return 'promote-release';
     default: return null;
   }
 }
@@ -137,6 +143,20 @@ function gateDecision({ waitingSince, now = Date.now(), allowed = [], othersRunn
   const since = ms(waitingSince);
   if (othersRunning || !Number.isFinite(since) || Number(now) - since < after) return 'wait';
   return 'park';
+}
+
+/**
+ * #489: the release train at the night's end, for the last release candidate: 'none' (no merge since
+ * the last stable), 'hold' (the candidate is on Hold, or the base check is red on it), 'promote' (the
+ * promote-release permission allowed) or 'propose' (left to the owner in the morning).
+ * @returns {{ action: 'none'|'hold'|'promote'|'propose', reason: string }}
+ */
+function decideReleaseTrain({ mergesSinceStable = 0, baseCheck = null, allowed = [], held = false } = {}) {
+  if (!(Number(mergesSinceStable) > 0)) return { action: 'none', reason: 'No merge since the last stable release: nothing to promote.' };
+  if (held) return { action: 'hold', reason: 'The last release candidate is on hold: the train does not promote it (take the Hold off on the Releases screen).' };
+  if (baseCheck !== 'green') return { action: 'hold', reason: `The base check is ${baseCheck === 'red' ? 'red' : 'not green yet'} on the last release candidate: the promotion waits for a green base.` };
+  if ((allowed || []).includes('promote-release')) return { action: 'promote', reason: 'Merges since the last stable release and a green base check: the last candidate is promoted.' };
+  return { action: 'propose', reason: 'The last release candidate is ready (green base check): it waits for the owner to promote it on the Releases screen (the night may not promote a release).' };
 }
 
 /** The owner's checklist: { allowed, updatedAt, defaults } (the defaults until it is saved). */
@@ -713,6 +733,7 @@ module.exports = {
   activeIntervals,
   BASELINE,
   covers,
+  decideReleaseTrain,
   DEFAULT_PERMISSIONS,
   detectSelfHealing,
   expandedRuns,
