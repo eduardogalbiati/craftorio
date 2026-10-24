@@ -8,15 +8,6 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
-- **2026-10-22** (#489): releases are "rc + stable". Every merge into `main` becomes a prerelease
-  candidate `vX.Y.Z-rc.N` (built on every OS, never latest); the stable release is the last
-  candidate promoted without a rebuild (a `vX.Y.Z` tag on its commit), by the night's release train
-  when the base check is green on that commit, or on demand ("Promote to stable" on the Releases
-  screen). The train promotes alone only with the night permission "Promote a release" (off by
-  default), otherwise it proposes; a red base check or a candidate on **Hold** stops it. The stable
-  version is the label suggestion (#436) over the issues since the last stable, editable. The cut
-  line stays the manual milestone checked by the full release run. Replaces the tag-only release of
-  #482.
 - **2026-10-23** (#476): the Linux AppImage keeps its AppRun fallback to `--no-sandbox` when the
   kernel forbids unprivileged user namespaces (Ubuntu 23.10+), but only as a last resort and never
   silently: the launcher warns on stderr and sets `MULTIAGENT_NO_SANDBOX=1`, Settings › About shows
@@ -26,6 +17,16 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   `chrome-sandbox` is setuid (or that installs the profile) is the way to a sandbox by default and
   stays a future packaging target. Assumption recorded by the run, not yet confirmed by the owner.
   Why: on Ubuntu 24.04 the AppImage ran with Chromium's renderer sandbox off and nobody was told.
+- **2026-10-22** (#489): releases are "rc + stable". Every merge into `main` becomes a prerelease
+  candidate `vX.Y.Z-rc.N` (built on every OS, never latest); the stable release is the last
+  candidate promoted without a rebuild (a `vX.Y.Z` tag on its commit), by the night's release train
+  when the base check is green on that commit, or on demand ("Promote to stable" on the Releases
+  screen). The train promotes alone only with the night permission "Promote a release" (off by
+  default), otherwise it proposes; a red base check or a candidate on **Hold** stops it. The stable
+  version is the label suggestion (#436) over the issues since the last stable, editable. The cut
+  line stays the manual milestone checked by the full release run. Replaces the tag-only release of
+  #482. Why: the owner had to remember to cut a release, and the latest build was whatever merged
+  last; a built, checked candidate promoted as is costs no rebuild.
 - **2026-10-22** (#469, #474): workflows, skills and seeds are code. Transition `action:` and
   `ship.build` stay shell strings (the bundled ones use `&&` and `{% if %}`: an argv list would
   break them); `loadWorkflow` allows there unfiltered only an allowlist of names the workflow or
@@ -164,14 +165,14 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   only to count the people using it (the account gates nothing). The history is not rewritten.
   Why: without a licence the code is not open source, and the owner wants to know how many people
   use the app.
-- **2026-10-04** (#247, #245): Ask for changes at a validation gate goes to the test writer first. It
+- **2026-10-04** (#247, #245, #241): Ask for changes at a validation gate goes to the test writer first. It
   only checks whether the request changes the acceptance criteria: if so, it updates the affected
   acceptance tests and scenarios (then the red check); otherwise the run goes straight to the
   developer. Why: the locked tests still described the old behaviour and cost extra rounds.
   (#245, same day) No snake_case or file-name id is shown to people; agents and steps have a
   readable `display` name, and ids stay in tooltips and details for debugging. Why: screens showed
   internal ids such as "acceptance_tests" where people read them.
-- **2026-10-04** (#241, #240, #105): each area has one owner. The Backlog (issues, roadmap, queue)
+  (#241, #240, #105, same day) Each area has one owner. The Backlog (issues, roadmap, queue)
   belongs to the Product Owner; workflows, skills and runs belong to the Supervisor. The Oracle
   reads everything, diagnoses and proposes, but routes every change to the owning agent. Why: the
   Oracle's changes ended in its own history, made by an agent that does not hold that area's rules.
