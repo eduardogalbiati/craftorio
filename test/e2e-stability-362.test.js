@@ -28,7 +28,7 @@ test('the visual limit stays maxDiffPixelRatio 0.02 and scenarios are not retrie
 });
 
 test('the three #362 scenarios stay in the release suite, not skipped or tagged out (#362)', () => {
-  const heat = scenarioTags('features/analytics.feature');
+  const heat = scenarioTags('fronts/analyser/features/analytics.feature');
   const names = scenarioTags('features/display-names.feature');
   const scenarios = [
     heat['The hours heatmap and its legend in the light theme'],

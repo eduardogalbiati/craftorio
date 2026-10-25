@@ -76,8 +76,8 @@ function sourceDirs(root) {
   return [...dirs];
 }
 
-// the folders of a workspace that hold no sources
-const NOT_SOURCE = new Set(['node_modules', 'test']);
+// the folders of a workspace that hold no sources (its tests, its Playwright features)
+const NOT_SOURCE = new Set(['features', 'node_modules', 'test']);
 
 function listFiles(root, dir, match) {
   const abs = path.join(root, dir);

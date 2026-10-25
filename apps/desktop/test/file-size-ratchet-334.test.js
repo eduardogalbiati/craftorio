@@ -54,10 +54,10 @@ test('#334 the exceptions list starts at the files over 1,000 lines, each with a
     'apps/desktop/renderer/views/backlog/backlog-roadmap.js': 2072,
     'apps/desktop/renderer/views/backlog/backlog.js': 1779,
     'packages/engine/domains/po/product-owner.js': 1732,
-    'apps/desktop/renderer/views/discovery/discovery.js': 1560,
+    'fronts/plan/views/discovery/discovery.js': 1560,
     'packages/engine/domains/discovery/discovery.js': 1164,
     'apps/desktop/renderer/views/backlog/backlog-po.js': 1102,
-    'apps/desktop/renderer/views/arena/arena.js': 1048,
+    'fronts/plan/views/arena/arena.js': 1048,
   };
   assert.deepEqual(Object.keys(EXCEPTIONS).sort(), Object.keys(atIssue).sort());
   for (const [file, max] of Object.entries(atIssue)) {

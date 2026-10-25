@@ -170,7 +170,7 @@ test('#344 the exceptions list holds only functions above 25, as "<file>:<name>"
   assert.ok(keys.length > 0, 'the functions above 25 today are listed');
   for (const key of keys) {
     const file = key.slice(0, key.indexOf(':'));
-    assert.match(file, /^(src|scripts|packages|apps)\/.+\.js$/, `${key}: a source file (src/, a workspace, scripts/)`);
+    assert.match(file, /^(src|scripts|packages|fronts|apps)\/.+\.js$/, `${key}: a source file (src/, a workspace, scripts/)`);
     assert.equal(fs.existsSync(path.join(root, ...file.split('/'))), true, `${key}: the file exists`);
     assert.equal(Number.isInteger(COMPLEXITY_EXCEPTIONS[key]) && COMPLEXITY_EXCEPTIONS[key] > 25, true, `${key}: a whole value above 25`);
   }

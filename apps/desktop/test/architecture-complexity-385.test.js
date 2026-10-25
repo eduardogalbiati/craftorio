@@ -19,7 +19,6 @@ const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { analyzeSource } = require('../../../scripts/code-health');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const RENDERER = path.join(ROOT, 'apps', 'desktop', 'renderer');
 
 // One if with an && (1 + 1 + 1 = 3); a for...of with an if and a ternary (1 + 1 + 1 + 1 = 4)
 const A_JS = [
@@ -189,7 +188,7 @@ function loadTab(model) {
   }
   vm.runInContext(fs.readFileSync(pageFileOf('date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {
-    vm.runInContext(fs.readFileSync(path.join(RENDERER, 'views', 'project', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(pageFileOf(`views/project/${f}`), 'utf8'), sandbox, { filename: f });
   }
   const box = dom.document.createElement('div');
   dom.document.body.appendChild(box);

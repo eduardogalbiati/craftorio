@@ -5,7 +5,7 @@
 //   model plaque, so Claude / Codex / Grok stay recognizable.
 // - packages/ui-kit/run-list.js (top-level functions only) is evaluated whole in a sandbox: the runs
 //   list's progress strip draws each agent's robot in its colour, and a saved look still wins.
-// - apps/desktop/renderer/views/duo/duo.js: Write & Review's robots, pulled out of the source.
+// - fronts/plan/views/duo/duo.js: Write & Review's robots, pulled out of the source.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -1,5 +1,5 @@
 // apps/desktop/renderer/views/supervisor/supervisor.js, apps/desktop/renderer/views/workflows/builder.js and
-// apps/desktop/renderer/views/analytics/analytics.js run only inside the Electron renderer (document,
+// fronts/analyser/views/analytics/analytics.js run only inside the Electron renderer (document,
 // window.api), so the screen-context helpers they expose for the Supervisor (#28) are pulled out
 // of the source and evaluated in a sandbox, the way test/renderer-run-gates.test.js checks app.js
 // as a seam.

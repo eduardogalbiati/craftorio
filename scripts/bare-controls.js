@@ -10,8 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { listFiles: walk } = require('./file-size-ratchet');
-const { pageDirs } = require('./source-tree');
+const { pageFiles } = require('./source-tree');
 
 const ROOT = path.join(__dirname, '..');
 const KINDS = {
@@ -30,23 +29,23 @@ const BASELINE = {
   'apps/desktop/renderer/index.html': { select: 4 },
   'packages/ui-kit/resume-dialog.js': { select: 1 },
   'packages/ui-kit/select.js': { select: 1 },
-  'apps/desktop/renderer/views/analytics/analytics-agents.js': { select: 1 },
-  'apps/desktop/renderer/views/analytics/analytics-run.js': { select: 1 },
-  'apps/desktop/renderer/views/arena/arena.js': { select: 5 },
+  'fronts/analyser/views/analytics/analytics-agents.js': { select: 1 },
+  'fronts/analyser/views/analytics/analytics-run.js': { select: 1 },
+  'fronts/plan/views/arena/arena.js': { select: 5 },
   'apps/desktop/renderer/views/artifacts/artifacts.js': { select: 1 },
   'apps/desktop/renderer/views/backlog/backlog-po-proposals.js': { select: 3 },
   'apps/desktop/renderer/views/backlog/backlog-po.js': { select: 1 },
   'apps/desktop/renderer/views/backlog/backlog-roadmap.js': { select: 4 },
   'apps/desktop/renderer/views/backlog/backlog.js': { select: 7 },
-  'apps/desktop/renderer/views/discovery/discovery-commit.js': { select: 2 },
-  'apps/desktop/renderer/views/discovery/discovery.js': { select: 5 },
-  'apps/desktop/renderer/views/duo/duo.js': { select: 7 },
-  'apps/desktop/renderer/views/inbox/inbox.js': { select: 3 },
+  'fronts/plan/views/discovery/discovery-commit.js': { select: 2 },
+  'fronts/plan/views/discovery/discovery.js': { select: 5 },
+  'fronts/plan/views/duo/duo.js': { select: 7 },
+  'fronts/plan/views/inbox/inbox.js': { select: 3 },
   'apps/desktop/renderer/views/nightwatch/nightwatch.js': { datetime: 1, select: 1 },
   'apps/desktop/renderer/views/oracle/oracle.js': { datetime: 1 },
-  'apps/desktop/renderer/views/project/project-architecture.js': { select: 1 },
-  'apps/desktop/renderer/views/project/project-city-agents.js': { select: 1 },
-  'apps/desktop/renderer/views/project/project-city.js': { select: 1 },
+  'fronts/analyser/views/project/project-architecture.js': { select: 1 },
+  'fronts/analyser/views/project/project-city-agents.js': { select: 1 },
+  'fronts/analyser/views/project/project-city.js': { select: 1 },
   'apps/desktop/renderer/views/sessions/sessions.js': { select: 2 },
   'packages/ui-kit/views/settings/settings-markup.js': { select: 6 },
   'apps/desktop/renderer/views/workflows/builder.js': { select: 4 },
@@ -61,9 +60,10 @@ function countBareControls(src) {
   return out;
 }
 
-// the .js and .html files of every page layer (the UI kit, the fronts, the apps' page folders:
-// scripts/source-tree.js pageDirs; a scratch tree without manifests has its apps/<app>/renderer/ only)
-const listFiles = (root) => pageDirs(root).flatMap((dir) => walk(root, dir, /\.(js|html)$/));
+// the .js and .html page files of every layer (the UI kit, the fronts, the apps' page folders: their
+// root files and their views/, scripts/source-tree.js pageFiles; a layer's POCs and 3D sources are
+// not page files; a scratch tree without manifests has its apps/<app>/renderer/ only)
+const listFiles = (root) => pageFiles(root, { match: /\.(js|html)$/ }).map((f) => f.file);
 
 // [{ file, kind, count, allowed, message }], sorted by file.
 function checkBareControls({ root = ROOT, baseline = BASELINE } = {}) {

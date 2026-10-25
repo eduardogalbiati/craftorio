@@ -18,13 +18,13 @@
 //   selection changes; a click on a tab is delegated (to its container, the section or the document);
 // - the Overview is data-testid="project-overview"; the Refactor tab shows
 //   data-testid="refactor-state-no-report" until the project has an Architecture report (#357;
-//   the Architecture tab is #356's, features/architecture.feature).
+//   the Architecture tab is #356's, fronts/analyser/features/architecture.feature).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const H = require('./roadmap-status-helpers');
 const { loadApp, navEntries, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, pageMarkup, region, tabsOf } = require('./project-page-helpers');
+const { clickRendered, pageMarkup, region, tabsOf } = require('@multiagent/front-analyser/test/project-page-helpers');
 
 const NAV_GROUPS = path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'nav-groups.js');
 const navGroups = () => require(NAV_GROUPS);

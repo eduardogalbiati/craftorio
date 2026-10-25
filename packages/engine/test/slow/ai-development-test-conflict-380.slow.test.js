@@ -28,7 +28,7 @@ function makeRepo(t) {
   return dir;
 }
 
-const CONFLICT = 'features/architecture.feature: both sides edited the step "the plan is shown" (simulated)';
+const CONFLICT = 'fronts/analyser/features/architecture.feature: both sides edited the step "the plan is shown" (simulated)';
 
 test('ai-development-local-hero (#380): a test conflict needing new lines goes to the test writer, then back to resolve_merge, and the run merges', { timeout: 180000 }, async (t) => {
   const repo = makeRepo(t);
@@ -51,7 +51,7 @@ test('ai-development-local-hero (#380): a test conflict needing new lines goes t
     resolveVisits++;
     const out = resolveVisits === 1
       ? { resolved: false, blocked: false, summary: 'A test file needs new lines: handed to the test writer.', test_conflict: CONFLICT }
-      : { resolved: true, blocked: false, summary: 'Finished the rebase.', files_changed: ['features/architecture.feature'], behaviour_changed: false, previous_head: 'abc0001', head: 'def0002' };
+      : { resolved: true, blocked: false, summary: 'Finished the rebase.', files_changed: ['fronts/analyser/features/architecture.feature'], behaviour_changed: false, previous_head: 'abc0001', head: 'def0002' };
     return Promise.resolve({ text: `\`\`\`json\n${JSON.stringify(out)}\n\`\`\`` });
   };
   const events = [];

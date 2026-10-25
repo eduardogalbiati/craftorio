@@ -69,7 +69,7 @@ Feature: Releases
     Then the release summary shows "Timeline", "The fixes", "Before you ship" and "Follow-ups"
 
   # #376: a release on the project city. A real git repository tagged 1.1.0, 1.1.1 and 1.1.2: 1.1.2
-  # adds one file (#12), removes one and changes one (#13); see features/steps/release-city.steps.js
+  # adds one file (#12), removes one and changes one (#13); see fronts/analyser/features/steps/release-city.steps.js
   # @fixme until #556 (release 1.3.0): since #430 the city opens in a modal the step does not look in
   @issue-376 @fixme
   Scenario: "Show on the map" on a release shows the city with what the release changed

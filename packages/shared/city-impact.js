@@ -1,7 +1,7 @@
 // An issue's impact preview on the project city (#375): where an issue would change the code, from
 // what is already written down (no model call: the Product Owner's saved answers are read, never
 // asked again). Pure and deterministic: no I/O, clock or randomness. The City view's impact overlay
-// (apps/desktop/renderer/views/project/project-city-impact.js) draws it on #373's layout.
+// (fronts/analyser/views/project/project-city-impact.js) draws it on #373's layout.
 // - citedPaths(body) → the sorted repository-relative paths an issue body cites, in backticks or in
 //   plain text (`path:line[:col]` and `path:line-line[:col]`, hyphen or en dash, give the path (#427),
 //   trailing punctuation dropped); globs, URLs, issue refs and folders are not paths; a root file name

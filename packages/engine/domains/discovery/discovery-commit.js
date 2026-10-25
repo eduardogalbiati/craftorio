@@ -25,7 +25,7 @@
 //                            stage: in_delivery, delivered (every issue done), released (every issue in
 //                            a shipped release, packages/engine/domains/releases/releases.js)
 // Service: packages/engine/service/channels/discovery.js (discovery:commit-proposal, discovery:commit, the board's
-// `committed` list); screen: apps/desktop/renderer/views/discovery/discovery-commit.js.
+// `committed` list); screen: fronts/plan/views/discovery/discovery-commit.js.
 
 const fs = require('fs');
 const path = require('path');
