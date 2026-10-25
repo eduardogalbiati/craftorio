@@ -25,6 +25,9 @@ process.env.MULTIAGENT_SIMULATION_ONLY = '1';
 process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.2';
 const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-ws-'));
 process.env.MULTIAGENT_WORKSPACE = wsDir; // scratch workspace, no workspace dialog
+// a scratch user data folder too (never the dev app's: its account session and engine connection stay untouched)
+process.env.MULTIAGENT_USER_DATA = path.join(wsDir, 'user-data');
+fs.mkdirSync(process.env.MULTIAGENT_USER_DATA, { recursive: true });
 // --lang <code> (#329): the interface language (a code of packages/shared/i18n/), English by default
 // whatever the computer's language, so the checks keep their English selectors
 const langAt = process.argv.indexOf('--lang');

@@ -163,7 +163,8 @@ function installState(dir, stateFile, config) {
 }
 
 // The app's screens a Run App copy can open on (#119), from the files the run changed: the most
-// touched of a page layer's views/<view>/… and <view>[-part].{js,css} (the UI kit, a front, the page folder); null for none.
+// touched of a page layer's views/<view>/… and <view>[-part].{js,css} (the UI kit, a front, the page folder); null for none. The layers are
+// scripts/source-tree.js's (pageDirs); the engine cannot require scripts/, so the rule is spelled here too.
 const START_VIEWS = [
   'agents',
   'analytics',

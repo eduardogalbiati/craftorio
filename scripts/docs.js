@@ -60,8 +60,9 @@ const yaml = require('js-yaml');
 const { testMap, testMapMarkdown } = require('@multiagent/engine/engine/affected-tests');
 const { fieldReference } = require('@multiagent/engine/engine/run/field-rules');
 const {
+  appPages,
   composition,
-  fronts,
+  pageDirs,
   sourceFiles,
   uiKit,
   viewsOf,
@@ -136,8 +137,7 @@ function codeMap(root = ROOT) {
   const rows = files.map((f) => `| \`${f}\` | ${cell(headerOf(read(root, f))) || '(no header comment)'} |`);
   // One row per screen folder (<layer>/views/<view>/: the UI kit's, each front's and each app's page
   // folder's, scripts/source-tree.js), discovered: its files, from disk.
-  const viewLayers = [...(uiKit(root) ? [uiKit(root).dir] : []), ...fronts(root).map((x) => x.dir), ...appPages(root).map((a) => `${a}/renderer`)];
-  const viewRows = viewLayers.flatMap((dir) => viewsOf(root, dir).map((v) => {
+  const viewRows = pageDirs(root).flatMap((dir) => viewsOf(root, dir).map((v) => {
     const own = fs.readdirSync(path.join(root, dir, 'views', v)).filter((f) => /\.(js|css)$/.test(f)).sort();
     return `| \`${dir}/views/${v}/\` | The ${v} screen's folder (registered with \`registerView\`): ${own.map((f) => `\`${f}\``).join(', ')}. |`;
   }));
@@ -163,7 +163,7 @@ function codeMap(root = ROOT) {
     '  (or a new file there: files are discovered, see `packages/engine/service/index.js`), never to `packages/engine/service/index.js`;',
     '  its tests go in `test/service/<area>.test.js` (see [testing.md](testing.md)).',
     '- **A screen**: a folder `views/<view>/` in the front that owns it (`fronts/<id>/views/<view>/`; a shell',
-    '  screen in `packages/ui-kit/views/`; until the fronts are filled, `apps/desktop/renderer/views/<view>/`) with',
+    '  screen in `packages/ui-kit/views/`) with',
     '  `<view>.js` calling `registerView` and `<view>.css` (see [renderer.md](renderer.md), "Composition"),',
     '  a fragment `docs/screens/<view>.md` (`menu`, `order`, text) for',
     '  the README table, and its screenshot seed `scripts/screenshot/views/<view>.js` (its tabs, modes,',
@@ -174,7 +174,7 @@ function codeMap(root = ROOT) {
     '  needs others as it loads (a file of the same package, else of the UI kit).',
     '- **Code both the UI and the backend use** (pure: no DOM, no fs, no Electron): a dual-load module in',
     '  `packages/shared/` (`module.exports` under Node, a `window` global as a `<script>`; copy',
-    '  `packages/shared/display-name.js`) and run `npm run docs`. The backend never requires `apps/desktop/renderer/`.',
+    '  `packages/shared/display-name.js`) and run `npm run docs`. The backend never requires the UI (the kit, the fronts, the apps\' pages).',
     '- **Something GitHub and GitLab do differently** (a `gh`/`glab` command, its JSON, a term such as',
     '  "PR #" / "MR !"): a member of both platform adapters, `packages/shared/platforms/github.js` and `gitlab.js`',
     '  (#351), called through the registry (`resolvePlatform` / `platformOrDefault` in `packages/shared/platforms/index.js`,',
@@ -381,13 +381,11 @@ function engineIndex(root = ROOT) {
 }
 
 // ---- the pages: index.html generated from each app's composition (phase 3 of the reorganisation study) ----
-// The apps with a page folder (`<app>/renderer/`), and those whose page is generated (it has an index.html).
-const APPS_DIR = 'apps';
-const appPages = (root) => (fs.existsSync(path.join(root, APPS_DIR)) ? fs.readdirSync(path.join(root, APPS_DIR), { withFileTypes: true })
-  .filter((e) => e.isDirectory() && fs.existsSync(path.join(root, APPS_DIR, e.name, 'renderer'))).map((e) => `${APPS_DIR}/${e.name}`).sort() : []);
-const pageApps = (root) => appPages(root).filter((app) => fs.existsSync(path.join(root, app, 'renderer', 'index.html')));
+// The apps whose page is generated: those with a page folder (scripts/source-tree.js appPages, the one
+// place that knows the page folder's name) holding an index.html.
+const pageApps = (root) => appPages(root).filter((a) => fs.existsSync(path.join(root, ...a.page.split('/'), 'index.html'))).map((a) => a.app);
 const DEFAULT_APP = 'apps/desktop';
-const indexHtmlOf = (app) => `${app}/renderer/index.html`;
+const indexHtmlOf = (root, app) => `${composition(root, app).page}/index.html`;
 // The shared package's folder (path from root, with /): the workspace named @multiagent/shared
 // (scripts/source-tree.js), so index.html's <script> paths follow the package wherever it lives.
 const SHARED_PACKAGE = '@multiagent/shared';
@@ -503,7 +501,7 @@ const ASSET_SECTIONS = {
 // An app's index.html with its generated stylesheet and script lists replaced (the markers stay).
 function renderIndexHtml(text, root = ROOT, app = DEFAULT_APP) {
   const sections = Object.fromEntries(Object.entries(ASSET_SECTIONS).map(([name, build]) => [name, () => build(root, app)]));
-  return renderSections(text, sections, indexHtmlOf(app));
+  return renderSections(text, sections, indexHtmlOf(root, app));
 }
 
 // The channel reference (#338): the request/reply channels of this app's manifest, by area file, each
@@ -555,9 +553,9 @@ function checkDocs(root = ROOT) {
   if (buildReadme(root) !== current('README.md')) problems.push('README.md is out of date with docs/readme/: run `npm run docs` and commit it.');
   if (engine !== null && engine !== current(ENGINE_INDEX)) problems.push('docs/agents/engine.md is out of date with docs/agents/engine/: run `npm run docs` and commit it.');
   for (const app of pageApps(root)) {
-    const html = read(root, indexHtmlOf(app));
+    const html = read(root, indexHtmlOf(root, app));
     try {
-      if (renderIndexHtml(html, root, app) !== html) problems.push(`${indexHtmlOf(app)}'s script and style lists are out of date: run \`npm run docs\` and commit it.`);
+      if (renderIndexHtml(html, root, app) !== html) problems.push(`${indexHtmlOf(root, app)}'s script and style lists are out of date: run \`npm run docs\` and commit it.`);
     } catch (err) { problems.push(err.message); }
   }
   for (const f of missingHeaders(root)) problems.push(`${f} has no header comment (the code map is built from it).`);
@@ -583,7 +581,7 @@ function main(argv = process.argv.slice(2), root = ROOT) {
   if (!derivedOnly) {
     fs.writeFileSync(path.join(root, 'README.md'), buildReadme(root));
     if (engine !== null) fs.writeFileSync(path.join(root, ENGINE_INDEX), engine);
-    for (const app of pageApps(root)) fs.writeFileSync(path.join(root, indexHtmlOf(app)), renderIndexHtml(read(root, indexHtmlOf(app)), root, app));
+    for (const app of pageApps(root)) fs.writeFileSync(path.join(root, indexHtmlOf(root, app)), renderIndexHtml(read(root, indexHtmlOf(root, app)), root, app));
   }
   return 0;
 }

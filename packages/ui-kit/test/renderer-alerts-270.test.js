@@ -32,7 +32,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const H = require('@multiagent/front-build/test/roadmap-status-helpers');
+const H = require('./page-pieces');
 const { loadApp, text } = require('./renderer-app-harness');
 
 const MODULE = path.join(__dirname, '..', 'alerts.js');

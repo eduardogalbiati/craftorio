@@ -24,7 +24,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const H = require('@multiagent/front-build/test/roadmap-status-helpers');
+const H = require('./roadmap-status-helpers');
 
 const FAILED = '20261014-100000-failed01';
 const RESUMED = '20261014-110000-resumed1';
