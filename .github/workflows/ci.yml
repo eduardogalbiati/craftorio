@@ -65,7 +65,7 @@ jobs:
       MULTIAGENT_SIMULATION_ONLY: "1"      # automated checks never call real models
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
