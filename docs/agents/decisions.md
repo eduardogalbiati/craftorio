@@ -21,7 +21,8 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   Night watch, agents, skills, usage: the menu's AI group of #254); (3) Arena and Duo stay in Design & Plan
   as ideation tools until a user asks otherwise; (4) the 3D bundles split by owner, the project city
   to the `analyser` front and the run's 3D view to the UI kit, one bundle per owner from
-  `scripts/build-3d.js`; (5) Home is the shell and each front registers its cards, as screens
+  `scripts/build-3d.js` (the city's engine-side domains `release-city` and `project-map` stay in the
+  engine kernel, since its steps run them on any composition: owner, 2026-10-25, #590); (5) Home is the shell and each front registers its cards, as screens
   register themselves with `registerView`; (6) npm workspaces hoist by default, one `node_modules`
   at the root, `node-pty` and any other native module a dependency of `apps/desktop`; (7) folders
   and ids as proposed: `packages/{shared,engine,ui-kit}`, `fronts/{analyser,build,plan,ai}`,
