@@ -18,6 +18,7 @@ const { SUITE_SLOT_ENV } = require('../src/engine/machine-slot');
 const root = path.join(__dirname, '..');
 const RUNNER = [
   'scripts/test.js', 'scripts/test-exit.js', 'scripts/test-reporter-agent.js', 'scripts/test-reporter-slowest.js',
+  'scripts/source-tree.js', // the workspaces' test folders (phase 2 of the reorganisation study)
   'src/engine/agent-test-report.js', 'src/engine/machine-slot.js', 'src/engine/test-timeouts.js', 'src/engine/affected-tests.js',
   // #553: the name of the list file's variable (TEST_FILES_ENV)
   'src/engine/suite-command-line.js',
