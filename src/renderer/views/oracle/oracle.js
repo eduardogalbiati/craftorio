@@ -1,4 +1,4 @@
-// The Oracle's chat (#171; the service is #122, src/oracle.js): one conversation in two places.
+// The Oracle's chat (#171; the service is #122, src/domains/oracle/oracle.js): one conversation in two places.
 // - the dock (#oracle-dock): docked on Home's Overview (the view `dashboard`), open there; hidden on
 //   Home's Analytics tab (#255, the view `analytics`: the drawer, as on the other screens);
 // - the drawer (#oracle-drawer): an overlay opened on any other screen from the header's Oracle

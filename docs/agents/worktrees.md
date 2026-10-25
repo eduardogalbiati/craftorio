@@ -67,9 +67,9 @@ actions, or any code that deletes or checks out branches.
   approve_merge) whose run has a config (the project's `localPreview`, else
   `orchestrator.local_preview: { install, command, url }`) carries `local_preview` and `work_dir`
   in `approval.requested` / `pendingGates()`. `localPreview:start` (service `startLocalPreview`,
-  helpers in `src/local-preview.js`) runs `install && command` (install only when node_modules is
+  helpers in `src/domains/local/local-preview.js`) runs `install && command` (install only when node_modules is
   missing or the lockfile hash changed since the run's last preview) in the worktree, in a pty of
-  `src/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
+  `src/domains/machine/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
   `MULTIAGENT_SIMULATION_ONLY=1`, `MULTIAGENT_WORKSPACE` = a scratch copy under
   `<workspace>/local-previews/<run>/workspace` (projects, agents, skills, workflows, settings; never
   runs) and `MULTIAGENT_USER_DATA` (read by `src/host/main.js`, dev only) unless the owner chose the
@@ -87,10 +87,10 @@ actions, or any code that deletes or checks out branches.
 - **The app started by hand in a worktree (#112)**: `npm start` in `<workspace>/worktrees/<id>`
   (dev only, no `MULTIAGENT_WORKSPACE`) gets a scratch workspace and user data folder under
   `<workspace>/local-previews/app-<id>/` and simulations only (`worktreeAppScratch` in
-  `src/local-preview.js`, used by `src/host/main.js`): it never opens the owner's workspace. Prefer **Run App**.
+  `src/domains/local/local-preview.js`, used by `src/host/main.js`): it never opens the owner's workspace. Prefer **Run App**.
 - **The run's scratch workspace (#120)**: a run with a worktree gets `runs/<id>/scratch/{workspace,
   user-data}` (`WorkflowRun.scratchWorkspace`, same content rules as `scratchWorkspace` in
-  `src/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
+  `src/domains/local/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
   folders; never runs, repos or worktrees), created on the first agent turn. Every agent of the run
   gets it as `MULTIAGENT_WORKSPACE` / `MULTIAGENT_USER_DATA` (`capabilities.agentEnv`), so
   `npm run run -- --mock`, `npm run screenshot`, `npm start` and `node -e` engine scripts from the

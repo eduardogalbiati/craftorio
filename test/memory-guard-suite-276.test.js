@@ -182,7 +182,7 @@ test('memory guard (#276): a hold before a suite is recorded as memory.hold with
   assert.equal(holds[0].waited_ms, 360000);
   assert.equal(holds[0].free_bytes, 1.5 * GB);
   assert.equal(holds[0].floor_bytes, 3.2 * GB);
-  const { incidentOf } = require('../src/night-watch');
+  const { incidentOf } = require('../src/domains/night/night-watch');
   assert.equal(incidentOf(holds[0]), 'memory');
 });
 
@@ -198,7 +198,7 @@ test('memory guard (#276): the engine\'s process.killed event is a memory incide
   const { events } = await runFixture(t, { memoryGuard: guard, mockSequences: { suite: { suite: ['pass'] } } });
   const killed = events.find((e) => e.type === 'process.killed');
   assert.ok(killed);
-  const { incidentOf } = require('../src/night-watch');
+  const { incidentOf } = require('../src/domains/night/night-watch');
   assert.equal(incidentOf(killed), 'memory');
 });
 

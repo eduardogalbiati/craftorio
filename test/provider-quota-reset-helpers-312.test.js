@@ -1,12 +1,12 @@
 // src/shared/providers/quota-reset.js (#312): the reset-time rules the adapters' quotaReset share,
-// and src/provider-accounts.js's login command quoting and Codex probe. Local time throughout.
+// and src/domains/cli/provider-accounts.js's login command quoting and Codex probe. Local time throughout.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { nextClockTime, nextDay } = require('../src/shared/providers/quota-reset');
-const { accountLoginCommand, accountStatus } = require('../src/provider-accounts');
+const { accountLoginCommand, accountStatus } = require('../src/domains/cli/provider-accounts');
 
 const local = (y, m, d, h = 0, min = 0) => new Date(y, m - 1, d, h, min, 0, 0).getTime();
 

@@ -8,7 +8,7 @@
 //   (`release`, #260) holds nothing; a roadmap whose enabled stages are all finished is `done` while
 //   the disabled stages stay planned. currentStage() names the first unfinished ENABLED stage.
 //   setState(..., 'running', { stage }) on a disabled stage throws a message asking to enable it.
-// - src/night-watch.js roadmapIncidents: a running roadmap with only disabled stages left is not
+// - src/domains/night/night-watch.js roadmapIncidents: a running roadmap with only disabled stages left is not
 //   `dispatch-idle`.
 // - src/roadmap-undo.js (#281): undoing a Disable / Enable puts the stage's switch back.
 // - the service: roadmap:start with a disabled stage's id (Run this stage) is refused (/enable/i).
@@ -216,7 +216,7 @@ test('#284 service: roadmap:start with a disabled stage (Run this stage) is refu
 // ---- Night watch -----------------------------------------------------------------------------------
 
 test('#284 night watch: a running roadmap with only disabled stages left is not reported as dispatch-idle', () => {
-  const { roadmapIncidents } = require('../src/night-watch');
+  const { roadmapIncidents } = require('../src/domains/night/night-watch');
   const roadmap = mkRoadmap([
     { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
     { id: 's2', disabled: true, items: [mkItem('i2', 2)] },
@@ -226,7 +226,7 @@ test('#284 night watch: a running roadmap with only disabled stages left is not 
 });
 
 test('#284 night watch: an enabled planned stage with no run in progress is still dispatch-idle (regression)', () => {
-  const { roadmapIncidents } = require('../src/night-watch');
+  const { roadmapIncidents } = require('../src/domains/night/night-watch');
   const roadmap = mkRoadmap([
     { id: 's1', disabled: true, items: [mkItem('i1', 1)] },
     { id: 's2', items: [mkItem('i2', 2)] },

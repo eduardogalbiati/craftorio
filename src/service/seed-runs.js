@@ -2,14 +2,14 @@
 // (channels/seeds.js) and the Ways of working interview (areas/workflow-interview.js) run a seed
 // through here, so both see the same run in progress (one per project and seed at a time; a second
 // one is refused as busy) and the last run's error. A run: the project's recorded tool (seedTools)
-// through the shell, else one Oracle turn read-only in its daily budget (src/oracle-seeds.js),
+// through the shell, else one Oracle turn read-only in its daily budget (src/domains/oracle/oracle-seeds.js),
 // simulated under mock or MULTIAGENT_SIMULATION_ONLY; saved under <workspace>/architecture/. The
 // state lives per service context (a WeakMap on ctx), read at call time.
 
 const { execFile, exec: execShell } = require('child_process');
 const path = require('path');
-const agents = require('../agents');
-const oracleSeeds = require('../oracle-seeds');
+const agents = require('../domains/agents/agents');
+const oracleSeeds = require('../domains/oracle/oracle-seeds');
 const projects = require('../projects');
 const simulation = require('../engine/simulation');
 const { clientError, requireId } = require('./common');

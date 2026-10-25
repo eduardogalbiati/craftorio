@@ -13,7 +13,7 @@
 //     gitlab.js epicHelp); the English text is today's, unchanged;
 // (c) fixed text the engine and the service build to be shown follows it too: the memory guard's
 //     `process.killed` message (src/engine/run/turns.js watchMemory) and the Oracle's monthly budget
-//     refusal (src/oracle.js monthlyBlock); engine errors and logs stay English (not tested here);
+//     refusal (src/domains/oracle/oracle.js monthlyBlock); engine errors and logs stay English (not tested here);
 // (d) pt-BR.json has every key of en.json (#329 only checks a missing key falls back to English);
 // (e) a few screens rendered in Portuguese (the real page, test/renderer-app-harness.js): Home's empty
 //     state, the Inbox, the Backlog's kanban show none of the English labels they show today, and no
@@ -159,7 +159,7 @@ test('#330 (c) the memory guard\'s process.killed message follows the interface 
 
 test('#330 (c) the Oracle\'s monthly budget refusal follows the interface language', (t) => {
   t.after(restoreEnglish);
-  const oracle = require(path.join(SRC, 'oracle.js'));
+  const oracle = require(path.join(SRC, 'domains', 'oracle', 'oracle.js'));
   const budget = { claude: { name: 'Claude Code', blockOnLimit: true, limitUsd: 10, usedUsd: 10 } };
   const { en, pt } = inBoth(() => oracle.monthlyBlock(budget));
   assert.equal(en, 'Claude Code already reached its monthly budget. Raise it in Usage to ask the Oracle.');

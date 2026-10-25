@@ -1,5 +1,5 @@
 // #487: the ways-of-working analysis seed (seeds/ways-of-working/seed.md), read by src/seeds.js and
-// run by src/oracle-seeds.js like the other bundled seeds. Acceptance tests, written before the seed.
+// run by src/domains/oracle/oracle-seeds.js like the other bundled seeds. Acceptance tests, written before the seed.
 //
 // Spec (what these tests assume):
 //   seeds/ways-of-working/seed.md: valid seed front matter (src/seeds.js SEED_SCHEMA, name =
@@ -42,7 +42,7 @@ test('#487 the seed documents its JSON model: profile and evidence with every fi
 });
 
 test('#487 the Oracle prompt of the seed carries its body and the read-only rules', () => {
-  const { seedPrompt } = require('../src/oracle-seeds');
+  const { seedPrompt } = require('../src/domains/oracle/oracle-seeds');
   const seed = seeds().readSeed(seeds().BUNDLED_SEEDS_DIR, ID);
   const prompt = seedPrompt({ project: { id: 'p1', name: 'demo', folder: '/tmp/demo' }, seed });
   assert.equal(prompt.includes(String(seed.body).trim()), true);

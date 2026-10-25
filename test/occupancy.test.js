@@ -1,11 +1,11 @@
 // src/occupancy.js (#188): the 24/7 meter. Occupancy = time with at least one real run active /
 // wall-clock time over a window, the idle time split by cause (the causes add up to the idle total),
 // the Night watch split, the plain hint and the cost figures. Pure, computed locally from the runs'
-// events (the same `[{ runId, events }]` shape as src/night-watch.js, whose interval logic it reuses).
+// events (the same `[{ runId, events }]` shape as src/domains/night/night-watch.js, whose interval logic it reuses).
 // Seams: occupancyOf, idleHint, costFigures.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { nightMetrics } = require('../src/night-watch');
+const { nightMetrics } = require('../src/domains/night/night-watch');
 
 // Loaded inside each test: before the module exists, each test fails on its own instead of the file.
 const load = () => require('../src/occupancy');

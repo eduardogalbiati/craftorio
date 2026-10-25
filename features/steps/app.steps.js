@@ -209,7 +209,7 @@ const projectSelect = (page) => header(page).getByTestId('header-project');
 Given('the workspace has a second project {string} whose backlog has the open issue {string}', async ({ e2e }, name, title) => {
   const workspace = require(path.join(root, 'src', 'workspace'));
   const projects = require(path.join(root, 'src', 'projects'));
-  const { taskProgress } = require(path.join(root, 'src', 'backlog'));
+  const { taskProgress } = require(path.join(root, 'src', 'domains', 'backlog', 'backlog'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const repo = `https://github.com/example/${name}`;
   const created = await projects.createProject(ws.projects, { name, description: 'A second project (simulated data)' });

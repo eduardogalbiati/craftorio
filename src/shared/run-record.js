@@ -4,8 +4,8 @@
 // order, once each, on read (src/run-record.js reads the files, the renderer upgrades live events).
 // Pure: the record given is never changed and the run's files are never rewritten. An upgrade that
 // does not apply returns the record as is, so a current run passes through unchanged and upgrading
-// twice gives the same record. Readers (src/run-analysis.js, src/oracle-run-analysis.js,
-// src/runs.js, src/analytics.js through the run index, src/renderer/app.js) read the current shape
+// twice gives the same record. Readers (src/run-analysis.js, src/domains/oracle/oracle-run-analysis.js,
+// src/runs.js, src/domains/analytics/analytics.js through the run index, src/renderer/app.js) read the current shape
 // only. Adding an upgrade: docs/agents/storage.md.
 // Browser: window.RunRecord; Node: module.exports.
 (function (root) {

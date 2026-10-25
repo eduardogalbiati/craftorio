@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const evidence = require('../../src/evidence');
+const evidence = require('../../src/domains/evidence/evidence');
 
 const DEMO_REPO = 'https://github.com/example/demo-app';
 // #124: an issue too big for one run (complexity 5, 12 tasks in two areas of the code): the Product

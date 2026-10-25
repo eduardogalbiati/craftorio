@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const usage = require('../src/usage');
-const { installCommand } = require('../src/install-commands');
+const { installCommand } = require('../src/domains/machine/install-commands');
 const { parseGrok } = require('../src/engine/providers');
 const { WorkflowRun } = require('../src/engine/workflow');
 

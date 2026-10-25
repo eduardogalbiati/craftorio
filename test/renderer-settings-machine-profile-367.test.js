@@ -1,6 +1,6 @@
 // #367 Machine profile in the UI: Settings › Execution › Concurrent runs
 // (src/renderer/views/settings/settings.js) and the first-run Setup (#319, src/renderer/setup.js)
-// show the machine's line (machineLine of src/machine-profile.js, or its src/shared/ counterpart),
+// show the machine's line (machineLine of src/domains/machine/machine-profile.js, or its src/shared/ counterpart),
 // with "Use these values", manual values and a "back to auto" link, and the memory guard's
 // suggestion with an Apply button. The renderer runs only inside Electron, so these tests read the
 // sources (static markup or the template strings that draw it).

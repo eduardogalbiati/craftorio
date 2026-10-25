@@ -98,7 +98,7 @@ test('chat:cancel(\'supervisor\') stops a supervisor:chat turn in flight: the an
   service.events.on('chat:progress', (ev) => events.push(ev));
 
   // the turn's AbortController is wired synchronously, before the mock turn's first real wait
-  // (src/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
+  // (src/domains/chat/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
   const asking = api['supervisor:chat']({ question: 'What am I looking at?', screen: '', mock: true });
   assert.equal(await api['chat:cancel']({ chat: 'supervisor', key: '' }), true);
 

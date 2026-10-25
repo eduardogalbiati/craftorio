@@ -1,4 +1,4 @@
-// The Backlog's Product Owner (#105; skill: backlog-product-owner): a built-in agent (src/agents.js)
+// The Backlog's Product Owner (#105; skill: backlog-product-owner): a built-in agent (src/domains/agents/agents.js)
 // that reads a project's backlog and proposes which issues to run together, which must not run in
 // parallel, in what order, how big each group is and which issues to enrich first.
 //
@@ -24,12 +24,12 @@
 // runs change (the saved map, built when missing; capped at CONFLICT_MAP_CAP); the answer keeps groups
 // touching one hot file in different stages and lists the hot spots in `decongest`, each with a fix the
 // owner may file as an issue with a click.
-// Live progress (#180, src/chat-progress.js): ask's `onItem` gets the turn's items as they arrive
+// Live progress (#180, src/domains/chat/chat-progress.js): ask's `onItem` gets the turn's items as they arrive
 // (a simulated turn streams fake steps first); its `signal` stops the turn, keeping what was written.
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
 // Each real call's cost and tokens also go to <workspace>/backlog/product-owner.usage.jsonl, which
 // clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
-// #280: a line is the agents' shared record (src/agents-usage.js); every call is a one-shot session.
+// #280: a line is the agents' shared record (src/domains/agents/agents-usage.js); every call is a one-shot session.
 //
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
@@ -46,13 +46,13 @@
 // sent to the platform). Clearing the conversation keeps these folders. A preview (simulated) never
 // calls gh/glab.
 //
-// A discovery card's commit (#258, src/discovery-commit.js): `proposeCommit` proposes the issues a
+// A discovery card's commit (#258, src/domains/discovery/discovery-commit.js): `proposeCommit` proposes the issues a
 // Ready card becomes (one read-only turn, mode 'commit': titles, the card's acceptance criteria as
 // tasks, complexity, workflow), kept to the card by normalizeSplit; `mock` answers with the
 // rule-based split. The owner edits and files it in the Discovery board's commit dialog.
 // Splitting (#124, src/po-split.js): the plan answer's `splits` propose 2-4 child issues for each
 // issue too big for one run; `applySplit` files them on the owner's click (the owner may move tasks
-// or merge children first) and updates the parent. Epics (#138, src/epics.js): the answer's `epics`
+// or merge children first) and updates the parent. Epics (#138, src/domains/backlog/epics.js): the answer's `epics`
 // places issues in existing epics and proposes new ones (and epics to merge or split); `applyEpic`
 // writes one of them on the owner's click. A registered issue's draft may name its epic: it joins it
 // when the owner keeps "Place in epic" (on by default with the project's autoEpic option). Both are
@@ -64,31 +64,31 @@
 // `suggested` (never in its `issues`: the owner adds one with a checkbox). Closed ones are left out of
 // the groups and listed in the answer's `closed`. The user message records them (`issues`).
 //
-// Its inbox (#240, src/agent-inbox.js): `handleRequest` takes another agent's request (the Oracle's)
+// Its inbox (#240, src/domains/agents/agent-inbox.js): `handleRequest` takes another agent's request (the Oracle's)
 // of a kind in REQUEST_KINDS. The mechanical kinds run the code of the owner's buttons, given by the
 // service (`perform`); `plan` is a question to its model (`ask`). The request and its result are in
 // the conversation, tagged `request: { from, kind, ref }`.
 
 const fs = require('fs');
 const path = require('path');
-const agentInbox = require('./agent-inbox');
-const agentsUsage = require('./agents-usage');
-const backlog = require('./backlog');
+const agentInbox = require('./domains/agents/agent-inbox');
+const agentsUsage = require('./domains/agents/agents-usage');
+const backlog = require('./domains/backlog/backlog');
 const { isArchived } = require('./shared/backlog-archive');
 const costEstimate = require('./cost-estimate');
 const DefaultWorkflow = require('./shared/default-workflow');
-const discoveryCommit = require('./discovery-commit');
-const epics = require('./epics');
+const discoveryCommit = require('./domains/discovery/discovery-commit');
+const epics = require('./domains/backlog/epics');
 const poCalibration = require('./shared/po-calibration');
 const poSplit = require('./po-split');
 const { separateSharedFiles } = require('./po-hot-files');
-const { mockSteps, partialText } = require('./chat-progress');
+const { mockSteps, partialText } = require('./domains/chat/chat-progress');
 const { hotSpots, loadConflictMap, readConflictMap } = require('./conflict-map');
 const { conflictsOf } = require('./repo-performance');
 const { storeFor } = require('./store');
 const { readEvents } = require('./supervisor');
 const Language = require('./shared/language');
-const TimeZone = require('./time-zone');
+const TimeZone = require('./domains/analytics/time-zone');
 
 const MAX_REPORT = 60000;
 const BODY_CLIP = 600;
@@ -1411,7 +1411,7 @@ function checkBudget(budget) {
  * @param mode      'plan' (default) or 'issue' (#117: register an issue; `attachments`: paths saved by saveAttachment,
  *                  moved to the thread's folder in `runsDir`, which also keeps the thread and each turn's analysis)
  * @param scenario  with `mock` only: a MOCK_SCENARIOS id forcing the simulated answer (#148)
- * @param onItem    #180: the turn's items as they arrive (src/chat-progress.js); a simulated turn then
+ * @param onItem    #180: the turn's items as they arrive (src/domains/chat/chat-progress.js); a simulated turn then
  *                  streams fake steps (MOCK_STEPS) and its text first
  * @param signal    #180: an AbortSignal that stops the turn; the prose written so far is recorded,
  *                  marked `stopped` (a failure keeps it too, after the error)
@@ -1529,7 +1529,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
 }
 
 // ---- a discovery card's commit (#258) ---------------------------------------------------------------
-// The split of a Ready card into the issues it is committed as (src/discovery-commit.js files them
+// The split of a Ready card into the issues it is committed as (src/domains/discovery/discovery-commit.js files them
 // on the owner's click): the model's proposal kept to the card's acceptance criteria
 // (normalizeSplit), or the rule-based one (proposeSplit: the simulated answer, and the fallback).
 const COMMIT_SCHEMA = {
@@ -1626,7 +1626,7 @@ async function callAgent({ mode = 'plan', question = '', report, previous = [], 
   const { extractJson, validateSchema } = require('./engine/run/outputs');
   const { render } = require('./engine/run/templates');
   const { runTurn, isImagePath } = require('./engine/providers');
-  const { resolveSkill, skillPrompt } = require('./skills');
+  const { resolveSkill, skillPrompt } = require('./domains/agents/skills');
   const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');
   const { PROVIDERS } = require('./workflow-builder');
   const provider = PROVIDERS.claude;

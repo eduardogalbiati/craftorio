@@ -12,13 +12,13 @@
 const fs = require('fs');
 const path = require('path');
 const { emptyUsage, imageInput } = require('../providers');
-const { resolveSkill, skillPrompt } = require('../../skills');
+const { resolveSkill, skillPrompt } = require('../../domains/agents/skills');
 const {
   priceOf,
   totalTokens,
 } = require('../../usage');
 const capabilities = require('../capabilities');
-const evidence = require('../../evidence');
+const evidence = require('../../domains/evidence/evidence');
 const testPaths = require('../test-paths');
 const chain = require('../../shared/chain-model');
 const Language = require('../../shared/language');
@@ -30,7 +30,7 @@ const {
   languagesFor,
   splitValues,
 } = require('../language-skills');
-const sessionCache = require('../../session-cache');
+const sessionCache = require('../../domains/session/session-cache');
 const { render } = require('./templates');
 const {
   parseDuration,
@@ -142,7 +142,7 @@ const methods = {
     };
   },
 
-  // #320: the session's prompt-cache state (src/session-cache.js): when its last turn ended, its
+  // #320: the session's prompt-cache state (src/domains/session/session-cache.js): when its last turn ended, its
   // context at the last request, whether its agent has a handoff note, and what its next turn re-reads
   cacheState(s) {
     if (s.agent === 'orchestrator') return {};

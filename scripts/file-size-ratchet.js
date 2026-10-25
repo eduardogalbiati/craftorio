@@ -18,7 +18,7 @@ const HOW_TO = 'docs/agents/testing.md ("File size ratchet")';
 
 // path (from the repository root, with /) -> its line count when listed; only lower it
 const EXCEPTIONS = {
-  'src/discovery.js': 1164,
+  'src/domains/discovery/discovery.js': 1164,
   'src/product-owner.js': 1732,
   'src/renderer/views/arena/arena.js': 1048,
   'src/renderer/views/backlog/backlog-po.js': 1102,

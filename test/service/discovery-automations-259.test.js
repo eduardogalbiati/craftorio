@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 const { makeService } = require('./helpers');
 
-const discovery = () => require('../../src/discovery');
+const discovery = () => require('../../src/domains/discovery/discovery');
 
 async function project(t, api) {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-automations-'));

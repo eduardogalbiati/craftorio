@@ -22,7 +22,7 @@ stops the turn at 100% (a run that would start over budget is refused).
   (interactive Claude Code sessions, other tools running the CLIs). Read from
   `~/.claude/projects/**/*.jsonl` (Claude Code; chunks of the same message counted once),
   `~/.codex/sessions/**/rollout-*.jsonl` (Codex) and `~/.grok/sessions/**/usage.json` (Grok), by
-  `src/local-usage.js`. The orchestrator's part is matched by provider session id.
+  `src/domains/local/local-usage.js`. The orchestrator's part is matched by provider session id.
 - Codex is metered by the ChatGPT plan's rate-limit windows and credits: its logs carry the plan
   type, the % used of each window and the credit balance, shown on the Codex card.
 - Claude Code's local logs have no cost, so outside usage is priced only if you set model prices.

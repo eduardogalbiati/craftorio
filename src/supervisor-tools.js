@@ -8,11 +8,11 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const agents = require('./agents');
-const analytics = require('./analytics');
+const agents = require('./domains/agents/agents');
+const analytics = require('./domains/analytics/analytics');
 const { fragmentSources } = require('./engine/run/load');
 const projects = require('./projects');
-const skills = require('./skills');
+const skills = require('./domains/agents/skills');
 const supervisor = require('./supervisor');
 
 const MAX_CHARS = 60000;

@@ -40,7 +40,7 @@ test('the model exists where the views and the engine can load it', () => {
 test('only src/roadmap.js writes the roadmap\'s state, pausedBy and scope', () => {
   const writes = /\b(pausedBy|scope)\s*:|\bstate\s*:\s*['"`](planned|running|paused|done)['"`]/;
   const hits = [];
-  for (const rel of ['live-roadmap.js', 'night-watch.js', 'roadmap-undo.js', 'service/areas/roadmap.js']) {
+  for (const rel of ['live-roadmap.js', 'domains/night/night-watch.js', 'roadmap-undo.js', 'service/areas/roadmap.js']) {
     read(rel).split(/\r?\n/).forEach((line, n) => { if (writes.test(line)) hits.push(`${rel}:${n + 1}: ${line.trim()}`); });
   }
   assert.deepEqual(hits, []);

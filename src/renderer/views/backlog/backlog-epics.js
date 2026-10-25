@@ -1,5 +1,5 @@
 // Backlog epics (#138): the epic filter rule, its options with counts, and each epic's progress.
-// The sync (src/epics.js) gives each member issue `epic` (the epic's id: `#12`, or `&5` for a GitLab
+// The sync (src/domains/backlog/epics.js) gives each member issue `epic` (the epic's id: `#12`, or `&5` for a GitLab
 // group epic) and the backlog `epics`; an epic issue itself has `isEpic`. The filter is '' (every
 // issue), NONE (issues in no epic, epics themselves left out) or an epic's id; it combines with the
 // label filter and the search in backlog.js (AND).

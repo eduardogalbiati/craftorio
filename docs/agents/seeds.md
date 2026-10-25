@@ -1,6 +1,6 @@
 # Writing an analysis seed (#360)
 
-A seed is a prompt the Oracle runs read-only on a project (`src/oracle-seeds.js`), shown in the
+A seed is a prompt the Oracle runs read-only on a project (`src/domains/oracle/oracle-seeds.js`), shown in the
 Architecture tab's Seeds section (`src/renderer/views/project/project-seeds.js`, channels in
 `src/service/channels/seeds.js`). Bundled seeds live in `seeds/<name>/seed.md` and are seeded into
 `<workspace>/seeds/` by `seedSeeds` (`src/seeds.js`, through `seedBundle` of `src/seed.js`): an
@@ -24,7 +24,7 @@ edited copy freezes like a skill.
 ## The answer
 
 One ```json fence `{ html, model }`: a self-contained page and the model it draws. Both are
-scrubbed of secrets (`redact`/`scrub` of `src/findings.js`) before they are written to
+scrubbed of secrets (`redact`/`scrub` of `src/domains/evidence/findings.js`) before they are written to
 `<workspace>/architecture/<project id>/seeds/<seed>/<stamp>/` (`result.html`, `model.json`,
 `run.json`). The page is shown in an `<iframe sandbox="">` with a `default-src 'none'` policy: no
 script, no network.
@@ -32,9 +32,9 @@ script, no network.
 ## Network needs
 
 A seed reads the network only as it declares, and each read is a command builder and a parser in
-both platform adapters (`src/shared/platforms/`), exposed through `src/oracle-platform.js`. The CI's
+both platform adapters (`src/shared/platforms/`), exposed through `src/domains/oracle/oracle-platform.js`. The CI's
 recent runs: `ciRunsCommand` / `parseCiRuns` (`ciRunsCommand` / `ciRunsResult` there), read by the
-Oracle's read-only `ci_runs` tool (`src/oracle-tools.js`) with the project's own CLI auth.
+Oracle's read-only `ci_runs` tool (`src/domains/oracle/oracle-tools.js`) with the project's own CLI auth.
 
 ## ways-of-working: the interview's analysis (#487)
 

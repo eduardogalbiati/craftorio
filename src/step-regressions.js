@@ -8,8 +8,8 @@
 // `minRuns` baseline runs: 'not-measurable'. A recent median above baseline × (1 + threshold) is a
 // regression of that measure; a key flagged earlier (`flagged`) that is back within is 'recovered'.
 // Report only: nothing here pauses, changes or answers anything. Pure: callers pass the run list
-// (src/runs.js listRuns). Used by the Night watch's regression finding (src/night-watch.js) and the
-// Oracle's run_analysis `regressions` focus (src/oracle-run-focus.js).
+// (src/runs.js listRuns). Used by the Night watch's regression finding (src/domains/night/night-watch.js) and the
+// Oracle's run_analysis `regressions` focus (src/domains/oracle/oracle-run-focus.js).
 
 const path = require('path');
 const { complexityOfIssues, stepMinutes } = require('./cost-estimate');

@@ -17,7 +17,7 @@
 //                  read at and how far its events.jsonl was read; artifact_paths maps a project copy's
 //                  path to the runs that saved it. Rebuilt from runs/ when missing.
 //   queues, queue_items, queue_claims
-//                  the Backlog queues (src/backlog.js): every change is one IMMEDIATE transaction, and
+//                  the Backlog queues (src/domains/backlog/backlog.js): every change is one IMMEDIATE transaction, and
 //                  a dispatcher claims the item it starts so two never take the same issue. The
 //                  backlog/<id>.queue.json files become a readable snapshot written under that lock;
 //                  a project with no row yet (a new or deleted index.db) is imported from its file.
@@ -26,18 +26,18 @@
 //   notifications  every notice (run started/finished/failed, gate waiting, CLI session waiting, push
 //                  merge conflict...),
 //                  for the notification center; kept notificationRetentionDays days (settings).
-//   usage_files    the local-usage scan's state of each CLI transcript (#389, src/local-usage.js): its
+//   usage_files    the local-usage scan's state of each CLI transcript (#389, src/domains/local/local-usage.js): its
 //                  size + mtime key, how far it was read, its records (as rows) and its sessions'
 //                  folded times and recent ids (encodeEntry). Written in small batches by the scan's
-//                  worker thread (src/local-usage-worker.js) through its own connection; rebuildable.
+//                  worker thread (src/domains/local/local-usage-worker.js) through its own connection; rebuildable.
 //
 // `openStore(ws)` opens (or reopens) the store of a workspace layout; `storeFor(dir)` finds the open
-// store whose runs or backlog folder is `dir`, so src/runs.js and src/backlog.js use it when the
+// store whose runs or backlog folder is `dir`, so src/runs.js and src/domains/backlog/backlog.js use it when the
 // service has one and fall back to the plain files otherwise (scripts/run.js, unit tests).
 
 const fs = require('fs');
 const path = require('path');
-const { pathKey } = require('./platform-paths');
+const { pathKey } = require('./domains/machine/platform-paths');
 
 // loaded on first use: a process that never opens a store (scripts/run.js, unit tests) never loads it
 let sqlite = null;

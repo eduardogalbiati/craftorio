@@ -13,8 +13,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const backlog = require('./backlog');
-const epics = require('./epics');
+const backlog = require('./domains/backlog/backlog');
+const epics = require('./domains/backlog/epics');
 const Language = require('./shared/language');
 
 const MAX_TASKS = 8;

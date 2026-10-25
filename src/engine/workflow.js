@@ -25,9 +25,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { emptyUsage, refreshWindowsPath } = require('./providers');
-const { resolveSkill, skillPrompt } = require('../skills');
-const evidence = require('../evidence');
-const { writeResultSummary } = require('../result-summary');
+const { resolveSkill, skillPrompt } = require('../domains/agents/skills');
+const evidence = require('../domains/evidence/evidence');
+const { writeResultSummary } = require('../domains/evidence/result-summary');
 const { stopProcessesIn } = require('./processes');
 const { sharedMemoryGuard } = require('./memory-guard');
 const machineActions = require('./machine-actions');
@@ -169,11 +169,11 @@ class WorkflowRun extends EventEmitter {
   // models (#262): { <model id>: { timeout_factor?, max_total_cost_usd? } } Settings' limits per model; the
   //   workflow's own `models` win per model (see modelLimits).
   // nightLimits (#337): () => tonight's limits ({ multiplier } | { values }) or null, called at each check
-  //   (src/night-limits.js tonightLimits; see effectiveLimits in src/engine/run/costs.js).
-  // testWorkers (#367): the machine profile's test workers per run (src/machine-profile.js), given to
+  //   (src/domains/night/night-limits.js tonightLimits; see effectiveLimits in src/engine/run/costs.js).
+  // testWorkers (#367): the machine profile's test workers per run (src/domains/machine/machine-profile.js), given to
   //   the agents and the suite as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS; null = not set.
   // architectureOracle (#381): () => { oracle, agent }, the service's Oracle ({ oneTurn, budgetRefusal }
-  //   of src/oracle.js) and its agent, for a `type: project_map` step's analyze action
+  //   of src/domains/oracle/oracle.js) and its agent, for a `type: project_map` step's analyze action
   //   (src/engine/run/project-map-steps.js); null = no Oracle (a simulation needs none).
   // refactorPriorityOptions (#378): (projectId) => the Product Owner's turn options (refactor:prioritize's),
   //   for a `type: refactor_proposals` step's prioritize action (src/engine/run/refactor-proposals-steps.js);

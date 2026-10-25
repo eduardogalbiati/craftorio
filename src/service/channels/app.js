@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
-const machineProfile = require('../../machine-profile');
+const machineProfile = require('../../domains/machine/machine-profile');
 const workspace = require('../../workspace');
 const {
   args,
@@ -87,7 +87,7 @@ module.exports = (ctx) => [
       simulationOnly: simulation.simulationOnly(),
       // Settings › Execution gives the memory guard's limit in GB for this machine (#276)
       totalMemoryBytes: os.totalmem(),
-      // the screen a Run App copy opens on (#119, set by src/local-preview.js); simulation-only copies only
+      // the screen a Run App copy opens on (#119, set by src/domains/local/local-preview.js); simulation-only copies only
       startView: simulation.simulationOnly() ? process.env.MULTIAGENT_START_VIEW || null : null,
       // run from source or packaged: the Findings button shows from source (#361, findings-model.js)
       isPackaged: Boolean(ctx.host.isPackaged),
@@ -109,7 +109,7 @@ module.exports = (ctx) => [
   // the code this process started with and the code on disk now (changed: a restart is needed, #83)
   { channel: 'app:codeVersion', method: 'codeVersion', schema: { result: OBJECT }, fn: () => ctx.code.check() },
   { channel: 'settings:get', method: 'getSettings', schema: { result: OBJECT }, fn: () => workspace.readSettings(ctx.ws) },
-  // the machine profile (#367, src/machine-profile.js) for Settings › Execution and the Setup: the
+  // the machine profile (#367, src/domains/machine/machine-profile.js) for Settings › Execution and the Setup: the
   // values in force (auto | manual | unknown), this machine's line and proposal, and the memory guard's
   // suggestion of the last 7 days (null when none). Read-only: Apply goes through settings:set.
   {

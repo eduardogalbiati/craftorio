@@ -5,10 +5,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const pipelines = require('../../pipelines');
 const seeds = require('../../seeds');
-const skills = require('../../skills');
+const skills = require('../../domains/agents/skills');
 const workflows = require('../../workflows');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('../common');
 

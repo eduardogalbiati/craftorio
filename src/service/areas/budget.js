@@ -8,7 +8,7 @@ const budget = require('../../budget');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 const workspace = require('../../workspace');
-const { nightWatch } = require('../../oracle-actions');
+const { nightWatch } = require('../../domains/oracle/oracle-actions');
 
 module.exports = (ctx) => {
   function budgetNow(now = new Date()) {

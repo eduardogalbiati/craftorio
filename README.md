@@ -1181,7 +1181,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
-| `clarity-score` | the Discovery board (its score and Grill me, src/clarity.js); issue-tracker (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
+| `clarity-score` | the Discovery board (its score and Grill me, src/domains/discovery/clarity.js); issue-tracker (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
 | `code-mapping` | mapper | Maps the files, functions, line numbers, connections, tests and conventions of a task before the first edit, in a map of at most 300 lines |
 | `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md` |
 | `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
@@ -2098,7 +2098,7 @@ stops the turn at 100% (a run that would start over budget is refused).
   (interactive Claude Code sessions, other tools running the CLIs). Read from
   `~/.claude/projects/**/*.jsonl` (Claude Code; chunks of the same message counted once),
   `~/.codex/sessions/**/rollout-*.jsonl` (Codex) and `~/.grok/sessions/**/usage.json` (Grok), by
-  `src/local-usage.js`. The orchestrator's part is matched by provider session id.
+  `src/domains/local/local-usage.js`. The orchestrator's part is matched by provider session id.
 - Codex is metered by the ChatGPT plan's rate-limit windows and credits: its logs carry the plan
   type, the % used of each window and the credit balance, shown on the Codex card.
 - Claude Code's local logs have no cost, so outside usage is priced only if you set model prices.
@@ -2193,10 +2193,10 @@ Codex drops the user's MCP servers,
   **↗** button next to each opens the same thing in an external console window instead (Windows).
 - **Live terminal** follows a session as it runs: prompts, thinking, text, tool calls, results and
   usage. For the **orchestrator** it follows the whole run: steps, transitions, sessions,
-  approvals, actions and logs. It is read by the app itself (`src/session-tail.js`), no child process.
+  approvals, actions and logs. It is read by the app itself (`src/domains/session/session-tail.js`), no child process.
 - **Open in CLI** runs the provider's interactive CLI resuming the same conversation in the
   session's folder (`claude --resume <id>`, `codex resume <id>`, `grok --resume <id>`) in a real
-  pseudoterminal (node-pty: ConPTY on Windows, forkpty on macOS/Linux; `src/terminals.js`). Only
+  pseudoterminal (node-pty: ConPTY on Windows, forkpty on macOS/Linux; `src/domains/machine/terminals.js`). Only
   between turns; whatever you send there becomes part of the agent's conversation for its next turn.
 - Keys: **Ctrl+C** copies when text is selected, otherwise interrupts; **Ctrl+V** / Shift+Insert
   paste; Ctrl+Shift+C always copies; right-click copies the selection or pastes. On macOS, Cmd
@@ -2461,16 +2461,16 @@ src/host/main.js              Electron main process + IPC
 src/host/preload.js           safe API exposed to the renderer
 src/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 src/projects.js          projects: CRUD and folder/repository setup
-src/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue
+src/domains/backlog/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue
 src/roadmap.js           backlog roadmap: ordered stages of runs, each after the previous one merged
-src/local-push.js        local merges not pushed: status (commits, issues they close), push, update and push
+src/domains/local/local-push.js        local merges not pushed: status (commits, issues they close), push, update and push
 src/seed.js              seeding of bundled defaults into the workspace (.seeded.json, origin status, restore)
-src/skills.js            skills: CRUD, lookup, seeding and prompt block
-src/agents.js            agents: CRUD, appearance validation, the built-in supervisor, the workflows' agents (read-only)
+src/domains/agents/skills.js            skills: CRUD, lookup, seeding and prompt block
+src/domains/agents/agents.js            agents: CRUD, appearance validation, the built-in supervisor, the workflows' agents (read-only)
 src/workflows.js         workflows: seeding, origin status, lookup (workspace, then bundled)
 src/workflow-builder.js  visual builder: spec <-> workflow YAML, what the builder can't draw
 src/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
-src/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)
+src/domains/local/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)
 src/actions-usage.js     GitHub Actions minutes of the month vs the included quota (Usage, CI step)
 src/engine/workflow.js   engine that runs the YAML graph
 src/engine/providers.js  claude / codex / grok / mock adapters

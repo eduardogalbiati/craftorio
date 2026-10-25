@@ -2,7 +2,7 @@
 // command (`npm run screenshot -- <args>`, the `screenshot` script of the worktree's package.json)
 // once per entry of an earlier step's `screenshots: [{ name, caption, args }]` output: "modified"
 // from the worktree, then "original" with `--ref <base>`, into <run_dir>/evidence/<folder>/round-<n>/
-// as `<name>.<side>.png` (src/evidence.js; the engine rebuilds the manifest after the step, with the
+// as `<name>.<side>.png` (src/domains/evidence/evidence.js; the engine rebuilds the manifest after the step, with the
 // captions of the output's `screenshots: [{ path, caption }]`).
 // It never fails: no entries, a simulated run, no worktree, no screenshot command, an invalid entry,
 // a timeout or a crash end up in the output (`errors`, `reason`, `message`), and the run goes on to
@@ -17,9 +17,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const evidence = require('../evidence');
+const evidence = require('../domains/evidence/evidence');
 const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
-const { runShim } = require('../shell');
+const { runShim } = require('../domains/machine/shell');
 const { readChecks, screenChecks } = require('./ui-review-checks');
 const {
   acquireSlot,

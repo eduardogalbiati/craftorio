@@ -18,8 +18,8 @@
 
 'use strict';
 
-const arch = require('./oracle-architecture');
-const backlog = require('./backlog');
+const arch = require('./domains/oracle/oracle-architecture');
+const backlog = require('./domains/backlog/backlog');
 const facts = require('./architecture-facts');
 const priority = require('./refactor-priority');
 const projects = require('./projects');

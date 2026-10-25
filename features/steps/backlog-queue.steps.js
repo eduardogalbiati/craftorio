@@ -25,7 +25,7 @@ const shownAlert = (page) => alerts(page).getByTestId('page-alert').filter({ vis
 
 Given('a queued run failed and paused the issue queue', async ({ e2e }) => {
   const args = {
-    module: path.resolve(__dirname, '..', '..', 'src', 'backlog.js'),
+    module: path.resolve(__dirname, '..', '..', 'src', 'domains', 'backlog', 'backlog.js'),
     dir: path.join(e2e.scratch, 'workspace', 'backlog'),
     projectId: e2e.project.id,
     error: QUEUE_ERROR,

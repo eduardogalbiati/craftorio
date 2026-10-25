@@ -17,7 +17,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const night = require('../../src/night-watch');
+const night = require('../../src/domains/night/night-watch');
 const { makeService } = require('./helpers');
 
 const settle = () => new Promise((r) => setTimeout(r, 50));

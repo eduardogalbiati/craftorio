@@ -1,5 +1,5 @@
 // #256 Discovery channels (src/service/channels/discovery.js, found by src/service/manifest.js like
-// every channel file): the Inbox screen reaches the store (src/discovery.js) through these, each
+// every channel file): the Inbox screen reaches the store (src/domains/discovery/discovery.js) through these, each
 // on the workspace's discovery folder (layout().discovery). The contract assumed here, channel →
 // window.api method (params):
 //   discovery:list                → listDiscoveryCards (projectId, column)

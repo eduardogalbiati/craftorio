@@ -10,7 +10,7 @@ function seed({ ws, project, src, workspace }) {
   workspace.writeSettings(ws, { findingsButton: true });
   let findings;
   try {
-    findings = src('findings');
+    findings = src('domains/evidence/findings');
   } catch {
     return; // an app before #361
   }

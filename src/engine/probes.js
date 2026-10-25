@@ -18,8 +18,8 @@ const {
   resolveCommand,
 } = require('./providers');
 const { childEnv, PLATFORM_CLIS } = require('./child-env');
-const { installHint } = require('../install-commands');
-const { execShim } = require('../shell');
+const { installHint } = require('../domains/machine/install-commands');
+const { execShim } = require('../domains/machine/shell');
 const github = require('../shared/platforms/github');
 const gitlab = require('../shared/platforms/gitlab');
 const { PLATFORMS, findPlatform, resolvePlatform } = require('../shared/platforms');

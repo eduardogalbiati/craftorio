@@ -44,7 +44,7 @@ bundled by `scripts/build-3d.js` into `generated/`. Modules both sides use live 
 ## The native sidecars
 
 `native/` is a cargo workspace with one small Rust binary per crate, shipped next to the app in
-`resources/bin/` (outside `app.asar`) and found by `src/native-bin.js`:
+`resources/bin/` (outside `app.asar`) and found by `src/domains/machine/native-bin.js`:
 
 - `multiagent-mcp`: the supervisor's MCP server (the JS fallback is `src/supervisor-mcp.js`).
 - `multiagent-tail`: follows a live agent session in an external terminal.

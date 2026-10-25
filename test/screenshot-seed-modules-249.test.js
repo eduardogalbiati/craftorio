@@ -27,7 +27,7 @@ async function seedView(t, argv, { withFolder = false } = {}) {
   const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO, ...(folder ? { folder } : {}) });
   workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, setupDone: true });
   fs.mkdirSync(ws.backlog, { recursive: true });
-  fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
+  fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('domains/backlog/backlog').taskProgress), null, 2));
   const view = VIEWS[args.view];
   if (view.seed) await view.seed({ appDir, args, project, projects, src, workspace, ws });
   return { ws, project };

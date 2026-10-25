@@ -17,7 +17,7 @@ const CAPABILITIES = 'docs/agents/capabilities.md';
 const ENTRY = /^\s*(?:#{2,4}\s+|[-*]\s+|\|\s*)[*_]*(\d{4}-\d{2}-\d{2})/;
 const MIN_ENTRIES = 3;
 const MAX_ENTRIES = 16;
-// what the README's Oracle section names besides its knowledge skills (src/oracle-knowledge.js)
+// what the README's Oracle section names besides its knowledge skills (src/domains/oracle/oracle-knowledge.js)
 const README_ORACLE_TOOLS = [
   'issues_search',
   'run_analysis',
@@ -71,7 +71,7 @@ function oracleSection(readme) {
 }
 
 function checkOracleCapabilities(root = ROOT) {
-  const { KNOWLEDGE_SKILLS } = require(path.join(root, 'src', 'oracle-knowledge'));
+  const { KNOWLEDGE_SKILLS } = require(path.join(root, 'src', 'domains', 'oracle', 'oracle-knowledge'));
   const problems = [];
   const section = oracleSection(read(root, 'README.md'));
   if (!section) problems.push({ file: 'README.md', message: 'README.md has no "### The Oracle" section (docs/readme/)' });

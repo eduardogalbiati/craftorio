@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const projects = require('../src/projects');
-const skills = require('../src/skills');
+const skills = require('../src/domains/agents/skills');
 const { setupWorkspace, readSettings, writeSettings, DEFAULT_SETTINGS } = require('../src/workspace');
 
 function tmp(t) {
@@ -31,7 +31,7 @@ test('settings: defaults, merge and dropping unknown keys', (t) => {
   assert.equal('junk' in readSettings(ws), false);
 });
 
-// #82: voice input (src/speech.js) defaults to whisper-cli, the "small" model and Portuguese (the
+// #82: voice input (src/domains/chat/speech.js) defaults to whisper-cli, the "small" model and Portuguese (the
 // owner dictates in Portuguese); an unrelated settings patch keeps them.
 test('settings: voice input defaults (whisper-cli, small, pt), kept by an unrelated patch', (t) => {
   const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });

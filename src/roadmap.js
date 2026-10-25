@@ -1,6 +1,6 @@
 // @ts-check
 // Backlog roadmap (#106): an ordered plan of runs per project, in
-// <workspace>/backlog/<project id>.roadmap.json, next to the queue (src/backlog.js). Stages run one
+// <workspace>/backlog/<project id>.roadmap.json, next to the queue (src/domains/backlog/backlog.js). Stages run one
 // after the other; the items of a stage (each one run: a workflow with one issue or a group, the
 // queue's item shape, so `itemIssues`/`runInputs` start it like an assigned group) run in parallel
 // up to the concurrency limit. A stage is over when every item is done (finished successfully and
@@ -57,7 +57,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { itemIssues, withSyncedText } = require('./issues');
+const { itemIssues, withSyncedText } = require('./domains/backlog/issues');
 const { normalizeThen } = require('./shared/chain-model');
 const { isArchived } = require('./shared/backlog-archive');
 const { dropWaitingSuffix } = require('./refactor-cadence');

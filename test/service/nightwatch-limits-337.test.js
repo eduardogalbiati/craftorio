@@ -2,7 +2,7 @@
 // limits. The API these tests pin down (the developer implements it):
 //   - channel `nightwatch:limits`, window.api method `setNightWatchLimits(limits)`: limits
 //     { multiplier } (1.5, 2 or 3) or { values: { context, cost, duration, turns, budget } }; saves
-//     them for the Night watch in force (src/night-limits.js saveNightLimits, by 'the owner'), raises
+//     them for the Night watch in force (src/domains/night/night-limits.js saveNightLimits, by 'the owner'), raises
 //     the nightly budget for that night through the existing settings.budget.raised
 //     ({ night: <watch startedAt>, nightlyUsd }: the nightly budget × multiplier, or values.budget),
 //     tells every live run (run.noteLimitsRaised) and answers nightwatch:state.
@@ -14,8 +14,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const actions = require('../../src/oracle-actions');
-const night = require('../../src/night-watch');
+const actions = require('../../src/domains/oracle/oracle-actions');
+const night = require('../../src/domains/night/night-watch');
 const workspace = require('../../src/workspace');
 const budget = require('../../src/budget');
 const { makeService } = require('./helpers');

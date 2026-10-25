@@ -19,15 +19,8 @@ const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
 const JS_YAML_BROWSER = path.join(ROOT, 'node_modules', 'js-yaml', 'dist', 'js-yaml.js');
 
-// workflow-compose.js: wherever the change puts it under src/
-function findCompose(dir = SRC) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) { const hit = findCompose(full); if (hit) return hit; }
-    else if (entry.name === 'workflow-compose.js') return full;
-  }
-  return null;
-}
+// the pure core of the composition (src/shared/); its Node wrapper, src/domains/workflow/workflow-compose.js, requires the engine
+const COMPOSE = path.join(SRC, 'shared', 'workflow-compose.js');
 
 const REQUIRE = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
 function resolveLocal(from, spec) {
@@ -104,8 +97,8 @@ test('#488 the Builder (src/workflow-builder.js) loads in a browser page and exp
 });
 
 test('#488 workflow-compose.js exists and loads in a browser page, exposing its functions', () => {
-  const file = findCompose();
-  assert.equal(file !== null, true, 'workflow-compose.js under src/');
+  const file = COMPOSE;
+  assert.equal(fs.existsSync(file), true, 'src/shared/workflow-compose.js exists');
   const page = loadInPage(file);
   assert.equal(page.error, null, page.error);
   const exposed = page.added.filter((k) => { const v = page.window[k]; return v && typeof v === 'object' && Object.values(v).some((f) => typeof f === 'function'); });
@@ -114,7 +107,7 @@ test('#488 workflow-compose.js exists and loads in a browser page, exposing its 
 
 // (fs / path in a Node-only branch is fine, as src/shared/i18n.js does: only process spawning is checked)
 test('#488 nothing the Builder, the composition or the field rules load can spawn a process', () => {
-  const targets = [path.join(SRC, 'workflow-builder.js'), path.join(SRC, 'engine', 'run', 'field-rules.js'), findCompose()].filter(Boolean);
+  const targets = [path.join(SRC, 'workflow-builder.js'), path.join(SRC, 'engine', 'run', 'field-rules.js'), COMPOSE];
   const offenders = [];
   for (const target of targets) {
     for (const file of scriptsFor(target)) {

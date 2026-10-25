@@ -6,7 +6,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { setupWorkspace } = require('../../src/workspace');
 const { createService } = require('../../src/service');
-const backlog = require('../../src/backlog');
+const backlog = require('../../src/domains/backlog/backlog');
 const {
   ISSUE_WORKFLOW, WORKFLOW, makeService, until, untilTrue, watchRuns,
 } = require('./helpers');

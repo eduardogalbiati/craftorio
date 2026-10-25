@@ -31,6 +31,6 @@ module.exports = (ctx) => [
   },
   // path: an artifact of a run (refused outside the runs' folders)
   { channel: 'artifacts:read', method: 'readArtifact', params: ['path'], schema: { params: args({ path: STRING }, ['path']), result: OBJECT }, fn: (opts) => ctx.readArtifact(opts) },
-  // a run's screenshots: the evidence manifest with its final set (#146, src/evidence.js)
+  // a run's screenshots: the evidence manifest with its final set (#146, src/domains/evidence/evidence.js)
   { channel: 'artifacts:evidence', method: 'runEvidence', params: ['runId'], schema: { params: args({ runId: RUN_ID }), result: nullable(OBJECT) }, fn: (opts) => ctx.runEvidence(opts || {}) },
 ];

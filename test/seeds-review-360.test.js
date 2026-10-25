@@ -1,4 +1,4 @@
-// #360 review: the ci_runs Oracle tool (src/oracle-tools.js) reads a project's recent CI runs through
+// #360 review: the ci_runs Oracle tool (src/domains/oracle/oracle-tools.js) reads a project's recent CI runs through
 // its platform's adapter (gh on GitHub, glab on GitLab) with the injected CLI runner (ctx.execCli, the
 // boundary) and answers the parsed runs; issues.cliTargetOrName takes a repository URL or an owner/name
 // and refuses anything else; two seed runs saved in the same millisecond get two folders (-1 suffix).
@@ -12,9 +12,9 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { createService } = require('../src/service');
 const { setupWorkspace } = require('../src/workspace');
-const { oracleTools, callTool } = require('../src/oracle-tools');
-const issues = require('../src/issues');
-const { runSeed, listSeedRuns } = require('../src/oracle-seeds');
+const { oracleTools, callTool } = require('../src/domains/oracle/oracle-tools');
+const issues = require('../src/domains/backlog/issues');
+const { runSeed, listSeedRuns } = require('../src/domains/oracle/oracle-seeds');
 
 function makeCtx(t, execCli) {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';

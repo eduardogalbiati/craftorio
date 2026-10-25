@@ -51,7 +51,7 @@
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const val = (x, f = fmtNum) => (x == null ? '—' : f(x));
 
-  // the range asked for: All is the longest one the service reads (a year, src/analytics.js dateRange)
+  // the range asked for: All is the longest one the service reads (a year, src/domains/analytics/analytics.js dateRange)
   function range() {
     if (ax.preset === 'all') return { from: daysBack(365), to: today() };
     const preset = ax.preset && window.DateRange?.presetRange(ax.preset, new Date(), window.TimeZone ? window.TimeZone.current() : 'UTC');

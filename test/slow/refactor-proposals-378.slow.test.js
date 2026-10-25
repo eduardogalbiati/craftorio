@@ -25,7 +25,7 @@ const { WorkflowRun } = require('../../src/engine/workflow');
 const { Recorder } = require('../../src/engine/recorder');
 const projects = require('../../src/projects');
 const proposals = require('../../src/refactor-proposals');
-const { validateReport } = require('../../src/oracle-architecture');
+const { validateReport } = require('../../src/domains/oracle/oracle-architecture');
 const { producedIssues } = require('../../src/shared/chain-model');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 

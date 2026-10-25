@@ -14,7 +14,7 @@
 // - inputValue / parseInput: a datetime-local field's value in the zone; nextAt(h, mi): the next local h:mi;
 // - zones(): the IANA list for the Settings select; current(): the renderer's zone (state.settings);
 //   onChange(fn) / notify(): open screens redraw when the zone is loaded or changed.
-// Browser: window.TimeZone; Node: module.exports (src/time-zone.js re-exports it).
+// Browser: window.TimeZone; Node: module.exports (src/domains/analytics/time-zone.js re-exports it).
 (function (root) {
   const DAY_MS = 864e5;
   const formatters = new Map();

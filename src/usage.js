@@ -4,7 +4,7 @@
 // - orchestrator: the runs' summary.json files (<workspace>/runs/*/summary.json, through the run
 //   index when it is open: src/store.js; mock runs
 //   are ignored) plus the sessions of the run in progress;
-// - machine: everything the CLIs recorded on this machine (src/local-usage.js), including use
+// - machine: everything the CLIs recorded on this machine (src/domains/local/local-usage.js), including use
 //   outside the orchestrator. The orchestrator's part is found by provider session id. Cost is what the CLI reported
 // (Claude Code and Grok do), otherwise an estimate from the per-model prices in settings, else the
 // adapter's price table (Codex does not report cost; #369: a Claude turn on a model the CLI does not know). Budgets live in settings.json and are enforced by the
@@ -12,12 +12,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { installCommand } = require('./install-commands');
+const { installCommand } = require('./domains/machine/install-commands');
 const { readRunSummary } = require('./run-record');
 const { runSummaries } = require('./runs');
 const registry = require('./shared/providers');
-const { cacheWriteUsd } = require('./session-cache');
-const TimeZone = require('./time-zone');
+const { cacheWriteUsd } = require('./domains/session/session-cache');
+const TimeZone = require('./domains/analytics/time-zone');
 
 // The CLIs, from their adapters (src/shared/providers/). installCommand: what the Usage screen's play
 // button runs (#147); installNote: what to do after it
@@ -48,7 +48,7 @@ function priceOf(model, prices = {}) {
 }
 
 // What tokens cost at `price`: input, output, cache reads, and cache writes at the cache's lifetime
-// (src/session-cache.js cacheWriteUsd: 1.25× input for 5 minutes, 2× for an hour, unless the price sets it)
+// (src/domains/session/session-cache.js cacheWriteUsd: 1.25× input for 5 minutes, 2× for an hour, unless the price sets it)
 function tokensCost(t = {}, price, lifetimeMs) {
   const base = (t.input || 0) * (price.input || 0) + (t.output || 0) * (price.output || 0) + (t.cache_read || 0) * (price.cache_read ?? price.input ?? 0);
   return base / 1e6 + (cacheWriteUsd(t.cache_write, price, lifetimeMs) || 0);
@@ -102,7 +102,7 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
  *                    or a list of them (concurrent runs)
  * @param installed   { claude: bool, codex: bool, grok: bool }
  * @param now         Date (tests)
- * @param extraRuns   summary-like spend that is in no run folder, e.g. the Oracle's days (src/oracle.js usageRuns)
+ * @param extraRuns   summary-like spend that is in no run folder, e.g. the Oracle's days (src/domains/oracle/oracle.js usageRuns)
  */
 function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now = new Date(), scope = 'orchestrator', local = null, extraRuns = [] }) {
   const prices = settings.prices || {};

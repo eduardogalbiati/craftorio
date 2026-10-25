@@ -6,8 +6,8 @@
 // the roadmap again. One refill per project at a time; the outcome is the roadmap's liveRefill and a
 // notification. It never answers a gate and never starts anything but the roadmap's own items.
 
-const agents = require('../../agents');
-const backlog = require('../../backlog');
+const agents = require('../../domains/agents/agents');
+const backlog = require('../../domains/backlog/backlog');
 const live = require('../../live-roadmap');
 const notifier = require('../../notifications');
 const productOwner = require('../../product-owner');

@@ -20,7 +20,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { unlinkDeps } = require('./deps-cache');
 const { ownerAlive, readOwner } = require('../run-owner');
-const { samePath: platformSamePath } = require('../platform-paths');
+const { samePath: platformSamePath } = require('../domains/machine/platform-paths');
 
 const FETCH_TIMEOUT_MS = 60e3;
 const GIT_TIMEOUT_MS = 120e3;
@@ -67,7 +67,7 @@ function canonicalPath(p) {
 
 /**
  * True when `a` and `b` are the same folder (see canonicalPath), with the app's one rule for case
- * (src/platform-paths.js: case-insensitive on Windows and macOS). On a case-sensitive macOS volume
+ * (src/domains/machine/platform-paths.js: case-insensitive on Windows and macOS). On a case-sensitive macOS volume
  * two folders that differ only by case would compare equal; run folders never do.
  */
 const samePath = (a, b) => platformSamePath(canonicalPath(a), canonicalPath(b));

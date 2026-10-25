@@ -1,6 +1,6 @@
 // Steps of features/local-preview-confirm.feature (#481, SEC-22): Run App's confirmation at a gate
 // with `local_preview: true` (src/renderer/gate-panel.js runAppConfirmHtml) for a command the
-// repository declares (.multiagent/local-preview.yaml, src/local-preview.js readRepoConfig). The run
+// repository declares (.multiagent/local-preview.yaml, src/domains/local/local-preview.js readRepoConfig). The run
 // itself reuses run.steps.js (Start panel, "Validated" mode, the gate card). Locators are roles and
 // data-testid only (skills/ui-conventions):
 //   run-gate                    the gate card; its Run App button is the button named "▶ Run App…" /

@@ -1,19 +1,19 @@
-// Service area: a project's Backlog (src/backlog.js). The synced issues with their runs, queue,
+// Service area: a project's Backlog (src/domains/backlog/backlog.js). The synced issues with their runs, queue,
 // roadmap stage and local status; Assign (queue issues for a workflow, alone or as one group run,
 // with an optional chain, #134); the queue's dispatch into free run slots; and the issue tracker's
 // epic placement after a run filed issues (#138); the Backlog Refresh banner and the sync after a
-// refresh run (#161, src/backlog-refresh.js). "Create and queue" is a chain (src/service/areas/chain.js).
+// refresh run (#161, src/domains/backlog/backlog-refresh.js). "Create and queue" is a chain (src/service/areas/chain.js).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const baseHealth = require('../../base-health');
-const refreshes = require('../../backlog-refresh');
+const refreshes = require('../../domains/backlog/backlog-refresh');
 const { git } = require('../../engine/worktree');
-const epics = require('../../epics');
+const epics = require('../../domains/backlog/epics');
 const roadmaps = require('../../roadmap');
 const { normalizeThen } = require('../../shared/chain-model');
 const { platformOrDefault, requestRef } = require('../../shared/platforms');
@@ -60,7 +60,7 @@ module.exports = (ctx) => {
     return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
   }
 
-  // The Backlog Refresh banner (#161, src/backlog-refresh.js): the merges on the base since the
+  // The Backlog Refresh banner (#161, src/domains/backlog/backlog-refresh.js): the merges on the base since the
   // last refresh are counted (first-parent commits: merges and squashes) only when it is stale;
   // `refreshed`: the issues that refresh updated, for a day.
   function refreshBanner(project, list, local) {

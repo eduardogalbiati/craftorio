@@ -6,7 +6,7 @@
 // restore the cache so other test files still get the real resolveCommand.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { installCommand, installHint } = require('../../src/install-commands');
+const { installCommand, installHint } = require('../../src/domains/machine/install-commands');
 
 function loadSettingsArea(resolveCommand) {
   const providersPath = require.resolve('../../src/engine/providers');

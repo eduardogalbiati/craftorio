@@ -4,7 +4,7 @@
 // from pages, ...) and every other page is denied.
 
 const { fileURLToPath } = require('url');
-const { pathKey } = require('../platform-paths');
+const { pathKey } = require('../domains/machine/platform-paths');
 
 const norm = (p) => pathKey(p);
 

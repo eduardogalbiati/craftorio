@@ -80,7 +80,7 @@
   };
 
   // Generic emblems for the user's own agents (no brand), drawn in a 20x20 box centered on 0.
-  // Keep the names in sync with EMBLEMS in src/agents.js.
+  // Keep the names in sync with EMBLEMS in src/domains/agents/agents.js.
   const line = (d, w = 2.4) => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
   const ICONS = {
     bolt: '<path d="M2 -10 L-6 2 H-1 L-2 10 L6 -2 H1 Z"/>',
@@ -307,7 +307,7 @@ ${flip(v.overlay || '')}
     },
   };
 
-  // ---------- user-defined looks (Agents screen, src/agents.js) ----------
+  // ---------- user-defined looks (Agents screen, src/domains/agents/agents.js) ----------
   // An appearance is { body, shell, visor, glow, eyes, emblem }: the main color (body, shoulder plate),
   // the shell (head and limbs), the visor (screen), the glow (eyes and antennas), the eye style and
   // an emblem ('none' = the plain panel). Base and outline are derived from the main color.

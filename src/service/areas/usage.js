@@ -1,7 +1,7 @@
 // Service area: usage, budgets and prices (the Usage screen, src/usage.js) and analytics (tokens
-// and session metrics over a date range, src/analytics.js), with the supervisor's report on it, and
+// and session metrics over a date range, src/domains/analytics/analytics.js), with the supervisor's report on it, and
 // Analytics' Repository performance tab (src/repo-performance.js, #159) and Agents tab (#280,
-// src/agents-usage.js: what the Oracle, the Product Owner and the Supervisor chat cost).
+// src/domains/agents/agents-usage.js: what the Oracle, the Product Owner and the Supervisor chat cost).
 // `agentUsageRuns` is the spend that is in no run folder, for Usage and every monthly budget check.
 
 const path = require('path');
@@ -13,9 +13,9 @@ const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
 const usage = require('../../usage');
-const agentsUsage = require('../../agents-usage');
-const analytics = require('../../analytics');
-const oracle = require('../../oracle');
+const agentsUsage = require('../../domains/agents/agents-usage');
+const analytics = require('../../domains/analytics/analytics');
+const oracle = require('../../domains/oracle/oracle');
 const productOwner = require('../../product-owner');
 const supervisorChat = require('../../supervisor-chat');
 const repoPerformance = require('../../repo-performance');
@@ -25,7 +25,7 @@ const { itemRuns } = require('../../shared/roadmap-model');
 const {
   computeUsageAsync,
   readLocalUsageAsync,
-} = require('../../local-usage');
+} = require('../../domains/local/local-usage');
 const { storeFor } = require('../../store');
 const supervisor = require('../../supervisor');
 const {

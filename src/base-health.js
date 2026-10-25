@@ -22,7 +22,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const issues = require('./issues');
+const issues = require('./domains/backlog/issues');
 const roadmaps = require('./roadmap');
 const { LOCAL } = require('./shared/default-workflow');
 const { prepareBaseWorktree, removeWorktree } = require('./engine/worktree');

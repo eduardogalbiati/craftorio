@@ -83,7 +83,7 @@ function createWatches({ events, liveRun, runFolder, workflowDirs, skillsDirs, r
     // a new conversation (first turn, or a provider that cannot resume) gets the rules and the report
     const line = Language.languageLine({ language: language() });
     if (w.sessionId) return `${line}\n\n${body}`;
-    const { resolveSkill, skillPrompt } = require('./skills');
+    const { resolveSkill, skillPrompt } = require('./domains/agents/skills');
     const skill = resolveSkill(skillsDirs(), 'run-supervisor');
     return [skillPrompt(skill), line, RULES, supervisor.runReport(w.runDir, { workflowsDir: workflowDirs() }), body].join('\n\n');
   }
@@ -179,7 +179,7 @@ function createWatches({ events, liveRun, runFolder, workflowDirs, skillsDirs, r
       const runDir = run.runDir;
       const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');
       const { render } = require('./engine/workflow');
-      const { resolveSkill } = require('./skills');
+      const { resolveSkill } = require('./domains/agents/skills');
       const skill = resolveSkill(skillsDirs(), 'run-supervisor');
       // read-only, like the supervisor inside a run (engine/capabilities.js)
       const readOnly = run.mock ? [] : providerArgs(cli.type, { caps: normalize({ tools: ['read'] }) }).args;

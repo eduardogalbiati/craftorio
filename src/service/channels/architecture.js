@@ -1,6 +1,6 @@
 // A project's Architecture tab (#356): the git facts of its repository (src/architecture-facts.js,
 // numbers from the pure core src/shared/architecture-model.js), the Oracle's analysis on demand
-// (src/oracle-architecture.js: one turn in the Oracle's daily budget, simulated under mock or
+// (src/domains/oracle/oracle-architecture.js: one turn in the Oracle's daily budget, simulated under mock or
 // MULTIAGENT_SIMULATION_ONLY; one analysis at a time, a second call is refused), the saved reports
 // (<workspace>/architecture/<project id>/, the latest with its findings marked new or gone, the
 // project's real finished runs since), the cost estimate from the last real analyses, the
@@ -32,8 +32,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const agents = require('../../agents');
-const arch = require('../../oracle-architecture');
+const agents = require('../../domains/agents/agents');
+const arch = require('../../domains/oracle/oracle-architecture');
 const facts = require('../../architecture-facts');
 const projects = require('../../projects');
 const proposals = require('../../refactor-proposals');

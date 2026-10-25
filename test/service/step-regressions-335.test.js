@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const night = require('../../src/night-watch');
+const night = require('../../src/domains/night/night-watch');
 const runs = require('../../src/runs');
 const { makeService } = require('./helpers');
 

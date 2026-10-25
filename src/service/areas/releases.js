@@ -10,7 +10,7 @@
 // `ship:` transition. A simulated release run records nothing; its Ship only opens the cut line of
 // a simulated roadmap. `markReleasedIssues` marks the Backlog's issues a release shipped; the
 // discovery cards linked to them are marked in the card store when the release is recorded
-// (`markCards`; the store, src/discovery.js, comes with #256: a checkout without it has no card).
+// (`markCards`; the store, src/domains/discovery/discovery.js, comes with #256: a checkout without it has no card).
 // #489 "rc + stable": `listReleases` lists the release candidates since the last stable (one rc per
 // merge into main) with the suggested stable version; `holdCandidate` puts one on Hold;
 // `promoteRelease` tags a candidate's commit as the stable release (only the tag is pushed; nothing
@@ -22,9 +22,9 @@ const path = require('path');
 const { readStore: readBaseHealth } = require('../../engine/base-health-store');
 const simulation = require('../../engine/simulation');
 const { loadWorkflow } = require('../../engine/workflow');
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const { clientError } = require('../common');
-const night = require('../../night-watch');
+const night = require('../../domains/night/night-watch');
 const projects = require('../../projects');
 const releases = require('../../releases');
 const roadmaps = require('../../roadmap');
@@ -32,10 +32,10 @@ const runs = require('../../runs');
 
 const RELEASE_WORKFLOW = 'release.yaml';
 
-// The discovery card store (src/discovery.js, #256), or null in a checkout that does not have it
+// The discovery card store (src/domains/discovery/discovery.js, #256), or null in a checkout that does not have it
 // (it was written in parallel with #260): without the store there is no card to mark.
 function cardStore() {
-  try { return require('../../discovery'); } catch (e) {
+  try { return require('../../domains/discovery/discovery'); } catch (e) {
     if (e.code === 'MODULE_NOT_FOUND' && e.message.split('\n')[0].includes('discovery')) return null;
     throw e;
   }

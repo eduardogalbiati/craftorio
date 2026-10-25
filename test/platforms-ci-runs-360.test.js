@@ -1,10 +1,10 @@
-// #360 CI runs through the platform adapters (ciRunsCommand / parseCiRuns) and src/oracle-platform.js.
+// #360 CI runs through the platform adapters (ciRunsCommand / parseCiRuns) and src/domains/oracle/oracle-platform.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const github = () => require('../src/shared/platforms/github');
 const gitlab = () => require('../src/shared/platforms/gitlab');
-const oraclePlatform = () => require('../src/oracle-platform');
+const oraclePlatform = () => require('../src/domains/oracle/oracle-platform');
 
 const GH_RUNS = JSON.stringify([
   { databaseId: 101, name: 'CI', status: 'completed', conclusion: 'success', createdAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-01T10:05:00Z', url: 'https://github.com/o/r/actions/runs/101' },

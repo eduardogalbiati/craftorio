@@ -3,7 +3,7 @@
 // (claude --resume), kept in <workspace>/supervisor/chat.jsonl (messages) and chat.json (the CLI
 // session and model); the images attached to questions in attachments/ (#129).
 // #280: every real turn also goes to <workspace>/supervisor/usage.jsonl, the agents' shared record
-// (src/agents-usage.js: tokens, cost, the CLI session, whether the turn resumed it or why it started
+// (src/domains/agents/agents-usage.js: tokens, cost, the CLI session, whether the turn resumed it or why it started
 // one), which Clear keeps; usageRuns counts the chat in Usage and the monthly budgets.
 //
 // Each question carries the screen the person is on ("Builder, editing workflow X"), so requests need
@@ -13,8 +13,8 @@
 // human gate and never prescribes code fixes (it routes them to the workflow's agents).
 // `mock` (and MULTIAGENT_SIMULATION_ONLY) answers from the simulated supervisor: no model call, no
 // cost, but the same tools, called in-process.
-// Live progress (#180, src/chat-progress.js): ask's `onItem` and `signal` stream and stop a question.
-// Its inbox (#240, src/agent-inbox.js): handleRequest takes another agent's request (the Oracle's) of
+// Live progress (#180, src/domains/chat/chat-progress.js): ask's `onItem` and `signal` stream and stop a question.
+// Its inbox (#240, src/domains/agents/agent-inbox.js): handleRequest takes another agent's request (the Oracle's) of
 // a kind in REQUEST_KINDS, all mechanical: the code of the app's own buttons, given by the service
 // (`perform`), no model call, US$ 0. The request and its result are messages of this chat.
 // #241: a kind that starts a run (CLICK_KINDS), one the Night watch does not allow, or by day a
@@ -23,10 +23,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const agentInbox = require('./agent-inbox');
-const agentsUsage = require('./agents-usage');
-const { mockSteps, partialText } = require('./chat-progress');
-const TimeZone = require('./time-zone');
+const agentInbox = require('./domains/agents/agent-inbox');
+const agentsUsage = require('./domains/agents/agents-usage');
+const { mockSteps, partialText } = require('./domains/chat/chat-progress');
+const TimeZone = require('./domains/analytics/time-zone');
 const Language = require('./shared/language');
 
 // the kinds another agent may ask the Supervisor for (#240)
@@ -171,7 +171,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     const { render } = require('./engine/workflow');
     const { providerArgs, dedupeFlags } = require('./engine/capabilities');
     const { PROVIDERS } = require('./workflow-builder');
-    const { resolveSkill } = require('./skills');
+    const { resolveSkill } = require('./domains/agents/skills');
     const provider = PROVIDERS.claude;
     if (!resolveCommand(provider.command)) throw new Error(`The supervisor needs ${provider.command}, which is not installed.`);
     const { url, token } = await bridge.start();

@@ -28,11 +28,11 @@ the workspace folder.
   `src/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
   release target of the platform and arch (`rustup target add` first) and needs cargo.
 - **No system Node in the packaged app** (#342): it ships three sidecars in `resources/bin/`
-  (`nativeBinaryPath`, `src/native-bin.js`): `multiagent-mcp`, `multiagent-tail` (the external
+  (`nativeBinaryPath`, `src/domains/machine/native-bin.js`): `multiagent-mcp`, `multiagent-tail` (the external
   live terminal, `tailCommand` in `terminalSpec`; the embedded one keeps `followSession` in
-  `src/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
+  `src/domains/session/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
   Settings › Execution). Node is needed for development only: `npm start`, the tests and the
-  JS fallbacks of a checkout without cargo (`src/session-tail.js`, `src/supervisor-mcp.js`,
+  JS fallbacks of a checkout without cargo (`src/domains/session/session-tail.js`, `src/supervisor-mcp.js`,
   `scripts/ctl.js`). `test/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
   binaries in release on their first run, like `multiagent-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
@@ -44,12 +44,12 @@ the workspace folder.
   `~/.npm-global/bin`, the `~/.npmrc` prefix, `/opt/homebrew/bin`, `/usr/local/bin`), else `null`
   (as on Windows). Before the first lookup it merges the login shell's PATH once per process
   (`mergeLoginShellPath`, 3 s timeout; a failing or noisy shell changes nothing). Config folders
-  follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (`src/cli-config-dirs.js`).
+  follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (`src/domains/cli/cli-config-dirs.js`).
 - Spawned CLIs get the lookup's folders (#397): `withCliPath` (`src/engine/providers.js`) appends
   the `cliDirs()` that exist (the known folders above; Windows `~\.local\bin`, `%APPDATA%\npm`),
   re-read per launch, after the env's own PATH, without duplicates. `cliEnv()`
   (`src/service/common.js`: command, shell, Sessions and supervisor terminals) and agent turns use it.
-- macOS without Homebrew (#398): `installCommands(platform, { brew })` (`src/install-commands.js`)
+- macOS without Homebrew (#398): `installCommands(platform, { brew })` (`src/domains/machine/install-commands.js`)
   offers brew commands only when `brew` resolves; otherwise git gets `xcode-select --install` and
   gh, glab and whisper-cli get prose (`MAC_NO_BREW_TEXT`). The command terminal's allowlist uses the
   same list.
@@ -70,7 +70,7 @@ the workspace folder.
   `xvfb-run`), then one `publish` job puts every asset in the same GitHub Release. A failing build or
   smoke stops the release. `preview.yml` runs the same jobs for the OS its `os` input picks
   (`windows` by default, `macos`, `linux`, `all`).
-- Voice input (optional, `src/speech.js`): `whisper-cli` from whisper.cpp. On Windows download
+- Voice input (optional, `src/domains/chat/speech.js`): `whisper-cli` from whisper.cpp. On Windows download
   `whisper-bin-x64.zip` from https://github.com/ggml-org/whisper.cpp/releases, unzip it (e.g. to
   `%LOCALAPPDATA%\whisper.cpp`) and add that folder to PATH, or put the full path of
   `whisper-cli.exe` in Settings › General › Voice input. Models (`ggml-<id>.bin`) are downloaded
@@ -114,7 +114,7 @@ the workspace folder.
 
 The app runs on Windows, macOS and Linux. What differs per OS, and where:
 
-- **Path comparison**: one rule, `samePath` / `pathKey` in `src/platform-paths.js`:
+- **Path comparison**: one rule, `samePath` / `pathKey` in `src/domains/machine/platform-paths.js`:
   case-insensitive on Windows and macOS, case-sensitive on Linux. Never compare paths with an
   inline `process.platform === 'win32' ? toLowerCase()`; use the helper (store, runs, artifacts,
   permissions, worktrees, deps cache, process lists, `path:open`).
@@ -126,12 +126,12 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
 - **Process trees**: Windows `taskkill /T /F`. macOS/Linux: every process `killTree` may stop is
   spawned with `OWN_GROUP` (`detached: true`, its own process group) and `killTree` signals the
   group (SIGTERM, SIGKILL after 2 s), so grandchildren (test servers, sub-agents, npm) die too.
-  Embedded terminals (node-pty) have their own kill in `src/terminals.js`.
+  Embedded terminals (node-pty) have their own kill in `src/domains/machine/terminals.js`.
 - **Microphone**: macOS asks `systemPreferences.askForMediaAccess('microphone')` before the first
-  recording (`src/mic-permission.js`, channel `voice:mic-access`); a denial points to System
+  recording (`src/domains/chat/mic-permission.js`, channel `voice:mic-access`); a denial points to System
   Settings. Other OSes never ask. The `NSMicrophoneUsageDescription` string belongs to packaging.
 - **App data**: Electron's `userData` on every OS (speech models in `<userData>/speech-models`).
-  Without Electron (`npm run serve`, tests) `src/speech.js` falls back to `%APPDATA%`,
+  Without Electron (`npm run serve`, tests) `src/domains/chat/speech.js` falls back to `%APPDATA%`,
   `~/Library/Application Support` or `$XDG_CONFIG_HOME`/`~/.config`, plus `multiagent-orchestrator`.
 
 ## Remote engine (the app as a window onto `npm run serve`)

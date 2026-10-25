@@ -1,12 +1,12 @@
 // Artifacts panel: one run's artifacts as a list with an in-place preview, the same source as the
 // Artifacts screen (artifacts:list → runArtifacts in src/runs.js). One component for the Run
 // screen's Artifacts tab (#109) and the approval gate's side panel (#108):
-// - what the run produced first (#225): every file has a category (src/artifact-categories.js);
+// - what the run produced first (#225): every file has a category (src/domains/evidence/artifact-categories.js);
 //   the list opens on "Produced" (Result, Screenshots & images, Tests, Reports), grouped by category,
 //   newest first in a category; "Show all" adds Process (handoff notes, decisions, logs); Internal
 //   files are never listed ("Open run folder" shows them). Chips narrow it to one category or one
 //   kind (image, markdown, JSON, log). `flat: true` lists them newest first without groups (the gate);
-// - the run's screenshots lead their category (#146, artifacts:evidence → src/evidence.js): the final
+// - the run's screenshots lead their category (#146, artifacts:evidence → src/domains/evidence/evidence.js): the final
 //   set by issue, each original/modified pair side by side ("Original (main)", "Modified (<branch>
 //   @<sha>)") with its caption, older rounds and steps in a collapsed History; "No screenshots in
 //   this run"; a legacy run (screenshots/ + screenshots.json) shows as one set. A screen whose

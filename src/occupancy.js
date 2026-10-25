@@ -2,7 +2,7 @@
 // and what the active time costs. Pure and local (no model call, no network): the service
 // (src/service/areas/occupancy.js) feeds it the runs' events, the app's heartbeat log and the Night
 // watch's nights; Analytics' 24/7 tab and the top bar chip (src/renderer/occupancy-chip.js) show it.
-// The interval logic (active = run time minus gate waits) is src/night-watch.js's activeIntervals, so
+// The interval logic (active = run time minus gate waits) is src/domains/night/night-watch.js's activeIntervals, so
 // the Night watch and this meter agree inside a night.
 //
 // Idle causes, each idle moment given to the first that applies:
@@ -18,8 +18,8 @@ const {
   runFacts,
   total,
   union,
-} = require('./night-watch');
-const TimeZone = require('./time-zone');
+} = require('./domains/night/night-watch');
+const TimeZone = require('./domains/analytics/time-zone');
 
 const HOUR = 36e5;
 const GAP_MIN = 15;

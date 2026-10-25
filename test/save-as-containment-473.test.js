@@ -4,7 +4,7 @@
 // Interface the developer implements (assumptions, documented here):
 //   - saveOutput(step, scope, text, output) resolves each target as today (relative to the run
 //     folder), then compares its real path (the nearest existing parent's realpath, as
-//     src/oracle-tools.js does) with the real paths of the allowed roots: this.runDir,
+//     src/domains/oracle/oracle-tools.js does) with the real paths of the allowed roots: this.runDir,
 //     this.ctx.worktree_dir (the run's checkout) and the project folder.
 //   - A target outside them is not written: saveOutput emits a `log` event (level warn or error,
 //     step_id = the step's id, the message naming save_as and the refused path) and throws an Error

@@ -1,6 +1,6 @@
 // src/service/channels/voice.js: the audio:transcribe, audio:status and audio:downloadModel
 // channels, wired into the engine service (manifest + the models kept under host.userDataDir, not
-// the workspace). See test/speech.test.js for src/speech.js itself.
+// the workspace). See test/speech.test.js for src/domains/chat/speech.js itself.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

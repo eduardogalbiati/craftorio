@@ -4,7 +4,7 @@
 // network data fetched by a separate step into a cache, JSON with sorted keys and commit timestamps,
 // a golden test, and the seed's VERIFY steps as tests. The issue is then planned like any item (the
 // Backlog, the roadmap); the tool's command, once it exists, is recorded in the project's settings
-// (seeds:setTool) and replaces the Oracle turn (src/oracle-seeds.js). The `analysis-tool` label is
+// (seeds:setTool) and replaces the Oracle turn (src/domains/oracle/oracle-seeds.js). The `analysis-tool` label is
 // created through the platform adapter when the tracker lacks it (GitLab creates it itself). In
 // simulation it files nothing: a preview of the title and body. Service: src/service/channels/seeds.js.
 
@@ -13,7 +13,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const issues = require('./issues');
+const issues = require('./domains/backlog/issues');
 
 const LABEL = 'analysis-tool';
 const LABEL_COLOR = '5319e7';

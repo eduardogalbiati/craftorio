@@ -11,9 +11,9 @@ const simulation = require('../../engine/simulation');
 const { canonicalPath } = require('../../engine/worktree');
 const projects = require('../../projects');
 const runs = require('../../runs');
-const cliSessions = require('../../cli-sessions');
-const cliTrust = require('../../cli-trust');
-const { tailCommand } = require('../../native-bin');
+const cliSessions = require('../../domains/cli/cli-sessions');
+const cliTrust = require('../../domains/cli/cli-trust');
+const { tailCommand } = require('../../domains/machine/native-bin');
 const {
   cliEnv,
   cliReason,
@@ -39,7 +39,7 @@ module.exports = (ctx) => {
   }
 
   // What to run to watch (live) or resume (cli) a session: { title, file, args, cwd, env }.
-  // - live: follows the session's log (src/session-tail.js);
+  // - live: follows the session's log (src/domains/session/session-tail.js);
   // - cli: the provider's interactive CLI resuming the same conversation in the session's
   //   folder (claude --resume / codex resume / grok --resume).
   // #465: a deterministic step's log (`logPath` relative to the run folder, only under its logs/) or
@@ -78,7 +78,7 @@ module.exports = (ctx) => {
     // #470 (SEC-5): the allowlisted environment, not the app's whole one (no CLAUDECODE either)
     const env = cliEnv();
     if (mode === 'live') {
-      // the multiagent-tail binary (#342), else session-tail.js under node (src/native-bin.js)
+      // the multiagent-tail binary (#342), else session-tail.js under node (src/domains/machine/native-bin.js)
       const tail = tailCommand(!!host.isPackaged, resolveCommand);
       return {
         title: sess.agent === 'orchestrator' ? 'orchestrator · live' : `${sess.agent} (${sess.id}) · live`,

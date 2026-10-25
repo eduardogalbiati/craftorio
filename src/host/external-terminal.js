@@ -11,7 +11,7 @@
 // the command line. No terminal found (Linux): terminalLaunch is null and externalTerminal says why,
 // so the renderer disables the button (src/renderer/term-dock.js termButtons).
 
-const { shQuote } = require('../shell');
+const { shQuote } = require('../domains/machine/shell');
 
 const LINUX_TERMINALS = [
   'x-terminal-emulator',

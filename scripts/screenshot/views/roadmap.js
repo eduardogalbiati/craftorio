@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const evidence = require('../../../src/evidence');
+const evidence = require('../../../src/domains/evidence/evidence');
 const {
   DEMO_ISSUES,
   DEMO_REPO,

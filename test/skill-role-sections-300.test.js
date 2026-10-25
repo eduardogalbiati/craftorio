@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { resolveSkill, skillPrompt } = require('../src/skills');
+const { resolveSkill, skillPrompt } = require('../src/domains/agents/skills');
 
 function skillsDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'role-sections-'));

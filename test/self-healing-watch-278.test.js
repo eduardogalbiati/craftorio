@@ -1,4 +1,4 @@
-// #278 Self-healing: the standing watch and acting alone by day (src/oracle-actions.js, src/oracle.js).
+// #278 Self-healing: the standing watch and acting alone by day (src/domains/oracle/oracle-actions.js, src/domains/oracle/oracle.js).
 // Acceptance tests written before the code. The API they pin down (the developer implements it):
 //   - settings.oracle.selfHealing, default false (workspace DEFAULT_SETTINGS.oracle.selfHealing === false).
 //   - oracle-actions watchState(dir, settings, now = Date.now()) → { on, until, startedAt, by, active,
@@ -17,9 +17,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const actions = require('../src/oracle-actions');
-const night = require('../src/night-watch');
-const oracle = require('../src/oracle');
+const actions = require('../src/domains/oracle/oracle-actions');
+const night = require('../src/domains/night/night-watch');
+const oracle = require('../src/domains/oracle/oracle');
 const workspace = require('../src/workspace');
 
 function tmpDir(t) {

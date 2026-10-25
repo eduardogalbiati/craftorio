@@ -9,7 +9,7 @@
 // follow Undo's rule and never stop a run.
 
 const path = require('path');
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const history = require('../../roadmap-history');
 const merge = require('../../roadmap-merge');
 const roadmaps = require('../../roadmap');

@@ -68,7 +68,7 @@ Given('the workspace has a git project {string} tagged {string}, {string} and {s
   if ([t0, t1, t2].join(' ') !== '1.1.0 1.1.1 1.1.2') throw new Error(`the seeded repository is tagged 1.1.0, 1.1.1 and 1.1.2 (not ${t0}, ${t1}, ${t2})`);
   const workspace = require(path.join(root, 'src', 'workspace'));
   const projects = require(path.join(root, 'src', 'projects'));
-  const arch = require(path.join(root, 'src', 'oracle-architecture'));
+  const arch = require(path.join(root, 'src', 'domains', 'oracle', 'oracle-architecture'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const folder = path.join(e2e.scratch, 'repos', name);
   seedTaggedRepo(folder);
@@ -180,7 +180,7 @@ const missingLine = (page) => byId(page, 'city-release-missing');
 async function seedProject(e2e, name, folder, plan, releases) {
   const workspace = require(path.join(root, 'src', 'workspace'));
   const projects = require(path.join(root, 'src', 'projects'));
-  const arch = require(path.join(root, 'src', 'oracle-architecture'));
+  const arch = require(path.join(root, 'src', 'domains', 'oracle', 'oracle-architecture'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const project = await projects.createProject(ws.projects, { name, folder, description: 'A git project with tagged releases (simulated data)' });
   arch.writePlan(path.join(ws.root, 'architecture'), project.id, { version: 1, project: name, summary: 'Simulated data.', ...plan }, new Date().toISOString());

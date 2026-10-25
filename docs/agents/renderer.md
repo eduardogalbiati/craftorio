@@ -233,7 +233,7 @@ Read this before changing anything in `src/renderer/`.
   (`switchTab`, `#tab-artifacts`, with a count on the tab). The Artifacts tab and the approval
   gate's side panel are one component, `artifacts-panel.js` (`ArtifactsPanel.mount(root, { runId,
   flat, extras })`): the run's files from `artifacts:list { runId }`, what the run produced first
-  (#225: each file's `category` from `src/artifact-categories.js`; "Produced" = Result, Screenshots &
+  (#225: each file's `category` from `src/domains/evidence/artifact-categories.js`; "Produced" = Result, Screenshots &
   images, Tests, Reports by default, "Show all" adds Process, Internal is never listed; category and
   kind chips; the Artifacts screen reuses `filtersHtml` / `filterFiles` / `onFilterClick`),
   grouped by category (newest first in one; `flat` for the gate), a preview in place (markdown, images with their original/modified
@@ -253,7 +253,7 @@ Read this before changing anything in `src/renderer/`.
   test notes and evidence plan). Stacked under 1100 px. The Run screen and the run chat use the same
   helpers; the sidebar card only links to the run (no room). **Run App** asks `localPreview:info`:
   with a config it starts the preview (`localPreview:start`), without one it opens a setup
-  prefilled from the worktree (`suggestConfig` in `src/local-preview.js`) that saves the project's
+  prefilled from the worktree (`suggestConfig` in `src/domains/local/local-preview.js`) that saves the project's
   `localPreview`. Its state (running / stopped / failed, Stop, Terminal, Open URL, the port-in-use
   error) is painted by `paintGateApps` from the run view's `preview` (local_preview events).
   `npm run screenshot -- --view run --workflow software-development-local-hero.yaml --input
@@ -342,7 +342,7 @@ Read this before changing anything in `src/renderer/`.
   it runs and after it ended. `run.js` keeps each step's latest log from its `step.log` events (else
   the log its output names) and the base check's of that round (`step.log` with `base`); a new round
   switches the tab to the new file. `term:open` with `kind: 'log'` follows `runs/<id>/logs/…` only
-  (the service refuses any other path) through `followFile` (`src/session-tail.js`) embedded, or
+  (the service refuses any other path) through `followFile` (`src/domains/session/session-tail.js`) embedded, or
   `multiagent-tail <runDir> --file <path>` in the external window (same ↗ rules as #318). The
   terminal is read-only (no keys, no paste). The base check (#405) pushes `baseCheck:changed` when it
   starts and ends (`baseCheck:state` answers a screen opened meanwhile); the Roadmap draws its card
@@ -445,7 +445,7 @@ with `renderMessage`; the component wraps each message in `[data-testid="agent-c
 and its scan/attach pattern (a MutationObserver), so a new AI prompt field gets the mic and image
 paste from one selector. One document-level `paste` listener takes the clipboard's images (none
 when it holds text) and saves each through `clipboard:saveImage` (a service channel, so the browser
-UI works too; `src/pasted-images.js` writes `<workspace>/attachments/pending/`). Fields with their
+UI works too; `src/domains/chat/pasted-images.js` writes `<workspace>/attachments/pending/`). Fields with their
 own image paste (`#po-question`, `.oracle-input`) are skipped. A screen that submits a field calls
 `await PasteImage.collect(field)` (`[{ path, name }]`, empty when nothing was pasted: send the
 request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena's `.ar-chip` plus
@@ -453,7 +453,7 @@ request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena'
 
 ## The agents' prompt cache: Next turn and the Continue line (#320)
 
-`src/shared/session-cache.js` (`window.SessionCache`, the engine's `src/session-cache.js` too) derives how a
+`src/shared/session-cache.js` (`window.SessionCache`, the engine's `src/domains/session/session-cache.js` too) derives how a
 session's next turn starts from its snapshot (`currentTurn`: snake_case snapshots or sessionView's
 camelCase, recomputed against the clock). The run lists' session table has a **Next turn** column
 (`nextTurnCell`, `td[data-testid="session-next-turn"][data-next-turn]`): "fresh from note", "warm ·
@@ -522,7 +522,7 @@ How a screen is built and reviewed (#387):
   (`scripts/screenshot/checks.js`): axe-core's `color-contrast` and `target-size` rules and the
   visible native controls (a bare `<select>`, date or datetime-local field), into
   `<name>.<side>.checks.json` beside the PNG. The screenshots step turns them into `axe_findings`
-  (`src/ui-review-checks.js`): a finding the original side has too is a baseline (a ratchet), never
+  (`src/domains/evidence/ui-review-checks.js`): a finding the original side has too is a baseline (a ratchet), never
   blocking. A data-heavy screen adds a real-scale state from the shared `largeProjectFixture`
   (`scripts/screenshot/helpers.js`; e.g. `--view project --tab architecture --mode large`).
 - **Review**: the `ui_reviewer` gets the `axe_findings` in its prompt and keeps each one in

@@ -1,6 +1,6 @@
 // Screenshot seed of Analytics (--view analytics, a tab of Home, #255): its tabs, 30 days of finished
 // runs with Claude, Codex and Grok sessions, and per tab: a git repository of three nights of merges
-// and a marker (performance, #159), from src/analytics-demo.js one AI Development run in depth (run,
+// and a marker (performance, #159), from src/domains/analytics/analytics-demo.js one AI Development run in depth (run,
 // #228), 30 days of runs and nights (occupancy, #188) and the agents' turns (agents, #280).
 
 const fs = require('fs');
@@ -122,7 +122,7 @@ function seed({ args, ws, project, src }) {
   // the Run (#228), 24/7 (#188) and Agents (#280) tabs (an app before them: nothing)
   if (['run', 'occupancy', 'agents'].includes(args.tab)) {
     try {
-      const demo = src('analytics-demo');
+      const demo = src('domains/analytics/analytics-demo');
       if (args.tab === 'run') demo.writeDemoRunInDepth(ws, project.id);
       else if (args.tab === 'agents') demo.writeDemoAgents?.(ws, project.id);
       else demo.writeDemoOccupancy(ws, project.id);

@@ -11,10 +11,10 @@ const fs = require('fs');
 const path = require('path');
 const projects = require('../../projects');
 const runs = require('../../runs');
-const evidence = require('../../evidence');
+const evidence = require('../../domains/evidence/evidence');
 const { artifactIndex, runsOfArtifact } = require('../../run-artifacts');
 const { folderMatcher } = require('../common');
-const { pathKey } = require('../../platform-paths');
+const { pathKey } = require('../../domains/machine/platform-paths');
 
 const MAX_ARTIFACT_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };

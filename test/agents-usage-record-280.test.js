@@ -5,7 +5,7 @@
 // startReason: first, compaction, model-change, idle, reset, cleared or one-shot.
 // Files: <workspace>/oracle/usage.jsonl, <workspace>/backlog/product-owner.usage.jsonl and (new)
 // <workspace>/supervisor/usage.jsonl.
-// Seams: createOracle (src/oracle.js), productOwner.ask (src/product-owner.js) and createSupervisorChat
+// Seams: createOracle (src/domains/oracle/oracle.js), productOwner.ask (src/product-owner.js) and createSupervisorChat
 // (src/supervisor-chat.js), each driven on a real turn (mock: false) whose provider CLI is faked at its
 // boundary: engine/providers' runTurn is replaced on its exports for the test (the modules require it
 // when a turn starts), so no CLI starts and no model is called. Simulated turns record nothing (as the
@@ -16,7 +16,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const oracle = require('../src/oracle');
+const oracle = require('../src/domains/oracle/oracle');
 const productOwner = require('../src/product-owner');
 const { createSupervisorChat } = require('../src/supervisor-chat');
 

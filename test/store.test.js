@@ -1,5 +1,5 @@
 // The workspace's SQLite index (src/store.js, #76): migrations, the runs cache, the Backlog queue
-// tables (claims), pending gates and notifications. src/runs.js and src/backlog.js already cover
+// tables (claims), pending gates and notifications. src/runs.js and src/domains/backlog/backlog.js already cover
 // reading/writing through the store from their own seams; this file tests the store's own API and
 // its migration/restart/concurrency guarantees directly.
 const test = require('node:test');

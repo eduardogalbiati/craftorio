@@ -18,8 +18,8 @@ const {
   totalTokens,
   WARN_AT,
 } = require('../../usage');
-const nightLimits = require('../../night-limits');
-const sessionCache = require('../../session-cache');
+const nightLimits = require('../../domains/night/night-limits');
+const sessionCache = require('../../domains/session/session-cache');
 const { render } = require('./templates');
 const { parseDuration, parseTokens } = require('./load');
 
@@ -87,7 +87,7 @@ const methods = {
     };
   },
 
-  // The limits in force now (#337, src/night-limits.js): the day ones, expanded by tonight's settings
+  // The limits in force now (#337, src/domains/night/night-limits.js): the day ones, expanded by tonight's settings
   // (read at each call, so a raise reaches a run in progress at its next check), never below the
   // highest this run was granted (the morning never cuts a run). Each new grant is recorded as a
   // `limits.expanded` event { day, limits } (the morning summary's runs past a day limit).

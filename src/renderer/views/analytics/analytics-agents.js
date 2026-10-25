@@ -4,7 +4,7 @@
 // its daily budget and its wake-ups vs questions; the Product Owner's projects), the cost per day
 // stacked by agent (US$ or tokens, remembered) and the sessions with why each one started and ended
 // (newest first, 50 at a time; a click on a card or the agent select filters them).
-// Channel analytics:agents (src/agents-usage.js via src/service/areas/usage.js). A tab of
+// Channel analytics:agents (src/domains/agents/agents-usage.js via src/service/areas/usage.js). A tab of
 // views/analytics/analytics.js (window.AnalyticsTabs), which gives load() its date range (usesRange).
 // Uses app.js globals: api, esc, fmtUsd, fmtTok, fmtNum, dateOf, errMsg; window.Robots (robots.js).
 (() => {

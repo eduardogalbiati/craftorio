@@ -1,6 +1,6 @@
 // The spending budget (#206): an optional cap in US$ per day (the owner's local calendar day,
 // settings.timeZone, #273) and per night (the
-// Night watch's window, from its start: src/oracle-actions.js nightWatch), in settings.json
+// Night watch's window, from its start: src/domains/oracle/oracle-actions.js nightWatch), in settings.json
 // (`budget: { dailyUsd, nightlyUsd, raised }`, Settings › Budget). Spending is counted from the runs'
 // recorded session costs (live runs included: their sessions so far), real runs only; a session with
 // no reported cost (Codex) is priced from its tokens × settings.prices (src/usage.js sessionCost) and
@@ -13,7 +13,7 @@
 // until the day or the night ends). The live roadmap's refills check the same cap
 // (src/service/areas/live-roadmap.js). Pure: the service passes the runs and the Night watch state.
 
-const TimeZone = require('./time-zone');
+const TimeZone = require('./domains/analytics/time-zone');
 const { sessionCost } = require('./usage');
 
 const DEFAULTS = Object.freeze({ dailyUsd: null, nightlyUsd: null, raised: null });

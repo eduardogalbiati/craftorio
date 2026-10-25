@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { canonicalPath } = require('./worktree');
-const { caseInsensitive } = require('../platform-paths');
+const { caseInsensitive } = require('../domains/machine/platform-paths');
 
 const LIST_TIMEOUT_MS = 30e3;
 
@@ -87,7 +87,7 @@ function listProcesses() {
   return listMac();
 }
 
-// the app's one rule for case (src/platform-paths.js)
+// the app's one rule for case (src/domains/machine/platform-paths.js)
 const CASE_INSENSITIVE = caseInsensitive(process.platform);
 
 /**

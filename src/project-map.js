@@ -11,14 +11,14 @@
 //   and the unmatched files.
 // - save: the plan written as architecture:savePlan writes it (the replaced one to city-plan-history/).
 // - analyze (#381): the Oracle's architecture analysis of the project, run and saved as
-//   architecture:analyze runs and saves it (src/oracle-architecture.js analyze / saveReport), with the
+//   architecture:analyze runs and saves it (src/domains/oracle/oracle-architecture.js analyze / saveReport), with the
 //   Oracle and its agent the service gives the run; a simulation saves the simulated report.
 // No other model call: the cartographer's turn is the workflow's plan step.
 
 'use strict';
 
 const path = require('path');
-const arch = require('./oracle-architecture');
+const arch = require('./domains/oracle/oracle-architecture');
 const facts = require('./architecture-facts');
 const projects = require('./projects');
 const { git } = require('./engine/worktree');

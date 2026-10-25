@@ -9,8 +9,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const night = require('../../src/night-watch');
-const actions = require('../../src/oracle-actions');
+const night = require('../../src/domains/night/night-watch');
+const actions = require('../../src/domains/oracle/oracle-actions');
 const { makeService } = require('./helpers');
 const { dayStart, iso, spanInOneDay } = require('./day-span');
 

@@ -79,7 +79,7 @@ prompt-injection channel the capabilities above contain: an agent still has only
 `.claude/settings*.json` files are not loaded under isolation (`--setting-sources ''`): they could
 declare hooks and `permissions.allow` rules that Claude Code honours before `--allowedTools`. The
 app auto-trusts only its own folders (`runs/`, `skills/`, `workflows/`, `trustWorkspaceFolder` in
-`src/cli-trust.js`); `repos/`, `worktrees/` and project folders keep each CLI's own trust prompt,
+`src/domains/cli/cli-trust.js`); `repos/`, `worktrees/` and project folders keep each CLI's own trust prompt,
 which a live "cli-new" terminal shows to the user.
 
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
@@ -88,11 +88,11 @@ tokens with the user's setup → 22.0k isolated with the developer's capabilitie
 
 **Which account a CLI runs on (#312)**: each adapter names the variable of its config folder
 (`configDirEnv` in `src/shared/providers/<id>.js`: Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME`, Grok
-none, always `~/.grok`); `src/cli-config-dirs.js` reads it from there. A session on one of Settings'
+none, always `~/.grok`); `src/domains/cli/cli-config-dirs.js` reads it from there. A session on one of Settings'
 accounts gets `{ <configDirEnv>: <folder> }` (`accountEnv` in `src/engine/providers.js`) added to the
 CLI process environment by `runCli`, after the agents' variables. It is never part of
 `capabilities.agentEnv`, which is printed in prompts and allow rules. Adding an account in Settings
-shows its login command (`src/provider-accounts.js`, e.g. `CLAUDE_CONFIG_DIR=<folder> claude /login`)
+shows its login command (`src/domains/cli/provider-accounts.js`, e.g. `CLAUDE_CONFIG_DIR=<folder> claude /login`)
 and whether the folder is signed in, read from that folder only (Claude: `claudeSignedIn` with only
 that variable and no Keychain; Codex: `auth.json` exists, never read); no credential is stored,
 logged or shown.
@@ -163,7 +163,7 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   screenshot`, the app, engine scripts) resolve to it with no flag. Without it, simulation only
   never resolves to the registered workspace (`resolveWorkspace` → OS temp).
 - **Test workers (#367)**: every run gets the machine profile's test workers per run
-  (`src/machine-profile.js`, Settings › Execution › Concurrent runs: auto from the machine, or the
+  (`src/domains/machine/machine-profile.js`, Settings › Execution › Concurrent runs: auto from the machine, or the
   owner's manual value) as `MULTIAGENT_TEST_WORKERS` and `MULTIAGENT_E2E_WORKERS` (the same number;
   this repository's `playwright.config.js` reads the second one). `capabilities.agentEnv(scratch,
   { testWorkers })` adds them to the agents' env (so their prefixes are allowed and the command guide
@@ -242,9 +242,9 @@ no write tool; the changes it owns (runs, workflows, skills) arrive as requests 
 
 ## The Oracle (#122)
 
-The Oracle (`src/oracle.js`, the built-in `oracle` agent) runs `claude` the same way: isolated,
+The Oracle (`src/domains/oracle/oracle.js`, the built-in `oracle` agent) runs `claude` the same way: isolated,
 `--tools ""`, one MCP server `orchestrator` allowed as `mcp__orchestrator`, over its own bridge.
-Its tools are `src/oracle-tools.js`: the supervisor's, plus `active_runs`, `run_events`,
+Its tools are `src/domains/oracle/oracle-tools.js`: the supervisor's, plus `active_runs`, `run_events`,
 `run_file`, `roadmap`, `backlog` (with the queue), `unpushed`, `seed_status`, and the repositories
 read-only: `repo_read` (a file or a listing, the path kept inside the project folder) and
 `repo_git`, which runs only `READ_GIT_COMMANDS` (blame, diff, grep, log, ls-files, ls-tree,
@@ -255,12 +255,12 @@ tool there is no shell or file write to try: read-only is enforced, not a conven
 points at the project holding the orchestrator's source (its `package.json` name), the only way to
 read the app's code (the packaged app's is in app.asar). #184 adds: `run_analysis` (runs' cost and
 tokens by agent and step, review rounds, timeouts, invalid outputs, refused calls, merge conflicts,
-tool timeouts, the test writer's context, whole-suite starts; `src/oracle-run-analysis.js`, no
+tool timeouts, the test writer's context, whole-suite starts; `src/domains/oracle/oracle-run-analysis.js`, no
 model; #321: its `focus` `time`, `context`, `tools`, `cache` or `tests` reads the same run files
-for where the time, the context and the tool calls went, `src/oracle-run-focus.js`, also no model
-and read-only); `issues_search`, `issue_view`, `labels` and `ci_runs` (#360) (`src/oracle-platform.js`: gh / glab `issue
+for where the time, the context and the tool calls went, `src/domains/oracle/oracle-run-focus.js`, also no model
+and read-only); `issues_search`, `issue_view`, `labels` and `ci_runs` (#360) (`src/domains/oracle/oracle-platform.js`: gh / glab `issue
 list`, `issue view`, `label list` and `run list` / `ci list` only, built by the app on the synced backlog's repository,
-never a command from the model); and the `checker` delegate (`src/oracle-check.js`): one test
+never a command from the model); and the `checker` delegate (`src/domains/oracle/oracle-check.js`): one test
 runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that fetches a package:
 no npx, npm exec, go run, pip) with plain arguments, no shell syntax or inline code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
 `MULTIAGENT_SIMULATION_ONLY=1`, stopped after 2 min; a longer check is a `check.run` card (20 min)
@@ -271,7 +271,7 @@ files (storage.md).
 roadmap, queue) is the Product Owner's, runs, workflows and skills are the Supervisor's. The
 Oracle's only write tool is `request_agent({ to: 'po' | 'supervisor', kind, params, reason })`
 (channel `oracle:requestAgent`), which hands the change to the owner's inbox (`po:request`,
-`supervisor:request`, `src/agent-inbox.js`): the owner runs it with the code of its own buttons
+`supervisor:request`, `src/domains/agents/agent-inbox.js`): the owner runs it with the code of its own buttons
 (no model call; `plan` is one paid question to the Product Owner's model) and records the request
 and its result in its own conversation. Its `propose_action` keeps only its own cards (`check.run`,
 `process.stop`); an owner's kind proposed as a card (`oracle-actions.js` `ownerOf`) is routed to

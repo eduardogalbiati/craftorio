@@ -2,7 +2,7 @@
 // only its look can be changed. The workflows' agents (read from <workspace>/workflows/) follow,
 // and only their look can be changed too.
 
-const agents = require('../../agents');
+const agents = require('../../domains/agents/agents');
 const { requireId } = require('../common');
 const {
   AGENT_ID,
@@ -12,7 +12,7 @@ const {
   OBJECT,
 } = require('../schemas');
 
-// an agent's fields (look and defaults): checked by src/agents.js
+// an agent's fields (look and defaults): checked by src/domains/agents/agents.js
 const AGENT_DATA = OBJECT;
 
 module.exports = (ctx) => [

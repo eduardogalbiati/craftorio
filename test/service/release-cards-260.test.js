@@ -1,5 +1,5 @@
 // Releases (#260): settling a cut line's release run marks the discovery cards linked to its issues
-// Released in the card store (src/service/areas/releases.js, markCards). The store (src/discovery.js)
+// Released in the card store (src/service/areas/releases.js, markCards). The store (src/domains/discovery/discovery.js)
 // comes with #256 and is not on this branch: the area's require of it is answered here by an
 // in-memory store with the same card API (listCards, updateCard). A real shipped run marks the linked
 // cards, a simulated one marks none, and a store that cannot write never keeps the release from being
@@ -24,7 +24,7 @@ stub.exports = {
 };
 const resolve = Module._resolveFilename;
 Module._resolveFilename = function (request, parent, ...rest) {
-  if (request === '../../discovery' && parent?.filename?.endsWith(path.join('areas', 'releases.js'))) return STUB;
+  if (request === '../../domains/discovery/discovery' && parent?.filename?.endsWith(path.join('areas', 'releases.js'))) return STUB;
   return resolve.call(this, request, parent, ...rest);
 };
 require.cache[STUB] = stub;

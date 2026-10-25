@@ -18,7 +18,7 @@ const path = require('path');
 const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
 const { simulationOnly } = require('./engine/simulation');
-const TimeZone = require('./time-zone');
+const TimeZone = require('./domains/analytics/time-zone');
 const { DEFAULT_PLATFORM } = require('./shared/platforms');
 
 const DEFAULT_NAME = 'multiagent-workspace';
@@ -111,7 +111,7 @@ function layout(root) {
     skills: path.join(root, 'skills'),
     // analysis seeds, one folder each with its seed.md (bundled defaults are seeded here, see src/seeds.js, #360)
     seeds: path.join(root, 'seeds'),
-    // user-defined agents, one JSON file each (see src/agents.js)
+    // user-defined agents, one JSON file each (see src/domains/agents/agents.js)
     agents: path.join(root, 'agents'),
     // editable workflow YAML files (bundled defaults are seeded here, see src/workflows.js)
     workflows: path.join(root, 'workflows'),
@@ -121,9 +121,9 @@ function layout(root) {
     worktrees: path.join(root, 'worktrees'),
     // dependencies installed once per lockfile hash, linked into run worktrees (#198, src/engine/deps-cache.js)
     cache: path.join(root, 'cache'),
-    // Run locally at a gate: per run, the scratch workspace and user data of the copy (src/local-preview.js)
+    // Run locally at a gate: per run, the scratch workspace and user data of the copy (src/domains/local/local-preview.js)
     localPreviews: path.join(root, 'local-previews'),
-    // last issue sync of each project (see src/backlog.js)
+    // last issue sync of each project (see src/domains/backlog/backlog.js)
     backlog: path.join(root, 'backlog'),
     // each project's release history and next release notes (#260, src/releases.js), created on demand
     releases: path.join(root, 'releases'),
@@ -131,13 +131,13 @@ function layout(root) {
     reports: path.join(root, 'reports'),
     // the app-wide Supervisor chat (src/supervisor-chat.js), created on demand
     supervisor: path.join(root, 'supervisor'),
-    // the Oracle (src/oracle.js): its conversation, memory, handoff notes and usage, created on demand
+    // the Oracle (src/domains/oracle/oracle.js): its conversation, memory, handoff notes and usage, created on demand
     oracle: path.join(root, 'oracle'),
-    // images pasted into the AI prompt fields (#130, src/pasted-images.js): pending/ until submitted
+    // images pasted into the AI prompt fields (#130, src/domains/chat/pasted-images.js): pending/ until submitted
     attachments: path.join(root, 'attachments'),
-    // discovery cards, private to the workspace (#256, src/discovery.js): <project id>/cards/<card id>/, created on demand
+    // discovery cards, private to the workspace (#256, src/domains/discovery/discovery.js): <project id>/cards/<card id>/, created on demand
     discovery: path.join(root, 'discovery'),
-    // the Architecture tab's settings, city plans and reports (#356, src/oracle-architecture.js), created on demand
+    // the Architecture tab's settings, city plans and reports (#356, src/domains/oracle/oracle-architecture.js), created on demand
     architecture: path.join(root, 'architecture'),
     // the Refactor tab's proposals, ranking and cadence (#357, src/refactor-proposals.js), created on demand
     refactor: path.join(root, 'refactor'),
@@ -189,7 +189,7 @@ const DEFAULT_SETTINGS = {
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
-  // Machine profile (#367, src/machine-profile.js): 'auto' sizes the concurrent runs' maximum and the
+  // Machine profile (#367, src/domains/machine/machine-profile.js): 'auto' sizes the concurrent runs' maximum and the
   // test workers per run from this machine; 'manual' keeps { concurrentRuns, testWorkers } as set
   machineProfile: { mode: 'auto' },
   // Memory guard (#276, src/engine/memory-guard.js): a real run's process over limitPercent of the RAM
@@ -217,10 +217,10 @@ const DEFAULT_SETTINGS = {
   // the spending budget (#206, src/budget.js): US$ per local day and per Night watch night (null = no
   // cap) past which the roadmaps pause before their next start; `raised`: "Raise for today" (one day/night)
   budget: { dailyUsd: null, nightlyUsd: null, raised: null },
-  // the Oracle (src/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
+  // the Oracle (src/domains/oracle/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
   // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
-  // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds; selfHealing (#278):
-  // its watch stays on day and night, with no end time (src/oracle-actions.js watchState); appUpdate
+  // src/domains/oracle/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds; selfHealing (#278):
+  // its watch stays on day and night, with no end time (src/domains/oracle/oracle-actions.js watchState); appUpdate
   // (#279, needs selfHealing): apply merged fixes to this app after a roadmap stage ends (src/app-update.js);
   // parkAfterMinutes (#395): the watch moves on past a roadmap run waiting this long at a human gate (skip permission)
   oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false, appUpdate: false, parkAfterMinutes: 15 },
@@ -238,7 +238,7 @@ const DEFAULT_SETTINGS = {
   models: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js
   actionsIncludedMinutes: 2000,
-  // voice input (src/speech.js): the whisper.cpp CLI (a name in PATH or a path), the model (an id
+  // voice input (src/domains/chat/speech.js): the whisper.cpp CLI (a name in PATH or a path), the model (an id
   // from speech.MODELS or a path to a ggml .bin) and the spoken language ('auto' = detect)
   voiceCommand: 'whisper-cli',
   voiceModel: 'small',
@@ -252,7 +252,7 @@ const DEFAULT_SETTINGS = {
   // #474: the files not bundled with the app the owner confirmed are code they trust, "workflows/<file>"
   // → the fingerprint of the text confirmed (src/service/areas/workflows.js); an edit elsewhere asks again
   trustedFiles: {},
-  // the owner's IANA time zone (#273, src/time-zone.js): screens, day/week/month cuts, the agents'
+  // the owner's IANA time zone (#273, src/domains/analytics/time-zone.js): screens, day/week/month cuts, the agents'
   // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
   timeZone: null,
   // the languages agents write in (#327, #328, src/shared/language.js): `agents` for chat replies, prose

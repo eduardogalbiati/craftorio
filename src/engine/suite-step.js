@@ -81,7 +81,7 @@ const {
   TEST_FILES_ENV,
   writeFileList,
 } = require('./suite-command-line');
-const { saveCoverage } = require('../coverage-summary');
+const { saveCoverage } = require('../domains/evidence/coverage-summary');
 const { suiteSlotRun } = require('./suite-slot');
 const {
   processTreeCommands,
@@ -89,7 +89,7 @@ const {
 } = require('./processes');
 const { killTree, OWN_GROUP } = require('./providers');
 const { MAX_TEST_TIMEOUT_MS } = require('./test-timeouts');
-const { workerEnv } = require('../machine-profile');
+const { workerEnv } = require('../domains/machine/machine-profile');
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
 const MIN_TIMEOUT_MS = 10 * 60e3;
@@ -285,7 +285,7 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 // runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1
 // (#219: a runner that knows it prints the failures-only JSON, src/engine/agent-test-report.js) and,
 // with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
-// test workers (#367, src/machine-profile.js workerEnv), never an inherited value; with tmpDir, TMP,
+// test workers (#367, src/domains/machine/machine-profile.js workerEnv), never an inherited value; with tmpDir, TMP,
 // TEMP and TMPDIR (#414: the run's temp folder over the user's). #470 (SEC-5): only the allowlisted
 // variables reach the repository's scripts (src/engine/child-env.js, no platform tokens), plus the
 // workflow's env.passthrough names; `removed` still names only the ones above. → { env, removed: [names] }

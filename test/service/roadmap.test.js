@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const { createService } = require('../../src/service');
 const roadmapModel = require('../../src/roadmap');
-const backlog = require('../../src/backlog');
+const backlog = require('../../src/domains/backlog/backlog');
 const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('./helpers');
 const path = require('path');
 

@@ -19,7 +19,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const workspace = require('../workspace');
-const { nativeBinaryPath } = require('../native-bin');
+const { nativeBinaryPath } = require('../domains/machine/native-bin');
 const { addedGates, BUNDLED_WORKFLOWS_DIR } = require('../workflows');
 const { CHANNELS, GATE_ARGS } = require('./allowlist');
 const {

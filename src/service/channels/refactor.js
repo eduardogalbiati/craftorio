@@ -20,11 +20,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const agentsMod = require('../../agents');
-const arch = require('../../oracle-architecture');
-const backlog = require('../../backlog');
+const agentsMod = require('../../domains/agents/agents');
+const arch = require('../../domains/oracle/oracle-architecture');
+const backlog = require('../../domains/backlog/backlog');
 const cadenceRules = require('../../refactor-cadence');
-const commits = require('../../discovery-commit');
+const commits = require('../../domains/discovery/discovery-commit');
 const conflictMaps = require('../../conflict-map');
 const facts = require('../../architecture-facts');
 const outcomes = require('../../refactor-outcome');
@@ -213,7 +213,7 @@ module.exports = (ctx) => {
   }
 
   // #435: a simulation without a host filer files into the synced backlog with the next free number
-  // (src/discovery-commit.js simulatedExec), never gh/glab
+  // (src/domains/discovery/discovery-commit.js simulatedExec), never gh/glab
   function simulatedFiler(p) {
     const exec = commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: p.id });
     return async (draft) => {

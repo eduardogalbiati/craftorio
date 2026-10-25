@@ -20,7 +20,7 @@
 // - Renderer (views/backlog/backlog-roadmap.js): a card at a gate shows a "Move on" button
 //   (data-rm-item="park", so window.api.roadmapItem(projectId, itemId, 'park')); a parked card reads
 //   "Parked at ..."; the roadmap bar counts "N parked at a gate".
-// - src/night-watch.js: permissionOf('roadmap.item', { action: 'park' }) is 'skip'; the log accepts
+// - src/domains/night/night-watch.js: permissionOf('roadmap.item', { action: 'park' }) is 'skip'; the log accepts
 //   'oracle.parked'; gateDecision({ waitingSince, now, allowed, othersRunning, settings }) answers
 //   'park' | 'escalate' | 'wait' (settings.oracle.parkAfterMinutes, default 15).
 // New exports are looked up inside each test so this file loads before they exist.
@@ -32,7 +32,7 @@ const path = require('path');
 
 const model = () => require('../src/shared/roadmap-model');
 const roadmaps = () => require('../src/roadmap');
-const night = () => require('../src/night-watch');
+const night = () => require('../src/domains/night/night-watch');
 
 const item = (id, status, extra = {}) => ({ id, workflow: 'software-development.yaml', inputs: {}, mock: true, number: Number(id.replace(/\D/g, '')) || 1, status, runId: null, runs: [], error: null, ...extra });
 const stage = (id, items, extra = {}) => ({ id, name: '', note: '', items, ...extra });
