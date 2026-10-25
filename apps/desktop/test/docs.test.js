@@ -247,10 +247,12 @@ test('rendererAssets on the real desktop page: load-order guarantees the app dep
   assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/duo/duo.js'));
   assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/agents/agents.js'));
   assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/backlog/backlog-po.js'));
-  // every views/ script loads after every top-level one
+  // every views/ script loads after every top-level script of the UI kit; after the first view only
+  // views/ scripts and the fronts' own root files (their Home cards, <id>-home.js) follow
+  const raw = rendererAssets(root, '.js');
   const firstView = scripts.findIndex((f) => f.startsWith('views/'));
   assert.ok(firstView > 0);
-  assert.ok(scripts.slice(firstView).every((f) => f.startsWith('views/')));
+  assert.ok(raw.slice(firstView).every((f) => name(f).startsWith('views/') || /^(\.\.\/)+fronts\/[^/]+\/[^/]+\.js$/.test(f)), 'after the first view: views and the fronts\' root files only');
 
   assert.equal(styles[0], 'style.css');
   // chat.css (the shared chat look, formerly duo.css, #154) precedes every screen that uses it

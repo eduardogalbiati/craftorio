@@ -50,6 +50,6 @@ test('the Roadmap view draws its buttons from the model\'s allowedActions', () =
   assert.equal(/allowedActions\s*\(/.test(view), true, 'backlog-roadmap.js does not call allowedActions');
 });
 
-test('the Dashboard asks the model for the roadmap\'s current stage', () => {
-  assert.equal(/RoadmapModel/.test(read('packages/ui-kit/views/dashboard/dashboard.js')), true, 'dashboard.js does not use RoadmapModel');
+test('the build front\'s Home card asks the model for the roadmap\'s current stage (#579: Home\'s cards live with their fronts)', () => {
+  assert.equal(/RoadmapModel/.test(read('fronts/build/build-home.js')), true, 'build-home.js does not use RoadmapModel');
 });

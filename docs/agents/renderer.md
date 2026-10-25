@@ -168,7 +168,12 @@ Read this before changing anything in the UI: the UI kit (`packages/ui-kit/`), a
   (project, analytics, the project city), `build` (projects, backlog with the Roadmap and the Product
   Owner, releases, sessions, workflows, run, runchat, artifacts, supervisor), `plan` (inbox,
   discovery, arena, duo), `ai` (oracle, nightwatch, agents, skills, usage); a front's id is its menu
-  group's (decision 7 of 2026-10-24).
+  group's (decision 7 of 2026-10-24). **Home's cards** (decision 5): Home is the shell's, its content
+  the fronts' — each front registers a card with `HomeCards.register` (`packages/ui-kit/home-cards.js`)
+  as its `<id>-home.js` loads: its stages of the flow strip with their counts and how a count opens
+  the screen, its "What needs you" rows with their one button, its "Today" stats, a banner above the
+  body (the Night watch's morning summary) and the clicks of the buttons it draws; a composition
+  without a front shows none of its parts, and the Analytics tab hides without the analyser front.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
   `state.runId` (the one the Run screen shows; #412: the top bar shows no run); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
