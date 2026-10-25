@@ -1,9 +1,10 @@
-// Layering rules (issue #345): the areas of the sources (src/ and the workspaces, scripts/source-tree.js)
+// Layering rules (issue #345): the areas of the sources (the workspaces, scripts/source-tree.js; a `src/`
+// tree with the same folders is read the same way)
 // and the directions they may require each other.
 // From the bottom: shared (packages/shared/, pure dual-load modules) requires nothing of the app; the
 // low-level utilities (ENGINE_ROOT_UTILITIES) only shared; the engine those two; the domain modules
 // (packages/engine/domains/<name>/, phase 1 of docs/reorganisation-study-2026-10.md; a loose file at the root of
-// src/ counts as one too) the engine too; the service all of these; the desktop entry and the server what is below
+// src/ counted as one too) the engine too; the service all of these; the desktop entry and the server what is below
 // them; the renderer only shared, and nothing else requires it. The desktop entry is apps/desktop/host/ (phase 1
 // of docs/reorganisation-study-2026-10.md): the Electron host, required by nothing else.
 // Every relative `require` of every source file is read, and every `require` of a workspace package
@@ -52,7 +53,7 @@ const AREAS = {
   renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (apps/desktop/renderer/)' },
 };
 
-// The top-level folders of src/ and their area (domains: a domain module, or a utility when
+// The area folders (a workspace's folders, or src/'s before phase 2) and their area (domains: a domain module, or a utility when
 // ENGINE_ROOT_UTILITIES lists the file, see areaOf). scripts/dep-map.js reads this list too.
 const FOLDERS = { bin: 'server', control: 'server', domains: 'root', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
 // The workspaces (phase 2 of docs/reorganisation-study-2026-10.md) and their area: a whole package

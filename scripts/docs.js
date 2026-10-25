@@ -63,7 +63,7 @@ const CODE_MAP = path.join('docs', 'agents', 'code-map.md');
 const TEST_MAP = path.join('docs', 'agents', 'test-map.md');
 const CHANNELS_REF = path.join('docs', 'agents', 'channels.md');
 const SUFFIXES = ['js', 'python', 'go', 'java', 'csharp', 'rust', 'gh', 'gl'];
-// The source files mapped one by one (scripts/source-tree.js: src/, the workspaces and scripts/; their .js
+// The source files mapped one by one (scripts/source-tree.js: the workspaces and scripts/; their .js
 // and .jsx files, recursively: .jsx are the run's 3D view's sources, apps/desktop/renderer/run3d/, bundled by
 // scripts/build-3d.js).
 const listSources = (root) => sourceFiles(root, { scripts: true, match: /\.jsx?$/ });
