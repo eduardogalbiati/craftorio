@@ -1,4 +1,9 @@
-// The Oracle (#122, packages/engine/domains/oracle/oracle.js): the app-wide master agent's persistent conversation, its memory,
+// The Oracle service (#122, packages/engine/domains/oracle/oracle.js), a kernel area since phase 4 of the
+// reorganisation study (#590): the `oracle:*` channels live in the ai front
+// (fronts/ai/engine/channels/oracle.js) and read it through ctx (oracleService, oracleDelegate,
+// oracleProposeOrRoute, oracleRequestAgent, oracleWake, oracleToolList); the kernel's run area, the
+// seed runs, the Product Owner and the Night watch call it whatever fronts the engine serves.
+// The Oracle: the app-wide master agent's persistent conversation, its memory,
 // its state (busy, paused by budget, owning process) and its read-only tools (packages/engine/domains/oracle/oracle-tools.js,
 // served over its own bridge). One Oracle per workspace root. `mock` (the drawer's developer mode)
 // and MULTIAGENT_SIMULATION_ONLY answer from the simulated Oracle: no model call, no cost.
@@ -50,31 +55,7 @@ const { createWake } = require('../../domains/oracle/oracle-wake');
 const { oracleTools } = require('../../domains/oracle/oracle-tools');
 const { resolveCommand } = require('../../engine/providers');
 const { stopProcessesIn } = require('../../engine/processes');
-const { requireObject } = require('../common');
-const {
-  ANY,
-  args,
-  BOOL,
-  FLAG,
-  listOf,
-  MESSAGES,
-  nullable,
-  NUMBER,
-  OBJECT,
-  OPTIONS,
-  orNone,
-  PROJECT_ID,
-  REQUEST_ANSWER,
-  RUN_ID,
-  shape,
-  STRING,
-  TOOL_LIST,
-} = require('../schemas');
 
-// an action card's id; what the chat answers after a change (its messages and the Oracle's state)
-const ACTION_ID = { type: ['string', 'integer'], description: 'An action card\'s id.' };
-const ON_ACTION = args({ actionId: ACTION_ID, mock: FLAG }, ['actionId']);
-const CHAT = shape({ messages: MESSAGES, state: OBJECT }, ['messages']);
 
 const ELSEWHERE_MS = 60e3;
 const DELEGATE_TEXT = 8000;
@@ -84,8 +65,6 @@ const git = (folder, args) => new Promise((resolve, reject) => {
   execFile('git', ['-C', folder, ...args], { timeout: 30e3, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).trim())) : resolve(String(stdout).trim())));
 });
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
-// who turned the Night watch on (#172): the account, and the screen it was turned on from
-const nightBy = (from) => `${process.env.USERNAME || process.env.USER || 'the owner'} (${String(from || 'the Oracle drawer').slice(0, 60)})`;
 const inside = (root, p) => { const r = path.relative(path.resolve(root), path.resolve(p)); return !r.startsWith('..') && !path.isAbsolute(r); };
 
 module.exports = (ctx) => {
@@ -283,7 +262,7 @@ module.exports = (ctx) => {
   }
   // #240: the owners' inboxes (po:request, supervisor:request) run their mechanical kinds with these
   // same functions, checked like a card; the backups go to the Oracle's folder, as a card's do
-  ctx.performAction = (kind, params, { mock } = {}) => {
+  const performAction = (kind, params, { mock } = {}) => {
     actions.ACTIONS[kind]?.check?.(params);
     return perform({ id: `request-${Date.now().toString(36)}`, kind, params }, { mock });
   };
@@ -296,18 +275,18 @@ module.exports = (ctx) => {
     },
     'run.retry': (p) => { retryStep(p); },
   };
-  ctx.checkAction = (kind, params) => {
+  const checkAction = (kind, params) => {
     actions.ACTIONS[kind]?.check?.(params);
     PRECHECK[kind]?.(params);
   };
-  ctx.restoreAction = (undo) => restore(null, undo);
+  const restoreAction = (undo) => restore(null, undo);
   // How an owner's inbox takes a request now (agent-inbox.js handle's wait / check / after): a kind in
   // clickKinds, a request content asked for (byContent), a kind of confirmKinds the Oracle's model asked
   // for by day (byModel), a kind the Night watch does not allow, or one more watch action on an item that
   // already had LOOP_CAP tonight waits for the owner's click; under the watch, what the owner ran and
   // what waits are in the night log.
   // `owner`: 'product-owner' | 'supervisor'; `project`: the PO's project, added to the params it checks.
-  ctx.inboxRules = (owner, { clickKinds = [], confirmKinds = [], project = null, byContent = false, byModel = false } = {}) => {
+  const inboxRules = (owner, { clickKinds = [], confirmKinds = [], project = null, byContent = false, byModel = false } = {}) => {
     // the watch in force: the Night watch, or by day Self-healing's standing watch (#278)
     const watch = actions.watchState(dir(), workspace.readSettings(ctx.ws));
     const allowed = night.readPermissions(dir()).allowed;
@@ -329,7 +308,7 @@ module.exports = (ctx) => {
     };
     return {
       wait: (kind, params) => why(kind, params)?.text || null,
-      check: (kind, params) => ctx.checkAction(kind, withProject(params)),
+      check: (kind, params) => checkAction(kind, withProject(params)),
       after: (r) => {
         if (!watch.active) return;
         const where = night.targetOf(withProject(r.params));
@@ -465,7 +444,12 @@ module.exports = (ctx) => {
   // and the Oracle's chat gets a short line. An unknown `to` is refused here and recorded nowhere.
   async function requestAgent({ to, kind, params, reason, projectId, requestedBy, mock } = {}) {
     const p = params && typeof params === 'object' && !Array.isArray(params) ? params : {};
+    // the Supervisor's inbox is the build front's (phase 4, #590): an engine that does not serve it says so
     const send = to === 'po' ? ctx.productOwnerRequest : to === 'supervisor' ? ctx.supervisorRequest : null;
+    if (to === 'supervisor' && !send) {
+      const error = 'The Supervisor is not served by this engine (the build front is not in its composition).';
+      return { ok: false, text: error, costUsd: 0, error };
+    }
     if (!send) {
       const error = `Unknown agent: ${to || '(none)'}. request_agent goes to po (the Product Owner: issues, roadmap, queue) or supervisor (the Supervisor: runs, workflows, skills).`;
       return { ok: false, text: error, costUsd: 0, error };
@@ -512,7 +496,7 @@ module.exports = (ctx) => {
     return oracles.get(root);
   };
   // the Night watch screen's channel (#172) reads the Oracle's state and switches the watch through it
-  ctx.oracleService = get;
+  const oracleService = get;
 
   // ---- wake-ups (#123) ---------------------------------------------------------------------------
   const wake = createWake({
@@ -527,10 +511,10 @@ module.exports = (ctx) => {
   });
   // #278: Self-healing's findings (packages/engine/service/channels/nightwatch.js) wake the Oracle with their
   // evidence, as lines: one short turn, simulated when every run is → oracle.wake's result
-  ctx.oracleFindings = ({ lines, runIds = [] }) => get().wake({ findings: lines, runIds, mock: simulation.simulationOnly() || (runIds.length > 0 && runIds.every(runMock)) });
+  const oracleFindings = ({ lines, runIds = [] }) => get().wake({ findings: lines, runIds, mock: simulation.simulationOnly() || (runIds.length > 0 && runIds.every(runMock)) });
   // ... in the wake-ups' own scope (settings.oracle.wakeScope): every run but the muted ones, or the
   // runs and roadmaps the Oracle watches; never when wake-ups are off
-  ctx.oracleFindingsScope = (runId) => {
+  const oracleFindingsScope = (runId) => {
     const s = wake.state();
     if (s.wakeScope === 'off') return false;
     const project = ctx.liveRun(runId)?.projectId || null;
@@ -556,128 +540,18 @@ module.exports = (ctx) => {
   hooks.requestAgent = (input) => requestAgent(input);
   hooks.watch = (input) => wake.watch(input || {});
 
-  const withState = (out) => ({ ...out, messages: get().history(), state: get().state() });
-  // Every oracle channel with input takes one object (`params: 'opts'`), the way the renderer calls
-  // them (`api.oracleAct({ actionId, mock })`): positional params would wrap that object again (#187).
-  return [
-    // { question, screen, images, mock, mockContextTokens } → { message, messages, state } or { refused, ... };
-    // images: pasted screenshots ({ dataUrl }, oracle.ATTACHMENT_LIMITS); mockContextTokens (simulated
-    // only) makes the answer report that context size (compaction checks)
-    {
-      channel: 'oracle:ask',
-      method: 'askOracle',
-      params: 'opts',
-      schema: {
-        params: args({ question: STRING, screen: ANY, images: nullable(listOf(OBJECT)), context: ANY, mock: FLAG, mockContextTokens: nullable(NUMBER) }),
-        result: shape({ message: nullable(OBJECT), messages: MESSAGES, state: OBJECT, refused: ANY }, ['messages']),
-      },
-      fn: async (arg) => {
-        const opts = requireObject(arg, 'options');
-        const mock = simulated(opts);
-        // #180: its progress is pushed on chat:progress; chat:cancel ('oracle') stops it
-        const turn = ctx.chatTurns.start('oracle');
-        let out;
-        try {
-          out = await get().ask({ question: opts.question, screen: opts.screen, images: opts.images, context: opts.context || null, mock, mockContextTokens: mock ? opts.mockContextTokens : undefined, onItem: turn.onItem, signal: turn.signal });
-        } finally {
-          turn.end(turn.stopped() ? 'stopped' : out?.message?.error || !out ? 'failed' : 'done');
-        }
-        return out;
-      },
-    },
-    // the owner's "Do it" on an action card (#123): performs exactly that card, once → { ok, text, messages, state }
-    {
-      channel: 'oracle:act',
-      method: 'oracleAct',
-      params: 'opts',
-      schema: { params: ON_ACTION, result: shape({ ok: BOOL, text: ANY, messages: MESSAGES, state: OBJECT }, ['ok']) },
-      fn: (arg) => { const { actionId, mock } = requireObject(arg, 'options'); return get().act(actionId, { mock: simulated({ mock }) }); },
-    },
-    // a pasted image of the conversation (its file name in a user message's attachments) → data: URL or null
-    { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', schema: { params: STRING, result: nullable(STRING) }, fn: (name) => get().attachment(name) },
-    // asks another agent (product-owner, issue-draft, supervisor, analyzer, checker) → { to, text, costUsd, error, ref }; recorded in the chat
-    {
-      channel: 'oracle:delegate',
-      method: 'oracleDelegate',
-      params: 'opts',
-      // { to, question, ... } as the delegate tool sends it; the agent checks the rest
-      schema: { params: args({ to: STRING, mock: FLAG }), result: shape({ to: STRING, text: ANY, costUsd: NUMBER, error: ANY, ref: ANY }) },
-      fn: (arg) => {
-        const { mock, ...input } = requireObject(arg, 'options');
-        return delegate(input, { mock });
-      },
-    },
-    { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', schema: { params: ON_ACTION, result: CHAT }, fn: (arg) => get().dismiss(requireObject(arg, 'options').actionId) },
-    { channel: 'oracle:history', method: 'oracleHistory', schema: { result: MESSAGES }, fn: () => get().history() },
-    // #184: { text (pasted, e.g. a Claude Code memory index), base (the draft; default the saved memory) } →
-    // { text }: the draft with the pasted decisions added; nothing is saved (the owner saves it)
-    {
-      channel: 'oracle:importMemory',
-      method: 'importOracleMemory',
-      params: 'opts',
-      schema: { params: { type: ['object', 'null'], properties: { text: STRING, base: nullable(STRING) } }, result: shape({ text: STRING }, ['text']) },
-      fn: (opts) => get().importMemory(opts || {}),
-    },
-    // the owner read the conversation up to { at } (default now) → { readAt }: the unread badge counts after it
-    { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', schema: { params: { type: ['object', 'null'], properties: { at: ANY } }, result: shape({ readAt: ANY }) }, fn: (opts) => get().markRead(opts?.at) },
-    { channel: 'oracle:memory', method: 'oracleMemory', schema: { result: shape({ text: STRING, updatedAt: nullable(STRING) }, ['text']) }, fn: () => get().memory() },
-    // mutes (on) or unmutes one run's wake-ups → the wake-up state
-    {
-      channel: 'oracle:mute',
-      method: 'muteOracleRun',
-      params: 'opts',
-      schema: { params: args({ runId: RUN_ID, on: FLAG }, ['runId']), result: OBJECT },
-      fn: (arg) => { const { runId, on } = requireObject(arg, 'options'); return wake.mute(runId, on !== false); },
-    },
-    // the Night watch: { on, until (ISO, at most 24 h ahead), from (the screen it was turned on from) } → { nightWatch, messages, state }
-    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: 'opts', schema: { params: args({ on: FLAG, until: nullable(STRING), from: nullable(STRING) }), result: OBJECT }, fn: (arg) => { const { on, until, from } = requireObject(arg, 'options'); return get().setNightWatch({ on, until, by: nightBy(from) }); } },
-    // the owner proposes a card themselves (or a check): { kind, params, why } → { id, status, ... };
-    // #241: a card requested by the Oracle or by content, of a kind an owner holds, goes to that owner's
-    // inbox → { routed, to, kind, ok, text, ... }
-    {
-      channel: 'oracle:propose',
-      method: 'oracleProposeAction',
-      params: 'opts',
-      // params: the card kind's own (packages/engine/domains/oracle/oracle-actions.js checks them per kind)
-      schema: { params: args({ kind: STRING, params: ANY, why: ANY, requestedBy: nullable(STRING) }, ['kind']), result: OBJECT },
-      fn: async (arg) => {
-        const input = requireObject(arg, 'options');
-        return withState(await proposeOrRoute(input, { fromOracle: input.requestedBy !== 'owner' }));
-      },
-    },
-    // #241: the request_agent tool's function: { to: 'po' | 'supervisor', kind, params, reason, projectId?, requestedBy?, mock } →
-    // { ok, text, costUsd, error?, pending? } (pending: a card waits for the owner's click in the owner's chat)
-    {
-      channel: 'oracle:requestAgent',
-      method: 'oracleRequestAgent',
-      params: 'opts',
-      // params: the request kind's own (the receiving agent checks them per kind)
-      schema: {
-        params: args({ to: STRING, kind: STRING, params: ANY, reason: ANY, projectId: orNone(PROJECT_ID), requestedBy: nullable(STRING), mock: FLAG }),
-        result: REQUEST_ANSWER,
-      },
-      fn: (arg) => requestAgent(requireObject(arg, 'options')),
-    },
-    // a new session from a handoff note; the messages and the memory are kept
-    { channel: 'oracle:reset', method: 'resetOracle', params: 'opts', schema: { params: OPTIONS, result: CHAT }, fn: (opts) => get().reset({ mock: simulated(opts) }) },
-    { channel: 'oracle:saveMemory', method: 'saveOracleMemory', params: 'text', schema: { params: STRING, result: OBJECT }, fn: (text) => get().saveMemory(text) },
-    // { busy, paused, today, owner, model, effort, contextTokens, compactAtTokens, nightWatch, ... }
-    { channel: 'oracle:state', method: 'oracleState', schema: { result: OBJECT }, fn: () => get().state() },
-    { channel: 'oracle:tools', method: 'listOracleTools', schema: { result: TOOL_LIST }, fn: () => tools.map(({ name, description }) => ({ name, description })) },
-    { channel: 'oracle:undo', method: 'oracleUndo', params: 'opts', schema: { params: ON_ACTION, result: CHAT }, fn: (arg) => get().undo(requireObject(arg, 'options').actionId) },
-    // watch a run ({ runId }) or a project's roadmap ({ projectId }) until it ends; on: false stops
-    {
-      channel: 'oracle:watch',
-      method: 'oracleWatch',
-      params: 'opts',
-      schema: { params: { type: ['object', 'null'], properties: { runId: orNone(RUN_ID), projectId: orNone(PROJECT_ID), on: FLAG } }, result: OBJECT },
-      fn: (input) => wake.watch(input || {}),
-    },
-    // the batch waiting for the wake-up window now (the owner's "wake now", checks) → the wake's answer or null
-    { channel: 'oracle:wakeNow', method: 'wakeOracleNow', schema: { result: nullable(OBJECT) }, fn: () => wake.flush() },
-    // { muted, watching, wakeScope, wakeOn, pending }
-    { channel: 'oracle:wakeState', method: 'oracleWakeState', schema: { result: OBJECT }, fn: () => ({ ...wake.state(), pending: wake.pending() }) },
-    // a message was added to the conversation (a wake-up, a card, a result): { id, role, kind }
-    { event: 'oracle:changed', method: 'onOracleChanged' },
-  ];
+  return {
+    checkAction,
+    inboxRules,
+    oracleDelegate: delegate,
+    oracleFindings,
+    oracleFindingsScope,
+    oracleProposeOrRoute: proposeOrRoute,
+    oracleRequestAgent: requestAgent,
+    oracleService,
+    oracleToolList: () => tools.map(({ name, description }) => ({ name, description })),
+    oracleWake: wake,
+    performAction,
+    restoreAction,
+  };
 };

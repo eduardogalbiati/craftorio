@@ -9,7 +9,7 @@
 // the same field changed on both sides to different values, an item it removes changed elsewhere,
 // or the read is no longer known (packages/engine/domains/roadmap/roadmap.js keeps the recent reads in memory, `readRoadmapAt`).
 // Pure (no file access, the stages given are never changed): used by the roadmap channels
-// (packages/engine/service/channels/roadmap.js) and the Oracle's roadmap.stages (packages/engine/service/channels/oracle.js).
+// (packages/engine/service/channels/roadmap.js) and the Oracle's roadmap.stages (packages/engine/service/areas/oracle.js).
 
 const path = require('path');
 

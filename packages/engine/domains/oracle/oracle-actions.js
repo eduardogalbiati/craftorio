@@ -1,6 +1,6 @@
 // The Oracle's actions (#123): what it may change, always as a card in its chat that runs only when
 // the owner clicks "Do it" (packages/engine/domains/oracle/oracle.js propose/act). This file only describes and checks them:
-// the service performs them (packages/engine/service/channels/oracle.js, with the app's own functions).
+// the service performs them (packages/engine/service/areas/oracle.js, with the app's own functions).
 // Each kind says what changes, where, the backup taken first, and whether Night watch may run it
 // without asking (`night`). Never here: answering a human gate, pushing, closing issues, deleting
 // data, starting a real run or a paid call without the click.
