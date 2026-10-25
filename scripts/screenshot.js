@@ -399,7 +399,8 @@ function main() {
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   });
-  app.setPath('userData', path.join(scratch, 'user-data'));
+  process.env.MULTIAGENT_USER_DATA = path.join(scratch, 'user-data'); // a throwaway user data folder (the host reads it, main.js)
+  app.setPath('userData', process.env.MULTIAGENT_USER_DATA);
   if (args.theme) nativeTheme.themeSource = args.theme;
 
   let appDir = repo;
