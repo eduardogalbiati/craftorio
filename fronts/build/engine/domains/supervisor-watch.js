@@ -13,7 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const supervisor = require('./supervisor');
+const supervisor = require('@multiagent/engine/domains/supervisor/supervisor');
 const registry = require('@multiagent/shared/providers');
 const Language = require('@multiagent/shared/language');
 
@@ -83,15 +83,15 @@ function createWatches({ events, liveRun, runFolder, workflowDirs, skillsDirs, r
     // a new conversation (first turn, or a provider that cannot resume) gets the rules and the report
     const line = Language.languageLine({ language: language() });
     if (w.sessionId) return `${line}\n\n${body}`;
-    const { resolveSkill, skillPrompt } = require('../agents/skills');
+    const { resolveSkill, skillPrompt } = require('@multiagent/engine/domains/agents/skills');
     const skill = resolveSkill(skillsDirs(), 'run-supervisor');
     return [skillPrompt(skill), line, RULES, supervisor.runReport(w.runDir, { workflowsDir: workflowDirs() }), body].join('\n\n');
   }
   const newEvents = (w) => (w.pending.length ? `New events in the run:\n${w.pending.join('\n')}` : '');
 
   async function turn(w, text) {
-    const { runTurn } = require('../../engine/providers');
-    const { render } = require('../../engine/workflow');
+    const { runTurn } = require('@multiagent/engine/engine/providers');
+    const { render } = require('@multiagent/engine/engine/workflow');
     w.abort = new AbortController();
     const res = await runTurn({
       provider: w.providerCfg, model: w.mock ? 'simulated' : w.model, effort: w.effort || undefined, providerSessionId: w.sessionId,
@@ -170,16 +170,20 @@ function createWatches({ events, liveRun, runFolder, workflowDirs, skillsDirs, r
       if (!run) throw new Error('The run is not in progress: the supervisor can only watch a running run.');
       let w = watches.get(runId);
       if (w?.on) return publicState(w);
-      const { PROVIDERS } = require('../workflow/workflow-builder');
+      const { PROVIDERS } = require('@multiagent/engine/domains/workflow/workflow-builder');
       const type = options.provider || DEFAULTS.provider;
       const cli = Object.values(PROVIDERS).find((p) => p.type === type);
       if (!cli) throw new Error(`Unknown provider: ${type}`);
       const providerCfg = run.mock ? { type: 'mock' } : cli;
       if (!run.mock && !resolveCommand(cli.command)) throw new Error(`The supervisor needs ${cli.command}, which is not installed.`);
       const runDir = run.runDir;
-      const { providerArgs, normalize, dedupeFlags } = require('../../engine/capabilities');
-      const { render } = require('../../engine/workflow');
-      const { resolveSkill } = require('../agents/skills');
+      const {
+        dedupeFlags,
+        normalize,
+        providerArgs,
+      } = require('@multiagent/engine/engine/capabilities');
+      const { render } = require('@multiagent/engine/engine/workflow');
+      const { resolveSkill } = require('@multiagent/engine/domains/agents/skills');
       const skill = resolveSkill(skillsDirs(), 'run-supervisor');
       // read-only, like the supervisor inside a run (engine/capabilities.js)
       const readOnly = run.mock ? [] : providerArgs(cli.type, { caps: normalize({ tools: ['read'] }) }).args;

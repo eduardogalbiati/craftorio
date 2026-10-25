@@ -21,7 +21,7 @@ const {
   RUN_ID,
   shape,
   STRING,
-} = require('../schemas');
+} = require('@multiagent/engine/service/schemas');
 
 const AT_GATE = args({ runId: RUN_ID, approvalId: nullable(GATE_ID) }, ['runId']);
 // a one-off or saved command config ({ command, install, url, ... }), checked by packages/engine/domains/local/local-preview.js
