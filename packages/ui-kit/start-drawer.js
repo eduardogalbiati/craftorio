@@ -363,7 +363,7 @@ function initStartDrawer() {
   $('#drawer-backdrop').onclick = closeDrawer;
   $('#wf-select').onchange = () => selectWorkflow($('#wf-select').value);
   $('#project-select').onchange = renderProjectInfo;
-  $('#btn-drawer-new-project').onclick = () => openProjectModal(null, { fromDrawer: true });
+  $('#btn-drawer-new-project').onclick = () => window.Actions.call('openProjectModal', null, { fromDrawer: true });
   $('#btn-start').onclick = () => startRun();
   $('#btn-start-another').onclick = () => startRun({ keepOpen: true });
 }

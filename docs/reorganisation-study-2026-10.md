@@ -243,7 +243,9 @@ longer form. Phase 1 (#560, #561, #562) is the first to implement anything of th
    phase 3, so its PRs stay small.
 2. **Settings is the shell; the fourth front is `ai`.** Settings, Setup, Usage and Account belong to
    the shell (every front needs them). Oracle, Night watch, agents and skills form the `ai` front:
-   the menu's existing AI group (#254).
+   the menu's existing AI group (#254). Confirmed on 2026-10-25 (#579): the Usage *screen* goes
+   with the AI group (`fronts/ai/views/usage/`, its menu group), the header's usage *widget* with
+   the kit; Settings, Setup and Account are the shell.
 3. **Arena and Duo stay in Design & Plan**, as ideation tools, until a user asks otherwise.
 4. **The 3D bundles split by owner.** The project city (`poc/city-modes`, `generated/project-city.js`,
    `release-city`, `project-map`) goes to the `analyser` front; the run's 3D view (`run3d*`) goes to

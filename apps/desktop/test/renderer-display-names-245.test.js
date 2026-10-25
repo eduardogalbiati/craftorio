@@ -179,7 +179,6 @@ function loadPanel({ ev, files }) {
     renderJsonText: (t) => t,
     renderDelimited: (t) => `<table>${t}</table>`,
     errMsg: (e) => String(e?.message || e),
-    openArtifactsAt: () => {},
     showToast: () => {},
     ArtifactMenu: { open: () => {} },
     ImageViewer: { THUMB: 'tabindex="0" role="button" title="Click to enlarge" data-iv-thumb', open: () => {} },
@@ -188,7 +187,7 @@ function loadPanel({ ev, files }) {
       readArtifact: async () => ({ text: '' }),
       runEvidence: async () => ev,
     },
-    window: { displayName },
+    window: { displayName, Actions: { call: () => {} } },
     document: {},
     setTimeout, clearTimeout, Date,
   };

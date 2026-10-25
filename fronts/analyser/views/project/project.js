@@ -43,6 +43,7 @@ function openProjectView(id, { tab = null } = {}) {
   window.CurrentProject?.set(id, { redraw: false });
   showView('project');
 }
+window.Actions.register('openProject', openProjectView); // the Projects cards ask for it (actions.js)
 
 // mode: 'reset' | 'more' | 'refresh' (run-list.js loadRunListPage)
 let pvLoading = null;
@@ -164,7 +165,8 @@ registerView({
         </div>
       </section>`,
   mount() {
-    $('#btn-project-back').onclick = () => showProjects();
+    // Back: the Projects screen when its front is shipped (the showProjects action), else Home
+    $('#btn-project-back').onclick = () => (window.Actions.has('showProjects') ? window.Actions.call('showProjects') : showView('dashboard'));
     $('#view-project').addEventListener('click', onProjectPageClick);
     $('#view-project').addEventListener('change', (e) => window.ProjectWorkflows?.onChange(e) || window.ProjectArchitecture?.onChange(e) || window.ProjectRefactor?.onChange(e) || window.ProjectConflictMap?.onChange(e));
     // a Conflict map row opens from the keyboard too

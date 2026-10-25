@@ -256,7 +256,8 @@ function loadAgentsScreen({ agents = AGENTS } = {}) {
     state: { skills: [], workflows: [WF] },
     esc: (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]),
     dateOf: (d) => String(d), errMsg: (e) => String(e?.message || e), showToast() {}, openModal() {}, closeModal() {},
-    confirmDialog: async () => false, showWorkflowDefinition() {},
+    confirmDialog: async () => false,
+    Actions: { register() {}, has: () => true, call() {} }, // the kit's actions registry (actions.js): the Workflows screen counts as shipped
     PoCalibration: {
       bindSlider() {}, sliderHtml: () => '', tooltip: () => '', step: () => ({ name: '' }), DEFAULT: 3,
       cost: { bindSlider() {}, sliderHtml: () => '', tooltip: () => '', step: () => ({ name: '' }), DEFAULT: 3 },

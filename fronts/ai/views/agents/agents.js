@@ -74,6 +74,9 @@
     ? window.AgentColors.hexFor(a.key, window.AgentColors.defIn(state.workflows, a.workflow.file, a.key)) : '');
   // an uncustomised workflow agent's card: the provider's robot in the role colour, as the run shows it
   const cardPaint = (a) => (a.workflow && !a.appearance ? roleColor(a) : '');
+  // "Open in workflow" needs the Workflows screen, which a composition may not ship (#579, actions.js)
+  const canOpenWorkflow = (workflow) => !!workflow && window.Actions.has('showWorkflowDefinition');
+  const openWorkflowButton = () => (window.Actions.has('showWorkflowDefinition') ? `<button class="btn sm ghost" data-act="open-workflow">${t('agents.open_in_workflow')}</button>` : '');
   const isSystem = () => !!ed.agent?.system;
   const isWorkflow = () => !!ed.agent?.workflow;
   const isReadOnly = () => isSystem() || isWorkflow();
@@ -134,7 +137,7 @@
           <span class="muted small">${esc(a.workflow.name)}</span>
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${t('agents.customize_look')}</button>
-          <button class="btn sm ghost" data-act="open-workflow">${t('agents.open_in_workflow')}</button>
+          ${openWorkflowButton()}
           <button class="btn sm ghost" data-act="duplicate">${t('agents.duplicate')}</button>
         </div>` : actions ? `<div class="card-actions">
           <span class="muted small">${a.system ? (a.calibration ? t('agents.look_model_and_planning_model', { model: esc(a.model) }) : a.model ? t('agents.look_and_model_model', { model: esc(a.model) }) : t('agents.look_only')) : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
@@ -146,6 +149,7 @@
       </div>`;
   }
   window.AgentCards = { card: agentCard };
+  window.Actions.register('agentCard', (a, opts) => agentCard(a, opts)); // the Workflow builder's picker asks for it (actions.js)
 
   // The workflows' agents, one heading per workflow file; a file that doesn't load shows its error
   // once, in its heading.
@@ -184,7 +188,7 @@
       const a = agents.find((x) => x.id === c.dataset.id);
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'remove') return removeAgent(a);
-      if (act === 'open-workflow') return showWorkflowDefinition(a.workflow.file);
+      if (act === 'open-workflow') return window.Actions.call('showWorkflowDefinition', a.workflow.file);
       if (act === 'duplicate') return duplicateAgent(a);
       openAgentModal(a);
     }));
@@ -256,7 +260,7 @@
       ['Capabilities', a.capabilities],
       ['Used in steps', a.steps?.join(', ') || 'none'],
     ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') : '';
-    $a('#btn-ag-open-workflow').classList.toggle('hidden', !workflow);
+    $a('#btn-ag-open-workflow').classList.toggle('hidden', !canOpenWorkflow(workflow));
     $a('#btn-ag-duplicate').classList.toggle('hidden', !workflow);
     $a('#ag-model-row').classList.toggle('hidden', !isTunable());
     $a('#ag-model').value = a?.model || '';
@@ -407,7 +411,7 @@
       const file = ed.agent?.workflow?.file;
       if (!file) return;
       closeModal('#agent-modal');
-      showWorkflowDefinition(file);
+      window.Actions.call('showWorkflowDefinition', file);
     };
     $a('#btn-ag-duplicate').onclick = () => { if (ed.agent?.workflow) duplicateAgent(ed.agent); };
     $a('#btn-ag-shuffle').onclick = shuffleLook;

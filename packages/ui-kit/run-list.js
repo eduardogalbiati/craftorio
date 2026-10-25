@@ -187,7 +187,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
-    openArtifactsAt({ projectId: rl.id || r.project?.id, runId: r.runId, path: b.dataset.art, mock: r.mock });
+    window.Actions.call('openArtifactsAt', { projectId: rl.id || r.project?.id, runId: r.runId, path: b.dataset.art, mock: r.mock });
   }));
   box.querySelectorAll('[data-term]').forEach((b) => (b.onclick = async () => {
     const runId = b.closest('.pr-run').dataset.run;

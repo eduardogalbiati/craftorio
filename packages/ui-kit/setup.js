@@ -222,7 +222,7 @@
   }
 
   function newProject() {
-    openProjectModal(null, { fromHeader: true });
+    window.Actions.call('openProjectModal', null, { fromHeader: true });
     // the dialog has no callback: the list is read again when it closes
     const modal = document.getElementById('project-modal');
     const watch = new MutationObserver(async () => {

@@ -19,7 +19,6 @@ function loadPanel(opts = {}) {
     renderJsonText: (t) => t,
     renderDelimited: (t) => `<table>${t}</table>`,
     errMsg: (e) => String(e?.message || e),
-    openArtifactsAt: (...a) => calls.openArtifactsAt.push(a),
     showToast: () => {},
     ArtifactMenu: { open: (e, target) => calls.artifactMenuOpen.push(target) },
     ImageViewer: {
@@ -31,7 +30,7 @@ function loadPanel(opts = {}) {
       readArtifact: opts.readArtifact || (async (p) => { calls.readArtifact.push(p); return { text: '' }; }),
       runEvidence: opts.runEvidence,
     },
-    window: {},
+    window: { Actions: { call: (name, ...a) => { if (name === 'openArtifactsAt') calls.openArtifactsAt.push(a); } } },
     document: {},
     setTimeout, clearTimeout, Date,
   };
