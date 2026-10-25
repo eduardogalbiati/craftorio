@@ -43,14 +43,16 @@ process.on('unhandledRejection', (e) => { current?.errors.push(e); });
 // The page's `<script src>` entries: `src` as index.html has it (relative to the page, e.g.
 // `../../../packages/ui-kit/app.js`, phase 3 of the reorganisation study), `name` the script's
 // page-relative name (`app.js`, `views/run/run.js`: the layer's prefix dropped, so a test names a
-// script the same whichever package holds it) and `file` its absolute path.
+// script the same whichever package holds it), `front` the id of the front that holds it (null for
+// the kit's, the shared package's and the page's own) and `file` its absolute path.
 function pageEntries() {
   const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
   return [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1])
     .filter((src) => !src.includes('node_modules/'))
-    .map((src) => ({ src, name: src.replace(/^(\.\.\/)+(packages\/ui-kit|fronts\/[^/]+)\//, ''), file: path.join(RENDERER, ...src.split('/')) }));
+    .map((src) => ({ src, name: src.replace(/^(\.\.\/)+(packages\/ui-kit|fronts\/[^/]+)\//, ''), front: /\/fronts\/([^/]+)\//.exec(src)?.[1] || null, file: path.join(RENDERER, ...src.split('/')) }));
 }
 const fileOfScript = new Map(pageEntries().map((e) => [e.name, e.file]));
+const frontOfScript = new Map(pageEntries().map((e) => [e.name, e.front]));
 /** The absolute path of a page script by its page-relative name (`app.js`, `views/run/run.js`). */
 const scriptFile = (name) => fileOfScript.get(name);
 
@@ -89,9 +91,11 @@ function makeStorage(initial = {}) {
  * - storage / session: initial localStorage / sessionStorage entries.
  * - state: fields merged into app.js's `state` after it loads.
  * - before(sandbox): runs right before the page's scripts (e.g. to preset globals).
+ * - fronts: the ids of the fronts to load (default: every front of the page): the page of a composition
+ *   of those fronts, the kit's, the shared package's and the page's own scripts kept (#579).
  * - only: a filter over the script list (default: every script).
  */
-function loadApp({ api: apiOverrides = {}, storage = {}, session = {}, state: stateFields = {}, only } = {}) {
+function loadApp({ api: apiOverrides = {}, storage = {}, session = {}, state: stateFields = {}, only, fronts } = {}) {
   const elements = new Map(); // selector → fake element
   const created = []; // elements made by document.createElement
   const docListeners = {};
@@ -340,6 +344,7 @@ function loadApp({ api: apiOverrides = {}, storage = {}, session = {}, state: st
   vm.createContext(sandbox);
 
   let scripts = pageScripts();
+  if (fronts) scripts = scripts.filter((name) => !frontOfScript.get(name) || fronts.includes(frontOfScript.get(name)));
   if (only) scripts = scripts.filter(only);
   for (const src of scripts) {
     const code = fs.readFileSync(fileOfScript.get(src), 'utf8');

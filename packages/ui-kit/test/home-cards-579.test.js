@@ -88,3 +88,18 @@ test('without the analyser front, Home hides its Analytics tab', async () => {
   assert.ok(tab, 'the tab button is in the markup');
   assert.equal(tab.classList.contains('hidden'), true, 'the tab is hidden without the Analytics screen');
 });
+
+test('with one front (ai), Home has no flow strip, "What needs you" holds the shell\'s rows only, and Today has no next-stage stat', async () => {
+  const app = loadApp({ api, fronts: ['ai'] });
+  await app.boot();
+  app.run("showView('dashboard')");
+  await app.settle();
+  assert.equal(app.run('HomeCards.list()').map((c) => c.id).join(), 'ai');
+  const body = app.el('#home-body').innerHTML;
+  assert.doesNotMatch(body, /data-testid="home-flow-strip"/, 'no stage, no strip');
+  assert.doesNotMatch(body, /data-testid="home-needs-item"/, 'no gate here, no row from a card: nothing waits');
+  assert.match(body, /home-none/, 'the "nothing waits for you" line');
+  const labels = [...body.matchAll(/<label>([^<]+)<\/label>/g)].map((m) => text(m[1]));
+  assert.deepEqual(labels, ['Cost today', 'Cost last night', 'Runs finished', 'Runs failed', '24/7 occupancy'], 'the shell\'s stats and the AI front\'s night cost, no roadmap stage');
+  assert.ok(!app.defs.has('backlog') && !app.defs.has('inbox') && app.defs.has('oracle'));
+});

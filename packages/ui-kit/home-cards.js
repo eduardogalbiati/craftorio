@@ -18,7 +18,8 @@
 //                    paused-run) and is the row's data-kind
 //     today(own, d)  the "Today" stats: { order, label, value (html), title, attrs }
 //     morning(box)   async: draws the card's banner above the body into `box` and answers what it
-//                    showed (kept as own.morning; null hides the box)
+//                    showed (kept as own.morning; null hides the box). One banner: Home has one box,
+//                    so one card of a composition draws into it (the Night watch's morning summary)
 //     actions        { 'data-home-<x>': (value, own, d) => … }: the clicks of the buttons the card draws
 //   `d` is what Home read: { projectId, active, runs, cards: { <id>: own } }.
 //   HomeCards.list()    the cards by order; HomeCards.stages()  every stage with its card, by order
@@ -38,7 +39,7 @@
   }
 
   const list = () => [...cards];
-  /** Every card's stages with their card, by the stage's order (a tie keeps the cards' order). */
+  /** Every card's stages with their card, by the stage's order (a tie sorts by the stage's id). */
   const stages = () => cards.flatMap((card) => (card.stages || []).map((s) => ({ ...s, card }))).sort(byOrder);
   /** For tests: forgets every card. */
   const reset = () => { cards.length = 0; };

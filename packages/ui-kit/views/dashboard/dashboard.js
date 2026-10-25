@@ -222,7 +222,8 @@ function paintHome() {
 function renderDashboard() {
   paintHome();
   if (homeView.asked !== homeProject() || Date.now() - homeView.at > HOME_REFRESH_MS) loadHome().catch((e) => console.error('home:', e));
-  // the cards' banners (#172, the Night watch's morning summary: its window dates "Cost last night")
+  // the cards' banners (#172, the Night watch's morning summary: its window dates "Cost last night");
+  // one box, so one card of a composition draws a banner (home-cards.js's contract)
   for (const card of homeCards()) {
     if (!card.morning) continue;
     card.morning($('#dash-nightwatch'))?.then((m) => {
