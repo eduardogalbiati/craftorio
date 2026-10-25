@@ -206,7 +206,8 @@ test('#341 packagerOptions: app.asar gets nothing from native/ (sources, Cargo f
     for (const p of ['/native', '/native/Cargo.toml', '/native/Cargo.lock', '/native/target/release/multiagent-mcp.exe', '/native/multiagent-mcp/src/main.rs']) {
       assert.equal(ignored(p), true, `${platform}-${arch}: ${p} is kept in app.asar`);
     }
-    for (const p of ['/packages/engine/domains/supervisor/supervisor-mcp.js', '/apps/desktop/host/main.js', '/nativeish.js', '/src/native/x.js']) {
+    // the engine the asar runs is the copy under node_modules/@multiagent/ (packages/engine itself is left out)
+    for (const p of ['/node_modules/@multiagent/engine/domains/supervisor/supervisor-mcp.js', '/apps/desktop/host/main.js', '/nativeish.js', '/src/native/x.js']) {
       assert.equal(ignored(p), false, `${platform}-${arch}: ${p} is dropped`);
     }
   }
