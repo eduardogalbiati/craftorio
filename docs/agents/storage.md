@@ -73,7 +73,7 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   ids, card ids and attachment names are checked before a path is built, so nothing outside a
   card's folder is read or written. No index row: the folders are read directly. Screens, the
   Oracle and agents reach a card only through the `discovery:` channels
-  (`packages/engine/service/channels/discovery.js`), never by reading the folder.
+  (`fronts/plan/engine/channels/discovery.js`), never by reading the folder.
 - **The gate answer record**: a gate's `approval.resolved` event in `events.jsonl` carries
   `approval_id`, `step_id`, `choice` (or `approved`), `by`, `wait_ms`, `feedback?`, `commit?`;
   answered from a paired phone it adds `answered_by: "owner"`, `via: "mobile"`, `device` (the

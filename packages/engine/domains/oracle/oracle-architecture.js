@@ -14,7 +14,7 @@
 // finding new or kept against the previous report and lists the gone ones; estimateCost is the
 // mean cost of the 5 newest real reports. The project's city plan (#371) is stored next to them,
 // city-plan.json, the plans it replaced in city-plan-history/ (never listed as reports).
-// Service: packages/engine/service/channels/architecture.js.
+// Service: fronts/analyser/engine/channels/architecture.js.
 
 'use strict';
 

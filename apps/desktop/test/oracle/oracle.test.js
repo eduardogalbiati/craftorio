@@ -1,5 +1,5 @@
 // The Oracle (#122, packages/engine/domains/oracle/oracle.js): one persistent conversation per workspace, reached through the
-// oracle:* channels (packages/engine/service/channels/oracle.js), the way the Dashboard drawer and every screen
+// oracle:* channels (fronts/ai/engine/channels/oracle.js, the service behind them packages/engine/service/areas/oracle.js), the way the Dashboard drawer and every screen
 // (#171) call it. Service-level tests drive it through a real service on a scratch workspace, the
 // way test/supervisor-chat.test.js does for the app-wide Supervisor chat; a couple of unit-level
 // tests call createOracle directly for what the channel's own simulation guard would hide
@@ -529,7 +529,7 @@ test('a question from another live app process is refused, naming its pid and ho
 // 'electron' only) and dispatching into the real service is what actually re-creates the bug's path.
 function loadPreloadApi(manifest, dispatch) {
   const electronPath = require.resolve('electron');
-  const preloadPath = require.resolve('../../host/preload.js');
+  const preloadPath = require.resolve('@multiagent/desktop/host/preload.js');
   let exposed = null;
   require.cache[electronPath] = {
     id: electronPath, filename: electronPath, loaded: true,

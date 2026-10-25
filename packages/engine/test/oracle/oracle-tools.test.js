@@ -1,7 +1,7 @@
 // The Oracle's read-only tools (#122, packages/engine/domains/oracle/oracle-tools.js): the git allow-list (refusedGitCommand),
 // the tools that read live workspace state (roadmap, run events, seed status) and the repositories
 // read-only (repo_git, repo_read), and app_source. ctx is built from a real service on a scratch
-// workspace, wired the way packages/engine/service/channels/oracle.js wires it (the extra fields it adds over
+// workspace, wired the way packages/engine/service/areas/oracle.js wires it (the extra fields it adds over
 // supervisorTools' own ctx are backed by the service's own already-tested channels), the way
 // test/supervisor-tools.test.js builds its ctx.
 const test = require('node:test');

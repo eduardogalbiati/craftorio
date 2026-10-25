@@ -1,14 +1,14 @@
 // Running an analysis seed (#360, seeds in packages/engine/domains/seed/seeds.js) on a project: one Oracle turn, outside its
 // conversation and in its daily budget (packages/engine/domains/oracle/oracle.js oneTurn / budgetRefusal), runs the seed
 // read-only (repo_read, repo_git) and answers { html, model }; or, when the project recorded a tool
-// for the seed ("Make it a tool", packages/engine/domains/seed/seed-tool-issue.js), that command runs in the project's folder
+// for the seed ("Make it a tool", fronts/analyser/engine/domains/seed-tool-issue.js), that command runs in the project's folder
 // instead, with no model cost, and its stdout JSON is the model. Simulated (mock,
 // MULTIAGENT_SIMULATION_ONLY): a result page derived from the seed, no model, no cost.
 // Every result is scrubbed of token-shaped strings and secret-named keys (packages/engine/domains/evidence/findings.js) before it
 // is written. Results are saved per run as <root>/<project id>/seeds/<seed id>/<stamp>/{result.html,
 // model.json, run.json} (root: <workspace>/architecture, next to #356's reports; never under the
 // project's own folder). The renderer shows result.html in a sandboxed frame with no network.
-// Service: packages/engine/service/channels/seeds.js.
+// Service: fronts/analyser/engine/channels/seeds.js.
 
 'use strict';
 

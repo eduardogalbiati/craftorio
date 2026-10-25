@@ -1,5 +1,5 @@
 // #278 Self-healing through the service, after the change (packages/engine/service/channels/nightwatch.js and the
-// owners' inbox rules in packages/engine/service/channels/oracle.js): the repeat and environment detectors on live
+// owners' inbox rules in packages/engine/service/areas/oracle.js): the repeat and environment detectors on live
 // run events (a run first seen mid-way reads its workflow.started from events.jsonl), findings not
 // logged again after a restart, the findings-waiting notice once per budget pause and never for a
 // muted run, the report's and the morning card's Self-healing day, and acting alone by day only with
