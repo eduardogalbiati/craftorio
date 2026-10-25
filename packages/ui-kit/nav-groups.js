@@ -1,5 +1,5 @@
 // The menu's groups (#254): the sidebar follows the flow from an idea to a release (Plan & Design,
-// Code & Build, Workflows, AI). A view's `nav` entry names its group (`group: 'code'`); an entry
+// Code & Build, Workflows, AI). A view's `nav` entry names its group (`group: 'build'`; the ids are the fronts' of phase 3, decision 7 of 2026-10-24); an entry
 // without one stands alone (Home, Night watch, Settings; Analytics is a tab of Home, #255). Everything sits by `order`: a
 // group at its own, its entries by theirs inside it. A group folds, and the choice is remembered.
 // No DOM here: view-registry.js draws the groups; a test feeds navLayout the views' entries.
@@ -8,7 +8,7 @@
 (function (root) {
   const GROUPS = [
     { id: 'plan', title: 'Plan & Design', order: 30 },
-    { id: 'code', title: 'Code & Build', order: 40 },
+    { id: 'build', title: 'Code & Build', order: 40 },
     { id: 'workflows', title: 'Workflows', order: 60 },
     { id: 'ai', title: 'AI', order: 70 },
   ];

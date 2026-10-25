@@ -7,7 +7,7 @@ Feature: Every screen in the interface language
   # from the app's catalogs (packages/shared/i18n/en.json and pt-BR.json), so they do not depend on the
   # Portuguese wording. Portuguese sidebar entries already in the catalog: Settings → "Configurações",
   # Runs → "Execuções"; Backlog stays "Backlog". Assumes the demo workspace's failed run "-old00233"
-  # (features/workflow-runs.feature).
+  # (fronts/build/features/workflow-runs.feature).
 
   @issue-330
   Scenario: With Português (Brasil) as the interface language, the Backlog shows no English label

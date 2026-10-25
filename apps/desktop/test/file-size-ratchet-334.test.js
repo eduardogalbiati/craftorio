@@ -51,12 +51,12 @@ test('#334 every .js file under src/ and scripts/ of this repository is within t
 test('#334 the exceptions list starts at the files over 1,000 lines, each with a count above the cap and no higher than at 383469a', () => {
   const { EXCEPTIONS } = load();
   const atIssue = {
-    'apps/desktop/renderer/views/backlog/backlog-roadmap.js': 2072,
-    'apps/desktop/renderer/views/backlog/backlog.js': 1779,
+    'fronts/build/views/backlog/backlog-roadmap.js': 2072,
+    'fronts/build/views/backlog/backlog.js': 1779,
     'packages/engine/domains/po/product-owner.js': 1732,
     'fronts/plan/views/discovery/discovery.js': 1560,
     'packages/engine/domains/discovery/discovery.js': 1164,
-    'apps/desktop/renderer/views/backlog/backlog-po.js': 1102,
+    'fronts/build/views/backlog/backlog-po.js': 1102,
     'fronts/plan/views/arena/arena.js': 1048,
   };
   assert.deepEqual(Object.keys(EXCEPTIONS).sort(), Object.keys(atIssue).sort());

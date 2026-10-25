@@ -8,7 +8,7 @@
 //   home-needs-you, home-needs-item         "What needs you" and its items (data-kind: gate,
 //                                           failed-item, discovery), each with one action button
 //   home-today                              today's summary (cost, runs, 24/7 occupancy, next stage)
-// Analytics' own tabs: role="tablist" named "Analytics" (features/steps/run.steps.js opens them).
+// Analytics' own tabs: role="tablist" named "Analytics" (fronts/build/features/steps/run.steps.js opens them).
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('./fixtures');

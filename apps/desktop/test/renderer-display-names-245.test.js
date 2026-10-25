@@ -7,7 +7,7 @@
 // stays in tooltips only: a title, an aria-label or an app tooltip card (role="tooltip", #236: the
 // progress strip and the roadmap ring carry no native title).
 //
-// Covered: the Roadmap card's run progress (apps/desktop/renderer/views/backlog/backlog-roadmap.js: the step
+// Covered: the Roadmap card's run progress (fronts/build/views/backlog/backlog-roadmap.js: the step
 // text, the steps popover's chips and its "Now:" line), the run list's progress strip
 // (packages/ui-kit/run-list.js runProgressStrip / progressChip: the chip name and its state line) and the
 // artifacts panel's round heads (packages/ui-kit/artifacts-panel.js: "Acceptance tests · round 1").

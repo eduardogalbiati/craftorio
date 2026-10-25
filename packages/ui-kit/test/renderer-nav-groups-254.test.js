@@ -26,7 +26,7 @@ function tokens(layout) {
 
 test('NavGroups.GROUPS: plan, code, workflows and ai, in that order, with their titles', () => {
   const { GROUPS } = navGroups();
-  assert.deepEqual(GROUPS.map((g) => g.id), ['plan', 'code', 'workflows', 'ai']);
+  assert.deepEqual(GROUPS.map((g) => g.id), ['plan', 'build', 'workflows', 'ai']);
   assert.deepEqual(GROUPS.map((g) => g.title), ['Plan & Design', 'Code & Build', 'Workflows', 'AI']);
 });
 
@@ -34,12 +34,12 @@ test('navLayout: the groups come in their fixed order whatever the views\' order
   const { navLayout } = navGroups();
   const layout = navLayout([
     { id: 'usage', label: 'Usage', order: 90, group: 'ai' },
-    { id: 'backlog', label: 'Backlog', order: 40, group: 'code' },
+    { id: 'backlog', label: 'Backlog', order: 40, group: 'build' },
     { id: 'agents', label: 'Agents', order: 70, group: 'ai' },
     { id: 'duo', label: 'Write & Review', order: 120, group: 'plan' },
   ]);
   const grouped = layout.filter((b) => b.group);
-  assert.deepEqual(grouped.map((b) => b.group), ['plan', 'code', 'ai']);
+  assert.deepEqual(grouped.map((b) => b.group), ['plan', 'build', 'ai']);
   assert.deepEqual(grouped.map((b) => b.title), ['Plan & Design', 'Code & Build', 'AI']);
   assert.deepEqual(grouped[2].items.map((i) => i.id), ['agents', 'usage']);
 });
@@ -51,7 +51,7 @@ test('the menu built from the real views: Home, Plan & Design, Code & Build, Wor
   const expected = [
     'Home',
     '[plan]', 'Write & Review', 'AI Arena',
-    '[code]', 'Projects', 'Backlog', 'Roadmap', 'Sessions',
+    '[build]', 'Projects', 'Backlog', 'Roadmap', 'Sessions',
     '[workflows]', 'Definitions', 'Runs', 'Builder', 'Pipelines',
     '[ai]', 'Agents', 'Skills', 'Usage',
     'Night watch',
@@ -83,15 +83,15 @@ test('the Workflows items open the Workflows screen on their tab: a view with se
 test('a group collapses and stays collapsed: the choice is kept in the given storage', () => {
   const storage = makeStorage();
   let ng = navGroups();
-  assert.equal(ng.isCollapsed('code', storage), false);
-  ng.setCollapsed('code', true, storage);
-  assert.equal(ng.isCollapsed('code', storage), true);
+  assert.equal(ng.isCollapsed('build', storage), false);
+  ng.setCollapsed('build', true, storage);
+  assert.equal(ng.isCollapsed('build', storage), true);
   assert.equal(ng.isCollapsed('plan', storage), false);
   assert.ok(storage.length > 0, 'nothing was stored');
   ng = navGroups(); // a new window
-  assert.equal(ng.isCollapsed('code', storage), true);
-  ng.setCollapsed('code', false, storage);
-  assert.equal(ng.isCollapsed('code', storage), false);
+  assert.equal(ng.isCollapsed('build', storage), true);
+  ng.setCollapsed('build', false, storage);
+  assert.equal(ng.isCollapsed('build', storage), false);
 });
 
 test('the page\'s sidebar shows the four group titles', async () => {
@@ -173,14 +173,14 @@ function navGroup(app, id) {
 
 test('a click on a group\'s title folds it (aria-expanded false, its items hidden), remembered; a second click unfolds it', () => {
   const app = loadApp();
-  const code = navGroup(app, 'code');
+  const code = navGroup(app, 'build');
   assert.equal(code.title.getAttribute('aria-expanded'), 'true');
   assert.equal(code.items.classList.contains('hidden'), false);
   code.title.onclick();
   assert.equal(code.title.getAttribute('aria-expanded'), 'false');
   assert.equal(code.items.classList.contains('hidden'), true);
   assert.equal(code.el.classList.contains('collapsed'), true);
-  assert.deepEqual(JSON.parse(app.sandbox.localStorage.getItem('multiagent.navCollapsed')), ['code']);
+  assert.deepEqual(JSON.parse(app.sandbox.localStorage.getItem('multiagent.navCollapsed')), ['build']);
   // the other groups stay open
   assert.equal(navGroup(app, 'plan').items.classList.contains('hidden'), false);
   code.title.onclick();
@@ -193,5 +193,5 @@ test('a group folded in a previous window is drawn folded', () => {
   const ai = navGroup(app, 'ai');
   assert.equal(ai.title.getAttribute('aria-expanded'), 'false');
   assert.equal(ai.items.classList.contains('hidden'), true);
-  assert.equal(navGroup(app, 'code').items.classList.contains('hidden'), false);
+  assert.equal(navGroup(app, 'build').items.classList.contains('hidden'), false);
 });

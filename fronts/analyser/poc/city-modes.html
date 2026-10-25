@@ -2222,11 +2222,11 @@ const RELEASE = (() => {
 const ISSUE = {
   number: 426, title: 'Run earlier/later moves a stage past the next visible stage, not a hidden one',
   cited: ['src/renderer/views/backlog/backlog-roadmap.js', 'src/roadmap.js', 'src/shared/roadmap-model.js', 'test/renderer-backlog-roadmap.test.js'].filter(has),
-  po: ['src/renderer/views/backlog/backlog.js', 'src/roadmap-undo.js', 'src/service/areas/roadmap.js', 'test/roadmap.test.js', 'features/roadmap.feature'].filter(has),
+  po: ['src/renderer/views/backlog/backlog.js', 'src/roadmap-undo.js', 'src/service/areas/roadmap.js', 'test/roadmap.test.js', 'fronts/build/features/roadmap.feature'].filter(has),
   newFiles: [{ path: 'src/shared/roadmap-arrows.js', note: 'a new file in Shared models' }],
   run: { hit: ['src/renderer/views/backlog/backlog-roadmap.js', 'src/roadmap.js', 'src/shared/roadmap-model.js', 'test/renderer-backlog-roadmap.test.js', 'test/roadmap.test.js'].filter(has),
-    missed: ['src/renderer/views/backlog/backlog.js', 'src/roadmap-undo.js', 'src/service/areas/roadmap.js', 'features/roadmap.feature'].filter(has),
-    unexpected: ['src/renderer/views/backlog/backlog.css', 'features/steps/roadmap.steps.js', 'test/roadmap-status-helpers.js'].filter(has), history: [0.6, 0.71] },
+    missed: ['src/renderer/views/backlog/backlog.js', 'src/roadmap-undo.js', 'src/service/areas/roadmap.js', 'fronts/build/features/roadmap.feature'].filter(has),
+    unexpected: ['src/renderer/views/backlog/backlog.css', 'fronts/build/features/steps/roadmap.steps.js', 'test/roadmap-status-helpers.js'].filter(has), history: [0.6, 0.71] },
 };
 // stage 113 "Roadmap arrows, release dialog": #426 and #436, one building both would change
 const STAGE = {
@@ -2249,15 +2249,15 @@ const LIVE = {
   ],
   collisions: [{ path: 'src/roadmap.js' }],
   building: [{ path: 'src/renderer/views/project/project-refactor-plan.js', district: 'insight-screens' }],
-  cranes: ['scripts/screenshot/views/roadmap.js', 'features/roadmap.feature'].filter(has),
+  cranes: ['scripts/screenshot/views/roadmap.js', 'fronts/build/features/roadmap.feature'].filter(has),
 };
 // the replay of the run of #426: its file touches in order, the shown moment
 const REPLAY = {
   runId: 'run-1f3e9c2a', short: '1f3e9c2a', issue: ISSUE, started: '17:02', ended: '17:48', speed: 1, playing: false, index: 11,
   touches: [['src/roadmap.js', 'Developer'], ['src/shared/roadmap-model.js', 'Developer'], ['test/roadmap.test.js', 'Developer'], ['src/roadmap.js', 'Developer'], ['src/renderer/views/backlog/backlog-roadmap.js', 'Developer'],
-    ['src/renderer/views/backlog/backlog.css', 'Developer'], ['test/renderer-backlog-roadmap.test.js', 'Developer'], ['features/roadmap.feature', 'Developer'], ['features/steps/roadmap.steps.js', 'Developer'],
+    ['src/renderer/views/backlog/backlog.css', 'Developer'], ['test/renderer-backlog-roadmap.test.js', 'Developer'], ['fronts/build/features/roadmap.feature', 'Developer'], ['fronts/build/features/steps/roadmap.steps.js', 'Developer'],
     ['src/renderer/views/backlog/backlog-roadmap.js', 'Reviewer'], ['src/roadmap.js', 'Reviewer'], ['src/renderer/views/backlog/backlog-roadmap.js', 'Developer'], ['test/renderer-backlog-roadmap.test.js', 'Developer'],
-    ['test/roadmap-status-helpers.js', 'Developer'], ['src/shared/roadmap-model.js', 'Developer'], ['features/roadmap.feature', 'Tester'], ['test/roadmap.test.js', 'Tester'], ['src/renderer/views/backlog/backlog-roadmap.js', 'Tester'], ['src/roadmap.js', 'Developer']].filter(([p]) => has(p)),
+    ['test/roadmap-status-helpers.js', 'Developer'], ['src/shared/roadmap-model.js', 'Developer'], ['fronts/build/features/roadmap.feature', 'Tester'], ['test/roadmap.test.js', 'Tester'], ['src/renderer/views/backlog/backlog-roadmap.js', 'Tester'], ['src/roadmap.js', 'Developer']].filter(([p]) => has(p)),
 };
 REPLAY.clock = (i) => { const s = Math.round((i / REPLAY.touches.length) * 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 // the most connected files, from the model's edges (#382)

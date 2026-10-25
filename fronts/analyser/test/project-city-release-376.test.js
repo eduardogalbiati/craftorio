@@ -14,7 +14,7 @@
 //   - a button data-testid="city-release-save-image" reading "Save image";
 //   - the project name escaped (markup in it shows as text).
 // - The city's main module, project-city.js, does not grow: at most 423 lines.
-// - The Releases screen (apps/desktop/renderer/views/releases/releases.js): each release with a tag offers a
+// - The Releases screen (fronts/build/views/releases/releases.js): each release with a tag offers a
 //   button "Show on the map", data-testid="release-show-map", data-tag="<tag>"; a release without a
 //   tag offers none.
 // - Screenshot: `--view project --tab architecture --mode city-release`.

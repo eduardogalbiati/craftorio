@@ -97,16 +97,16 @@ const developTurn = (at) => {
 // affected test files with long paths, each with a long reason
 const LONG_FILES = {
   'test/integration/renderer/views/run/suite-cards-stay-inside-the-narrow-side-column-of-the-run-screen.test.js':
-    'imports apps/desktop/renderer/views/run/run.js, which draws the suite cards, the scratch workspace line and the run summary of the side column',
+    'imports fronts/build/views/run/run.js, which draws the suite cards, the scratch workspace line and the run summary of the side column',
   'test/integration/renderer/artifacts-panel/scratch-workspace-line-with-its-open-in-button.test.js':
-    'imports packages/ui-kit/artifacts-panel.js through apps/desktop/renderer/views/run/run.js and packages/ui-kit/status-pill.js',
+    'imports packages/ui-kit/artifacts-panel.js through fronts/build/views/run/run.js and packages/ui-kit/status-pill.js',
   'test/unit/shared/i18n/portuguese-catalog-keeps-every-status-pill-label-short-enough.test.js':
     'reads packages/shared/i18n/pt-BR.json, changed by this run together with packages/shared/i18n/en.json',
 };
 Given('the demo project has a finished AI Development run {string} whose suite ran only affected test files with long paths', async ({ e2e }, suffix) => {
   const files = Object.keys(LONG_FILES);
   const selection = {
-    mode: 'affected', files, reasons: LONG_FILES, changed: ['apps/desktop/renderer/views/run/run.js', 'packages/ui-kit/artifacts-panel.js', 'packages/shared/i18n/pt-BR.json'], slow: [],
+    mode: 'affected', files, reasons: LONG_FILES, changed: ['fronts/build/views/run/run.js', 'packages/ui-kit/artifacts-panel.js', 'packages/shared/i18n/pt-BR.json'], slow: [],
     why: `the ${files.length} affected test file(s) reach the 3 changed file(s); the whole suite was not run`,
   };
   e2e.longPaths = files;

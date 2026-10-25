@@ -1,4 +1,4 @@
-// Steps of features/releases.feature for a release on the project city (#376): "Show on the map" on a
+// Steps of fronts/build/features/releases.feature for a release on the project city (#376): "Show on the map" on a
 // shipped release of the Releases screen opens the project's Architecture tab on the City with the
 // release overlay (the city at the previous tag in grey, the release's changes in colour). Locators
 // are roles and data-testid only (skills/ui-conventions).

@@ -3,7 +3,7 @@
 // Design, Code & Build, Workflows, AI, Night watch, Settings; a group's title collapses it), the
 // header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
 // (#276: Execution's Memory guard group), the failed app update banner (#279), the Pipelines tab's
-// cards (features/pipelines.feature, #378), the window kept on the app's page (#466), Settings ›
+// cards (fronts/build/features/pipelines.feature, #378), the window kept on the app's page (#466), Settings ›
 // About's warning when the app was started without Chromium's sandbox (#476).
 // Locators are roles and data-testid only (skills/ui-conventions).
 // #254: a menu group is a role="group" named by its title, holding its title's toggle button

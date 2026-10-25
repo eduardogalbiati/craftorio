@@ -1,6 +1,7 @@
 // #262 internals (the developer's own tests, next to the acceptance tests of agent-overrides-262 and
-// agent-fallbacks-262): what a resume keeps, the fallback session's record, the run chat's fallback
-// item, Settings' `models` validation and the workflow list's `runs_on`.
+// agent-fallbacks-262): what a resume keeps, the fallback session's record, Settings' `models`
+// validation and the workflow list's `runs_on`. The run chat's fallback item is the build front's
+// (fronts/build/test/run-chat-fallback-262.test.js): no kit test depends on a front (#579).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -98,23 +99,6 @@ test('#262 Settings\' models are validated like the workflow\'s: an unknown limi
   assert.throws(() => make({ 'gpt-6-luna': { speed: 2 } }), /unknown limit "speed"/);
   assert.throws(() => make({ 'gpt-6-luna': { timeout_factor: 0 } }), /positive number/);
   assert.doesNotThrow(() => make({ 'gpt-6-luna': { timeout_factor: 1.5, max_total_cost_usd: 50 } }));
-});
-
-test('#262 the run chat model turns agent.fallback into a fallback item and keeps a simulated turn\'s provider', () => {
-  const { RunChatModel } = require('@multiagent/desktop/renderer/views/runchat/run-chat-model.js');
-  const m = new RunChatModel();
-  const session = { agent: 'writer', provider: 'mock', simulates: 'codex', model: 'gpt-6-luna' };
-  for (const ev of [
-    { seq: 1, type: 'workflow.started', workflow: 'w', inputs: {} },
-    { seq: 2, type: 'step.started', step_id: 'write', agent: 'writer', visit: 1 },
-    { seq: 3, type: 'agent.fallback', agent: 'writer', step_id: 'write', from: 'claude:claude-opus-5-5', to: 'codex:gpt-6-luna', reason: 'Claude AI usage limit reached|1' },
-    { seq: 4, type: 'session.opened', session_id: 's2', session },
-    { seq: 5, type: 'session.message_received', session_id: 's2', turn: 1, step_id: 'write', text: 'done', session },
-  ]) m.apply(ev);
-  const fallback = m.items.find((i) => i.kind === 'fallback');
-  assert.deepEqual([fallback.agent, fallback.stepId, fallback.from, fallback.to], ['writer', 'write', 'claude:claude-opus-5-5', 'codex:gpt-6-luna']);
-  const turn = m.items.find((i) => i.kind === 'turn');
-  assert.deepEqual([turn.provider, turn.simulates, turn.model], ['mock', 'codex', 'gpt-6-luna']);
 });
 
 test('#262 listWorkflows: each agent\'s runs_on resolves its templates with the inputs\' defaults; the workflow lists its providers', (t) => {

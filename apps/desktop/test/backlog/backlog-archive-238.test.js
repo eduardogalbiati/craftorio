@@ -13,7 +13,7 @@
 //     where each archived issue is at once closed with the `archived` label (it leaves the Open view).
 //     Never throws for one issue: a refusal or a CLI failure is that issue's { ok: false, error }.
 //   restoreIssues({ platform, repo, numbers, dir, projectId, exec }) -> Promise<{ results: [{ number, ok, error? }] }>
-// The guard's reason text comes from apps/desktop/renderer/views/backlog/backlog-archive.js
+// The guard's reason text comes from fronts/build/views/backlog/backlog-archive.js
 // archiveBlockReason (see test/renderer-backlog-archive.test.js): "Planned in stage 41: remove it
 // from the roadmap first".
 // Product Owner: backlogReport leaves archived issues out, even when they are in the owner's selection.

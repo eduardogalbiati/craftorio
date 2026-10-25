@@ -1,4 +1,4 @@
-// Steps of features/run.feature for #320: how each session's next turn starts. The agents table of a
+// Steps of fronts/build/features/run.feature for #320: how each session's next turn starts. The agents table of a
 // run (Workflows › Runs, the expanded row: one row per session, data-testid run-session-card,
 // data-agent) gets a "Next turn" cell (data-testid session-next-turn, NEW; data-next-turn
 // fresh | warm | cold | new, NEW): "fresh from note", "warm · 42 min left", "cold since HH:MM ·

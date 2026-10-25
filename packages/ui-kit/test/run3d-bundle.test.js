@@ -28,8 +28,8 @@ test('the overlay loads the bundle on the first click, from generated/, with a p
 });
 
 test('a 3D button sits beside Chat on the Run screen and in the run chat\'s header', () => {
-  assert.match(read('apps/desktop/renderer/views/run/run.js'), /<button id="run-mode-3d"[^>]*data-run3d="run"/);
-  assert.match(read('apps/desktop/renderer/views/runchat/runchat.js'), /<button id="rc-3d"[^>]*data-run3d="chat"/);
+  assert.match(read('fronts/build/views/run/run.js'), /<button id="run-mode-3d"[^>]*data-run3d="run"/);
+  assert.match(read('fronts/build/views/runchat/runchat.js'), /<button id="rc-3d"[^>]*data-run3d="chat"/);
 });
 
 test('the bundle is generated (gitignored, built by the npm hooks), packed into the app; poc/ is not', () => {

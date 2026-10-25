@@ -1,4 +1,4 @@
-// apps/desktop/renderer/views/artifacts/artifacts.js: the Artifacts screen's run groups and the Collapse
+// fronts/build/views/artifacts/artifacts.js: the Artifacts screen's run groups and the Collapse
 // all / Expand all toggle (#126); ART_KIND/artKindIcon/fmtSize are shared in artifact-render.js
 // (also used by artifacts-panel.js), moved out of app.js by #154. It runs only inside the
 // Electron renderer, so the relevant functions are pulled out of the source and evaluated in a

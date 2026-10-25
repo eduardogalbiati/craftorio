@@ -1,4 +1,4 @@
-// Steps of the "main stays green" scenarios (#405) in features/roadmap.feature and
+// Steps of the "main stays green" scenarios (#405) in fronts/build/features/roadmap.feature and
 // features/settings.feature: the Roadmap's one line of the base's known failures, the red-base choice
 // in Settings › Execution, and the fix item a red base check puts at the front of the roadmap.
 // State is seeded through packages/engine/domains/project/base-health.js (required inside the steps, never at the top: bddgen

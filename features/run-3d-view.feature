@@ -5,7 +5,7 @@ Feature: The run's 3D view
   the window stops its drawing. The frames are counted with a spy on the WebGL draw calls of the
   overlay's canvas (features/steps/run3d.steps.js).
 
-  # The run "-fin00388" is seeded finished (features/steps/turn-costs.steps.js): one developer turn
+  # The run "-fin00388" is seeded finished (fronts/build/features/steps/turn-costs.steps.js): one developer turn
   @issue-388
   Scenario: A finished run's 3D view stays still once drawn
     Given the app is open
