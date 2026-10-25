@@ -139,3 +139,32 @@ test('#597 a selection on the command line runs only the named files, as before'
   assert.equal(out.failed, 0);
   assert.equal(r.status, 0);
 });
+
+test('#597 a failing todo test does not fail the run, as with node --test', { timeout: 60000 }, (t) => {
+  const dir = tmpDir(t);
+  const { locks } = hold(dir);
+  const todo = path.join(dir, 'todo.test.js');
+  fs.writeFileSync(todo, "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('not yet', { todo: true }, () => {\n  assert.equal(1, 2);\n});\ntest('passes', () => {});\n");
+  const r = spawnSync(process.execPath, ['scripts/test.js', todo], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks), timeout: 30000 });
+  assert.equal(r.error?.code, undefined, `the run ends on its own: ${humanLog(dir).slice(0, 300)}`);
+  const lines = r.stdout.trim().split(/\r?\n/);
+  const out = JSON.parse(lines[lines.length - 1]);
+  assert.equal(out.failed, 0);
+  assert.equal(out.passed, 1);
+  assert.equal(r.status, 0, humanLog(dir).slice(0, 500));
+});
+
+test('#597 outside agent mode the spec report reaches stdout and a failure fails the run', { timeout: 60000 }, (t) => {
+  const dir = tmpDir(t);
+  const { locks } = hold(dir);
+  const ok = path.join(dir, 'spec-ok.test.js');
+  const bad = path.join(dir, 'spec-bad.test.js');
+  fs.writeFileSync(ok, "const test = require('node:test');\ntest('spec one passes', () => {});\n");
+  fs.writeFileSync(bad, "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('spec two fails', () => {\n  assert.equal(1, 2);\n});\n");
+  const r = spawnSync(process.execPath, ['scripts/test.js', ok, bad], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { MULTIAGENT_AGENT_MODE: '0' }), timeout: 30000 });
+  assert.equal(r.error?.code, undefined, 'the run ends on its own');
+  assert.match(r.stdout, /spec one passes/);
+  assert.match(r.stdout, /spec two fails/);
+  assert.doesNotMatch(r.stdout, /"reporter":"multiagent-agent"/, 'no agent JSON line outside agent mode');
+  assert.equal(r.status, 1);
+});
