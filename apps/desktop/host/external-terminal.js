@@ -9,7 +9,7 @@
 // open on exit like `cmd /k`. Terminal.app does not inherit the app's environment: the variables
 // the command needs (`childEnv` differing from `env`, e.g. ELECTRON_RUN_AS_NODE) are exported in
 // the command line. No terminal found (Linux): terminalLaunch is null and externalTerminal says why,
-// so the renderer disables the button (apps/desktop/renderer/term-dock.js termButtons).
+// so the renderer disables the button (packages/ui-kit/term-dock.js termButtons).
 
 const { shQuote } = require('@multiagent/engine/domains/machine/shell');
 

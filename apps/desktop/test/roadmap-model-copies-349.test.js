@@ -51,5 +51,5 @@ test('the Roadmap view draws its buttons from the model\'s allowedActions', () =
 });
 
 test('the Dashboard asks the model for the roadmap\'s current stage', () => {
-  assert.equal(/RoadmapModel/.test(read('apps/desktop/renderer/views/dashboard/dashboard.js')), true, 'dashboard.js does not use RoadmapModel');
+  assert.equal(/RoadmapModel/.test(read('packages/ui-kit/views/dashboard/dashboard.js')), true, 'dashboard.js does not use RoadmapModel');
 });

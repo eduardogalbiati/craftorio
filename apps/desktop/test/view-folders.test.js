@@ -1,21 +1,28 @@
-// apps/desktop/renderer/views/<view>/: one folder per screen, registering itself with registerView instead of
+// views/<view>/: one folder per screen, registering itself with registerView instead of
 // index.html listing its markup and nav entry (#78 moved Settings, Usage and Supervisor; #153 moved
 // dashboard, sessions, projects, project, backlog, artifacts, workflows, agents, skills and
-// analytics; #154 moved run, runchat, duo and arena; #171 added oracle; #256 added inbox; #257 added discovery). A generic check (any view
-// folder registers under its own folder name and is loaded by index.html) plus a check that the move
-// left no duplicate markup behind in index.html, so this stays a pure move.
+// analytics; #154 moved run, runchat, duo and arena; #171 added oracle; #256 added inbox; #257 added discovery).
+// Phase 3 of the reorganisation study (#579) spreads the folders over the UI kit (the shell's
+// screens), the fronts and the app's own page folder: scripts/source-tree.js (pageDirs, pageFile)
+// says where each lives, and the desktop page (apps/desktop/renderer/index.html) still loads every
+// one. A generic check (any view folder registers under its own folder name and is loaded by
+// index.html) plus a check that the move left no duplicate markup behind in index.html, so this
+// stays a pure move.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
+const { pageDirs, pageFile, viewsOf } = require('../../../scripts/source-tree');
 
-const rendererDir = path.join(__dirname, '..', 'renderer');
-const indexHtml = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
-const viewIds = fs.readdirSync(path.join(rendererDir, 'views'), { withFileTypes: true })
-  .filter((d) => d.isDirectory()).map((d) => d.name);
+const ROOT = path.join(__dirname, '..', '..', '..');
+const indexHtml = fs.readFileSync(pageFileOf('index.html'), 'utf8');
+const viewIds = pageDirs(ROOT).flatMap((dir) => viewsOf(ROOT, dir));
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('views/: all 22 screens have moved into their own folders (#260 added releases, #257 discovery)', () => {
-  assert.deepEqual(viewIds.sort(), [
+  assert.deepEqual([...viewIds].sort(), [
     'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'discovery', 'duo', 'inbox', 'nightwatch', 'oracle',
     'project', 'projects', 'releases', 'run', 'runchat', 'sessions', 'settings', 'skills', 'supervisor', 'usage', 'workflows',
   ]);
@@ -23,8 +30,8 @@ test('views/: all 22 screens have moved into their own folders (#260 added relea
 
 for (const id of viewIds) {
   test(`views/${id}/${id}.js: registers itself with registerView under id "${id}"`, () => {
-    const file = path.join(rendererDir, 'views', id, `${id}.js`);
-    assert.ok(fs.existsSync(file), `${file} is missing`);
+    const file = pageFile(ROOT, `views/${id}/${id}.js`);
+    assert.ok(file && fs.existsSync(file), `views/${id}/${id}.js is missing`);
     const src = fs.readFileSync(file, 'utf8');
     // the call's own indentation, whatever it is (top-level, or one level into an IIFE like
     // views/supervisor/supervisor.js), so its closing "});" is told apart from a nested one
@@ -34,16 +41,17 @@ for (const id of viewIds) {
   });
 
   test(`index.html: loads views/${id}/${id}.js, after view-registry.js and before it is used`, () => {
-    assert.match(indexHtml, new RegExp(`<script src="views/${id}/${id}\\.js"></script>`));
-    const registryAt = indexHtml.indexOf('<script src="view-registry.js"></script>');
-    const viewAt = indexHtml.indexOf(`<script src="views/${id}/${id}.js"></script>`);
+    const viewTag = new RegExp(`<script src="[^"]*views/${esc(id)}/${esc(id)}\\.js"></script>`);
+    assert.match(indexHtml, viewTag);
+    const registryAt = indexHtml.search(/<script src="[^"]*view-registry\.js"><\/script>/);
+    const viewAt = indexHtml.search(viewTag);
     assert.ok(registryAt >= 0 && registryAt < viewAt, 'view-registry.js must load before the view that calls registerView');
   });
 
   test(`index.html: links views/${id}/${id}.css when the view has one`, () => {
-    const hasCss = fs.existsSync(path.join(rendererDir, 'views', id, `${id}.css`));
+    const hasCss = !!pageFile(ROOT, `views/${id}/${id}.css`);
     if (!hasCss) return;
-    assert.match(indexHtml, new RegExp(`<link rel="stylesheet" href="views/${id}/${id}\\.css" />`));
+    assert.match(indexHtml, new RegExp(`<link rel="stylesheet" href="[^"]*views/${esc(id)}/${esc(id)}\\.css" />`));
   });
 }
 
@@ -82,7 +90,7 @@ test('index.html: no <section class="view"> markup is left; every screen registe
 
 // app.js's 1,000-line cap is the rule of every source file (#334, file-size-ratchet-334.test.js).
 test('app.js is the shell only: its header naming the shared pieces moved into their own file', () => {
-  const appSrc = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const appSrc = fs.readFileSync(pageFile(ROOT, 'app.js'), 'utf8');
   const header = appSrc.slice(0, appSrc.indexOf('\nconst $ ='));
   for (const shared of ['start-drawer.js', 'gate-panel.js', 'resume-dialog.js', 'supervisor-drawer.js', 'term-dock.js']) {
     assert.match(header, new RegExp(shared.replace('.', '\\.')), `app.js's header does not name ${shared}`);

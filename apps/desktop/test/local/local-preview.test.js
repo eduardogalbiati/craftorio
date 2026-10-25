@@ -149,7 +149,7 @@ test('previewEnv: an extra env from the config never overrides the simulation gu
 
 test('startView: the most touched view under apps/desktop/renderer/views/<view>/ or apps/desktop/renderer/<view>*.{js,css}; null without a match', () => {
   assert.equal(lp.startView(['apps/desktop/renderer/views/backlog/board.js', 'apps/desktop/renderer/views/backlog/card.js', 'apps/desktop/renderer/views/artifacts/list.js']), 'backlog', 'two files touch backlog, one touches artifacts');
-  assert.equal(lp.startView(['apps/desktop/renderer/artifacts.js', 'apps/desktop/renderer/style.css']), 'artifacts');
+  assert.equal(lp.startView(['apps/desktop/renderer/artifacts.js', 'packages/ui-kit/style.css']), 'artifacts');
   assert.equal(lp.startView(['packages/engine/service/index.js', 'README.md']), null, 'no renderer screen changed');
   assert.equal(lp.startView([]), null);
   assert.equal(lp.startView(undefined), null);

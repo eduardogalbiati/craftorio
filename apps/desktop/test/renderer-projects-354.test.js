@@ -23,10 +23,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const H = require('./roadmap-status-helpers');
-const { loadApp, navEntries, text } = require('./renderer-app-harness');
+const { loadApp, navEntries, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
 const { clickRendered, pageMarkup, region, tabsOf } = require('./project-page-helpers');
 
-const NAV_GROUPS = path.join(__dirname, '..', 'renderer', 'nav-groups.js');
+const NAV_GROUPS = path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'nav-groups.js');
 const navGroups = () => require(NAV_GROUPS);
 
 const PROJECTS = [

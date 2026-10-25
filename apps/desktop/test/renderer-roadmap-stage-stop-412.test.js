@@ -63,7 +63,7 @@ async function clickStop(s, { confirm = true } = {}) {
   sandbox.api.pauseRoadmapStage = async (...a) => { calls.pauseRoadmapStage.push(a); return data(); };
   sandbox.confirmDialog = async (title, body) => { calls.dialogs.push(`${title} | ${body}`); return confirm; };
   sandbox.showToast = () => {};
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'run-controls.js'), 'utf8'), sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'run-controls.js'), 'utf8'), sandbox);
   const d = data();
   const { ctx } = H.makeCtx();
   await R.onClick(H.clickOn(stageOf(R.html(d, () => {}, view), s).outer, (e) => e.attrs['data-testid'] === 'roadmap-stage-menu'), ctx, d);

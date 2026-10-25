@@ -1,5 +1,5 @@
 // Steps of features/run-3d-view.feature (#388): the run's 3D view draws on demand. The view is the
-// overlay data-testid="run3d" (role dialog "Run in 3D", apps/desktop/renderer/run3d.js), opened by the Run
+// overlay data-testid="run3d" (role dialog "Run in 3D", packages/ui-kit/run3d.js), opened by the Run
 // screen's 3D button data-testid="run-3d" (#run-mode-3d) and closed by data-testid="run3d-close"
 // ("Close the 3D view"); its scene is the canvas of React Three Fiber inside the overlay.
 //

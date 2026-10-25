@@ -237,7 +237,7 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   the channel tables that only forward to an area (agents, analytics, app-update, artifacts, chain,
   chat, diff, local-preview, notify, pasted-images, phonegates, pipelines, projects, releases,
   sessions, usage, workflows); `apps/desktop/host/main.js` (Electron main, E2E app.feature), `packages/engine/domains/account/auth-config.js`
-  and `apps/desktop/renderer/chat-models.js` (constants), `areas/chat-turns.js` (12-line wrapper); renderer
+  and `packages/ui-kit/chat-models.js` (constants), `areas/chat-turns.js` (12-line wrapper); renderer
   glue over a tested model or covered by a feature (account, chain-picker, code-banner,
   diff-viewer, image-viewer, keep-awake, kept-work-dialog, run3d/*, setup, usage-widget,
   discovery, discovery-commit, inbox, project, projects, releases, settings-phone, skills).
@@ -247,8 +247,8 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   channels `discovery` (card move, clarity, commit), `oracle` (conversation, memory, tools: the
   largest), `storage` (notification history, unread, mark-read), `supervisor` (on-demand analysis,
   watch start/stop/ask), `voice` (status, error path); `packages/engine/domains/supervisor/supervisor-watch.js` (batching window,
-  `FLAG:` → notification, stop at run end); `apps/desktop/renderer/run-meta.js` (issuesOfRun, issueRefs,
-  display title); `apps/desktop/renderer/toast.js` (countdown and action timing); `views/arena/arena.js`
+  `FLAG:` → notification, stop at run end); `packages/ui-kit/run-meta.js` (issuesOfRun, issueRefs,
+  display title); `packages/ui-kit/toast.js` (countdown and action timing); `views/arena/arena.js`
   (no feature of its own: an E2E scenario or a model to extract); `scripts/lint-lists.js`.
 
 ## File size ratchet (#334)
@@ -263,7 +263,7 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
 - **No new exception by default**: adding a file to `EXCEPTIONS` needs the owner's ok written in
   its issue; code review checks it.
 - **How to split** a file near the cap, the usual ways: a screen into its view's folder
-  (`apps/desktop/renderer/views/<view>/`, one file per part, #154); the service into one file per area
+  (its front's `views/<view>/`, one file per part, #154); the service into one file per area
   (`packages/engine/service/areas/`, `packages/engine/service/channels/`, #155); the run into its modules
   (`packages/engine/engine/run/`, methods on `WorkflowRun.prototype`, #250). Each new file documents itself
   in its header comment (the code map is built from it).

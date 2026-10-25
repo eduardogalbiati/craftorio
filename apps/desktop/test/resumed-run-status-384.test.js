@@ -8,7 +8,7 @@
 // Seams:
 // - runs.listRuns(runsDir) (packages/engine/domains/run/runs.js): the RunInfo rows the lists are built from (no index open).
 // - The service's `runs:list` channel (packages/engine/service/areas/run-lists.js), index open: one page, and
-//   `{ ids }` (what a run event uses to refresh one row, refreshRunRow in apps/desktop/renderer/run-list.js).
+//   `{ ids }` (what a run event uses to refresh one row, refreshRunRow in packages/ui-kit/run-list.js).
 // - The service's `roadmap:get` channel (packages/engine/service/areas/roadmap.js roadmapView).
 // The run folders are written by hand, the way a resume leaves them on disk (summary.json,
 // events.jsonl with workflow.started's resumed_from, owner.json while a run is alive): the link

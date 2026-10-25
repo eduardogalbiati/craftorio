@@ -7,11 +7,14 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const RUNNER = path.join(ROOT, 'scripts', 'screenshot.js');
 const SEEDS_DIR = path.join(ROOT, 'scripts', 'screenshot', 'views');
-const RENDERER_VIEWS = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views');
+// the screen folders of every page layer (the UI kit, the fronts, the page folder: scripts/source-tree.js)
+const screenFolders = () => { const st = require('../../../scripts/source-tree'); const root = path.join(__dirname, '..', '..', '..'); return st.pageDirs(root).flatMap((d) => st.viewsOf(root, d)); };
 
 // a fresh copy of the runner, so a seed module added during a test is discovered
 function loadRunner() {
@@ -34,7 +37,7 @@ test('every view of --view has its own seed module in scripts/screenshot/views/'
 
 test('every screen folder with a screenshot view has a seed module', () => {
   const { VIEWS } = loadRunner();
-  const folders = fs.readdirSync(RENDERER_VIEWS, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  const folders = screenFolders();
   const missing = [];
   let checked = 0;
   for (const folder of folders) {

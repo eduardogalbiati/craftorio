@@ -137,14 +137,9 @@ test('#267 the choice is forgotten once the stage has no finished item left to f
 });
 
 test('#267 css: the done chip is green with the run chat\'s .duo-note.done tokens', () => {
-  const css = [];
-  const walk = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) walk(p); else if (e.name.endsWith('.css')) css.push(fs.readFileSync(p, 'utf8'));
-    }
-  };
-  walk(H.R);
+  // every stylesheet of the page's layers (scripts/source-tree.js pageFiles)
+  const root = path.join(__dirname, '..', '..', '..');
+  const css = require('../../../scripts/source-tree').pageFiles(root, { match: /\.css$/ }).map((f) => fs.readFileSync(path.join(root, f.file), 'utf8'));
   const text = css.join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
   const bodies = [...text.matchAll(/([^{}]*rm-done-chip[^{}]*)\{([^{}]*)\}/g)].map((m) => m[2].replace(/\s+/g, ''));
   assert.ok(bodies.length > 0, 'a css rule for .rm-done-chip');

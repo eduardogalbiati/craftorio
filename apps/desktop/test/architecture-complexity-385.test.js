@@ -10,10 +10,12 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { execFileSync } = require('child_process');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { analyzeSource } = require('../../../scripts/code-health');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -185,7 +187,7 @@ function loadTab(model) {
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'architecture-facts-view.js', 'city-model.js', 'city-layout.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
-  vm.runInContext(fs.readFileSync(path.join(RENDERER, 'date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
+  vm.runInContext(fs.readFileSync(pageFileOf('date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {
     vm.runInContext(fs.readFileSync(path.join(RENDERER, 'views', 'project', f), 'utf8'), sandbox, { filename: f });
   }

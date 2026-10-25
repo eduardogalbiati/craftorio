@@ -50,7 +50,7 @@ test('git_tags lists the last tags, git_log_stat the commits since a base with t
 });
 
 test('gateReportParts: the report as Markdown in release-summary, the message without it (#290)', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'gate-panel.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'packages', 'ui-kit', 'gate-panel.js'), 'utf8');
   const sandbox = { window: {}, esc: (s) => String(s), markdownHtml: (s) => `<md>${s}</md>`, document: {} };
   vm.createContext(sandbox);
   vm.runInContext(`${/function gateReportParts[\s\S]*?\n}\n/.exec(src)[0]}; window.gateReportParts = gateReportParts;`, sandbox);

@@ -7,11 +7,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
-const supervisorSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'supervisor', 'supervisor.js'), 'utf8');
-const builderSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'workflows', 'builder.js'), 'utf8');
-const analyticsSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'analytics', 'analytics.js'), 'utf8');
+const supervisorSrc = fs.readFileSync(pageFileOf('views/supervisor/supervisor.js'), 'utf8');
+const builderSrc = fs.readFileSync(pageFileOf('views/workflows/builder.js'), 'utf8');
+const analyticsSrc = fs.readFileSync(pageFileOf('views/analytics/analytics.js'), 'utf8');
 
 function loadSupervisorScreenContext() {
   const LABELS = /const LABELS = \{[\s\S]*?\n  \};/.exec(supervisorSrc)?.[0];
@@ -75,7 +77,7 @@ test('analyticsContext: the quick range (days) and a custom from/to both show, w
 });
 
 test('#383 Analytics reads a saved date-range preset, and the older saved days as their preset', () => {
-  const DateRange = require('../renderer/date-range.js');
+  const DateRange = require('@multiagent/ui-kit/date-range.js');
   const presetOf = (saved) => loadAnalyticsContext(saved, { DateRange }).ax.preset;
   for (const id of ['24h', '7d', '30d', 'all']) assert.equal(presetOf({ preset: id }), id);
   assert.equal(presetOf({ days: 7 }), '7d');
@@ -87,7 +89,7 @@ test('#383 Analytics reads a saved date-range preset, and the older saved days a
 });
 
 test('#383 Analytics with a preset gives the supervisor that preset\'s range', () => {
-  const DateRange = require('../renderer/date-range.js');
+  const DateRange = require('@multiagent/ui-kit/date-range.js');
   const sandbox = loadAnalyticsContext({ preset: '7d' }, { DateRange });
   const [, from, to] = /^range (\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2}), /.exec(sandbox.analyticsContext()) || [];
   assert.ok(from && to, sandbox.analyticsContext());

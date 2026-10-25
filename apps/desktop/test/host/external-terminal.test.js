@@ -3,7 +3,7 @@
 // `exists(name)`, true when a program is on PATH; nothing is spawned here). Windows keeps today's
 // `cmd.exe /c start "<title>" /D "<cwd>" cmd /k "<command line>"`; macOS uses Terminal.app;
 // Linux takes the first of $TERMINAL, x-terminal-emulator, gnome-terminal, konsole, xterm that is
-// installed. Also the ↗ button of apps/desktop/renderer/term-dock.js's termButtons, disabled with the reason
+// installed. Also the ↗ button of packages/ui-kit/term-dock.js's termButtons, disabled with the reason
 // when the app reports no external terminal (api.externalTerminal = { available, reason }), run in
 // a vm sandbox the way test/renderer-command-hint.test.js runs command-hint.js.
 const test = require('node:test');
@@ -188,10 +188,10 @@ test('externalTerminal: available where a terminal is found, else unavailable wi
   assert.match(missing.reason, /No terminal found/);
 });
 
-// --- the ↗ button (apps/desktop/renderer/term-dock.js termButtons) -----------------------------------------
+// --- the ↗ button (packages/ui-kit/term-dock.js termButtons) -----------------------------------------
 
-const appSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'app.js'), 'utf8');
-const dockSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'term-dock.js'), 'utf8');
+const appSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'packages', 'ui-kit', 'app.js'), 'utf8');
+const dockSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'packages', 'ui-kit', 'term-dock.js'), 'utf8');
 
 function loadTermButtons(api) {
   const sandbox = { api, navigator: { platform: '' } };

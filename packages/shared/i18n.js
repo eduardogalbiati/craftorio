@@ -92,7 +92,7 @@
   const formatPercent = (ratio, lang, options) => numberFormat(lang, { style: 'percent', maximumFractionDigits: 1, ...options }).format(Number(ratio) || 0);
   const formatCost = (usd, lang, digits = 2) => numberFormat(lang, { style: 'currency', currency: 'USD', minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(usd) || 0);
 
-  // open screens redraw when the language changes (apps/desktop/renderer/interface-language.js)
+  // open screens redraw when the language changes (packages/ui-kit/interface-language.js)
   const listeners = [];
   const onChange = (fn) => { listeners.push(fn); };
   function notify() {

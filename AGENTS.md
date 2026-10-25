@@ -59,6 +59,6 @@ npm run screenshot -- --view backlog --mode kanban --out <dir>   # one screen, s
 - [docs/agents/testing.md](docs/agents/testing.md): CI, machine-independent tests, mock provider, real CLIs. Read before writing tests.
 - [docs/agents/windows-gotchas.md](docs/agents/windows-gotchas.md): line endings, paths, node-pty, the exe, EBUSY. Read before scripted edits, terminals or packaging.
 - [docs/agents/environment.md](docs/agents/environment.md): Node/npm/Electron, CLIs, workspace layout. Read before installing or upgrading.
-- [docs/agents/renderer.md](docs/agents/renderer.md): the UI and how to check it. Read before changing `apps/desktop/renderer/`.
+- [docs/agents/renderer.md](docs/agents/renderer.md): the UI and how to check it. Read before changing `packages/ui-kit/`, `fronts/` or `apps/*/renderer/`.
 - [docs/agents/backlog.md](docs/agents/backlog.md): open ideas. Read when planning new work.
 - [seeds.md](docs/agents/seeds.md): writing an analysis seed.

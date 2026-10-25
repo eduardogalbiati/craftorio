@@ -2,7 +2,7 @@
 // the code. apps/desktop/renderer/views/backlog/backlog-roadmap.js is evaluated whole in a vm sandbox
 // (test/roadmap-status-helpers.js loadRoadmap); the shared context helper is evaluated into the same
 // sandbox after it: apps/desktop/renderer/oracle-context.js when the change creates it, then the real
-// apps/desktop/renderer/gate-oracle.js (window.GateOracle). So backlog-roadmap.js must look the helper up when
+// packages/ui-kit/gate-oracle.js (window.GateOracle). So backlog-roadmap.js must look the helper up when
 // it renders / clicks (window.GateOracle… or window.OracleContext…), never at load time.
 // window.OracleChat is a stub: { openWith(context) (recorded), pendingRef() }.
 //
@@ -25,6 +25,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (phase 3 of the reorganisation study)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const H = require('./roadmap-status-helpers');
 
@@ -39,8 +41,8 @@ function load({ pending = null } = {}) {
   out.sandbox.showToast = () => {};
   out.sandbox.OracleChat = { openWith: (ctx) => { opened.push(JSON.stringify(ctx)); }, pendingRef: () => pending, open() {} };
   for (const file of ['oracle-context.js', 'gate-oracle.js']) {
-    const p = path.join(H.R, file);
-    if (fs.existsSync(p)) vm.runInContext(fs.readFileSync(p, 'utf8'), out.sandbox);
+    const p = pageFileOf(file);
+    if (p) vm.runInContext(fs.readFileSync(p, 'utf8'), out.sandbox);
   }
   return { ...out, opened };
 }
@@ -139,7 +141,7 @@ test('#271 planned and running cards have no .rm-fail-actions group', () => {
 // #282: the card answers to its own width (a container query on .rm-items), so a narrow window and the
 // Oracle's drawer beside the page are the same case: no rule per window width or for .shell.oracle-side
 test('#271 backlog.css gives the titles the full width on a narrow card (Retry / Skip / the Oracle go under them, in the status block), whatever narrows it (window or the Oracle beside the page)', () => {
-  const css = fs.readFileSync(path.join(H.R, 'views', 'backlog', 'backlog.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(pageFileOf('views/backlog/backlog.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.match(css, /\.rm-items\s*\{[^}]*container:\s*rm-card\s*\/\s*inline-size/, 'the cards\' list is the container');
   const at = css.search(/@container\s+rm-card\s*\(max-width:\s*\d+px\)\s*\{/);
   const narrow = at < 0 ? '' : css.slice(at, css.indexOf('\n}', at));

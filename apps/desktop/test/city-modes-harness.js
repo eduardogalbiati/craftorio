@@ -8,14 +8,15 @@
 // poll is left running; ProjectCity.overlay is wrapped to know the layers set on the city.
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { buildModel } = require('@multiagent/shared/architecture-model');
 const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const RENDERER = path.join(ROOT, 'apps', 'desktop', 'renderer');
 const SHARED = ['globs.js', 'json-schema.js', 'architecture-model.js', 'architecture-facts-view.js', 'city-model.js', 'city-layout.js',
   'city-agents.js', 'city-connections.js', 'city-impact.js', 'city-release.js', 'roadmap-model.js'];
 
@@ -79,13 +80,13 @@ const REPLAY = {
 };
 
 // every classic script under apps/desktop/renderer whose name names the city (no JSX, no module code)
-function cityScripts(dir = RENDERER) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) return e.name === 'run3d' ? [] : cityScripts(full);
-    if (!/city/i.test(e.name) || !e.name.endsWith('.js')) return [];
+// the page's layers (the UI kit, the fronts, the page folder: scripts/source-tree.js pageFiles; the
+// 3D sources under run3d/ and city3d/ are not page files)
+function cityScripts() {
+  return require('../../../scripts/source-tree').pageFiles(ROOT).map((f) => path.join(ROOT, f.file)).filter((full) => {
+    if (!/city/i.test(path.basename(full))) return false;
     const src = fs.readFileSync(full, 'utf8');
-    return /^\s*(import|export)\s/m.test(src) || /\brequire\(/.test(src) ? [] : [full];
+    return !(/^\s*(import|export)\s/m.test(src) || /\brequire\(/.test(src));
   });
 }
 
@@ -153,10 +154,10 @@ function loadWindow({ agents = () => ({ projectId: 'p1', runs: [], collisions: [
     const file = path.join(ROOT, 'packages', 'shared', name);
     if (fs.existsSync(file)) { try { run(file); } catch { /* a Node-only core: the tab does without it */ } }
   }
-  run(path.join(RENDERER, 'select.js'));
+  run(pageFileOf('select.js'));
   for (const file of cityScripts()) run(file);
-  run(path.join(RENDERER, 'date-range.js'));
-  run(path.join(RENDERER, 'views', 'project', 'project-architecture.js'));
+  run(pageFileOf('date-range.js'));
+  run(pageFileOf('views/project/project-architecture.js'));
   // the layers set on the city, by name (the modules call ProjectCity.overlay at call time)
   const overlay = sandbox.ProjectCity.overlay;
   sandbox.ProjectCity.overlay = (name, spec) => { calls.overlay.push({ name: String(name), on: !!spec }); return overlay(name, spec); };

@@ -1,4 +1,4 @@
-// Images pasted into the AI prompt fields (#130, apps/desktop/renderer/paste-image.js). Each pasted image is
+// Images pasted into the AI prompt fields (#130, packages/ui-kit/paste-image.js). Each pasted image is
 // written at once into the staging folder <workspace>/attachments/pending/ and its path goes with the
 // field's request (run:start's attachments, approval:resolve's images, the Supervisor's attachments),
 // which copies it where the turn reads it (#129). A chip removed deletes its file; what was never

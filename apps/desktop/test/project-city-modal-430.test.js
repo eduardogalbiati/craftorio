@@ -25,11 +25,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const H = require('./city-modes-harness');
 
 const { ISSUE, STAGE, REPLAY, settle, q, text, mode, title } = H;
 const ROOT = path.join(__dirname, '..', '..', '..');
-const MODAL_FILE = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'project', 'project-city-modal.js');
+const MODAL_FILE = pageFileOf('views/project/project-city-modal.js');
 const VIEW_KEY = 'multiagent.architecture.view';
 
 // the window with the modal's module (the harness loads every *city* script, this one included)
@@ -271,7 +273,7 @@ test('#430 openCity is called only from the Project screen\'s files', () => {
 });
 
 test('#430 index.html loads views/project/project-city-modal.js', () => {
-  const html = fs.readFileSync(path.join(ROOT, 'apps', 'desktop', 'renderer', 'index.html'), 'utf8');
+  const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
   assert.equal(html.includes('<script src="views/project/project-city-modal.js"></script>'), true, 'its <script> in index.html (npm run docs writes the list)');
 });
 

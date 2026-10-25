@@ -19,12 +19,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const DIR = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'project');
+const DIR = pageFileOf('views/project');
 const CITY = path.join(DIR, 'project-city.js');
 const IMPACT = path.join(DIR, 'project-city-impact.js');
 
@@ -71,7 +73,7 @@ const PREVIEW = {
   files: [
     { path: 'packages/engine/engine/big.js', sources: ['cited', 'po'] },
     { path: 'packages/engine/engine/small.js', sources: ['cited'] },
-    { path: 'apps/desktop/renderer/app.js', sources: ['po'] },
+    { path: 'packages/ui-kit/app.js', sources: ['po'] },
     { path: 'docs/a.md', sources: ['cited'] },
   ],
   newFiles: [{ path: 'apps/desktop/renderer/views/fresh.js', sources: ['cited'], district: 'views', note: 'new file, expected in Views' }],
@@ -130,7 +132,7 @@ test('#375 headerMarkup: predicted vs actual, the three sets\' counts and the hi
   assert.equal(q(render(PREVIEW), 'city-impact-comparison'), null, 'no comparison before a run');
   const box = render({
     ...PREVIEW,
-    comparison: { hit: ['packages/engine/engine/big.js', 'packages/engine/engine/small.js'], missed: ['docs/a.md', 'apps/desktop/renderer/app.js'], unexpected: ['packages/engine/engine/gates.js'], hitRate: 0.5 },
+    comparison: { hit: ['packages/engine/engine/big.js', 'packages/engine/engine/small.js'], missed: ['docs/a.md', 'packages/ui-kit/app.js'], unexpected: ['packages/engine/engine/gates.js'], hitRate: 0.5 },
   });
   const cmp = q(box, 'city-impact-comparison');
   assert.equal(!!cmp, true, 'data-testid="city-impact-comparison"');

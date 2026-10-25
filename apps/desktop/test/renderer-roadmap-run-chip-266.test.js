@@ -1,7 +1,7 @@
 // #266 "Readable statuses everywhere": the Roadmap card's run chip and readable states.
 // Acceptance tests written before the code. apps/desktop/renderer/views/backlog/backlog-roadmap.js is
 // evaluated whole in a vm sandbox (test/roadmap-status-helpers.js loadRoadmap), with the real
-// run-list.js chips, displayName and, when it exists, apps/desktop/renderer/status-pill.js (#266).
+// run-list.js chips, displayName and, when it exists, packages/ui-kit/status-pill.js (#266).
 //
 // Contract (the seam these tests assume):
 // - An item with a run shows the kanban's run chip: an element carrying `data-run="<runId>"` (a click

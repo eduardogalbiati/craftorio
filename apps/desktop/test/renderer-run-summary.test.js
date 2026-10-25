@@ -1,5 +1,5 @@
 // apps/desktop/renderer/views/run/run.js: the Run view's Details panel (one-line run inputs, #90) and
-// apps/desktop/renderer/resume-dialog.js: the Resume from step… control (#100), moved out of app.js by
+// packages/ui-kit/resume-dialog.js: the Resume from step… control (#100), moved out of app.js by
 // #154. It runs only inside the Electron renderer (document, window.api), so these pure helpers
 // are pulled out of the source and evaluated in a sandbox, the way
 // test/renderer-backlog-assign.test.js checks backlog.js as a seam.
@@ -7,11 +7,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
-const runSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'run', 'run.js'), 'utf8');
-const resumeSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'resume-dialog.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'app.js'), 'utf8');
+const runSrc = fs.readFileSync(pageFileOf('views/run/run.js'), 'utf8');
+const resumeSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'resume-dialog.js'), 'utf8');
 
 function loadHelpers() {
   const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];

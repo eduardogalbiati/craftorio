@@ -14,7 +14,7 @@
 //     has not answered, and not once it answered.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('./renderer-app-harness');
+const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
 const PROJECTS = [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/work/one' }];
 const BASE_API = {

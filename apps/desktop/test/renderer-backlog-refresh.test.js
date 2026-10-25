@@ -8,10 +8,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
+const src = fs.readFileSync(pageFileOf('views/backlog/backlog.js'), 'utf8');
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const pick = (re) => {
   const m = re.exec(src);
@@ -57,7 +59,7 @@ function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' 
     sandbox.api.getBacklogState = async () => { lightReads.push(clock.now); return state.light; };
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), 'utf8'), sandbox);
     sandbox.window.RoadmapModel ??= sandbox.RoadmapModel;
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog-live.js'), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(pageFileOf('views/backlog/backlog-live.js'), 'utf8'), sandbox);
     sandbox.window.BacklogRoadmap.mergeState = (d, l) => sandbox.window.BacklogLive.mergeState(d, l);
   }
   vm.runInContext(

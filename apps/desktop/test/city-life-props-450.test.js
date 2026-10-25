@@ -8,10 +8,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const Module = require('module');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const CITY3D = path.join(ROOT, 'apps', 'desktop', 'renderer', 'city3d');
+const CITY3D = pageFileOf('city3d');
 
 const noop = () => {};
 const proxy = (extra = {}) => new Proxy(() => {}, { get: (_t, k) => (k in extra ? extra[k] : () => {}) });
@@ -34,7 +36,7 @@ async function bundle(t, file) {
     external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@react-three/*', 'postprocessing'], logLevel: 'silent',
   });
   globalThis.window ||= {};
-  globalThis.window.Run3DTheme ||= require('../renderer/run3d-theme.js');
+  globalThis.window.Run3DTheme ||= require('@multiagent/ui-kit/run3d-theme.js');
   globalThis.t ||= require('@multiagent/shared/i18n.js').t;
   const m = new Module(path.join(CITY3D, `${file}.bundle.js`));
   m.require = (id) => (/^(react|react-dom|@react-three|postprocessing)(\/|$)/.test(id) ? stubFor(id) : require(id));

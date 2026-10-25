@@ -292,7 +292,7 @@ test('#396 software-development-local-hero has no suite policy transition', () =
 });
 
 test('#396 inputs form (Start drawer, roadmap item): the policy shows as "Suite red outside the change", Ask selected by default; a chosen Continue stays selected', () => {
-  const WorkflowInputs = require('../renderer/workflow-inputs');
+  const WorkflowInputs = require('@multiagent/ui-kit/workflow-inputs');
   const { suite_red_outside_change: def } = loadWorkflow(WORKFLOW).inputs;
   const defs = { suite_red_outside_change: def };
   const active = (html) => (html.match(/data-wi-pill="(\w+)" class="active"/g) || []).map((m) => m.match(/"(\w+)"/)[1]);

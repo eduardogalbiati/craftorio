@@ -1,4 +1,4 @@
-// apps/desktop/renderer/app.js: human gates answered inside their run, never in an app-wide modal (#38).
+// packages/ui-kit/app.js: human gates answered inside their run, never in an app-wide modal (#38).
 // renderRunGates/onRunGateClick live in views/run/run.js, what a gate offers in gate-panel.js
 // (#154); app.js keeps pendingGates, showToast and the rest of the gate state. It runs only
 // inside the Electron renderer (document, window.api), so the pure/interaction helpers are pulled
@@ -8,13 +8,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
-const gateSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'gate-panel.js'), 'utf8');
-const runSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'run', 'run.js'), 'utf8');
-const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'app.js'), 'utf8');
+const gateSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'gate-panel.js'), 'utf8');
+const runSrc = fs.readFileSync(pageFileOf('views/run/run.js'), 'utf8');
+const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
 
 test('no app-wide approval modal: the gate is answered inside its run, never in a dialog over the app', () => {
   assert.doesNotMatch(html, /id="approval-modal"/);
@@ -71,7 +73,7 @@ function loadHelpers() {
     api: { resolveApproval: async (...args) => { calls.push(args); return {}; } },
     errMsg: (e) => String(e?.message || e),
     showToast: (...args) => toasts.push(args),
-    // run.js settles the pasted images of the answer (apps/desktop/renderer/paste-image.js)
+    // run.js settles the pasted images of the answer (packages/ui-kit/paste-image.js)
     PasteImage: { settle: async () => {}, attachments: () => [] },
   };
   vm.createContext(withI18n(sandbox));
@@ -814,7 +816,7 @@ test('gateChoices: out_of_rounds offers the same save-to-issue choice when it al
 // The card's markup (gateCardHtml, gateBriefHtml, the Run screen's .run-gate-message) is cascaded with
 // style.css by test/css-layout.js (no browser): a line of prose wraps (long words too) instead of being
 // cut at the card's edge; a line that ends in "…" keeps its whole text in a title.
-const { parseHtml, styleSheet, layoutOf, elements, textOf } = require('./css-layout.js');
+const { parseHtml, styleSheet, layoutOf, elements, textOf } = require('@multiagent/ui-kit/test/css-layout.js');
 const NARROW = 260;
 const LONG_WORD = 'apps/desktop/renderer/views/run/suite_card_overflow_guard_with_a_very_long_name.js';
 

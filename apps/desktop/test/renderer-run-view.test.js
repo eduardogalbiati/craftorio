@@ -1,4 +1,4 @@
-// apps/desktop/renderer/app.js: the remembered Chat / Details run view (#80) and the friendly error for a
+// packages/ui-kit/app.js: the remembered Chat / Details run view (#80) and the friendly error for a
 // channel the running main process doesn't have (#83). It runs only inside the Electron renderer
 // (document, window.api), so these pure helpers are pulled out of the source and evaluated in a
 // sandbox, the way test/renderer-run-summary.test.js checks app.js as a seam.
@@ -6,11 +6,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
-const runSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'run', 'run.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'app.js'), 'utf8');
+const runSrc = fs.readFileSync(pageFileOf('views/run/run.js'), 'utf8');
 
 function loadHelpers({ runs = new Map(), runView = 'details' } = {}) {
   const runViewKey = /const RUN_VIEW_KEY = [^\n]+;/.exec(src)[0];

@@ -26,6 +26,8 @@ const { afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -179,10 +181,11 @@ test('#329 i18n.js in the page: window.I18n, loaded by index.html before the scr
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'i18n.js'), 'utf8'), sandbox);
   assert.ok(sandbox.I18n, 'window.I18n is defined');
   for (const fn of ['t', 'setLanguage', 'getLanguage', 'languages']) assert.equal(typeof sandbox.I18n[fn], 'function', fn);
-  const html = fs.readFileSync(path.join(ROOT, 'apps', 'desktop', 'renderer', 'index.html'), 'utf8');
+  const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
   const at = html.indexOf('<script src="../../../packages/shared/i18n.js"></script>');
   assert.ok(at >= 0, 'index.html loads ../../../packages/shared/i18n.js');
   for (const src of ['../../../packages/shared/setup-model.js', '../../../packages/shared/time-zone.js', 'setup.js', 'views/settings/settings.js']) {
-    assert.ok(at < html.indexOf(`<script src="${src}"></script>`), `i18n.js loads before ${src}`);
+    // by the tail of the tag: the UI kit's scripts carry the package's path prefix (phase 3)
+    assert.ok(at < html.indexOf(`${src.startsWith('.') ? '' : '/'}${src}"></script>`), `i18n.js loads before ${src}`);
   }
 });

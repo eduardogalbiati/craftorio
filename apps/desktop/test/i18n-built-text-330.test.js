@@ -11,9 +11,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pageDirs, pageFile, pageFiles } = require('../../../scripts/source-tree');
+const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
+// a page file by its page-relative name, wherever its layer is (phase 3 of the reorganisation study)
+const page = (rel) => pageFile(PAGE_ROOT, rel);
+void pageDirs; void pageFiles; void page;
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const RENDERER = path.join(ROOT, 'apps', 'desktop', 'renderer');
 const SHARED = path.join(ROOT, 'packages', 'shared');
 const SHARED_SCREEN = ['roadmap-model.js', 'roadmap-summary.js', 'po-calibration.js', 'platforms'];
 
@@ -26,7 +30,7 @@ function jsFiles(dir) {
 }
 
 const files = () => [
-  ...jsFiles(RENDERER),
+  ...pageFiles(ROOT).map((f) => path.join(ROOT, f.file)),
   ...SHARED_SCREEN.flatMap((p) => (fs.statSync(path.join(SHARED, p)).isDirectory() ? jsFiles(path.join(SHARED, p)) : [path.join(SHARED, p)])),
 ];
 

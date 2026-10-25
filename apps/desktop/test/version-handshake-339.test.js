@@ -37,6 +37,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const http = require('http');
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
@@ -47,7 +49,7 @@ const { createServer } = require('@multiagent/engine/server');
 const PKG = require('../../../package.json');
 const TOKEN = 'test-token-339-0123456789abcdef';
 const HEX = /^[0-9a-f]{6,16}$/;
-const API_HTTP = path.join(__dirname, '..', 'renderer', 'api-http.js');
+const API_HTTP = pageFileOf('api-http.js');
 
 // the module the change adds to: required inside each test (the export does not exist yet)
 const contractHash = () => {

@@ -37,7 +37,7 @@ function decongestConversation(t) {
   const at = '2026-10-12T10:00:00.000Z';
   const answer = { summary: '', groups: [], conflicts: [], enrich: [], decongest: [
     { file: 'src/index.js', line: 3, fix: 'One import per line, sorted.', runs: 7, of: 10 },
-    { file: 'apps/desktop/renderer/app.js', fix: 'Split it by screen.', runs: 8, of: 10 },
+    { file: 'packages/ui-kit/app.js', fix: 'Split it by screen.', runs: 8, of: 10 },
   ] };
   fs.writeFileSync(path.join(backlogDir, 'demo.po.jsonl'), `${JSON.stringify({ ts: at, role: 'po', text: '', answer })}\n`);
   const file = (index, preview, exec = () => 'https://github.com/o/r/issues/9\n') => productOwner.fileDecongest({ backlogDir, projectId: 'demo', runsDir: path.join(dir, 'runs'), at, index, preview, platform: 'github', repo: 'https://github.com/o/r', exec });

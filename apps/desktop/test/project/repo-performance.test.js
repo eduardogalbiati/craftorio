@@ -260,7 +260,7 @@ test('recommendationOf: a large file touched by many runs → split it by area',
 });
 
 test('recommendationOf: a stylesheet → per-screen CSS', () => {
-  assert.equal(recommendationOf(over('apps/desktop/renderer/style.css')).kind, 'stylesheet');
+  assert.equal(recommendationOf(over('packages/ui-kit/style.css')).kind, 'stylesheet');
 });
 
 test('recommendationOf: a doc → per-topic doc or generated table', () => {
@@ -272,7 +272,7 @@ test('recommendationOf: a test file every run edits → one test file per featur
 });
 
 test('recommendationOf: says what to do and names the evidence (share, runs, lines now, conflicts)', () => {
-  const rec = recommendationOf(over('apps/desktop/renderer/style.css', { share: 0.4, runs: 8, lines: 120, conflicts: 2 }));
+  const rec = recommendationOf(over('packages/ui-kit/style.css', { share: 0.4, runs: 8, lines: 120, conflicts: 2 }));
   assert.equal(typeof rec.text, 'string');
   assert.ok(rec.text.length > 0);
   assert.deepEqual(
@@ -282,9 +282,9 @@ test('recommendationOf: says what to do and names the evidence (share, runs, lin
 });
 
 test('recommendationOf: none at or below the limit, nor for a file only one run edited', () => {
-  assert.equal(recommendationOf(over('apps/desktop/renderer/style.css', { share: SHARED_LIMIT })), null);
-  assert.equal(recommendationOf(over('apps/desktop/renderer/style.css', { share: 0.1 })), null);
-  assert.equal(recommendationOf(over('apps/desktop/renderer/style.css', { share: 1, runs: 1 })), null);
+  assert.equal(recommendationOf(over('packages/ui-kit/style.css', { share: SHARED_LIMIT })), null);
+  assert.equal(recommendationOf(over('packages/ui-kit/style.css', { share: 0.1 })), null);
+  assert.equal(recommendationOf(over('packages/ui-kit/style.css', { share: 1, runs: 1 })), null);
 });
 
 // ---- repositoryPerformance (end to end) ------------------------------------------------------------

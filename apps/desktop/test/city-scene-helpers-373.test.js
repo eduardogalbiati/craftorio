@@ -6,6 +6,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const Module = require('module');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -16,13 +18,13 @@ async function loadScene(t) {
   let esbuild;
   try { esbuild = require('esbuild'); } catch { t.skip('esbuild is not installed'); return null; }
   const out = await esbuild.build({
-    entryPoints: [path.join(ROOT, 'apps', 'desktop', 'renderer', 'city3d', 'scene.jsx')],
+    entryPoints: [pageFileOf('city3d/scene.jsx')],
     bundle: true, write: false, format: 'cjs', platform: 'node', jsx: 'automatic', loader: { '.jsx': 'jsx' },
     external: ['react', 'react/jsx-runtime', '@react-three/fiber'], logLevel: 'silent',
   });
   const hook = () => new Proxy(() => {}, { get: () => () => {} });
   const stubs = { react: hook(), 'react/jsx-runtime': hook(), '@react-three/fiber': hook() };
-  const m = new Module(path.join(ROOT, 'apps', 'desktop', 'renderer', 'city3d', 'scene.bundle.js'));
+  const m = new Module(path.join(path.dirname(pageFileOf('city3d/scene.jsx')), 'scene.bundle.js'));
   m.require = (id) => stubs[id] || require(id);
   m._compile(out.outputFiles[0].text, m.id);
   cached = m.exports;

@@ -7,10 +7,11 @@
 // Used by test/discovery-board-view-257.test.js.
 const fs = require('fs');
 const path = require('path');
-const { loadPage, settle } = require('./agent-chat-page-harness');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
+const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
 
 const VIEW = 'views/discovery/discovery.js';
-const RENDERER = path.join(__dirname, '..', 'renderer');
 const P = 'p1';
 
 const COLUMNS = [
@@ -100,9 +101,9 @@ async function openBoard(opts = {}) {
   const page = await loadPage({ api: methods });
   if (!page.sandbox.CurrentProject) page.sandbox.CurrentProject = {};
   page.sandbox.CurrentProject.get = () => P;
-  const listed = require('./renderer-app-harness').pageScripts().includes(VIEW);
+  const listed = require('@multiagent/ui-kit/test/renderer-app-harness').pageScripts().includes(VIEW);
   if (!listed) {
-    const file = path.join(RENDERER, ...VIEW.split('/'));
+    const file = pageFileOf(VIEW);
     if (!fs.existsSync(file)) throw new Error(`${VIEW} does not exist yet`);
     page.run(fs.readFileSync(file, 'utf8'));
   }

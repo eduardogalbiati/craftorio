@@ -7,9 +7,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const en = require('@multiagent/shared/i18n/en.json');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
+const src = fs.readFileSync(pageFileOf('views/backlog/backlog.js'), 'utf8');
 
 test('matches: an issue must pass both the label filter and the epic filter (AND), before the search', () => {
   const fn = /const matches = \(i\) => \{[\s\S]*?\n  \};/.exec(src)[0];

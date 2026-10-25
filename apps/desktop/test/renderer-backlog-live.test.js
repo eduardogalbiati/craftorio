@@ -7,9 +7,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
+const src = fs.readFileSync(pageFileOf('views/backlog/backlog.js'), 'utf8');
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
 function load({ view = 'backlog', hidden = false, mode = 'roadmap', projectId = 'p1', roadmapBusy = false, activeElement = null } = {}) {

@@ -9,6 +9,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const {
   codeMap, featurePieces, featureSection, loadRule, main, missingHeaders, renderIndexHtml,
   rendererAssets, renderReadme,
@@ -212,13 +214,15 @@ test('main(): writes docs/agents/test-map.md (the code → tests map, #219), say
 // #152: apps/desktop/renderer/index.html's <link>/<script> lists.
 
 test('apps/desktop/renderer/index.html\'s script and style lists are up to date with the generator', () => {
-  const html = read(path.join(root, 'apps', 'desktop', 'renderer', 'index.html'));
+  const html = read(pageFileOf('index.html'));
   assert.equal(renderIndexHtml(html, root), html);
 });
 
-test('rendererAssets on the real apps/desktop/renderer/: load-order guarantees the app depends on', () => {
-  const scripts = rendererAssets(root, '.js');
-  const styles = rendererAssets(root, '.css');
+test('rendererAssets on the real desktop page: load-order guarantees the app depends on', () => {
+  // the page-relative names: the layer's prefix (../../../packages/ui-kit/, ../../../fronts/<id>/) dropped
+  const name = (f) => f.replace(/^(\.\.\/)+(packages|fronts)\/[^/]+\//, '');
+  const scripts = rendererAssets(root, '.js').map(name);
+  const styles = rendererAssets(root, '.css').map(name);
   const at = (list, f) => {
     const i = list.indexOf(f);
     assert.ok(i >= 0, `${f} is missing from the generated list`);

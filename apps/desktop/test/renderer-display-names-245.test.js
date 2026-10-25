@@ -9,8 +9,8 @@
 //
 // Covered: the Roadmap card's run progress (apps/desktop/renderer/views/backlog/backlog-roadmap.js: the step
 // text, the steps popover's chips and its "Now:" line), the run list's progress strip
-// (apps/desktop/renderer/run-list.js runProgressStrip / progressChip: the chip name and its state line) and the
-// artifacts panel's round heads (apps/desktop/renderer/artifacts-panel.js: "Acceptance tests · round 1").
+// (packages/ui-kit/run-list.js runProgressStrip / progressChip: the chip name and its state line) and the
+// artifacts panel's round heads (packages/ui-kit/artifacts-panel.js: "Acceptance tests · round 1").
 // Then a sweep: those screens rendered with runs walking the bundled workflows' real steps must show
 // no snake_case agent / step / workflow id in their visible text.
 //
@@ -25,16 +25,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 const yaml = require('js-yaml');
-const AgentColors = require('../renderer/agent-colors.js');
+const AgentColors = require('@multiagent/ui-kit/agent-colors.js');
 const { displayName } = require('@multiagent/shared/display-name.js');
-const { fakeRoot, waitTick } = require('./artifacts-panel-helpers');
+const { fakeRoot, waitTick } = require('@multiagent/ui-kit/test/artifacts-panel-helpers');
 
-const R = path.join(__dirname, '..', 'renderer');
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', 'workflows');
-const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
+const read = (...p) => fs.readFileSync(pageFileOf(p.join('/')), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 const agentLabel = (slug, names) => displayName(slug, names);
@@ -161,7 +162,7 @@ function loadRoadmap() {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
-  if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
+  if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }

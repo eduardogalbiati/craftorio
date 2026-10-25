@@ -24,14 +24,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
-const { loadApp } = require('./renderer-app-harness');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
+const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const SHARED = path.join(ROOT, 'packages', 'shared');
-const DIR = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'project');
+const DIR = pageFileOf('views/project');
 const CITY = path.join(DIR, 'project-city.js');
 const RELEASE = path.join(DIR, 'project-city-release.js');
 
@@ -54,7 +56,7 @@ function load() {
     vm.runInContext(fs.readFileSync(path.join(SHARED, f), 'utf8'), sandbox, { filename: f });
   }
   // The app's select builder, so the pickers are built as in the app (#383).
-  vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps', 'desktop', 'renderer', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'ui-kit', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-city-release.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sandbox, { filename: f });
   }

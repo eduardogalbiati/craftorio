@@ -1,4 +1,4 @@
-// #329 apps/desktop/renderer/interface-language.js: window.InterfaceLanguage.apply(settings) shows the
+// #329 packages/ui-kit/interface-language.js: window.InterfaceLanguage.apply(settings) shows the
 // interface language of the settings (else the computer's when it has a catalog, else English),
 // remembers it for the next first paint, paints index.html's static data-i18n hooks and, only when the
 // language changed, redraws the window (menu labels, screens, shell, then I18n.notify()). A pushed
@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const SRC = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'interface-language.js'), 'utf8');
+const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'interface-language.js'), 'utf8');
 const I18N_PATH = require.resolve('@multiagent/shared/i18n.js');
 
 /** A fresh i18n instance (its language and listeners are module state). */

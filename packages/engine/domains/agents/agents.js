@@ -1,6 +1,6 @@
 // Agents: reusable personas the user defines once, to be used across the platform later. One JSON
 // file per agent in <workspace>/agents/<id>.json: name, description, prompt (the agent's context:
-// what it is for), the skills it always gets and the look of its robot avatar (apps/desktop/renderer/robots.js).
+// what it is for), the skills it always gets and the look of its robot avatar (packages/ui-kit/robots.js).
 //
 // The platform's supervisor is built in: always listed first, it can't be removed and its
 // instructions (the run-supervisor skill) can't be changed here; only its look is saved
@@ -27,7 +27,7 @@ const { isWorkflowFile } = require('../workflow/workflows');
 const SUPERVISOR_ID = 'supervisor';
 const PRODUCT_OWNER_ID = 'product-owner';
 const ORACLE_ID = 'oracle';
-// Keep in sync with EYES and the generic emblems of apps/desktop/renderer/robots.js.
+// Keep in sync with EYES and the generic emblems of packages/ui-kit/robots.js.
 const EYES = ['dots', 'bars', 'arcs', 'slits'];
 const EMBLEMS = ['none', 'bolt', 'clipboard', 'heart', 'shield', 'leaf', 'gear', 'code', 'rocket', 'eye', 'crown', 'flask', 'star5'];
 const COLORS = ['body', 'shell', 'visor', 'glow'];

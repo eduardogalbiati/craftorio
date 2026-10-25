@@ -4,7 +4,7 @@
 // The interface language is written into the scratch workspace's settings.json (language.interface,
 // packages/engine/domains/workspace/workspace.js) and the page reloads, so a scenario starts in that language; the steps that
 // navigate read their labels from the app's catalogs (packages/shared/i18n/<lang>.json) in the language
-// the page shows (the html lang attribute, apps/desktop/renderer/interface-language.js).
+// the page shows (the html lang attribute, packages/ui-kit/interface-language.js).
 // Locators are roles and data-testid only (skills/ui-conventions). Existing: run-list-row (data-run:
 // the run id), status-label (the pill's label, data-status), run-suite-card, run-gate. NEW:
 //   run-side-column   the Run screen's left column (aside.panel.config: the run summary, its suite
@@ -99,14 +99,14 @@ const LONG_FILES = {
   'test/integration/renderer/views/run/suite-cards-stay-inside-the-narrow-side-column-of-the-run-screen.test.js':
     'imports apps/desktop/renderer/views/run/run.js, which draws the suite cards, the scratch workspace line and the run summary of the side column',
   'test/integration/renderer/artifacts-panel/scratch-workspace-line-with-its-open-in-button.test.js':
-    'imports apps/desktop/renderer/artifacts-panel.js through apps/desktop/renderer/views/run/run.js and apps/desktop/renderer/status-pill.js',
+    'imports packages/ui-kit/artifacts-panel.js through apps/desktop/renderer/views/run/run.js and packages/ui-kit/status-pill.js',
   'test/unit/shared/i18n/portuguese-catalog-keeps-every-status-pill-label-short-enough.test.js':
     'reads packages/shared/i18n/pt-BR.json, changed by this run together with packages/shared/i18n/en.json',
 };
 Given('the demo project has a finished AI Development run {string} whose suite ran only affected test files with long paths', async ({ e2e }, suffix) => {
   const files = Object.keys(LONG_FILES);
   const selection = {
-    mode: 'affected', files, reasons: LONG_FILES, changed: ['apps/desktop/renderer/views/run/run.js', 'apps/desktop/renderer/artifacts-panel.js', 'packages/shared/i18n/pt-BR.json'], slow: [],
+    mode: 'affected', files, reasons: LONG_FILES, changed: ['apps/desktop/renderer/views/run/run.js', 'packages/ui-kit/artifacts-panel.js', 'packages/shared/i18n/pt-BR.json'], slow: [],
     why: `the ${files.length} affected test file(s) reach the 3 changed file(s); the whole suite was not run`,
   };
   e2e.longPaths = files;

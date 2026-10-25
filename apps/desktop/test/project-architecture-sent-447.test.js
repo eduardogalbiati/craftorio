@@ -14,10 +14,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const I18n = require('@multiagent/shared/i18n.js');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -85,7 +87,7 @@ function loadArchitecture() {
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'architecture-facts-view.js', 'city-model.js', 'city-layout.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
-  vm.runInContext(fs.readFileSync(path.join(RENDERER, 'date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
+  vm.runInContext(fs.readFileSync(pageFileOf('date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {
     vm.runInContext(fs.readFileSync(path.join(RENDERER, 'views', 'project', f), 'utf8'), sandbox, { filename: f });
   }
@@ -179,7 +181,7 @@ test('#435 the Refactor tab says per proposal its issue and its stage waiting fo
     listArchitectureReports: async () => [{ id: 'r1', date: '2026-10-20T10:00:00Z' }],
   };
   const { sandbox, box } = sandboxOf(api);
-  vm.runInContext(fs.readFileSync(path.join(RENDERER, 'views', 'project', 'project-refactor.js'), 'utf8'), sandbox, { filename: 'project-refactor.js' });
+  vm.runInContext(fs.readFileSync(pageFileOf('views/project/project-refactor.js'), 'utf8'), sandbox, { filename: 'project-refactor.js' });
   sandbox.ProjectRefactor.show('p1', box);
   await settle();
   const where = text(q(q(box, 'refactor-proposal'), 'refactor-proposal-where'));

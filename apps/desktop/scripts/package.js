@@ -125,7 +125,7 @@ function packagerOptions({ platform, arch, out }) {
     afterCopy: [({ buildPath }) => require('fs').copyFileSync(path.join(root, 'resources', 'THIRD_PARTY_LICENSES.txt'), path.join(buildPath, '..', 'THIRD_PARTY_LICENSES.txt'))],
     // .claude/ may contain worktrees from other sessions (with their own node_modules); poc/ holds
     // proofs of concept, never part of the app; generated/ (the run's 3D view and the project city,
-    // scripts/build-3d.js) is packed, and apps/desktop/renderer/run3d/ and city3d/ (their sources) are not
+    // scripts/build-3d.js) is packed, and packages/ui-kit/run3d/ and city3d/ (their sources) are not
     // needed once bundled; native/ (the Rust sources and cargo's target/) arrives as resources/bin/
     // through extraResource, and resources/ (the license file) through afterCopy
     // phase 2 of docs/reorganisation-study-2026-10.md: the app is the npm workspace root (packages/*, apps/*,
@@ -135,8 +135,11 @@ function packagerOptions({ platform, arch, out }) {
     // resolves, next to packages/ and apps/ themselves, which the renderer's <script> paths reach)
     ignore: [
       /^\/(runs|dist|build|scripts|test|supabase|poc|native|resources|\.github|\.claude|\.test-output|\.features-gen)(\/|$)/,
-      /^\/apps\/desktop\/renderer\/(run3d|city3d)(\/|$)/,
-      /^\/(packages|apps)\/[^/]+\/(test|scripts)(\/|$)/,
+      // the 3D views' JSX sources (bundled into generated/): the run's in the UI kit, the city's in the analyser front
+      /^\/packages\/ui-kit\/run3d(\/|$)/,
+      /^\/(apps\/desktop\/renderer|fronts\/analyser)\/city3d(\/|$)/,
+      // phase 3: the fronts' and the kit's tests and Playwright features stay out too
+      /^\/(packages|apps|fronts)\/[^/]+\/(test|scripts|features)(\/|$)/,
       // the engine package itself: the host requires @multiagent/engine, which the asar resolves to the
       // dereferenced copy under node_modules/; packages/shared stays (the renderer's <script> paths name it)
       /^\/packages\/engine(\/|$)/,

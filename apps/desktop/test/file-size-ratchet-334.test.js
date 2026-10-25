@@ -3,7 +3,7 @@
 // file that grows past its count fails (the message says to split it and where the how-to is), a
 // listed file at 1,000 lines or fewer fails until it leaves the list. Lines are counted the same
 // way on every OS (CRLF normalized). The former caps on packages/engine/engine/workflow.js
-// (engine-run-split-250) and apps/desktop/renderer/app.js (view-folders) fold into this rule.
+// (engine-run-split-250) and packages/ui-kit/app.js (view-folders) fold into this rule.
 // Seam: scripts/file-size-ratchet.js { MAX_LINES, EXCEPTIONS, countLines, checkFileSizes }.
 // The module is created by the change: it is loaded inside each test (tests first).
 const test = require('node:test');
@@ -65,7 +65,7 @@ test('#334 the exceptions list starts at the files over 1,000 lines, each with a
     assert.ok(EXCEPTIONS[file] > 1000 && EXCEPTIONS[file] <= max, `${file}: recorded ${EXCEPTIONS[file]}, expected 1001..${max}`);
   }
   assert.equal('packages/engine/engine/workflow.js' in EXCEPTIONS, false, 'the former #250 cap is not an exception');
-  assert.equal('apps/desktop/renderer/app.js' in EXCEPTIONS, false, 'the former view-folders cap is not an exception');
+  assert.equal('packages/ui-kit/app.js' in EXCEPTIONS, false, 'the former view-folders cap is not an exception');
 });
 
 test('#334 a file over the cap that is not listed fails, naming the file and its count', (t) => {

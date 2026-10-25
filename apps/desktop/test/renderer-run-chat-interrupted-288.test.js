@@ -18,8 +18,8 @@
 //   service's `suggested`); called with no options it behaves as today.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { textOf } = require('./mini-dom');
-const { loadPage, settle } = require('./agent-chat-page-harness');
+const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
+const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
 
 const RUN = 'r-288-int';
 const T0 = Date.parse('2026-10-11T10:00:00.000Z');

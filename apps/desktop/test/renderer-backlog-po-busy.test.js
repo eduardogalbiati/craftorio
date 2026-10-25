@@ -17,11 +17,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const R = path.join(__dirname, '..', 'renderer');
-const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
+const read = (...p) => fs.readFileSync(pageFileOf(p.join('/')), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const text = (html) => String(html).replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ');
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -136,7 +137,7 @@ function loadDrawer({ projectId = 'demo' } = {}) {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   vm.runInContext(read('agent-request.js'), sandbox);
-  if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
+  if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-po-settings.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-po.js'), sandbox);
   // the log: 1000 px of content in a 200 px box

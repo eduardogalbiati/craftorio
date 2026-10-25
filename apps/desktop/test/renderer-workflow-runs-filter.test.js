@@ -1,5 +1,5 @@
 // #310: the workflow filter of Workflows › Runs (apps/desktop/renderer/views/workflows/workflows.js with the
-// shared list of apps/desktop/renderer/run-list.js). The Runs tab shows a <select data-testid="runs-workflow-filter">
+// shared list of packages/ui-kit/run-list.js). The Runs tab shows a <select data-testid="runs-workflow-filter">
 // beside the status chips: "All workflows" and each workflow of the service's `workflows` answer
 // ({ workflow, count }) with its count. Picking one loads the list again with `workflow` set
 // (api.listRuns, runs:list); the choice stays across tab visits and is not saved for the next start.
@@ -7,7 +7,7 @@
 // fake DOM parses nothing, so the control is found in the markup strings the view produced.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('./renderer-app-harness');
+const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
 const SD = 'software-development.yaml';
 const BF = 'bug-fix.yaml';

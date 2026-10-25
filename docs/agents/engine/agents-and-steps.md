@@ -339,7 +339,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
 - Inputs with `type: boolean` take true/false; `resolveInputs` also accepts their text ("true",
   "false", "yes", "no", "1", "0", "": saved inputs, the CLI's `--input`), so a condition reads
   `inputs.x`, not `inputs.x == 'true'`. UI-only keys the engine ignores (#116, rendered by
-  `apps/desktop/renderer/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
+  `packages/ui-kit/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
   label }` for an enum), `show_if` (`"mode == 'validated'"`: hidden while false, value kept).
 - Images attached to inputs (#129): `attachments: { <input>: [path | { path, name }] }` on
   `run:start` / `WorkflowRun` (`--attach task=<file>` in `scripts/run.js`). Checked in the
@@ -366,7 +366,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   Written by the visual builder's "random agent" desk.
 - `capabilities` (agent, overridable per step) and `isolation: false`: see [capabilities.md](../capabilities.md).
 - `color: "#RRGGBB"` (agent, #224): the agent's colour in the run chat and the runs list, over its role's
-  fixed colour (`apps/desktop/renderer/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
+  fixed colour (`packages/ui-kit/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
 - `display: "Final verification"` (agent or step, #245, optional, a string of 1 to 40 characters,
   see the field reference): the name the screens show instead of the key or id; without it
   `displayName(id)` (`packages/shared/display-name.js`: `verify_change` → "Verify change"). `workflow.started`

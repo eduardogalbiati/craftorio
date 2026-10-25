@@ -29,6 +29,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { DIRS, listFiles } = require('./file-size-ratchet');
+const { areaOf } = require('./layers');
 const {
   byHotness,
   byScore,
@@ -100,13 +101,13 @@ const COMPLEXITY_EXCEPTIONS = {
   'packages/engine/engine/suite-step.js:runSuite': 71,
   'packages/engine/engine/workflow.js:constructor': 47,
   'packages/engine/engine/workflow.js:runStep': 46,
-  'apps/desktop/renderer/gate-oracle.js:failureContext': 28,
-  'apps/desktop/renderer/gate-oracle.js:gateContext': 28,
-  'apps/desktop/renderer/gate-panel.js:gateToolsHtml': 28,
-  'apps/desktop/renderer/gate-panel.js:onGateTool': 37,
-  'apps/desktop/renderer/run-list.js:renderRunList': 30,
-  'apps/desktop/renderer/run-list.js:runListRow': 27,
-  'apps/desktop/renderer/start-drawer.js:selectWorkflow': 27,
+  'packages/ui-kit/gate-oracle.js:failureContext': 28,
+  'packages/ui-kit/gate-oracle.js:gateContext': 28,
+  'packages/ui-kit/gate-panel.js:gateToolsHtml': 28,
+  'packages/ui-kit/gate-panel.js:onGateTool': 37,
+  'packages/ui-kit/run-list.js:renderRunList': 30,
+  'packages/ui-kit/run-list.js:runListRow': 27,
+  'packages/ui-kit/start-drawer.js:selectWorkflow': 27,
   'apps/desktop/renderer/views/agents/agents.js:agentCard': 26,
   'apps/desktop/renderer/views/agents/agents.js:openAgentModal': 35,
   'apps/desktop/renderer/views/arena/arena.js:onStepFinished': 36,
@@ -127,7 +128,7 @@ const COMPLEXITY_EXCEPTIONS = {
   'apps/desktop/renderer/views/runchat/runchat.js:itemHtml': 30,
   'apps/desktop/renderer/views/workflows/builder.js:renderPanel': 41,
   'apps/desktop/renderer/views/workflows/workflows.js:workflowCard': 34,
-  'apps/desktop/renderer/workflow-inputs.js:applyHints': 27,
+  'packages/ui-kit/workflow-inputs.js:applyHints': 27,
   'packages/engine/service/areas/live-roadmap.js:refill': 35,
   'packages/engine/service/areas/releases.js:settleRelease': 29,
   'packages/engine/service/areas/resume.js:keptWorkQuestion': 29,
@@ -337,7 +338,14 @@ function distribution(functions) {
   return { functions: values.length, median: percentile(values, 0.5), p90: percentile(values, 0.9), p99: percentile(values, 0.99), max: values[values.length - 1] ?? 0, over_limit: values.filter((v) => v > MAX_COMPLEXITY).length };
 }
 
-const AREAS = { renderer: (f) => f.file.startsWith('apps/desktop/renderer/'), backend: (f) => f.file.startsWith('src/') && !f.file.startsWith('apps/desktop/renderer/'), scripts: (f) => f.file.startsWith('scripts/') };
+// the report's buckets, by the file's layering area (scripts/layers.js areaOf): the UI (the kit, the fronts,
+// the apps' pages), the backend (the engine, the service, the domain modules, the server, the host), scripts/
+const UI_AREAS = /^(kit|front:|renderer)/;
+const AREAS = {
+  renderer: (f) => UI_AREAS.test(areaOf(f.file) || ''),
+  backend: (f) => { const a = areaOf(f.file); return !!a && !UI_AREAS.test(a) && a !== 'shared'; },
+  scripts: (f) => f.file.startsWith('scripts/'),
+};
 
 function functionReport(root, asJson) {
   const functions = measureFiles(root, sourceFiles(root));

@@ -10,9 +10,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -100,8 +102,8 @@ function loadWindow() {
     if (fs.existsSync(file)) { try { run(file); } catch { /* a Node-only core: the tab does without it */ } }
   }
   for (const file of cityScripts()) run(file);
-  run(path.join(RENDERER, 'date-range.js'));
-  run(path.join(RENDERER, 'views', 'project', 'project-architecture.js'));
+  run(pageFileOf('date-range.js'));
+  run(pageFileOf('views/project/project-architecture.js'));
   dom.document.addEventListener('click', (e) => sandbox.ProjectArchitecture.onClick(e));
   const newBox = () => {
     const box = dom.document.createElement('div');

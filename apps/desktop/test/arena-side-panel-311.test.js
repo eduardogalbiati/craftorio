@@ -12,6 +12,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
@@ -63,9 +65,11 @@ function parseCss(css, rules, file) {
 }
 
 function loadRules() {
-  const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
+  const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
   const hrefs = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]).filter((h) => !h.includes('node_modules'));
-  assert.ok(hrefs.includes('chat.css') && hrefs.includes('views/arena/arena.css'), 'index.html loads chat.css and the arena stylesheet');
+  // the page-relative names (the UI kit's or a front's prefix dropped, phase 3 of the reorganisation study)
+  const names = hrefs.map((h) => h.replace(/^(\.\.\/)+(packages\/ui-kit|fronts\/[^/]+)\//, ''));
+  assert.ok(names.includes('chat.css') && names.includes('views/arena/arena.css'), 'index.html loads chat.css and the arena stylesheet');
   const rules = [];
   for (const h of hrefs) parseCss(fs.readFileSync(path.join(RENDERER, h), 'utf8'), rules, h);
   return rules;
@@ -90,7 +94,7 @@ function parseAttrs(src) {
 // A view's markup (the `markup: () => `...`` template of views/<view>/<view>.js, a function since #330
 // so a language change redraws it), mounted under html > body > main.
 function loadMarkup(view) {
-  const src = fs.readFileSync(path.join(RENDERER, 'views', view, `${view}.js`), 'utf8');
+  const src = fs.readFileSync(pageFileOf(`views/${view}/${view}.js`), 'utf8');
   const m = /markup:\s*(?:\(\)\s*=>\s*)?`([\s\S]*?)`\s*,\s*\n\s*modals:/.exec(src);
   assert.ok(m, `${view}.js has a markup template`);
   // ${t('key', { a: 1 })}: the params' braces too

@@ -140,10 +140,13 @@ test('steps assert through role and test-id locators, and every test id they use
   const { testIdsUsed, missingTestIds } = require('@multiagent/engine/engine/test-ids');
   const ids = testIdsUsed(steps);
   assert.ok(ids.length >= 5, `at least 5 stable test ids used by the steps (got ${ids.length})`);
-  const renderer = walk(path.join('apps', 'desktop', 'renderer'), ['.js', '.html']).map((f) => read(f)).join('\n');
+  // this app's page is spread over the UI kit, the fronts and the page folder (phase 3 of the
+  // reorganisation study, scripts/source-tree.js pageDirs); the default is a project's src/renderer
+  const layers = require('../../../scripts/source-tree').pageDirs(root);
+  const renderer = layers.flatMap((dir) => walk(path.join(...dir.split('/')), ['.js', '.html'])).map((f) => read(f)).join('\n');
   assert.match(renderer, /data-testid/, 'the renderer has data-testid attributes');
-  const missing = missingTestIds(root, { renderer: path.join('apps', 'desktop', 'renderer') }).map((m) => m.id); // this app's renderer (the default is a project's src/renderer)
-  assert.deepEqual(missing, [], 'each test id the steps use is defined in apps/desktop/renderer');
+  const missing = missingTestIds(root, { renderer: layers }).map((m) => m.id);
+  assert.deepEqual(missing, [], 'each test id the steps use is defined in the page\'s layers');
 });
 
 test('the old screenshot-only E2E folder test/e2e/ is gone', () => {

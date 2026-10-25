@@ -14,6 +14,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const http = require('http');
 
@@ -131,8 +133,9 @@ test('#345 the require graph under src/ has no cycle, lazy requires included', (
 test('#345 the shared pure modules live under packages/shared/ and no longer under src/renderer/', () => {
   const shared = listJs(SHARED).map((f) => path.basename(f, '.js'));
   assert.deepEqual(MOVED.filter((m) => !shared.includes(m)), [], 'modules missing from packages/shared/');
-  const left = listJs(RENDERER).map(rel).filter((f) => MOVED.includes(path.basename(f, '.js')));
-  assert.deepEqual(left, [], 'moved modules still in src/renderer/');
+  // the page's layers (the UI kit, the fronts, the page folder: phase 3 of the reorganisation study)
+  const left = require('../../../scripts/source-tree').pageFiles(root).map((f) => f.file).filter((f) => MOVED.includes(path.basename(f, '.js')));
+  assert.deepEqual(left, [], 'moved modules still among the page\'s files');
 });
 
 test('#345 every packages/shared/ module loads with require and as a browser <script> in the order index.html lists them', () => {
@@ -142,7 +145,7 @@ test('#345 every packages/shared/ module loads with require and as a browser <sc
     const mod = require(f);
     assert.equal(mod !== null && ['object', 'function'].includes(typeof mod) && Object.keys(mod).length > 0, true, `${rel(f)} exports something with require`);
   }
-  const html = read(path.join(RENDERER, 'index.html'));
+  const html = read(pageFileOf('index.html'));
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => rel(path.resolve(RENDERER, m[1])));
   const sharedRel = files.map(rel);
   assert.deepEqual(sharedRel.filter((f) => !scripts.includes(f)), [], 'packages/shared/ modules missing from index.html');
@@ -158,7 +161,7 @@ test('#345 every packages/shared/ module loads with require and as a browser <sc
 });
 
 test('#345 every <script src> of src/renderer/index.html names an existing file, and the generated lists are up to date', () => {
-  const html = read(path.join(RENDERER, 'index.html'));
+  const html = read(pageFileOf('index.html'));
   const missing = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1])
     .filter((s) => !/^[a-z]+:/i.test(s) && !fs.existsSync(path.resolve(RENDERER, s)));
   assert.deepEqual(missing, []);

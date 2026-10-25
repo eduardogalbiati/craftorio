@@ -5,17 +5,18 @@
 // The page is the real one (test/renderer-app-harness.js loads index.html's scripts in a vm sandbox;
 // nothing is parsed, the tests read the markup strings the views produce). The Roadmap is
 // apps/desktop/renderer/views/backlog/backlog-roadmap.js loaded alone, as in test/renderer-backlog-roadmap-view.test.js.
-// New modules (apps/desktop/renderer/nav-groups.js's entries, views/releases/) are reached inside each test.
+// New modules (packages/ui-kit/nav-groups.js's entries, views/releases/) are reached inside each test.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const { loadApp, navEntries, text } = require('./renderer-app-harness');
+const { loadApp, navEntries, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
-const R = path.join(__dirname, '..', 'renderer');
-const NAV_GROUPS = path.join(R, 'nav-groups.js');
+const NAV_GROUPS = pageFileOf('nav-groups.js');
 const navGroups = () => {
   delete require.cache[require.resolve(NAV_GROUPS)];
   return require(NAV_GROUPS);
@@ -102,7 +103,7 @@ test('the next release\'s notes are editable in a textarea before Ship (#260)', 
 // ---- the Roadmap's cut line -------------------------------------------------------------------
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
+const read = (...p) => fs.readFileSync(pageFileOf(p.join('/')), 'utf8');
 
 // backlog-roadmap.js alone in a sandbox (copied from test/renderer-backlog-roadmap-view.test.js)
 function loadRoadmap() {
@@ -144,7 +145,7 @@ function loadRoadmap() {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
-  if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
+  if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }

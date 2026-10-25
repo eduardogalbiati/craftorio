@@ -306,7 +306,8 @@ test('loaded by a <script>, the model sets window.RoadmapModel', () => {
 
 test('the renderer loads the model before the Roadmap and Dashboard views', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
-  const at = (src) => html.indexOf(`<script src="${src}"></script>`);
+  // by the tail of the tag: a UI kit's or a front's script carries its package's path prefix (phase 3)
+  const at = (src) => html.indexOf(`${src}"></script>`);
   assert.ok(at('../../../packages/shared/roadmap-model.js') >= 0, 'index.html does not load ../../../packages/shared/roadmap-model.js');
   assert.ok(at('../../../packages/shared/roadmap-model.js') < at('views/backlog/backlog-roadmap.js'));
   assert.ok(at('../../../packages/shared/roadmap-model.js') < at('views/dashboard/dashboard.js'));

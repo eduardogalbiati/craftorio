@@ -11,11 +11,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const Module = require('module');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const CITY3D = path.join(ROOT, 'apps', 'desktop', 'renderer', 'city3d');
+const CITY3D = pageFileOf('city3d');
 const MODES = { explore: true, live: true, replay: false, issue: false, stage: false, release: false };
 
 // ---------- the city3d bundle (store.js, main.jsx) ----------
@@ -40,7 +42,7 @@ async function bundle(t, file) {
   });
   // main.jsx defines window.ProjectCityScene and reads the catalog's t at call time
   globalThis.window ||= {};
-  globalThis.window.Run3DTheme ||= require('../renderer/run3d-theme.js'); // theme.js reads it (the app loads it first)
+  globalThis.window.Run3DTheme ||= require('@multiagent/ui-kit/run3d-theme.js'); // theme.js reads it (the app loads it first)
   globalThis.t ||= require('@multiagent/shared/i18n.js').t;
   const m = new Module(path.join(CITY3D, `${file}.bundle.js`));
   m.require = (id) => (/^(react|react-dom|@react-three|postprocessing)(\/|$)/.test(id) ? stubFor(id) : require(id));
@@ -68,7 +70,7 @@ const mountScene = (S, extra = {}) => S.mount({}, { layout: LAYOUT, paint: { col
 
 // ---------- the project city view (mini DOM) ----------
 
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
 const hash = '11'.repeat(20);

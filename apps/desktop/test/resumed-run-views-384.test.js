@@ -1,7 +1,7 @@
 // #384 review round 1: where else a resumed run says how it ended, and what the lookup costs.
 //
 // Seams:
-// - StatusPill.runPill / resumedLink (apps/desktop/renderer/status-pill.js), pure: the pill and the link every
+// - StatusPill.runPill / resumedLink (packages/ui-kit/status-pill.js), pure: the pill and the link every
 //   card that shows a run uses.
 // - The Run screen's summary (#run-summary) and the Chat's finished note (run-chat-finished), through
 //   the whole page (test/agent-chat-page-harness.js) with a fake api.listRuns.
@@ -11,9 +11,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { textOf } = require('./mini-dom');
-const { loadPage, settle } = require('./agent-chat-page-harness');
-const SP = require('../renderer/status-pill.js');
+const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
+const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const SP = require('@multiagent/ui-kit/status-pill.js');
 
 const FAILED = '20261014-100000-failed01';
 const RESUMED = '20261014-110000-resumed1';

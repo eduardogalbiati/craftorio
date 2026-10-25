@@ -17,15 +17,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { buildModel } = require('@multiagent/shared/architecture-model');
 const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const CITY = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'project', 'project-city.js');
-const AGENTS = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'project', 'project-city-agents.js');
+const CITY = pageFileOf('views/project/project-city.js');
+const AGENTS = pageFileOf('views/project/project-city-agents.js');
 const hash = '11'.repeat(20);
 const FILES = [
   { path: 'src/engine/run.js', lines: 100 }, { path: 'src/engine/queue.js', lines: 40 },

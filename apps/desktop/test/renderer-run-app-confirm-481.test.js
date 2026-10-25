@@ -1,4 +1,4 @@
-// #481 (SEC-22), apps/desktop/renderer/gate-panel.js runAppConfirmHtml: Run App's one-click confirmation of a
+// #481 (SEC-22), packages/ui-kit/gate-panel.js runAppConfirmHtml: Run App's one-click confirmation of a
 // command declared by the repository (.multiagent/local-preview.yaml, localPreview:info source
 // 'repo') shows everything that will run: the full command, the install step, the env variables
 // (name and value), and marks that it comes from the repository (an element with
@@ -11,8 +11,8 @@ const path = require('path');
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const appSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
-const gateSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'gate-panel.js'), 'utf8');
+const appSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'app.js'), 'utf8');
+const gateSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'gate-panel.js'), 'utf8');
 
 function loadConfirm() {
   const parts = {

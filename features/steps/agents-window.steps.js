@@ -1,5 +1,5 @@
 // Steps of features/agents-window.feature (#263): the Agents window, a second Electron window with
-// the three agents' shared chat (apps/desktop/renderer/agent-chat.js). Opening a drawer reuses oracle.steps.js,
+// the three agents' shared chat (packages/ui-kit/agent-chat.js). Opening a drawer reuses oracle.steps.js,
 // backlog.steps.js and agent-inbox.steps.js; the drawer's answer, agent-chat.steps.js. Locators are
 // roles and data-testid only (skills/ui-conventions):
 //   agent-chat-open-window   in each drawer, the "Open in a window" button (Ctrl+Shift+A does the same)

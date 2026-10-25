@@ -75,7 +75,7 @@ const TEST_MAP = path.join('docs', 'agents', 'test-map.md');
 const CHANNELS_REF = path.join('docs', 'agents', 'channels.md');
 const SUFFIXES = ['js', 'python', 'go', 'java', 'csharp', 'rust', 'gh', 'gl'];
 // The source files mapped one by one (scripts/source-tree.js: the workspaces and scripts/; their .js
-// and .jsx files, recursively: .jsx are the run's 3D view's sources, apps/desktop/renderer/run3d/, bundled by
+// and .jsx files, recursively: .jsx are the run's 3D view's sources, packages/ui-kit/run3d/, bundled by
 // scripts/build-3d.js).
 const listSources = (root) => sourceFiles(root, { scripts: true, match: /\.jsx?$/ });
 // Folders that are not part of the app: left out of the code → tests map (poc/: proofs of concept).
@@ -163,7 +163,7 @@ function codeMap(root = ROOT) {
     '  (or a new file there: files are discovered, see `packages/engine/service/index.js`), never to `packages/engine/service/index.js`;',
     '  its tests go in `test/service/<area>.test.js` (see [testing.md](testing.md)).',
     '- **A screen**: a folder `views/<view>/` in the front that owns it (`fronts/<id>/views/<view>/`; a shell',
-    '  screen in `packages/ui-kit/views/`; until the fronts are filled, `apps/desktop/renderer/views/<view>/`) with',
+    '  screen in `packages/ui-kit/views/`) with',
     '  `<view>.js` calling `registerView` and `<view>.css` (see [renderer.md](renderer.md), "Composition"),',
     '  a fragment `docs/screens/<view>.md` (`menu`, `order`, text) for',
     '  the README table, and its screenshot seed `scripts/screenshot/views/<view>.js` (its tabs, modes,',
@@ -174,7 +174,7 @@ function codeMap(root = ROOT) {
     '  needs others as it loads (a file of the same package, else of the UI kit).',
     '- **Code both the UI and the backend use** (pure: no DOM, no fs, no Electron): a dual-load module in',
     '  `packages/shared/` (`module.exports` under Node, a `window` global as a `<script>`; copy',
-    '  `packages/shared/display-name.js`) and run `npm run docs`. The backend never requires `apps/desktop/renderer/`.',
+    '  `packages/shared/display-name.js`) and run `npm run docs`. The backend never requires the UI (the kit, the fronts, the apps\' pages).',
     '- **Something GitHub and GitLab do differently** (a `gh`/`glab` command, its JSON, a term such as',
     '  "PR #" / "MR !"): a member of both platform adapters, `packages/shared/platforms/github.js` and `gitlab.js`',
     '  (#351), called through the registry (`resolvePlatform` / `platformOrDefault` in `packages/shared/platforms/index.js`,',

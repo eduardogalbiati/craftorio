@@ -1,6 +1,6 @@
 // packages/engine/domains/chat/mic-permission.js (#318): before the first recording on macOS the main process asks
 // systemPreferences.askForMediaAccess('microphone'); a denial is the voice-input error pointing to
-// System Settings. Other OSes never ask. Also the renderer side (apps/desktop/renderer/voice.js): it calls
+// System Settings. Other OSes never ask. Also the renderer side (packages/ui-kit/voice.js): it calls
 // api.micAccess() (channel 'voice:mic-access') before getUserMedia, and a denial shows the error in
 // the voice-input toast without opening the microphone. voice.js runs in a vm sandbox with a
 // minimal fake DOM (the way test/renderer-command-hint.test.js runs command-hint.js).
@@ -41,9 +41,9 @@ test('ensureMicrophoneAccess: Windows and Linux are ok without asking', async ()
   }
 });
 
-// --- renderer: apps/desktop/renderer/voice.js ---------------------------------------------------------------
+// --- renderer: packages/ui-kit/voice.js ---------------------------------------------------------------
 
-const voiceSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'voice.js'), 'utf8');
+const voiceSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'packages', 'ui-kit', 'voice.js'), 'utf8');
 
 function fakeEl() {
   const attrs = {};

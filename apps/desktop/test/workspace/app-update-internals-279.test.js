@@ -87,12 +87,12 @@ test('#285 updateDue: a stored appUpdateWhen "marked" is ignored: a stage end up
 // ---- the Settings row -------------------------------------------------------------------------
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const settingsSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'views', 'settings', 'settings.js'), 'utf8');
+const settingsSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'packages', 'ui-kit', 'views', 'settings', 'settings.js'), 'utf8');
 
 function appUpdateHtml(o, info) {
   const src = /function appUpdateHtml\(o, info\) \{[\s\S]*?\n\}/.exec(settingsSrc)?.[0];
   assert.ok(src, 'appUpdateHtml not found in settings.js');
-  const sandbox = { esc, t: require('../settings-source-329').t }; // #329: the row's texts come from the catalog
+  const sandbox = { esc, t: require('@multiagent/ui-kit/test/settings-source-329').t }; // #329: the row's texts come from the catalog
   vm.runInNewContext(`${src}\nthis.appUpdateHtml = appUpdateHtml;`, sandbox);
   return sandbox.appUpdateHtml(o, info);
 }

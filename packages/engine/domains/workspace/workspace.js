@@ -202,10 +202,10 @@ const DEFAULT_SETTINGS = {
   keepAwake: false,
   // Control channel (#336, packages/engine/control): outside sessions drive this app through a loopback endpoint
   controlChannel: false,
-  // Findings button (#361, apps/desktop/renderer/findings.js): shown in a packaged app (and in screenshot
+  // Findings button (#361, packages/ui-kit/findings.js): shown in a packaged app (and in screenshot
   // captures) only when on; the app run from source always shows it
   findingsButton: false,
-  // the top bar's 24/7 chip (#188, apps/desktop/renderer/occupancy-chip.js): the last 24 h occupancy
+  // the top bar's 24/7 chip (#188, packages/ui-kit/occupancy-chip.js): the last 24 h occupancy
   showOccupancyChip: true,
   // the project city's Glow (#450, apps/desktop/renderer/views/project/project-city.js): the bloom over the
   // lights and the vignette start on; off for slower machines (the header's switch still turns it on)
@@ -243,7 +243,7 @@ const DEFAULT_SETTINGS = {
   voiceCommand: 'whisper-cli',
   voiceModel: 'small',
   voiceLanguage: 'pt',
-  // the first-run Setup (#319, apps/desktop/renderer/setup.js): done once Finish or Skip is pressed; a
+  // the first-run Setup (#319, packages/ui-kit/setup.js): done once Finish or Skip is pressed; a
   // settings.json written before Setup existed reads true (readSettings), so current users skip it
   setupDone: false,
   // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: not offered by

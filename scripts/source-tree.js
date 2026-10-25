@@ -31,6 +31,9 @@
 //                           apps' page folders
 //   featureDirs(root)       the folders holding Playwright features: the repository's `features`, the
 //                           kit's and each front's `features/` (playwright.config.js builds its globs from them)
+//   pageFile(root, rel)     the absolute path of a page file by its page-relative name
+//                           ('select.js', 'views/run/run.js'), in whichever layer holds it, or null
+//   pageFiles(root, opts)   every page file of every layer, [{ dir, rel, file }]; { match } the extension
 
 const fs = require('fs');
 const path = require('path');
@@ -136,10 +139,11 @@ function composition(root, app) {
   return { app: appDir, page: `${appDir}/${PAGE_DIR}`, fronts: list };
 }
 
+// a screen folder holds at least one file (a folder a move left empty is none)
 function viewsOf(root, dir) {
   const abs = path.join(root, dir, 'views');
   if (!fs.existsSync(abs)) return [];
-  return fs.readdirSync(abs, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  return fs.readdirSync(abs, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.readdirSync(path.join(abs, e.name)).length).map((e) => e.name).sort();
 }
 
 // The apps with a page folder (`apps/<app>/renderer/`, where index.html lives), by path.
@@ -169,6 +173,31 @@ function frontOf(root, view) {
   return fronts(root).find((f) => viewsOf(root, f.dir).includes(view)) || null;
 }
 
+
+// The file of a page by its page-relative name ('select.js', 'views/run/run.js', 'index.html'),
+// wherever it lives (the UI kit, a front, an app's page folder; the first that has it, in load
+// order), as an absolute path; null when no layer holds it. Tests ask this instead of naming a layer.
+function pageFile(root, rel) {
+  for (const dir of pageDirs(root)) {
+    const abs = path.join(root, dir, ...posix(rel).split('/'));
+    if (fs.existsSync(abs)) return abs;
+  }
+  return null;
+}
+
+// Every page file of every layer (a layer's root files and its views/<view>/ files; `match` picks
+// the extension, .js by default): [{ dir, rel, file }] with `file` the path from root, sorted.
+function pageFiles(root, { match = /\.js$/ } = {}) {
+  const out = [];
+  for (const dir of pageDirs(root)) {
+    const abs = path.join(root, dir);
+    const filesIn = (sub) => fs.readdirSync(path.join(abs, sub), { withFileTypes: true })
+      .filter((e) => e.isFile() && match.test(e.name)).map((e) => posix(path.join(sub, e.name))).sort();
+    for (const rel of [...filesIn('.'), ...viewsOf(root, dir).flatMap((v) => filesIn(path.join('views', v)))]) out.push({ dir, rel, file: `${dir}/${rel}` });
+  }
+  return out;
+}
+
 module.exports = {
   appPages,
   composition,
@@ -178,6 +207,8 @@ module.exports = {
   listFiles,
   packageOf,
   pageDirs,
+  pageFile,
+  pageFiles,
   resolvePackagePath,
   sourceDirs,
   sourceFiles,

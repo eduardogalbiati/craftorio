@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { makeService } = require('@multiagent/engine/test/service/helpers');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -70,7 +70,7 @@ test('#450 settings: the city\'s Glow is on by default and Settings can turn it 
 });
 
 test('#450 settings: Settings › Execution has the Glow switch, bound to cityGlow', () => {
-  const src = fs.readFileSync(path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'settings', 'settings-markup.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'packages', 'ui-kit', 'views', 'settings', 'settings-markup.js'), 'utf8');
   assert.match(src, /data-setting="cityGlow" data-testid="setting-city-glow"/);
 });
 
