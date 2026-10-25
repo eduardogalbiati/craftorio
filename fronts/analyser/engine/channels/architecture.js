@@ -5,7 +5,7 @@
 // (<workspace>/architecture/<project id>/, the latest with its findings marked new or gone, the
 // project's real finished runs since), the cost estimate from the last real analyses, the
 // project's exclude list, and "Send to Refactor": a finding becomes a proposal of the Refactor tab
-// (packages/engine/domains/refactor/refactor-proposals.js; the Refactor tab's channels are packages/engine/service/channels/refactor.js), filed
+// (packages/engine/domains/refactor/refactor-proposals.js; the Refactor tab's channels are fronts/analyser/engine/channels/refactor.js), filed
 // as an issue and planned in the roadmap's disabled stage waiting for the owner's OK (#435); the report
 // says where each sent finding went (`sentTo`: its issue and stage).
 // The project city (#371): architecture:city is the facts grouped by the saved city plan (folder
@@ -32,26 +32,26 @@
 
 const fs = require('fs');
 const path = require('path');
-const agents = require('../../domains/agents/agents');
-const arch = require('../../domains/oracle/oracle-architecture');
-const facts = require('../../domains/project/architecture-facts');
-const projects = require('../../domains/project/projects');
-const proposals = require('../../domains/refactor/refactor-proposals');
-const roadmaps = require('../../domains/roadmap/roadmap');
-const runs = require('../../domains/run/runs');
-const releaseCity = require('../../domains/releases/release-city');
-const { isWaitingStage } = require('../../domains/refactor/refactor-cadence');
-const simulation = require('../../engine/simulation');
-const { localChanges } = require('../../engine/test-paths');
-const { readEvents } = require('../../domains/supervisor/supervisor');
+const agents = require('@multiagent/engine/domains/agents/agents');
+const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
+const facts = require('@multiagent/engine/domains/project/architecture-facts');
+const projects = require('@multiagent/engine/domains/project/projects');
+const proposals = require('@multiagent/engine/domains/refactor/refactor-proposals');
+const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
+const runs = require('@multiagent/engine/domains/run/runs');
+const releaseCity = require('@multiagent/engine/domains/releases/release-city');
+const { isWaitingStage } = require('@multiagent/engine/domains/refactor/refactor-cadence');
+const simulation = require('@multiagent/engine/engine/simulation');
+const { localChanges } = require('@multiagent/engine/engine/test-paths');
+const { readEvents } = require('@multiagent/engine/domains/supervisor/supervisor');
 const cityAgents = require('@multiagent/shared/city-agents');
 const { recordHitRate } = require('@multiagent/shared/city-impact');
-const { validateSchema } = require('../../domains/workspace/json-schema');
+const { validateSchema } = require('@multiagent/engine/domains/workspace/json-schema');
 const {
   CITY_PLAN_SCHEMA,
   refreshSignal,
 } = require('@multiagent/shared/city-model');
-const { clientError, requireId } = require('../common');
+const { clientError, requireId } = require('@multiagent/engine/service/common');
 const {
   ANY,
   args,
@@ -64,7 +64,7 @@ const {
   RUN_ID,
   shape,
   STRING,
-} = require('../schemas');
+} = require('@multiagent/engine/service/schemas');
 
 const DATE = nullable({ type: 'string', maxLength: 40, description: 'An ISO date, or null for no bound.' });
 const PATTERN = { type: 'string', maxLength: 200, description: 'A gitignore-style path pattern.' };

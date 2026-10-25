@@ -1,4 +1,4 @@
-// #429: architecture:impact({ projectId, record }) (packages/engine/service/channels/architecture.js) keeps the
+// #429: architecture:impact({ projectId, record }) (fronts/analyser/engine/channels/architecture.js) keeps the
 // record's `withSection` (the issue had a `## Expected files` section) on the history entry, so the
 // hit rate can be compared with the section against without it.
 const test = require('node:test');
@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('./helpers');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 function tmp(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

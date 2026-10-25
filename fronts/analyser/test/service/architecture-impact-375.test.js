@@ -1,4 +1,4 @@
-// #375: the channel architecture:impact({ projectId, record? }) (packages/engine/service/channels/architecture.js,
+// #375: the channel architecture:impact({ projectId, record? }) (fronts/analyser/engine/channels/architecture.js,
 // method architectureImpact) gives the city impact preview what it reads without a model call: the
 // project's city plan and the hit rates kept per issue, in <workspace>/architecture/<project id>/
 // impact-history.json → { plan, history: { [issue]: [{ hitRate, ts, run }] }, error }. `record`
@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('./helpers');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 function tmp(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

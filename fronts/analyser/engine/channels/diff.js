@@ -12,7 +12,7 @@ const {
   OBJECT,
   RUN_ID,
   STRING,
-} = require('../schemas');
+} = require('@multiagent/engine/service/schemas');
 
 const COMMIT = nullable(STRING);
 

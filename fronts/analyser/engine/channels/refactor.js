@@ -15,27 +15,27 @@
 // cadence.json { on, every, since }) listens to run:event: after every X real finished runs of the
 // project since it was turned on (or since its last item) the top ranked proposal with an issue and
 // no unfinished item joins the roadmap where placeRefactor puts it (never in the waiting stage). A finished refactor run records the proposal's
-// `outcome` (packages/engine/domains/refactor/refactor-outcome.js). It never answers a gate: an item counts in the budget cap
+// `outcome` (fronts/analyser/engine/domains/refactor-outcome.js). It never answers a gate: an item counts in the budget cap
 // like any other. No model call outside refactor:prioritize.
 
 const fs = require('fs');
 const path = require('path');
-const agentsMod = require('../../domains/agents/agents');
-const arch = require('../../domains/oracle/oracle-architecture');
-const backlog = require('../../domains/backlog/backlog');
-const cadenceRules = require('../../domains/refactor/refactor-cadence');
-const commits = require('../../domains/discovery/discovery-commit');
-const conflictMaps = require('../../domains/project/conflict-map');
-const facts = require('../../domains/project/architecture-facts');
-const outcomes = require('../../domains/refactor/refactor-outcome');
-const priority = require('../../domains/refactor/refactor-priority');
-const projects = require('../../domains/project/projects');
-const proposals = require('../../domains/refactor/refactor-proposals');
-const refactorIssues = require('../../domains/refactor/refactor-issues');
-const roadmaps = require('../../domains/roadmap/roadmap');
-const runs = require('../../domains/run/runs');
-const simulation = require('../../engine/simulation');
-const { clientError, requireId } = require('../common');
+const agentsMod = require('@multiagent/engine/domains/agents/agents');
+const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
+const backlog = require('@multiagent/engine/domains/backlog/backlog');
+const cadenceRules = require('@multiagent/engine/domains/refactor/refactor-cadence');
+const commits = require('@multiagent/engine/domains/discovery/discovery-commit');
+const conflictMaps = require('@multiagent/engine/domains/project/conflict-map');
+const facts = require('@multiagent/engine/domains/project/architecture-facts');
+const outcomes = require('../domains/refactor-outcome');
+const priority = require('@multiagent/engine/domains/refactor/refactor-priority');
+const projects = require('@multiagent/engine/domains/project/projects');
+const proposals = require('@multiagent/engine/domains/refactor/refactor-proposals');
+const refactorIssues = require('@multiagent/engine/domains/refactor/refactor-issues');
+const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
+const runs = require('@multiagent/engine/domains/run/runs');
+const simulation = require('@multiagent/engine/engine/simulation');
+const { clientError, requireId } = require('@multiagent/engine/service/common');
 const {
   args,
   BOOL,
@@ -50,7 +50,7 @@ const {
   shape,
   STRING,
   text: textOf,
-} = require('../schemas');
+} = require('@multiagent/engine/service/schemas');
 
 const { WORKFLOW } = refactorIssues;
 const WORKFLOW_NAME = 'refactor';

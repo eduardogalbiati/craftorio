@@ -1,4 +1,4 @@
-// packages/engine/service/areas/diff.js (#118): the diff viewer's data. runDiff lists a run's changed files
+// fronts/analyser/engine/areas/diff.js (#118): the diff viewer's data. runDiff lists a run's changed files
 // (added/modified/deleted/renamed, binary/image, large files without a patch) since the merge base
 // with its base branch, or one commit only; runDiffFile returns one file's patch and both sides'
 // contents. A mock run, or one without a worktree, gets the developer's reported files instead of
@@ -11,8 +11,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const diffArea = require('../../service/areas/diff');
-const { gitRepo } = require('./helpers');
+const diffArea = require('../../engine/areas/diff');
+const { gitRepo } = require('@multiagent/engine/test/service/helpers');
 
 // A minimal ctx for diff.js: a real runs/ folder (ctx.runFolder behaves like workspace.js's, an
 // events.jsonl is required) and `active`, a fake stand-in for the engine's live WorkflowRun map.

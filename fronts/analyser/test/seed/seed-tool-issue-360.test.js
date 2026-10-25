@@ -1,9 +1,9 @@
-// #360 packages/engine/domains/seed/seed-tool-issue.js: "Make it a tool" files an issue asking to turn a seed into a
+// #360 fronts/analyser/engine/domains/seed-tool-issue.js: "Make it a tool" files an issue asking to turn a seed into a
 // deterministic tool (preview without filing, or one issue create command through exec).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('../../domains/seed/seed-tool-issue');
+const load = () => require('../../engine/domains/seed-tool-issue');
 
 const SEED = {
   id: 'churn-complexity',

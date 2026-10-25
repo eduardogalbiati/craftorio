@@ -1,10 +1,10 @@
-// #357: a refactor's success measured on the architecture map (packages/engine/domains/refactor/refactor-outcome.js): whether
+// #357: a refactor's success measured on the architecture map (fronts/analyser/engine/domains/refactor-outcome.js): whether
 // its file left the Danger Zone, how much its score dropped, whether it improved at all, and how many
 // proposals left the Danger Zone in the last 30 / 90 days. Tests first: loaded inside each test.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('../../domains/refactor/refactor-outcome');
+const load = () => require('../../engine/domains/refactor-outcome');
 
 test('#357 refactorOutcome: a file that left the Danger Zone improved', () => {
   const { refactorOutcome } = load();

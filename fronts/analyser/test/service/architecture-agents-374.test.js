@@ -1,4 +1,4 @@
-// #374: the channel architecture:agents({ projectId }) (packages/engine/service/channels/architecture.js, method
+// #374: the channel architecture:agents({ projectId }) (fronts/analyser/engine/channels/architecture.js, method
 // architectureAgents) reads the runs in progress of a project for its city and never starts one:
 // → { projectId, runs: [{ id, colour, agents: [lastTouches entries], trail: [paths], dirty: [paths] }],
 //     collisions: [{ path, runs }] } (packages/shared/city-agents.js does the reading). It declares
@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('./helpers');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 function tmp(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

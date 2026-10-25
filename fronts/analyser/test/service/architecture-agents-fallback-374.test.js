@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('./helpers');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 const T0 = Date.parse('2026-10-13T10:00:00.000Z');
 const at = (s) => new Date(T0 + s * 1000).toISOString();
