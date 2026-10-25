@@ -118,13 +118,15 @@ steps:
 // also try to stop the same run, harmlessly, once it is already gone) keeps rmSync last.
 // #408: the CLIs' transcripts are read from an empty home of the test (host.cliHome), never from the
 // machine's ~/.claude, ~/.codex and ~/.grok (slow, and different on every machine).
-function makeService(t, hostExtra = {}) {
+// `hostExtra` lands on the fake host; its `fronts` (the composition's ids) and `installed` (the fronts
+// found, in place of the app root's) go to createService instead (phase 4, #590).
+function makeService(t, { fronts, installed, ...hostExtra } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'service-ws-'));
   const cliHome = fs.mkdtempSync(path.join(os.tmpdir(), 'service-cli-home-'));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
   process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
   const trashed = [];
-  const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false, cliHome, ...hostExtra } });
+  const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false, cliHome, ...hostExtra }, fronts, installed });
   t.after(async () => {
     for (const run of service.api['runs:active']()) {
       try { service.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ }

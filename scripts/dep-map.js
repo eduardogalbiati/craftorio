@@ -6,7 +6,9 @@
 // front (what phase 4's vertical slices have to place), and the script globals a front defines
 // (`window.X = …`, a top-level `function X(` or `const X =` of a classic script) that another layer
 // uses by name: the couplings the layering check cannot see, since the fronts reach each other through
-// the page, not through require. Read-only; prints a report.
+// the page, not through require. After phase 4 (#590) it also says which package holds each channel
+// file (the engine kernel or a front's engine/channels/) and flags a front's file called from outside
+// the front. Read-only; prints a report.
 // `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
 
 'use strict';
@@ -16,6 +18,7 @@ const path = require('path');
 
 const { FOLDERS, PACKAGES } = require('./layers');
 const {
+  frontEngineDirs,
   fronts,
   resolvePackagePath,
   sourceDirs,
@@ -82,16 +85,28 @@ function areaMatrix(all) {
   return mat;
 }
 
-// The service's channel files, by the `method` each channel exposes on window.api.
+// The channel folders: the kernel's (packages/engine/service/channels, `engine`) and each front's
+// engine/channels/ (phase 4 of the study, #590; scripts/source-tree.js frontEngineDirs), [{ dir, from }].
+function channelDirs() {
+  const kernel = sourceDirWith(path.join('service', 'channels'));
+  return [...(kernel ? [{ dir: rel(kernel), from: 'engine' }] : []), ...frontEngineDirs(ROOT).map((f) => ({ dir: `${f.engine}/channels`, from: f.id }))]
+    .filter((d) => fs.existsSync(path.join(ROOT, d.dir)));
+}
+
+// The service's channel files, by the `method` each channel exposes on window.api, and the package
+// that holds each file (`engine`, or a front's id).
 function channelFiles() {
-  const dir = sourceDirWith(path.join('service', 'channels'));
-  if (!dir) return {};
   const byMethod = {};
-  for (const f of fs.readdirSync(dir)) {
-    const text = fs.readFileSync(path.join(dir, f), 'utf8');
-    for (const m of text.matchAll(/method:\s*'([A-Za-z0-9_]+)'/g)) byMethod[m[1]] = f.replace(/\.js$/, '');
+  const holder = {};
+  for (const { dir, from } of channelDirs()) {
+    for (const f of fs.readdirSync(path.join(ROOT, dir)).filter((x) => x.endsWith('.js'))) {
+      const name = f.replace(/\.js$/, '');
+      holder[name] = from;
+      const text = fs.readFileSync(path.join(ROOT, dir, f), 'utf8');
+      for (const m of text.matchAll(/method:\s*'([A-Za-z0-9_]+)'/g)) byMethod[m[1]] = name;
+    }
   }
-  return byMethod;
+  return { byMethod, holder };
 }
 
 const apiCalls = (text) => new Set([...text.matchAll(/\bapi\.([A-Za-z0-9_]+)\s*\(/g)].map((m) => m[1]));
@@ -214,7 +229,7 @@ function report() {
   const svc = all.filter(([a, b]) => area(a) === 'service' && (area(b) === 'renderer' || rel(b) === 'apps/desktop/host/main.js'));
   say(`## service/ requiring renderer/ or main.js: ${svc.length ? svc.length : 'none'}`);
 
-  const byMethod = channelFiles();
+  const { byMethod, holder } = channelFiles();
   const { views, layerOf } = viewChannels(byMethod);
   say(''); say(`## channels: ${Object.keys(byMethod).length}; per view (its front in brackets), the channel files it calls (count); "?name" = a window.api method outside the channel files`);
   for (const v of Object.keys(views).sort()) {
@@ -222,15 +237,24 @@ function report() {
   }
   const users = {};
   for (const [v, files] of Object.entries(views)) for (const k of Object.keys(files)) (users[k] ??= new Set()).add(v);
-  say(''); say('## channel file -> the views that call it');
-  for (const [k, s] of Object.entries(users).sort()) say(k.padEnd(24), [...s].sort().join(' '));
+  say(''); say('## channel file [the package that holds it] -> the views that call it');
+  for (const [k, s] of Object.entries(users).sort()) say(`${k}${holder[k] ? ` [${holder[k]}]` : ''}`.padEnd(30), [...s].sort().join(' '));
   // phase 3: a channel file called from two fronts or more is what phase 4 has to place (the shell's
-  // screens and the host's own methods, "?name", are left out of the count)
+  // screens and the host's own methods, "?name", are left out of the count); after phase 4 (#590) only
+  // kernel files may cross fronts, and a front's file is called by that front alone (or by the shell:
+  // a shell call keeps a file in the kernel, docs/agents/fronts.md)
   const byFront = {};
   for (const [k, s] of Object.entries(users)) byFront[k] = new Set([...s].map((v) => layerOf[v]).filter((l) => l !== 'shell' && !l.startsWith('app:')));
   const crossing = Object.entries(byFront).filter(([k, s]) => !k.startsWith('?') && s.size > 1).sort();
   say(''); say(`## channel files called from more than one front: ${crossing.length}${crossing.length ? '' : ' (none)'}`);
-  for (const [k, s] of crossing) say(k.padEnd(24), [...s].sort().join(' '));
+  for (const [k, s] of crossing) say(`${k} [${holder[k] || '?'}]`.padEnd(30), [...s].sort().join(' '));
+  const misplaced = Object.entries(users).filter(([k, s]) => holder[k] && holder[k] !== 'engine' && [...s].some((v) => layerOf[v] !== holder[k])).sort();
+  say(''); say(`## a front's channel files called from outside the front (phase 4 forbids it): ${misplaced.length}${misplaced.length ? '' : ' (none)'}`);
+  for (const [k, s] of misplaced) say(`${k} [${holder[k]}]`.padEnd(30), [...s].filter((v) => layerOf[v] !== holder[k]).sort().join(' '));
+  const byHolder = {};
+  for (const [name, from] of Object.entries(holder)) (byHolder[from] ??= []).push(name);
+  say(''); say('## channel files by package (phase 4)');
+  for (const [from, names] of Object.entries(byHolder).sort()) say(from.padEnd(12), names.sort().join(' '));
 
   // the page's globals a front defines that another layer uses; the shell's globals are the page's
   // (every front may use them), so only a front's are listed

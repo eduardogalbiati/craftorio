@@ -15,7 +15,9 @@
 // exports (ctx) => { helpers }; they all land on one shared `ctx` (with host, events, code), which
 // the channels receive too. An area reads another's helper or state through ctx at call time
 // (`ctx.ws`, `ctx.active`, `ctx.startWorkflowRun(...)`), never when it is created; a name two
-// areas both define is refused. A new feature adds or edits an area file, not this one.
+// areas both define is refused. A new feature adds or edits an area file, not this one. A front's
+// own areas and channels (fronts/<id>/engine/, phase 4 of the study, #590) load next to these when
+// the composition serves the front: docs/agents/fronts.md.
 // Pure helpers the areas share: packages/engine/service/common.js.
 //
 // Today apps/desktop/host/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +
@@ -34,7 +36,6 @@
 //   cliHome          optional; the folder the CLIs' config folders (.claude, .codex, .grok) are read under
 //                    (#408, packages/engine/domains/cli/cli-config-dirs.js); the user's home (and CLAUDE_CONFIG_DIR/CODEX_HOME) without it
 
-const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 const pastedImages = require('../domains/chat/pasted-images');
@@ -56,29 +57,38 @@ const {
   DESKTOP,
   loadChannels,
 } = require('./manifest');
+const { servedFronts, serviceFiles } = require('./fronts');
 
 const AREAS_DIR = path.join(__dirname, 'areas');
 
 // Every area file exports (ctx) => { helpers }; its properties (getters included, e.g. `ws`) are
 // defined on ctx as they are. Refuses a name already on ctx (two areas would shadow each other).
-function loadAreas(ctx, dir = AREAS_DIR) {
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js')).sort()) {
-    const props = Object.getOwnPropertyDescriptors(require(path.join(dir, f))(ctx));
-    for (const name of Object.keys(props)) {
-      if (name in ctx) throw new Error(`Service areas: ${name} is defined twice (${f}).`);
+// The files come from this folder and from each served front's engine/areas/ (phase 4, #590;
+// packages/engine/service/fronts.js serviceFiles: one order by file name). A kernel file uses a
+// helper a front's area defines only as an optional call (`ctx.x?.()`): the front may not be served.
+function loadAreas(ctx, fronts = [], dir = AREAS_DIR) {
+  for (const { file, name } of serviceFiles(dir, fronts, 'areas')) {
+    const props = Object.getOwnPropertyDescriptors(require(file)(ctx));
+    for (const prop of Object.keys(props)) {
+      if (prop in ctx) throw new Error(`Service areas: ${prop} is defined twice (${name}).`);
     }
     Object.defineProperties(ctx, props);
   }
   return ctx;
 }
 
-function createService({ host }) {
+// `fronts` (phase 4, #590): the ids of the fronts this engine serves, from the app's composition
+// (apps/desktop/composition.js, apps/web/composition.js, the bin's --fronts); absent, every installed
+// front. `installed` replaces the scan of the app root (tests). Their channels and areas load next to
+// the kernel's; a channel of a front not served is unknown (the server answers 404).
+function createService({ host, fronts = null, installed = undefined }) {
   const events = new EventEmitter();
   // the code this process started with, to tell a window it runs newer code (#83)
   const code = createCodeVersion({ appVersion: host.appVersion, isPackaged: host.isPackaged });
-  const ctx = loadAreas({ host, events, code, BUNDLED_SKILLS_DIR });
+  const served = servedFronts(fronts, installed);
+  const ctx = loadAreas({ host, events, code, BUNDLED_SKILLS_DIR, fronts: served.map((f) => f.id) }, served);
 
-  const entries = loadChannels(ctx);
+  const entries = loadChannels(ctx, served);
   // Every channel needs an open workspace, and a channel with named params an object argument whose
   // runId, projectId and cardId are file names (#333, requireArgs in packages/engine/service/common.js): checked
   // once here instead of in each handler. #338: then the argument is checked against the entry's
@@ -108,6 +118,8 @@ function createService({ host }) {
     notifications,
     manifest,
     events,
+    // the ids of the fronts this engine serves (phase 4, #590), by id
+    fronts: ctx.fronts,
     // the code version (#83): main.js calls code.markLoaded() when a window loads
     code,
     workspace: () => ctx.ws,

@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  frontEngineDirs,
   fronts,
   resolvePackagePath,
   sourceFiles,
@@ -58,10 +59,20 @@ const AREAS = {
   kit: { may: ['kit', 'shared'], what: 'the UI kit (packages/ui-kit/): the shell, the run kernel and the controls every page starts from' },
   renderer: { may: ['renderer', 'kit', 'shared'], what: 'an app\'s own page files (apps/<app>/renderer/: the desktop page, the browser\'s api-http.js)' },
 };
-// Phase 3: one area per front (`front:<id>`), which may require the kit and shared, never another
+// Phase 3: one area per front (`front:${id}`), which may require the kit and shared, never another
 // front, so the layering check tells a front reaching into another one apart (the fronts mostly reach
 // each other through script globals, which scripts/dep-map.js lists next to the channel crossings).
-for (const f of fronts(ROOT)) AREAS[`front:${f.id}`] = { may: [`front:${f.id}`, 'kit', 'shared'], what: `the ${f.id} front (${f.dir}/): its screens, their CSS and its Home card` };
+// Phase 4 (#590, docs/agents/fronts.md): a front's engine side (`fronts/<id>/engine/`: its channels,
+// areas and domains) is the area `front-engine:<id>`, which may require the engine kernel (the
+// service's common and schemas, the engine, the domains, the utilities) and shared, never another
+// front's engine code and never the UI; nothing requires it (the kernel never requires a front, and
+// the front's UI reaches its own engine code only through window.api).
+for (const f of fronts(ROOT)) {
+  AREAS[`front:${f.id}`] = { may: [`front:${f.id}`, 'kit', 'shared'], what: `the ${f.id} front (${f.dir}/): its screens, their CSS and its Home card` };
+  AREAS[`front-engine:${f.id}`] = { may: [`front-engine:${f.id}`, 'service', 'root', 'engine', 'utility', 'shared'], what: `the ${f.id} front's engine side (${f.dir}/engine/): its channels, areas and domain modules` };
+}
+// a front's engine-side folder (scripts/source-tree.js frontEngineDirs), by the front's folder
+const FRONT_ENGINE = Object.fromEntries(frontEngineDirs(ROOT, { all: true }).map((f) => [f.dir, f.engine]));
 
 // The area folders (a workspace's folders, or src/'s before phase 2) and their area (domains: a domain module, or a utility when
 // ENGINE_ROOT_UTILITIES lists the file, see areaOf). scripts/dep-map.js reads this list too.
@@ -83,8 +94,14 @@ function areaOf(file) {
   const parts = file.split('/');
   const pkg = parts.length > 2 ? `${parts[0]}/${parts[1]}` : null;
   if (pkg && pkg in PACKAGES) {
-    // a package's tests and features are not sources
-    if (PACKAGES[pkg]) return parts[2] === 'test' || parts[2] === 'features' ? null : PACKAGES[pkg];
+    // a package's tests and features are not sources; a front's engine folder is its own area (phase 4)
+    // the desktop app's composition (the fronts it ships, phase 3) is read by its host (main.js passes it to the service, phase 4)
+    if (file === 'apps/desktop/composition.js') return 'desktop';
+    if (PACKAGES[pkg]) {
+      if (parts[2] === 'test' || parts[2] === 'features') return null;
+      if (FRONT_ENGINE[pkg] && file.startsWith(`${FRONT_ENGINE[pkg]}/`)) return `front-engine:${PACKAGES[pkg].slice('front:'.length)}`;
+      return PACKAGES[pkg];
+    }
     if (parts.length < 4 || parts[2] === 'test') return null;
     if (parts[2] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
     return FOLDERS[parts[2]] || null;

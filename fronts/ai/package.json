@@ -5,6 +5,9 @@
   "description": "The AI front: the Oracle, Night watch, the agents, the skills and the usage; its screens, their CSS, its features and its tests.",
   "license": "MIT",
   "author": "Eduardo Galbiati",
+  "multiagent": {
+    "front": "ai"
+  },
   "scripts": {
     "test": "node ../../scripts/test.js --workspace .",
     "test:e2e": "node ../../scripts/e2e.js --front ai"

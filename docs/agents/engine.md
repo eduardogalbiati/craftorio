@@ -10,6 +10,7 @@ Which field is valid where, its type and the loader's message: [the field refere
 - [Agents and steps](engine/agents-and-steps.md): What agents and steps declare: skills, fan-out, step types (screenshots, suite, test ids), transitions, inputs, agent options, and the events and guards around a turn.
 - [Chaining: declared outputs and `then` (#134)](engine/chaining.md): Declared run outputs and `then`: what a finished run hands to the next one, and how the service starts it.
 - [Evidence: screenshots per step and round (#146)](engine/evidence.md): Where a run's screenshots go (`evidence/<step>/round-<n>/`), the evidence index and who reads it.
+- [Fronts: the engine side of a front (#590)](engine/fronts.md): Phase 4 of the reorganisation study: a front package carries the channels, areas and domain modules only it uses; the engine discovers them from the installed fronts and serves the ones the app's composition names.
 - [Gates, loops and how a run ends](engine/gates-and-run-end.md): Human gates (feedback, choices, summaries), the supervisor, refused tool calls, waits, how a run ends and ships, and the bundled workflows' rules for several issues.
 - [Providers](engine/providers.md): Turn timeouts, per-run agent overrides, fallback chains, limits per model, retries and other provider details.
 - [Repository workflows (#485)](engine/repository-workflows.md): A repository's `.multiagent/project.yaml`: the workflows a project is worked on with, how a name resolves, and why a repository's own workflow is accepted per commit and capped.
