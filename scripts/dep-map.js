@@ -110,6 +110,16 @@ function viewChannels(byMethod) {
   const result = {};
   const layerOf = {};
   for (const layer of viewLayers()) {
+    // a layer's own root files count as one screen of its own (a front's Home card, <id>-home.js, phase 3)
+    const rootFiles = fs.readdirSync(path.join(ROOT, layer.dir)).filter((f) => f.endsWith('.js') && !layer.id.startsWith('app:') && layer.id !== 'shell');
+    if (rootFiles.length) {
+      const calls = new Set();
+      for (const f of rootFiles) apiCalls(fs.readFileSync(path.join(ROOT, layer.dir, f), 'utf8')).forEach((c) => calls.add(c));
+      const files = {};
+      for (const c of calls) { const k = byMethod[c] || `?${c}`; files[k] = (files[k] || 0) + 1; }
+      result[`${layer.id}/*`] = files;
+      layerOf[`${layer.id}/*`] = layer.id;
+    }
     for (const v of viewsOf(ROOT, layer.dir)) {
       const dir = path.join(ROOT, layer.dir, 'views', v);
       const calls = new Set();

@@ -26,6 +26,7 @@ const BASELINE = {
   'packages/ui-kit/diff-viewer.js': { select: 1 },
   'packages/ui-kit/gate-panel.js': { select: 1 },
   'apps/desktop/renderer/index.html': { select: 4 },
+  'apps/web/renderer/index.html': { select: 4 },
   'packages/ui-kit/resume-dialog.js': { select: 1 },
   'packages/ui-kit/select.js': { select: 1 },
   'fronts/analyser/views/analytics/analytics-agents.js': { select: 1 },

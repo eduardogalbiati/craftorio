@@ -125,8 +125,12 @@ One repository, one `node_modules` (default hoisting), the workspaces of the roo
   `ai`, each its `views/`, `features/` and `test/`. An app's `composition.js` lists the fronts it ships
   ([renderer.md](renderer.md), "Composition").
 - `apps/desktop/` = `@multiagent/desktop`: `host/` (Electron's main, the root `package.json`'s `main`),
-  `renderer/` (its page, `index.html`, generated from its composition), `assets/`, `scripts/package.js`
-  (`npm run build`). `node-pty`, xterm, marked and dompurify are its dependencies.
+  `renderer/` (its page, `index.html`, generated from its composition; the engine connection page),
+  `assets/`, `scripts/package.js` (`npm run build`). `node-pty`, xterm, marked and dompurify are its
+  dependencies.
+- `apps/web/` = `@multiagent/web` (phase 3): the browser UI the engine server serves at `/` (the root
+  `package.json`'s `multiagent.ui` names `apps/web/renderer`): its `composition.js`, its page and
+  `api-http.js`. Not in the desktop asar.
 - Across packages, require by name: `@multiagent/shared/<file>`, `@multiagent/engine/<folder>/<file>`
   (npm links the workspaces in `node_modules/@multiagent/`; `npm ci` / `npm install` at the root).
   The engine never requires the desktop app (`node scripts/layers.js`). A new workspace is learnt once

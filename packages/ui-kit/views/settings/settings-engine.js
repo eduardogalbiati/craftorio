@@ -1,6 +1,6 @@
 /* global api */
 // Settings › Execution › Engine: where this window's engine runs (api.engineConnection, from
-// apps/desktop/host/preload.js or apps/desktop/renderer/api-http.js). The desktop app on this computer's engine and the
+// apps/desktop/host/preload.js or apps/web/renderer/api-http.js). The desktop app on this computer's engine and the
 // desktop app showing a remote engine both offer Change…, which opens the app's connection page
 // (apps/desktop/host/engine-connection-window.js: this computer or a remote engine, address and token, Test
 // connection); a plain browser on `npm run serve` only says which engine serves it. Its texts are

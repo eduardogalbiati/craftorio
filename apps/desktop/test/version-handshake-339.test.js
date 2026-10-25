@@ -16,14 +16,14 @@
 //
 // 3. `GET /api/manifest` also answers the contract of the manifest it serves:
 //    `{ result: [...entries], contract }`. This is how the browser UI learns "the contract it was
-//    built for": apps/desktop/renderer/api-http.js builds window.api from that manifest at load and keeps its
+//    built for": apps/web/renderer/api-http.js builds window.api from that manifest at load and keeps its
 //    `contract`.
 //
 // 4. A service channel `app:version` (method `appVersion`, no argument) whose schema.result is an
 //    object requiring `app` and `contract` (strings). It answers exactly what GET /api/version
 //    answers, so the desktop app gets the same over IPC (apps/desktop/host/main.js serves every service channel).
 //
-// 5. apps/desktop/renderer/api-http.js, on every WebSocket open (the first connection and each
+// 5. apps/web/renderer/api-http.js, on every WebSocket open (the first connection and each
 //    reconnection), reads `GET /api/version` (fetch or XMLHttpRequest) and compares its `contract`
 //    with the one /api/manifest gave at load. Different: it shows a banner, an element built with
 //    document.createElement carrying `data-testid="version-skew-banner"` (setAttribute or
@@ -190,7 +190,7 @@ test('#339 contractHash changes when a channel is added or removed', (t) => {
   assert.notEqual(hash(removed), before, 'a channel removed');
 });
 
-// ---- the browser UI's handshake (apps/desktop/renderer/api-http.js) -------------------------------------
+// ---- the browser UI's handshake (apps/web/renderer/api-http.js) -------------------------------------
 
 // A minimal DOM: enough for createElement / append / setAttribute / dataset / textContent /
 // innerHTML (text only) / classList / addEventListener / click / querySelector by simple selectors.

@@ -400,7 +400,7 @@ argument. The JS engine's answers are the reference a second engine (the Rust ph
 - **The handshake**: `GET /api/version` (and the `app:version` channel over IPC) answers
   `{ app, contract }`, `contract` being `contractHash` of the manifest (`packages/engine/service/contract.js`):
   any change to a channel, its params or its schemas changes it. `GET /api/manifest` carries the
-  same `contract`; the browser UI (`apps/desktop/renderer/api-http.js`) compares them on every WebSocket
+  same `contract`; the browser UI (`apps/web/renderer/api-http.js`) compares them on every WebSocket
   connection and shows a Reload banner when the engine speaks another contract.
 
 ## Machine-independent tests

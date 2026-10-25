@@ -5,11 +5,9 @@
 // then the renderer folder's own files), and the smoke and screenshot runners read it through
 // `scripts/source-tree.js` (composition). A front never depends on another as it loads, so the list
 // is sorted; a composition of one front builds that front alone; this one, the default, ships them all.
-module.exports = {
-  fronts: [
-    'ai',
-    'analyser',
-    'build',
-    'plan',
-  ],
-};
+module.exports = { fronts: [
+  'ai',
+  'analyser',
+  'build',
+  'plan',
+] };

@@ -74,6 +74,6 @@
     "node-pty@1.1.0": true
   },
   "multiagent": {
-    "ui": "apps/desktop/renderer"
+    "ui": "apps/web/renderer"
   }
 }

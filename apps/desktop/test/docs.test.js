@@ -229,9 +229,12 @@ test('rendererAssets on the real desktop page: load-order guarantees the app dep
     return i;
   };
 
-  // view-registry.js and api-http.js are read as app.js loads
+  // view-registry.js is read as app.js loads; api-http.js (the browser app's own file, apps/web)
+  // is read as app.js loads on the web page, and the desktop page never loads it (its preload builds window.api)
   assert.ok(at(scripts, 'view-registry.js') < at(scripts, 'app.js'));
-  assert.ok(at(scripts, 'api-http.js') < at(scripts, 'app.js'));
+  assert.equal(scripts.includes('api-http.js'), false, 'the desktop page loads no api-http.js');
+  const web = rendererAssets(root, '.js', 'apps/web').map(name);
+  assert.ok(at(web, 'api-http.js') < at(web, 'app.js'));
   // chat-models.js's window.ChatModels (a top-level file) is read by every chat screen as it loads
   assert.ok(at(scripts, 'chat-models.js') < at(scripts, 'views/duo/duo.js'));
   assert.ok(at(scripts, 'chat-models.js') < at(scripts, 'views/arena/arena.js'));

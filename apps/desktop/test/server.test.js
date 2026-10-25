@@ -152,15 +152,15 @@ test('a browser opening ?token= gets a cookie and the UI', async (t) => {
   assert.match(cookie, /SameSite=Strict/);
   const jar = { Cookie: cookie.split(';')[0] };
 
-  assert.equal((await request(base, { path: '/', headers: jar })).headers.location, '/apps/desktop/renderer/index.html');
-  const page = await request(base, { path: '/apps/desktop/renderer/index.html', headers: jar });
+  assert.equal((await request(base, { path: '/', headers: jar })).headers.location, '/apps/web/renderer/index.html');
+  const page = await request(base, { path: '/apps/web/renderer/index.html', headers: jar });
   assert.equal(page.status, 200);
   assert.match(page.headers['content-type'], /text\/html/);
   assert.match(page.text, /api-http\.js/);
   assert.equal((await request(base, { path: '/node_modules/marked/lib/marked.umd.js', headers: jar })).status, 200);
   assert.equal((await callApi(base, 'projects:list', null, { ...jar, 'Content-Type': 'application/json' })).status, 200);
   // without the cookie, even the UI needs the token
-  assert.equal((await request(base, { path: '/apps/desktop/renderer/index.html' })).status, 401);
+  assert.equal((await request(base, { path: '/apps/web/renderer/index.html' })).status, 401);
 });
 
 test('serves only the UI folders: no source, no other packages, no traversal', async (t) => {
@@ -171,9 +171,9 @@ test('serves only the UI folders: no source, no other packages, no traversal', a
   assert.equal(await get('/packages/engine/domains/account/auth-config.js'), 404);
   assert.equal(await get('/package.json'), 404);
   assert.equal(await get('/node_modules/ws/package.json'), 404);
-  assert.equal(await get('/apps/desktop/renderer/../../package.json'), 404);
-  assert.equal(await get('/apps/desktop/renderer/%2e%2e/%2e%2e/package.json'), 404);
-  assert.equal(await get('/apps/desktop/renderer/..%5c..%5cpackage.json'), 404);
+  assert.equal(await get('/apps/web/renderer/../../package.json'), 404);
+  assert.equal(await get('/apps/web/renderer/%2e%2e/%2e%2e/package.json'), 404);
+  assert.equal(await get('/apps/web/renderer/..%5c..%5cpackage.json'), 404);
 });
 
 test('the WebSocket needs the token and streams run events', async (t) => {
@@ -264,7 +264,7 @@ function loadPreloadApi(manifest) {
   return exposed;
 }
 
-// apps/desktop/renderer/api-http.js is a browser IIFE (window, fetch, XMLHttpRequest, WebSocket): run it in
+// apps/web/renderer/api-http.js is a browser IIFE (window, fetch, XMLHttpRequest, WebSocket): run it in
 // a small vm sandbox with just enough of those to build window.api from a stubbed manifest fetch.
 function loadApiHttpApi(manifest) {
   const vm = require('vm');

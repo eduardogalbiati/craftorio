@@ -71,7 +71,8 @@ test('#383 BASELINE lists renderer files with whole counts, totals no higher tha
       total[kind] += n;
     }
   }
-  assert.equal(total.select <= 74, true, `select total ${total.select} <= 74`);
+  // 74 of the issue inventory, plus the 4 of the browser app's page (apps/web/renderer/index.html, the desktop page's frame again)
+  assert.equal(total.select <= 78, true, `select total ${total.select} <= 78`);
   assert.equal(total.date <= 6, true, `date total ${total.date} <= 6`);
   assert.equal(total.datetime <= 2, true, `datetime total ${total.datetime} <= 2`);
 });

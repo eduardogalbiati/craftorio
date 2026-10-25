@@ -33,7 +33,7 @@ const path = require('path');
 const DEFAULT_PORT = 7300;
 const FILE = 'engine-connection.json';
 // the remote page asks the desktop app for the connection page by opening this path of its own origin
-// (apps/desktop/renderer/api-http.js openEngineConnection): the remote window runs without a preload
+// (apps/web/renderer/api-http.js openEngineConnection): the remote window runs without a preload
 const CONNECTION_PATH = '/__desktop__/engine-connection';
 // added to the remote window's user agent, so the engine's page knows it is inside the desktop app
 const CLIENT_MARK = 'MultiagentRemoteClient';

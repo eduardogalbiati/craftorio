@@ -521,7 +521,7 @@ test('a question from another live app process is refused, naming its pid and ho
 // ---- the renderer calls these channels with one object, through the real manifest (#187) --------
 // Before the fix, every oracle channel with input declared positional params (e.g.
 // params: ['actionId', 'mock']), so the client-side payload() builder (apps/desktop/host/preload.js,
-// apps/desktop/renderer/api-http.js), given the renderer's single object (api.oracleAct({ actionId, mock })),
+// apps/web/renderer/api-http.js), given the renderer's single object (api.oracleAct({ actionId, mock })),
 // wrapped it again into { actionId: { actionId, mock }, mock: undefined }: act() then saw an object,
 // String()'d into "[object Object]", and "This action is not in the conversation." `service.api`
 // alone (used elsewhere in this file) calls the channel's fn directly and never exercises that

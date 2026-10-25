@@ -35,8 +35,8 @@ test('the connection test and the remote window\'s first load against npm run se
 
   const root = await fetch(`${engine.url}/`, { headers: { cookie }, redirect: 'manual' });
   assert.equal(root.status, 302);
-  assert.equal(root.headers.get('location'), '/apps/desktop/renderer/index.html');
-  const page = await fetch(`${engine.url}/apps/desktop/renderer/index.html`, { headers: { cookie } });
+  assert.equal(root.headers.get('location'), '/apps/web/renderer/index.html');
+  const page = await fetch(`${engine.url}/apps/web/renderer/index.html`, { headers: { cookie } });
   assert.equal(page.status, 200);
   const html = await page.text();
   assert.match(html, /api-http\.js/);

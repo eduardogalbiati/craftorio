@@ -1,6 +1,6 @@
 // window.api for the desktop app, built at load from the channel manifest the main process holds
 // (packages/engine/service/manifest.js, merged from packages/engine/service/channels/*.js): nothing here lists channels, so
-// a new channel needs no edit in this file. apps/desktop/renderer/api-http.js builds the same object for the
+// a new channel needs no edit in this file. apps/web/renderer/api-http.js builds the same object for the
 // browser from the server's copy of the manifest. Sandboxed: only `electron` can be required.
 const { contextBridge, ipcRenderer } = require('electron');
 

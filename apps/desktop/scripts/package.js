@@ -138,8 +138,10 @@ function packagerOptions({ platform, arch, out }) {
       // the 3D views' JSX sources (bundled into generated/): the run's in the UI kit, the city's in the analyser front
       /^\/packages\/ui-kit\/run3d(\/|$)/,
       /^\/(apps\/desktop\/renderer|fronts\/analyser)\/city3d(\/|$)/,
-      // phase 3: the fronts' and the kit's tests and Playwright features stay out too
+      // phase 3: the fronts' and the kit's tests and Playwright features stay out too, and so does the
+      // browser app (apps/web: the engine serves it; a desktop app on a remote engine loads it from there)
       /^\/(packages|apps|fronts)\/[^/]+\/(test|scripts|features)(\/|$)/,
+      /^\/apps\/web(\/|$)/,
       // the engine package itself: the host requires @multiagent/engine, which the asar resolves to the
       // dereferenced copy under node_modules/; packages/shared stays (the renderer's <script> paths name it)
       /^\/packages\/engine(\/|$)/,

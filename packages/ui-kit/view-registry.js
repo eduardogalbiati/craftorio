@@ -214,6 +214,9 @@ function redrawMarkup() {
 }
 window.ViewRegistry = {
   draw: (container, source) => drawInto(container, source),
+  // the registered screens' ids (the smoke checks every screen of the composition registered, scripts/smoke.js)
+  has: (id) => viewRegistry.has(id),
+  ids: () => [...viewRegistry.keys()],
   redrawMarkup,
   relabelNav,
   repaintNodes,
