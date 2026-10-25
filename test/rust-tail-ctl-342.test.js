@@ -1,5 +1,5 @@
 // Acceptance tests for #342 (the session tail and the control client as Rust binaries, so the packaged
-// app needs no system Node): everything but the binaries' own behaviour (test/session-tail-342.test.js
+// app needs no system Node): everything but the binaries' own behaviour (test/session/session-tail-342.test.js
 // and test/ctl-342.test.js run those). Seams, loaded inside each test (they do not exist before the change):
 // - src/domains/machine/native-bin.js: nativeBinaryPath(name, { isPackaged, resourcesPath, platform }) where a native
 //   sidecar (multiagent-mcp, multiagent-tail, multiagent-ctl) lives: packaged resources/bin/<name>[.exe],

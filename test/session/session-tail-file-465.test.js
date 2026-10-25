@@ -3,10 +3,10 @@
 // - src/domains/session/session-tail.js exports followFile(file, write) → stop(), like followSession: it prints a
 //   plain log as it grows (no JSON, no formatting of its lines), waits for a file that does not exist
 //   yet, and keeps following it.
-// - as a script, and its Rust twin multiagent-tail (native/, as test/session-tail-342.test.js builds
+// - as a script, and its Rust twin multiagent-tail (native/, as test/session/session-tail-342.test.js builds
 //   and runs it): `<tail> <runDir> --file <path relative to the run folder>` follows that file; the
 //   binary prints exactly what the script prints. Without cargo the binary's cases are skipped with
-//   one line (CI never skips them), as in test/session-tail-342.test.js.
+//   one line (CI never skips them), as in test/session/session-tail-342.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

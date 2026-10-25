@@ -3,7 +3,7 @@
 // never holds the run's worktree. It replaces --test-force-exit, which calls process.exit() right
 // after the last test: on Windows (Node 24) that races V8's background threads and aborts the process
 // with `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c` after a fetch()
-// (test/mobile-gates-answers.test.js, about 1 run in 40 under the suite's load). A file with nothing
+// (test/workspace/mobile-gates-answers.test.js, about 1 run in 40 under the suite's load). A file with nothing
 // left running exits on its own, the normal way.
 // node --test passes --require on to the runner too: only a test file's process (NODE_TEST_CONTEXT) arms it.
 if (process.env.NODE_TEST_CONTEXT) {

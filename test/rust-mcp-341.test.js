@@ -4,7 +4,7 @@
 //   (where the binary of the current platform lives: never PATH) and
 //   mcpCommand(isPackaged, resolveCommand, { binary }) (the binary when it exists, else the JS script);
 // - the repository's files: the cargo workspace in native/, packaging, the CI and release workflows,
-//   the docs. The MCP protocol itself (both servers, the same cases) is test/supervisor-mcp.test.js.
+//   the docs. The MCP protocol itself (both servers, the same cases) is test/supervisor/supervisor-mcp.test.js.
 // Nothing here builds, packages, launches the app or calls a model.
 
 const test = require('node:test');

@@ -21,9 +21,9 @@ plan, and records the decisions the owner took (section 5). The figures come fro
 
 The renderer talks to the engine only through `window.api`, built from the channel manifest
 (`src/service/manifest.js`): 276 channels in 33 files under `src/service/channels/`, each with a JSON
-schema. Two transports carry them unchanged: Electron IPC (`src/preload.js`) and HTTP + WebSocket
+schema. Two transports carry them unchanged: Electron IPC (`src/host/preload.js`) and HTTP + WebSocket
 (`src/server/`, `src/renderer/api-http.js`). `npm run serve` is already the engine without Electron,
-and the desktop app can attach to an engine another computer serves (`src/engine-connection.js`).
+and the desktop app can attach to an engine another computer serves (`src/host/engine-connection.js`).
 
 So "engine vs app" is a runtime boundary today. It is not a package boundary: one `package.json`,
 one `node_modules`, one test tree, one build. The study is about turning the runtime seam into a
@@ -186,7 +186,7 @@ fronts/
   plan/                      views: inbox, discovery; features; tests
   ai/                        views: oracle, nightwatch, agents, skills, usage; features; tests
 apps/
-  desktop/                   src/main.js, preload, ipc-guard, window-guards, permissions,
+  desktop/                   src/host/main.js, preload, ipc-guard, window-guards, permissions,
                              engine-connection*, external-terminal, keep-awake, auth, package.js,
                              assets; its composition lists the fronts it ships
   web/                       the browser composition served by the engine (index.html + api-http)
@@ -233,9 +233,9 @@ true.
 
 ## 5. Decisions taken by the owner (2026-10-24)
 
-The seven questions this study raised, decided in the owner's session of 2026-10-24. They become
-the entry of [decisions.md](agents/decisions.md) when phase 0 starts; until then this section is the
-record. The study is a plan: nothing below is implemented.
+The seven questions this study raised, decided in the owner's session of 2026-10-24. Phase 0 (#559)
+recorded them as the 2026-10-24 entry of [decisions.md](agents/decisions.md); this section keeps the
+longer form. Phase 1 (#560, #561, #562) is the first to implement anything of this study.
 
 1. **Vertical fronts, reached in phase 4.** Phases 2 and 3 keep every channel file and domain
    module in the engine package; in phase 4 each front takes its channels, areas and domain

@@ -9,8 +9,12 @@
 const fs = require('fs');
 const path = require('path');
 
+const { FOLDERS } = require('./layers');
+
 const ROOT = path.resolve(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
+// the top-level folders of src/ (scripts/layers.js FOLDERS): anything else under src/ is a loose file
+const AREA = new RegExp(`^src/(${Object.keys(FOLDERS).join('|')})/`);
 
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -25,7 +29,7 @@ const rel = (p) => path.relative(ROOT, p).replace(/\\/g, '/');
 
 // The area a file belongs to: a top-level folder of src/, or `src-root` for the loose files.
 function area(file) {
-  const m = rel(file).match(/^src\/(engine|service|shared|server|control|renderer|host|domains)\//);
+  const m = rel(file).match(AREA);
   return m ? m[1] : 'src-root';
 }
 

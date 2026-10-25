@@ -21,7 +21,7 @@ the workspace folder.
   native/Cargo.toml --all -- --check`, `cargo clippy --manifest-path native/Cargo.toml
   --all-targets -- -D warnings`, `cargo test --manifest-path native/Cargo.toml`. The **target
   folder is per worktree** (`native/target/`, gitignored; `CARGO_TARGET_DIR` moves it, and
-  `test/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `multiagent-mcp` in
+  `test/supervisor/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `multiagent-mcp` in
   release (about a minute), later ones are incremental. Without cargo, `npm test` skips the
   binary's cases with one line; CI never does. `mcpCommand` (`src/domains/supervisor/supervisor-bridge.js`) starts
   `native/target/release/multiagent-mcp[.exe]` when it exists (packaged: `resources/bin/`), else
@@ -33,7 +33,7 @@ the workspace folder.
   `src/domains/session/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
   Settings › Execution). Node is needed for development only: `npm start`, the tests and the
   JS fallbacks of a checkout without cargo (`src/domains/session/session-tail.js`, `src/domains/supervisor/supervisor-mcp.js`,
-  `scripts/ctl.js`). `test/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
+  `scripts/ctl.js`). `test/session/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
   binaries in release on their first run, like `multiagent-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH

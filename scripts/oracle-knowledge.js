@@ -2,7 +2,7 @@
 // Checks or refreshes the hashes of skills/oracle/knowledge.md (#184): the Oracle's digest of the
 // skills it knows (backlog-product-owner, run-supervisor, issue-writing, context-economy). Each
 // digest section records the sha256 (12 hex) of its source skill's SKILL.md with LF line endings;
-// test/oracle-capable-184.test.js fails when a source skill changed and its digest was not reviewed.
+// test/oracle/oracle-capable-184.test.js fails when a source skill changed and its digest was not reviewed.
 //   node scripts/oracle-knowledge.js           # list each source with its recorded and current hash
 //   node scripts/oracle-knowledge.js --write   # after updating a digest's text: record the new hashes
 const fs = require('fs');

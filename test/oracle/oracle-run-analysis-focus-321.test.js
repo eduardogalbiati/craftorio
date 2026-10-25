@@ -44,7 +44,7 @@ function scratchDir(t, prefix) {
   return dir;
 }
 
-// The tools' ctx on a fresh workspace (as test/oracle-capable-184.test.js wires it).
+// The tools' ctx on a fresh workspace (as test/oracle/oracle-capable-184.test.js wires it).
 function makeCtx(t) {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-321-ws-'));

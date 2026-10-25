@@ -19,7 +19,7 @@ edited copy freezes like a skill.
 - **A report-back list** after VERIFY: a line with "tell me" followed by `- ` bullets.
 - Credit the source when the text is adapted, and add it to `THIRD_PARTY_NOTICES.md`.
 
-`test/seeds-360.test.js` validates every bundled seed.
+`test/seed/seeds-360.test.js` validates every bundled seed.
 
 ## The answer
 
