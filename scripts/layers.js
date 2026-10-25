@@ -49,13 +49,15 @@ const AREAS = {
   renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (src/renderer/)' },
 };
 
-const FOLDERS = { control: 'server', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
+// The top-level folders of src/ and their area (domains: a domain module, or a utility when
+// ENGINE_ROOT_UTILITIES lists the file, see areaOf). scripts/dep-map.js reads this list too.
+const FOLDERS = { control: 'server', domains: 'root', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
 
 // The area of a file (path from the repository root, with /), or null when no area holds it.
 function areaOf(file) {
   const parts = file.split('/');
   if (parts[0] !== 'src' || parts.length < 2) return null;
-  if (parts.length === 2 || (parts[1] === 'domains' && parts.length === 4)) return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
+  if (parts.length === 2 || parts[1] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
   return FOLDERS[parts[1]] || null;
 }
 
@@ -236,6 +238,7 @@ module.exports = {
   checkLayers,
   ENGINE_ROOT_UTILITIES,
   EXCEPTIONS,
+  FOLDERS,
   requireGraph,
 };
 
