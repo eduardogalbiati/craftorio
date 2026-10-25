@@ -227,7 +227,7 @@ Then('the request in the Supervisor chat offers {string} and {string}', async ({
   for (const name of [a, b]) await expect(card.getByRole('button', { name, exact: true })).toBeEnabled();
 });
 
-// the Oracle's panel in view (features/steps/oracle.steps.js); its line for a request it sent:
+// the Oracle's panel in view (fronts/ai/features/steps/oracle.steps.js); its line for a request it sent:
 // [data-testid="oracle-request"], "Sent to the <owner> · <kind> · ..."
 const oraclePanel = (page) => page.getByRole('complementary', { name: 'Oracle', exact: true });
 

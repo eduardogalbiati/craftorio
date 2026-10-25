@@ -1,5 +1,5 @@
 // #337 (acceptance tests, written before the code): the "Limits tonight" group of the Night watch
-// screen (apps/desktop/renderer/views/nightwatch/nightwatch.js). The view is loaded whole into a vm sandbox
+// screen (fronts/ai/views/nightwatch/nightwatch.js). The view is loaded whole into a vm sandbox
 // with app.js's globals stubbed and a tiny fake DOM (as test/renderer-nightwatch.test.js does): #nw-body
 // keeps the HTML it is given and turns every element with an id or a data-testid into an object
 // that holds the handlers the view wires (found by `#id` or `[data-testid="..."]`).

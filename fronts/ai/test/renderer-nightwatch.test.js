@@ -1,4 +1,4 @@
-// apps/desktop/renderer/views/nightwatch/nightwatch.js: the Night watch screen's checklist (#239, Save cleared
+// fronts/ai/views/nightwatch/nightwatch.js: the Night watch screen's checklist (#239, Save cleared
 // every permission). The view runs only inside the renderer, so it is loaded whole into a vm sandbox
 // with app.js's globals stubbed and a tiny fake DOM: #nw-body keeps the HTML it is given and turns its
 // ids and checklist boxes into objects with the handlers the view wires (no layout, no real parser).

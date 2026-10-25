@@ -1,4 +1,4 @@
-// apps/desktop/renderer/views/usage/usage.js: providerCard's and actionsCard's install/scope hint (#147),
+// fronts/ai/views/usage/usage.js: providerCard's and actionsCard's install/scope hint (#147),
 // each with a play button next to it (commandHint, packages/ui-kit/command-hint.js) when there is a
 // command to run. Pulled out of the source and run in a vm sandbox against stand-ins for the
 // app-wide helpers it is not about (esc, fmtTok/fmtUsd, meterHtml, STATUS_TEXT, orchestratorSplit,

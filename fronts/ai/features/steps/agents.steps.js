@@ -1,4 +1,4 @@
-// Steps of features/agents.feature (#297): the Agents screen's workflow agents, their "Customize
+// Steps of fronts/ai/features/agents.feature (#297): the Agents screen's workflow agents, their "Customize
 // look" editor with its full-size robot preview, the robots on their cards painted in their role
 // colour, and the Analytics Agents tab's small card robots. Opening the screen, Home's tabs and
 // Analytics' tabs reuse app.steps.js, home.steps.js and run.steps.js. Locators are roles and
@@ -18,7 +18,7 @@
 // The preview (agent-editor-robot) is painted with the colour: its data-color, or the hex in its svg.
 
 const { expect } = require('@playwright/test');
-const { When, Then } = require('./fixtures');
+const { When, Then } = require('../../../../features/steps/fixtures');
 
 const LOAD_TIMEOUT = 30000;
 // a desktop window's preview: 280 px, give or take the rounding of borders and zoom

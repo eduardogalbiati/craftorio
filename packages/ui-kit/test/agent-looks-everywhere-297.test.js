@@ -3,7 +3,7 @@
 //   run's workflow file without .yaml, or its name>, <agent key>) first. A saved look is drawn as
 //   saved (its boxes, colours, eyes and emblem; the role colour is not painted over it); without one,
 //   the provider's robot in the agent's role colour (AgentColors.hexFor), as today.
-// - The Agents screen (apps/desktop/renderer/views/agents/agents.js): an uncustomised workflow agent's card and
+// - The Agents screen (fronts/ai/views/agents/agents.js): an uncustomised workflow agent's card and
 //   the editor's first preview draw the provider's robot painted in its role colour
 //   (AgentColors.hexFor(key, the workflow's agents[key])), as the run chat does; a customised one its
 //   saved look; the supervisor / Product Owner / Oracle keep their own looks; "Reset look" goes back to

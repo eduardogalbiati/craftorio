@@ -5,7 +5,7 @@
 // files (paused, dispatch idle with items left, nothing left) and the runs in progress (no progress
 // event for T_stall, night-watch.js STALL_MS: stalled). When a watch ends (packages/engine/domains/oracle/oracle.js
 // onNightEnd → `nightwatch:ended`) the morning summary goes out as a notification.
-// Screen: apps/desktop/renderer/views/nightwatch/; the switch itself is the Oracle's (oracle:nightWatch).
+// Screen: fronts/ai/views/nightwatch/; the switch itself is the Oracle's (oracle:nightWatch).
 // Self-healing (#278, settings.oracle.selfHealing): the watch is then active day and night
 // (oracle-actions.watchState). Its switch is a setting: `settings:changed` writes the oracle.watch entry
 // (selfHealing: true) when it turns on or off. The detectors of packages/engine/domains/night/night-watch.js (detectSelfHealing:

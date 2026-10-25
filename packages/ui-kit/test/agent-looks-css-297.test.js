@@ -69,7 +69,7 @@ test('#297: no stylesheet outside the Agents screen targets an unscoped .ag-robo
       for (const sel of r.selectors) if (hasClass(firstCompound(sel), 'ag-robot')) offenders.push(`${rel(file)}: "${sel}"`);
     }
   }
-  assert.deepEqual(offenders, [], `rules that target .ag-robot without a scoping ancestor, outside apps/desktop/renderer/views/agents/:\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `rules that target .ag-robot without a scoping ancestor, outside fronts/ai/views/agents/:\n${offenders.join('\n')}`);
 });
 
 test('#297: agents.css still makes the editor robot 280px, and 200px in the under-900px media query', () => {

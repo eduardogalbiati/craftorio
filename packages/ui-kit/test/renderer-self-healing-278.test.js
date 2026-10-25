@@ -1,5 +1,5 @@
 // #278 Self-healing in the UI: Settings › Execution › Oracle (packages/ui-kit/views/settings/settings.js) and
-// the Night watch screen (apps/desktop/renderer/views/nightwatch/nightwatch.js). Renderer code runs only in
+// the Night watch screen (fronts/ai/views/nightwatch/nightwatch.js). Renderer code runs only in
 // Electron, so functions are pulled out of the source and run in a vm sandbox (as in
 // test/renderer-settings-oracle.test.js and test/renderer-nightwatch.test.js). Only strings and
 // primitives are compared. Acceptance tests written before the code; the seams they pin down:
