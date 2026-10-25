@@ -529,7 +529,7 @@ test('a question from another live app process is refused, naming its pid and ho
 // 'electron' only) and dispatching into the real service is what actually re-creates the bug's path.
 function loadPreloadApi(manifest, dispatch) {
   const electronPath = require.resolve('electron');
-  const preloadPath = require.resolve('../../host/preload.js');
+  const preloadPath = require.resolve('@multiagent/desktop/host/preload.js');
   let exposed = null;
   require.cache[electronPath] = {
     id: electronPath, filename: electronPath, loaded: true,
