@@ -16,6 +16,7 @@
   "main": "apps/desktop/host/main.js",
   "workspaces": [
     "packages/*",
+    "fronts/*",
     "apps/*"
   ],
   "engines": {
@@ -35,8 +36,8 @@
     "pretest:coverage": "node scripts/docs.js --derived",
     "test:coverage": "node scripts/test.js --experimental-test-coverage",
     "screenshot": "electron scripts/screenshot.js",
-    "test:e2e": "bddgen && playwright test",
-    "test:e2e:update": "bddgen && playwright test --update-snapshots",
+    "test:e2e": "node scripts/e2e.js",
+    "test:e2e:update": "node scripts/e2e.js -- --update-snapshots",
     "test:engine": "node scripts/run.js --mock --auto-approve --task \"Engine test\"",
     "typecheck": "tsc --noEmit -p jsconfig.json",
     "prebuild": "node scripts/docs.js --derived && node scripts/build-3d.js",

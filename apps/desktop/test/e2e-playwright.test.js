@@ -66,7 +66,8 @@ test('package.json has @playwright/test and playwright-bdd as dev dependencies a
   assert.ok(p.devDependencies?.['@playwright/test'], 'devDependencies["@playwright/test"]');
   assert.ok(p.devDependencies?.['playwright-bdd'], 'devDependencies["playwright-bdd"]');
   assert.equal(p.dependencies?.['@playwright/test'], undefined, 'not a runtime dependency of the packaged app');
-  assert.match(p.scripts?.['test:e2e'] || '', /bddgen|playwright/, 'scripts["test:e2e"] runs playwright-bdd / playwright');
+  // scripts/e2e.js runs bddgen, then playwright test (phase 3 of the reorganisation study: one front's features too)
+  assert.match(p.scripts?.['test:e2e'] || '', /bddgen|playwright|scripts\/e2e\.js/, 'scripts["test:e2e"] runs playwright-bdd / playwright');
 });
 
 test('the Playwright config runs the visual lane one at a time, keeps traces, videos and screenshots of failures and writes JSON results', async () => {

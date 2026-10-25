@@ -1,8 +1,13 @@
-// Dependency map of src/ for reorganisation work (docs/reorganisation-study-2026-10.md): the
+// Dependency map of the sources for reorganisation work (docs/reorganisation-study-2026-10.md): the
 // require() edges between areas (engine, service, shared, server, control, renderer, host, the loose files
-// of a src/ tree; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs, and
-// which service channel files each renderer view calls (through `api.<method>(`). Read-only; prints
-// a report. `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
+// of a src/ tree; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs,
+// which service channel files each screen calls (through `api.<method>(`), by the front that holds the
+// screen (the UI kit's screens as `shell`, phase 3), the channel files called from more than one
+// front (what phase 4's vertical slices have to place), and the script globals a front defines
+// (`window.X = …`, a top-level `function X(` or `const X =` of a classic script) that another layer
+// uses by name: the couplings the layering check cannot see, since the fronts reach each other through
+// the page, not through require. Read-only; prints a report.
+// `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
 
 'use strict';
 
@@ -10,7 +15,14 @@ const fs = require('fs');
 const path = require('path');
 
 const { FOLDERS, PACKAGES } = require('./layers');
-const { resolvePackagePath, sourceDirs, sourceFiles } = require('./source-tree');
+const {
+  fronts,
+  resolvePackagePath,
+  sourceDirs,
+  sourceFiles,
+  uiKit,
+  viewsOf,
+} = require('./source-tree');
 
 const ROOT = path.resolve(__dirname, '..');
 // the first source folder (scripts/source-tree.js) holding `sub`, e.g. service/channels (packages/engine) or renderer/views (apps/desktop)
@@ -84,25 +96,71 @@ function channelFiles() {
 
 const apiCalls = (text) => new Set([...text.matchAll(/\bapi\.([A-Za-z0-9_]+)\s*\(/g)].map((m) => m[1]));
 
+// The layers that hold screens (phase 3 of the study): the UI kit (`shell`), each front by its id, and
+// each app's page folder (`app:<name>`); before phase 3, the renderer folder alone (`renderer`).
+function viewLayers() {
+  const layers = [];
+  const kit = uiKit(ROOT);
+  if (kit) layers.push({ id: 'shell', dir: kit.dir });
+  for (const f of fronts(ROOT)) layers.push({ id: f.id, dir: f.dir });
+  const legacy = sourceDirWith(path.join('renderer', 'views'));
+  if (legacy) layers.push({ id: kit ? `app:${path.basename(path.dirname(path.dirname(legacy)))}` : 'renderer', dir: rel(path.dirname(legacy)) });
+  return layers;
+}
+
+// view → { channel file: calls }, and view → the layer (front) holding it
 function viewChannels(byMethod) {
-  const viewsDir = sourceDirWith(path.join('renderer', 'views'));
-  if (!viewsDir) return {};
   const result = {};
-  for (const v of fs.readdirSync(viewsDir)) {
-    const dir = path.join(viewsDir, v);
-    if (!fs.statSync(dir).isDirectory()) continue;
-    const calls = new Set();
-    for (const f of fs.readdirSync(dir)) {
-      if (f.endsWith('.js')) apiCalls(fs.readFileSync(path.join(dir, f), 'utf8')).forEach((c) => calls.add(c));
+  const layerOf = {};
+  for (const layer of viewLayers()) {
+    for (const v of viewsOf(ROOT, layer.dir)) {
+      const dir = path.join(ROOT, layer.dir, 'views', v);
+      const calls = new Set();
+      for (const f of fs.readdirSync(dir)) {
+        if (f.endsWith('.js')) apiCalls(fs.readFileSync(path.join(dir, f), 'utf8')).forEach((c) => calls.add(c));
+      }
+      const files = {};
+      for (const c of calls) {
+        const k = byMethod[c] || `?${c}`;
+        files[k] = (files[k] || 0) + 1;
+      }
+      result[v] = files;
+      layerOf[v] = layer.id;
     }
-    const files = {};
-    for (const c of calls) {
-      const k = byMethod[c] || `?${c}`;
-      files[k] = (files[k] || 0) + 1;
-    }
-    result[v] = files;
   }
-  return result;
+  return { views: result, layerOf };
+}
+
+// The page scripts of each layer (the UI kit's and the fronts' root files and views/), with the globals
+// each defines (`window.X = …`, a top-level `function X(` or `const X =`) and the names it uses.
+function pageGlobals() {
+  const layers = [...(uiKit(ROOT) ? [{ id: 'shell', dir: uiKit(ROOT).dir }] : []), ...fronts(ROOT).map((f) => ({ id: f.id, dir: f.dir }))];
+  const filesOf = (dir) => {
+    const abs = path.join(ROOT, dir);
+    if (!fs.existsSync(abs)) return [];
+    const own = fs.readdirSync(abs).filter((f) => f.endsWith('.js')).map((f) => `${dir}/${f}`);
+    const views = viewsOf(ROOT, dir).flatMap((v) => fs.readdirSync(path.join(abs, 'views', v)).filter((f) => f.endsWith('.js')).map((f) => `${dir}/views/${v}/${f}`));
+    return [...own, ...views];
+  };
+  const defined = new Map(); // name -> the layer that defines it
+  const texts = [];
+  for (const layer of layers) {
+    for (const file of filesOf(layer.dir)) {
+      const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
+      texts.push({ layer: layer.id, text });
+      for (const m of text.matchAll(/^window\.([A-Za-z_$][\w$]*)\s*=/gm)) defined.set(m[1], layer.id);
+      for (const m of text.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) defined.set(m[1], layer.id);
+      for (const m of text.matchAll(/^const\s+([A-Za-z_$][\w$]*)\s*=/gm)) defined.set(m[1], layer.id);
+    }
+  }
+  const out = [];
+  for (const [name, from] of defined) {
+    if (from === 'shell') continue;
+    const re = new RegExp(`(?<![\\w$.])${name.split('$').join('\\$')}(?=\\s*[(.?])`);
+    const users = [...new Set(texts.filter((t) => t.layer !== from && re.test(t.text)).map((t) => t.layer))].sort();
+    if (users.length) out.push({ name, from, users });
+  }
+  return out.sort((a, b) => a.from.localeCompare(b.from) || a.name.localeCompare(b.name));
 }
 
 function report() {
@@ -147,15 +205,28 @@ function report() {
   say(`## service/ requiring renderer/ or main.js: ${svc.length ? svc.length : 'none'}`);
 
   const byMethod = channelFiles();
-  const views = viewChannels(byMethod);
-  say(''); say(`## channels: ${Object.keys(byMethod).length}; per view, the channel files it calls (count); "?name" = a window.api method outside the channel files`);
+  const { views, layerOf } = viewChannels(byMethod);
+  say(''); say(`## channels: ${Object.keys(byMethod).length}; per view (its front in brackets), the channel files it calls (count); "?name" = a window.api method outside the channel files`);
   for (const v of Object.keys(views).sort()) {
-    say(v.padEnd(12), Object.entries(views[v]).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(' '));
+    say(`${v} [${layerOf[v]}]`.padEnd(22), Object.entries(views[v]).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(' '));
   }
   const users = {};
   for (const [v, files] of Object.entries(views)) for (const k of Object.keys(files)) (users[k] ??= new Set()).add(v);
   say(''); say('## channel file -> the views that call it');
   for (const [k, s] of Object.entries(users).sort()) say(k.padEnd(24), [...s].sort().join(' '));
+  // phase 3: a channel file called from two fronts or more is what phase 4 has to place (the shell's
+  // screens and the host's own methods, "?name", are left out of the count)
+  const byFront = {};
+  for (const [k, s] of Object.entries(users)) byFront[k] = new Set([...s].map((v) => layerOf[v]).filter((l) => l !== 'shell' && !l.startsWith('app:')));
+  const crossing = Object.entries(byFront).filter(([k, s]) => !k.startsWith('?') && s.size > 1).sort();
+  say(''); say(`## channel files called from more than one front: ${crossing.length}${crossing.length ? '' : ' (none)'}`);
+  for (const [k, s] of crossing) say(k.padEnd(24), [...s].sort().join(' '));
+
+  // the page's globals a front defines that another layer uses; the shell's globals are the page's
+  // (every front may use them), so only a front's are listed
+  const globals = pageGlobals();
+  say(''); say(`## script globals a front defines that another layer uses (the fronts' couplings through the page): ${globals.length}${globals.length ? '' : ' (none)'}`);
+  for (const g of globals) say(`${g.name} [${g.from}]`.padEnd(40), `used by ${g.users.join(' ')}`);
 
   return { text: lines.join('\n'), edges: all.map(([a, b]) => [rel(a), rel(b)]) };
 }

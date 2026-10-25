@@ -141,29 +141,34 @@ Read this before changing anything in `apps/desktop/renderer/`.
   its script and stylesheet (plus, for its checks and the README, a screenshot seed module
   `scripts/screenshot/views/<view>.js` and a `docs/screens/<view>.md` fragment), then `npm run docs`; `index.html`,
   `app.js` and `style.css` stay untouched (the nav, `showView`, `init()` and the file lists find it).
-- **How the files are loaded** (#152): `index.html`'s `<link>`/`<script>` lines for `apps/desktop/renderer/*`
-  and `apps/desktop/renderer/views/*/*` sit between `<!-- generated:styles -->` / `<!-- generated:scripts -->`
-  markers, written by `npm run docs` (`scripts/docs.js`); `node scripts/docs.js --check` (CI) fails
-  when they are stale. A new module or stylesheet is a new file plus `npm run docs`. Order, per list:
-  the files whose header comment has a `load: early` line (`api-http.js`, `view-registry.js`…,
-  `style.css`), then `app.js`, then the other top-level files, then the views, each group sorted by
-  path (`x-part.js` sorts before `x.js`). A file that needs another one as it loads (top-level code,
-  not a function called later) says so in its header: `load: after views/duo/duo-issue.js (why)`; a CSS
-  file that overrides another's rules too (`load: after <file>.css`). The vendor files
-  (`node_modules`) stay hand-kept outside the markers. The CSP and the packaged app are unchanged:
-  the page still lists plain files.
-- **Composition** (the reorganisation study, #558; the contract phase 3 implements, written here
-  first so no screen is built against another one): a **front** is a package of `views/` folders,
-  each calling `registerView` as today, plus its stylesheets and its `features/`; it registers its
-  screens, its menu entries and its Home cards itself, and never names another front. An **app**
-  (the desktop app, the browser UI the engine serves) lists the fronts it ships in one
-  **composition file** (`apps/desktop/composition.js`, `apps/web/composition.js`): an ordered
-  list of front packages, nothing else. `index.html` is generated from the composition (the
-  `<link>`/`<script>` lists above, extended from `apps/desktop/renderer/` to the fronts the composition
-  names, by the same `load:` rules); a composition of one front builds that front alone, the
-  default composition builds them all. The shell (the app frame, Settings, Setup, Usage, Account,
-  the run kernel and the controls) belongs to no front: it is the UI kit every composition starts
-  from. Until phase 3 the one composition is implicit: every folder under `apps/desktop/renderer/views/`.
+- **How the files are loaded** (#152): each app's page (`apps/<app>/renderer/index.html`) holds its
+  `<link>`/`<script>` lines between `<!-- generated:styles -->` / `<!-- generated:scripts -->`
+  markers, written by `npm run docs` (`scripts/docs.js`) from the app's composition (below);
+  `node scripts/docs.js --check` (CI) fails when they are stale. A new module or stylesheet is a new
+  file plus `npm run docs`. Order, per list: the pure modules of `packages/shared/`, the files whose
+  header comment has a `load: early` line in any layer (`api-http.js`, `view-registry.js`…,
+  `style.css`), then the UI kit (`app.js`, its other root files, its `views/`), then each front of the
+  composition in order (its `views/`), then the app's own page files, each group sorted by path
+  (`x-part.js` sorts before `x.js`); paths are relative to the page (`../../../packages/ui-kit/app.js`).
+  A file that needs another one as it loads (top-level code, not a function called later) says so in
+  its header: `load: after views/duo/duo-issue.js (why)`, naming a file of its own package, else one
+  of the UI kit (which loads before every front); a CSS file that overrides another's rules too
+  (`load: after <file>.css`). The vendor files (`node_modules`) stay hand-kept outside the markers.
+  The CSP and the packaged app are unchanged: the page still lists plain files.
+- **Composition** (the reorganisation study, #558; phase 3, #579): a **front** is a workspace
+  `fronts/<id>/` of `views/` folders, each calling `registerView` as today, plus its stylesheets, its
+  `features/` and its `test/`; it registers its screens, its menu entries and its Home cards itself,
+  and never names another front. An **app** (`apps/desktop`, the browser UI the engine serves from
+  `apps/web`) lists the fronts it ships in one **composition file** (`<app>/composition.js`): a list
+  of front ids, nothing else (`scripts/source-tree.js` `composition()` reads it; without the file an
+  app ships every installed front). The page is generated from the composition (the lists above); a
+  composition of one front builds that front alone, the default composition builds them all. The
+  shell (the app frame, Home, Settings, Setup, Account, the run kernel and the controls) belongs to
+  no front: it is the UI kit (`packages/ui-kit`) every composition starts from. The fronts: `analyser`
+  (project, analytics, the project city), `build` (projects, backlog with the Roadmap and the Product
+  Owner, releases, sessions, workflows, run, runchat, artifacts, supervisor), `plan` (inbox,
+  discovery, arena, duo), `ai` (oracle, nightwatch, agents, skills, usage); a front's id is its menu
+  group's (decision 7 of 2026-10-24).
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
   `state.runId` (the one the Run screen shows; #412: the top bar shows no run); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,

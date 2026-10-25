@@ -110,18 +110,23 @@ the workspace folder.
   simulation-only mode, never pushes, never touches a packaged install.
 - The owner uses **subscription plans** (Claude, ChatGPT free for Codex, SuperGrok), not API keys.
 
-## Repository layout: npm workspaces (phase 2 of the reorganisation study)
+## Repository layout: npm workspaces (phases 2 and 3 of the reorganisation study)
 
-One repository, one `node_modules` (default hoisting), three workspaces (root `package.json`
-`workspaces: ["packages/*", "apps/*"]`), decisions 6 and 7 of 2026-10-24:
+One repository, one `node_modules` (default hoisting), the workspaces of the root `package.json`
+(`workspaces: ["packages/*", "fronts/*", "apps/*"]`), decisions 6 and 7 of 2026-10-24:
 
 - `packages/shared/` = `@multiagent/shared`: the pure dual-load modules, files at the package root.
 - `packages/engine/` = `@multiagent/engine`: `engine/`, `service/`, `server/`, `control/`, `domains/`
   at the package root (requires inside the package are relative), `bin/multiagent-engine.js`
   (`npm run serve`). `node-pty` is an optional peer: the desktop app provides it.
+- `packages/ui-kit/` = `@multiagent/ui-kit` (phase 3, #579): the UI kit every page starts from (the
+  shell, the run kernel, the controls, `style.css`, the shell's screens in `views/`), plain page scripts.
+- `fronts/<id>/` = `@multiagent/front-<id>` (phase 3): the four fronts `analyser`, `build`, `plan`,
+  `ai`, each its `views/`, `features/` and `test/`. An app's `composition.js` lists the fronts it ships
+  ([renderer.md](renderer.md), "Composition").
 - `apps/desktop/` = `@multiagent/desktop`: `host/` (Electron's main, the root `package.json`'s `main`),
-  `renderer/`, `assets/`, `scripts/package.js` (`npm run build`). `node-pty`, xterm, marked and
-  dompurify are its dependencies.
+  `renderer/` (its page, `index.html`, generated from its composition), `assets/`, `scripts/package.js`
+  (`npm run build`). `node-pty`, xterm, marked and dompurify are its dependencies.
 - Across packages, require by name: `@multiagent/shared/<file>`, `@multiagent/engine/<folder>/<file>`
   (npm links the workspaces in `node_modules/@multiagent/`; `npm ci` / `npm install` at the root).
   The engine never requires the desktop app (`node scripts/layers.js`). A new workspace is learnt once

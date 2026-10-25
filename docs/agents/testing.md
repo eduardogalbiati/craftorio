@@ -41,9 +41,12 @@ Read this before writing or changing tests, and before any check that could star
   Ubuntu jobs have a step for it, with the E2E smoke (after `node node_modules/electron/install.js`;
   the matrix sets `ELECTRON_SKIP_BINARY_DOWNLOAD`; Ubuntu under `xvfb-run`, with unprivileged user
   namespaces allowed for Chromium's sandbox). Run it locally when you change the script or add a view.
-- **The app's E2E suite (#222)**: Playwright + playwright-bdd, `npm run test:e2e` (`-- --grep
-  @smoke`: the 6 critical journeys, ~30 s; `-- --grep @issue-<n>`: one issue). Feature files in
-  `features/` (one per area, every scenario `@issue-<n>`), steps in `features/steps/`, the launch in
+- **The app's E2E suite (#222)**: Playwright + playwright-bdd, `npm run test:e2e` (`scripts/e2e.js`:
+  `bddgen`, then `playwright test`; `-- --grep @smoke`: the 6 critical journeys, ~30 s; `-- --grep
+  @issue-<n>`: one issue; `-w fronts/<id>`: one front's features, phase 3 of the reorganisation
+  study). Feature files with their packages (the shell's in `features/` and `packages/ui-kit/features/`,
+  a front's in `fronts/<id>/features/`; one per area, every scenario `@issue-<n>`), steps next to them
+  (`<folder>/steps/`, every steps folder loaded whatever runs), the launch in
   `features/support/app.js` (`_electron` on a fresh demo workspace seeded with scripts/screenshot.js's
   data, simulation only, window off-screen; `MULTIAGENT_E2E_SHOW=1` shows it). Steps assert through
   `getByRole` / `getByTestId` (the renderer's `data-testid`s). Visual baselines:
