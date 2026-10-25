@@ -1,4 +1,4 @@
-// Steps of features/nightwatch.feature (#239): the Night watch screen's permissions (what the
+// Steps of fronts/ai/features/nightwatch.feature (#239): the Night watch screen's permissions (what the
 // Oracle may do without asking), ticked, saved and found again; #278: Self-healing, its switch in
 // Settings › Execution › Oracle and what the Night watch screen shows of it; #279: the "Apply merged
 // fixes to this app" row under it; #335: a step whose cost or minutes regress, in Home's morning
@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
-const { Given, When, Then } = require('./fixtures');
+const { Given, When, Then } = require('../../../../features/steps/fixtures');
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // the "What the Oracle may do without asking" card

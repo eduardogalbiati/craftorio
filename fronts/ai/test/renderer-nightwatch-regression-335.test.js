@@ -1,4 +1,4 @@
-// #335 step regressions in the UI (apps/desktop/renderer/views/nightwatch/nightwatch.js): Home's morning card
+// #335 step regressions in the UI (fronts/ai/views/nightwatch/nightwatch.js): Home's morning card
 // (window.NightWatchView.renderMorning: one `nw-regression` line per regressed step, one
 // `nw-regression-run` button per run behind it, opening the Run screen) in its three states, and the
 // Night watch screen's incidents line naming the new kind. Renderer code runs only in Electron, so the

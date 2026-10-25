@@ -1,4 +1,4 @@
-// apps/desktop/renderer/views/oracle/oracle-chat-model.js (#171): the Oracle drawer/dock's state as a pure
+// fronts/ai/views/oracle/oracle-chat-model.js (#171): the Oracle drawer/dock's state as a pure
 // function of the history, the service state and the drafts, no DOM — the way
 // image-viewer-model.test.js checks image-viewer-model.js. oracle.js (the renderer) and its DOM
 // wiring (follow(), the drawer open/close, the screenshot states) are exercised through
@@ -6,7 +6,7 @@
 // "opens every view" test in screenshot.test.js, gated behind MULTIAGENT_UI_TESTS=1.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../renderer/views/oracle/oracle-chat-model');
+const M = require('../views/oracle/oracle-chat-model');
 
 // ---- chatView: the states ----------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-// Steps of features/oracle.feature (#208): the Oracle's panel (docked on Home, the Dashboard before
+// Steps of fronts/ai/features/oracle.feature (#208): the Oracle's panel (docked on Home, the Dashboard before
 // #254, a drawer elsewhere; opened by the header's Oracle button since #254) in a narrow window: the app never shifts sideways, the panel's header stays readable.
 // #244: a routine wake-up is a code-only notice, the daily budget counts each turn's own cost (not
 // Claude's cumulative session cost), the status shows the model and a fresh or resumed session.
@@ -9,8 +9,8 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
-const { Given, When, Then } = require('./fixtures');
-const { runTabRow, runScreenStatus } = require('../support/run-screen');
+const { Given, When, Then } = require('../../../../features/steps/fixtures');
+const { runTabRow, runScreenStatus } = require('../../../../features/support/run-screen');
 
 // the Oracle's panel in view: the Dashboard's dock or the drawer (a closed drawer is aria-hidden and
 // the dock of a hidden Dashboard is not rendered, so only the open one matches)
