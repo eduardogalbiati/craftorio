@@ -444,8 +444,12 @@ module.exports = (ctx) => {
   // and the Oracle's chat gets a short line. An unknown `to` is refused here and recorded nowhere.
   async function requestAgent({ to, kind, params, reason, projectId, requestedBy, mock } = {}) {
     const p = params && typeof params === 'object' && !Array.isArray(params) ? params : {};
-    // the Supervisor's inbox is the build front's (phase 4): without it the request is refused below
-    const send = to === 'po' ? ctx.productOwnerRequest : to === 'supervisor' ? ctx.supervisorRequest?.bind(ctx) : null;
+    // the Supervisor's inbox is the build front's (phase 4, #590): an engine that does not serve it says so
+    const send = to === 'po' ? ctx.productOwnerRequest : to === 'supervisor' ? ctx.supervisorRequest : null;
+    if (to === 'supervisor' && !send) {
+      const error = 'The Supervisor is not served by this engine (the build front is not in its composition).';
+      return { ok: false, text: error, costUsd: 0, error };
+    }
     if (!send) {
       const error = `Unknown agent: ${to || '(none)'}. request_agent goes to po (the Product Owner: issues, roadmap, queue) or supervisor (the Supervisor: runs, workflows, skills).`;
       return { ok: false, text: error, costUsd: 0, error };
