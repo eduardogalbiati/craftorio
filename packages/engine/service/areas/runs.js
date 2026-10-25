@@ -500,9 +500,10 @@ module.exports = (ctx) => {
       if (pr) run.pr = pr;
       if (run.pr) ctx.refreshLivePr(run, pr || ev.type === 'workflow.finished' ? 0 : 15000).catch((e) => console.error('run PR:', e.message));
       if (ev.type === 'workflow.finished') runEnded(run);
-      // a local preview lives only while its gate is open
+      // a local preview lives only while its gate is open (the build front's area, phase 4: an engine
+      // without that front has no previews to stop)
       if (ev.type === 'approval.resolved' || ev.type === 'workflow.finished') {
-        ctx.stopLocalPreview({ runId: run.runId, reason: ev.type === 'approval.resolved' ? 'the gate was answered' : 'the run ended' });
+        ctx.stopLocalPreview?.({ runId: run.runId, reason: ev.type === 'approval.resolved' ? 'the gate was answered' : 'the run ended' });
       }
       if (ev.type === 'worktree.merged') ctx.afterLocalMerge(run, ev).catch((e) => console.error('after local merge:', e));
       // #405: pre-existing failures are tracked, and a merge starts the base check (areas/base-health.js)

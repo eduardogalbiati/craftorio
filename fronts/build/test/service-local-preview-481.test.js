@@ -1,4 +1,4 @@
-// #481 (SEC-26), packages/engine/service/areas/local-preview.js `localPreview:suggest { dir }`: it reads a folder
+// #481 (SEC-26), fronts/build/engine/areas/local-preview.js `localPreview:suggest { dir }`: it reads a folder
 // on the engine's machine, so only a known project folder (or a run's worktree) is read; any other
 // folder is refused (the channel throws, or answers null without reading it). A project's own folder
 // still gets its suggestion. The folder here declares `web: node server.js` in a Procfile, which
@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('./service/helpers');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 function appFolder(t, name) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `lp-481-${name}-`));

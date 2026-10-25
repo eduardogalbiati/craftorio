@@ -11,5 +11,9 @@
   "scripts": {
     "test": "node ../../scripts/test.js --workspace .",
     "test:e2e": "node ../../scripts/e2e.js --front build"
+  },
+  "dependencies": {
+    "@multiagent/engine": "*",
+    "@multiagent/shared": "*"
   }
 }

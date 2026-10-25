@@ -1,7 +1,7 @@
 // The supervisor's read-only tools over the service (#28, packages/engine/domains/supervisor/supervisor-tools.js): workflows,
 // projects, runs, skills, agents and usage, served to the supervisor's MCP session. ctx is built
 // from a real service on a scratch workspace (as test/service/*.test.js does), wired the same way
-// packages/engine/service/channels/supervisor.js wires it, since ctx itself is internal to packages/engine/service/index.js.
+// fronts/build/engine/channels/supervisor.js wires it, since ctx itself is internal to packages/engine/service/index.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -24,7 +24,7 @@ steps:
 `;
 
 // Builds the ctx supervisorTools(ctx) expects, out of a real service's public api + workspace
-// (the same functions packages/engine/service/channels/supervisor.js hands it), never its private internals.
+// (the same functions fronts/build/engine/channels/supervisor.js hands it), never its private internals.
 function makeCtx(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-tools-'));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
