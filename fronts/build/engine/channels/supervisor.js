@@ -80,7 +80,7 @@ module.exports = (ctx) => {
     sent(out);
     return answer(out);
   };
-  // the Oracle's request_agent sends here (packages/engine/service/channels/oracle.js)
+  // the Oracle's request_agent sends here (packages/engine/service/areas/oracle.js)
   ctx.supervisorRequest = request;
 
   return [

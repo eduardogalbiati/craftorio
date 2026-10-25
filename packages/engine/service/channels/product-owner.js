@@ -115,9 +115,9 @@ module.exports = (ctx) => {
       timeZone: settings.timeZone, // #273: the owner's zone in the turn's prompt
     };
   };
-  // a discovery card's commit proposal asks the same Product Owner (#258, packages/engine/service/channels/discovery.js)
+  // a discovery card's commit proposal asks the same Product Owner (#258, fronts/plan/engine/channels/discovery.js)
   ctx.productOwnerOptions = askOptions;
-  // the Refactor tab's ranking reads no issue (#357, packages/engine/service/channels/refactor.js)
+  // the Refactor tab's ranking reads no issue (#357, fronts/analyser/engine/channels/refactor.js)
   ctx.productOwnerAgentOptions = agentOptions;
 
   // ---- the inbox's mechanical kinds (#240): the code of the owner's own buttons ------------------
@@ -218,7 +218,7 @@ module.exports = (ctx) => {
     sent(out, id);
     return answer(out);
   };
-  // the Oracle's request_agent sends here (packages/engine/service/channels/oracle.js)
+  // the Oracle's request_agent sends here (packages/engine/service/areas/oracle.js)
   ctx.productOwnerRequest = request;
 
   return [

@@ -4,7 +4,7 @@
 // platform reads labels, as packages/engine/domains/backlog/epics.js does for `epic`; GitLab creates it on filing) and the
 // gh/glab command of the synced repository. issueDraft builds it without running anything (the
 // preview, and every simulation); createIssue runs it, records the issue on the proposal and syncs
-// the backlog. Used by packages/engine/service/channels/refactor.js and packages/engine/domains/refactor/refactor-proposals-run.js.
+// the backlog. Used by fronts/analyser/engine/channels/refactor.js and packages/engine/domains/refactor/refactor-proposals-run.js.
 
 'use strict';
 
