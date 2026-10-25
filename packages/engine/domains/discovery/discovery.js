@@ -49,7 +49,7 @@
 // Every file is written whole (temp file + rename, packages/engine/domains/workspace/state-file.js); the thread is appended one
 // line at a time. Project ids, card ids and attachment names are checked before any path is built:
 // nothing outside a card's folder is read or written. Used by the discovery: channels
-// (packages/engine/service/channels/discovery.js), the only way the screens, the Oracle and agents reach a card.
+// (fronts/plan/engine/channels/discovery.js), the only way the screens, the Oracle and agents reach a card.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -991,7 +991,7 @@ function mergeCard(dir, projectId, fromId, intoId, { by = 'owner' } = {}) {
 }
 
 // ---- imports (#322) -------------------------------------------------------------------------------
-// A document imported into the Inbox (packages/engine/domains/discovery/discovery-import.js) becomes its cards all or none: they
+// A document imported into the Inbox (fronts/plan/engine/domains/discovery-import.js) becomes its cards all or none: they
 // are written whole under imports/<batch>/ (never listed), then commit.json says the batch is
 // complete, and only then they move into cards/ and onto the board. A batch without commit.json was
 // cut before it was complete and is dropped; one with it is finished (finishImports, also after the

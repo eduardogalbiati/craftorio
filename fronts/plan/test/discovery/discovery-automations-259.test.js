@@ -13,9 +13,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { layout } = require('../../domains/workspace/workspace');
+const { layout } = require('@multiagent/engine/domains/workspace/workspace');
 
-const load = () => require('../../domains/discovery/discovery');
+const load = () => require('@multiagent/engine/domains/discovery/discovery');
 const P = 'p1';
 
 function tmp(t) {

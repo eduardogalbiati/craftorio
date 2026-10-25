@@ -8,8 +8,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('./helpers');
-const discovery = require('../../domains/discovery/discovery');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
 
 async function project(t, api) {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-auto-recovery-'));
