@@ -516,6 +516,9 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   (`npm test`), `scripts/smoke.js` (which also uses a scratch temporary workspace and fails unless
   every session was `mock`), the CI workflows and the tests' `makeService`/server helpers. A test
   that drives a real provider type at a fake CLI (`fake-claude.js`) lifts it for its duration.
+  On macOS a simulation also runs with Chromium's mock keychain (`--use-mock-keychain`, set by
+  `apps/desktop/host/main.js` in a development checkout): safeStorage never asks for "Chromium Safe
+  Storage", a dialog that blocked the smoke, the screenshots and each E2E scenario until dismissed.
 - UI checks run through `scripts/smoke.js` (or a script built the same way), never through a
   hand-written script that launches `apps/desktop/host/main` directly. The remote engine (the app as a window onto
   `npm run serve`) has `scripts/smoke-remote.js <out-dir>`: a scratch server on 127.0.0.1, the app in
