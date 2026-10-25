@@ -103,6 +103,11 @@ Read this before writing or changing tests, and before any check that could star
   (its npm script is not `node <file>` naming the variable) runs the whole suite, and the message
   says why; a runner whose own counts show it ignored the list (files outside it, or as many tests
   as the run's whole suite) is reported as a whole run (`list_ignored`). Without `scope` (test-batch, E2E release) a suite step runs the whole suite.
+  Inside `scripts/test.js` no test file is on a child's command line (#597): the whole suite, a
+  selection in its arguments, a `MULTIAGENT_TEST_FILES` list and `--workspace` alike, each time-budget
+  group's files, concurrency, timeout and reporters go to a JSON file in its temp folder, and the
+  group's child (`node scripts/test.js --child <file>`) starts them with node:test's `run()`, so the
+  32,767-character limit of a Windows command line no longer bounds the number of test files.
   Agents never run suites in their turn: they end a turn with a ```` ```run-tests ```` block (one
   test file per line, or `affected`), the engine runs them like the suite step (log
   `logs/tests-<step>-<n>.log`) and resumes the agent with a summary only (counts, each failure's

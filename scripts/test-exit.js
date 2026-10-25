@@ -5,7 +5,8 @@
 // with `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c` after a fetch()
 // (test/workspace/mobile-gates-answers.test.js, about 1 run in 40 under the suite's load). A file with nothing
 // left running exits on its own, the normal way.
-// node --test passes --require on to the runner too: only a test file's process (NODE_TEST_CONTEXT) arms it.
+// Only a test file's process (NODE_TEST_CONTEXT) arms it, wherever --require loads it (scripts/test.js's
+// run() execArgv, or a runner given --require by hand).
 if (process.env.NODE_TEST_CONTEXT) {
   const { after } = require('node:test');
   const GRACE_MS = 5000;
