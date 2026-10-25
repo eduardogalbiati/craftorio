@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@multiagent/shared": "*",
-    "@supabase/supabase-js": "^2.117.2",
+    "@supabase/supabase-js": "^2.118.0",
     "js-yaml": "^4.1.0",
     "nunjucks": "^3.2.4",
     "qrcode-generator": "^1.5.2",
