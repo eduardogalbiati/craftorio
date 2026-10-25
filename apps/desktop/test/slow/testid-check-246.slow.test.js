@@ -8,7 +8,7 @@
 //   - packages/engine/engine/test-ids.js: `testIdsUsed(source)` → the unique static ids of `getByTestId('…')` in a
 //     source text (template strings skipped); `missingTestIds(root, { steps, renderer })` → one
 //     `{ id, files }` per id the step definitions use (files: repository-relative, forward slashes)
-//     that the renderer folder does not contain; folders default to features/steps and apps/desktop/renderer;
+//     that the renderer folder does not contain; folders default to features/steps and src/renderer;
 //   - step `testid_check`: no agent, visited right after develop when the acceptance step wrote
 //     scenarios (e2e_scope: scenarios); back to develop at most twice; a project with no BDD steps is
 //     skipped with a note in the step's output.
@@ -49,7 +49,7 @@ function makeRepo(t, { steps = true } = {}) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
   git(dir, 'init', '-q');
   write(dir, 'src/app.js', 'module.exports = 1;\n');
-  write(dir, 'apps/desktop/renderer/index.html', '<main data-testid="present-id"></main>\n');
+  write(dir, 'src/renderer/index.html', '<main data-testid="present-id"></main>\n');
   if (steps) {
     write(dir, 'features/board.feature', 'Feature: Board\n  @issue-246\n  Scenario: Split a card\n    Then the split card is shown\n');
     write(dir, 'features/steps/board.steps.js', STEPS);
@@ -62,7 +62,7 @@ function makeRepo(t, { steps = true } = {}) {
 
 // the developer's fix: the missing id added to a screen, committed
 function addMissingId(repo) {
-  write(repo, 'apps/desktop/renderer/board.js', "export const card = '<div data-testid=\"po-split-card\"></div>';\n");
+  write(repo, 'src/renderer/board.js', "export const card = '<div data-testid=\"po-split-card\"></div>';\n");
   git(repo, 'add', '-A');
   git(repo, 'commit', '-q', '-m', 'develop: add the split card test id');
 }

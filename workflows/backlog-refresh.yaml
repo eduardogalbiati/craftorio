@@ -52,7 +52,7 @@ inputs:
     label: "Focus"
     type: string
     default: ""
-    description: Optional, what to look at first, e.g. "the screens epic #158 moved to apps/desktop/renderer/views/". Empty = a plain refresh.
+    description: Optional, what to look at first, e.g. "the screens epic #158 moved to src/renderer/views/". Empty = a plain refresh.
   git_platform:
     type: string
     enum: [gh, gl]

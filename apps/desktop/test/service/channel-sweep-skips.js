@@ -16,7 +16,7 @@ module.exports = [
   { channel: 'clipboard:write', reason: 'desktop only (apps/desktop/host/main.js): the system clipboard' },
   { channel: 'clipboard:writeFile', reason: 'desktop only (apps/desktop/host/main.js): the system clipboard' },
   { channel: 'clipboard:writeImage', reason: 'desktop only (apps/desktop/host/main.js): the system clipboard' },
-  { channel: 'control:state', reason: 'desktop only (apps/desktop/host/main.js): the control channel endpoint (test/control-channel-336.test.js)' },
+  { channel: 'control:state', reason: 'desktop only (apps/desktop/host/main.js): the control channel endpoint (packages/engine/test/control-channel-336.test.js)' },
   { channel: 'dialog:pickFolder', reason: 'desktop only (apps/desktop/host/main.js): a native dialog' },
   { channel: 'engine:openConnection', reason: 'desktop only (apps/desktop/host/main.js): opens the engine connection window (test/engine-connection-window.test.js)' },
   { channel: 'keepAwake:state', reason: 'desktop only (apps/desktop/host/main.js): the power save blocker' },
@@ -26,8 +26,8 @@ module.exports = [
   { channel: 'window:capture', reason: 'desktop only (apps/desktop/host/main.js): captures the window' },
   { channel: 'workspace:change', reason: 'desktop only (apps/desktop/host/main.js): a native dialog, then switches the workspace' },
   { channel: 'workspace:open', reason: 'desktop only (apps/desktop/host/main.js): opens the file explorer' },
-  // answered by apps/desktop/host/auth.js (system browser sign-in), not by the service
-  { channel: 'auth:*', reason: 'the account module (apps/desktop/host/auth.js): sign-in opens the system browser' },
+  // answered by packages/engine/domains/account/auth.js (system browser sign-in), not by the service
+  { channel: 'auth:*', reason: 'the account module (packages/engine/domains/account/auth.js): sign-in opens the system browser' },
   // effects outside the process
   { channel: 'app-update:back', reason: "moves the app's own checkout to another commit and relaunches it" },
   { channel: 'app-update:state', reason: "fetches the app's repository (network)" },

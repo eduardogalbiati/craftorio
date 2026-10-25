@@ -8,7 +8,7 @@
 //   - packages/engine/engine/test-ids.js: `testIdsUsed(source)` → the unique static ids of `getByTestId('…')` in a
 //     source text (template strings skipped); `missingTestIds(root, { steps, renderer })` → one
 //     `{ id, files }` per id the step definitions use (files: repository-relative, forward slashes)
-//     that the renderer folder does not contain; folders default to features/steps and apps/desktop/renderer;
+//     that the renderer folder does not contain; folders default to features/steps and src/renderer;
 //   - step `testid_check`: no agent, visited right after develop when the acceptance step wrote
 //     scenarios (e2e_scope: scenarios); back to develop at most twice; a project with no BDD steps is
 //     skipped with a note in the step's output.
@@ -51,7 +51,7 @@ function makeRepo(t, { steps = true } = {}) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
   git(dir, 'init', '-q');
   write(dir, 'src/app.js', 'module.exports = 1;\n');
-  write(dir, 'apps/desktop/renderer/index.html', '<main data-testid="present-id"></main>\n');
+  write(dir, 'src/renderer/index.html', '<main data-testid="present-id"></main>\n');
   if (steps) {
     write(dir, 'features/board.feature', 'Feature: Board\n  @issue-246\n  Scenario: Split a card\n    Then the split card is shown\n');
     write(dir, 'features/steps/board.steps.js', STEPS);
@@ -82,7 +82,7 @@ test('#246 missingTestIds: each id the step definitions use that the renderer la
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   write(root, 'features/steps/a.steps.js', "page.getByTestId('present'); page.getByTestId('absent');\n");
   write(root, 'features/steps/b.steps.js', "page.getByTestId('absent'); page.getByTestId('other-absent'); page.getByTestId(`row-${i}`);\n");
-  write(root, 'apps/desktop/renderer/view.js', "html`<div data-testid=\"present\"></div>`;\n");
+  write(root, 'src/renderer/view.js', "html`<div data-testid=\"present\"></div>`;\n");
   const missing = missingTestIds(root).map((m) => ({ id: m.id, files: [...m.files].sort() })).sort((a, b) => a.id.localeCompare(b.id));
   assert.deepEqual(missing, [
     { id: 'absent', files: ['features/steps/a.steps.js', 'features/steps/b.steps.js'] },
@@ -139,7 +139,7 @@ test('#246 run: a test_ids step uses the project\'s own step and renderer folder
   const own = await runCheckOnly(t, repo, { steps: 'e2e/steps', renderer: 'web/ui' });
   assert.equal(own.finished.status, 'success', own.finished.error);
   assert.equal(own.output.status, 'missing');
-  assert.deepEqual(own.output.missing, [{ id: 'po-split-card', files: ['e2e/steps/login.steps.ts'] }], 'login-button is in web/ui; apps/desktop/renderer is not read');
+  assert.deepEqual(own.output.missing, [{ id: 'po-split-card', files: ['e2e/steps/login.steps.ts'] }], 'login-button is in web/ui; src/renderer is not read');
   const none = await runCheckOnly(t, repo, { steps: 'tests/bdd/steps', renderer: 'web/ui' });
   assert.equal(none.output.status, 'skipped');
   assert.match(none.output.message, /tests\/bdd\/steps/, 'the note names the folder it looked in');
