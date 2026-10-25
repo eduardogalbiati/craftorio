@@ -3,7 +3,7 @@
 // this file loads and each test fails on its own.
 //
 // The API these tests pin down (src/domains/machine/machine-profile.js; it may re-export pure parts that live in a
-// src/shared/ dual-load module so the renderer can use them too):
+// packages/shared/ dual-load module so the renderer can use them too):
 //
 //   CONSTANTS -> { THREADS_PER_RUN: 4, GB_PER_RUN: 6, MIN_RUNS: 1, MAX_RUNS: 6, ... } (one place)
 //   readMachine(osLike = require('os')) -> { threads, totalBytes, freeBytes, platform }

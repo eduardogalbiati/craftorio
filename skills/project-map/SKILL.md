@@ -98,7 +98,7 @@ Answer it as `city_plan` in your JSON block; the orchestrator validates it and w
       "include": ["/crates/engine/src/**"], "exclude": ["*_tests.rs"] }
   ],
   "landmarks": [ { "path": "apps/photocraft/src/main.rs", "label": "Desktop app entry" } ],
-  "ports": [ { "id": "github", "name": "GitHub", "via": ["src/shared/platforms/github.js"] } ],
+  "ports": [ { "id": "github", "name": "GitHub", "via": ["packages/shared/platforms/github.js"] } ],
   "evidence": ["Cargo.toml", "AGENTS.md"]
 }
 ```

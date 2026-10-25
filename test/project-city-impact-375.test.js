@@ -1,5 +1,5 @@
 // #375, the impact overlay of the City view: src/renderer/views/project/project-city-impact.js, a
-// classic script (window.ProjectCityImpact) built on #373's overlay API and src/shared/city-impact.js,
+// classic script (window.ProjectCityImpact) built on #373's overlay API and packages/shared/city-impact.js,
 // loaded here in a mini DOM without WebGL next to the city's own scripts. The contract tested:
 //   ProjectCityImpact.headerMarkup(preview) → an HTML string, preview = { issue: { number, title },
 //     files, newFiles (expectedFiles' lists), header (impactHeader's output), comparison?
@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const ROOT = path.join(__dirname, '..');
@@ -44,7 +44,7 @@ function load() {
   withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js', 'city-impact.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-city-impact.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sandbox, { filename: f });

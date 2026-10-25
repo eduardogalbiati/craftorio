@@ -18,7 +18,7 @@ group, plus an editable list per project. The commit, the window (From / To) and
 shown. Complexity per function comes only from a real parser or tool, never a guess (#385):
 JavaScript and TypeScript are measured inside the app, with no tool to install and no Python, read
 at the facts' commit with the same parser and rules as `scripts/code-health.js` (acorn; one core,
-`src/shared/code-complexity.js`, so both give the same numbers; TypeScript's types are stripped
+`packages/shared/code-complexity.js`, so both give the same numbers; TypeScript's types are stripped
 first, so `enum`, `namespace` and JSX files are not measured). The other languages (Python, Go,
 Rust, Java, C#, C/C++, Kotlin, PHP, Ruby, Swift) come from lizard when the machine has it and the
 checkout is at that commit, its output checked before use. Without it, the tab names the languages
@@ -26,7 +26,7 @@ not measured and how to measure them (`pip install lizard`, which needs Python);
 complexity ("—"), never 0, and churn and size only. Each measured file has its total complexity and its worst function, sits in a quadrant (Danger Zone, Cowboy Code,
 Fertile Ground, Healthy Closure, split at the medians on `log1p` axes), the Danger Zone ranks by
 `sqrt(u² + v²)` with each axis normalized by its maximum, and monthly frames list the files that
-entered or left it. The numbers come from a pure core (`src/shared/architecture-model.js`, shared
+entered or left it. The numbers come from a pure core (`packages/shared/architecture-model.js`, shared
 with `scripts/code-health.js --hotspots`), cached per commit. The project's own quality gate
 (complexity, coverage, duplication in its CI) is listed as measured, pending or missing: missing
 evidence is never shown as clean.

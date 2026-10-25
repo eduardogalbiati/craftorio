@@ -4,7 +4,7 @@
 // Seams:
 // - readRunRecord(runDir) of src/domains/run/run-record.js: reads summary.json and events.jsonl, returns
 //   { summary, events } in the current shape (summary null while the run has no summary.json).
-// - upgradeRunRecord({ summary, events }) of src/shared/run-record.js: the same upgrade, pure, on
+// - upgradeRunRecord({ summary, events }) of packages/shared/run-record.js: the same upgrade, pure, on
 //   in-memory events (the renderer loads it for live events); UPGRADES: one { name, ... } per change.
 // - The readers on a fixture run per historical shape (test/run-record-fixtures-350.js): runFigures,
 //   analyzeRun, the run list (runs.readRun), the roadmap's figures (cost-estimate) and the Analytics
@@ -33,7 +33,7 @@ const fx = require('../run-record-fixtures-350');
 const GOLDEN = require('../fixtures/run-record-golden-350.json');
 
 const loadReader = () => require('../../src/domains/run/run-record');
-const loadUpgrade = () => require('../../src/shared/run-record');
+const loadUpgrade = () => require('@multiagent/shared/run-record');
 
 const near = (actual, expected, msg) => assert.ok(typeof actual === 'number' && Math.abs(actual - expected) < 1e-6, `${msg}: expected ${expected}, got ${actual}`);
 const received = (events, sessionId, turn) => events.find((e) => e.type === 'session.message_received' && e.session_id === sessionId && e.turn === turn);
@@ -272,9 +272,9 @@ test('the Analytics totals are the same as before, for every historical shape', 
 
 test('the renderer loads the upgrade before app.js (past-turn costs of live events)', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'index.html'), 'utf8');
-  const upgrade = html.indexOf('src="../shared/run-record.js"');
+  const upgrade = html.indexOf('src="../../packages/shared/run-record.js"');
   const app = html.indexOf('src="app.js"');
-  assert.ok(upgrade >= 0, 'index.html loads ../shared/run-record.js');
+  assert.ok(upgrade >= 0, 'index.html loads ../../packages/shared/run-record.js');
   assert.ok(app < 0 || upgrade < app, 'before app.js');
 });
 

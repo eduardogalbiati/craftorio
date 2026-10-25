@@ -1,5 +1,5 @@
-// #327 / #328 acceptance tests (written before the code): the pure module src/shared/language.js
-// (UMD like src/shared/time-zone.js: module.exports in Node, window.Language in the browser). It holds
+// #327 / #328 acceptance tests (written before the code): the pure module packages/shared/language.js
+// (UMD like packages/shared/time-zone.js: module.exports in Node, window.Language in the browser). It holds
 // the language list of Settings › General › Language, what the AI agents and the issues settings
 // resolve to, the one [Language] line every agent turn gets, and the issue headings the app writes
 // itself in each supported language. The module does not exist yet: it is required inside each test.
@@ -10,7 +10,7 @@ const path = require('path');
 const vm = require('vm');
 const { taskProgress } = require('../src/domains/backlog/issues');
 
-const load = () => require('../src/shared/language');
+const load = () => require('@multiagent/shared/language');
 const PT = { language: { agents: 'pt-BR' } };
 
 test('#327 LANGUAGES lists the nine languages, in order, with their own names', () => {
@@ -115,7 +115,7 @@ test('#328 a body with the pt-BR tasks heading keeps "- [ ]" / "- [x]": taskProg
 });
 
 test('#327 in the browser the module is window.Language', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'language.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'language.js'), 'utf8');
   const sandbox = {};
   sandbox.window = sandbox;
   vm.createContext(sandbox);

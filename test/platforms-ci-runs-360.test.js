@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const github = () => require('../src/shared/platforms/github');
-const gitlab = () => require('../src/shared/platforms/gitlab');
+const github = () => require('@multiagent/shared/platforms/github');
+const gitlab = () => require('@multiagent/shared/platforms/gitlab');
 const oraclePlatform = () => require('../src/domains/oracle/oracle-platform');
 
 const GH_RUNS = JSON.stringify([

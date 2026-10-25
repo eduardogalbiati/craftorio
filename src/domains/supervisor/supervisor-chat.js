@@ -27,7 +27,7 @@ const agentInbox = require('../agents/agent-inbox');
 const agentsUsage = require('../agents/agents-usage');
 const { mockSteps, partialText } = require('../chat/chat-progress');
 const TimeZone = require('../analytics/time-zone');
-const Language = require('../../shared/language');
+const Language = require('@multiagent/shared/language');
 
 // the kinds another agent may ask the Supervisor for (#240)
 const REQUEST_KINDS = [

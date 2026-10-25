@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const I18n = require('../src/shared/i18n');
+const I18n = require('@multiagent/shared/i18n');
 
 // the harness module is loaded inside each test (it requires Playwright and the demo data)
 const loadHarness = () => require('../features/support/app');

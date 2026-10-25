@@ -4,11 +4,11 @@
 // paths whose quadrant is the Danger Zone; a path the layout does not draw is not counted).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildModel } = require('../src/shared/architecture-model');
-const { buildCity } = require('../src/shared/city-model');
-const { layoutCity } = require('../src/shared/city-layout');
-const { impactHeader } = require('../src/shared/city-impact');
-const { releaseHeader } = require('../src/shared/city-release');
+const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
+const { layoutCity } = require('@multiagent/shared/city-layout');
+const { impactHeader } = require('@multiagent/shared/city-impact');
+const { releaseHeader } = require('@multiagent/shared/city-release');
 
 const hash = '76'.repeat(20);
 const FILES = [

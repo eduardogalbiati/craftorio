@@ -15,7 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { trailOf } = require('../../shared/run-progress-model');
+const { trailOf } = require('@multiagent/shared/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('../workspace/store');
@@ -27,7 +27,7 @@ const {
   walkFiles,
 } = require('./run-artifacts');
 const { readRunSummary } = require('./run-record');
-const { sessionsOfEvents, upgradeRunRecord } = require('../../shared/run-record');
+const { sessionsOfEvents, upgradeRunRecord } = require('@multiagent/shared/run-record');
 
 // The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
 function readIssueSaves(dir) {

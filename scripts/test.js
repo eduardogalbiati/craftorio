@@ -1,6 +1,9 @@
 // Test suite: unit tests (node:test in test/*.test.js and test/<area>/*.test.js, e.g.
-// test/service/, #156) + full flow in mock mode. Lists the files explicitly so it works on any
-// Node version; test/fixtures/ holds no tests.
+// test/service/, #156, and every workspace's <workspace>/test/, phase 2 of
+// docs/reorganisation-study-2026-10.md) + full flow in mock mode. Lists the files explicitly so it
+// works on any Node version; fixtures/ folders hold no tests.
+//   npm test -w packages/shared        one workspace's tests (`node scripts/test.js --workspace <dir>`:
+//                                      its test/ folder only, no full flow)
 // The files run in parallel, one process each: the concurrency is explicit (MULTIAGENT_TEST_CONCURRENCY,
 // else the CPUs minus one) and printed with what could lower it (an inspector in NODE_OPTIONS forces
 // node --test to one file at a time), so a slow suite inside the app can be compared with a shell (#210).
@@ -35,6 +38,7 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { isAgentMode, REPORTER } = require('../src/engine/agent-test-report');
+const { workspaces } = require('./source-tree');
 const machineSlot = require('../src/engine/machine-slot');
 const { TEST_FILES_ENV } = require('../src/engine/suite-command-line');
 const { testTimeoutMs } = require('../src/engine/test-timeouts');
@@ -63,10 +67,16 @@ const run = (args, env = {}) => {
   }
 };
 
-const testFiles = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
+const testFiles = (dir) => (fs.existsSync(path.join(root, dir)) ? fs.readdirSync(path.join(root, dir), { withFileTypes: true }) : []).flatMap((e) => {
   if (e.isDirectory()) return e.name === 'fixtures' ? [] : testFiles(path.join(dir, e.name));
   return e.name.endsWith('.test.js') ? [path.join(dir, e.name)] : [];
 }).sort();
+// --workspace <dir>: one workspace's test/ folder (its `npm test`); else the root test/ and every workspace's
+const workspaceAt = process.argv.indexOf('--workspace');
+const workspaceDir = workspaceAt >= 0 ? path.relative(root, path.resolve(process.argv[workspaceAt + 1] || '.')) : null;
+const allTestFiles = () => (workspaceDir !== null
+  ? testFiles(path.join(workspaceDir, 'test'))
+  : [...testFiles('test'), ...workspaces(root).flatMap((w) => testFiles(path.join(w.dir, 'test')))]);
 // #553: the list file of a selection too long for the command line (src/engine/suite-step.js
 // TEST_FILES_ENV), read once and dropped, so the test files this run spawns never inherit it
 const listed = (() => {
@@ -75,8 +85,8 @@ const listed = (() => {
   if (!list) return [];
   return fs.readFileSync(path.resolve(list), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 })();
-const only = [...process.argv.slice(2).filter((a) => !a.startsWith('-')), ...listed];
-const files = only.length ? only : testFiles('test');
+const only = [...process.argv.slice(2).filter((a, i, all) => !a.startsWith('-') && all[i - 1] !== '--workspace'), ...listed];
+const files = only.length ? only : allTestFiles();
 
 // #455: an agent's whole suite waits for the machine-wide suite slot (the suite step's own child
 // inherits it through SUITE_SLOT_ENV); a focused run never waits
@@ -209,7 +219,7 @@ async function main() {
     try { say(fs.readFileSync(g.specFile, 'utf8').trimEnd()); } catch { /* the runner died before reporting */ }
   }
   saySlowest();
-  if (unitStatus !== 0 || only.length) finish(null);
+  if (unitStatus !== 0 || only.length || workspaceDir !== null) finish(null);
 
   say('\n== Full flow in mock mode ==');
   // Fresh temporary workspace: the tests do not write to the user's workspace or the registry, and the

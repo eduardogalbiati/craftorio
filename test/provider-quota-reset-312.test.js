@@ -7,7 +7,7 @@
 // - `quotaResetAt(type, message, now)` exported by src/engine/providers.js (next to isQuotaError):
 //   the epoch ms the limit resets at, read from that CLI's message, or null. `now`: epoch ms or a
 //   Date, the moment the message was read (a clock time without a date is its next occurrence).
-// - each CLI adapter (src/shared/providers, registry().resolve(id)) has `quotaReset(message, now)`
+// - each CLI adapter (packages/shared/providers, registry().resolve(id)) has `quotaReset(message, now)`
 //   next to quotaPattern, and `configDirEnv`: claude 'CLAUDE_CONFIG_DIR', codex 'CODEX_HOME',
 //   grok null (no known variable).
 // - `accountEnv(type, account)` exported by src/engine/providers.js: { [configDirEnv]: account.dir },
@@ -16,7 +16,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const registry = () => require('../src/shared/providers');
+const registry = () => require('@multiagent/shared/providers');
 const local = (y, m, d, h, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 
 test('#312 quotaResetAt reads Claude\'s epoch from "usage limit reached|<epoch>"', () => {

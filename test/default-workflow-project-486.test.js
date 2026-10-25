@@ -1,4 +1,4 @@
-// #486: src/shared/default-workflow.js's project rules: firstBuild (the default of a project's set,
+// #486: packages/shared/default-workflow.js's project rules: firstBuild (the default of a project's set,
 // shared by src/domains/project/projects.js and the Overview), and in the renderer the header project's own default
 // and set first in the pickers (current, projectFirst), run in a vm with window.CurrentProject and state.
 const test = require('node:test');
@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const DefaultWorkflow = require('../src/shared/default-workflow');
+const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 
-const src = fs.readFileSync(path.join(__dirname, '../src/shared/default-workflow.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
 const WORKFLOWS = [
   { file: 'software-development-local-hero.yaml', name: 'Local hero' },
   { file: 'software-development.yaml', name: 'Software development' },

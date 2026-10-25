@@ -1,7 +1,7 @@
 // #238: archive issues from the Backlog screen. Acceptance tests, written before the code.
 //
 // Seams this file expects:
-// 1. A new plain-logic module, no DOM: src/shared/backlog-archive.js (moved from views/backlog/, #345)
+// 1. A new plain-logic module, no DOM: packages/shared/backlog-archive.js (moved from views/backlog/, #345)
 //    (Browser: window.BacklogArchive, loaded by src/renderer/index.html; Node: module.exports, like
 //    backlog-labels.js; the service may require it too, as src/domains/roadmap/roadmap.js requires chain-model):
 //      ARCHIVED_LABEL                         'archived'
@@ -23,16 +23,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const en = require('../src/shared/i18n/en.json');
+const en = require('@multiagent/shared/i18n/en.json');
 
 const VIEW = path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog');
 const src = fs.readFileSync(path.join(VIEW, 'backlog.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
 
 function loadArchive() {
-  // moved to src/shared/ with the other pure modules both sides use (#345)
-  const file = path.join(__dirname, '..', 'src', 'shared', 'backlog-archive.js');
-  assert.ok(fs.existsSync(file), 'src/shared/backlog-archive.js exists');
+  // moved to packages/shared/ with the other pure modules both sides use (#345)
+  const file = path.join(__dirname, '..', 'packages', 'shared', 'backlog-archive.js');
+  assert.ok(fs.existsSync(file), 'packages/shared/backlog-archive.js exists');
   return require(file);
 }
 
@@ -105,7 +105,7 @@ test('backlog-archive: deprioritizedIssues lists the open issues still labelled 
 // ---- the screen (source seams) ----------------------------------------------------------------------
 
 test('index.html loads backlog-archive.js with the other shared modules', () => {
-  assert.match(indexHtml, /<script src="\.\.\/shared\/backlog-archive\.js"><\/script>/);
+  assert.match(indexHtml, /<script src="\.\.\/\.\.\/packages\/shared\/backlog-archive\.js"><\/script>/);
 });
 
 test('selection bar: an "Archive (n)" button next to Send to Product Owner and Clear selection, shown with the selection', () => {

@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 const RunBadges = require('../src/renderer/run-badges');
 
 // run titles, issues and PRs moved into run-meta.js: both files are searched

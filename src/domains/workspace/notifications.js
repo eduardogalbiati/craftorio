@@ -13,10 +13,10 @@
 //            or a Night watch ended (its morning summary, #172); target = { view: 'nightwatch' }
 //
 // Nothing is shown while the window is focused on the notice's run, session or Product Owner drawer.
-// Titles and bodies are in the interface language (#329, src/shared/i18n.js, set by
+// Titles and bodies are in the interface language (#329, packages/shared/i18n.js, set by
 // src/service/areas/interface-language.js); what they quote (titles, messages, commands) is not translated.
 
-const { t } = require('../../shared/i18n');
+const { t } = require('@multiagent/shared/i18n');
 
 const SETTING = { oracle: 'notifyOracle', po: 'notifyPO', run: 'notifyRuns', session: 'notifySessions' };
 // the event names (English, never translated); their words come from notify.status.*

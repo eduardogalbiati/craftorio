@@ -3,7 +3,7 @@
 // roadmap item: showIssue(projectId, issue)) opens the project's City view (#430: in the city modal over
 // the screen, project-city-modal.js, unless a city of the project is on screen) and colours the issue's
 // expected buildings by source (its `## Expected files` section, cited in its body, the Product
-// Owner's group, changed by its latest finished run; src/shared/city-impact.js), the rest grey. A card
+// Owner's group, changed by its latest finished run; packages/shared/city-impact.js), the rest grey. A card
 // (data-testid="city-impact") holds the header (headerMarkup: the issue, the counts by district and
 // zone, the Danger Zone share, the new files with their district) and, after a run, predicted vs
 // actual: the three sets on the map and the hit rate, kept per issue with whether it had the section

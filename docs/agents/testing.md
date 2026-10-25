@@ -4,7 +4,9 @@ Read this before writing or changing tests, and before any check that could star
 
 ## Running and CI
 
-- `npm test` = node:test unit tests (`test/*.test.js` and `test/<area>/*.test.js`, listed by
+- `npm test` = node:test unit tests (`test/*.test.js`, `test/<area>/*.test.js` and every workspace's
+  `<workspace>/test/` (`packages/shared/test/`, phase 2 of the reorganisation study; `npm test -w
+  packages/shared` runs one workspace's), listed by
   `scripts/test.js`) + a full mock run of software-development.
 
 ## Where a new test goes
@@ -16,8 +18,10 @@ Read this before writing or changing tests, and before any check that could star
 - A new area (a new `src/service/areas/<area>.js`, a new module) gets a new test file; no list to
   edit: `scripts/test.js` finds it.
 - A domain module's tests (`src/domains/<domain>/<module>.js`) live in `test/<domain>/`, the Electron
-  host's (`src/host/`) in `test/host/`; the shared helpers (`mini-dom.js`, `i18n-sandbox.js`, …) stay
-  at the root of `test/`, required as `../<helper>`. Renderer tests stay at the root of `test/`.
+  host's (`src/host/`) in `test/host/`; a workspace package's tests (`packages/shared/`) in its own
+  `test/` folder, required relative to it (`../<module>`), and from another package through the
+  package name (`@multiagent/shared/test/i18n-sandbox`); the other shared helpers (`mini-dom.js`, …)
+  stay at the root of `test/`, required as `../<helper>`. Renderer tests stay at the root of `test/`.
 - Node 24's test reporter is "spec", not TAP: look for `ℹ pass N` / `✖`, not `# pass`.
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
   plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +
@@ -284,7 +288,7 @@ above stays as it is.
   Cowboy Code (complex, rarely changed), Fertile Ground (simple, often changed), Healthy Closure.
   The Danger Zone comes first, ranked by `sqrt(u² + v²)`, u and v each axis's `log1p` divided by
   its maximum (files against files, functions against functions; the pure core shared with the
-  Architecture tab, `src/shared/architecture-model.js`, #356); a function's churn is its file's. The
+  Architecture tab, `packages/shared/architecture-model.js`, #356); a function's churn is its file's. The
   output is deterministic (sorted keys, dates from the commits); churn git cannot read (a shallow
   clone) is `null` and listed under `missing`, never 0.
 - **How to split a function** that is over the limit or grew: pull each branch body that does its
@@ -308,7 +312,7 @@ implicit `any`, `this` and catch variables allowed, so a file opts in without a 
   checker cannot infer (`/** @param {...} */`, a `/** @type {...} */ (x)` cast for a local set in a
   callback), and add the file to `CHECKED` in `scripts/typecheck.js` (removing it from `NEXT` when
   it was there). Change code only where the checker finds a real bug, and say so in the PR.
-- **The types** live in `src/shared/types.js`: `RunSummary`, `RunEvent` (a union by `type`),
+- **The types** live in `packages/shared/types.js`: `RunSummary`, `RunEvent` (a union by `type`),
   `Roadmap`, `RoadmapStage`, `RoadmapItem`, `Workflow`, `WorkflowStep`, `SessionRecord`, matching
   what the code writes (a field that can be missing is optional). Import them with
   `/** @param {import('./shared/types').Roadmap} roadmap */` (the path relative to the file). A

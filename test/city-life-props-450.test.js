@@ -35,7 +35,7 @@ async function bundle(t, file) {
   });
   globalThis.window ||= {};
   globalThis.window.Run3DTheme ||= require('../src/renderer/run3d-theme.js');
-  globalThis.t ||= require('../src/shared/i18n.js').t;
+  globalThis.t ||= require('@multiagent/shared/i18n.js').t;
   const m = new Module(path.join(CITY3D, `${file}.bundle.js`));
   m.require = (id) => (/^(react|react-dom|@react-three|postprocessing)(\/|$)/.test(id) ? stubFor(id) : require(id));
   m._compile(out.outputFiles[0].text, m.id);

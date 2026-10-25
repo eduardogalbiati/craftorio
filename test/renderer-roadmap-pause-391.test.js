@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const H = require('./roadmap-status-helpers');
-const runProgress = require('../src/shared/run-progress-model');
+const runProgress = require('@multiagent/shared/run-progress-model');
 
 const view = { showAll: true, since: 'total' };
 const it = (id, status, n) => H.item(id, status, n, `Issue ${n}`, { origin: H.iso(H.NOW - H.HOUR), runId: null, runs: [], error: null });
@@ -105,7 +105,7 @@ test('#391 stage menu: the stage\'s pause reads "Pause after current step"; its 
 test('#391 Run screen: the run\'s pause button reads "Pause after current step"', () => {
   const renderer = path.join(__dirname, '..', 'src', 'renderer');
   // the markup takes its text from the catalog (#330): read it with the English values in place
-  const en = JSON.parse(fs.readFileSync(path.join(renderer, '..', 'shared', 'i18n', 'en.json'), 'utf8'));
+  const en = JSON.parse(fs.readFileSync(path.join(renderer, '..', '..', 'packages', 'shared', 'i18n', 'en.json'), 'utf8'));
   const html = ['index.html', 'views/run/run.js', 'run-controls.js'].map((f) => fs.readFileSync(path.join(renderer, ...f.split('/')), 'utf8')).join('\n')
     .replace(/\$\{t\('([\w.]+)'\)\}/g, (m, k) => (k in en ? en[k] : m));
   const btn = H.findEl(html, (e) => e.name === 'button' && (e.attrs.id === 'btn-pause' || e.attrs['data-testid'] === 'run-pause'));

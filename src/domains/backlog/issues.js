@@ -4,13 +4,13 @@
 // - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress);
 // - issueCreateCommand, repoLabels: filing an issue (the Product Owner's Create, the epics);
 // - issueFields, itemIssues, withSyncedText: the read-only copies queue and roadmap items keep (#168).
-// The commands and JSON of each platform come from its adapter (src/shared/platforms/, #351):
+// The commands and JSON of each platform come from its adapter (packages/shared/platforms/, #351):
 // adapterOf (the adapter of a syncing platform, or null), runCommand ({ cli, args } with an exec),
 // commandDisplay (a command as a preview shows it).
 
 const { resolveCommand } = require('../../engine/providers');
 const { execShim } = require('../machine/shell');
-const Platforms = require('../../shared/platforms');
+const Platforms = require('@multiagent/shared/platforms');
 
 // the backlog's platforms: the adapters, and Bitbucket (no sync yet)
 const PLATFORMS = {
@@ -53,7 +53,7 @@ function normalize(adapter, raw) {
 // { cli, args } run with `exec`
 const runCommand = (exec, c) => exec(c.cli, c.args);
 
-// The adapter of a platform that syncs (src/shared/platforms/), or null.
+// The adapter of a platform that syncs (packages/shared/platforms/), or null.
 const adapterOf = (platform) => Platforms.findPlatform(platform);
 
 // Runs a platform CLI and resolves with its stdout.

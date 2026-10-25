@@ -31,7 +31,7 @@
 //         *.test.js, README.md → *.md), else the name itself (Makefile).
 //     manifestsOf(files: string[]) → string[]: the manifests at any depth (package.json, Cargo.toml,
 //       go.mod, pyproject.toml, pom.xml, build.gradle(.kts), *.csproj), sorted.
-// - src/shared/city-model.js (#371's pure core) gains:
+// - packages/shared/city-model.js (#371's pure core) gains:
 //     planVerdict(validation) → { ok: boolean, problems: string[] }: not ok on schema errors,
 //       duplicate ids, unknown zones, or coverage under 0.95 (95% exactly passes); a problem about
 //       coverage names "coverage".
@@ -51,13 +51,13 @@ const os = require('os');
 const path = require('path');
 const { loadWorkflow, evalExpr } = require('../../src/engine/workflow');
 const caps = require('../../src/engine/capabilities');
-const { buildModel } = require('../../src/shared/architecture-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const root = path.join(__dirname, '..', '..');
 const WORKFLOW = path.join(root, 'workflows', 'project-map.yaml');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
 const loadWf = () => loadWorkflow(WORKFLOW);
-const cityModel = () => require('../../src/shared/city-model');
+const cityModel = () => require('@multiagent/shared/city-model');
 const projectMap = () => require('../../src/domains/project/project-map');
 
 function tmp(t, prefix) {
@@ -300,7 +300,7 @@ test('#372 manifestsOf finds the manifests at any depth, sorted', () => {
   assert.deepEqual(out, ['Cargo.toml', 'crates/a/Cargo.toml', 'java/pom.xml', 'net/App.csproj', 'package.json', 'py/pyproject.toml', 'svc/go.mod']);
 });
 
-// ---------- the validation verdict (src/shared/city-model.js) ----------
+// ---------- the validation verdict (packages/shared/city-model.js) ----------
 
 test('#372 planVerdict: a plan matching every drawn file passes', () => {
   const { planVerdict } = cityModel();
@@ -347,7 +347,7 @@ test('#372 planVerdict: a duplicate district id fails', () => {
   assert.equal(planVerdict(cityOf(p).validation).ok, false);
 });
 
-// ---------- the refresh (src/shared/city-model.js) ----------
+// ---------- the refresh (packages/shared/city-model.js) ----------
 
 const CURRENT = {
   version: 1, project: 'fixture', summary: 'Before.', ignore: [],
@@ -479,7 +479,7 @@ test('#372 the facts step fails on a folder that is not a git repository', async
   await assert.rejects(mapFacts({ folder, archRoot, projectId: 'p1' }), /not a git repository/);
 });
 
-// ---------- the refresh signal of the Architecture tab (src/shared/city-model.js) ----------
+// ---------- the refresh signal of the Architecture tab (packages/shared/city-model.js) ----------
 
 const SIGNAL_PLAN = {
   version: 1, project: 'fixture', summary: 'x', ignore: [],

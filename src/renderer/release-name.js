@@ -1,7 +1,7 @@
 // Naming a release (#436): what the Roadmap's cut line dialog (backlog.js #cut-line-modal, opened by
 // backlog-roadmap.js) and the Releases screen's version field (releases.js) share. The last three
 // shipped releases as text above the field ("1.1.2 · 2026-10-13 · 4 issues"), a "Suggest version"
-// button and the line under the field saying why. The suggestion is src/shared/release-version.js's
+// button and the line under the field saying why. The suggestion is packages/shared/release-version.js's
 // (window.ReleaseVersion), from labels only: no model call; the button fills the field, never submits.
 // The cut line's dialog itself is here too (cutLineDialog, #454: saved while it stays open).
 // Uses app.js's esc and errMsg, the api and the catalog's t.

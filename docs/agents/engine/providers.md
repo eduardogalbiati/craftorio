@@ -3,8 +3,8 @@
 Turn timeouts, per-run agent overrides, fallback chains, limits per model, retries and other provider details.
 
 - **The provider registry (#348)**: what differs per CLI lives in one adapter each, in
-  `src/shared/providers/` (`claude.js`, `codex.js`, `grok.js`, and `mock.js` for the simulation), listed
-  by `src/shared/providers/index.js`. The registry is the only place that maps the CLI names / adapter
+  `packages/shared/providers/` (`claude.js`, `codex.js`, `grok.js`, and `mock.js` for the simulation), listed
+  by `packages/shared/providers/index.js`. The registry is the only place that maps the CLI names / adapter
   ids (`claude`) to the provider types of the workflow YAML (`providers.<name>.type`): `resolve(key)`
   finds an adapter by id, type, CLI name or model name (its `modelPrefixes`), `byId` / `byType` by
   exactly one of them, `clis()` lists the CLIs. An adapter carries its id, type, label, short name,

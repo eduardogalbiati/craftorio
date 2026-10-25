@@ -14,7 +14,7 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
 - A fresh session of an agent that already has a note (handoff mode, a rotation, or a resumed run)
   gets `<system>…</system>`, then `<handoff_note>…</handoff_note>`, then the prompt.
 - **The Language line** (#327, #328): `agentTurn` adds one `[Language]` line to every turn, for
-  every CLI (`languageLine` in `src/shared/language.js`, from the WorkflowRun `language` option,
+  every CLI (`languageLine` in `packages/shared/language.js`, from the WorkflowRun `language` option,
   read at each turn: a change in Settings › Language applies from the next turn). It names the AI
   agents language (prose, notes, documents) and the issues language (issues, PR/MR descriptions,
   commit messages), and keeps JSON keys, enum values, paths, branches, labels and `Closes #n` as
@@ -37,7 +37,7 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   bundled workflow with a persistent agent sets `fresh_after_idle: 55m` in `defaults:` (Claude's
   hour minus a margin); an agent's own value wins.
 - **The prompt cache's state** (#320, `src/domains/session/session-cache.js`, the same module as
-  `src/shared/session-cache.js`): `cacheLifetimeMs(provider, { auth, tier })` is the one lifetime
+  `packages/shared/session-cache.js`): `cacheLifetimeMs(provider, { auth, tier })` is the one lifetime
   (Claude 1 h on a subscription, 5 min with `ANTHROPIC_API_KEY`, a tier the usage reports in
   `cache_creation.ephemeral_1h/5m_input_tokens` wins; Codex and Grok `null`, unknown); the Oracle's
   `WARM_MS` is it minus `CACHE_MARGIN_MS`. A simulated run keeps the subscription's hour. Each
@@ -75,7 +75,7 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   cost in the session (`estimated_cost_usd`), the step's record, the run and `max_total_cost_usd`;
   the `attempt N/M failed` log line says what it cost. `workflow.started` and the summary carry
   `cost_accounting: 'per_turn'`; runs without it are read corrected by the run record's upgrades
-  (`src/shared/run-record.js`, #350).
+  (`packages/shared/run-record.js`, #350).
 - Several `result` events in one Claude turn (#277): a turn that used sub-agents (the `Agent` tool)
   ends with 2 to 4 `result` events one ms apart, all with the same (or a growing) session
   `total_cost_usd`. `parseClaude` records the turn's cost once: the highest total seen in the turn
@@ -84,7 +84,7 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   the main conversation's tokens (`usage_main`) are the largest of each field. The raw `result`
   events of such a turn are kept as `raw` items of `session.stream`. The summary carries
   `turn_cost: 'max_result'`; a per-turn run without it is read (upgrade `#277 multi-result turn` in
-  `src/shared/run-record.js`) with each turn
+  `packages/shared/run-record.js`) with each turn
   at the highest cost among its `usage` stream items when that is more than its recorded `cost_usd`
   (the files are never rewritten).
 - A turn's tokens (#308): `session.message_received.usage` is everything the turn paid for, as its

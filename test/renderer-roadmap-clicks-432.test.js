@@ -8,11 +8,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', ...p), 'utf8');
 const roadmapSrc = read('views', 'backlog', 'backlog-roadmap.js');
-const MODULES = ['status-pill.js', 'estimates.js', '../shared/run-progress-model.js', '../shared/default-workflow.js', '../shared/roadmap-model.js', 'workflow-inputs.js'].map((f) => read(f));
+const MODULES = ['status-pill.js', 'estimates.js', '../../packages/shared/run-progress-model.js', '../../packages/shared/default-workflow.js', '../../packages/shared/roadmap-model.js', 'workflow-inputs.js'].map((f) => read(f));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const plain = (v) => JSON.parse(JSON.stringify(v ?? null)); // primitives only: never compare vm objects
 

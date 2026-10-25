@@ -20,9 +20,9 @@ const {
 const capabilities = require('../capabilities');
 const evidence = require('../../domains/evidence/evidence');
 const testPaths = require('../test-paths');
-const chain = require('../../shared/chain-model');
-const Language = require('../../shared/language');
-const registry = require('../../shared/providers');
+const chain = require('@multiagent/shared/chain-model');
+const Language = require('@multiagent/shared/language');
+const registry = require('@multiagent/shared/providers');
 const { changedFiles } = require('../affected-tests');
 const {
   expandSkillNames,

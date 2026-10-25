@@ -6,9 +6,9 @@
 const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
-const { displayName } = require('../../shared/display-name');
+const { displayName } = require('@multiagent/shared/display-name');
 const runs = require('../../domains/run/runs');
-const sessionCache = require('../../shared/session-cache');
+const sessionCache = require('@multiagent/shared/session-cache');
 const supervisor = require('../../domains/supervisor/supervisor');
 const { gitOut } = require('../common');
 

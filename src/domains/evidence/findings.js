@@ -3,7 +3,7 @@
 //   screenshot.png  the window's capture
 //   marked.png      the capture with the marks drawn on it
 //   marks.json      the marks (pin, circle, box, arrow, freehand), each with its optional note; a pin
-//                   carries the element it resolved to (src/shared/findings-model.js resolvePin)
+//                   carries the element it resolved to (packages/shared/findings-model.js resolvePin)
 //   context.json    the state behind the screen, kept to an allow list (CONTEXT_KEYS), capped
 //                   (50 UI actions, 50 service calls, 200 main log lines), denied keys dropped at
 //                   every depth and token-shaped strings redacted: never tokens, auth state,
@@ -14,7 +14,7 @@
 // listFindings gives each one with its status: 'saved', 'sent' or 'filed'.
 const fs = require('fs');
 const path = require('path');
-const Language = require('../../shared/language');
+const Language = require('@multiagent/shared/language');
 const { redactBaseline } = require('../../engine/redact-baseline');
 
 const CONTEXT_KEYS = ['actions', 'app', 'calls', 'log', 'project', 'runIds', 'tab', 'theme', 'view', 'window'];

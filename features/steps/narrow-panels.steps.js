@@ -3,7 +3,7 @@
 // size (src/host/main.js minWidth / minHeight), in English or Portuguese (Brasil).
 // The interface language is written into the scratch workspace's settings.json (language.interface,
 // src/domains/workspace/workspace.js) and the page reloads, so a scenario starts in that language; the steps that
-// navigate read their labels from the app's catalogs (src/shared/i18n/<lang>.json) in the language
+// navigate read their labels from the app's catalogs (packages/shared/i18n/<lang>.json) in the language
 // the page shows (the html lang attribute, src/renderer/interface-language.js).
 // Locators are roles and data-testid only (skills/ui-conventions). Existing: run-list-row (data-run:
 // the run id), status-label (the pill's label, data-status), run-suite-card, run-gate. NEW:
@@ -25,7 +25,7 @@ const LOAD_TIMEOUT = 30000;
 // the main window's minWidth / minHeight (src/host/main.js), as arena.steps.js
 const MIN_SIZE = '1100x700';
 const LANGUAGES = { English: 'en', 'Português (Brasil)': 'pt-BR' };
-const I18N_DIR = path.join(__dirname, '..', '..', 'src', 'shared', 'i18n');
+const I18N_DIR = path.join(__dirname, '..', '..', 'packages', 'shared', 'i18n');
 const catalogs = {};
 const catalog = (code) => (catalogs[code] ||= JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${code}.json`), 'utf8')));
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -101,12 +101,12 @@ const LONG_FILES = {
   'test/integration/renderer/artifacts-panel/scratch-workspace-line-with-its-open-in-button.test.js':
     'imports src/renderer/artifacts-panel.js through src/renderer/views/run/run.js and src/renderer/status-pill.js',
   'test/unit/shared/i18n/portuguese-catalog-keeps-every-status-pill-label-short-enough.test.js':
-    'reads src/shared/i18n/pt-BR.json, changed by this run together with src/shared/i18n/en.json',
+    'reads packages/shared/i18n/pt-BR.json, changed by this run together with packages/shared/i18n/en.json',
 };
 Given('the demo project has a finished AI Development run {string} whose suite ran only affected test files with long paths', async ({ e2e }, suffix) => {
   const files = Object.keys(LONG_FILES);
   const selection = {
-    mode: 'affected', files, reasons: LONG_FILES, changed: ['src/renderer/views/run/run.js', 'src/renderer/artifacts-panel.js', 'src/shared/i18n/pt-BR.json'], slow: [],
+    mode: 'affected', files, reasons: LONG_FILES, changed: ['src/renderer/views/run/run.js', 'src/renderer/artifacts-panel.js', 'packages/shared/i18n/pt-BR.json'], slow: [],
     why: `the ${files.length} affected test file(s) reach the 3 changed file(s); the whole suite was not run`,
   };
   e2e.longPaths = files;

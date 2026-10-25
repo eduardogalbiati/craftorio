@@ -1,6 +1,6 @@
 // #385 acceptance: the Architecture facts (src/domains/project/architecture-facts.js readFacts) measure JavaScript
 // and TypeScript complexity inside the app, without lizard or Python, with the same rules as
-// scripts/code-health.js (acorn); one pure measuring core in src/shared/ used by both; a language
+// scripts/code-health.js (acorn); one pure measuring core in packages/shared/ used by both; a language
 // without a tool is "not measured" (null, never 0) and named; the Facts tab says which languages
 // are not measured and how to measure them (`pip install lizard`, which needs Python).
 // lizard is made unavailable by stubbing src/engine/providers.js resolveCommand/resolveCommandAsync
@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { execFileSync } = require('child_process');
 const { createDom } = require('./mini-dom');
 const { analyzeSource } = require('../scripts/code-health');
@@ -146,8 +146,8 @@ test('#385 a language without a tool is not measured (null, never 0) and named i
   assert.equal(listed.includes('TypeScript'), false, 'TypeScript is measured');
 });
 
-test('#385 one measuring core: src/shared/code-complexity.js measureSource gives code-health.js\'s numbers', () => {
-  const { measureSource } = require('../src/shared/code-complexity');
+test('#385 one measuring core: packages/shared/code-complexity.js measureSource gives code-health.js\'s numbers', () => {
+  const { measureSource } = require('@multiagent/shared/code-complexity');
   assert.equal(typeof measureSource, 'function');
   const pick = (fns) => fns.map((f) => ({ name: f.name, line: f.line, complexity: f.complexity }));
   const measured = measureSource(A_JS, { file: 'src/a.js' });
@@ -183,7 +183,7 @@ function loadTab(model) {
   withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'architecture-facts-view.js', 'city-model.js', 'city-layout.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   vm.runInContext(fs.readFileSync(path.join(RENDERER, 'date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {
@@ -298,7 +298,7 @@ test('#385 Electron\'s own Node measures TypeScript with the shared core (the pa
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const script = path.join(dir, 'measure.js');
   fs.writeFileSync(script, [
-    `const { measureSource } = require(${JSON.stringify(path.join(ROOT, 'src', 'shared', 'code-complexity.js'))});`,
+    `const { measureSource } = require(${JSON.stringify(path.join(ROOT, 'packages', 'shared', 'code-complexity.js'))});`,
     `const fns = measureSource(${JSON.stringify(C_TS)}, { file: 'src/c.ts' });`,
     'process.stdout.write(JSON.stringify(fns.map((f) => ({ name: f.name, line: f.line, complexity: f.complexity }))));',
     '',

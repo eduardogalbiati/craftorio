@@ -1,5 +1,5 @@
 // #327 acceptance tests (written before the code): every agent turn of a run carries ONE [Language]
-// line (src/shared/language.js languageLine), added where a step's prompt is assembled
+// line (packages/shared/language.js languageLine), added where a step's prompt is assembled
 // (src/engine/run/sessions.js), the same for every CLI. The run reads the setting through its
 // `language` option, a function returning the settings' language object ({ agents, issues }) called
 // at each turn (like `nightLimits`): a change applies from the next turn. The output instruction
@@ -15,7 +15,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
 
-const load = () => require('../src/shared/language');
+const load = () => require('@multiagent/shared/language');
 const PT = { agents: 'pt-BR', issues: 'en' };
 
 // cld answers twice in one persistent session (a then d); cdx and grk once; b has an output schema

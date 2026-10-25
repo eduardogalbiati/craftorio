@@ -21,7 +21,7 @@ const supervisorChat = require('../../domains/supervisor/supervisor-chat');
 const repoPerformance = require('../../domains/project/repo-performance');
 const roadmap = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
-const { itemRuns } = require('../../shared/roadmap-model');
+const { itemRuns } = require('@multiagent/shared/roadmap-model');
 const {
   computeUsageAsync,
   readLocalUsageAsync,

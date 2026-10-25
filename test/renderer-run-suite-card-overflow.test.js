@@ -12,9 +12,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const I18n = require('../src/shared/i18n.js');
-const { withI18n } = require('./i18n-sandbox.js');
-const { displayName } = require('../src/shared/display-name.js');
+const I18n = require('@multiagent/shared/i18n.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { displayName } = require('@multiagent/shared/display-name.js');
 const { parseHtml, styleSheet, layoutOf, elements, textOf } = require('./css-layout.js');
 
 const RUN_JS = path.join(__dirname, '..', 'src', 'renderer', 'views', 'run', 'run.js');

@@ -17,7 +17,7 @@ renderer (src/renderer/)  ──window.api──▶  service (src/service/)  ─
 
 `src/engine/` runs a workflow: it loads the YAML (`workflows/`, `fragments/`), walks its steps and
 transitions, prepares a git worktree per run (`worktree.js`), starts each agent turn as a headless
-CLI through its provider (`src/shared/providers/`: `claude.js`, `codex.js`, `grok.js`, and
+CLI through its provider (`packages/shared/providers/`: `claude.js`, `codex.js`, `grok.js`, and
 `mock.js` for simulated runs), and stops at human gates. What an agent may use is declared per agent
 (`capabilities.js`) and turned into each CLI's flags; this is context economy, not a security
 boundary (README "Security model"). Everything a run produces (events, logs, artifacts, costs) is
@@ -39,7 +39,7 @@ the running app through an allowlist of those channels.
 per screen (moved screens in `views/<view>/`), shared tokens in `style.css`, and `window.api` as the
 only way to the engine, so the same UI runs in the desktop window and in a browser against a remote
 engine. The 3D views (the run view and the project city) are the exception: React and three.js,
-bundled by `scripts/build-3d.js` into `generated/`. Modules both sides use live in `src/shared/`.
+bundled by `scripts/build-3d.js` into `generated/`. Modules both sides use live in `packages/shared/`.
 
 ## The native sidecars
 

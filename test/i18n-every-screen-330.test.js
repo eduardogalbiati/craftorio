@@ -1,12 +1,12 @@
 // #330 Interface language part 2: every screen translated (written before the code). #329 moved
-// Settings and the Setup to the catalog (src/shared/i18n.js, src/shared/i18n/en.json, pt-BR.json);
+// Settings and the Setup to the catalog (packages/shared/i18n.js, packages/shared/i18n/en.json, pt-BR.json);
 // #330 moves the rest. These tests guard that:
 // (a) every .js file under src/renderer (the whole folder: a new view is in it by itself, the Agents
-//     window and the shared renderer modules too) and the src/shared/ modules with screen text show no
+//     window and the shared renderer modules too) and the packages/shared/ modules with screen text show no
 //     visible text outside t() (test/untranslated-text.js, the check of #329 part c); index.html's
 //     static text carries its data-i18n hook (data-i18n, data-i18n-title, data-i18n-aria-label,
 //     data-i18n-placeholder), the product name left out;
-// (b) the screen text the page's src/shared/ modules build follows the interface language
+// (b) the screen text the page's packages/shared/ modules build follows the interface language
 //     (I18n.setLanguage, as the page and the service set it): the Roadmap's refusal reasons and pause
 //     choices (roadmap-model.js allowedActions, pauseChoices), the Product Owner calibration's steps
 //     (po-calibration.js label, cost.label), the platforms' epic help (platforms/github.js,
@@ -29,12 +29,12 @@ const { report, sourceFiles, untranslated, untranslatedHtml } = require('./untra
 const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
 const RENDERER = path.join(SRC, 'renderer');
-const SHARED = path.join(SRC, 'shared');
+const SHARED = path.join(ROOT, 'packages', 'shared');
 const CATALOGS = path.join(SHARED, 'i18n');
 const rel = (file) => path.relative(ROOT, file).split(path.sep).join('/');
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 
-// the src/shared/ modules the page loads that build screen text (a folder: every .js in it)
+// the packages/shared/ modules the page loads that build screen text (a folder: every .js in it)
 const SHARED_SCREEN = ['roadmap-model.js', 'roadmap-summary.js', 'po-calibration.js', 'platforms/'];
 const sharedScreenFiles = () => SHARED_SCREEN.flatMap((p) => (p.endsWith('/') ? sourceFiles(path.join(SHARED, p)) : [path.join(SHARED, p)]));
 
@@ -52,7 +52,7 @@ test('#330 (a) every .js file under src/renderer shows no visible text outside t
   assert.deepEqual(found, [], report(found));
 });
 
-test('#330 (a) the src/shared/ modules with screen text show no visible text outside t() in their markup', () => {
+test('#330 (a) the packages/shared/ modules with screen text show no visible text outside t() in their markup', () => {
   const files = sharedScreenFiles();
   assert.ok(files.length >= 5, `scanned: ${files.map(rel).join(', ')}`);
   const found = files.flatMap((f) => untranslated(fs.readFileSync(f, 'utf8'), rel(f)));
@@ -80,7 +80,7 @@ test('#330 (a) src/renderer/index.html: every static text and label carries its 
   assert.deepEqual(found, [], report(found, 'static text without its data-i18n hook (data-i18n, data-i18n-title, data-i18n-aria-label, data-i18n-placeholder)'));
 });
 
-// ---- (b) the src/shared/ modules' screen text follows the interface language -----------------------
+// ---- (b) the packages/shared/ modules' screen text follows the interface language -----------------------
 /** The value in English, then in pt-BR (the current language set as the page and the service do). */
 function inBoth(fn) {
   const i18n = I18n();

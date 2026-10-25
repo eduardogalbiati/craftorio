@@ -14,7 +14,7 @@ const history = require('../../domains/roadmap/roadmap-history');
 const merge = require('../../domains/roadmap/roadmap-merge');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const undo = require('../../domains/roadmap/roadmap-undo');
-const RoadmapModel = require('../../shared/roadmap-model');
+const RoadmapModel = require('@multiagent/shared/roadmap-model');
 const { requireText } = require('../common');
 const {
   ANY,

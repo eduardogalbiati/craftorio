@@ -1,9 +1,9 @@
 // The Oracle's architecture analysis of a project (#356): one turn, outside its conversation, that
-// reads the facts model (src/shared/architecture-model.js: hotspots, co-change pairs, languages)
+// reads the facts model (packages/shared/architecture-model.js: hotspots, co-change pairs, languages)
 // and checks the top hotspots with its read-only repository tools (repo_read, repo_git). It
 // answers a report in the agents language (#327: the [Language] line of oneTurn), { summary, areas: [{ area, verdict }], findings: [{ kind, title,
 // files: [{ path, lines }], evidence, severity, refactor }] }, checked against REPORT_SCHEMA
-// (src/shared/architecture-report.js, shared with the Refactor proposals workflow, #378) with
+// (packages/shared/architecture-report.js, shared with the Refactor proposals workflow, #378) with
 // validateSchema (#338): an invalid answer is an error, never half a report. It never edits code
 // and never prescribes a fix to a run (the supervisor rule): a finding goes to the Refactor tab,
 // where the Product Owner prioritizes. The turn runs on the Oracle's model in its daily budget
@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { validateSchema } = require('../workspace/json-schema');
-const { KINDS, REPORT_SCHEMA, SEVERITIES } = require('../../shared/architecture-report');
+const { KINDS, REPORT_SCHEMA, SEVERITIES } = require('@multiagent/shared/architecture-report');
 
 const ESTIMATE_BASIS = 5;
 const PROMPT_ROWS = 15;

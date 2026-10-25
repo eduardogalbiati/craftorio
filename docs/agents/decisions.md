@@ -97,7 +97,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   language (default "Same as the interface": the language the interface resolves to, an unset
   Interface following the engine host's computer language when it has a catalog, else English, #424). Issues, PR/MR descriptions and
   commit messages follow a separate issues language (default English), and so do Findings' "File as
-  issue" and the epic body line (one place: `src/shared/language.js`). JSON keys and enum values,
+  issue" and the epic body line (one place: `packages/shared/language.js`). JSON keys and enum values,
   paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled
   workflows and skills, logs and tests stay English. Grill me's questions come from the clarity
   rubric (`src/domains/discovery/clarity.js`, no model call): app text, so they follow the interface language (#329),
@@ -106,10 +106,10 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   chat language; the output contract keeps the keys in English so #94 does not come back.
   The interface language (#329, #330, of 2026-10-12) is a setting too (Settings › General ›
   Language › Interface), separate from these two, and every screen follows it (#330: each view,
-  the shared renderer modules, the Agents window and the screen text of `src/shared/`); until one is chosen it follows the computer's
-  language when it has a catalog, else English. Its text lives in `src/shared/i18n/<lang>.json`
+  the shared renderer modules, the Agents window and the screen text of `packages/shared/`); until one is chosen it follows the computer's
+  language when it has a catalog, else English. Its text lives in `packages/shared/i18n/<lang>.json`
   (English the source, a missing key shows the English text) behind one `t()`
-  (`src/shared/i18n.js`); dates, numbers and percentages follow it, costs stay in US$ with the
+  (`packages/shared/i18n.js`); dates, numbers and percentages follow it, costs stay in US$ with the
   language's separators; user content, workflow YAML texts, skills, agents' messages, engine errors
   and logs are never translated. Why: an owner who works in another language read an English-only
   app, and logs and errors must stay searchable and reportable.
@@ -140,7 +140,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   city of stacked squares in place of the POC he had approved. Earlier the same day (#371, #372):
   the project city is on the roadmap, built from the proof of concept
   (PR #370, `poc/embed-city.js` and its two plans at 100% coverage); groma.md is not used. The city
-  is one deterministic model (`src/shared/city-model.js`) from #356's facts and a city plan, drawn
+  is one deterministic model (`packages/shared/city-model.js`) from #356's facts and a city plan, drawn
   by the 3D view (#373). The plan of any project is written by an agent, the cartographer of the
   `project-map` workflow (skill `project-map`, one for every kind of project), and validated by
   rules (95% of the drawn files match a district); the cartographer is read-only on the project
@@ -171,7 +171,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   proves useful should become free and repeatable. (#356, same day) A project's Architecture tab
   works for any language. The deterministic
   facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
-  pure core in `src/shared/`; complexity comes only from a real tool, never a regex; the analysis is
+  pure core in `packages/shared/`; complexity comes only from a real tool, never a regex; the analysis is
   the Oracle's, on demand, in its daily budget. What the Oracle finds feeds the Refactor tab, where
   the Product Owner prioritizes. Why: a parser per language cannot be the base when a project can be
   in any language, or several.

@@ -16,7 +16,7 @@ const supervisor = require('../src/domains/supervisor/supervisor');
 const { createWatches } = require('../src/domains/supervisor/supervisor-watch');
 const { prioritize } = require('../src/domains/refactor/refactor-priority');
 const epics = require('../src/domains/backlog/epics');
-const Language = require('../src/shared/language');
+const Language = require('@multiagent/shared/language');
 
 const SKILLS = path.join(__dirname, '..', 'skills');
 const WORKFLOWS = path.join(__dirname, '..', 'workflows');

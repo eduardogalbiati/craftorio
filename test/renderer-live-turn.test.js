@@ -212,11 +212,11 @@ test('onClick: the steps toggle flips stepsOpen and re-renders; a click elsewher
   assert.equal(onClick({ target: elsewhere }, null, {}), false);
 });
 
-// ---- #423 the live turn in the interface language (src/shared/i18n.js, I18n.setLanguage) -----------
+// ---- #423 the live turn in the interface language (packages/shared/i18n.js, I18n.setLanguage) -----------
 // Its text comes from the catalog through t(); what it quotes (paths, patterns, commands, the agent's
 // name, the answer) stays verbatim; a step's label follows the language at render time. The English
 // texts are the ones above. Each test puts English back.
-const I18n = require('../src/shared/i18n');
+const I18n = require('@multiagent/shared/i18n');
 const inPortuguese = () => I18n.setLanguage('pt-BR');
 test.afterEach(() => I18n.setLanguage('en'));
 

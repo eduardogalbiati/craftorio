@@ -12,7 +12,7 @@ const path = require('path');
 const { execGit, repoNameFromUrl } = require('../workspace/workspace');
 const { cleanConfig } = require('../local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow
-const { firstBuild } = require('../../shared/default-workflow');
+const { firstBuild } = require('@multiagent/shared/default-workflow');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
@@ -180,7 +180,7 @@ async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) 
     }
   }
   // no CLI that can read it: a public repository's raw file
-  const raw = require('../../shared/platforms').rawFileUrl(platform, parsed, MANIFEST_FILE);
+  const raw = require('@multiagent/shared/platforms').rawFileUrl(platform, parsed, MANIFEST_FILE);
   try {
     const res = typeof fetch === 'function' ? await fetch(raw) : null;
     if (res?.ok) return entries(await res.text());

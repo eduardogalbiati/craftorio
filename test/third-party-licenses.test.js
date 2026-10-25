@@ -27,7 +27,9 @@ test('#482 resources/THIRD_PARTY_LICENSES.txt is up to date with node_modules (r
 test('#482 THIRD_PARTY_LICENSES.txt has an entry for every production dependency and the bundled three and react', () => {
   const { BUNDLED } = load();
   const titles = new Set(lf(read(LICENSES)).split('\n').map((l) => l.split(' ')[0]));
-  const names = [...Object.keys(pkg().dependencies || {}), ...BUNDLED];
+  // this repository's own workspace packages (private) are not third parties: their dependencies are
+  const isWorkspace = (n) => require('../scripts/source-tree').workspaces(root).some((w) => w.name === n);
+  const names = [...Object.keys(pkg().dependencies || {}).filter((n) => !isWorkspace(n)), ...BUNDLED];
   assert.ok(names.includes('three') && names.includes('react'), 'three and react are bundled');
   assert.deepEqual(names.filter((n) => !titles.has(n)), [], 'packages without an entry');
 });

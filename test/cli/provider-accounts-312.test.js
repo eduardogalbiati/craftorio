@@ -19,7 +19,7 @@
 // - Mock: `mockSequences.usage_limits` also takes "<provider>@<account name>": every turn on that
 //   account fails with the CLI's usageLimitMessage ("<provider>" still means every account).
 // - Event `agent.account_switch` { agent, step_id, provider, from, to, reason, until } (from/to:
-//   account names; until: ISO time or null), declared in src/shared/types.js RUN_EVENT_TYPES.
+//   account names; until: ISO time or null), declared in packages/shared/types.js RUN_EVENT_TYPES.
 // - Event `run.waiting_credits` { agent, step_id, provider, until } when no account of the provider
 //   is left and the agent has no chain: the run waits (it does not finish); stop() cancels it.
 const test = require('node:test');
@@ -149,7 +149,7 @@ function filesUnder(dir) {
 }
 
 test('#312 the account switch and the wait for credits are declared run events', () => {
-  const { RUN_EVENT_TYPES } = require('../../src/shared/types');
+  const { RUN_EVENT_TYPES } = require('@multiagent/shared/types');
   assert.equal(RUN_EVENT_TYPES.includes('agent.account_switch'), true);
   assert.equal(RUN_EVENT_TYPES.includes('run.waiting_credits'), true);
 });

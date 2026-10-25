@@ -1,12 +1,13 @@
-// Layering rules (issue #345): the areas of src/ and the directions they may require each other.
-// From the bottom: shared (src/shared/, pure dual-load modules) requires nothing of the app; the
+// Layering rules (issue #345): the areas of the sources (src/ and the workspaces, scripts/source-tree.js)
+// and the directions they may require each other.
+// From the bottom: shared (packages/shared/, pure dual-load modules) requires nothing of the app; the
 // low-level utilities (ENGINE_ROOT_UTILITIES) only shared; the engine those two; the domain modules
 // (src/domains/<name>/, phase 1 of docs/reorganisation-study-2026-10.md; a loose file at the root of
 // src/ counts as one too) the engine too; the service all of these; the desktop entry and the server what is below
 // them; the renderer only shared, and nothing else requires it. The desktop entry is src/host/ (phase 1
 // of docs/reorganisation-study-2026-10.md): the Electron host, required by nothing else.
-// Every relative `require` of every .js file under src/ is read, lazy ones (inside a function)
-// included, comments skipped. A require is allowed when AREAS lets the requiring area reach the
+// Every relative `require` of every source file is read, and every `require` of a workspace package
+// (`@multiagent/shared/…`, resolved to its file), lazy ones (inside a function) included, comments skipped. A require is allowed when AREAS lets the requiring area reach the
 // required one, or when EXCEPTIONS lists it with its reason. The exceptions may only shrink: one
 // that no file has any more fails ('leave-list') until it leaves the list. A require cycle fails
 // too, however its requires are written. Where a new module goes: docs/agents/code-map.md
@@ -16,11 +17,12 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolvePackagePath, sourceFiles } = require('./source-tree');
 
 const ROOT = path.join(__dirname, '..');
 
 // The low-level utilities the engine may require: domain files that require nothing but each other
-// and src/shared/ (area `utility`). A domain file that needs more is a domain module (area `root`).
+// and packages/shared/ (area `utility`). A domain file that needs more is a domain module (area `root`).
 const ENGINE_ROOT_UTILITIES = [
   'src/domains/evidence/coverage-summary.js',
   'src/domains/evidence/evidence.js',
@@ -52,10 +54,20 @@ const AREAS = {
 // The top-level folders of src/ and their area (domains: a domain module, or a utility when
 // ENGINE_ROOT_UTILITIES lists the file, see areaOf). scripts/dep-map.js reads this list too.
 const FOLDERS = { control: 'server', domains: 'root', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
+// The workspaces (phase 2 of docs/reorganisation-study-2026-10.md) and their area: a whole package
+// (packages/shared), or its folders by FOLDERS (packages/engine/<folder>/, apps/desktop/<folder>/).
+const PACKAGES = { 'apps/desktop': null, 'packages/engine': null, 'packages/shared': 'shared' };
 
 // The area of a file (path from the repository root, with /), or null when no area holds it.
 function areaOf(file) {
   const parts = file.split('/');
+  const pkg = parts.length > 2 ? `${parts[0]}/${parts[1]}` : null;
+  if (pkg && pkg in PACKAGES) {
+    if (PACKAGES[pkg]) return PACKAGES[pkg];
+    if (parts.length < 4 || parts[2] === 'test') return null;
+    if (parts[2] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
+    return FOLDERS[parts[2]] || null;
+  }
   if (parts[0] !== 'src' || parts.length < 2) return null;
   if (parts.length === 2 || parts[1] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
   return FOLDERS[parts[1]] || null;
@@ -82,14 +94,6 @@ const EXCEPTIONS = [
 
 const posix = (p) => p.split(path.sep).join('/');
 
-function listJs(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) return e.name === 'node_modules' ? [] : listJs(p);
-    return e.isFile() && e.name.endsWith('.js') ? [p] : [];
-  }).sort();
-}
 
 // The source with comments and regex literals blanked (strings and line breaks kept, so targets
 // and lines survive). A / after an operator, an opening bracket or `return` starts a regex.
@@ -138,23 +142,29 @@ function withoutComments(src) {
   return out;
 }
 
-function resolveLocal(fromAbs, target) {
-  const base = path.resolve(path.dirname(fromAbs), target);
+// A require's target file: a relative spec from the requiring file, or a workspace package's path
+// (`@multiagent/shared/i18n` → packages/shared/i18n.js); null for an npm package or a missing file.
+function resolveLocal(root, fromAbs, target) {
+  const pkgPath = target.startsWith('.') ? null : resolvePackagePath(root, target);
+  if (!target.startsWith('.') && !pkgPath) return null;
+  const base = pkgPath ? path.join(root, pkgPath) : path.resolve(path.dirname(fromAbs), target);
   for (const p of [base, `${base}.js`, path.join(base, 'index.js')]) {
     if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
   }
   return null;
 }
 
-// Every relative require of a .js file under <root>/src: [{ from, to, line }], paths from root.
+// Every require of a source file (scripts/source-tree.js sourceFiles) that names another file of
+// the repository, relative or through a workspace package: [{ from, to, line }], paths from root.
 function requireGraph(root) {
   const edges = [];
-  for (const abs of listJs(path.join(root, 'src'))) {
+  for (const rel of sourceFiles(root)) {
+    const abs = path.join(root, rel);
     const code = withoutComments(fs.readFileSync(abs, 'utf8').replace(/\r\n/g, '\n'));
-    for (const m of code.matchAll(/\brequire\(\s*(['"])(\.[^'"]*)\1\s*\)/g)) {
-      const to = resolveLocal(abs, m[2]);
+    for (const m of code.matchAll(/\brequire\(\s*(['"])([^'"]*)\1\s*\)/g)) {
+      const to = resolveLocal(root, abs, m[2]);
       if (!to || !to.endsWith('.js')) continue;
-      edges.push({ from: posix(path.relative(root, abs)), to: posix(path.relative(root, to)), line: code.slice(0, m.index).split('\n').length });
+      edges.push({ from: rel, to: posix(path.relative(root, to)), line: code.slice(0, m.index).split('\n').length });
     }
   }
   return edges;
@@ -170,7 +180,7 @@ function allowed(from, to) {
 function rule(from, to) {
   const area = areaOf(from);
   const target = areaOf(to);
-  if (!area || !target) return `${!area ? from : to} is in no area: add its folder to AREAS of scripts/layers.js`;
+  if (!area || !target) return `${!area ? from : to} is in no area: add its folder to FOLDERS or PACKAGES of scripts/layers.js`;
   return `the ${area} area may require only ${AREAS[area].may.join(', ')}, not the ${target} area (scripts/layers.js; move the shared code down, or list the exception with its reason)`;
 }
 
@@ -239,6 +249,7 @@ module.exports = {
   ENGINE_ROOT_UTILITIES,
   EXCEPTIONS,
   FOLDERS,
+  PACKAGES,
   requireGraph,
 };
 

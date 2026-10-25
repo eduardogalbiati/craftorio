@@ -29,7 +29,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { unfinishedItems } = require('../../shared/roadmap-model');
+const { unfinishedItems } = require('@multiagent/shared/roadmap-model');
 const { regressionLine, stepRegressions } = require('../run/step-regressions');
 
 // What the Oracle may do without asking, each with what it does and its undo. Defaults: retry and refresh.
@@ -224,7 +224,7 @@ function incidentOf(ev) {
  * The roadmap anomalies of the moment: `roadmaps` [{ projectId, roadmap }] (the files), `active`
  * [{ projectId }] the runs in progress. → [{ kind, projectId }]: a paused roadmap (or one with an
  * error), a running roadmap with items left and no run of its project, or nothing left anywhere.
- * A disabled stage's items (#284) are not work left (src/shared/roadmap-model.js unfinishedItems).
+ * A disabled stage's items (#284) are not work left (packages/shared/roadmap-model.js unfinishedItems).
  */
 function roadmapIncidents(roadmaps = [], active = []) {
   const out = [];

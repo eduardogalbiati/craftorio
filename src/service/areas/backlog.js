@@ -15,8 +15,8 @@ const refreshes = require('../../domains/backlog/backlog-refresh');
 const { git } = require('../../engine/worktree');
 const epics = require('../../domains/backlog/epics');
 const roadmaps = require('../../domains/roadmap/roadmap');
-const { normalizeThen } = require('../../shared/chain-model');
-const { platformOrDefault, requestRef } = require('../../shared/platforms');
+const { normalizeThen } = require('@multiagent/shared/chain-model');
+const { platformOrDefault, requestRef } = require('@multiagent/shared/platforms');
 const runs = require('../../domains/run/runs');
 
 module.exports = (ctx) => {

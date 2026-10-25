@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const en = require('../src/shared/i18n/en.json');
+const en = require('@multiagent/shared/i18n/en.json');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
 
@@ -28,7 +28,7 @@ test('updateAssignNote: the real-run note drops the "one at a time" / ordering c
 });
 
 test('#330 the Assign button reads "Simulate 1 run" / "Start 3 runs" in English and its Portuguese text in pt-BR', () => {
-  const I18n = require('../src/shared/i18n.js');
+  const I18n = require('@multiagent/shared/i18n.js');
   assert.equal(I18n.t('backlog.assign_simulate_runs', { count: 1 }, 'en'), 'Simulate 1 run');
   assert.equal(I18n.t('backlog.assign_start_runs', { count: 3 }, 'en'), 'Start 3 runs');
   assert.equal(I18n.t('backlog.assign_simulate_runs', { count: 1 }, 'pt-BR'), 'Simular 1 execução');

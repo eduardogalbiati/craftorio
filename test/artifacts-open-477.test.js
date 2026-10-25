@@ -19,7 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
 // resolved inside each test: the module does not exist until the change lands
 const load = () => {

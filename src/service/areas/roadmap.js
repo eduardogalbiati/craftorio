@@ -19,8 +19,8 @@ const budget = require('../../domains/usage/budget');
 const costEstimate = require('../../domains/usage/cost-estimate');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
-const RoadmapModel = require('../../shared/roadmap-model');
-const RunProgress = require('../../shared/run-progress-model');
+const RoadmapModel = require('@multiagent/shared/roadmap-model');
+const RunProgress = require('@multiagent/shared/run-progress-model');
 const { clientError } = require('../common');
 
 module.exports = (ctx) => {

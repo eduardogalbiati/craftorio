@@ -17,7 +17,7 @@
 
 const path = require('path');
 const yaml = require('js-yaml');
-const chain = require('../../shared/chain-model');
+const chain = require('@multiagent/shared/chain-model');
 const { seedBundle, bundleStatus, restoreBundled } = require('../seed/seed');
 const { WORKFLOW_KIND } = require('./workflows');
 const { WORKFLOW_CATEGORIES } = require('./workflow-categories');

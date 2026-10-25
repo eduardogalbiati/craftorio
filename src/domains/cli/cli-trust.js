@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs } = require('./cli-config-dirs');
 const { pathKey } = require('../machine/platform-paths');
-const registry = require('../../shared/providers');
+const registry = require('@multiagent/shared/providers');
 
 /** The folder and the root of the git repository it is in (when it is in one). */
 function foldersToTrust(dir) {

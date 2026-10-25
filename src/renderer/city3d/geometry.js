@@ -4,7 +4,7 @@
 //   RoundedBoxGeometry (2 segments, ROUND of its size) scaled per instance, so the rounding grows with
 //   the building. mastBox() and capBall() are the masts' and their caps'; flatPlane() a lane dash.
 // - partGeometries() (#449, poc/project-city-v2.html): the unit geometries of the v2 buildings' parts
-//   (src/shared/city-buildings.js `g`), every base at y = 0 but the cap's and the light's (centred):
+//   (packages/shared/city-buildings.js `g`), every base at y = 0 but the cap's and the light's (centred):
 //   box (buildingBox), wedge (a gable roof, wedgeGeometry), barrel (a half cylinder along x), dome,
 //   cyl, cone, green (a blob of foliage), mast, cap and light. windowMaterial(uniforms, { floorH,
 //   pitch }) is the walls' material: windows at a real floor height on every facade, lit by churn

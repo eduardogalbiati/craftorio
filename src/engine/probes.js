@@ -20,14 +20,14 @@ const {
 const { childEnv, PLATFORM_CLIS } = require('./child-env');
 const { installHint } = require('../domains/machine/install-commands');
 const { execShim } = require('../domains/machine/shell');
-const github = require('../shared/platforms/github');
-const gitlab = require('../shared/platforms/gitlab');
-const { PLATFORMS, findPlatform, resolvePlatform } = require('../shared/platforms');
+const github = require('@multiagent/shared/platforms/github');
+const gitlab = require('@multiagent/shared/platforms/gitlab');
+const { PLATFORMS, findPlatform, resolvePlatform } = require('@multiagent/shared/platforms');
 // defined with the field rules (wait.probe), which load without Node (#488)
 const { PROBES } = require('./run/field-rules');
 
 // URL (agent output) → { platform (the short id: gh | gl), host, repo, kind: 'pr' | 'run', id }, or null.
-// The URL forms are the adapters' parseTargetUrl (src/shared/platforms/).
+// The URL forms are the adapters' parseTargetUrl (packages/shared/platforms/).
 function parseTarget(url) {
   for (const p of PLATFORMS) {
     const t = p.parseTargetUrl(url);

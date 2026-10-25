@@ -12,7 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 const roadmaps = require('../src/domains/roadmap/roadmap');
 
 function tmp(t) {
@@ -23,9 +23,9 @@ function tmp(t) {
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-roadmap.js'), 'utf8');
 const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
-const runProgressSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'run-progress-model.js'), 'utf8');
-const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
-const roadmapModelSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'roadmap-model.js'), 'utf8');
+const runProgressSrc = fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'run-progress-model.js'), 'utf8');
+const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
+const roadmapModelSrc = fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'roadmap-model.js'), 'utf8');
 const statusPillSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'status-pill.js'), 'utf8');
 const estimatesSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'estimates.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

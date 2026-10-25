@@ -17,8 +17,11 @@ const testDir = path.join(root, 'test');
 const slash = (p) => p.split(path.sep).join('/');
 const rel = (f) => slash(path.relative(root, f));
 
-// Every .js/.cjs/.mjs file under test/, recursively, except test/fixtures/ (inputs, never run).
-function jsFiles(dir = testDir) {
+// Every .js/.cjs/.mjs file under test/ and under every workspace's test/ (scripts/source-tree.js),
+// recursively, except fixtures/ folders (inputs, never run).
+const testDirs = () => [testDir, ...require('../scripts/source-tree').workspaces(root).map((w) => path.join(root, ...w.dir.split('/'), 'test'))].filter((d) => fs.existsSync(d));
+function jsFiles(dir) {
+  if (dir === undefined) return testDirs().flatMap((d) => jsFiles(d)).sort();
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) return e.name === 'fixtures' ? [] : jsFiles(full);

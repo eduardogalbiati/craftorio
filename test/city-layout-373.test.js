@@ -1,4 +1,4 @@
-// #373: the layout of the project city, src/shared/city-layout.js (dual load like city-model.js:
+// #373: the layout of the project city, packages/shared/city-layout.js (dual load like city-model.js:
 // window.CityLayout in the browser, module.exports in Node). Pure and deterministic:
 // - squarify(items [{ id, weight }], rect { x, y, w, h }) → [{ id, x, y, w, h }], one cell per item
 //   with weight > 0, each cell's area proportional to its weight, filling the rect;
@@ -14,11 +14,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { buildModel } = require('../src/shared/architecture-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const root = path.join(__dirname, '..');
-const load = () => require('../src/shared/city-layout.js');
-const loadModel = () => require('../src/shared/city-model.js');
+const load = () => require('@multiagent/shared/city-layout.js');
+const loadModel = () => require('@multiagent/shared/city-model.js');
 const EPS = 1e-6;
 
 // ---------- fixtures: #356 facts and #371 city models ----------
@@ -133,12 +133,12 @@ test('#373 city-layout.js loads in Node and, in the browser, defines window.City
   const sandbox = { console };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(fs.readFileSync(path.join(root, 'src', 'shared', 'city-layout.js'), 'utf8'), sandbox, { filename: 'city-layout.js' });
+  vm.runInContext(fs.readFileSync(path.join(root, 'packages', 'shared', 'city-layout.js'), 'utf8'), sandbox, { filename: 'city-layout.js' });
   assert.equal(typeof sandbox.window.CityLayout?.squarify, 'function');
 });
 
 test('#373 city-layout.js is pure: no I/O, no clock, no randomness', () => {
-  const src = fs.readFileSync(path.join(root, 'src', 'shared', 'city-layout.js'), 'utf8');
+  const src = fs.readFileSync(path.join(root, 'packages', 'shared', 'city-layout.js'), 'utf8');
   for (const banned of ["require('fs')", "require('child_process')", "require('net')", "require('http')", "require('https')", 'Date.now', 'new Date(', 'Math.random']) {
     assert.equal(src.includes(banned), false, `city-layout.js uses ${banned}`);
   }

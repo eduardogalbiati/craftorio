@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const drawerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'start-drawer.js'), 'utf8');
@@ -153,7 +153,7 @@ function envStatusHtml(cliStates, requirements = { clis: ['claude', 'codex', 'gi
     state: { wf: requirements ? { requirements } : {}, cliStates, cliTools: tools },
     $: () => box,
     esc: (s) => String(s),
-    SetupModel: require('../src/shared/setup-model.js'),
+    SetupModel: require('@multiagent/shared/setup-model.js'),
     canRunCommands: () => canRun,
     commandHint: (cmd, opts) => `[${opts?.signIn ? 'sign-in' : 'run'}: ${cmd}]`,
     devMode: () => dev,

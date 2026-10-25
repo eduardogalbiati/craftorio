@@ -3,11 +3,11 @@
 // the files tracked there with their line counts (`git grep -c` at that commit, binary files
 // skipped, so .gitignored files never count), `git log <commit> --no-merges -M --name-status`,
 // .git-blame-ignore-revs and .gitattributes at that commit, and whether the clone is shallow. The
-// numbers come from the pure core (src/shared/architecture-model.js buildModel), cached per commit,
+// numbers come from the pure core (packages/shared/architecture-model.js buildModel), cached per commit,
 // window, exclude list and mass-change toggle.
 // Complexity only from a real parser or tool: JavaScript and TypeScript inside the app (#385), at
 // that commit (`git cat-file --batch`), with scripts/code-health.js's core
-// (src/shared/code-complexity.js), no tool to install; the other languages from lizard when the
+// (packages/shared/code-complexity.js), no tool to install; the other languages from lizard when the
 // machine has it and the checkout is at that commit; lizard's output is checked (core
 // checkComplexity) and a failed check is shown, never hidden. The model names the code languages
 // not measured, the tools they need and how to install lizard (`pip install lizard`).
@@ -15,7 +15,7 @@
 // listed with each input measured (its own report found), pending (configured, no report) or
 // missing; missing evidence is never shown as clean.
 // The project city (#371, readCity): the facts (with the test files, its campus, #372) and a city plan through the pure core
-// src/shared/city-model.js, with the edges' sources read at the same commit (the tracked files, the
+// packages/shared/city-model.js, with the edges' sources read at the same commit (the tracked files, the
 // relative require/import lines of JavaScript/TypeScript files in one `git grep`, the Cargo.toml
 // files), cached per facts read (a refresh rebuilds it) and plan hash. Used by src/service/channels/architecture.js.
 // opts.ref (#376, src/domains/releases/release-city.js): the facts and the city at any commit-ish (a release's previous
@@ -37,12 +37,12 @@ const {
   DEFAULT_EXCLUDES,
   globRe,
   parseIgnoreRevs,
-} = require('../../shared/architecture-model');
-const { buildCity } = require('../../shared/city-model');
+} = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
 const {
   measures,
   measureSource,
-} = require('../../shared/code-complexity');
+} = require('@multiagent/shared/code-complexity');
 const { resolveCommand } = require('../../engine/providers');
 
 const GIT_TIMEOUT_MS = 120e3;

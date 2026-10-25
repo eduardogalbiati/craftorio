@@ -1,6 +1,6 @@
 // #330 the screen text a script builds outside markup follows the interface language too: the check
 // of test/untranslated-text.js reads markup (text nodes and the labelled attributes); this one reads
-// the code around it, in every .js file of src/renderer and the src/shared/ modules with screen text:
+// the code around it, in every .js file of src/renderer and the packages/shared/ modules with screen text:
 // - no English plural suffix (`n === 1 ? '' : 's'`): a plural is a catalog entry { one, other } picked
 //   by its count;
 // - no English word given to t() as a param (`t(key, { value: open ? 'Hide' : 'Show' })`): one key per
@@ -14,7 +14,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
-const SHARED = path.join(ROOT, 'src', 'shared');
+const SHARED = path.join(ROOT, 'packages', 'shared');
 const SHARED_SCREEN = ['roadmap-model.js', 'roadmap-summary.js', 'po-calibration.js', 'platforms'];
 
 function jsFiles(dir) {

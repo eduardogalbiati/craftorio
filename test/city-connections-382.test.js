@@ -1,4 +1,4 @@
-// #382: the most connected files of the project city. The pure ranking (src/shared/city-connections.js:
+// #382: the most connected files of the project city. The pure ranking (packages/shared/city-connections.js:
 // rank, edgesState) and the City view's connections panel (src/renderer/views/project/
 // project-city-connections.js) in a mini DOM without WebGL: the list with the two counts and a
 // search, a click flies to the file and pins its connections (city.setPins), a second click unpins,
@@ -8,11 +8,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
-const { buildModel } = require('../src/shared/architecture-model');
-const { buildCity } = require('../src/shared/city-model');
-const CityConnections = require('../src/shared/city-connections');
+const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
+const CityConnections = require('@multiagent/shared/city-connections');
 
 const ROOT = path.join(__dirname, '..');
 const hash = '11'.repeat(20);
@@ -77,7 +77,7 @@ function load(answer) {
   withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-connections.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-city-connections.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', f), 'utf8'), sandbox, { filename: f });

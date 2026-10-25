@@ -1,13 +1,13 @@
 // #425 In Planned mode the Roadmap shows only the latest release. Acceptance tests written before the code.
 //
-// Interface: RoadmapModel.releaseView(r, data, wanted, showAll) (src/shared/roadmap-model.js) gains
+// Interface: RoadmapModel.releaseView(r, data, wanted, showAll) (packages/shared/roadmap-model.js) gains
 // `showAll`: with no release chosen (`wanted` '') and showAll false (Planned), `shown` holds only the
 // release with the greatest `at` among those with at >= 0; showAll true (All) keeps every placed
 // release, as before. A chosen version and 'next' are unchanged. No releases: nothing shown.
 // backlog-roadmap.js html() passes its view's showAll.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const RoadmapModel = require('../src/shared/roadmap-model.js');
+const RoadmapModel = require('@multiagent/shared/roadmap-model.js');
 const H = require('./roadmap-status-helpers');
 
 const done = (id, n, runId) => H.item(id, 'done', n, `Issue ${n}`, { runId, runs: [runId] });

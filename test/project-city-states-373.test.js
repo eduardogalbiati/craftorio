@@ -13,9 +13,9 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createDom } = require('./mini-dom');
-const { withI18n } = require('./i18n-sandbox');
-const { buildModel } = require('../src/shared/architecture-model');
-const { buildCity } = require('../src/shared/city-model');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..');
 const hash = '11'.repeat(20);
@@ -48,7 +48,7 @@ function load(answer) {
   withI18n(sandbox); // #330: the view reads its text from the catalog (English here)
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox);
   }
   // the view and its two helper modules (#381/#382: the notes and the cards have their own files)
   // #440/#441: the modes' and the panels' helpers, when they have their own files

@@ -29,7 +29,7 @@ const {
   planDiff,
   planVerdict,
   refreshPlan,
-} = require('../../shared/city-model');
+} = require('@multiagent/shared/city-model');
 
 const ROOT_FOLDER = '(root)';
 const MANIFESTS = ['build.gradle', 'build.gradle.kts', 'Cargo.toml', 'go.mod', 'package.json', 'pom.xml', 'pyproject.toml'];

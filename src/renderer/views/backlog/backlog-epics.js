@@ -6,7 +6,7 @@
 // No DOM here: backlog.js draws the select, the badges and the Epics view; a test feeds it issues.
 // Browser: window.BacklogEpics; Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('../../../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const NONE = 'none';
 
   /** True when the issue passes the epic filter. */

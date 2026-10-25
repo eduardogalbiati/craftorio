@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const productOwner = require('../../src/domains/po/product-owner');
-const CityImpact = require('../../src/shared/city-impact');
+const CityImpact = require('@multiagent/shared/city-impact');
 
 const ROOT = path.join(__dirname, '..', '..');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');

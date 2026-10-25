@@ -69,13 +69,33 @@ const read = (root, f) => {
 // A `//` after a quote or a colon (a URL in a string) is kept.
 const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 
-// file → the files it imports (resolved, project-relative)
-function importsOf(file, text, known) {
+// The project's own packages (npm workspaces, or any package.json outside node_modules): name → folder,
+// so an import of `@scope/name/sub` resolves to a project file (`packages/name/sub.js`).
+function localPackages(root, known) {
+  const out = new Map();
+  for (const f of known) {
+    if (!/(^|\/)package\.json$/.test(f) || /(^|\/)node_modules\//.test(f) || f === 'package.json') continue;
+    try {
+      const { name } = JSON.parse(read(root, f));
+      if (name) out.set(name, path.posix.dirname(f));
+    } catch { /* not a package manifest */ }
+  }
+  return out;
+}
+
+// file → the files it imports (resolved, project-relative): relative specs, and a local package's
+function importsOf(file, text, known, packages = new Map()) {
   const out = new Set();
   for (const m of text.matchAll(IMPORT)) {
     const spec = m[1] || m[2] || m[3] || m[4];
-    if (!spec || !spec.startsWith('.')) continue;
-    const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), spec));
+    if (!spec) continue;
+    let base;
+    if (spec.startsWith('.')) base = path.posix.normalize(path.posix.join(path.posix.dirname(file), spec));
+    else {
+      const name = [...packages.keys()].find((n) => spec === n || spec.startsWith(`${n}/`));
+      if (!name) continue;
+      base = path.posix.normalize(path.posix.join(packages.get(name), spec.slice(name.length + 1) || '.'));
+    }
     const hit = EXTENSIONS.map((e) => base + e).find((c) => known.has(c));
     if (hit) out.add(hit);
   }
@@ -101,16 +121,17 @@ function importGraph(root, files, extra = []) {
   const code = files.filter((f) => CODE.test(f) && !/(^|\/)node_modules\//.test(f));
   const known = new Set([...files, ...extra]);
   const texts = new Map(code.map((f) => [f, stripComments(read(root, f))]));
+  const packages = localPackages(root, known);
   const importers = new Map();
   for (const [f, text] of texts) {
-    for (const dep of importsOf(f, text, known)) {
+    for (const dep of importsOf(f, text, known, packages)) {
       if (!importers.has(dep)) importers.set(dep, new Set());
       importers.get(dep).add(f);
     }
   }
   const baseCount = new Map();
   for (const f of known) { const b = f.split('/').pop(); baseCount.set(b, (baseCount.get(b) || 0) + 1); }
-  return { files, code, known, texts, importers, baseCount };
+  return { files, code, known, texts, importers, baseCount, packages };
 }
 
 // Breadth-first from `seeds` through the files that import them → Map(file → { seed, via, named });
@@ -274,7 +295,7 @@ function relatedTests({ root, tests = [] } = {}) {
   if (!graph.code.some(isTest)) { out.why = 'no JS/TS test files: no import graph for this project'; return out; }
   const sources = new Set();
   for (const t of given) {
-    for (const dep of importsOf(t, stripComments(read(root, t)), graph.known)) if (!isTest(dep) && !SUPPORT.test(dep)) sources.add(dep);
+    for (const dep of importsOf(t, stripComments(read(root, t)), graph.known, graph.packages)) if (!isTest(dep) && !SUPPORT.test(dep)) sources.add(dep);
   }
   out.sources = [...sources].sort();
   const from = reach(graph, out.sources);

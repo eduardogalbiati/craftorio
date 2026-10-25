@@ -1,5 +1,5 @@
-// #374: agents at work on the project city, src/shared/city-agents.js. Pure, dual-loaded like
-// src/shared/city-layout.js (module.exports in Node, window.CityAgents in the browser). Exports:
+// #374: agents at work on the project city, packages/shared/city-agents.js. Pure, dual-loaded like
+// packages/shared/city-layout.js (module.exports in Node, window.CityAgents in the browser). Exports:
 // - relativePath(file, worktree) → the repo-relative path with forward slashes, or null when the file
 //   is outside the worktree. Windows: drive letter case-insensitive, backslashes or slashes in either
 //   argument; POSIX; a path already relative stays as is ('./' dropped); a sibling folder sharing the
@@ -34,13 +34,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { buildModel } = require('../src/shared/architecture-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const root = path.join(__dirname, '..');
-const FILE = path.join(root, 'src', 'shared', 'city-agents.js');
-const load = () => require('../src/shared/city-agents.js');
-const loadLayout = () => require('../src/shared/city-layout.js');
-const loadModel = () => require('../src/shared/city-model.js');
+const FILE = path.join(root, 'packages', 'shared', 'city-agents.js');
+const load = () => require('@multiagent/shared/city-agents.js');
+const loadLayout = () => require('@multiagent/shared/city-layout.js');
+const loadModel = () => require('@multiagent/shared/city-model.js');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const EPS = 1e-6;
 

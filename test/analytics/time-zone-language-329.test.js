@@ -1,9 +1,9 @@
 // #329 acceptance tests (written before the code): dates and times shown in words follow the
-// interface language. src/shared/time-zone.js (re-exported by src/domains/analytics/time-zone.js) keeps its fixed
+// interface language. packages/shared/time-zone.js (re-exported by src/domains/analytics/time-zone.js) keeps its fixed
 // machine formats (dayKey, formatDate '2026-10-04', formatTime '22:14': keys and inputs, #273) and adds
 //   formatLocale(t, options, tz, lang) → string: the instant as Intl.DateTimeFormat(lang, options)
 //   writes it, in the zone (zoneOf(tz)); lang omitted → the interface language
-//   (src/shared/i18n.js getLanguage()), never undefined / navigator.language.
+//   (packages/shared/i18n.js getLanguage()), never undefined / navigator.language.
 // Fixed instant: 2026-10-04 22:14 UTC.
 const test = require('node:test');
 const { afterEach } = require('node:test');
@@ -13,7 +13,7 @@ const load = () => require('../../src/domains/analytics/time-zone');
 const AT = Date.UTC(2026, 9, 4, 22, 14);
 
 afterEach(() => {
-  try { require('../../src/shared/i18n.js').setLanguage('en'); } catch { /* the module does not exist yet */ }
+  try { require('@multiagent/shared/i18n.js').setLanguage('en'); } catch { /* the module does not exist yet */ }
 });
 
 test('#329 formatLocale: a short date in pt-BR is dd/mm/yyyy, in English m/d/yy', () => {
@@ -32,8 +32,8 @@ test('#329 formatLocale: month names in the language, in the given zone', () => 
 
 test('#329 formatLocale: without a language, the interface language set in i18n.js', () => {
   const { formatLocale } = load();
-  require('../../src/shared/i18n.js').setLanguage('pt-BR');
+  require('@multiagent/shared/i18n.js').setLanguage('pt-BR');
   assert.equal(formatLocale(AT, { dateStyle: 'short' }, 'UTC'), '04/10/2026');
-  require('../../src/shared/i18n.js').setLanguage('en');
+  require('@multiagent/shared/i18n.js').setLanguage('en');
   assert.equal(formatLocale(AT, { dateStyle: 'short' }, 'UTC'), '10/4/26');
 });

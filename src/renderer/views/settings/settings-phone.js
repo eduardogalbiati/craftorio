@@ -5,7 +5,7 @@
 // privately from outside (Tailscale serve, Cloudflare Tunnel with access rules), the address from
 // outside with Save and Check, and the paired phones with Revoke. Drawn into #set-phone by
 // settings.js when the tab opens; uses app.js globals ($, esc, errMsg, state, confirmDialog) and the
-// catalog's t (src/shared/i18n.js, #329: its texts are settings.phone.*).
+// catalog's t (packages/shared/i18n.js, #329: its texts are settings.phone.*).
 (() => {
   const ph = { state: null, pairing: null, check: null, error: null, form: null, poll: null };
 

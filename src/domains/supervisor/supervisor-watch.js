@@ -14,8 +14,8 @@
 const fs = require('fs');
 const path = require('path');
 const supervisor = require('./supervisor');
-const registry = require('../../shared/providers');
-const Language = require('../../shared/language');
+const registry = require('@multiagent/shared/providers');
+const Language = require('@multiagent/shared/language');
 
 // the provider type of the default model's CLI (Claude Code)
 const DEFAULTS = { provider: registry.resolve('claude-opus-5-5').type, model: 'claude-opus-5-5', effort: '' };

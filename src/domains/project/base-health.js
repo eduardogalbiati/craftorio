@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const issues = require('../backlog/issues');
 const roadmaps = require('../roadmap/roadmap');
-const { LOCAL } = require('../../shared/default-workflow');
+const { LOCAL } = require('@multiagent/shared/default-workflow');
 const { prepareBaseWorktree, removeWorktree } = require('../../engine/worktree');
 const { FILE_TIMEOUT_MS, suiteEnv } = require('../../engine/suite-step');
 const {

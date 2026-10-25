@@ -1,7 +1,7 @@
 // #374: the channel architecture:agents({ projectId }) (src/service/channels/architecture.js, method
 // architectureAgents) reads the runs in progress of a project for its city and never starts one:
 // → { projectId, runs: [{ id, colour, agents: [lastTouches entries], trail: [paths], dirty: [paths] }],
-//     collisions: [{ path, runs }] } (src/shared/city-agents.js does the reading). It declares
+//     collisions: [{ path, runs }] } (packages/shared/city-agents.js does the reading). It declares
 // schema.params and schema.result (#338) and refuses a missing, invalid or unknown projectId like
 // architecture:city. A project with no run in progress → runs: [], collisions: [].
 // The channel is created by the change: each test calls it through the service (tests first).

@@ -14,7 +14,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
 const R = path.join(__dirname, '..', 'src', 'renderer');
 const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
@@ -55,9 +55,9 @@ function loadRoadmap({ listWorkflows } = {}) {
   sandbox.window.showRun = () => {};
   vm.createContext(withI18n(sandbox));
   vm.runInContext(read('status-pill.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   // #215's shared estimate rules; missing before the change (the tests then fail on their assertions)
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);

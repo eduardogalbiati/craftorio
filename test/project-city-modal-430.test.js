@@ -276,7 +276,7 @@ test('#430 index.html loads views/project/project-city-modal.js', () => {
 });
 
 test('#430 the modal\'s labels are catalog keys project_city_modal.* in en and pt-BR, "Open in Projects" among them', () => {
-  const read = (lang) => JSON.parse(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'i18n', `${lang}.json`), 'utf8'));
+  const read = (lang) => JSON.parse(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'i18n', `${lang}.json`), 'utf8'));
   const en = read('en');
   const pt = read('pt-BR');
   const keys = (cat) => Object.keys(cat).filter((k) => k.startsWith('project_city_modal.')).sort();

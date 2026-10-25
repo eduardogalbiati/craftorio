@@ -29,7 +29,8 @@ function packageDir(name, fromDir) {
 }
 
 // Every package reached from the root names (with dependencies and optionalDependencies), sorted by
-// name and version: { name, version, license, text }. A missing optional package is skipped.
+// name and version: { name, version, license, text }. A missing optional package is skipped; a private
+// package (a workspace of this repository) is walked but not listed.
 function collect(names, base = root) {
   const seen = new Map();
   const visit = (name, fromDir) => {
@@ -39,12 +40,14 @@ function collect(names, base = root) {
     const files = fs.readdirSync(dir).filter((f) => LICENSE_FILE.test(f)).sort();
     const text = files.map((f) => fs.readFileSync(path.join(dir, f), 'utf8').trim()).join('\n\n');
     const license = typeof pkg.license === 'object' ? pkg.license.type : pkg.license;
-    seen.set(dir, { name: pkg.name || name, version: pkg.version, license: license || 'UNKNOWN', text });
+    // this repository's own workspace packages (private, phase 2 of docs/reorganisation-study-2026-10.md)
+    // are not third parties: only what they depend on is listed
+    seen.set(dir, pkg.private ? null : { name: pkg.name || name, version: pkg.version, license: license || 'UNKNOWN', text });
     for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })) visit(dep, dir);
   };
   for (const name of names) visit(name, base);
   const key = (p) => `${p.name}@${p.version}`;
-  return [...new Map([...seen.values()].map((p) => [key(p), p])).values()]
+  return [...new Map([...seen.values()].filter(Boolean).map((p) => [key(p), p])).values()]
     .sort((a, b) => key(a).localeCompare(key(b)));
 }
 

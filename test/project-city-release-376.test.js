@@ -1,6 +1,6 @@
 // #376, a release on the project city in the UI:
 // - src/renderer/views/project/project-city-release.js, a classic script (window.ProjectCityRelease)
-//   built on #373's overlay API and src/shared/city-release.js, loaded here in a mini DOM without
+//   built on #373's overlay API and packages/shared/city-release.js, loaded here in a mini DOM without
 //   WebGL next to the city's own scripts. ProjectCityRelease.headerMarkup(view) → an HTML string,
 //   view = { project, from, to, header (CityRelease.releaseHeader's output), tags: [tag], issues: [n],
 //   issue }:
@@ -25,12 +25,12 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
 const { loadApp } = require('./renderer-app-harness');
 
 const ROOT = path.join(__dirname, '..');
-const SHARED = path.join(ROOT, 'src', 'shared');
+const SHARED = path.join(ROOT, 'packages', 'shared');
 const DIR = path.join(ROOT, 'src', 'renderer', 'views', 'project');
 const CITY = path.join(DIR, 'project-city.js');
 const RELEASE = path.join(DIR, 'project-city-release.js');

@@ -1,5 +1,5 @@
-// #371: the pure core of the project city, src/shared/city-model.js (dual load: module.exports in
-// Node). It takes a city plan and #356's facts (the model of src/shared/architecture-model.js) and
+// #371: the pure core of the project city, packages/shared/city-model.js (dual load: module.exports in
+// Node). It takes a city plan and #356's facts (the model of packages/shared/architecture-model.js) and
 // returns { model, validation }:
 // - model: { zones, districts, buildings, landmarks, ports, edges }, each building
 //   { path, district, lines, churn, complexity, worst, functions, lastChange }; complexity, worst and
@@ -15,11 +15,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { buildModel } = require('../src/shared/architecture-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
 const { validateSchema } = require('../src/domains/workspace/json-schema');
 
 const root = path.join(__dirname, '..');
-const load = () => require('../src/shared/city-model');
+const load = () => require('@multiagent/shared/city-model');
 
 // ---------- the fixture: #356 facts of a small repository ----------
 
@@ -254,7 +254,7 @@ test('#371 without a plan, top-level folders are zones and their subfolders dist
 test('#371 without a plan, a district with fewer than 3 files folds into its parent', () => {
   const { model } = load().buildCity({ plan: null, facts: facts() });
   assert.equal(districtOf(model, 'src/shared/globs.js'), 'src');
-  assert.equal(model.districts.some((d) => d.id === 'src/shared'), false);
+  assert.equal(model.districts.some((d) => d.id === 'packages/shared'), false);
 });
 
 test('#371 without a plan, every drawn file is a building', () => {
@@ -365,7 +365,7 @@ test('#371 the order of the facts\' files does not change the model', () => {
 });
 
 test('#371 city-model.js is pure: no I/O, no clock, no randomness', () => {
-  const src = fs.readFileSync(path.join(root, 'src', 'shared', 'city-model.js'), 'utf8');
+  const src = fs.readFileSync(path.join(root, 'packages', 'shared', 'city-model.js'), 'utf8');
   for (const banned of ["require('fs')", "require('child_process')", "require('net')", "require('http')", "require('https')", 'Date.now', 'new Date(', 'Math.random']) {
     assert.equal(src.includes(banned), false, `city-model.js uses ${banned}`);
   }

@@ -19,7 +19,7 @@ const path = require('path');
 const { PLATFORM_CLIS } = require('./child-env');
 const { workerEnv } = require('../domains/machine/machine-profile');
 const { machineSlotDir } = require('./machine-slot');
-const registry = require('../shared/providers');
+const registry = require('@multiagent/shared/providers');
 
 const TOOL_RE =/^(read|edit|write|bash(:.+)?)$/;
 const KEYS = ['tools', 'web', 'mcp', 'subagents', 'screenshots'];
@@ -237,7 +237,7 @@ const ADAPTER_LIB = {
 function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV } = {}) {
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
   const adapter = registry.byType(type);
-  // each CLI's own flags: its adapter's isolationArgs (src/shared/providers/<id>.js)
+  // each CLI's own flags: its adapter's isolationArgs (packages/shared/providers/<id>.js)
   const { args, notes } = adapter?.isolationArgs
     ? adapter.isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env }, ADAPTER_LIB)
     : { args: [], notes: [] };

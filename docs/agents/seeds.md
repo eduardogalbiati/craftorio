@@ -32,7 +32,7 @@ script, no network.
 ## Network needs
 
 A seed reads the network only as it declares, and each read is a command builder and a parser in
-both platform adapters (`src/shared/platforms/`), exposed through `src/domains/oracle/oracle-platform.js`. The CI's
+both platform adapters (`packages/shared/platforms/`), exposed through `src/domains/oracle/oracle-platform.js`. The CI's
 recent runs: `ciRunsCommand` / `parseCiRuns` (`ciRunsCommand` / `ciRunsResult` there), read by the
 Oracle's read-only `ci_runs` tool (`src/domains/oracle/oracle-tools.js`) with the project's own CLI auth.
 

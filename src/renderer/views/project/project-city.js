@@ -1,5 +1,5 @@
 // The City view of a project's Architecture tab (#373): the project drawn as a 3D city from #371's
-// model (architecture:city → src/shared/city-model.js), laid out by src/shared/city-layout.js and
+// model (architecture:city → packages/shared/city-model.js), laid out by packages/shared/city-layout.js and
 // drawn by the prebuilt bundle generated/project-city.js (scripts/build-3d.js, src/renderer/city3d/), loaded with a
 // plain <script src> the first time a City view shows. Without WebGL, or without the bundle, the view says so.
 // The HUD is this file's, with the run's 3D view classes (run3d.css; project-city.css places them):

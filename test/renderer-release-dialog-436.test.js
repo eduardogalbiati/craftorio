@@ -2,7 +2,7 @@
 // written before the code.
 // Both places where a release is named show the last three shipped releases as text above the field
 // ("1.1.2 · 2026-10-13 · 4 issues"; "No release yet" when none shipped) and a "Suggest version" button
-// that fills the field with src/shared/release-version.js's suggestion (window.ReleaseVersion, loaded
+// that fills the field with packages/shared/release-version.js's suggestion (window.ReleaseVersion, loaded
 // by index.html) and never submits; a line under the field says why (the reason).
 // - the Roadmap's cut line dialog (#cut-line-modal of backlog.js, opened by a stage's "Release here"
 //   in backlog-roadmap.js; its field #cut-line-name);

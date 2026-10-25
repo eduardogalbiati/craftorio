@@ -1,4 +1,4 @@
-// #349 acceptance: src/shared/roadmap-model.js owns the roadmap's rules (states, isFinished,
+// #349 acceptance: packages/shared/roadmap-model.js owns the roadmap's rules (states, isFinished,
 // currentStage, unfinishedItems, stageProgress, allowedActions); it is pure and dual-loaded
 // (require, and a <script> that sets window.RoadmapModel). The module is loaded inside each test
 // so this file runs before it exists.
@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const MODEL = path.join(__dirname, '..', 'src', 'shared', 'roadmap-model.js');
+const MODEL = path.join(__dirname, '..', 'packages', 'shared', 'roadmap-model.js');
 const load = () => require(MODEL);
 
 const freeze = (o) => {
@@ -307,9 +307,9 @@ test('loaded by a <script>, the model sets window.RoadmapModel', () => {
 test('the renderer loads the model before the Roadmap and Dashboard views', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
-  assert.ok(at('../shared/roadmap-model.js') >= 0, 'index.html does not load ../shared/roadmap-model.js');
-  assert.ok(at('../shared/roadmap-model.js') < at('views/backlog/backlog-roadmap.js'));
-  assert.ok(at('../shared/roadmap-model.js') < at('views/dashboard/dashboard.js'));
+  assert.ok(at('../../packages/shared/roadmap-model.js') >= 0, 'index.html does not load ../../packages/shared/roadmap-model.js');
+  assert.ok(at('../../packages/shared/roadmap-model.js') < at('views/backlog/backlog-roadmap.js'));
+  assert.ok(at('../../packages/shared/roadmap-model.js') < at('views/dashboard/dashboard.js'));
 });
 
 // #375: an item's issues, shared by the Roadmap's refs and the city's impact preview

@@ -87,7 +87,9 @@ test('runShim: a Windows .cmd shim gets every argument unchanged (quotes, %VAR%,
 
 // ---- no args array together with a shell option, anywhere in src/ and scripts/ -------------------
 
-const ROOTS = [path.join(__dirname, '..', '..', 'src'), path.join(__dirname, '..', '..', 'scripts')];
+const REPO = path.join(__dirname, '..', '..');
+// every source file (src/, the workspaces, scripts/: scripts/source-tree.js), tests left out
+const sourceFiles = () => require('../../scripts/source-tree').sourceFiles(REPO, { scripts: true }).map((f) => path.join(REPO, ...f.split('/')));
 const CALL = /\b(spawn|spawnSync|execFile|execFileSync)\s*\(/g;
 // a `shell` option that is not plainly `shell: false`: `shell: true`, `shell: x.shell`, `{ shell }`
 const SHELL = /(^|[{,\s])shell\s*(:(?!\s*false\b)|[,}])/;
@@ -150,11 +152,9 @@ test('no spawn/execFile call in src/ or scripts/ passes an args array together w
   assert.deepEqual(offendersIn('spawn(file, args, { cwd: "shell: true" });'), []);
 
   const offenders = [];
-  for (const root of ROOTS) {
-    for (const file of jsFiles(root)) {
-      const text = fs.readFileSync(file, 'utf8');
-      for (const line of offendersIn(text)) offenders.push(`${path.relative(path.join(__dirname, '..', '..'), file)}:${line}: ${text.split('\n')[line - 1].trim()}`);
-    }
+  for (const file of sourceFiles()) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const line of offendersIn(text)) offenders.push(`${path.relative(REPO, file)}:${line}: ${text.split('\n')[line - 1].trim()}`);
   }
   assert.deepEqual(offenders, []);
 });

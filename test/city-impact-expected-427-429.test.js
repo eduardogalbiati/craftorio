@@ -1,4 +1,4 @@
-// #427, #429: the paths an issue predicts, src/shared/city-impact.js (the impact preview of #375).
+// #427, #429: the paths an issue predicts, packages/shared/city-impact.js (the impact preview of #375).
 // #427: a path cited with a line range (`path:12-30`, `path:12–30` with an en dash, `path:12-30:4`)
 // gives the path, in backticks and in plain text, like `path:12` and `path:12:4`; a root file name in
 // backticks counts only when the repository has it (`files` of expectedFiles): an id or a log name is
@@ -20,7 +20,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('../src/shared/city-impact.js');
+const load = () => require('@multiagent/shared/city-impact.js');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 // ---------- #427: line ranges ----------

@@ -384,12 +384,12 @@ test('#329 the engine\'s page sends its interface language along to the connecti
 
 // ---- the interface language (#329): Settings › Execution › Engine and the connection page ----------
 
-const I18N_DIR = path.join(__dirname, '..', '..', 'src', 'shared', 'i18n');
+const I18N_DIR = path.join(__dirname, '..', '..', 'packages', 'shared', 'i18n');
 const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${lang}.json`), 'utf8'));
 
 // settings-engine.js in a vm sandbox, its t the catalog's in `lang`
 function engineSettingsMarkup(lang, engineConnection, canChange = true) {
-  const I18n = require('../../src/shared/i18n');
+  const I18n = require('@multiagent/shared/i18n');
   const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'views', 'settings', 'settings-engine.js'), 'utf8');
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   const api = { platform: engineConnection.mode === 'local' ? 'win32' : 'browser', engineConnection, ...(canChange && { openEngineConnection: async () => true }) };

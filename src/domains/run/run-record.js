@@ -1,10 +1,10 @@
 // A recorded run read in the current shape (#350): runs/<id>/summary.json and events.jsonl, upgraded
-// on read by src/shared/run-record.js (one upgrade per change of a run's shape). The files are
+// on read by packages/shared/run-record.js (one upgrade per change of a run's shape). The files are
 // only read, never rewritten: an old run stays readable as it was recorded.
 
 const fs = require('fs');
 const path = require('path');
-const { summaryNeedsEvents, upgradeRunRecord } = require('../../shared/run-record');
+const { summaryNeedsEvents, upgradeRunRecord } = require('@multiagent/shared/run-record');
 
 function readEvents(file) {
   let text;
@@ -23,7 +23,7 @@ function readRunRecord(runDir) {
 
 /**
  * A run's summary.json in the current shape, null without one: its events are read only when it
- * needs them (src/shared/run-record.js summaryNeedsEvents), cached by both files' size and time.
+ * needs them (packages/shared/run-record.js summaryNeedsEvents), cached by both files' size and time.
  */
 const summaries = new Map(); // run folder → { key, summary }
 function readRunSummary(runDir) {

@@ -1,5 +1,5 @@
 // A project's Architecture tab (#356), written for a human reader (#386, the pure parts in
-// src/shared/architecture-facts-view.js): a lead row answers "how is this project?" (the report's
+// packages/shared/architecture-facts-view.js): a lead row answers "how is this project?" (the report's
 // verdict in one line, the top 3 risks with their 0-100 score, the Danger Zone count, the languages
 // as GitHub's bar and legend). Then the latest Oracle report (or the one picked): its summary (three
 // lines at most), the verdict per area as chips, the findings ranked by score, one line each (score
@@ -9,7 +9,7 @@
 // the Refactor tab, its issue and the waiting stage, #435; once sent the same button, disabled,
 // "Sent to Refactor", with a link to its issue and stage next to it, #447; new / kept translated),
 // the gone ones folded. Then the git facts (architecture:facts, numbers from
-// src/shared/architecture-model.js), titled with an ⓘ that opens what the numbers cannot tell: the
+// packages/shared/architecture-model.js), titled with an ⓘ that opens what the numbers cannot tell: the
 // commit, window, mass changes and shallow clone, the project's own quality gate as one row of
 // chips, the exclusions in one line (editable, architecture:setExclude), the complexity in one line
 // whose "How to measure" names the code languages not measured and how to install lizard (#385),
@@ -192,7 +192,7 @@
     }
   }
 
-  // ---------- the report, for a human reader (#386: ArchitectureFactsView, src/shared/architecture-facts-view.js) ----------
+  // ---------- the report, for a human reader (#386: ArchitectureFactsView, packages/shared/architecture-facts-view.js) ----------
 
   const dangerZone = () => cur.facts?.model?.danger_zone || [];
   const ranked = () => ArchitectureFactsView.rankFindings(cur.view?.findings || [], dangerZone());

@@ -17,7 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { FileXHR, setCurrentScript } = require('./page-i18n');
+const { FileXHR, setCurrentScript } = require('@multiagent/shared/test/page-i18n');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
 // window.api's plain values (not methods), as src/host/preload.js exposes them
@@ -42,7 +42,7 @@ process.on('unhandledRejection', (e) => { current?.errors.push(e); });
 function pageScripts() {
   const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
   return [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1])
-    .filter((src) => !src.startsWith('../../') && src !== 'api-http.js');
+    .filter((src) => !src.includes('node_modules/') && src !== 'api-http.js');
 }
 
 // #330 a view's markup, modals and panel are functions (drawn again in a new language): the tests read

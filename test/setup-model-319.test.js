@@ -17,7 +17,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('../src/shared/setup-model');
+const load = () => require('@multiagent/shared/setup-model');
 
 test('statusBadge: checking, not installed, not signed in, ready', () => {
   const { statusBadge } = load();

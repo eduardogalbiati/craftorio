@@ -1,6 +1,6 @@
 // A refactor's success measured on the architecture map (#357): its target's quadrant and Danger Zone
 // score before the run (kept on the proposal when it joins the roadmap) against the same after the
-// run. `quadrantOf` names a model quadrant ('Danger Zone', src/shared/architecture-model.js QUADRANTS)
+// run. `quadrantOf` names a model quadrant ('Danger Zone', packages/shared/architecture-model.js QUADRANTS)
 // as the outcome stores it ('danger-zone'); `fileScore` reads a file's { quadrant, score } from the
 // facts' model. leftDangerZoneCount gives the Refactor tab's header its 30 / 90-day counts.
 

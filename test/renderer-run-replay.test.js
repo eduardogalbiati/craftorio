@@ -8,11 +8,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const RunProgress = require('../src/shared/run-progress-model');
+const RunProgress = require('@multiagent/shared/run-progress-model');
 const RunBadges = require('../src/renderer/run-badges');
-const ChainModel = require('../src/shared/chain-model'); // #134: runInfo reads a run's chain through it
-const RunRecord = require('../src/shared/run-record'); // #350: onEvent upgrades a past run's events through it
-const { withI18n } = require('./i18n-sandbox.js');
+const ChainModel = require('@multiagent/shared/chain-model'); // #134: runInfo reads a run's chain through it
+const RunRecord = require('@multiagent/shared/run-record'); // #350: onEvent upgrades a past run's events through it
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
 // run titles, issues and PRs moved into run-meta.js: both files are searched
 const src = ['app.js', 'run-meta.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', f), 'utf8')).join('\n');

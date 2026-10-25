@@ -1,4 +1,4 @@
-// #345: layering rules enforced by a test, and the pure modules both sides use moved to src/shared/.
+// #345: layering rules enforced by a test, and the pure modules both sides use moved to packages/shared/.
 // The areas of src/ have a direction: shared (pure, dual-load modules) requires nothing of the app;
 // the engine requires shared and the low-level root utilities it names; the root domain modules
 // require the engine and shared; the service all of these; the desktop entry and the server the
@@ -19,9 +19,10 @@ const http = require('http');
 
 const root = path.join(__dirname, '..');
 const SRC = path.join(root, 'src');
-const SHARED = path.join(SRC, 'shared');
+const SHARED = path.join(root, 'packages', 'shared');
 const RENDERER = path.join(SRC, 'renderer');
 const load = () => require('../scripts/layers.js');
+const { resolvePackagePath, sourceFiles } = require('../scripts/source-tree');
 const posix = (p) => p.split(path.sep).join('/');
 const rel = (abs) => posix(path.relative(root, abs));
 const read = (file) => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
@@ -33,7 +34,7 @@ function listJs(dir) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) return listJs(p);
+    if (e.isDirectory()) return ['node_modules', 'test'].includes(e.name) ? [] : listJs(p);
     return e.isFile() && e.name.endsWith('.js') ? [p] : [];
   }).sort();
 }
@@ -58,19 +59,22 @@ function withoutComments(src) {
 }
 
 function resolveLocal(fromFile, target) {
-  const base = path.resolve(path.dirname(fromFile), target);
+  const pkgPath = target.startsWith('.') ? null : resolvePackagePath(root, target);
+  if (!target.startsWith('.') && !pkgPath) return null;
+  const base = pkgPath ? path.join(root, pkgPath) : path.resolve(path.dirname(fromFile), target);
   for (const p of [base, `${base}.js`, path.join(base, 'index.js')]) {
     if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
   }
   return null;
 }
 
-// Every relative require of every .js file under src/ (lazy ones included): [{ from, to, line }].
+// Every require of every source file (src/ and the workspaces; lazy ones included) that names another
+// file of the repository, relative or through a workspace package: [{ from, to, line }].
 function requireGraph() {
   const edges = [];
-  for (const file of listJs(SRC)) {
+  for (const file of sourceFiles(root).map((f) => path.join(root, f))) {
     const code = withoutComments(read(file));
-    for (const m of code.matchAll(/\brequire\(\s*(['"])(\.[^'"]*)\1\s*\)/g)) {
+    for (const m of code.matchAll(/\brequire\(\s*(['"])([^'"]*)\1\s*\)/g)) {
       const to = resolveLocal(file, m[2]);
       if (to && to.endsWith('.js')) edges.push({ from: rel(file), to: rel(to), line: code.slice(0, m.index).split('\n').length });
     }
@@ -124,16 +128,16 @@ test('#345 the require graph under src/ has no cycle, lazy requires included', (
   assert.deepEqual(cycles, []);
 });
 
-test('#345 the shared pure modules live under src/shared/ and no longer under src/renderer/', () => {
+test('#345 the shared pure modules live under packages/shared/ and no longer under src/renderer/', () => {
   const shared = listJs(SHARED).map((f) => path.basename(f, '.js'));
-  assert.deepEqual(MOVED.filter((m) => !shared.includes(m)), [], 'modules missing from src/shared/');
+  assert.deepEqual(MOVED.filter((m) => !shared.includes(m)), [], 'modules missing from packages/shared/');
   const left = listJs(RENDERER).map(rel).filter((f) => MOVED.includes(path.basename(f, '.js')));
   assert.deepEqual(left, [], 'moved modules still in src/renderer/');
 });
 
-test('#345 every src/shared/ module loads with require and as a browser <script> in the order index.html lists them', () => {
+test('#345 every packages/shared/ module loads with require and as a browser <script> in the order index.html lists them', () => {
   const files = listJs(SHARED);
-  assert.ok(files.length >= MOVED.length, 'src/shared/ holds the moved modules');
+  assert.ok(files.length >= MOVED.length, 'packages/shared/ holds the moved modules');
   for (const f of files) {
     const mod = require(f);
     assert.equal(mod !== null && ['object', 'function'].includes(typeof mod) && Object.keys(mod).length > 0, true, `${rel(f)} exports something with require`);
@@ -141,7 +145,7 @@ test('#345 every src/shared/ module loads with require and as a browser <script>
   const html = read(path.join(RENDERER, 'index.html'));
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => rel(path.resolve(RENDERER, m[1])));
   const sharedRel = files.map(rel);
-  assert.deepEqual(sharedRel.filter((f) => !scripts.includes(f)), [], 'src/shared/ modules missing from index.html');
+  assert.deepEqual(sharedRel.filter((f) => !scripts.includes(f)), [], 'packages/shared/ modules missing from index.html');
   const ctx = vm.createContext({});
   vm.runInContext('globalThis.window = globalThis;', ctx);
   const added = {};
@@ -162,7 +166,7 @@ test('#345 every <script src> of src/renderer/index.html names an existing file,
   assert.equal(renderIndexHtml(html, root) === html, true, 'index.html matches npm run docs');
 });
 
-test('#345 the browser server serves the src/shared/ modules', async (t) => {
+test('#345 the browser server serves the packages/shared/ modules', async (t) => {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';
   const { setupWorkspace } = require('../src/domains/workspace/workspace');
   const { createService } = require('../src/service');
@@ -184,9 +188,9 @@ test('#345 the browser server serves the src/shared/ modules', async (t) => {
     req.end();
   });
   const file = listJs(SHARED).find((f) => path.basename(f) === 'display-name.js');
-  assert.equal(Boolean(file), true, 'src/shared/ has display-name.js');
+  assert.equal(Boolean(file), true, 'packages/shared/ has display-name.js');
   assert.equal(await get(`/${rel(file)}`), 200);
-  assert.equal(await get('/src/shared/../main.js'), 404);
+  assert.equal(await get('/packages/shared/../main.js'), 404);
 });
 
 test('#345 the layering check passes on this repository', () => {
@@ -206,14 +210,14 @@ test('#345 every listed exception names its two files and a reason, and none is 
 test('#345 the allowed directions pass: shared, engine, root, service, desktop, server and renderer requiring what they may', (t) => {
   const { checkLayers } = load();
   const dir = tree(t, {
-    'src/shared/zz-s1.js': "const fs = require('fs');\nconst yaml = require('js-yaml');\nconst s2 = require('./zz-s2');\nmodule.exports = { fs, yaml, s2 };\n",
-    'src/shared/zz-s2.js': 'module.exports = { two: 2 };\n',
-    'src/engine/zz-e.js': "// require('../renderer/zz-r') in a comment is not a require\nconst s = require('../shared/zz-s1');\nmodule.exports = { s };\n",
-    'src/zz-domain.js': "const e = require('./engine/zz-e');\nfunction later() { return require('./shared/zz-s2'); }\nmodule.exports = { e, later };\n",
-    'src/service/zz-svc.js': "const d = require('../zz-domain');\nconst e = require('../engine/zz-e');\nconst s = require('../shared/zz-s1');\nmodule.exports = { d, e, s };\n",
+    'packages/shared/zz-s1.js': "const fs = require('fs');\nconst yaml = require('js-yaml');\nconst s2 = require('./zz-s2');\nmodule.exports = { fs, yaml, s2 };\n",
+    'packages/shared/zz-s2.js': 'module.exports = { two: 2 };\n',
+    'src/engine/zz-e.js': "// require('../renderer/zz-r') in a comment is not a require\nconst s = require('../../packages/shared/zz-s1');\nmodule.exports = { s };\n",
+    'src/zz-domain.js': "const e = require('./engine/zz-e');\nfunction later() { return require('../packages/shared/zz-s2'); }\nmodule.exports = { e, later };\n",
+    'src/service/zz-svc.js': "const d = require('../zz-domain');\nconst e = require('../engine/zz-e');\nconst s = require('../../packages/shared/zz-s1');\nmodule.exports = { d, e, s };\n",
     'src/host/main.js': "const svc = require('../service/zz-svc');\nmodule.exports = { svc };\n",
     'src/server/zz-srv.js': "const svc = require('../service/zz-svc');\nmodule.exports = { svc };\n",
-    'src/renderer/zz-r.js': "(function () { const s = typeof require === 'function' ? require('../shared/zz-s2') : null; return s; })();\n",
+    'src/renderer/zz-r.js': "(function () { const s = typeof require === 'function' ? require('../../packages/shared/zz-s2') : null; return s; })();\n",
   });
   assert.deepEqual(checkLayers({ root: dir, exceptions: [] }).map((p) => p.message), []);
 });
@@ -221,7 +225,7 @@ test('#345 the allowed directions pass: shared, engine, root, service, desktop, 
 test('#345 a forbidden direction fails, naming the file, the line and the rule (lazy requires included)', (t) => {
   const { checkLayers } = load();
   const dir = tree(t, {
-    'src/shared/zz-s.js': "// a pure module\n\nconst e = require('../engine/zz-e');\nmodule.exports = { e };\n",
+    'packages/shared/zz-s.js': "// a pure module\n\nconst e = require('../../src/engine/zz-e');\nmodule.exports = { e };\n",
     'src/engine/zz-e.js': 'module.exports = {};\n',
     'src/engine/zz-up.js': "const x = 1;\n\nfunction later() {\n  return require('../zz-domain');\n}\nmodule.exports = { x, later };\n",
     'src/engine/zz-ui.js': "const r = require('../renderer/zz-r');\nmodule.exports = { r };\n",
@@ -231,15 +235,15 @@ test('#345 a forbidden direction fails, naming the file, the line and the rule (
   });
   const problems = checkLayers({ root: dir, exceptions: [] });
   assert.deepEqual(found(problems), [
+    'forbidden packages/shared/zz-s.js',
     'forbidden src/engine/zz-ui.js',
     'forbidden src/engine/zz-up.js',
     'forbidden src/renderer/zz-r.js',
-    'forbidden src/shared/zz-s.js',
     'forbidden src/zz-domain.js',
   ]);
-  const shared = problems.find((p) => p.file === 'src/shared/zz-s.js');
+  const shared = problems.find((p) => p.file === 'packages/shared/zz-s.js');
   assert.equal(shared.line, 3);
-  assert.match(shared.message, /src\/shared\/zz-s\.js/);
+  assert.match(shared.message, /packages\/shared\/zz-s\.js/);
   assert.match(shared.message, /\b3\b/);
   assert.match(shared.message, /src\/engine\/zz-e\.js/);
   const lazy = problems.find((p) => p.file === 'src/engine/zz-up.js');
@@ -278,11 +282,11 @@ test('#345 a require cycle fails, naming its files, even when one side requires 
   }
 });
 
-test('#345 the docs say where a new module goes: the code map and renderer.md name src/shared/ and the layering check', () => {
+test('#345 the docs say where a new module goes: the code map and renderer.md name packages/shared/ and the layering check', () => {
   const { codeMap } = require('../scripts/docs.js');
   const map = codeMap(root);
-  assert.match(map, /src\/shared\//);
+  assert.match(map, /packages\/shared\//);
   assert.match(map, /scripts\/layers\.js|layers/);
   const doc = read(path.join(root, 'docs', 'agents', 'renderer.md'));
-  assert.match(doc, /src\/shared\//);
+  assert.match(doc, /packages\/shared\//);
 });

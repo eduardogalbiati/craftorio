@@ -114,7 +114,7 @@
 //   --paste-big <css>  the same with a 12 MB image: the red "Image too large" chip
 //                      (--workflow on a view other than run: the workflow the Start drawer opens on)
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
-//   --lang <code>      the interface language (#329): en | pt-BR, a language with a catalog in src/shared/i18n/
+//   --lang <code>      the interface language (#329): en | pt-BR, a language with a catalog in packages/shared/i18n/
 //   --size <WxH>       window content size (default 1400x900)
 //   --ref <git ref>    captures the app as it is at this ref (e.g. main, for the "original" shots)
 //   --out <dir>        output folder (default runs/screenshots); --name <file> without .png
@@ -152,7 +152,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
 const evidence = require('../src/domains/evidence/evidence');
-const I18n = require('../src/shared/i18n');
+const I18n = require('@multiagent/shared/i18n');
 const machineSlot = require('../src/engine/machine-slot');
 const {
   demoKeepAwake,
@@ -185,7 +185,7 @@ const VIEWS = loadViews(VIEWS_DIR);
 const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 
-// #329 --lang <code>: the interface language of the capture, one with a catalog (src/shared/i18n/).
+// #329 --lang <code>: the interface language of the capture, one with a catalog (packages/shared/i18n/).
 // Taken out of argv here so parseArgs does not grow (scripts/code-health.js); sets a.lang.
 function takeLang(argv, a) {
   const rest = [...argv];

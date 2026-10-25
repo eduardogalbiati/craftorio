@@ -26,7 +26,7 @@ const { Recorder } = require('../../src/engine/recorder');
 const projects = require('../../src/domains/project/projects');
 const proposals = require('../../src/domains/refactor/refactor-proposals');
 const { validateReport } = require('../../src/domains/oracle/oracle-architecture');
-const { producedIssues } = require('../../src/shared/chain-model');
+const { producedIssues } = require('@multiagent/shared/chain-model');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', '..', 'workflows', 'refactor-proposals.yaml');

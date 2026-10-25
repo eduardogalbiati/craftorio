@@ -5,9 +5,9 @@
 // refused, merge conflicts, commands cut by a tool's timeout, the test writer's turns × context and
 // cache re-read, and the whole-suite starts (the orchestrator's suite step and the ones an agent
 // started itself) with their durations. Pure: the caller reads summary.json and events.jsonl; a
-// record of an older shape is upgraded first (#350, src/shared/run-record.js).
+// record of an older shape is upgraded first (#350, packages/shared/run-record.js).
 
-const { upgradeRunRecord } = require('../../shared/run-record');
+const { upgradeRunRecord } = require('@multiagent/shared/run-record');
 
 const TOKEN_KINDS = ['input', 'output', 'cache_read', 'cache_write'];
 const TEST_WRITER = /test_?writer/i;

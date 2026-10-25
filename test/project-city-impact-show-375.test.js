@@ -20,10 +20,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
-const { buildModel } = require('../src/shared/architecture-model');
-const { buildCity } = require('../src/shared/city-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..');
 const DIR = path.join(ROOT, 'src', 'renderer', 'views', 'project');
@@ -73,7 +73,7 @@ function load({ impact = () => ({ plan: null, history: {}, error: null }) } = {}
   withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js', 'city-impact.js', 'roadmap-model.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   // #440/#441: the modes' and the panels' helpers, when they have their own files
   const optional = ['project-city-modes.js', 'project-city-panels.js'].filter((f) => fs.existsSync(path.join(DIR, f)));

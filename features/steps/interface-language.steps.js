@@ -31,13 +31,13 @@ Then('the sidebar no longer offers {string}', async ({ e2e }, name) => {
 
 // ---- #330: every screen in the interface language ---------------------------------------------------
 // Steps of features/interface-language.feature. A step names a label by its English text; the
-// expected text in the chosen language is read from the catalogs (src/shared/i18n/<lang>.json):
+// expected text in the chosen language is read from the catalogs (packages/shared/i18n/<lang>.json):
 // every key whose English value is the label gives its value in that language. So the steps never
 // depend on key names or on wording the developer picks. A label with no catalog entry fails with a
 // clear message (the screen is not translated yet). Only visible elements count (views kept hidden
 // in the DOM are ignored). A button or chip may carry a trailing count ("All 12").
 
-const I18N_DIR = path.join(__dirname, '..', '..', 'src', 'shared', 'i18n');
+const I18N_DIR = path.join(__dirname, '..', '..', 'packages', 'shared', 'i18n');
 const LANGUAGE_FILES = { English: 'en', 'Português (Brasil)': 'pt-BR' };
 const catalog = (code) => JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${code}.json`), 'utf8'));
 

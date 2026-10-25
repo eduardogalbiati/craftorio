@@ -332,7 +332,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
 - Effective limits at night (#337, `src/domains/night/night-limits.js`, `effectiveLimits` in `src/engine/run/costs.js`): the run reads its limits at each check, never once at start: context and cost before each agent turn (`contextGate`, `checkLimits`), duration at its check, the turn timeout when a turn starts (`turnTimeout` × `turns`). The limit in force is the workflow's value (templates rendered, after the #262 per-model lift) × tonight's multiplier (1.5, 2 or 3), or tonight's custom value; never below the day value nor below the highest limit this run was granted (the morning never cuts a run: a run keeps it until it ends; runs started after the watch get the day limits). The settings come from the `nightLimits` option (the service passes `tonightLimits` of the Oracle's folder): only a Night watch with an end time has them, never Self-healing's standing watch. Each new grant is a `limits.expanded` event `{ day, limits }` (the morning summary's runs past a day limit). Never relaxed: a limit the workflow does not set (`max_total_cost_usd: 0` stays no limit), the provider monthly budgets (`checkBudget`), the memory guard (#276). A raise never answers a gate: an open `context_limit` gate stays open with a `note` (`noteLimitsRaised`, in `pendingGates()`).
 - `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
   `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with
-  `summary.progress` = the engine's `StepTrail` (`src/shared/run-progress-model.js`).
+  `summary.progress` = the engine's `StepTrail` (`packages/shared/run-progress-model.js`).
 - Inputs with `type: run` take another run's id: empty/`latest` → the most recent run of another
   workflow; an id with no `runs/<id>/events.jsonl` is refused when the run is created (the UI shows
   it before anything starts). Used by `run-retrospective`.
@@ -369,7 +369,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   fixed colour (`src/renderer/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
 - `display: "Final verification"` (agent or step, #245, optional, a string of 1 to 40 characters,
   see the field reference): the name the screens show instead of the key or id; without it
-  `displayName(id)` (`src/shared/display-name.js`: `verify_change` → "Verify change"). `workflow.started`
+  `displayName(id)` (`packages/shared/display-name.js`: `verify_change` → "Verify change"). `workflow.started`
   records `display: { agents: { key: name }, steps: { id: name } }` for every agent and step
   (`displayNames()`), so a past run keeps its own version's names; `readRun` gives the renderer
   `stepNames` and `agentNames` (the Agents menu's own names win). Ids stay in tooltips and details;

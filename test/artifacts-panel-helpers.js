@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
 const panelSrc = () => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'artifacts-panel.js'), 'utf8');
 

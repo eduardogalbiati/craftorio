@@ -1,5 +1,5 @@
 // Settings' markup (#329): the whole <section id="view-settings">, every tab, drawn in the interface
-// language (its texts are settings.* keys of src/shared/i18n/en.json). A function, so the view is
+// language (its texts are settings.* keys of packages/shared/i18n/en.json). A function, so the view is
 // drawn again when the language changes (view-registry.js redrawMarkup); settings.js registers it
 // and fills the values. Uses window.Select, the catalog's t and settings.js's selfHealingHtml and
 // appUpdateHtml, at call time.

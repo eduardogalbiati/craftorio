@@ -372,7 +372,7 @@ ${flip(v.overlay || '')}
     return v;
   }
 
-  // The robot of a provider type: its adapter's (window.Providers, src/shared/providers/); a provider
+  // The robot of a provider type: its adapter's (window.Providers, packages/shared/providers/); a provider
   // without one (simulated, unknown, or no registry loaded) gets the robot of its model's maker.
   const MAKERS = [[/^claude-/i, 'claude'], [/^(gpt-|o\d)/i, 'gpt'], [/^grok-/i, 'grok']];
   function variantFor(provider, model = '') {

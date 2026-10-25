@@ -55,7 +55,7 @@ const epics = () => require('../src/domains/backlog/epics');
 const oracle = () => require('../src/domains/oracle/oracle-platform');
 const runPr = () => require('../src/domains/run/run-pr');
 const probes = () => require('../src/engine/probes');
-const archive = () => require('../src/shared/backlog-archive');
+const archive = () => require('@multiagent/shared/backlog-archive');
 
 async function withExec(routes, fn) {
   const r = recorder(routes);

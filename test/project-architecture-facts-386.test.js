@@ -1,5 +1,5 @@
 // #386 acceptance: the Architecture tab's Facts view for a human reader
-// (src/renderer/views/project/project-architecture.js with src/shared/architecture-facts-view.js) in
+// (src/renderer/views/project/project-architecture.js with packages/shared/architecture-facts-view.js) in
 // a mini DOM, loaded as test/project-architecture-action-381.test.js loads it: a lead row (the
 // report's verdict, the top 3 risks with their score, the Danger Zone count, the languages bar),
 // findings ranked by a 0-100 score with one line each and "Read more" for the evidence, filters by
@@ -12,13 +12,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
-const FACTS_VIEW = path.join(ROOT, 'src', 'shared', 'architecture-facts-view.js');
-const loadView = () => require('../src/shared/architecture-facts-view.js');
+const FACTS_VIEW = path.join(ROOT, 'packages', 'shared', 'architecture-facts-view.js');
+const loadView = () => require('@multiagent/shared/architecture-facts-view.js');
 const hash = '22'.repeat(20);
 
 // ---------- fixtures: the service's answers (architecture:facts, architecture:report) ----------
@@ -123,7 +123,7 @@ function loadWindow({ model = makeModel(), findings = FINDINGS, gate = GATE, rep
   const shared = ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js'];
   if (fs.existsSync(FACTS_VIEW)) shared.push('architecture-facts-view.js'); // #386's module, once it exists
   for (const f of shared) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   vm.runInContext(fs.readFileSync(path.join(RENDERER, 'date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {
