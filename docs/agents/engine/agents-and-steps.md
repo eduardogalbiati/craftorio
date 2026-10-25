@@ -28,7 +28,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   the same two since #387, to build with the tokens and the design section): `min_success: 1`,
   `required_agents: [reviewer]` (a failed UI Reviewer never blocks the run), the `ui_reviewer`
   only on a round whose UI change was just captured by `developer_screenshots` (which runs after
-  `develop` in every mode for a UI change: screenshots listed or files under `src/renderer/`).
+  `develop` in every mode for a UI change: screenshots listed or files under `apps/desktop/renderer/`).
   Transitions read `output.results.reviewer.verdict`; code findings and blocking
   `output.results.ui_reviewer.ui_findings` go back to `develop` in one turn, the UI once
   (`vars.ui_review_returned`), and the fix round is reviewed again before test/suite/E2E/build.
@@ -243,7 +243,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   (the first n answers of that step have one test command cut at the default).
 - A **test id step** (`type: test_ids`, no agent, no model call, #246; `runTestIdsStep` →
   `packages/engine/engine/test-ids.js`): the static `getByTestId('…')` ids of the E2E step definitions (`steps`,
-  default `features/steps`) that the renderer's source (`renderer`, default `src/renderer`) does not
+  default `features/steps`) that the renderer's source (`renderer`, default `apps/desktop/renderer`) does not
   contain; both folders are repository-relative templates. Output `{ kind: 'test_ids', status: pass |
   missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
   project has no step definitions. The same rule backs the `missing_test_ids` filter
@@ -339,7 +339,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
 - Inputs with `type: boolean` take true/false; `resolveInputs` also accepts their text ("true",
   "false", "yes", "no", "1", "0", "": saved inputs, the CLI's `--input`), so a condition reads
   `inputs.x`, not `inputs.x == 'true'`. UI-only keys the engine ignores (#116, rendered by
-  `src/renderer/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
+  `apps/desktop/renderer/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
   label }` for an enum), `show_if` (`"mode == 'validated'"`: hidden while false, value kept).
 - Images attached to inputs (#129): `attachments: { <input>: [path | { path, name }] }` on
   `run:start` / `WorkflowRun` (`--attach task=<file>` in `scripts/run.js`). Checked in the
@@ -366,7 +366,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   Written by the visual builder's "random agent" desk.
 - `capabilities` (agent, overridable per step) and `isolation: false`: see [capabilities.md](../capabilities.md).
 - `color: "#RRGGBB"` (agent, #224): the agent's colour in the run chat and the runs list, over its role's
-  fixed colour (`src/renderer/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
+  fixed colour (`apps/desktop/renderer/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
 - `display: "Final verification"` (agent or step, #245, optional, a string of 1 to 40 characters,
   see the field reference): the name the screens show instead of the key or id; without it
   `displayName(id)` (`packages/shared/display-name.js`: `verify_change` → "Verify change"). `workflow.started`

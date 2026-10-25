@@ -1,6 +1,6 @@
 Feature: The agents' chat
   The Oracle, the Product Owner and the Supervisor talk with the owner through one shared chat
-  (src/renderer/agent-chat.js): the text box empties as soon as the owner sends a message, and the
+  (apps/desktop/renderer/agent-chat.js): the text box empties as soon as the owner sends a message, and the
   message shows in the conversation at once, before the answer. The simulated agents answer without
   a model call, so the steps watch the chat from the click and check what it showed in the first frame.
 

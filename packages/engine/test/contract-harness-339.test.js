@@ -21,7 +21,7 @@
 //   coverage(manifest, fixtures)  -> { withSchema, covered, missing }: sorted arrays of channel
 //                          names. withSchema: the request/reply entries (`channel`) that have a
 //                          `schema` and are not desktop-only (`desktop` set: the same rule
-//                          src/renderer/api-http.js uses); `send` and `event` entries are not
+//                          apps/desktop/renderer/api-http.js uses); `send` and `event` entries are not
 //                          channels of the HTTP suite. covered: those with a fixture; missing: the rest.
 //
 // test/contract/fixtures.js exports an object { [channel]: fixture }, a fixture being

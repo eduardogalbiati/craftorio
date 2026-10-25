@@ -1,6 +1,6 @@
 // The main process's recent log (#361): capture() keeps the last 200 lines of console.log / info /
 // warn / error (still printed as before), and recent() gives them to a finding's context.json
-// (packages/engine/domains/evidence/findings.js). src/host/main.js calls capture() at startup; there is no log file.
+// (packages/engine/domains/evidence/findings.js). apps/desktop/host/main.js calls capture() at startup; there is no log file.
 const MAX_LINES = 200;
 const lines = [];
 let captured = false;

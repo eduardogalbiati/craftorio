@@ -204,7 +204,7 @@ command's JSON and the URL parsers. `packages/shared/platforms/index.js` resolve
 (`resolvePlatform('gh') === resolvePlatform('github')`; the workflow input `git_platform` and the
 skill suffixes `-gh`/`-gl` use the short id). Code outside the adapters asks the adapter instead of
 branching on the platform: `test/platform-literals-351.test.js` fails on a `'github'`/`'gitlab'`/
-`'gh'`/`'gl'` literal elsewhere in `src/` (its listed exceptions may only shrink), and
+`'gh'`/`'gl'` literal elsewhere in the sources (`packages/`, `apps/`) (its listed exceptions may only shrink), and
 `test/platform-wire-351.test.js` holds the exact commands and parsed results per operation and
 platform. A new operation adds a builder (and a parser) to both adapters; a new forge adds an adapter
 with the same members and registers it in `index.js`.

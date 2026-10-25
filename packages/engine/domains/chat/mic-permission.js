@@ -1,7 +1,7 @@
 // Microphone permission before recording (#318). A packaged macOS app must ask the OS
 // (Electron's systemPreferences.askForMediaAccess) before getUserMedia, or the OS denies the
 // microphone silently; a denial becomes the voice-input error pointing to System Settings.
-// Windows and Linux never ask. The host (src/host/main.js) passes Electron's systemPreferences to the
+// Windows and Linux never ask. The host (apps/desktop/host/main.js) passes Electron's systemPreferences to the
 // service; the renderer calls it on 'voice:mic-access' (packages/engine/service/areas/speech.js).
 
 const DENIED = 'Microphone access is denied. Allow it in System Settings › Privacy & Security › Microphone.';

@@ -2,7 +2,7 @@
 // engine server (`node scripts/serve.js --port 0 --workspace <scratch>`, as `npm run serve` does) on a
 // fresh scratch workspace, in simulation (MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AUTH=off, HOME
 // inside the scratch folder), and a "browser" for its UI: an Electron window with no preload
-// (features/support/browser-main.js), so window.api is src/renderer/api-http.js over HTTP, as in a
+// (features/support/browser-main.js), so window.api is apps/desktop/renderer/api-http.js over HTTP, as in a
 // real browser. Electron is the browser on purpose: it is always installed with the app, Playwright's
 // own browsers may not be. The window starts on about:blank: a step can set routes (page.route) before
 // it opens the served UI (open()). Takes the machine's screenshot slot like launchApp (#199), only

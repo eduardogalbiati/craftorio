@@ -1,6 +1,6 @@
-// Service area: the work in progress that Keep awake (#162, src/host/keep-awake.js) keeps the computer
+// Service area: the work in progress that Keep awake (#162, apps/desktop/host/keep-awake.js) keeps the computer
 // awake for: the runs in progress (waiting at a gate or not), the started roadmaps with their
-// current stage, and the items of the Backlog queues that are not paused. Read by src/host/main.js.
+// current stage, and the items of the Backlog queues that are not paused. Read by apps/desktop/host/main.js.
 
 const backlog = require('../../domains/backlog/backlog');
 const roadmaps = require('../../domains/roadmap/roadmap');

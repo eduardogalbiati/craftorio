@@ -2,7 +2,7 @@
 // (the workspace project that is this app's repository) for Settings and the roadmap cards; the
 // trigger the roadmap calls when a marked item merged or a stage ended (appUpdateEvent); the cycle
 // with the roadmaps and the Backlog queues paused, the runs in progress waited for, `npm install`
-// only on a lockfile change and the restart through the host (src/host/main.js, as app:relaunch does);
+// only on a lockfile change and the restart through the host (apps/desktop/host/main.js, as app:relaunch does);
 // and, at the start of the new process, the intent read before the roadmap dispatch
 // (appUpdateAfterRestart). Never in simulation-only mode, never without a host that can restart.
 

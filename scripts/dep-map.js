@@ -140,7 +140,7 @@ function report() {
 
   const outside = all.filter(([a, b]) => area(a) === 'shared' && area(b) !== 'shared');
   say(''); say(`## shared/ requiring outside shared/: ${outside.length ? outside.map(([a, b]) => `${rel(a)} -> ${rel(b)}`).join(', ') : 'none'}`);
-  const svc = all.filter(([a, b]) => area(a) === 'service' && (area(b) === 'renderer' || rel(b) === 'src/host/main.js'));
+  const svc = all.filter(([a, b]) => area(a) === 'service' && (area(b) === 'renderer' || rel(b) === 'apps/desktop/host/main.js'));
   say(`## service/ requiring renderer/ or main.js: ${svc.length ? svc.length : 'none'}`);
 
   const byMethod = channelFiles();

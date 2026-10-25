@@ -6,11 +6,11 @@
 //                         (packages/engine/service/manifest.js) and their contract (contractHash, packages/engine/service/contract.js)
 //   GET  /api/version     { "app", "contract" } (#339): the engine's version and the contract it speaks,
 //                         as app:version answers it; a client built for another contract shows a banner
-//                         (src/renderer/api-http.js). Contract tests over HTTP: test/contract/.
+//                         (apps/desktop/renderer/api-http.js). Contract tests over HTTP: test/contract/.
 //   GET  /ws              WebSocket. The server pushes { "channel", "payload" } (chat:progress, run:event,
 //                         supervisor:watch, term:data, term:exit, auth:changed); the client sends { "channel", "arg" }
 //                         for the fire-and-forget channels (term:input, term:resize).
-//   GET  /                the UI (src/renderer + src/renderer/api-http.js) and the few libraries
+//   GET  /                the UI (apps/desktop/renderer + apps/desktop/renderer/api-http.js) and the few libraries
 //                         it loads from node_modules.
 //
 //   POST /session         form body token=<token>: the one-shot sign-in (the 401 page of a browser is
@@ -39,8 +39,8 @@ const { appPackage, appRoot } = require('../domains/workspace/app-root');
 
 const PKG = appPackage();
 // The UI folder served (relative to the app root, with a trailing /): the root package.json's
-// `multiagent.ui` (the desktop app's renderer until phase 3's apps/web), else src/renderer/.
-const uiDir = (pkg = PKG) => `${String(pkg.multiagent?.ui || 'src/renderer').replace(/\/+$/, '')}/`;
+// `multiagent.ui` (the desktop app's renderer until phase 3's apps/web), else apps/desktop/renderer/.
+const uiDir = (pkg = PKG) => `${String(pkg.multiagent?.ui || 'apps/desktop/renderer').replace(/\/+$/, '')}/`;
 // the shared package's folder, relative to root (the workspace @multiagent/shared, wherever it lives)
 function sharedDir(root) {
   try { return `${path.relative(root, path.dirname(require.resolve('@multiagent/shared/package.json'))).split(path.sep).join('/')}/`; } catch { return 'packages/shared/'; }

@@ -5,11 +5,11 @@ A short tour for people reading the code for the first time. The details live in
 the user-facing documentation is the [README](../README.md).
 
 ```
-renderer (src/renderer/)  ──window.api──▶  service (packages/engine/service/)  ──▶  engine (packages/engine/engine/)
+renderer (apps/desktop/renderer/)  ──window.api──▶  service (packages/engine/service/)  ──▶  engine (packages/engine/engine/)
    desktop window or browser                 channels, one per area        runs workflows
-        ▲ IPC (src/host/preload.js)                                                │ spawns
+        ▲ IPC (apps/desktop/host/preload.js)                                                │ spawns
         │ or HTTP/WebSocket (packages/engine/server/)                                     ▼
-   main process (src/host/main.js)                                   agent CLIs: claude, codex, grok
+   main process (apps/desktop/host/main.js)                                   agent CLIs: claude, codex, grok
                                                                 native sidecars (resources/bin/)
 ```
 
@@ -28,14 +28,14 @@ written to the local workspace (`<workspace>/runs/<run>/`).
 `packages/engine/service/` is everything the UI can ask of the engine, with no dependency on Electron or on a
 transport. Each area declares its channels in one file under `packages/engine/service/channels/`;
 `packages/engine/service/manifest.js` merges them into the list the clients build `window.api` from. Two
-transports carry the same channels: Electron IPC in the desktop app (`src/host/main.js`,
-`src/host/preload.js`) and HTTP/WebSocket when the engine runs as a server (`npm run serve`,
+transports carry the same channels: Electron IPC in the desktop app (`apps/desktop/host/main.js`,
+`apps/desktop/host/preload.js`) and HTTP/WebSocket when the engine runs as a server (`npm run serve`,
 `packages/engine/server/`). The optional control channel (`packages/engine/control/`) lets a terminal or another agent drive
 the running app through an allowlist of those channels.
 
 ## The renderer
 
-`src/renderer/` is the UI: plain HTML, CSS and JavaScript, no bundler and no framework. One script
+`apps/desktop/renderer/` is the UI: plain HTML, CSS and JavaScript, no bundler and no framework. One script
 per screen (moved screens in `views/<view>/`), shared tokens in `style.css`, and `window.api` as the
 only way to the engine, so the same UI runs in the desktop window and in a browser against a remote
 engine. The 3D views (the run view and the project city) are the exception: React and three.js,
@@ -50,7 +50,7 @@ bundled by `scripts/build-3d.js` into `generated/`. Modules both sides use live 
 - `multiagent-tail`: follows a live agent session in an external terminal.
 - `multiagent-ctl`: the control channel's command-line client.
 
-They exist so that nothing in the packaged app needs a system Node. `scripts/package.js` builds
+They exist so that nothing in the packaged app needs a system Node. `apps/desktop/scripts/package.js` builds
 them for the target before packaging.
 
 ## Where to go next

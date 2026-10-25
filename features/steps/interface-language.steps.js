@@ -107,7 +107,7 @@ Then('the {string} language reads {string} naming {string}, in {string}', async 
 
 // ---- #423: the agent chats' live turn in the interface language -------------------------------------
 // The Product Owner's drawer (aside "Product Owner", the same name in both catalogs) shows the live turn
-// (src/renderer/live-turn.js) while a simulated turn runs (Given the app is open with slow simulated
+// (apps/desktop/renderer/live-turn.js) while a simulated turn runs (Given the app is open with slow simulated
 // turns: thinking, then Read / Grep / gh steps of about 2.5 s each). Contract for these steps:
 // data-testid="live-turn" on the live turn's root, "live-turn-label" on its activity line,
 // "live-turn-steps" on the step count toggle, "live-turn-stop" on its Stop button. The expected texts

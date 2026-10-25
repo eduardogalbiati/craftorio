@@ -16,7 +16,7 @@
 // (`releaseCards`: `links.release` of each card whose `links.issues` holds a shipped issue; the
 // store is packages/engine/domains/discovery/discovery.js of #256, handed in by the service).
 // Service: packages/engine/service/areas/releases.js; channels: packages/engine/service/channels/releases.js; screen:
-// src/renderer/views/releases/releases.js.
+// apps/desktop/renderer/views/releases/releases.js.
 // #489 "rc + stable": every merge into main is a release candidate, recorded in the history's
 // `candidates: [{ tag: 'vX.Y.Z-rc.N', commit, date, runId, issues: [{ number, title, labels }], held? }]`
 // (`rcTag`, N = `mergesSinceStable`). The stable release is a candidate promoted without a rebuild

@@ -1,7 +1,7 @@
 ---
 name: design-system
-description: The app's design tokens - colours, spacing scale, typography, radius and the alignment grid, read from the `:root` tokens of src/renderer/style.css. The developer builds a screen with them, the UI reviewer checks the screenshots and styles against them. Separate from ui-conventions (shared components and interaction conventions). Use when building or reviewing the screens or styles of a UI change.
-summary: "UI changes: the app's design tokens (colours, spacing, typography, alignment) from src/renderer/style.css, to build with and to review against"
+description: The app's design tokens - colours, spacing scale, typography, radius and the alignment grid, read from the `:root` tokens of apps/desktop/renderer/style.css. The developer builds a screen with them, the UI reviewer checks the screenshots and styles against them. Separate from ui-conventions (shared components and interaction conventions). Use when building or reviewing the screens or styles of a UI change.
+summary: "UI changes: the app's design tokens (colours, spacing, typography, alignment) from apps/desktop/renderer/style.css, to build with and to review against"
 used_by: "developer (ai-development-local-hero: builds with the tokens); ui_reviewer (ai-development-local-hero, code_review fan-out: checks against them)"
 # "## Developer: ..." reaches only the developer agent's prompt (#300), "## UI reviewer: ..." (the
 # tokens' tables and what to report) only the ui_reviewer's (#387)
@@ -16,7 +16,7 @@ colours, sizes and spacing a change takes from the app's tokens (a hard-coded gr
 
 ## 1. Where the tokens come from
 
-The `:root` block of **`src/renderer/style.css`** (the base of every `src/renderer/*.css`) is the
+The `:root` block of **`apps/desktop/renderer/style.css`** (the base of every `apps/desktop/renderer/*.css`) is the
 source of truth: when this skill and the file disagree, the file wins. Another project: its own
 tokens (CSS custom properties, a theme file), the same checks.
 

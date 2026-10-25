@@ -1,7 +1,7 @@
 // Electron main process used as a plain browser by the Playwright E2E suite (#339):
 // features/support/served.js launches `electron features/support/browser-main.js` to show the UI of
 // a served engine (scripts/serve.js). One window, no preload and no Node in the page, so the UI
-// builds window.api from src/renderer/api-http.js over HTTP as in any browser. It opens on
+// builds window.api from apps/desktop/renderer/api-http.js over HTTP as in any browser. It opens on
 // about:blank: the steps set their routes, then load the served URL. Same window settings as
 // features/support/electron-main.js (fixed size MULTIAGENT_E2E_SIZE, off-screen unless
 // MULTIAGENT_E2E_SHOW=1, keeps painting off-screen), applied the same way: after the window exists.
@@ -12,7 +12,7 @@ const { app, BrowserWindow } = require('electron');
 const [width, height] = String(process.env.MULTIAGENT_E2E_SIZE || '1400x900').split('x').map(Number);
 const show = process.env.MULTIAGENT_E2E_SHOW === '1';
 
-// the profile in the scratch folder, as src/host/main.js does: with HOME/APPDATA redirected to an empty
+// the profile in the scratch folder, as apps/desktop/host/main.js does: with HOME/APPDATA redirected to an empty
 // scratch folder and no userData set, Electron crashed at launch (0x80000003)
 if (process.env.MULTIAGENT_USER_DATA) app.setPath('userData', process.env.MULTIAGENT_USER_DATA);
 

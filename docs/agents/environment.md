@@ -12,7 +12,7 @@ the workspace folder.
   `readText`, `write` and `writeText`, all but `clear` returning promises. `writeImage`,
   `writeBuffer`, `readImage` and `readBuffer` are gone: write an image as
   `clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()]) })])` and await it
-  (`src/host/main.js`, #139). Raw OS formats use `electron application/osclipboard;format="<name>"`.
+  (`apps/desktop/host/main.js`, #139). Raw OS formats use `electron application/osclipboard;format="<name>"`.
 - Rust (#341): **stable** through `rustup` (cargo 1.99 here; the workspace needs 1.85+ for edition
   2024), with the **MSVC** build tools on Windows (Visual Studio Build Tools, "Desktop development
   with C++"; `rustup` installs the `x86_64-pc-windows-msvc` toolchain). The cargo workspace is
@@ -53,17 +53,17 @@ the workspace folder.
   offers brew commands only when `brew` resolves; otherwise git gets `xcode-select --install` and
   gh, glab and whisper-cli get prose (`MAC_NO_BREW_TEXT`). The command terminal's allowlist uses the
   same list.
-- **Packaging per OS** (#317, `scripts/package.js`): `npm run package` builds for the current
+- **Packaging per OS** (#317, `apps/desktop/scripts/package.js`): `npm run package` builds for the current
   machine into `dist/MultiagentOrchestrator-<platform>-<arch>/`; `-- --platform win32|darwin|linux
   --arch x64|arm64` picks another target. Same asar ignore/unpack lists everywhere; the fuses are
   flipped in the `.exe`, the `.app`'s `Contents/MacOS` binary or the ELF, and on macOS the `.app` is
   re-signed ad hoc right after (needs `codesign`, so a Mac). macOS: bundle id, `.icns`,
   `NSMicrophoneUsageDescription`; no Developer ID signing nor notarization (owner decision later).
-  Icons: `assets/icon-source.png` → `npm run icons` (`scripts/icons.js`, runs under Electron).
+  Icons: `apps/desktop/assets/icon-source.png` → `npm run icons` (`scripts/icons.js`, runs under Electron).
   `scripts/release-assets.js` turns a build into the release files (Windows zip, macOS zip made with
   `ditto`, Linux `.tar.gz` and AppImage through `appimagetool`), and `scripts/smoke-package.js`
   starts a packaged app in simulation on a scratch workspace and waits for it to quit by itself
-  (`MULTIAGENT_SMOKE_FILE`, honoured only with `MULTIAGENT_SIMULATION_ONLY=1`, `src/host/main.js`).
+  (`MULTIAGENT_SMOKE_FILE`, honoured only with `MULTIAGENT_SIMULATION_ONLY=1`, `apps/desktop/host/main.js`).
 - **Release jobs**: `deploy.yml` (a `vX.Y.Z` tag or a manual dispatch) runs one build job per target on `windows-latest`
   (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and `ubuntu-latest`
   (linux x64: `npm rebuild node-pty` against Electron's headers, AppImage + tar.gz, smoke under
@@ -81,7 +81,7 @@ the workspace folder.
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`),
   `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
   points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repository is public, MIT).
-- **Developing while runs are active**: pulling or merging changes `src/` under the running app.
+- **Developing while runs are active**: pulling or merging changes the sources (`packages/`, `apps/`) under the running app.
   Ctrl+R reloads only the window (renderer + preload); the main process (or the `npm run serve`
   server) keeps the code it started with, so new channels are missing. The process records its
   code version at startup (`packages/engine/domains/workspace/code-version.js`: app version + a hash of `src/` without
@@ -118,7 +118,7 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   case-insensitive on Windows and macOS, case-sensitive on Linux. Never compare paths with an
   inline `process.platform === 'win32' ? toLowerCase()`; use the helper (store, runs, artifacts,
   permissions, worktrees, deps cache, process lists, `path:open`).
-- **External terminal (↗)**: `src/host/external-terminal.js`. Windows `cmd.exe start ... cmd /k`;
+- **External terminal (↗)**: `apps/desktop/host/external-terminal.js`. Windows `cmd.exe start ... cmd /k`;
   macOS Terminal.app through `osascript` (the app's environment is exported in the command line,
   Terminal.app does not inherit it); Linux the first installed of `$TERMINAL`,
   `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xterm`. None found: the preload's
@@ -138,9 +138,9 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
 
 - The setting is per machine: `<userData>/engine-connection.json` (`{ mode, address, token }`, the
   token `{ encrypted }` with `safeStorage`, `{ plain }` without OS encryption), never in the
-  workspace. Rules in `src/host/engine-connection.js` (pure), windows in `src/host/engine-connection-window.js`,
-  the page in `src/renderer/connection/` with its own preload (`src/host/engine-connection-preload.js`).
-- `src/host/main.js` decides at `whenReady` (`decideMode`): remote mode creates no workspace, lock,
+  workspace. Rules in `apps/desktop/host/engine-connection.js` (pure), windows in `apps/desktop/host/engine-connection-window.js`,
+  the page in `apps/desktop/renderer/connection/` with its own preload (`apps/desktop/host/engine-connection-preload.js`).
+- `apps/desktop/host/main.js` decides at `whenReady` (`decideMode`): remote mode creates no workspace, lock,
   account, keep-awake, control channel or cleanup timer; the service is constructed but never gets a
   workspace. `MULTIAGENT_ENGINE=local` forces local; under `MULTIAGENT_SIMULATION_ONLY=1` a remote
   engine is used only on 127.0.0.1 (a check never drives an engine that can start real runs).

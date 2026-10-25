@@ -163,7 +163,7 @@ function installState(dir, stateFile, config) {
 }
 
 // The app's screens a Run App copy can open on (#119), from the files the run changed: the most
-// touched of src/renderer/views/<view>/… and src/renderer/<view>[-part].{js,css}; null for none.
+// touched of apps/desktop/renderer/views/<view>/… and apps/desktop/renderer/<view>[-part].{js,css}; null for none.
 const START_VIEWS = [
   'agents',
   'analytics',
@@ -182,7 +182,7 @@ const START_VIEWS = [
 function startView(files) {
   const counts = new Map();
   for (const f of files || []) {
-    const m = String(f).replace(/\\/g, '/').match(/^src\/renderer\/(?:views\/([^/]+)\/|([a-z]+)[^/]*\.(?:js|css|html)$)/);
+    const m = String(f).replace(/\\/g, '/').match(/^apps\/desktop\/renderer\/(?:views\/([^/]+)\/|([a-z]+)[^/]*\.(?:js|css|html)$)/);
     const view = m && (m[1] || m[2]);
     if (START_VIEWS.includes(view)) counts.set(view, (counts.get(view) || 0) + 1);
   }

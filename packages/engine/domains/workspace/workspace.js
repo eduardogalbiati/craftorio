@@ -179,7 +179,7 @@ const DEFAULT_SETTINGS = {
   backlogMaxGroup: 5,
   // the Backlog suggests a Backlog Refresh run when the last one is older than this (#161); 0 = off
   backlogRefreshHours: 24,
-  // the workflow used wherever one is not picked by hand (#195, src/renderer/default-workflow.js):
+  // the workflow used wherever one is not picked by hand (#195, apps/desktop/renderer/default-workflow.js):
   // null = the local workflow when the workspace has it, else the GitHub one
   defaultWorkflow: null,
   // Live roadmap (#164, packages/engine/domains/roadmap/live-roadmap.js): the highest complexity:n a refill picks, the most stages
@@ -198,16 +198,16 @@ const DEFAULT_SETTINGS = {
   // Main stays green (#405, packages/engine/domains/project/base-health.js): what a red test on the base files: 'off', 'issue'
   // (a bug issue only) or 'fix' (the issue and a fix item at the front of the roadmap)
   baseCheck: { onRed: 'fix' },
-  // Keep awake (#162, src/host/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
+  // Keep awake (#162, apps/desktop/host/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
   // Control channel (#336, packages/engine/control): outside sessions drive this app through a loopback endpoint
   controlChannel: false,
-  // Findings button (#361, src/renderer/findings.js): shown in a packaged app (and in screenshot
+  // Findings button (#361, apps/desktop/renderer/findings.js): shown in a packaged app (and in screenshot
   // captures) only when on; the app run from source always shows it
   findingsButton: false,
-  // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy
+  // the top bar's 24/7 chip (#188, apps/desktop/renderer/occupancy-chip.js): the last 24 h occupancy
   showOccupancyChip: true,
-  // the project city's Glow (#450, src/renderer/views/project/project-city.js): the bloom over the
+  // the project city's Glow (#450, apps/desktop/renderer/views/project/project-city.js): the bloom over the
   // lights and the vignette start on; off for slower machines (the header's switch still turns it on)
   cityGlow: true,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
@@ -243,7 +243,7 @@ const DEFAULT_SETTINGS = {
   voiceCommand: 'whisper-cli',
   voiceModel: 'small',
   voiceLanguage: 'pt',
-  // the first-run Setup (#319, src/renderer/setup.js): done once Finish or Skip is pressed; a
+  // the first-run Setup (#319, apps/desktop/renderer/setup.js): done once Finish or Skip is pressed; a
   // settings.json written before Setup existed reads true (readSettings), so current users skip it
   setupDone: false,
   // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: not offered by

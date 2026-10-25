@@ -1,4 +1,4 @@
-// Account sign-in (Supabase Auth with OAuth providers). No Electron here: src/host/main.js passes an
+// Account sign-in (Supabase Auth with OAuth providers). No Electron here: apps/desktop/host/main.js passes an
 // encrypted storage and a way to open the system browser. The app is free: the account gates
 // nothing, it only counts the people using the app (#315).
 //

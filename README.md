@@ -257,9 +257,9 @@ value you set by hand always wins.
 The CLIs the workflows use are installed separately: see
 [Installing the CLIs on Windows](#installing-the-clis-on-windows) and its macOS and Linux part.
 
-**App icon.** `assets/icon.ico` (Windows), `assets/icon.icns` (macOS) and `assets/icon.png` (Linux)
-are generated from one source image, `assets/icon-source.png` (its origin and license are in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). To replace the icon, put a square PNG of 1024 px or more at `assets/icon-source.png` (or pass its path)
+**App icon.** `apps/desktop/assets/icon.ico` (Windows), `apps/desktop/assets/icon.icns` (macOS) and `apps/desktop/assets/icon.png` (Linux)
+are generated from one source image, `apps/desktop/assets/icon-source.png` (its origin and license are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). To replace the icon, put a square PNG of 1024 px or more at `apps/desktop/assets/icon-source.png` (or pass its path)
 and run `npm run icons`, then commit the four files.
 
 ## Account and privacy
@@ -1190,7 +1190,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
 | `design-doc-writing` | arena, Write & Review (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
 | `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
-| `design-system` | developer (ai-development-local-hero: builds with the tokens); ui_reviewer (ai-development-local-hero, code_review fan-out: checks against them) | UI changes: the app's design tokens (colours, spacing, typography, alignment) from src/renderer/style.css, to build with and to review against |
+| `design-system` | developer (ai-development-local-hero: builds with the tokens); ui_reviewer (ai-development-local-hero, code_review fan-out: checks against them) | UI changes: the app's design tokens (colours, spacing, typography, alignment) from apps/desktop/renderer/style.css, to build with and to review against |
 | `e2e-scenarios` | via `uses` | User-visible changes only, at most 3 scenarios per issue reusing existing steps; development runs write and parse-check them (pending); the release workflow runs them all; per-scenario status with reason |
 | `e2e-test-writer-{js,python,go,java,csharp,rust}` | test writer, E2E runner | E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands |
 | `implementation-evidence` | evidence | Evidence by kind of change (screenshots, HTTP request/response, CLI output, logs), local and simulated only, one list per issue |
@@ -2457,8 +2457,8 @@ Notes:
 
 <!-- generated:structure -->
 ```
-src/host/main.js              Electron main process + IPC
-src/host/preload.js           safe API exposed to the renderer
+apps/desktop/host/main.js              Electron main process + IPC
+apps/desktop/host/preload.js           safe API exposed to the renderer
 packages/engine/domains/workspace/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 packages/engine/domains/project/projects.js          projects: CRUD and folder/repository setup
 packages/engine/domains/backlog/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue
@@ -2477,7 +2477,7 @@ packages/engine/engine/providers.js  claude / codex / grok / mock adapters
 packages/engine/engine/capabilities.js  agent capabilities and isolation → each CLI's flags
 packages/engine/engine/recorder.js   writes to disk (jsonl + summary)
 packages/engine/engine/worktree.js   git worktree per run: create, reuse on resume, remove, orphan cleanup
-src/renderer/            UI (plain HTML/CSS/JS)
+apps/desktop/renderer/            UI (plain HTML/CSS/JS)
 workflows/               bundled workflow definitions (copied into <workspace>/workflows)
 skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)

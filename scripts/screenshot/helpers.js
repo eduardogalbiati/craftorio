@@ -17,8 +17,8 @@ const DEMO_REPO = 'https://github.com/example/demo-app';
 const BIG_TASKS = [
   'One app per workspace: a lock file in `packages/engine/domains/workspace/workspace.js`', 'A second app opens read-only, with a banner', 'Run owners recorded in `packages/engine/domains/run/runs.js`',
   'Only the owner resumes a run', 'Queue claims survive a restart (`packages/engine/domains/workspace/store.js`)', 'Roadmap writes are atomic (`packages/engine/domains/roadmap/roadmap.js`)',
-  'Resume dialog lists the steps (`src/renderer/run.js`)', 'Duplicate runs are flagged on the card (`src/renderer/backlog.js`)', 'Safe-write notice in the run header (`src/renderer/run.js`)',
-  'Roadmap status derived from runs, shown in `src/renderer/backlog-roadmap.js`', 'Docs: run safety in the README', 'Tests',
+  'Resume dialog lists the steps (`apps/desktop/renderer/run.js`)', 'Duplicate runs are flagged on the card (`apps/desktop/renderer/backlog.js`)', 'Safe-write notice in the run header (`apps/desktop/renderer/run.js`)',
+  'Roadmap status derived from runs, shown in `apps/desktop/renderer/backlog-roadmap.js`', 'Docs: run safety in the README', 'Tests',
 ];
 const DEMO_ISSUES = [
   { number: 16, title: 'Keyboard focus is lost after closing a dialog', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:2', color: '#ededed' }], body: '- [ ] Focus returns to the control that opened the dialog\n- [ ] Tests' },
@@ -141,7 +141,7 @@ function writeDemoPackage(folder) {
 // data-heavy screen (lists, reports, charts, the city) uses it for its real-scale state, where
 // density and layout problems show (the 31-file demo hides them).
 const LARGE_AREAS = [
-  ['packages/engine/engine', 'js', 260], ['src/renderer/views', 'js', 300], ['packages/engine/service', 'ts', 180], ['tools/analysis', 'py', 140],
+  ['packages/engine/engine', 'js', 260], ['apps/desktop/renderer/views', 'js', 300], ['packages/engine/service', 'ts', 180], ['tools/analysis', 'py', 140],
   ['services/billing', 'go', 120], ['docs/guides', 'md', 110], ['test', 'js', 90],
 ];
 const LARGE_KINDS = ['duplicated-rule', 'oversized-unit', 'test-gap', 'layer-breach', 'dead-code', 'cyclic-dependency'];

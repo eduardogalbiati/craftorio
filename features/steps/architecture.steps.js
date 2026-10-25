@@ -4,7 +4,7 @@
 // new/gone, "Send to Refactor"), and its states. Locators are roles and data-testid only
 // (skills/ui-conventions).
 //
-// What the tab exposes (the renderer's contract for these steps, src/renderer/views/project/):
+// What the tab exposes (the renderer's contract for these steps, apps/desktop/renderer/views/project/):
 // - #project-panel-architecture holds the tab; data-testid="architecture-state-not-git" /
 //   "architecture-state-never" / ...: the tab's states;
 // - data-testid="architecture-analyze": the "Analyze this project" button, its text or title has

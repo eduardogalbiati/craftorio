@@ -627,7 +627,7 @@ function main() {
   }
 
   simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), demoMissingClis(appDir, args.missingClis), args.oracle === 'answering', args.po);
-  require(path.join(appDir, 'src', 'host', 'main'));
+  require(path.join(appDir, 'apps', 'desktop', 'host', 'main'));
 }
 
 // Electron's main process runs the capture; plain Node (the tests) and the E2E suite's Electron main

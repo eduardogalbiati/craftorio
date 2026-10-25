@@ -3,7 +3,7 @@
 // `npm run serve` at the repository root). Runs the engine as a server: the HTTP/WebSocket API
 // (packages/engine/server) and the UI in a browser (the folder the root package.json's `multiagent.ui`
 // names, served from the app root), or in
-// the desktop app of another computer (Settings › Execution › Engine, src/host/engine-connection.js).
+// the desktop app of another computer (Settings › Execution › Engine, apps/desktop/host/engine-connection.js).
 //   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--insecure-http] [--workspace <dir>]
 //
 // The token is full control of this machine (a shell, gate approval, paid runs, #479): the banner

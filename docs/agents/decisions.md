@@ -11,7 +11,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 - **2026-10-24** (#558, the reorganisation study `docs/reorganisation-study-2026-10.md`): the app
   becomes an engine package plus modular fronts, in one git repository with npm workspaces (no
   submodules, no separate repositories), by phases that each stop on their own: 0 these decisions,
-  1 a tidy of `src/` (host files in `src/host/`, the backend's loose files in `packages/engine/domains/<name>/`,
+  1 a tidy of `src/` (host files in `apps/desktop/host/`, the backend's loose files in `packages/engine/domains/<name>/`,
   tests following their modules), 2 the engine package, 3 the UI kit and the fronts, 4 vertical
   slices. Seven decisions: (1) the fronts are vertical, reached in phase 4 (phases 2 and 3 keep every
   channel file and domain module in the engine package; in phase 4 each front takes its channels,

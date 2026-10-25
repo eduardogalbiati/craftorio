@@ -157,7 +157,7 @@ tpl.addFilter('suite_scope', (output, noun) => suiteStep.suiteScope(output, noun
 
 // The test ids the E2E step definitions of a checkout use and its renderer lacks (#246, the rule of
 // packages/engine/engine/test-ids.js), one line per id with the step files that use it; '' when none or without
-// a folder. Optional folders, repository-relative: steps (features/steps), renderer (src/renderer).
+// a folder. Optional folders, repository-relative: steps (features/steps), renderer (apps/desktop/renderer).
 //   {{ worktree_dir | missing_test_ids }}
 tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
   if (!dir || !fs.existsSync(String(dir))) return '';

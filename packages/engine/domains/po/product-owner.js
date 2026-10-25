@@ -11,7 +11,7 @@
 // Add to roadmap buttons apply a proposal only on the owner's click.
 // Simulated (developer mode, MULTIAGENT_SIMULATION_ONLY): mockAnswer builds the answer from the
 // backlog itself, with no model call and no cost.
-// Calibration (#189, src/renderer/po-calibration.js): a plan question is planned with the agent's saved
+// Calibration (#189, apps/desktop/renderer/po-calibration.js): a plan question is planned with the agent's saved
 // Speed ↔ Quality step, or a step for that question only; the prompt states its parameters, the simulated
 // answer follows them, normalizeAnswer caps the runs per stage, and the answer records the step.
 // Cost (#205, PoCalibration.cost): the saved Economy ↔ Generous step (`cost`), or one for the question
@@ -1154,7 +1154,7 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   const [one, two, three, ...rest] = todo;
   const pairs = [];
   for (let n = 0; n < rest.length; n += 2) pairs.push(rest.slice(n, n + 2).map((i) => i.number));
-  const group = (name, list, stage, reason, extra = {}) => ({ name, issues: list, workflow, inputs: {}, reason, files: ['src/renderer/views/backlog/backlog-po.js'], stage, ...extra });
+  const group = (name, list, stage, reason, extra = {}) => ({ name, issues: list, workflow, inputs: {}, reason, files: ['apps/desktop/renderer/views/backlog/backlog-po.js'], stage, ...extra });
   const groups = [
     ...(one ? [group('Already applied', [one.number], 1, 'Already in the roadmap (simulated).', { simulated: { covered: [one.number], stage: 1 } })] : []),
     ...(two ? [group('Partly applied', [two.number, ...(three ? [three.number] : [])], 1, 'One issue already in the roadmap, one not (simulated).', { simulated: { covered: [two.number], stage: 1 } })] : []),
@@ -1164,7 +1164,7 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   return {
     summary: `${head}. ${groups.length} proposed run${groups.length === 1 ? '' : 's'}${groups.length > 1 ? ', the first one already applied and the second one partly' : ''}.${long}`,
     groups,
-    conflicts: pairs.length > 1 ? [{ issues: [pairs[0][0], pairs[1][0]], reason: 'Both change the same file (simulated).', files: ['src/renderer/views/backlog/backlog-po.js'] }] : [],
+    conflicts: pairs.length > 1 ? [{ issues: [pairs[0][0], pairs[1][0]], reason: 'Both change the same file (simulated).', files: ['apps/desktop/renderer/views/backlog/backlog-po.js'] }] : [],
     enrich: scenario === 'large-answer' ? todo.slice(0, 5).map((i) => ({ issue: i.number, reason: 'The description is too short (simulated).' })) : [],
     splits: [],
     epics: {},

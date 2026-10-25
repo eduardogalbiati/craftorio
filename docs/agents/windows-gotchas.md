@@ -21,7 +21,7 @@ Use `canonicalPath`/`samePath` from `packages/engine/engine/worktree.js`.
   pseudoterminal → the live log follower runs in-process (virtual terminal).
 - node-pty re-quotes array args: pass `cmd.exe` its command line as **one string**.
 - In the packaged app node-pty must be loaded from `app.asar.unpacked` (its worker thread can't
-  read app.asar); `scripts/package.js` sets `asar.unpack` for it.
+  read app.asar); `apps/desktop/scripts/package.js` sets `asar.unpack` for it.
 - `kill()` after exit prints "AttachConsole failed" (harmless).
 
 ## Memory: commit, not the working set (#276)
@@ -43,7 +43,7 @@ Use `canonicalPath`/`samePath` from `packages/engine/engine/worktree.js`.
 
 ## Packaged exe
 
-- Hardened (`scripts/package.js` flips Electron fuses): no `ELECTRON_RUN_AS_NODE`, no
+- Hardened (`apps/desktop/scripts/package.js` flips Electron fuses): no `ELECTRON_RUN_AS_NODE`, no
   `NODE_OPTIONS`/`--inspect`, only loads `app.asar` and refuses a modified one (integrity check);
   DevTools off and `--remote-debugging-port` exits when `app.isPackaged`. So the packaged app can't
   spawn itself as node: anything that must run as a node child ships unpacked (`asar.unpack`) and

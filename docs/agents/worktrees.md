@@ -24,7 +24,7 @@ actions, or any code that deletes or checks out branches.
   prompt says "uncommitted work from the previous attempt". The kept-work question (#170,
   `runWorktreeWork` in `packages/engine/service/areas/resume.js`) counts the run's own commits on its branch, in
   the repository, once the folder is gone. **Cleanup** (`cleanupWorktrees`, service
-  `cleanupRunWorktrees`): at start and every 30 minutes (`src/host/main.js`, `packages/engine/bin/multiagent-engine.js`), one pass
+  `cleanupRunWorktrees`): at start and every 30 minutes (`apps/desktop/host/main.js`, `packages/engine/bin/multiagent-engine.js`), one pass
   at a time. It never touches the runs in progress here (`active`), a run live in another app process
   (`owner.json` alive, #112) or a run waiting at a human gate (`approval.requested` without
   `approval.resolved`); any other run's worktree is retired the same way (interrupted runs included)
@@ -72,7 +72,7 @@ actions, or any code that deletes or checks out branches.
   `packages/engine/domains/machine/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
   `MULTIAGENT_SIMULATION_ONLY=1`, `MULTIAGENT_WORKSPACE` = a scratch copy under
   `<workspace>/local-previews/<run>/workspace` (projects, agents, skills, workflows, settings; never
-  runs) and `MULTIAGENT_USER_DATA` (read by `src/host/main.js`, dev only) unless the owner chose the
+  runs) and `MULTIAGENT_USER_DATA` (read by `apps/desktop/host/main.js`, dev only) unless the owner chose the
   real workspace. Stopped on `approval.resolved` and `workflow.finished` (and by `terminals.killAll`
   at quit); it never answers the gate. `local_preview.started` / `local_preview.stopped` events land
   in the run's history and chat. Mock runs have no worktree: `work_dir` is `repo_path`.
@@ -87,7 +87,7 @@ actions, or any code that deletes or checks out branches.
 - **The app started by hand in a worktree (#112)**: `npm start` in `<workspace>/worktrees/<id>`
   (dev only, no `MULTIAGENT_WORKSPACE`) gets a scratch workspace and user data folder under
   `<workspace>/local-previews/app-<id>/` and simulations only (`worktreeAppScratch` in
-  `packages/engine/domains/local/local-preview.js`, used by `src/host/main.js`): it never opens the owner's workspace. Prefer **Run App**.
+  `packages/engine/domains/local/local-preview.js`, used by `apps/desktop/host/main.js`): it never opens the owner's workspace. Prefer **Run App**.
 - **The run's scratch workspace (#120)**: a run with a worktree gets `runs/<id>/scratch/{workspace,
   user-data}` (`WorkflowRun.scratchWorkspace`, same content rules as `scratchWorkspace` in
   `packages/engine/domains/local/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
@@ -114,7 +114,7 @@ actions, or any code that deletes or checks out branches.
   resumed run has its own id, so its own fresh `tmp`. The stray-process watcher attributes a process
   under `runs/<id>/tmp` to run `<id>` (`watchStrayProcesses` in `packages/engine/service/areas/runs.js`), and
   `walkFiles` skips `tmp/` (not artifacts). A mock run creates none.
-- **One app per workspace (#112)**: `src/host/main.js` takes Electron's single-instance lock (the owner's
+- **One app per workspace (#112)**: `apps/desktop/host/main.js` takes Electron's single-instance lock (the owner's
   user data folder) and `<workspace>/.lock` (pid, host, heartbeat; `lockWorkspace` in
   `packages/engine/domains/run/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old
   heartbeat) is taken over. Each run in progress has `runs/<id>/owner.json` with a heartbeat

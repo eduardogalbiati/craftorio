@@ -1,4 +1,4 @@
-// Service area: workflow chaining (#134, src/renderer/chain-model.js). A run started with a `then`
+// Service area: workflow chaining (#134, apps/desktop/renderer/chain-model.js). A run started with a `then`
 // (the Start drawer, the Backlog's Assign, a roadmap item, or a gate choice such as the issue
 // tracker's "Create and queue") hands its declared outputs to what follows when it finishes:
 // another workflow (its inputs mapped from the outputs, `from` recorded in the next run), the

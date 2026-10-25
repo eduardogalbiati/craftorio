@@ -126,13 +126,13 @@ function demoCityPlan(ws, projectId) {
 
 // #373: a bigger city: four folders of files of growing size, then a city plan with a landmark and a port
 const cityFile = (n) => `${Array.from({ length: n }, (_, i) => `function step${i}(x) {\n  return x > ${i} ? x - ${i} : x + ${i};\n}`).join('\n')}\nmodule.exports = {};\n`;
-const CITY_FOLDERS = { 'packages/engine/engine': 9, 'src/renderer/views': 12, 'docs/guides': 6, 'scripts/build': 4 };
+const CITY_FOLDERS = { 'packages/engine/engine': 9, 'apps/desktop/renderer/views': 12, 'docs/guides': 6, 'scripts/build': 4 };
 const CITY_COMMITS = [
   ...ARCH_COMMITS,
   ['2026-09-22', 'Grow the engine and the views', Object.fromEntries(Object.entries(CITY_FOLDERS).flatMap(([dir, n]) => Array.from({ length: n }, (_, i) => [
     `${dir}/${dir.startsWith('docs') ? `guide-${i}.md` : `part-${i}.js`}`, dir.startsWith('docs') ? `# Guide ${i}\n${'Text.\n'.repeat(4 + i * 3)}` : cityFile(2 + ((i * 7) % 11)),
   ])))],
-  ['2026-09-29', 'Tune the engine', { 'packages/engine/engine/part-0.js': cityFile(16), 'packages/engine/engine/part-3.js': cityFile(12), 'src/renderer/views/part-1.js': cityFile(14) }],
+  ['2026-09-29', 'Tune the engine', { 'packages/engine/engine/part-0.js': cityFile(16), 'packages/engine/engine/part-3.js': cityFile(12), 'apps/desktop/renderer/views/part-1.js': cityFile(14) }],
 ];
 const CITY_PLAN = {
   version: 1, project: 'demo-app', summary: 'Billing, its engine and views, with the export and the docs.',
@@ -145,7 +145,7 @@ const CITY_PLAN = {
   districts: [
     { id: 'billing', name: 'Billing', zone: 'core', include: ['src/billing.js', 'src/api.js'] },
     { id: 'engine', name: 'Engine', zone: 'core', include: ['packages/engine/engine/**'] },
-    { id: 'views', name: 'Views', zone: 'ui', include: ['src/renderer/**'] },
+    { id: 'views', name: 'Views', zone: 'ui', include: ['apps/desktop/renderer/**'] },
     { id: 'scripts', name: 'Scripts', zone: 'tooling', include: ['scripts/**', 'tools/**'] },
     { id: 'guides', name: 'Guides', zone: 'books', include: ['docs/**', 'README.md'] },
   ],
@@ -172,8 +172,8 @@ const demoCityAgents = (projectId) => ({
     },
     {
       id: '20261013-101500-c1ty0002', workflow: 'software-development', colour: '#4c9be8',
-      agents: [agentAt('s-dev-2', 'developer', 'implement', 'src/renderer/views/part-new.js', 'change', 'claude', 'claude-sonnet-5-5')],
-      trail: ['src/billing.js', 'src/renderer/views/part-1.js', 'src/renderer/views/part-new.js'],
+      agents: [agentAt('s-dev-2', 'developer', 'implement', 'apps/desktop/renderer/views/part-new.js', 'change', 'claude', 'claude-sonnet-5-5')],
+      trail: ['src/billing.js', 'apps/desktop/renderer/views/part-1.js', 'apps/desktop/renderer/views/part-new.js'],
       dirty: [],
     },
   ],
@@ -186,7 +186,7 @@ const demoCityAgents = (projectId) => ({
 // stage of two items that would both change src/billing.js (simulated data)
 const DEMO_IMPACT_ISSUE = {
   number: 412, title: 'Apply the loyalty discount to the invoice totals', runs: [],
-  body: 'The discount rule lives in `src/billing.js:42-58`; the totals come from packages/engine/engine/part-3.js.\n\n## Expected files\n\n- `src/billing.js`: the discount rule\n- `src/renderer/views/part-new.js` (new): the loyalty badge\n',
+  body: 'The discount rule lives in `src/billing.js:42-58`; the totals come from packages/engine/engine/part-3.js.\n\n## Expected files\n\n- `src/billing.js`: the discount rule\n- `apps/desktop/renderer/views/part-new.js` (new): the loyalty badge\n',
 };
 const DEMO_IMPACT_PO = [{ role: 'po', answer: { summary: 'One group.', groups: [{ issues: [412], workflow: 'software-development.yaml', reason: 'Billing rules.', files: ['src/billing.js', 'packages/engine/engine/part-0.js'] }], conflicts: [], enrich: [] } }];
 const DEMO_IMPACT_STAGE = {
@@ -194,14 +194,14 @@ const DEMO_IMPACT_STAGE = {
   items: [
     { id: 'it-412', number: 412, title: 'Apply the loyalty discount', body: 'Change `src/billing.js` and `packages/engine/engine/part-0.js`.' },
     { id: 'it-413', number: 413, title: 'Round the export totals', body: 'Round in `src/billing.js`, document it in `docs/guides/guide-1.md`.' },
-    { id: 'it-414', number: 414, title: 'Faster invoice list', body: 'Paginate `src/renderer/views/part-1.js`.' },
+    { id: 'it-414', number: 414, title: 'Faster invoice list', body: 'Paginate `apps/desktop/renderer/views/part-1.js`.' },
   ],
 };
 
 // #376: release 1.1.2 after 1.1.1 (the city's head) on simulated data: a new view (#21), the engine
 // and billing changed by a few and many lines (#22), a guide removed and a script renamed (#23)
 const RELEASE_COMMITS = [
-  ['2026-10-06', 'Add the invoice view (#21)', { 'src/renderer/views/invoice.js': cityFile(9) }],
+  ['2026-10-06', 'Add the invoice view (#21)', { 'apps/desktop/renderer/views/invoice.js': cityFile(9) }],
   ['2026-10-07', 'Faster engine, partner prices (#22)', { 'packages/engine/engine/part-2.js': cityFile(14), 'packages/engine/engine/part-5.js': cityFile(6), 'src/billing.js': jsBody(220) }],
 ];
 function demoReleaseCity(folder) {

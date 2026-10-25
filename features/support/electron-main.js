@@ -1,7 +1,7 @@
 // Electron main process of the Playwright E2E suite (#222): features/support/app.js launches
 // `electron features/support/electron-main.js` with Playwright's _electron, on a scratch workspace
 // it has already seeded. This file only sets what has to happen inside Electron, then loads the
-// real app (src/host/main.js):
+// real app (apps/desktop/host/main.js):
 // - the theme Electron reports (MULTIAGENT_E2E_THEME: light | dark), for the visual baselines;
 // - a fixed window content size (MULTIAGENT_E2E_SIZE, default 1400x900);
 // - the channels that would call a model (Product Owner, Oracle, supervisor chat, analysis) answer
@@ -57,4 +57,4 @@ require.cache[baseHealthArea].exports = (ctx) => {
   return area;
 };
 
-require(path.join(__dirname, '..', '..', 'src', 'host', 'main'));
+require(path.join(__dirname, '..', '..', 'apps', 'desktop', 'host', 'main'));

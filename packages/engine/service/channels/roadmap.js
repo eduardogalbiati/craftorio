@@ -1,6 +1,6 @@
 // Backlog roadmap (packages/engine/domains/roadmap/roadmap.js): ordered stages of runs per project, each stage after the
 // previous one merged. Every channel returns the Backlog (withIssueRuns), whose `roadmap` the
-// screen shows (src/renderer/backlog-roadmap.js); the service's dispatchRoadmaps runs it.
+// screen shows (apps/desktop/renderer/backlog-roadmap.js); the service's dispatchRoadmaps runs it.
 // #281: an owner edit (save, propose, from-queue, clear, restore) first keeps the stages as they were
 // (packages/engine/domains/roadmap/roadmap-history.js: backlog/<project>.roadmap.history/, the last 20). A save, a proposal that
 // replaces the roadmap, Clear and a restore answer with `edit` ({ id, label }): the last such edit of

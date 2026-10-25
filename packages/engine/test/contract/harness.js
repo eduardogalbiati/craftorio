@@ -162,7 +162,7 @@ async function runFixture({ url, token, channel, fixture }) {
   return result;
 }
 
-// The request/reply channels with a schema (not desktop-only: the browser's rule, src/renderer/api-http.js)
+// The request/reply channels with a schema (not desktop-only: the browser's rule, apps/desktop/renderer/api-http.js)
 // → { withSchema, covered, missing }, sorted channel names
 function coverage(manifest, fixtures) {
   const withSchema = manifest.filter((e) => e.channel && e.schema && !e.desktop).map((e) => e.channel).sort();

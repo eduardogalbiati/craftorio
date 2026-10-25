@@ -3,8 +3,8 @@ order: 100
 ---
 
 <!-- section:structure -->
-src/host/main.js              Electron main process + IPC
-src/host/preload.js           safe API exposed to the renderer
+apps/desktop/host/main.js              Electron main process + IPC
+apps/desktop/host/preload.js           safe API exposed to the renderer
 packages/engine/domains/workspace/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 packages/engine/domains/project/projects.js          projects: CRUD and folder/repository setup
 packages/engine/domains/backlog/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue
@@ -23,7 +23,7 @@ packages/engine/engine/providers.js  claude / codex / grok / mock adapters
 packages/engine/engine/capabilities.js  agent capabilities and isolation → each CLI's flags
 packages/engine/engine/recorder.js   writes to disk (jsonl + summary)
 packages/engine/engine/worktree.js   git worktree per run: create, reuse on resume, remove, orphan cleanup
-src/renderer/            UI (plain HTML/CSS/JS)
+apps/desktop/renderer/            UI (plain HTML/CSS/JS)
 workflows/               bundled workflow definitions (copied into <workspace>/workflows)
 skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)

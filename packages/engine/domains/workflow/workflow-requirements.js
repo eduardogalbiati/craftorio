@@ -9,7 +9,7 @@
 // (issues, backlog sync, pull requests) through gh or glab; the local workflows that only allow
 // bash:gh in their tools do not count.
 // - workflowRequirements(wf, inputs) -> { clis: sorted ids among claude, codex, git, grok; forge };
-// - missingRequirements(reqs, states): from src/renderer/setup-model.js (shared with the renderer).
+// - missingRequirements(reqs, states): from apps/desktop/renderer/setup-model.js (shared with the renderer).
 
 const { render } = require('../../engine/workflow');
 const { missingRequirements } = require('@multiagent/shared/setup-model');

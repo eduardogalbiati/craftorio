@@ -18,7 +18,7 @@ Read this before writing or changing tests, and before any check that could star
 - A new area (a new `packages/engine/service/areas/<area>.js`, a new module) gets a new test file; no list to
   edit: `scripts/test.js` finds it.
 - A domain module's tests (`packages/engine/domains/<domain>/<module>.js`) live in `packages/engine/test/<domain>/`, the Electron
-  host's (`src/host/`) in `test/host/`; a workspace package's tests in its own `test/` folder, required
+  host's (`apps/desktop/host/`) in `test/host/`; a workspace package's tests in its own `test/` folder, required
   relative to it (`../<module>`), and from another package through the package name
   (`@multiagent/shared/test/i18n-sandbox`, `@multiagent/engine/test/contract/harness`):
   `packages/engine/test/` holds the engine's, the service's (`service/`), the domains' (`<domain>/`),
@@ -233,8 +233,8 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   (`count-refusals`, `simulated-strays`, `serve`, `smoke`, `smoke-package`, `affected-tests` CLI);
   the channel tables that only forward to an area (agents, analytics, app-update, artifacts, chain,
   chat, diff, local-preview, notify, pasted-images, phonegates, pipelines, projects, releases,
-  sessions, usage, workflows); `src/host/main.js` (Electron main, E2E app.feature), `packages/engine/domains/account/auth-config.js`
-  and `src/renderer/chat-models.js` (constants), `areas/chat-turns.js` (12-line wrapper); renderer
+  sessions, usage, workflows); `apps/desktop/host/main.js` (Electron main, E2E app.feature), `packages/engine/domains/account/auth-config.js`
+  and `apps/desktop/renderer/chat-models.js` (constants), `areas/chat-turns.js` (12-line wrapper); renderer
   glue over a tested model or covered by a feature (account, chain-picker, code-banner,
   diff-viewer, image-viewer, keep-awake, kept-work-dialog, run3d/*, setup, usage-widget,
   discovery, discovery-commit, inbox, project, projects, releases, settings-phone, skills).
@@ -244,13 +244,13 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   channels `discovery` (card move, clarity, commit), `oracle` (conversation, memory, tools: the
   largest), `storage` (notification history, unread, mark-read), `supervisor` (on-demand analysis,
   watch start/stop/ask), `voice` (status, error path); `packages/engine/domains/supervisor/supervisor-watch.js` (batching window,
-  `FLAG:` → notification, stop at run end); `src/renderer/run-meta.js` (issuesOfRun, issueRefs,
-  display title); `src/renderer/toast.js` (countdown and action timing); `views/arena/arena.js`
+  `FLAG:` → notification, stop at run end); `apps/desktop/renderer/run-meta.js` (issuesOfRun, issueRefs,
+  display title); `apps/desktop/renderer/toast.js` (countdown and action timing); `views/arena/arena.js`
   (no feature of its own: an E2E scenario or a model to extract); `scripts/lint-lists.js`.
 
 ## File size ratchet (#334)
 
-- **The rule**: every `.js` file under `src/` and `scripts/` has at most 1,000 lines (counted the
+- **The rule**: every source `.js` file (`packages/`, `apps/`, `scripts/`: `scripts/source-tree.js`) has at most 1,000 lines (counted the
   same on every OS, CRLF normalized). `scripts/file-size-ratchet.js` checks it
   (`test/file-size-ratchet-334.test.js`; `node scripts/file-size-ratchet.js` reports by hand).
 - **Exceptions only shrink**: the files over the cap when the rule came are in its `EXCEPTIONS`,
@@ -260,14 +260,14 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
 - **No new exception by default**: adding a file to `EXCEPTIONS` needs the owner's ok written in
   its issue; code review checks it.
 - **How to split** a file near the cap, the usual ways: a screen into its view's folder
-  (`src/renderer/views/<view>/`, one file per part, #154); the service into one file per area
+  (`apps/desktop/renderer/views/<view>/`, one file per part, #154); the service into one file per area
   (`packages/engine/service/areas/`, `packages/engine/service/channels/`, #155); the run into its modules
   (`packages/engine/engine/run/`, methods on `WorkflowRun.prototype`, #250). Each new file documents itself
   in its header comment (the code map is built from it).
 
 ## Code health (#344)
 
-`scripts/code-health.js` measures every function under `src/` and `scripts/` with a real parser
+`scripts/code-health.js` measures every function of the sources (`packages/`, `apps/`, `scripts/`) with a real parser
 (`acorn`, a pinned dependency: the app measures JavaScript with it too, #385): lines, cyclomatic complexity (1 + each `if`, `else if`,
 ternary, `&&`, `||`, `??`, `case`, `catch` and loop; a nested function counts on its own), max
 nesting and parameter count. `test/code-health-344.test.js` holds both ratchets; the line ratchet
@@ -397,7 +397,7 @@ argument. The JS engine's answers are the reference a second engine (the Rust ph
 - **The handshake**: `GET /api/version` (and the `app:version` channel over IPC) answers
   `{ app, contract }`, `contract` being `contractHash` of the manifest (`packages/engine/service/contract.js`):
   any change to a channel, its params or its schemas changes it. `GET /api/manifest` carries the
-  same `contract`; the browser UI (`src/renderer/api-http.js`) compares them on every WebSocket
+  same `contract`; the browser UI (`apps/desktop/renderer/api-http.js`) compares them on every WebSocket
   connection and shows a Reload banner when the engine speaks another contract.
 
 ## Machine-independent tests
@@ -517,7 +517,7 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   every session was `mock`), the CI workflows and the tests' `makeService`/server helpers. A test
   that drives a real provider type at a fake CLI (`fake-claude.js`) lifts it for its duration.
 - UI checks run through `scripts/smoke.js` (or a script built the same way), never through a
-  hand-written script that launches `src/host/main` directly. The remote engine (the app as a window onto
+  hand-written script that launches `apps/desktop/host/main` directly. The remote engine (the app as a window onto
   `npm run serve`) has `scripts/smoke-remote.js <out-dir>`: a scratch server on 127.0.0.1, the app in
   remote mode on a scratch user data folder, its Settings, its connection page and the engine
   stopping (see [environment.md](environment.md), "Remote engine").

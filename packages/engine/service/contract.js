@@ -7,7 +7,7 @@
 // validated, so the contract costs nothing at runtime.
 // contractHash (#339) names the contract a manifest declares: a short hash of its channels, their
 // params and schemas (never their code), answered by GET /api/version and app:version so a client
-// built for another contract can tell (src/renderer/api-http.js).
+// built for another contract can tell (apps/desktop/renderer/api-http.js).
 
 'use strict';
 

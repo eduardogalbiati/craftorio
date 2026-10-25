@@ -1,5 +1,5 @@
 // Findings button (#361), the renderer's model: where the button shows, its shortcut, and what a
-// numbered pin resolves to (the element under it). The overlay is src/renderer/findings.js.
+// numbered pin resolves to (the element under it). The overlay is apps/desktop/renderer/findings.js.
 // - SHORTCUT, isShortcut(event): Ctrl+Shift+F opens the findings;
 // - buttonVisible({ isPackaged, settings, screenshot }): shown from source (npm start) or with
 //   Settings › General › "Findings button" on; never in a scripts/screenshot.js capture unless the

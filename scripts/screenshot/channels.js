@@ -126,7 +126,7 @@ function demoRunDiff(commit) {
     file({ file: 'src/legacy-retry.js', status: 'deleted', deleted: 2, patch: demoPatch('src/legacy-retry.js', [[1, 0, ['-// Old fixed delay.', '-module.exports = () => 1000;']]]) }),
     file({ file: 'docs/retries.md', oldFile: 'docs/retry.md', status: 'renamed', added: 1, deleted: 1, patch: demoPatch('docs/retries.md', [[1, 1, [' # Retry', ' ', '-A failed step retries twice.', '+A failed step retries up to five times.']]]) }),
     file({ file: 'docs/images/backoff.svg', status: 'modified', added: null, deleted: null, binary: true, image: true }),
-    file({ file: 'assets/icon.ico', status: 'added', added: null, deleted: null, binary: true }),
+    file({ file: 'apps/desktop/assets/icon.ico', status: 'added', added: null, deleted: null, binary: true }),
     file({ file: 'package-lock.json', status: 'modified', added: 1840, deleted: 1203, large: true }),
   ];
   return { simulated: false, unavailable: null, base: 'main', branch: 'retry-backoff-settings-defaults', mergeBase: 'c0ffee0', commits, commit: commit || null, files };
@@ -155,12 +155,12 @@ function demoMissingClis(appDir, on) {
   };
 }
 
-// --keep-awake active | error: what main answers (built by the app tree's src/host/keep-awake.js, absent
+// --keep-awake active | error: what main answers (built by the app tree's apps/desktop/host/keep-awake.js, absent
 // at an older --ref); off and idle are the real state from the setting.
 function demoKeepAwake(appDir, which) {
   if (which !== 'active' && which !== 'error') return null;
   let ka;
-  try { ka = require(path.join(appDir, 'src', 'host', 'keep-awake')); } catch { return null; }
+  try { ka = require(path.join(appDir, 'apps', 'desktop', 'host', 'keep-awake')); } catch { return null; }
   const work = ka.workToDo({ runs: [{ waiting: false }, { waiting: true }], roadmaps: [{ projectId: 'demo-app', state: 'running', stage: 3, of: 6 }] });
   const s = which === 'active'
     ? { available: true, enabled: true, holding: true, work, error: null }

@@ -147,7 +147,7 @@ class WorkflowRun extends EventEmitter {
   // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129), checked here (refused
   //   before anything runs), copied into <run_dir>/attachments/<input>/ at start and given to every turn of a
   //   step whose prompt uses that input (stepAttachments). A resume passes the previous run's copies.
-  // then: what happens with the run's result when it finishes (#134, src/renderer/chain-model.js), recorded in
+  // then: what happens with the run's result when it finishes (#134, apps/desktop/renderer/chain-model.js), recorded in
   //   workflow.started and summary.json; a gate choice with `then` or the owner (setThen) can change it while it runs.
   // from: { run_id, workflow, pipeline? } the run whose chain started this one (workflow.started.from,
   //   summary.from); `pipeline` when a saved pipeline's stage (#135, chain-model normalizePipeline).

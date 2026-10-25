@@ -45,7 +45,7 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   `timeout_factor` (`models`, below).
 - **Per-run agent overrides (#262)**: WorkflowRun's `agentOverrides: { <agent>: { provider?, model?,
   effort? } }` (run:start's, the Start drawer / Assign dialog / roadmap item Edit "Agents" section,
-  `src/renderer/agent-overrides.js`; a Backlog queue item and a roadmap item keep theirs) replace the
+  `apps/desktop/renderer/agent-overrides.js`; a Backlog queue item and a roadmap item keep theirs) replace the
   workflow's resolved values for that run only (`applyAgentOverrides`, after the templates; an unknown
   agent or provider throws; `effort: ''` clears it). workflow.started records `agents` (what each agent
   runs on) and `agent_overrides` (what differs); a resume applies them again, plus the fallbacks taken

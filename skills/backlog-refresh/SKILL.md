@@ -52,7 +52,7 @@ Return `edits: [{ find, replace }]` per issue, applied in order to the issue's *
 - `find` is copied **exactly** from the body (same backticks, spaces, punctuation), long enough to
   be unique (a whole line, or a path with its surrounding backticks). The script skips the whole
   issue when a `find` is missing or appears more than once.
-- Allowed: a path or file name (`src/renderer/app.js:1537` → the new file and line), a line
+- Allowed: a path or file name (`apps/desktop/renderer/app.js:1537` → the new file and line), a line
   number, a renamed symbol, a ticked task with evidence (`- [ ] **Lead**` → `- [x] **Lead**`), a
   dead issue link replaced by the right one.
 - Not allowed in `edits`: rewording a requirement, adding or removing tasks, changing a decision

@@ -12,7 +12,7 @@
 //   5. concurrency: field A transcribing while field B records, each showing only its own state.
 //   6. the field (and its positioning box) removed from the DOM while transcription is pending:
 //      no uncaught error, and the mic ends idle.
-// `window.api` is exposed through contextBridge (src/host/preload.js): its methods cannot be
+// `window.api` is exposed through contextBridge (apps/desktop/host/preload.js): its methods cannot be
 // monkey-patched from the page, so the real audio:transcribe channel runs, against the fake CLI,
 // whose behaviour (delay, text, failure) is chosen per scenario via env vars the main process
 // (this file) sets before each one, read by packages/engine/domains/chat/speech.js's execFile call.
@@ -40,7 +40,7 @@ const FAKE_CLI = process.platform === 'win32'
   : path.join(__dirname, 'fake-whisper.js');
 if (process.platform !== 'win32') fs.chmodSync(FAKE_CLI, 0o755);
 
-require('../../../../src/host/main');
+require('@multiagent/desktop/host/main');
 
 setTimeout(() => { console.error('voice-check: timed out'); app.exit(1); }, 60000);
 

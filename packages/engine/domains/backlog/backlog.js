@@ -24,7 +24,7 @@
 // Archive (#238): `archiveIssues` closes issues as not planned with the `archived` label (guards:
 // packages/shared/backlog-archive.js), `restoreIssues` reopens them.
 // The platform CLI helpers and the issue copies live in packages/engine/domains/backlog/issues.js (re-exported here, #345).
-// Screen: src/renderer/views/backlog/backlog.js; channels: packages/engine/service/channels/backlog.js.
+// Screen: apps/desktop/renderer/views/backlog/backlog.js; channels: packages/engine/service/channels/backlog.js.
 
 const crypto = require('crypto');
 const fs = require('fs');

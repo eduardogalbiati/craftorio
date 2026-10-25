@@ -4,7 +4,7 @@
 // low-level utilities (ENGINE_ROOT_UTILITIES) only shared; the engine those two; the domain modules
 // (packages/engine/domains/<name>/, phase 1 of docs/reorganisation-study-2026-10.md; a loose file at the root of
 // src/ counts as one too) the engine too; the service all of these; the desktop entry and the server what is below
-// them; the renderer only shared, and nothing else requires it. The desktop entry is src/host/ (phase 1
+// them; the renderer only shared, and nothing else requires it. The desktop entry is apps/desktop/host/ (phase 1
 // of docs/reorganisation-study-2026-10.md): the Electron host, required by nothing else.
 // Every relative `require` of every source file is read, and every `require` of a workspace package
 // (`@multiagent/shared/…`, resolved to its file), lazy ones (inside a function) included, comments skipped. A require is allowed when AREAS lets the requiring area reach the
@@ -47,9 +47,9 @@ const AREAS = {
   engine: { may: ['engine', 'utility', 'shared'], what: 'the workflow engine (packages/engine/engine/)' },
   root: { may: ['root', 'engine', 'utility', 'shared'], what: 'the domain modules (packages/engine/domains/<name>/, and any loose file at the root of src/)' },
   service: { may: ['service', 'root', 'engine', 'utility', 'shared'], what: 'the app\'s operations, no Electron and no transport (packages/engine/service/)' },
-  desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron host (src/host/: main.js, the preloads, the windows and their guards)' },
+  desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron host (apps/desktop/host/: main.js, the preloads, the windows and their guards)' },
   server: { may: ['server', 'service', 'root', 'utility', 'shared'], what: 'the HTTP server and the control channel (packages/engine/server/, packages/engine/control/)' },
-  renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (src/renderer/)' },
+  renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (apps/desktop/renderer/)' },
 };
 
 // The top-level folders of src/ and their area (domains: a domain module, or a utility when

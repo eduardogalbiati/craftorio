@@ -5,7 +5,7 @@
 // Pure: the record given is never changed and the run's files are never rewritten. An upgrade that
 // does not apply returns the record as is, so a current run passes through unchanged and upgrading
 // twice gives the same record. Readers (packages/engine/domains/run/run-analysis.js, packages/engine/domains/oracle/oracle-run-analysis.js,
-// packages/engine/domains/run/runs.js, packages/engine/domains/analytics/analytics.js through the run index, src/renderer/app.js) read the current shape
+// packages/engine/domains/run/runs.js, packages/engine/domains/analytics/analytics.js through the run index, apps/desktop/renderer/app.js) read the current shape
 // only. Adding an upgrade: docs/agents/storage.md.
 // Browser: window.RunRecord; Node: module.exports.
 (function (root) {

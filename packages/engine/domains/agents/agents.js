@@ -1,13 +1,13 @@
 // Agents: reusable personas the user defines once, to be used across the platform later. One JSON
 // file per agent in <workspace>/agents/<id>.json: name, description, prompt (the agent's context:
-// what it is for), the skills it always gets and the look of its robot avatar (src/renderer/robots.js).
+// what it is for), the skills it always gets and the look of its robot avatar (apps/desktop/renderer/robots.js).
 //
 // The platform's supervisor is built in: always listed first, it can't be removed and its
 // instructions (the run-supervisor skill) can't be changed here; only its look is saved
 // (agents/supervisor.json).
 // The Backlog's Product Owner (#105, packages/engine/domains/po/product-owner.js) is built in the same way, listed second:
 // its instructions are the backlog-product-owner skill; its look, model, effort and its Speed ↔ Quality
-// calibration (#189, `calibration` 1..5, src/renderer/po-calibration.js) and its Economy ↔ Generous
+// calibration (#189, `calibration` 1..5, apps/desktop/renderer/po-calibration.js) and its Economy ↔ Generous
 // Cost step (#205, `cost` 1..5, the same file) are saved (agents/product-owner.json).
 // The Oracle (#122, packages/engine/domains/oracle/oracle.js), the app-wide master agent, is built in the same way, listed third:
 // its instructions are the oracle skill; its look, model and effort are saved (agents/oracle.json).
@@ -27,7 +27,7 @@ const { isWorkflowFile } = require('../workflow/workflows');
 const SUPERVISOR_ID = 'supervisor';
 const PRODUCT_OWNER_ID = 'product-owner';
 const ORACLE_ID = 'oracle';
-// Keep in sync with EYES and the generic emblems of src/renderer/robots.js.
+// Keep in sync with EYES and the generic emblems of apps/desktop/renderer/robots.js.
 const EYES = ['dots', 'bars', 'arcs', 'slits'];
 const EMBLEMS = ['none', 'bolt', 'clipboard', 'heart', 'shield', 'leaf', 'gear', 'code', 'rocket', 'eye', 'crown', 'flask', 'star5'];
 const COLORS = ['body', 'shell', 'visor', 'glow'];

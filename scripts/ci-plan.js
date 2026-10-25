@@ -40,7 +40,7 @@ function isDocsFile(file) {
 const MACOS_PATHS = [
   'packages/engine/engine/worktree.js', 'packages/engine/engine/processes.js', 'packages/engine/domains/machine/terminals.js',
   'packages/engine/test/worktree.test.js', 'packages/engine/test/processes.test.js', 'packages/engine/test/machine/terminals.test.js',
-  'scripts/package.js', 'scripts/ci-plan.js', 'package.json', 'package-lock.json', '.nvmrc',
+  'apps/desktop/scripts/package.js', 'scripts/ci-plan.js', 'package.json', 'package-lock.json', '.nvmrc',
   '.github/workflows/', 'native/',
 ];
 const isMacosFile = (file) => MACOS_PATHS.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));

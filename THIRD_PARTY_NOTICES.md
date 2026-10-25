@@ -18,7 +18,7 @@ All are under the MIT or BSD licenses, except:
 
 ## App icon
 
-`assets/icon-source.png` (and `assets/icon.ico`, `icon.icns` and `icon.png`, generated from it by
+`apps/desktop/assets/icon-source.png` (and `apps/desktop/assets/icon.ico`, `icon.icns` and `icon.png`, generated from it by
 `npm run icons`) was made for this project by its author and is released with it under the
 project's MIT License (see [LICENSE](LICENSE)); it uses no third-party artwork.
 

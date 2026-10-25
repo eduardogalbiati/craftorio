@@ -1,16 +1,16 @@
-// Generates the app icons from one source image: assets/icon.ico (Windows), assets/icon.icns (macOS)
-// and assets/icon.png (Linux, 512 px), used by scripts/package.js. Runs under Electron (its nativeImage
+// Generates the app icons from one source image: apps/desktop/assets/icon.ico (Windows), apps/desktop/assets/icon.icns (macOS)
+// and apps/desktop/assets/icon.png (Linux, 512 px), used by apps/desktop/scripts/package.js. Runs under Electron (its nativeImage
 // reads and resizes any PNG/JPEG):
-//   npm run icons [-- <source.png>]   (default source: assets/icon-source.png, square, 1024 px or more)
+//   npm run icons [-- <source.png>]   (default source: apps/desktop/assets/icon-source.png, square, 1024 px or more)
 // With no source image it first draws a placeholder (a graph of three agents) into
-// assets/icon-source.png: replace that file with the real artwork and run it again.
+// apps/desktop/assets/icon-source.png: replace that file with the real artwork and run it again.
 
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { app, nativeImage } = require('electron');
 
-const assets = path.join(__dirname, '..', 'assets');
+const assets = path.join(__dirname, '..', 'apps', 'desktop', 'assets');
 const SIZE = 1024;
 
 // A PNG file from RGBA pixels (8 bits per channel, filter 0 on every row).

@@ -1,7 +1,7 @@
 # Writing an analysis seed (#360)
 
 A seed is a prompt the Oracle runs read-only on a project (`packages/engine/domains/oracle/oracle-seeds.js`), shown in the
-Architecture tab's Seeds section (`src/renderer/views/project/project-seeds.js`, channels in
+Architecture tab's Seeds section (`apps/desktop/renderer/views/project/project-seeds.js`, channels in
 `packages/engine/service/channels/seeds.js`). Bundled seeds live in `seeds/<name>/seed.md` and are seeded into
 `<workspace>/seeds/` by `seedSeeds` (`packages/engine/domains/seed/seeds.js`, through `seedBundle` of `packages/engine/domains/seed/seed.js`): an
 edited copy freezes like a skill.
@@ -44,7 +44,7 @@ facts' languages, an existing `.multiagent/`) and answers a fixed model: `profil
 solo|team, `merge`: local|pr, `release`: milestone|per-merge|train|rc-stable, `testCommand`,
 `checkCommand`, `ci`, `languages`) and `evidence` per field (`numbers` and `commits`). A field the
 history cannot settle is `null`: the interview asks it. It is not listed only in the Seeds section:
-the project page's "Ways of working" drawer (`src/renderer/views/project/project-ways-of-working.js`)
+the project page's "Ways of working" drawer (`apps/desktop/renderer/views/project/project-ways-of-working.js`)
 shows its `seeds:estimate` first and runs it through `workflows:interview`
 (`packages/engine/service/areas/workflow-interview.js`). Both callers run a seed through
 `packages/engine/service/seed-runs.js` (`runSeed`: the same "already running" guard and error map per service,

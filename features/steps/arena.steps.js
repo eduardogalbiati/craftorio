@@ -1,5 +1,5 @@
 // Steps of features/arena.feature (#311): an AI Arena run's chat screen and its right column
-// (src/renderer/views/arena/arena.js): Documents (its tabs), Peer scores, Supervisor. A cancelled
+// (apps/desktop/renderer/views/arena/arena.js): Documents (its tabs), Peer scores, Supervisor. A cancelled
 // simulated ai-arena run of the demo project is written into the scratch workspace like
 // scripts/screenshot.js demoRoadmapRuns; Workflows › Runs › "Open chat" opens it in the Arena screen.
 // Locators are roles and data-testid only (skills/ui-conventions). NEW data-testids (#311):
@@ -13,7 +13,7 @@ const { expect } = require('@playwright/test');
 const { Given, Then } = require('./fixtures');
 
 const LOAD_TIMEOUT = 30000;
-// the main window's minWidth / minHeight (src/host/main.js)
+// the main window's minWidth / minHeight (apps/desktop/host/main.js)
 const MIN_SIZE = '1100x700';
 const WORKFLOW = 'ai-arena';
 const LONG_NAME = 'quarterly-planning-reference-notes-for-the-appointment-booking-platform-for-small-clinics-with-payments-and-reminders-v12-final-reviewed.md';
