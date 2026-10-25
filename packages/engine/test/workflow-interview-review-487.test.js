@@ -15,7 +15,11 @@ const { setupWorkspace } = require('../domains/workspace/workspace');
 const projects = require('../domains/project/projects');
 const seeds = require('../domains/seed/seeds');
 const workflowInterview = require('../service/areas/workflow-interview');
-const seedChannels = require('@multiagent/front-analyser/engine/channels/seeds');
+// the seeds channel file, found the way the service finds it (phase 4, #590: the kernel's folder or a
+// front's engine/channels/), never by naming the package that holds it
+const { CHANNELS_DIR } = require('../service/manifest');
+const { installedFronts, serviceFiles } = require('../service/fronts');
+const seedChannels = require(serviceFiles(CHANNELS_DIR, installedFronts(), 'channels').find((f) => f.name === 'seeds.js').file);
 
 const SOLO_PROFILE = { team: 'solo', merge: 'local', release: 'milestone', testCommand: 'npm test', ci: 'github-actions', languages: ['javascript'] };
 const SOLO_EVIDENCE = { team: { numbers: { authors: 1, commits: 12 }, commits: ['a1b2c3d'] } };
