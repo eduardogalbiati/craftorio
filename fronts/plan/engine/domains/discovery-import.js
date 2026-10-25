@@ -14,10 +14,10 @@
 // (discovery.importCards): `idea` cards at the top of the Inbox in the document's order, the source
 // file attached to each, a history entry { by: 'import', source, ts }; an item may be skipped or
 // merged into an existing card instead. Used by the discovery:import-* channels
-// (packages/engine/service/channels/discovery.js); cards stay private: an import never files an issue (#261).
+// (fronts/plan/engine/channels/discovery.js); cards stay private: an import never files an issue (#261).
 
-const clarity = require('./clarity');
-const discovery = require('./discovery');
+const clarity = require('@multiagent/engine/domains/discovery/clarity');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
 
 // over this many cards an import asks first (importItems' confirmLarge)
 const MAX_IMPORT_ITEMS = 200;

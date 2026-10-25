@@ -1,4 +1,4 @@
-// #256 Discovery channels (packages/engine/service/channels/discovery.js, found by packages/engine/service/manifest.js like
+// #256 Discovery channels (fronts/plan/engine/channels/discovery.js, found by packages/engine/service/manifest.js like
 // every channel file): the Inbox screen reaches the store (packages/engine/domains/discovery/discovery.js) through these, each
 // on the workspace's discovery folder (layout().discovery). The contract assumed here, channel →
 // window.api method (params):
@@ -20,8 +20,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setupWorkspace } = require('../domains/workspace/workspace');
-const { createService } = require('../service');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService } = require('@multiagent/engine/service');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'discovery-channels-'));

@@ -2,7 +2,7 @@
 // split into items deterministically (no model), the owner previews them (rename, drop, merge, nest;
 // duplicates marked), then one `idea` card is written per item, all or none.
 //
-// The contract these tests assume, packages/engine/domains/discovery/discovery-import.js (required inside each test, so a missing
+// The contract these tests assume, fronts/plan/engine/domains/discovery-import.js (required inside each test, so a missing
 // module fails its tests, not the file):
 //   splitDocument(text, { name } = {}) → { items, structured, note }
 //     Each top-level heading (the highest heading level present) is an item; without headings, each
@@ -37,9 +37,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const discovery = require('../../domains/discovery/discovery');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
 
-const load = () => require('../../domains/discovery/discovery-import');
+const load = () => require('../../engine/domains/discovery-import');
 const P = 'p1';
 
 function tmp(t) {

@@ -19,12 +19,12 @@
 // that is gone ends the automation as interrupted.
 
 const path = require('path');
-const { childRunCost, loadWorkflow } = require('../../engine/workflow');
-const simulation = require('../../engine/simulation');
+const { childRunCost, loadWorkflow } = require('@multiagent/engine/engine/workflow');
+const simulation = require('@multiagent/engine/engine/simulation');
 const chainModel = require('@multiagent/shared/chain-model');
-const discovery = require('../../domains/discovery/discovery');
-const projects = require('../../domains/project/projects');
-const runs = require('../../domains/run/runs');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
+const projects = require('@multiagent/engine/domains/project/projects');
+const runs = require('@multiagent/engine/domains/run/runs');
 
 // the stages of a pipeline followed from the run folders (a chain's nextRunId), at most
 const MAX_STAGES = 20;

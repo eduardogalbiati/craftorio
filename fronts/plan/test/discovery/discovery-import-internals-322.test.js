@@ -8,10 +8,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const discovery = require('../../domains/discovery/discovery');
-const imports = require('../../domains/discovery/discovery-import');
-const { setupWorkspace } = require('../../domains/workspace/workspace');
-const { createService } = require('../../service');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
+const imports = require('../../engine/domains/discovery-import');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService } = require('@multiagent/engine/service');
 
 const P = 'p1';
 

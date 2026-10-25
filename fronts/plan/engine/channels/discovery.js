@@ -13,25 +13,25 @@
 // rule-based one and the issues only join the workspace's synced backlog: never gh/glab, no model.
 // `preview` (the screen's developer mode, like po:file and po:split): the rule-based proposal, and a
 // commit that only answers with the commands it would run.
-// Column automations (#259, packages/engine/service/areas/discovery-automations.js): discovery:move answers with
+// Column automations (#259, fronts/plan/engine/areas/discovery-automations.js): discovery:move answers with
 // what the column's on_enter proposes or started, discovery:set-automation sets a column's mode and
 // discovery:run-automation starts a proposed one; the result comes back to the card by itself.
-// Backlog import (#322, packages/engine/domains/discovery/discovery-import.js): discovery:import-split and discovery:import-edit
+// Backlog import (#322, fronts/plan/engine/domains/discovery-import.js): discovery:import-split and discovery:import-edit
 // preview a document's items (nothing written), discovery:import writes the confirmed ones as cards.
 
 const os = require('os');
 const path = require('path');
-const backlog = require('../../domains/backlog/backlog');
-const commits = require('../../domains/discovery/discovery-commit');
-const imports = require('../../domains/discovery/discovery-import');
-const discovery = require('../../domains/discovery/discovery');
+const backlog = require('@multiagent/engine/domains/backlog/backlog');
+const commits = require('@multiagent/engine/domains/discovery/discovery-commit');
+const imports = require('../domains/discovery-import');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
 const Language = require('@multiagent/shared/language');
-const productOwner = require('../../domains/po/product-owner');
-const projects = require('../../domains/project/projects');
-const releases = require('../../domains/releases/releases');
-const simulation = require('../../engine/simulation');
-const workspace = require('../../domains/workspace/workspace');
-const { clientError, requireText } = require('../common');
+const productOwner = require('@multiagent/engine/domains/po/product-owner');
+const projects = require('@multiagent/engine/domains/project/projects');
+const releases = require('@multiagent/engine/domains/releases/releases');
+const simulation = require('@multiagent/engine/engine/simulation');
+const workspace = require('@multiagent/engine/domains/workspace/workspace');
+const { clientError, requireText } = require('@multiagent/engine/service/common');
 const {
   ANY,
   args,
@@ -48,7 +48,7 @@ const {
   shape,
   STRING,
   text,
-} = require('../schemas');
+} = require('@multiagent/engine/service/schemas');
 
 // Every discovery channel works on one project's cards (the store checks the rest of each value)
 const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_ID, ...properties }, ['projectId', ...required]);
@@ -130,7 +130,7 @@ module.exports = (ctx) => {
       schema: { params: onProject({ title: STRING, text: nullable(STRING), type: nullable(STRING), from: nullable(STRING) }), result: CARD },
       fn: ({ projectId, title, text, type, from }) => discovery.createCard(dir(), projectId, { title, text, type: type || 'idea', author: owner(), from: from || undefined }),
     },
-    // import (#322, packages/engine/domains/discovery/discovery-import.js): a document's text (`name`: its file, or none when pasted)
+    // import (#322, fronts/plan/engine/domains/discovery-import.js): a document's text (`name`: its file, or none when pasted)
     // cut into items, previewed (clarity, duplicates of open cards and open synced issues); nothing written
     {
       channel: 'discovery:import-split',

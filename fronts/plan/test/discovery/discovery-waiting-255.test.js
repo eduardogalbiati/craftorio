@@ -9,9 +9,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const discovery = require('../../domains/discovery/discovery');
-const { setupWorkspace } = require('../../domains/workspace/workspace');
-const { createService } = require('../../service');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService } = require('@multiagent/engine/service');
 
 const P = 'p1';
 

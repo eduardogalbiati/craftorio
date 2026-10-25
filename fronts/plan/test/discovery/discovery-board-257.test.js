@@ -15,7 +15,7 @@
 //   restoreVersion(dir, projectId, id, name, { by }) → card (the current document is kept as a version first)
 //   recordResult(dir, projectId, id, { source, text, runId }) → card (document = text, a version
 //     whose name contains the source, a thread entry { kind: 'result', source, runId })
-// Channels (packages/engine/service/channels/discovery.js), channel → window.api method (params):
+// Channels (fronts/plan/engine/channels/discovery.js), channel → window.api method (params):
 //   discovery:board           → discoveryBoard (projectId)
 //   discovery:set-wip         → setDiscoveryWip (projectId, column, limit)
 //   discovery:move            → moveDiscoveryCard (projectId, cardId, column, index)
@@ -28,8 +28,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { layout, setupWorkspace } = require('../../domains/workspace/workspace');
-const discovery = require('../../domains/discovery/discovery');
+const { layout, setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
 
 const P = 'p1';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -243,7 +243,7 @@ test('recordResult from AI Arena is recorded the same way with its own source', 
 
 function makeService(t) {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
-  const { createService } = require('../../service');
+  const { createService } = require('@multiagent/engine/service');
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, userDataDir: tmp(t, 'discovery-board-ud-').root } });
   t.after(() => service.shutdown());
   const { root } = tmp(t);

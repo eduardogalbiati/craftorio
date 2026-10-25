@@ -115,7 +115,7 @@ module.exports = (ctx) => {
       timeZone: settings.timeZone, // #273: the owner's zone in the turn's prompt
     };
   };
-  // a discovery card's commit proposal asks the same Product Owner (#258, packages/engine/service/channels/discovery.js)
+  // a discovery card's commit proposal asks the same Product Owner (#258, fronts/plan/engine/channels/discovery.js)
   ctx.productOwnerOptions = askOptions;
   // the Refactor tab's ranking reads no issue (#357, packages/engine/service/channels/refactor.js)
   ctx.productOwnerAgentOptions = agentOptions;
