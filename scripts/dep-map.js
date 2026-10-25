@@ -1,6 +1,6 @@
 // Dependency map of src/ for reorganisation work (docs/reorganisation-study-2026-10.md): the
 // require() edges between areas (engine, service, shared, server, control, renderer, host, the loose files
-// of src/; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs, and
+// of a src/ tree; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs, and
 // which service channel files each renderer view calls (through `api.<method>(`). Read-only; prints
 // a report. `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
 
@@ -15,7 +15,7 @@ const { resolvePackagePath, sourceDirs, sourceFiles } = require('./source-tree')
 const ROOT = path.resolve(__dirname, '..');
 // the first source folder (scripts/source-tree.js) holding `sub`, e.g. service/channels (packages/engine) or renderer/views (apps/desktop)
 const sourceDirWith = (sub) => sourceDirs(ROOT).map((d) => path.join(ROOT, d, sub)).find((p) => fs.existsSync(p));
-// the top-level folders of src/ (scripts/layers.js FOLDERS): anything else under src/ is a loose file
+// the area folders (scripts/layers.js FOLDERS): anything else under a src/ tree is a loose file
 const AREA = new RegExp(`^src/(${Object.keys(FOLDERS).join('|')})/`);
 // a workspace's folders (scripts/layers.js PACKAGES): the whole package, or its area folders
 const PKG_AREA = new RegExp(`^(${Object.keys(PACKAGES).join('|')})/(?:(${Object.keys(FOLDERS).join('|')})/)?`);
@@ -118,7 +118,7 @@ function report() {
   }
 
   const roots = files.filter((f) => area(f) === 'src-root').map(rel);
-  say(''); say(`## loose files of src/: ${roots.length}; clusters by name prefix (2 or more)`);
+  say(''); say(`## loose files (outside the area folders): ${roots.length}; clusters by name prefix (2 or more)`);
   const clusters = {};
   for (const r of roots) {
     const name = path.basename(r, '.js');

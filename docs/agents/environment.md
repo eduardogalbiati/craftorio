@@ -110,6 +110,36 @@ the workspace folder.
   simulation-only mode, never pushes, never touches a packaged install.
 - The owner uses **subscription plans** (Claude, ChatGPT free for Codex, SuperGrok), not API keys.
 
+## Repository layout: npm workspaces (phase 2 of the reorganisation study)
+
+One repository, one `node_modules` (default hoisting), three workspaces (root `package.json`
+`workspaces: ["packages/*", "apps/*"]`), decisions 6 and 7 of 2026-10-24:
+
+- `packages/shared/` = `@multiagent/shared`: the pure dual-load modules, files at the package root.
+- `packages/engine/` = `@multiagent/engine`: `engine/`, `service/`, `server/`, `control/`, `domains/`
+  at the package root (requires inside the package are relative), `bin/multiagent-engine.js`
+  (`npm run serve`). `node-pty` is an optional peer: the desktop app provides it.
+- `apps/desktop/` = `@multiagent/desktop`: `host/` (Electron's main, the root `package.json`'s `main`),
+  `renderer/`, `assets/`, `scripts/package.js` (`npm run build`). `node-pty`, xterm, marked and
+  dompurify are its dependencies.
+- Across packages, require by name: `@multiagent/shared/<file>`, `@multiagent/engine/<folder>/<file>`
+  (npm links the workspaces in `node_modules/@multiagent/`; `npm ci` / `npm install` at the root).
+  The engine never requires the desktop app (`node scripts/layers.js`). A new workspace is learnt once
+  in `scripts/source-tree.js` (the code map, the ratchets, the layering check and the test runner read it).
+- Tests live in each workspace's `test/` (`npm test -w packages/engine` runs one; the root `npm test`
+  runs them all plus the root `test/`, the repository's own tests).
+- **The app root** (`packages/engine/domains/workspace/app-root.js`): the bundled defaults
+  (`workflows/`, `skills/`, `pipelines/`, `seeds/`, `fragments/`), the app version and the server's static
+  root come from the first `package.json` above the module with `workspaces` or a `multiagent` section
+  (the repository's; `resources/app`'s in the packaged app, where the packager strips `workspaces`),
+  never from a package's own folder (`__dirname`); `MULTIAGENT_APP_ROOT` overrides it. The root
+  `package.json`'s `multiagent.ui` names the UI folder the engine server serves.
+- **Packaging**: the packaged app is still the workspace root. `@electron/packager` dereferences the
+  workspace links, so the asar holds `packages/`, `apps/` and the copies under `node_modules/@multiagent/`
+  that `require('@multiagent/…')` resolves (the renderer's `<script>` paths reach `packages/shared/`
+  directly); its prune follows the root's dependencies (the three workspaces) into theirs; the
+  workspaces' `test/` and `scripts/` folders are ignored. `node scripts/smoke-package.js` checks a build.
+
 ## Platforms (#318)
 
 The app runs on Windows, macOS and Linux. What differs per OS, and where:
