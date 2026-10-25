@@ -355,7 +355,7 @@ Then('the release version holds the version suggested after {string}, with the r
 // name", buttons "Add cut line" and "Cancel"); data-testid="cut-line-error" (NEW) on the dialog's
 // error line, where a refused save's reason shows; the toast (data-testid="toast", as #281) "Set the
 // cut line <name>" with "Undo"; each cut line data-testid="roadmap-cut-line" (as #260). A refused save
-// (the service's `conflict`, src/domains/roadmap/roadmap-merge.js) keeps the dialog open, or reopens it, with the
+// (the service's `conflict`, packages/engine/domains/roadmap/roadmap-merge.js) keeps the dialog open, or reopens it, with the
 // name typed. Stage n is the stage the roadmap numbers "Stage n" (stage 1, done, is hidden in Planned).
 
 const LOAD_TIMEOUT = 30000;

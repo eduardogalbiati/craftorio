@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun, loadWorkflow, evalExpr } = require('../src/engine/workflow');
+const { WorkflowRun, loadWorkflow, evalExpr } = require('@multiagent/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', 'workflows', 'ai-development-local-hero.yaml');
@@ -24,7 +24,7 @@ test('ai-development-local-hero: the transition from acceptance_tests goes to de
 
 // The mock provider returns one placeholder for a list of strings (providers.js, the array case), so
 // a run cannot write "nothing testable" yet: the route to develop is checked above, the run is left out here.
-test('ai-development-local-hero: a task with nothing testable goes straight from acceptance_tests to develop, through a mock run', { skip: 'the mock cannot return an empty tests_added (src/engine/providers.js, array case): needs a sequence for it' }, () => {});
+test('ai-development-local-hero: a task with nothing testable goes straight from acceptance_tests to develop, through a mock run', { skip: 'the mock cannot return an empty tests_added (packages/engine/engine/providers.js, array case): needs a sequence for it' }, () => {});
 
 // #179's self-review in the develop turn was moved out by #303 (test/develop-turn-303.test.js):
 // the code_review step is the review.
@@ -64,7 +64,7 @@ function firstGoto(step, scope) {
   return tr && tr.goto;
 }
 // develop's answer and the run's state when it finishes a committed turn
-function developScope({ mode = 'auto', screenshots = [], files = ['src/engine/workflow.js'] } = {}) {
+function developScope({ mode = 'auto', screenshots = [], files = ['packages/engine/engine/workflow.js'] } = {}) {
   return {
     inputs: { mode, validate_every_round: false, screenshots: 'all', issues: [], unit_tests: 'write_and_run', e2e_tests: 'write_and_run', base_branch: 'main' },
     vars: {},
@@ -86,7 +86,7 @@ test('ai-development-local-hero (#151): a change to src/renderer/ takes its scre
 
 test('ai-development-local-hero (#151): a change with no UI skips the screenshots and goes straight to the review', () => {
   const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
-  assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['src/engine/workflow.js', 'docs/agents/engine.md'] })), 'code_review');
+  assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['packages/engine/engine/workflow.js', 'docs/agents/engine.md'] })), 'code_review');
 });
 
 test('ai-development-local-hero (#151): the screenshots go to the review in automatic mode, to the owner\'s gate in validated mode', () => {

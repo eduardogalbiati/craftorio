@@ -20,7 +20,7 @@ test('a mock run honors MULTIAGENT_WORKSPACE (an agent\'s own run scratch worksp
   const out = execFileSync(process.execPath, [
     path.join(__dirname, '..', 'scripts', 'run.js'),
     '--mock', '--auto-approve',
-    '--file', path.join(__dirname, 'fixtures', 'run-script.yaml'),
+    '--file', path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'run-script.yaml'),
     '--repo', repo,
   ], {
     env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: scratch },

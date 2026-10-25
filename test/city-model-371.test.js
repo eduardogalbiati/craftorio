@@ -16,7 +16,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { buildModel } = require('@multiagent/shared/architecture-model');
-const { validateSchema } = require('../src/domains/workspace/json-schema');
+const { validateSchema } = require('@multiagent/engine/domains/workspace/json-schema');
 
 const root = path.join(__dirname, '..');
 const load = () => require('@multiagent/shared/city-model');

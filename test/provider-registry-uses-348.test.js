@@ -100,7 +100,7 @@ test('robots: without an adapter (simulated, unknown, no registry) the model\'s 
 });
 
 test('builder: a workflow provider of the simulated or an unknown type is reported, not drawn as a CLI', () => {
-  const builder = require('../src/domains/workflow/workflow-builder');
+  const builder = require('@multiagent/engine/domains/workflow/workflow-builder');
   const agent = { provider: 'claude', model: 'claude-opus-5-5', system_prompt: 'You plan.' };
   const wf = (type) => ({
     name: 'P', steps: [{ id: 'plan', agent: 'planner', prompt: 'Plan.' }],
@@ -121,7 +121,7 @@ test('builder: a workflow provider of the simulated or an unknown type is report
 });
 
 test('requirements: a provider of the simulated or an unknown type needs no CLI; a known type needs its CLI', () => {
-  const { workflowRequirements } = require('../src/domains/workflow/workflow-requirements');
+  const { workflowRequirements } = require('@multiagent/engine/domains/workflow/workflow-requirements');
   const wf = (providers, provider) => ({ agents: { a: { provider } }, providers });
   assert.deepEqual(workflowRequirements(wf({ sim: { type: 'mock' } }, 'sim')).clis, ['git']);
   assert.deepEqual(workflowRequirements(wf({ other: { type: 'gemini-cli' } }, 'other')).clis, ['git']);
@@ -130,7 +130,7 @@ test('requirements: a provider of the simulated or an unknown type needs no CLI;
 });
 
 test('trustFolder: an unknown provider or the simulated one is not trusted and writes nothing', (t) => {
-  const { trustFolder } = require('../src/domains/cli/cli-trust');
+  const { trustFolder } = require('@multiagent/engine/domains/cli/cli-trust');
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'trust-348-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const dir = path.join(home, 'project');

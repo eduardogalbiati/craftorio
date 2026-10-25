@@ -1,4 +1,4 @@
-// #450, the city's Glow in Settings: the `cityGlow` setting (src/domains/workspace/workspace.js, on by default), its
+// #450, the city's Glow in Settings: the `cityGlow` setting (packages/engine/domains/workspace/workspace.js, on by default), its
 // switch in Settings › Execution, and the project city (src/renderer/views/project/project-city.js)
 // mounting the scene with it and showing the header's Glow switch unpressed when it is off.
 const test = require('node:test');
@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { makeService } = require('./service/helpers');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 const { createDom } = require('./mini-dom');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 

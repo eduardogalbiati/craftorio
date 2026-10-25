@@ -1,6 +1,6 @@
 # Git worktrees per run
 
-Read this before touching `src/engine/worktree.js`, `setupWorktree`/`finishWorktree`, merge
+Read this before touching `packages/engine/engine/worktree.js`, `setupWorktree`/`finishWorktree`, merge
 actions, or any code that deletes or checks out branches.
 
 ## How runs use them
@@ -22,18 +22,18 @@ actions, or any code that deletes or checks out branches.
   (`worktree.ready` with `recreated: true`; dependencies from the cache as for a new worktree), and
   `restoreWork` soft-resets a WIP tip: the work is back as staged changes and the resumed step's
   prompt says "uncommitted work from the previous attempt". The kept-work question (#170,
-  `runWorktreeWork` in `src/service/areas/resume.js`) counts the run's own commits on its branch, in
+  `runWorktreeWork` in `packages/engine/service/areas/resume.js`) counts the run's own commits on its branch, in
   the repository, once the folder is gone. **Cleanup** (`cleanupWorktrees`, service
-  `cleanupRunWorktrees`): at start and every 30 minutes (`src/host/main.js`, `scripts/serve.js`), one pass
+  `cleanupRunWorktrees`): at start and every 30 minutes (`src/host/main.js`, `packages/engine/bin/multiagent-engine.js`), one pass
   at a time. It never touches the runs in progress here (`active`), a run live in another app process
   (`owner.json` alive, #112) or a run waiting at a human gate (`approval.requested` without
   `approval.resolved`); any other run's worktree is retired the same way (interrupted runs included)
   and recorded in its events.jsonl. A folder a process holds (EBUSY) stays for the next pass; a folder
   git does not know (`shots-*`) goes once older than an hour.
 - **Local workflows**: `orchestrator.worktree.remote: false` starts the worktree from the **local** `<base>` without fetching (it may hold local merges never pushed), and `removeWorktree` checks "merged" against the local base. A transition with `merge: local` (validated by `loadWorkflow`; needs `orchestrator.worktree`) calls `mergeLocally`: the run's worktree must be on a branch with everything committed; the branch is rebased onto the local base when it moved (a conflict aborts the rebase, leaves the branch untouched and fails with the files); then the base is fast-forwarded with `merge --ff-only` where it is checked out (refused when that checkout has uncommitted changes to tracked files) or by `update-ref` (compare-and-swap) when it is checked out nowhere. No push, no fetch; simulated runs skip it (`action.executed` skipped). Emits `worktree.merged` (`branch`, `base`, `commit`, `checkout`, `rebased`, and `base_commit`: the base's tip before the merge, which `run:diff` uses as the merge base once the branch is deleted (#289); for a run merged before that field existed it reads the base's reflog). Used by `software-development-local-hero`.
-- **Conflicts in protected test files (#380)**: the step after a failed `merge: local` (`resolve_merge`) has the developer rebase in its own turn, so the `protect_files` / `edits_tests: false` guard (`changedTestFiles`, `src/engine/test-paths.js`) sees the rebased test files as changed. It accepts a file that only combines both sides: changed on both sides since the merge base of the turn's starting HEAD and the base ref, every line of the result from one of the two versions (the ones `git show :2:`/`:3:` give during the rebase), and every line either side added kept. A new line or a dropped one is refused as before. A file still unmerged after the turn (`--diff-filter=U`: git's markers, not the agent's) is not counted: ai-development-local-hero leaves such a test conflict in the rebase (`test_conflict`) and delegates it to the test writer, then the developer finishes the rebase. Placement flags two runs of one stage that add scenarios to the same `.feature` file (product-owner).
-- **The branch is brought up to date before each suite round (#403)**: in a local workflow (`remote: false`), before each `type: suite` round (the unit suite and the E2E rounds alike), the engine (`bringBaseIn`, `src/engine/run/checkout.js` → `syncWithBase` in `worktree.js`) rebases the run's branch (or detached HEAD) onto the local `<base>` when the base moved past it, real git even in a simulation, so a fix that landed on the base meanwhile reaches the run before the final merge. The round's output says which base commit it tested on (`base_commit`), a `log` line names the base commit and the commits brought in, and the next single-agent turn (developer, test writer) gets a note in its prompt. A resumed run ("Resume from step") recreates the folder from its branch and gets the base the same way before its first suite or E2E round. A base that does not apply cleanly (a conflict) aborts the rebase: the round runs on the branch as it is, its log line and message say so, and the conflict is left to the final `merge: local` and `resolve_merge` (#380). Uncommitted changes to tracked files skip it too. Skipped for `base_check: false` (the worktree is the base) and for remote workflows (a pushed branch must not be rewritten). The base itself is never modified and nothing is fetched or pushed.
-- **Dependencies from a shared cache (#198, `src/engine/deps-cache.js`)**: after `worktree.ready`
+- **Conflicts in protected test files (#380)**: the step after a failed `merge: local` (`resolve_merge`) has the developer rebase in its own turn, so the `protect_files` / `edits_tests: false` guard (`changedTestFiles`, `packages/engine/engine/test-paths.js`) sees the rebased test files as changed. It accepts a file that only combines both sides: changed on both sides since the merge base of the turn's starting HEAD and the base ref, every line of the result from one of the two versions (the ones `git show :2:`/`:3:` give during the rebase), and every line either side added kept. A new line or a dropped one is refused as before. A file still unmerged after the turn (`--diff-filter=U`: git's markers, not the agent's) is not counted: ai-development-local-hero leaves such a test conflict in the rebase (`test_conflict`) and delegates it to the test writer, then the developer finishes the rebase. Placement flags two runs of one stage that add scenarios to the same `.feature` file (product-owner).
+- **The branch is brought up to date before each suite round (#403)**: in a local workflow (`remote: false`), before each `type: suite` round (the unit suite and the E2E rounds alike), the engine (`bringBaseIn`, `packages/engine/engine/run/checkout.js` → `syncWithBase` in `worktree.js`) rebases the run's branch (or detached HEAD) onto the local `<base>` when the base moved past it, real git even in a simulation, so a fix that landed on the base meanwhile reaches the run before the final merge. The round's output says which base commit it tested on (`base_commit`), a `log` line names the base commit and the commits brought in, and the next single-agent turn (developer, test writer) gets a note in its prompt. A resumed run ("Resume from step") recreates the folder from its branch and gets the base the same way before its first suite or E2E round. A base that does not apply cleanly (a conflict) aborts the rebase: the round runs on the branch as it is, its log line and message say so, and the conflict is left to the final `merge: local` and `resolve_merge` (#380). Uncommitted changes to tracked files skip it too. Skipped for `base_check: false` (the worktree is the base) and for remote workflows (a pushed branch must not be rewritten). The base itself is never modified and nothing is fetched or pushed.
+- **Dependencies from a shared cache (#198, `packages/engine/engine/deps-cache.js`)**: after `worktree.ready`
   the engine (`prepareDeps`) links the worktree's `node_modules` to
   `<workspace>/cache/deps/<project>/<key>/node_modules` (a junction on Windows, a symlink elsewhere)
   and records `deps.ready` (`for`, `status` hit | linked | miss | local | failed | not_cached, `key`,
@@ -67,9 +67,9 @@ actions, or any code that deletes or checks out branches.
   approve_merge) whose run has a config (the project's `localPreview`, else
   `orchestrator.local_preview: { install, command, url }`) carries `local_preview` and `work_dir`
   in `approval.requested` / `pendingGates()`. `localPreview:start` (service `startLocalPreview`,
-  helpers in `src/domains/local/local-preview.js`) runs `install && command` (install only when node_modules is
+  helpers in `packages/engine/domains/local/local-preview.js`) runs `install && command` (install only when node_modules is
   missing or the lockfile hash changed since the run's last preview) in the worktree, in a pty of
-  `src/domains/machine/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
+  `packages/engine/domains/machine/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
   `MULTIAGENT_SIMULATION_ONLY=1`, `MULTIAGENT_WORKSPACE` = a scratch copy under
   `<workspace>/local-previews/<run>/workspace` (projects, agents, skills, workflows, settings; never
   runs) and `MULTIAGENT_USER_DATA` (read by `src/host/main.js`, dev only) unless the owner chose the
@@ -87,18 +87,18 @@ actions, or any code that deletes or checks out branches.
 - **The app started by hand in a worktree (#112)**: `npm start` in `<workspace>/worktrees/<id>`
   (dev only, no `MULTIAGENT_WORKSPACE`) gets a scratch workspace and user data folder under
   `<workspace>/local-previews/app-<id>/` and simulations only (`worktreeAppScratch` in
-  `src/domains/local/local-preview.js`, used by `src/host/main.js`): it never opens the owner's workspace. Prefer **Run App**.
+  `packages/engine/domains/local/local-preview.js`, used by `src/host/main.js`): it never opens the owner's workspace. Prefer **Run App**.
 - **The run's scratch workspace (#120)**: a run with a worktree gets `runs/<id>/scratch/{workspace,
   user-data}` (`WorkflowRun.scratchWorkspace`, same content rules as `scratchWorkspace` in
-  `src/domains/local/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
+  `packages/engine/domains/local/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
   folders; never runs, repos or worktrees), created on the first agent turn. Every agent of the run
   gets it as `MULTIAGENT_WORKSPACE` / `MULTIAGENT_USER_DATA` (`capabilities.agentEnv`), so
   `npm run run -- --mock`, `npm run screenshot`, `npm start` and `node -e` engine scripts from the
   worktree write there, never to the owner's runs, roadmap, queue or backlog. Removed with the
   worktree (`finishWorktree` on success, `cleanupWorktrees` for orphans, `removeScratch` in
-  `src/engine/worktree.js`), whatever the status (#202); the cleanup also removes the scratch of a
+  `packages/engine/engine/worktree.js`), whatever the status (#202); the cleanup also removes the scratch of a
   run that ended 3 days ago and has no worktree folder (#201). Scratch files are not artifacts:
-  `walkFiles` (`src/domains/run/run-artifacts.js`) skips `scratch/` like `sessions/`; a `file.saved` under it is
+  `walkFiles` (`packages/engine/domains/run/run-artifacts.js`) skips `scratch/` like `sessions/`; a `file.saved` under it is
   still listed. The
   evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
   the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
@@ -109,14 +109,14 @@ actions, or any code that deletes or checks out branches.
   every suite / e2e round (`runSuite` creates it, `suiteEnv({ tmpDir })`), so the tests' temp files
   stay in the workspace (the antivirus exclusion covers them) and go with the run. A short name
   directly under the run, for `MAX_PATH`. Removed at every end but `paused` (`finishWorktree`,
-  `removeRunTmp` in `src/engine/worktree.js`, with or without a worktree); `cleanupWorktrees` removes
+  `removeRunTmp` in `packages/engine/engine/worktree.js`, with or without a worktree); `cleanupWorktrees` removes
   the `tmp` of ended runs like their scratch (a live run or one waiting at a gate keeps it). A
   resumed run has its own id, so its own fresh `tmp`. The stray-process watcher attributes a process
-  under `runs/<id>/tmp` to run `<id>` (`watchStrayProcesses` in `src/service/areas/runs.js`), and
+  under `runs/<id>/tmp` to run `<id>` (`watchStrayProcesses` in `packages/engine/service/areas/runs.js`), and
   `walkFiles` skips `tmp/` (not artifacts). A mock run creates none.
 - **One app per workspace (#112)**: `src/host/main.js` takes Electron's single-instance lock (the owner's
   user data folder) and `<workspace>/.lock` (pid, host, heartbeat; `lockWorkspace` in
-  `src/domains/run/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old
+  `packages/engine/domains/run/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old
   heartbeat) is taken over. Each run in progress has `runs/<id>/owner.json` with a heartbeat
   (`claimRun`): another process lists it as `running` (`runningElsewhere`), never `interrupted`,
   and the roadmap, Retry, Resume and a new run for the same issues leave it alone.
@@ -140,8 +140,8 @@ actions, or any code that deletes or checks out branches.
 
 - Shared tables are generated from per-feature files (`npm run docs`, see the code map's header):
   the code map is gitignored, the README tables are committed with an out-of-date check. The
-  channels of `window.api` are one file per area (`src/service/channels/`), and so are the
-  service's helpers and state (`src/service/areas/`) and its tests (`test/service/`).
+  channels of `window.api` are one file per area (`packages/engine/service/channels/`), and so are the
+  service's helpers and state (`packages/engine/service/areas/`) and its tests (`packages/engine/test/service/`).
 - Shared name lists (`module.exports`, destructured requires) are one item per line, sorted
   (`npm run lint:lists`, `-- --fix`); new functions go next to related code, not before the same
   section comment every run uses.

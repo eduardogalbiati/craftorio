@@ -1,6 +1,6 @@
 /* global api */
 // Discovery board (#257, Plan & Design › Discovery): the upstream half of the kanban. The cards of
-// the header's project that left the Inbox (src/domains/discovery/discovery.js, the discovery: channels) in the
+// the header's project that left the Inbox (packages/engine/domains/discovery/discovery.js, the discovery: channels) in the
 // board's columns Triage → Shape → Define → Ready (board.json), in the board's order. A card moves by
 // drag and drop or with its "Move to…" menu (keyboard); its face shows the title, the type, the age
 // in its column, the clarity score and the estimate when known, and its attachment and thread
@@ -89,7 +89,7 @@
   // the clarity bar of a card's type (#166: the board's clarity { bar, byKind }), and a card under it
   const barOf = (c) => dv.board?.clarity?.byKind?.[c.type] ?? dv.board?.clarity?.bar ?? 85;
   const belowBar = (c) => !(typeof c.clarity?.score === 'number' && c.clarity.score >= barOf(c));
-  // the store's refusal of a move into Ready below the bar (src/domains/discovery/discovery.js)
+  // the store's refusal of a move into Ready below the bar (packages/engine/domains/discovery/discovery.js)
   const REFUSED = /below the clarity bar/i;
 
   // The cards of a column in the board's order (a card the board does not list goes last).

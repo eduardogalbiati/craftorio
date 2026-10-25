@@ -1,14 +1,14 @@
 // #285 Remove "Update the app after this". Acceptance tests written before the code.
 //
 // What these tests expect:
-// - src/domains/workspace/app-update.js: one trigger (a roadmap stage that ended, test/app-update-279.test.js); the
+// - packages/engine/domains/workspace/app-update.js: one trigger (a roadmap stage that ended, test/app-update-279.test.js); the
 //   `WHEN_MODES` export is gone (or no longer offers 'marked').
-// - src/domains/roadmap/roadmap.js: `updateAfter` is never written: an item saved, proposed (the Product Owner's
+// - packages/engine/domains/roadmap/roadmap.js: `updateAfter` is never written: an item saved, proposed (the Product Owner's
 //   append goes through propose) or read from an older file with it loses the field at the next save;
 //   an older file that has it still reads without error.
 // - The roadmap card (src/renderer/views/backlog/backlog-roadmap.js) never draws the switch, even
 //   when api.appUpdateState says the update applies.
-// - The Oracle's tool descriptions (src/domains/oracle/oracle-tools.js) and skills/oracle/SKILL.md no longer mention
+// - The Oracle's tool descriptions (packages/engine/domains/oracle/oracle-tools.js) and skills/oracle/SKILL.md no longer mention
 //   updateAfter or "Update the app after this".
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -25,10 +25,10 @@ function tmp(t) {
 }
 const issues = (...numbers) => numbers.map((n) => ({ number: n, title: `Issue ${n}`, state: 'open', url: `https://github.com/o/r/issues/${n}`, body: '' }));
 
-// ---- src/domains/workspace/app-update.js ------------------------------------------------------------------------------
+// ---- packages/engine/domains/workspace/app-update.js ------------------------------------------------------------------------------
 
 test('#285 app-update: WHEN_MODES is gone, or no longer offers "marked"', () => {
-  const appUpdate = require('../../src/domains/workspace/app-update');
+  const appUpdate = require('@multiagent/engine/domains/workspace/app-update');
   const modes = appUpdate.WHEN_MODES;
   assert.equal(Array.isArray(modes) && modes.includes('marked'), false);
 });
@@ -36,7 +36,7 @@ test('#285 app-update: WHEN_MODES is gone, or no longer offers "marked"', () => 
 // ---- the roadmap file ---------------------------------------------------------------------------------
 
 test('#285 roadmap: a file written with updateAfter reads without error and loses the field at the next save', (t) => {
-  const roadmaps = require('../../src/domains/roadmap/roadmap');
+  const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
   const dir = tmp(t);
   const item = { id: 'item-1', workflow: 'w.yaml', workflowName: 'w', inputs: {}, mock: true, number: 1, url: 'https://github.com/o/r/issues/1', title: 'Issue 1', body: '', issues: [{ number: 1, url: 'https://github.com/o/r/issues/1', title: 'Issue 1' }], status: 'planned', runId: null, runs: [], error: null, updateAfter: true };
   fs.writeFileSync(path.join(dir, 'p1.roadmap.json'), JSON.stringify({ state: 'planned', simulated: false, error: null, pausedBy: null, scope: null, updatedAt: null, stages: [{ id: 's1', name: '', note: '', items: [item] }] }));
@@ -48,7 +48,7 @@ test('#285 roadmap: a file written with updateAfter reads without error and lose
 });
 
 test('#285 roadmap: a proposal (the Product Owner\'s append) with updateAfter: true is stored without the field', (t) => {
-  const roadmaps = require('../../src/domains/roadmap/roadmap');
+  const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
   const dir = tmp(t);
   roadmaps.propose(dir, 'p1', [{ items: [{ workflow: 'w.yaml', issues: [1], updateAfter: true }] }], { issues: issues(1) });
   const raw = JSON.parse(fs.readFileSync(path.join(dir, 'p1.roadmap.json'), 'utf8'));
@@ -74,7 +74,7 @@ test('#285 roadmap card: never draws "Update the app after this", even when the 
 // ---- the Oracle ------------------------------------------------------------------------------------------------
 
 test('#285 Oracle tools: no tool description mentions updateAfter', () => {
-  const { oracleTools } = require('../../src/domains/oracle/oracle-tools');
+  const { oracleTools } = require('@multiagent/engine/domains/oracle/oracle-tools');
   const text = oracleTools({}).map((x) => `${x.description || ''} ${JSON.stringify(x.inputSchema || {})}`).join('\n');
   assert.equal(/updateAfter/.test(text), false);
 });

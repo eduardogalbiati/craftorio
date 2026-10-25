@@ -41,7 +41,7 @@ function brokenCopy() {
   // (each planted file has a header comment, so docs --check does not name it too)
   write(dir, 'scripts/zz-lists-404.js', '// planted by test/check-command-404.test.js\nconst a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n\nmodule.exports = { d, c, b, a };\n');
   // layers: packages/shared/ requires the engine
-  write(dir, 'packages/shared/zz-layers-404.js', "// planted by test/check-command-404.test.js\nmodule.exports = require('../../src/engine/workflow');\n");
+  write(dir, 'packages/shared/zz-layers-404.js', "// planted by test/check-command-404.test.js\nmodule.exports = require('../../packages/engine/engine/workflow');\n");
   // file-size ratchet: a new file over 1000 lines
   write(dir, 'scripts/zz-size-404.js', `${Array.from({ length: 1005 }, (_, i) => `// planted line ${i + 1}`).join('\n')}\n`);
   // code health: one function far above the complexity cap

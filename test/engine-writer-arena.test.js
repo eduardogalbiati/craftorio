@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../src/engine/workflow');
-const evidence = require('../src/domains/evidence/evidence');
+const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('@multiagent/engine/engine/workflow');
+const evidence = require('@multiagent/engine/domains/evidence/evidence');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
-const { root } = require('./engine-helpers');
+const { root } = require('@multiagent/engine/test/engine-helpers');
 
 test('the renderer shuffle (arena-shuffle.js) gives the same order as the engine filter', () => {
   const { shuffle, sha256Word } = require('../src/renderer/views/arena/arena-shuffle.js');

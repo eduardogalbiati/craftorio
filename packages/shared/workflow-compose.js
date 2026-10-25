@@ -12,7 +12,7 @@
   const list = (v) => (Array.isArray(v) ? v : []);
   const text = (v) => (v == null ? '' : String(v));
 
-  // a tools list flat (YAML anchors nest lists, like src/engine/capabilities.js normalize)
+  // a tools list flat (YAML anchors nest lists, like packages/engine/engine/capabilities.js normalize)
   const toolsOf = (tools) => list(tools).flat(Infinity).map(text);
 
   // agents.<name>.capabilities.tools (e.g. read, bash:git), with `defaults`' when the agent has none

@@ -80,7 +80,7 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
   const toggleBtn = fakeToggleButton();
   const store = { ...storage };
   // A run's files load through api.listArtifacts({ runId }), same array-wrapped shape as the real
-  // service (src/service/areas/artifacts.js): the fixture's own files (run()'s `_files`), never empty
+  // service (packages/engine/service/areas/artifacts.js): the fixture's own files (run()'s `_files`), never empty
   // by surprise so a test that opens a group doesn't see a silent "ReferenceError: api is not defined".
   const sandbox = {
     state: { art: { runs, q, loadedQ: q, projectId, showSim, sel: null }, settings: { developerMode }, simulationOnly: false, projects: [] },

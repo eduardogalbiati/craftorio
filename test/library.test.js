@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const projects = require('../src/domains/project/projects');
-const skills = require('../src/domains/agents/skills');
-const { setupWorkspace, readSettings, writeSettings, DEFAULT_SETTINGS } = require('../src/domains/workspace/workspace');
+const projects = require('@multiagent/engine/domains/project/projects');
+const skills = require('@multiagent/engine/domains/agents/skills');
+const { setupWorkspace, readSettings, writeSettings, DEFAULT_SETTINGS } = require('@multiagent/engine/domains/workspace/workspace');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lib-'));
@@ -31,7 +31,7 @@ test('settings: defaults, merge and dropping unknown keys', (t) => {
   assert.equal('junk' in readSettings(ws), false);
 });
 
-// #82: voice input (src/domains/chat/speech.js) defaults to whisper-cli, the "small" model and Portuguese (the
+// #82: voice input (packages/engine/domains/chat/speech.js) defaults to whisper-cli, the "small" model and Portuguese (the
 // owner dictates in Portuguese); an unrelated settings patch keeps them.
 test('settings: voice input defaults (whisper-cli, small, pt), kept by an unrelated patch', (t) => {
   const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });
@@ -212,7 +212,7 @@ test('every bundled SKILL.md frontmatter parses with js-yaml and has name, descr
 // must resolve to an existing skill (e.g. language: go → unit-test-writer-go).
 test('every templated skill in the workflows resolves for every enum input value', () => {
   const nunjucks = require('nunjucks');
-  const { loadWorkflow } = require('../src/engine/workflow');
+  const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
   const root = path.join(__dirname, '..');
   const dir = path.join(root, 'skills');
   for (const file of fs.readdirSync(path.join(root, 'workflows'))) {

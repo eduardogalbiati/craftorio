@@ -14,7 +14,7 @@ cost: one or two Oracle turns (reads the history, the CI files and the scripts)
 # Ways of working
 
 Read how the repository is actually worked on, so the app can propose the workflows that fit it
-(#487: the workflow interview, `src/service/areas/workflow-interview.js`). The analysis is
+(#487: the workflow interview, `packages/engine/service/areas/workflow-interview.js`). The analysis is
 read-only: read the files and the history, never edit, build, test, commit or push anything.
 
 Answer each field of the profile from the evidence, and leave it `null` when the evidence does not

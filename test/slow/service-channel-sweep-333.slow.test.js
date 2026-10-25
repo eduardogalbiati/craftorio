@@ -13,7 +13,7 @@
 // panic_hunt). The calls run in test/service/channel-sweep-runner.js, a child process: a call that
 // blocks the event loop is killed by the watchdog here, reported, and the sweep goes on from the
 // next channel.
-// Seams: createService's manifest, api and notifications (src/service/index.js), through the runner.
+// Seams: createService's manifest, api and notifications (packages/engine/service/index.js), through the runner.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
@@ -21,7 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { createService } = require('../../src/service');
+const { createService } = require('@multiagent/engine/service');
 const SKIPS = require('../service/channel-sweep-skips');
 
 const RUNNER = path.join(__dirname, '..', 'service', 'channel-sweep-runner.js');

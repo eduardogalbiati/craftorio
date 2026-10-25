@@ -96,7 +96,7 @@ function loadWorkflowRunsThrottled() {
 // and the saved pipelines (api.listPipelines, #135) as connected cards in their category's section.
 // A section filter (pills) and a search narrow both; "Used in" links a workflow to its pipelines.
 // each section's hint: catalog keys. #485: first the four flows a repository's manifest files its
-// workflows under (src/domains/project/project-manifest.js), shown always; the app's CATEGORIES (app.js) name the others
+// workflows under (packages/engine/domains/project/project-manifest.js), shown always; the app's CATEGORIES (app.js) name the others
 const WF_SECTIONS = {
   intake: 'workflows.section_intake_hint',
   solo: 'workflows.section_solo_hint',
@@ -452,7 +452,7 @@ function stepList(w) {
   }).join('');
 }
 
-// Where a workflow file comes from (see src/domains/seed/seed.js): the bundled default, edited by the user or user-created.
+// Where a workflow file comes from (see packages/engine/domains/seed/seed.js): the bundled default, edited by the user or user-created.
 function originBadge(w) {
   const project = (state.projects || []).find((p) => p.id === w.projectId)?.name || w.projectId || '';
   const badges = {

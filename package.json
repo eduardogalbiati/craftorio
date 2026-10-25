@@ -29,7 +29,7 @@
     "prestart": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "start": "electron .",
     "run": "node scripts/run.js",
-    "serve": "node scripts/serve.js",
+    "serve": "multiagent-engine",
     "pretest": "node scripts/docs.js --derived",
     "test": "node scripts/test.js",
     "pretest:coverage": "node scripts/docs.js --derived",
@@ -47,18 +47,15 @@
     "package": "node scripts/package.js"
   },
   "dependencies": {
+    "@multiagent/engine": "*",
     "@multiagent/shared": "*",
-    "@supabase/supabase-js": "^2.117.2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "acorn": "8.19.0",
     "dompurify": "^3.4.17",
     "js-yaml": "^4.1.0",
     "marked": "^18.0.14",
-    "node-pty": "^1.1.0",
-    "nunjucks": "^3.2.4",
-    "qrcode-generator": "^1.5.2",
-    "ws": "^8.22.0"
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
@@ -78,5 +75,8 @@
   },
   "allowScripts": {
     "node-pty@1.1.0": true
+  },
+  "multiagent": {
+    "ui": "src/renderer"
   }
 }

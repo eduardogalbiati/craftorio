@@ -1,18 +1,18 @@
-// src/service/channels/voice.js: the audio:transcribe, audio:status and audio:downloadModel
+// packages/engine/service/channels/voice.js: the audio:transcribe, audio:status and audio:downloadModel
 // channels, wired into the engine service (manifest + the models kept under host.userDataDir, not
-// the workspace). See test/speech.test.js for src/domains/chat/speech.js itself.
+// the workspace). See test/speech.test.js for packages/engine/domains/chat/speech.js itself.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setupWorkspace } = require('../src/domains/workspace/workspace');
-const { createService } = require('../src/service');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService } = require('@multiagent/engine/service');
 const { encodeWav } = require('../src/renderer/voice.js');
 
 const FAKE_CLI = process.platform === 'win32'
-  ? path.join(__dirname, 'fixtures', 'fake-whisper.cmd')
-  : path.join(__dirname, 'fixtures', 'fake-whisper.js');
+  ? path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'fake-whisper.cmd')
+  : path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'fake-whisper.js');
 if (process.platform !== 'win32') fs.chmodSync(FAKE_CLI, 0o755);
 
 const TINY_WAV = `data:audio/wav;base64,${Buffer.from(encodeWav(new Float32Array(1600))).toString('base64')}`;
@@ -43,7 +43,7 @@ test('the manifest declares audio:transcribe, audio:status and audio:downloadMod
 test('audio:status reads the settings and the models under host.userDataDir', (t) => {
   const { service, userDataDir } = makeService(t);
   const st = service.api['audio:status']();
-  assert.equal(st.command, 'whisper-cli'); // default setting (src/domains/workspace/workspace.js DEFAULT_SETTINGS)
+  assert.equal(st.command, 'whisper-cli'); // default setting (packages/engine/domains/workspace/workspace.js DEFAULT_SETTINGS)
   assert.equal(st.modelsDir, path.join(userDataDir, 'speech-models'));
   assert.equal(st.modelReady, false); // nothing downloaded in the fresh temp userDataDir
 });

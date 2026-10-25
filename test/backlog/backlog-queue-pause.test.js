@@ -1,13 +1,13 @@
 // #445 a failed run pauses the Backlog queue only when the queue started it, with a reason the screen
 // translates, and a stale pause does not stay. Acceptance tests written before the code.
 //
-// The service side: src/service/areas/runs.js's afterRunFinished (what follows a run's
-// workflow.finished) with the real src/domains/backlog/backlog.js on a scratch workspace (src/domains/workspace/workspace.js
+// The service side: packages/engine/service/areas/runs.js's afterRunFinished (what follows a run's
+// workflow.finished) with the real packages/engine/domains/backlog/backlog.js on a scratch workspace (packages/engine/domains/workspace/workspace.js
 // setupWorkspace). Real runs are refused in simulation and afterRunFinished is private, so the area
 // is compiled from its own source with afterRunFinished added to what its factory returns, and called
 // with a run object and its workflow.finished event; every ctx hook it calls besides `ws` is a no-op.
 //   The run object's contract (the developer marks the queue's runs): a run the queue started carries
-//   `fromQueue: true` (src/service/areas/backlog.js dispatchQueue passes it to startWorkflowRun); a
+//   `fromQueue: true` (packages/engine/service/areas/backlog.js dispatchQueue passes it to startWorkflowRun); a
 //   roadmap item's run does not, and its item names it (runId) in the roadmap file.
 //   Like today, the queued item has left the queue when its run started (dispatchQueue unqueues it).
 // The queue is read through its public read, backlog.readQueue(dir, projectId).
@@ -28,14 +28,14 @@ const path = require('path');
 const Module = require('module');
 const { EventEmitter } = require('events');
 const H = require('../roadmap-status-helpers');
-const { setupWorkspace } = require('../../src/domains/workspace/workspace');
-const backlog = require('../../src/domains/backlog/backlog');
-const roadmaps = require('../../src/domains/roadmap/roadmap');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const backlog = require('@multiagent/engine/domains/backlog/backlog');
+const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
 
 const PROJECT = 'p1';
-const RUNS_AREA = path.join(__dirname, '..', '..', 'src', 'service', 'areas', 'runs.js');
+const RUNS_AREA = path.join(__dirname, '..', '..', 'packages', 'engine', 'service', 'areas', 'runs.js');
 
-// src/service/areas/runs.js compiled from its source, its factory also returning afterRunFinished
+// packages/engine/service/areas/runs.js compiled from its source, its factory also returning afterRunFinished
 function loadRunsArea() {
   const src = fs.readFileSync(RUNS_AREA, 'utf8');
   const marker = '\n  return {';
@@ -63,7 +63,7 @@ function setup(t) {
     },
   });
   const area = loadRunsArea()(ctx);
-  assert.equal(typeof area.afterRunFinished, 'function', 'afterRunFinished in src/service/areas/runs.js');
+  assert.equal(typeof area.afterRunFinished, 'function', 'afterRunFinished in packages/engine/service/areas/runs.js');
   t.after(() => {
     area.stopDispatchTimers?.();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -81,7 +81,7 @@ const queueRun = (runId, numbers) => run(runId, numbers, { fromQueue: true });
 // the queue with other issues waiting (the failed one left it when its run started)
 const enqueue = (ws, numbers) => backlog.enqueue(ws.backlog, PROJECT, { issues: numbers.map((n) => ({ ...ref(n), body: '' })), workflow: 'w.yaml' });
 const read = (ws) => backlog.readQueue(ws.backlog, PROJECT);
-// the synced Backlog (src/domains/backlog/backlog.js's <id>.json) with these issues and states
+// the synced Backlog (packages/engine/domains/backlog/backlog.js's <id>.json) with these issues and states
 const syncedBacklog = (ws, issues) => fs.writeFileSync(path.join(ws.backlog, `${PROJECT}.json`), JSON.stringify({
   projectId: PROJECT, platform: 'github', repo: 'https://github.com/o/r',
   issues: issues.map(([number, state]) => ({ ...ref(number), state, body: '', labels: [], assignees: [], tasks: { done: 0, total: 0 } })),

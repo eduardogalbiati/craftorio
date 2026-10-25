@@ -2,7 +2,7 @@
 
 Saved pipelines (`<workspace>/pipelines/*.yaml`): their shape, how they are checked, and how they run as a chain.
 
-- `src/domains/workflow/pipelines.js`: `<workspace>/pipelines/*.yaml` (bundled `pipelines/`, seeded and restorable like
+- `packages/engine/domains/workflow/pipelines.js`: `<workspace>/pipelines/*.yaml` (bundled `pipelines/`, seeded and restorable like
   the workflows). `parsePipeline` checks the shape (≥ 2 stages, the first a workflow, a `product_owner` /
   `queue` target only last, `on: success` only); `validatePipeline` checks each stage against its
   workflows: fixed `inputs` and `map` keys are inputs of the stage's workflow, `map` values are outputs
@@ -16,7 +16,7 @@ Saved pipelines (`<workspace>/pipelines/*.yaml`): their shape, how they are chec
   (`withPipelineId`). `chain-model pipelineOf(chain, runId)` says which pipeline and stage a run is.
   Pauses, Resume / Edit / Drop are the chain's; an Edit that keeps the next workflow keeps the stages
   after it.
-- Service `src/service/areas/pipelines.js`, channels `workflows:pipelines` (list), `pipelines:run`,
+- Service `packages/engine/service/areas/pipelines.js`, channels `workflows:pipelines` (list), `pipelines:run`,
   `pipelines:estimate`, `pipelines:get-run` (a pipeline run's stages and runs), `pipelines:save` (a run's
   chain → `fromChain` → a new file, never over an existing one), `pipelines:restore`; `backlog:assign`
   takes `pipeline` (its first workflow, fixed inputs and chain for each queued issue).

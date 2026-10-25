@@ -15,7 +15,7 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const registry = () => require('@multiagent/shared/providers');
-const fixture = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', name), 'utf8');
 const events = (text) => text.trim().split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
 const parseAll = (adapter, evs) => {
   const items = [];
@@ -82,7 +82,7 @@ test('the simulated provider is not a CLI: no CLI name to look for', () => {
 });
 
 test('claude adapter parses the fake Claude Code stream: session, text, usage and cost', () => {
-  const out = execFileSync(process.execPath, [path.join(__dirname, 'fixtures', 'fake-claude.js')], { input: '', encoding: 'utf8' });
+  const out = execFileSync(process.execPath, [path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'fake-claude.js')], { input: '', encoding: 'utf8' });
   const { kinds, acc } = parseAll(registry().resolve('claude'), events(out));
   assert.deepEqual(kinds, ['session', 'text', 'usage']);
   assert.equal(acc.providerSessionId, '00000000-0000-4000-8000-000000000001');
@@ -127,7 +127,7 @@ test('each adapter says how it opens attached images', () => {
 });
 
 test('each CLI adapter\'s usage-limit message is recognised as a credit error for its type, and not a plain failure', () => {
-  const { isQuotaError } = require('../src/engine/providers');
+  const { isQuotaError } = require('@multiagent/engine/engine/providers');
   for (const id of ['claude', 'codex', 'grok']) {
     const a = registry().resolve(id);
     assert.equal(typeof a.usageLimitMessage, 'string', `${id}.usageLimitMessage`);

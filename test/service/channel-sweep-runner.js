@@ -7,8 +7,8 @@
 // { type: 'problem', text }, { type: 'trashed', path }, { type: 'unhandled', text }, and at the end
 // { type: 'done', swept, polluted, relaunched }. A helper script: it registers no test.
 const path = require('path');
-const { createService } = require('../../src/service');
-const { setupWorkspace } = require('../../src/domains/workspace/workspace');
+const { createService } = require('@multiagent/engine/service');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
 const SKIPS = require('./channel-sweep-skips');
 
 const LIMIT_MS = 4000;
@@ -74,7 +74,7 @@ async function main() {
   const from = Number(fromArg) || 0;
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // never a real run, provider or CLI terminal
   process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
-  // the CLIs' config folders (src/domains/cli/cli-config-dirs.js) inside the scratch workspace: the usage
+  // the CLIs' config folders (packages/engine/domains/cli/cli-config-dirs.js) inside the scratch workspace: the usage
   // channels (analytics:*) read empty folders instead of this machine's logs in the home folder
   process.env.CLAUDE_CONFIG_DIR = path.join(path.resolve(wsDir), 'cli-config', 'claude');
   process.env.CODEX_HOME = path.join(path.resolve(wsDir), 'cli-config', 'codex');

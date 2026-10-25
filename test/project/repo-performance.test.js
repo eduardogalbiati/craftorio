@@ -1,4 +1,4 @@
-// src/domains/project/repo-performance.js (#159): Analytics' Repository performance tab and the files-most-runs-edit
+// packages/engine/domains/project/repo-performance.js (#159): Analytics' Repository performance tab and the files-most-runs-edit
 // map the Product Owner shares (#150). Seams: conflictsOf, runFacts, filesEditedByRuns, fileCounts,
 // sharedFiles and repositoryPerformance.
 const test = require('node:test');
@@ -9,7 +9,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const {
   CONFLICT_STEPS, conflictsOf, fileCounts, filesEditedByRuns, recommendationOf, repositoryPerformance, runFacts, SHARED_LIMIT, sharedFiles,
-} = require('../../src/domains/project/repo-performance');
+} = require('@multiagent/engine/domains/project/repo-performance');
 
 // Isolated identity on every call: nothing depends on the machine's git config (as in worktree.test.js).
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
@@ -256,7 +256,7 @@ test('recommendationOf: a shared registry or list → one file per entry the reg
 });
 
 test('recommendationOf: a large file touched by many runs → split it by area', () => {
-  assert.equal(recommendationOf(over('src/engine/workflow.js', { lines: 3700 })).kind, 'large');
+  assert.equal(recommendationOf(over('packages/engine/engine/workflow.js', { lines: 3700 })).kind, 'large');
 });
 
 test('recommendationOf: a stylesheet → per-screen CSS', () => {

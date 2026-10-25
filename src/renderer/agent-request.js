@@ -2,7 +2,7 @@
 // one card in the Product Owner's drawer (views/backlog/backlog-po.js) and the Supervisor chat
 // (views/supervisor/supervisor.js): who sent it and when, the kind, the reason, then the result with
 // its state and its cost (US$ 0 and "no model call" for a mechanical request), and a link back to
-// the Oracle's chat. The request's messages share `request.ref` (src/domains/agents/agent-inbox.js): the result and
+// the Oracle's chat. The request's messages share `request.ref` (packages/engine/domains/agents/agent-inbox.js): the result and
 // a plan request's question are drawn inside the card, not again (inCard); a plan answer stays a
 // normal answer under it. reveal(ref) scrolls an open conversation to a request's card (the Oracle's
 // line links to it).

@@ -1,6 +1,6 @@
 // The Oracle's spend per UTC day (#244), from <workspace>/oracle/usage.jsonl and messages.jsonl: the
 // turns by kind (wake, owner, handoff: a usage line with no answer posted right after it), each
-// turn's own cost (src/domains/oracle/oracle.js usageLines: Claude's cumulative cost per session, differenced), the
+// turn's own cost (packages/engine/domains/oracle/oracle.js usageLines: Claude's cumulative cost per session, differenced), the
 // cost the app reported before #244 (the plain sum), cache read / write and output tokens, the
 // context at the day's first turn and its peak, wake-ups answered / refused, code-only notices and
 // the action cards proposed during wake turns. Read-only: nothing is rewritten.
@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { usageLines } = require('../src/domains/oracle/oracle');
+const { usageLines } = require('@multiagent/engine/domains/oracle/oracle');
 
 const MATCH_MS = 10e3; // an answer is posted right after its usage line
 

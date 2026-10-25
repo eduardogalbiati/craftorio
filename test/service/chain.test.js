@@ -1,5 +1,5 @@
-// Workflow chaining (#134): src/service/areas/chain.js wired through a live run via
-// src/service/areas/runs.js (workflow.finished -> continueChain). The model alone
+// Workflow chaining (#134): packages/engine/service/areas/chain.js wired through a live run via
+// packages/engine/service/areas/runs.js (workflow.finished -> continueChain). The model alone
 // (src/renderer/chain-model.js: normalizeThen, nextInputs, queueBatches, blockedReason...) is
 // unit-tested in test/chain-model.test.js; this file only checks that a real run, through the
 // service, really starts (or pauses, or asks the Product Owner, or queues) as chain-model says.
@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeService, roadmapIssue, until, untilTrue } = require('./helpers');
+const { makeService, roadmapIssue, until, untilTrue } = require('@multiagent/engine/test/service/helpers');
 
 // Stands for the issue-tracker -> software-development-local-hero pair: an `issues` output of
 // created issues (number, url, title), a human gate that decides success or failure, and a `task`

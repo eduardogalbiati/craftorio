@@ -2,7 +2,7 @@
 // Settings › Agents & CLIs › Accounts (#312): settings.providers.<provider>.accounts, the accounts of
 // each CLI that keeps its account in a config folder (the adapter's configDirEnv: CLAUDE_CONFIG_DIR,
 // CODEX_HOME; Grok has none, so it is not listed), in order: a name, the folder and Enabled. A turn
-// runs on the first enabled account; at its usage limit it moves to the next one (src/engine/run/
+// runs on the first enabled account; at its usage limit it moves to the next one (packages/engine/engine/run/
 // accounts.js). A row whose folder is set shows whether that folder is signed in and, while it is
 // not (or the row is new), the command that logs it in (settings:accountStatus, never a credential).
 // settings.accountCooldownMinutes: how long an account stays out after a limit with no reset time.

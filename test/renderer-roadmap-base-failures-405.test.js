@@ -5,7 +5,7 @@
 // - src/renderer/views/backlog/backlog-roadmap.js loaded whole into a vm sandbox (the setup of
 //   test/renderer-backlog-roadmap-view.test.js, copied in its minimal form); the seam is
 //   BacklogRoadmap.html(data, rerender): `data.baseFailures` is the project's knownFailures list
-//   (src/domains/project/base-health.js). Only the returned HTML string is checked.
+//   (packages/engine/domains/project/base-health.js). Only the returned HTML string is checked.
 //
 // Assumptions:
 // - Non-empty: exactly one element data-testid="base-failures" whose text counts the failures

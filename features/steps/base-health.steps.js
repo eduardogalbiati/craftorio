@@ -1,7 +1,7 @@
 // Steps of the "main stays green" scenarios (#405) in features/roadmap.feature and
 // features/settings.feature: the Roadmap's one line of the base's known failures, the red-base choice
 // in Settings › Execution, and the fix item a red base check puts at the front of the roadmap.
-// State is seeded through src/domains/project/base-health.js (required inside the steps, never at the top: bddgen
+// State is seeded through packages/engine/domains/project/base-health.js (required inside the steps, never at the top: bddgen
 // loads this file before the module exists). Locators are roles and data-testid only.
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -12,7 +12,7 @@
 //   native <select> under the design-system control, like the time zone list (#383).
 // - data-testid="base-check-card" (#465): the Roadmap's base check line, its state in data-status; new
 //   for #527: data-status="waiting" and a text reading "waiting for the suite slot" while another run
-//   holds the machine's `suite` slot (src/engine/machine-slot.js).
+//   holds the machine's `suite` slot (packages/engine/engine/machine-slot.js).
 //
 // #527 (features/base-health.feature): the app is launched with its temp folder (TMP/TEMP/TMPDIR, so
 // machineSlotDir()) and MULTIAGENT_LOCKS_DIR in a folder of the scenario, never the machine's; the
@@ -30,7 +30,7 @@ const { Given, When, Then } = require('./fixtures');
 
 const LOAD_TIMEOUT = 30000;
 const root = path.join(__dirname, '..', '..');
-const baseHealth = () => require(path.join(root, 'src', 'domains', 'project', 'base-health'));
+const baseHealth = () => require(path.join(root, 'packages', 'engine', 'domains', 'project', 'base-health'));
 const wsRoot = (e2e) => path.join(e2e.scratch, 'workspace');
 
 const failuresLine = (page) => page.getByTestId('base-failures');
@@ -153,7 +153,7 @@ Given('the demo project is a git repository on the base {string}', async ({ e2e 
   git(folder, ['commit', '-q', '-m', 'Initial commit'], config);
 });
 
-// what the service does on a real run's `worktree.merged` (src/service/areas/runs.js): not awaited,
+// what the service does on a real run's `worktree.merged` (packages/engine/service/areas/runs.js): not awaited,
 // the check waits for the slot in the background
 When('a merge into the base {string} starts the base check', async ({ e2e }, base) => {
   const res = await e2e.app.evaluate((_electron, a) => {

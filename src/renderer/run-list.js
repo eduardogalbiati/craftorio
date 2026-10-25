@@ -21,7 +21,7 @@
 // goes back to Produced when the card is reopened. A run event updates its own row (refreshRunRow:
 // runs:list { ids }); a running run's commits are read again when its row refreshes.
 
-// The filter chips (id, catalog key, read when drawn); the service filters and counts (src/service/areas/run-lists.js RUN_FILTERS).
+// The filter chips (id, catalog key, read when drawn); the service filters and counts (packages/engine/service/areas/run-lists.js RUN_FILTERS).
 const RUN_FILTERS = [
   ['all', 'run_list.filter_all'],
   ['running', 'run_list.filter_running'],

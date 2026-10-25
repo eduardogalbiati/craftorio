@@ -13,7 +13,7 @@ scripts with the Write tool into the scratchpad and run them with node.
 
 Never compare paths with `path.resolve` + lowercase alone. The GitHub Windows runner's temp folder
 is an 8.3 short path (`RUNNER~1`) while git prints long paths, and macOS `/var` is `/private/var`.
-Use `canonicalPath`/`samePath` from `src/engine/worktree.js`.
+Use `canonicalPath`/`samePath` from `packages/engine/engine/worktree.js`.
 
 ## node-pty
 
@@ -29,7 +29,7 @@ Use `canonicalPath`/`samePath` from `src/engine/worktree.js`.
 - A runaway Windows process is measured by its **committed (private) bytes**, not its working set:
   in the #274 incident a `node --test` process passed 70 GB of commit while its working set stayed
   near 22 GB. Windows grows the page file until the commit limit is reached, then everything that
-  allocates fails. The memory guard (`src/engine/memory-guard.js`) reads `Win32_Process.PrivatePageCount`
+  allocates fails. The memory guard (`packages/engine/engine/memory-guard.js`) reads `Win32_Process.PrivatePageCount`
   and the free commit (`Win32_OperatingSystem.FreeVirtualMemory`) through **one long-lived
   PowerShell helper**: when the commit is gone, starting a new process (even `git`) fails.
 - Out-of-memory signatures in other runs' logs (they are the machine's, not the change's):

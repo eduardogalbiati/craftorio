@@ -1,6 +1,6 @@
 // Backlog › Product Owner (#105): the floating robot button at the bottom right of the Backlog opens
 // the Product Owner's drawer (#po-drawer): suggested questions as chips, a free text box, and the
-// project's conversation (kept by the service until cleared, src/domains/po/product-owner.js). Each answer
+// project's conversation (kept by the service until cleared, packages/engine/domains/po/product-owner.js). Each answer
 // shows its cost and, when it has them, the proposed groups (issues, workflow, inputs, why, files,
 // stage, size: complexity, an estimate from past runs, warnings), the issues that must not run in
 // parallel and the issues to enrich first. A group is applied only on the owner's click: Assign
@@ -28,7 +28,7 @@
 // is disabled ("Product Owner is answering": syncSendButton).
 // Developer or simulated mode asks the simulated Product Owner (no model call) and only previews a filing.
 // Its scenario picker (#148, #po-sim, orange, shown in that mode only) forces the next simulated answer
-// (MOCK_SCENARIOS in src/domains/po/product-owner.js: a question, a draft, a duplicate, an error, large answers,
+// (MOCK_SCENARIOS in packages/engine/domains/po/product-owner.js: a question, a draft, a duplicate, an error, large answers,
 // applied groups, a long attachments list) to click through every state by hand or in a smoke check.
 // The conversation keeps the owner's scroll position on every render; a new message (the question
 // sent, the answer) scrolls to the end only when the owner was already there (#148). While a
@@ -89,7 +89,7 @@
   const actions = () => window.BacklogActions;
   const issueOf = (n) => (actions()?.data()?.issues || []).find((i) => i.number === n);
   const avatar = (st = 'idle') => (window.Robots ? Robots.svg('product-owner', st, { bubble: false, plaque: '' }) : '');
-  // #148: the simulated answers the picker forces (ids of MOCK_SCENARIOS, src/domains/po/product-owner.js); `mode`:
+  // #148: the simulated answers the picker forces (ids of MOCK_SCENARIOS, packages/engine/domains/po/product-owner.js); `mode`:
   // the drawer switches to the mode it answers in
   const SCENARIOS = [
     { id: '', label: 'Default (built from the backlog)' },
@@ -564,7 +564,7 @@
   const placeEpic = (m) => (m in po.placeEpic ? po.placeEpic[m] : !!actions()?.data()?.autoEpic);
 
   // The draft the owner can still file: the latest one, unless filed (not a preview) or discarded since
-  // (the same rule as currentDraft in src/domains/po/product-owner.js).
+  // (the same rule as currentDraft in packages/engine/domains/po/product-owner.js).
   function openDraftIndex() {
     for (let i = po.messages.length - 1; i >= 0; i--) {
       const m = po.messages[i];
@@ -679,7 +679,7 @@
     const agent = window.productOwnerAgent;
     const simulated = devMode();
     const issueMode = po.mode === 'issue';
-    // registering an issue uses the issue tracker's cheaper analysis model (ISSUE_AGENT in src/domains/po/product-owner.js)
+    // registering an issue uses the issue tracker's cheaper analysis model (ISSUE_AGENT in packages/engine/domains/po/product-owner.js)
     const model = issueMode ? 'claude-sonnet-5 · medium' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`;
     // #235: what the drawer plans for, the project by its name
     $p('#po-for').textContent = !po.projectId ? t('backlog_po.choose_a_project_in_the_backlog')

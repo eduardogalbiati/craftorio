@@ -162,15 +162,24 @@ test('#345 every <script src> of src/renderer/index.html names an existing file,
   const missing = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1])
     .filter((s) => !/^[a-z]+:/i.test(s) && !fs.existsSync(path.resolve(RENDERER, s)));
   assert.deepEqual(missing, []);
+  // the other pages (the engine connection page, src/renderer/connection/) write their script paths by hand
+  const pages = fs.readdirSync(RENDERER, { recursive: true }).filter((f) => f.endsWith('.html') && f !== 'index.html' && !f.includes('node_modules'));
+  assert.ok(pages.length >= 1, 'the renderer has other pages');
+  for (const page of pages) {
+    const text = read(path.join(RENDERER, page));
+    const lost = [...text.matchAll(/<(?:script src|link rel="stylesheet" href)="([^"]+)"/g)].map((m) => m[1])
+      .filter((s) => !/^[a-z]+:/i.test(s) && !fs.existsSync(path.resolve(RENDERER, path.dirname(page), s)));
+    assert.deepEqual(lost, [], `${page}: script or style files that do not exist`);
+  }
   const { renderIndexHtml } = require('../scripts/docs.js');
   assert.equal(renderIndexHtml(html, root) === html, true, 'index.html matches npm run docs');
 });
 
 test('#345 the browser server serves the packages/shared/ modules', async (t) => {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  const { setupWorkspace } = require('../src/domains/workspace/workspace');
-  const { createService } = require('../src/service');
-  const { createServer } = require('../src/server');
+  const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+  const { createService } = require('@multiagent/engine/service');
+  const { createServer } = require('@multiagent/engine/server');
   const TOKEN = 'test-token-0123456789abcdef';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'layers-345-ws-'));
   const service = createService({ host: { trashItem: async () => {}, appVersion: '1.2.3', isPackaged: false } });

@@ -3,7 +3,7 @@
 // the fixture workflow has one mock agent turn and a human gate the TEST answers as the owner).
 //
 // Assumed interface (the developer implements it; names chosen to match the existing code):
-// - Channel `roadmap:pause` (src/service/channels/roadmap.js) takes `after: 'stage' | 'now'` next to
+// - Channel `roadmap:pause` (packages/engine/service/channels/roadmap.js) takes `after: 'stage' | 'now'` next to
 //   `stop` (params ['projectId', 'stop', 'after'], so window.api.pauseRoadmap(projectId, stop, after));
 //   nothing passed = 'now' = today's pause. Its schema lists both values and says the default is now.
 // - `after: 'stage'` keeps the roadmap running until the current stage is over, then it pauses with
@@ -17,8 +17,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const roadmaps = require('../../src/domains/roadmap/roadmap');
-const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('../service/helpers');
+const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
+const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('@multiagent/engine/test/service/helpers');
 const H = require('../roadmap-status-helpers');
 
 const hasIssue = (r, n) => (r.issues || []).some((i) => i.number === n);
@@ -188,7 +188,7 @@ test('#391 the bar\'s Cancel pause (drawn from the file) asks the service to tak
 test('#391 channel roadmap:pause: its schema takes after (stage | now), says the default is now, and the service refuses another value', async (t) => {
   const stub = new Proxy(function stub() {}, { get: () => stub, apply: () => undefined });
   const ctx = new Proxy({}, { get: (target, key) => (key === 'ws' ? null : stub) });
-  const entry = require('../../src/service/channels/roadmap')(ctx).find((e) => e.channel === 'roadmap:pause');
+  const entry = require('@multiagent/engine/service/channels/roadmap')(ctx).find((e) => e.channel === 'roadmap:pause');
   assert.equal(entry.params.includes('after'), true, `params: ${entry.params.join(', ')}`);
   const after = JSON.stringify(entry.schema.params.properties.after || null);
   assert.deepEqual([/"stage"/.test(after), /"now"/.test(after)], [true, true], after);

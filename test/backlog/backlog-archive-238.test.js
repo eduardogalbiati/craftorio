@@ -5,7 +5,7 @@
 // failure is per issue and leaves it as it was. The Product Owner and the roadmap ignore archived
 // issues, and the retired `deprioritized` label is gone from the skills.
 //
-// Seams this file expects (src/domains/backlog/backlog.js, next to issueCloseCommand; `exec` is execCli's signature,
+// Seams this file expects (packages/engine/domains/backlog/backlog.js, next to issueCloseCommand; `exec` is execCli's signature,
 // the system boundary, so gh/glab are never started here):
 //   archiveIssues({ platform, repo, numbers, issues, dir, projectId, exec }) -> Promise<{ results: [{ number, ok, error? }] }>
 //     `issues`: the Backlog's issues with their links (the service's withIssueRuns: `roadmap`
@@ -23,11 +23,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const productOwner = require('../../src/domains/po/product-owner');
-const roadmaps = require('../../src/domains/roadmap/roadmap');
+const productOwner = require('@multiagent/engine/domains/po/product-owner');
+const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
 
 const ROOT = path.join(__dirname, '..', '..');
-const loadBacklog = () => require('../../src/domains/backlog/backlog');
+const loadBacklog = () => require('@multiagent/engine/domains/backlog/backlog');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-238-'));
@@ -94,12 +94,12 @@ const labelRemoves = (calls, n) => calls.filter((c) => c[1] === 'issue' && c[3] 
 
 function archiveFn() {
   const { archiveIssues } = loadBacklog();
-  assert.equal(typeof archiveIssues, 'function', 'src/domains/backlog/backlog.js exports archiveIssues');
+  assert.equal(typeof archiveIssues, 'function', 'packages/engine/domains/backlog/backlog.js exports archiveIssues');
   return archiveIssues;
 }
 function restoreFn() {
   const { restoreIssues } = loadBacklog();
-  assert.equal(typeof restoreIssues, 'function', 'src/domains/backlog/backlog.js exports restoreIssues');
+  assert.equal(typeof restoreIssues, 'function', 'packages/engine/domains/backlog/backlog.js exports restoreIssues');
   return restoreIssues;
 }
 

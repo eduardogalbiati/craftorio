@@ -14,12 +14,12 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const ADAPTERS = path.join(__dirname, '..', 'platforms');
 const LITERAL = /(['"`])(github|gitlab|gh|gl)\1/g;
 const EXCEPTIONS = {
+  'packages/engine/domains/account/auth.js': 1, // the GitHub sign-in (OAuth) provider, not a git platform
   'packages/shared/setup-model.js': 1, // the CLIs the setup describes
-  'src/domains/usage/actions-usage.js': 2, // the GitHub Actions billing API: a GitHub-only feature run with the gh CLI
-  'src/domains/workspace/workspace.js': 1, // the gh credential helper for github.com clones
-  'src/host/auth.js': 1, // the GitHub sign-in (OAuth) provider, not a git platform
+  'packages/engine/domains/usage/actions-usage.js': 2, // the GitHub Actions billing API: a GitHub-only feature run with the gh CLI
+  'packages/engine/domains/workspace/workspace.js': 1, // the gh credential helper for github.com clones
   'src/renderer/setup.js': 1, // the CLIs the setup checks
-  'src/service/areas/settings.js': 1, // the CLIs the settings check
+  'packages/engine/service/areas/settings.js': 1, // the CLIs the settings check
 };
 
 const jsFiles = (root) => sourceFiles(root).map((f) => path.join(root, ...f.split('/')));

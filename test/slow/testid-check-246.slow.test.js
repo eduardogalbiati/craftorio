@@ -5,7 +5,7 @@
 // temp folder, as in test/ai-development-e2e.test.js.
 //
 // The interface these tests fix (the issue leaves the names open):
-//   - src/engine/test-ids.js: `testIdsUsed(source)` → the unique static ids of `getByTestId('…')` in a
+//   - packages/engine/engine/test-ids.js: `testIdsUsed(source)` → the unique static ids of `getByTestId('…')` in a
 //     source text (template strings skipped); `missingTestIds(root, { steps, renderer })` → one
 //     `{ id, files }` per id the step definitions use (files: repository-relative, forward slashes)
 //     that the renderer folder does not contain; folders default to features/steps and src/renderer;
@@ -20,7 +20,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { WorkflowRun } = require('../../src/engine/workflow');
+const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', '..', 'workflows', 'ai-development-local-hero.yaml');

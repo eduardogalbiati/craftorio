@@ -9,7 +9,7 @@
 //   { allowed, reason }. An item at a human gate is the view's `status: 'running'` with `waiting: true`.
 //   parkStage is refused while an item of the stage runs a turn or a command (running, not waiting),
 //   its reason naming "Pause after current step".
-// - src/domains/roadmap/roadmap.js: itemAction(dir, projectId, itemId, 'park', ...) parks an item whose run waits at a
+// - packages/engine/domains/roadmap/roadmap.js: itemAction(dir, projectId, itemId, 'park', ...) parks an item whose run waits at a
 //   human gate; advance/withStatus keep a parked item 'parked' while its run waits, 'done' when the run
 //   later succeeds merged, 'failed' when it ends otherwise, and a parked item that fails later never
 //   pauses the roadmap (pausedBy stays null). parkStage(dir, projectId, stageId, { alive, runOf }) is the
@@ -20,7 +20,7 @@
 // - Renderer (views/backlog/backlog-roadmap.js): a card at a gate shows a "Move on" button
 //   (data-rm-item="park", so window.api.roadmapItem(projectId, itemId, 'park')); a parked card reads
 //   "Parked at ..."; the roadmap bar counts "N parked at a gate".
-// - src/domains/night/night-watch.js: permissionOf('roadmap.item', { action: 'park' }) is 'skip'; the log accepts
+// - packages/engine/domains/night/night-watch.js: permissionOf('roadmap.item', { action: 'park' }) is 'skip'; the log accepts
 //   'oracle.parked'; gateDecision({ waitingSince, now, allowed, othersRunning, settings }) answers
 //   'park' | 'escalate' | 'wait' (settings.oracle.parkAfterMinutes, default 15).
 // New exports are looked up inside each test so this file loads before they exist.
@@ -31,8 +31,8 @@ const os = require('os');
 const path = require('path');
 
 const model = () => require('@multiagent/shared/roadmap-model');
-const roadmaps = () => require('../../src/domains/roadmap/roadmap');
-const night = () => require('../../src/domains/night/night-watch');
+const roadmaps = () => require('@multiagent/engine/domains/roadmap/roadmap');
+const night = () => require('@multiagent/engine/domains/night/night-watch');
 
 const item = (id, status, extra = {}) => ({ id, workflow: 'software-development.yaml', inputs: {}, mock: true, number: Number(id.replace(/\D/g, '')) || 1, status, runId: null, runs: [], error: null, ...extra });
 const stage = (id, items, extra = {}) => ({ id, name: '', note: '', items, ...extra });
@@ -89,7 +89,7 @@ test('#395 model: "Move on from this stage" is refused while an item runs a turn
   assert.match(String(acts.parkStage?.reason), /Pause after current step/);
 });
 
-// ---- src/domains/roadmap/roadmap.js: persisted state, sequencing, late answers -----------------------------------
+// ---- packages/engine/domains/roadmap/roadmap.js: persisted state, sequencing, late answers -----------------------------------
 
 test('#395 parked is persisted: written and read back as parked', (t) => {
   const dir = tmpDir(t);
@@ -136,7 +136,7 @@ test('#395 parkStage: refused while an item of the stage runs a turn, naming "Pa
 
 // ---- Through the service (mock runs, the fixture's human gate) -----------------------------------
 
-function svc() { return require('../service/helpers'); }
+function svc() { return require('@multiagent/engine/test/service/helpers'); }
 const hasIssue = (r, n) => (r.issues || []).some((i) => i.number === n);
 const ticks = (ms = 500) => new Promise((r) => setTimeout(r, ms));
 

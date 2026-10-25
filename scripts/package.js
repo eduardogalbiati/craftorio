@@ -55,7 +55,7 @@ async function hardenExe(exe, platform) {
 }
 
 // The native sidecars (native/, #341): the Rust target of each platform and arch, and the binaries
-// shipped in resources/bin/ (src/domains/machine/native-bin.js nativeBinaryPath finds them there): the MCP server,
+// shipped in resources/bin/ (packages/engine/domains/machine/native-bin.js nativeBinaryPath finds them there): the MCP server,
 // the external live terminal's follower and the control channel's client (#342).
 const RUST_TARGETS = {
   'darwin-arm64': 'aarch64-apple-darwin',

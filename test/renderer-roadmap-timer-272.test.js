@@ -1,7 +1,7 @@
 // #272 "Roadmap card: a live run timer under the ring, coloured against the estimate; no progress
 // drop on a fix round". Acceptance tests written before the code. backlog-roadmap.js is evaluated
 // whole in a vm sandbox (test/roadmap-status-helpers.js loadRoadmap) with a fixed clock (setNow moves
-// it); the item's `run` is the service's (src/service/areas/roadmap.js runView: status, startedAt,
+// it); the item's `run` is the service's (packages/engine/service/areas/roadmap.js runView: status, startedAt,
 // finishedAt, progress trail, stepTimes, history) and the workflow's steps come from
 // api.listWorkflows, as RunProgress.estimateProgress gets them.
 //

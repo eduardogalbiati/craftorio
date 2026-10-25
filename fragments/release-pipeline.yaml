@@ -1,5 +1,5 @@
-# The steps of a composed release workflow (#487, src/domains/workflow/workflow-compose.js), adapted from release.yaml
-# without its `ship:` (a repository's workflow never ships, src/engine/run/load.js
+# The steps of a composed release workflow (#487, packages/engine/domains/workflow/workflow-compose.js), adapted from release.yaml
+# without its `ship:` (a repository's workflow never ships, packages/engine/engine/run/load.js
 # loadRepositoryWorkflow): the release manager gathers what is released and proposes the version,
 # the suite runs the project's tests on the base, the notes are written, the owner approves and the
 # tagger tags. Each release style (milestone, per-merge, train, rc-stable) picks its steps and its

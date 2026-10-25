@@ -1,10 +1,10 @@
 // What every run list shows of a run besides its status (#84): its display title (the owner's,
-// else the issue or the task's first line, as src/domains/run/run-pr.js computes it) and the PR it opened, a
+// else the issue or the task's first line, as packages/engine/domains/run/run-pr.js computes it) and the PR it opened, a
 // pull-request glyph coloured by the PR state with its number as a link. Pure (no DOM): app.js,
 // views/runchat/runchat.js and views/backlog/backlog.js draw with it, and it loads in node for tests.
 // load: early (app.js draws its run lists with it)
 (function (root) {
-  // state (src/domains/run/run-pr.js) → words for the tooltip; null: not read yet
+  // state (packages/engine/domains/run/run-pr.js) → words for the tooltip; null: not read yet
   const PR_STATES = {
     closed: 'closed without merge',
     conflict: 'conflict with its base',
@@ -47,7 +47,7 @@
       : `<span class="${cls}" title="${tip}">${PR_GLYPH}${warn}${label}</span>`;
   }
 
-  // The default title (same rule as src/domains/run/run-pr.js defaultTitle): the issue(s), else the first line
+  // The default title (same rule as packages/engine/domains/run/run-pr.js defaultTitle): the issue(s), else the first line
   // of the task. r: a run list item or a window run view ({ issues, task?, inputs? }).
   function defaultTitle(r) {
     const issues = r?.issues || (r?.issue ? [r.issue] : []);

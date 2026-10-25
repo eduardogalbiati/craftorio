@@ -200,7 +200,7 @@ const SUPERVISOR_LOOK = { body: '#7C5CFF', shell: '#F4F4F6', visor: '#15161A', g
 const PO_LOOK = { body: '#0F9F8F', shell: '#F4F4F6', visor: '#15161A', glow: '#9FF5E6', eyes: 'arcs', emblem: 'clipboard' };
 const ORACLE_LOOK = { body: '#1E3A8A', shell: '#F4F4F6', visor: '#15161A', glow: '#FCD34D', eyes: 'slits', emblem: 'eye' };
 
-// a workflow agent as src/domains/agents/agents.js lists it (api.listAgents)
+// a workflow agent as packages/engine/domains/agents/agents.js lists it (api.listAgents)
 const wfAgent = (key, extra = {}) => ({
   id: `workflow:${WF.file}:${key}`, key, name: key.replace(/_/g, ' '), system: false, readOnly: true,
   workflow: { file: WF.file, name: WF.name }, description: `An agent of the ${WF.name} workflow.`, prompt: '',

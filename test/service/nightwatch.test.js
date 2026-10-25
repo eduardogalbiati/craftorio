@@ -1,4 +1,4 @@
-// src/service/channels/nightwatch.js: the owner's Night watch checklist (#239). The channel is called
+// packages/engine/service/channels/nightwatch.js: the owner's Night watch checklist (#239). The channel is called
 // the way window.api calls it (src/host/preload.js, src/renderer/api-http.js): the method's positional
 // arguments become the channel's one argument through the manifest's `params`, so these tests hold
 // whatever shape `params` takes. Save with a list keeps exactly that list; anything that is not a
@@ -7,8 +7,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const night = require('../../src/domains/night/night-watch');
-const { makeService } = require('./helpers');
+const night = require('@multiagent/engine/domains/night/night-watch');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 // The same mapping as src/host/preload.js payload(): positional arguments -> the channel's argument.
 function payload(params, args) {

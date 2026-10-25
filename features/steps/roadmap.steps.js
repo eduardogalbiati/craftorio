@@ -839,7 +839,7 @@ Then('no roadmap item shows an {string} control', async ({ e2e }, name) => {
 const releaseRe = (version) => new RegExp(`${escapeRe(version)}(?![\\w.])`);
 const releaseBlock = (page, version) => page.getByTestId('roadmap-release-block').filter({ hasText: new RegExp(`Release ${releaseRe(version).source}`) }).first();
 
-// A shipped release in the project's history (<workspace>/releases/<projectId>.json, src/domains/releases/releases.js,
+// A shipped release in the project's history (<workspace>/releases/<projectId>.json, packages/engine/domains/releases/releases.js,
 // as scripts/screenshot.js demoReleases writes it), holding the runs of stage n's done items (stage n
 // as the roadmap numbers it: the demo's stage 1 "Stability first", stage 2 "Tonight"). Added to the
 // releases already there; the app reloads to read it.
@@ -951,7 +951,7 @@ Given('the app is open with simulated turns of a few seconds', async ({ e2e }) =
 
 // The demo roadmap's stages replaced by two planned stages (issues #3911…#3913, made up: the runs are
 // simulated), the roadmap paused with nothing to settle, so the bar offers Resume; Concurrent runs
-// off: one run at a time, simulations included (src/service/areas/runs.js concurrency()).
+// off: one run at a time, simulations included (packages/engine/service/areas/runs.js concurrency()).
 Given('the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time', async ({ e2e }) => {
   editRoadmap(e2e, (r) => {
     const model = r.stages.flatMap((s) => s.items).find((x) => x.workflow === 'software-development-local-hero.yaml');

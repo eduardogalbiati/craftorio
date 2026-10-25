@@ -1,6 +1,6 @@
 // Electron main process: the window, the workspace dialog, desktop-only actions (native dialogs,
 // clipboard, opening files and folders, external console windows) and the IPC transport to the
-// engine service (src/service), which holds everything else. With a remote engine set (Settings ›
+// engine service (packages/engine/service), which holds everything else. With a remote engine set (Settings ›
 // Execution › Engine, src/host/engine-connection.js) the process runs no engine and opens no workspace:
 // its window shows the engine another computer serves (src/host/engine-connection-window.js).
 
@@ -28,37 +28,37 @@ const {
   systemPreferences,
 } = require('electron');
 const { createAgentsWindow } = require('./agents-window');
-const { resolveCommand } = require('../engine/providers');
+const { resolveCommand } = require('@multiagent/engine/engine/providers');
 const {
   externalTerminal,
   NO_TERMINAL,
   terminalLaunch,
 } = require('./external-terminal');
-const { pathKey } = require('../domains/machine/platform-paths');
-const { psQuote } = require('../domains/machine/shell');
+const { pathKey } = require('@multiagent/engine/domains/machine/platform-paths');
+const { psQuote } = require('@multiagent/engine/domains/machine/shell');
 const I18n = require('@multiagent/shared/i18n');
 const { t } = I18n;
-const workspace = require('../domains/workspace/workspace');
-const localPreview = require('../domains/local/local-preview');
-const runOwner = require('../domains/run/run-owner');
+const workspace = require('@multiagent/engine/domains/workspace/workspace');
+const localPreview = require('@multiagent/engine/domains/local/local-preview');
+const runOwner = require('@multiagent/engine/domains/run/run-owner');
 const { allowPermission } = require('./permissions');
 const { guardIpc } = require('./ipc-guard');
 const { guardWindow } = require('./window-guards');
 const { checkOpenable } = require('./open-guard');
-const { createService } = require('../service');
-const { createControlChannel } = require('../control');
-const { nativeBinaryPath } = require('../domains/machine/native-bin');
+const { createService } = require('@multiagent/engine/service');
+const { createControlChannel } = require('@multiagent/engine/control');
+const { nativeBinaryPath } = require('@multiagent/engine/domains/machine/native-bin');
 const {
   authChannels,
   PUSHED_EVENTS,
-} = require('../service/manifest');
-const { contractHash } = require('../service/contract');
+} = require('@multiagent/engine/service/manifest');
+const { contractHash } = require('@multiagent/engine/service/contract');
 const engineConnection = require('./engine-connection');
 const { createEngineConnection } = require('./engine-connection-window');
-const { createAuth, fileStorage } = require('./auth');
-const authConfig = require('./auth-config');
+const { createAuth, fileStorage } = require('@multiagent/engine/domains/account/auth');
+const authConfig = require('@multiagent/engine/domains/account/auth-config');
 const { createKeepAwake } = require('./keep-awake');
-const mainLog = require('../domains/workspace/main-log');
+const mainLog = require('@multiagent/engine/domains/workspace/main-log');
 
 // the last lines of this process's console, for a finding's context (#361)
 mainLog.capture();
@@ -69,7 +69,7 @@ if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s
   app.exit(1);
 }
 
-// A copy started by Run locally at a gate (src/domains/local/local-preview.js) keeps its own user data folder,
+// A copy started by Run locally at a gate (packages/engine/domains/local/local-preview.js) keeps its own user data folder,
 // so it never shares the owner's sign-in or window state
 if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData', path.resolve(process.env.MULTIAGENT_USER_DATA));
 
@@ -80,7 +80,7 @@ if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData',
 // - The owner's app (no MULTIAGENT_WORKSPACE) holds Electron's single-instance lock for its user
 //   data folder; a second copy gets a user data folder of its own and offers a scratch copy or quit.
 // - Whatever the user data folder, the app locks the workspace it opens (<workspace>/.lock with a
-//   heartbeat, src/domains/run/run-owner.js); a locked workspace is never opened read-write by a second copy.
+//   heartbeat, packages/engine/domains/run/run-owner.js); a locked workspace is never opened read-write by a second copy.
 // Scratch copies (screenshots, Run locally, smoke checks, tests) have their own workspaces: unaffected.
 const APP_DIR = path.join(__dirname, '..', '..');
 if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
@@ -148,7 +148,7 @@ const service = createService({
     // #329: the interface language until one is chosen (areas/interface-language.js)
     get locale() { return app.getLocale(); }, // read once the app is ready
     userDataDir: app.getPath('userData'),
-    // #318: the microphone permission asked on macOS before recording (src/domains/chat/mic-permission.js)
+    // #318: the microphone permission asked on macOS before recording (packages/engine/domains/chat/mic-permission.js)
     systemPreferences,
     // #279: Self-healing applies merged fixes to this app folder, then restarts it
     appDir: app.getAppPath(),
@@ -156,7 +156,7 @@ const service = createService({
   },
 });
 
-// The account channels (declared in src/service/manifest.js). `auth` is created once the app is
+// The account channels (declared in packages/engine/service/manifest.js). `auth` is created once the app is
 // ready, so it is read at call time; signing in brings the window forward.
 const account = {
   state: () => auth.state(),
@@ -170,7 +170,7 @@ const account = {
   signOut: () => auth.signOut(),
 };
 // Every channel below answers only the app's page in a window's top frame (#467, src/host/ipc-guard.js):
-// another page or a subframe is refused and logged (the console, kept by src/domains/workspace/main-log.js)
+// another page or a subframe is refused and logged (the console, kept by packages/engine/domains/workspace/main-log.js)
 const APP_PAGE = path.join(__dirname, '..', 'renderer', 'index.html');
 const ipc = guardIpc(ipcMain, { appPage: APP_PAGE, log: (...a) => console.warn('[ipc]', ...a) });
 for (const { channel, fn } of authChannels(account)) if (channel) ipc.handle(channel, (arg) => fn(arg));
@@ -231,7 +231,7 @@ service.events.on('settings:changed', () => keepAwake.update());
 ipc.handle('keepAwake:state', () => keepAwake.update());
 
 // ---- control channel (#336) ------------------------------------------------------------
-// Outside sessions drive this app through its own channels (src/control): opened and closed with
+// Outside sessions drive this app through its own channels (packages/engine/control): opened and closed with
 // the setting, closed on quit; the Settings screen shows its port and endpoint file.
 const control = createControlChannel({ service, ctlPath: nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }) });
 const updateControl = () => control.update().then((s) => { broadcast('control:changed', s); return s; });
@@ -373,7 +373,7 @@ function createConnection(mode) {
     mode,
     windowOptions: WINDOW,
     mainWindow: () => win,
-    // runs in progress here refuse the switch (src/service/areas/runs.js), before anything is saved
+    // runs in progress here refuse the switch (packages/engine/service/areas/runs.js), before anything is saved
     prepareRestart: () => { if (!remoteMode) service.prepareRestart({ interruptRuns: false }); },
     relaunch: () => (remoteMode ? setImmediate(() => { app.relaunch(); app.exit(0); }) : restartApp()),
     devTools: !app.isPackaged,

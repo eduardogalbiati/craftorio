@@ -5,7 +5,7 @@
 // temp folder, as in test/ai-development-e2e.test.js.
 //
 // The interface these tests fix (the issue leaves the names open):
-//   - src/engine/test-ids.js: `testIdsUsed(source)` → the unique static ids of `getByTestId('…')` in a
+//   - packages/engine/engine/test-ids.js: `testIdsUsed(source)` → the unique static ids of `getByTestId('…')` in a
 //     source text (template strings skipped); `missingTestIds(root, { steps, renderer })` → one
 //     `{ id, files }` per id the step definitions use (files: repository-relative, forward slashes)
 //     that the renderer folder does not contain; folders default to features/steps and src/renderer;
@@ -20,14 +20,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
+const { WorkflowRun, loadWorkflow } = require('@multiagent/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', 'workflows', 'ai-development-local-hero.yaml');
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 // the module the change creates: loaded inside each test
-const load = () => require('../src/engine/test-ids');
+const load = () => require('@multiagent/engine/engine/test-ids');
 
 const write = (dir, rel, text) => {
   fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
@@ -62,7 +62,7 @@ function makeRepo(t, { steps = true } = {}) {
   return dir;
 }
 
-// ---- the shared rule (src/engine/test-ids.js) -------------------------------------------------------
+// ---- the shared rule (packages/engine/engine/test-ids.js) -------------------------------------------------------
 
 test('#246 testIdsUsed: the static ids of getByTestId, once each, in single or double quotes; template strings are skipped', () => {
   const { testIdsUsed } = load();

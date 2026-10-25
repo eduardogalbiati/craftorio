@@ -2,7 +2,7 @@
 // above it are listed with their line count when they were listed, and may only shrink: a listed
 // file that grows past its count fails (the message says to split it and where the how-to is), a
 // listed file at 1,000 lines or fewer fails until it leaves the list. Lines are counted the same
-// way on every OS (CRLF normalized). The former caps on src/engine/workflow.js
+// way on every OS (CRLF normalized). The former caps on packages/engine/engine/workflow.js
 // (engine-run-split-250) and src/renderer/app.js (view-folders) fold into this rule.
 // Seam: scripts/file-size-ratchet.js { MAX_LINES, EXCEPTIONS, countLines, checkFileSizes }.
 // The module is created by the change: it is loaded inside each test (tests first).
@@ -53,9 +53,9 @@ test('#334 the exceptions list starts at the files over 1,000 lines, each with a
   const atIssue = {
     'src/renderer/views/backlog/backlog-roadmap.js': 2072,
     'src/renderer/views/backlog/backlog.js': 1779,
-    'src/domains/po/product-owner.js': 1732,
+    'packages/engine/domains/po/product-owner.js': 1732,
     'src/renderer/views/discovery/discovery.js': 1560,
-    'src/domains/discovery/discovery.js': 1164,
+    'packages/engine/domains/discovery/discovery.js': 1164,
     'src/renderer/views/backlog/backlog-po.js': 1102,
     'src/renderer/views/arena/arena.js': 1048,
   };
@@ -64,7 +64,7 @@ test('#334 the exceptions list starts at the files over 1,000 lines, each with a
     assert.equal(Number.isInteger(EXCEPTIONS[file]), true, `${file}: a whole line count`);
     assert.ok(EXCEPTIONS[file] > 1000 && EXCEPTIONS[file] <= max, `${file}: recorded ${EXCEPTIONS[file]}, expected 1001..${max}`);
   }
-  assert.equal('src/engine/workflow.js' in EXCEPTIONS, false, 'the former #250 cap is not an exception');
+  assert.equal('packages/engine/engine/workflow.js' in EXCEPTIONS, false, 'the former #250 cap is not an exception');
   assert.equal('src/renderer/app.js' in EXCEPTIONS, false, 'the former view-folders cap is not an exception');
 });
 

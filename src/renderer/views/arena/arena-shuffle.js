@@ -1,4 +1,4 @@
-// The engine's `shuffle(seed)` template filter (src/engine/workflow.js), for the renderer: the AI
+// The engine's `shuffle(seed)` template filter (packages/engine/engine/workflow.js), for the renderer: the AI
 // Arena chat uses it to know which contender wrote "Proposal N" (ai-arena anonymizes the
 // proposals with `| shuffle(run_id)`). The renderer has no Node crypto, so the SHA-256 is inlined.
 // A test keeps both implementations equal. Browser: window.arenaShuffle; Node: module.exports.

@@ -1,4 +1,4 @@
-// Backlog screen: a project's issues synced from its git platform (src/domains/backlog/backlog.js), as a list or a
+// Backlog screen: a project's issues synced from its git platform (packages/engine/domains/backlog/backlog.js), as a list or a
 // kanban (To do / In progress / Waiting for approval / Done). Shows the last sync right away and
 // syncs again in the background each time the screen opens. The platform defaults to
 // Settings › General › Backlog and can be switched here.
@@ -48,7 +48,7 @@
 // closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
 (() => {
-  // The platform adapters (packages/shared/platforms/, #351; platformOf: GitHub's when unknown) plus Bitbucket (soon = no sync yet), as in src/domains/backlog/issues.js.
+  // The platform adapters (packages/shared/platforms/, #351; platformOf: GitHub's when unknown) plus Bitbucket (soon = no sync yet), as in packages/engine/domains/backlog/issues.js.
   const { DEFAULT_PLATFORM, platformOrDefault: platformOf, requestRef } = window.Platforms;
   const PLATFORMS = { ...Object.fromEntries(window.Platforms.PLATFORMS.map((p) => [p.id, { label: p.label }])), bitbucket: { label: 'Bitbucket', soon: true } };
   window.BACKLOG_PLATFORMS = PLATFORMS;
@@ -1055,7 +1055,7 @@
     }];
   }
 
-  // The Backlog Refresh alert (#161, src/domains/backlog/backlog-refresh.js; a warning, #270): on every view when the
+  // The Backlog Refresh alert (#161, packages/engine/domains/backlog/backlog-refresh.js; a warning, #270): on every view when the
   // last refresh is older than Settings › General › Backlog's interval and the base got merges since
   // (or none ever ran); "Refreshing…" (an info) with a link while a refresh run is live. Never starts
   // a run by itself. "Dismiss for today" is remembered by the service; × hides it until it is due again.

@@ -1,4 +1,4 @@
-// The Backlog's Product Owner (#105, src/domains/po/product-owner.js): the analysis report schema, its mock
+// The Backlog's Product Owner (#105, packages/engine/domains/po/product-owner.js): the analysis report schema, its mock
 // answer, sizing/estimates, the monthly usage ledger that budgets the conversation itself, and
 // registering an issue in the conversation (#117): the question cap per thread, each thread's
 // folder in the runs folder, filing and discarding a draft.
@@ -10,9 +10,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const productOwner = require('../../src/domains/po/product-owner');
-const runs = require('../../src/domains/run/runs');
-const usage = require('../../src/domains/usage/usage');
+const productOwner = require('@multiagent/engine/domains/po/product-owner');
+const runs = require('@multiagent/engine/domains/run/runs');
+const usage = require('@multiagent/engine/domains/usage/usage');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'po-'));
@@ -177,7 +177,7 @@ test('normalizeAnswer maps a group\'s mode_reason to modeReason, absent when the
 });
 
 test('RULES states the rule for mode_reason (validated for a change the owner can try in the app, auto otherwise): checked on the source, RULES is not exported', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'domains', 'po', 'product-owner.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'packages', 'engine', 'domains', 'po', 'product-owner.js'), 'utf8');
   const rules = /const RULES = \[[\s\S]*?\]\.join\('\\n'\);/.exec(src)[0];
   assert.match(rules, /mode_reason/);
   assert.match(rules, /validated/);
@@ -565,12 +565,12 @@ test('ask (mock, scenario "error"): the fake steps and a partial line stream fir
 });
 
 test('callAgent includes SELECTION_RULES in the prompt only when a selection is given (checked on the source: callAgent needs a real CLI to run for real)', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'domains', 'po', 'product-owner.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'packages', 'engine', 'domains', 'po', 'product-owner.js'), 'utf8');
   assert.match(src, /selection\.length \? SELECTION_RULES : '',/);
 });
 
 test('callAgent (plan mode) states the calibration and its parameters in the prompt; issue mode has no Calibration section (runTurn stubbed: no real CLI is started)', async (t) => {
-  const providers = require('../../src/engine/providers');
+  const providers = require('@multiagent/engine/engine/providers');
   const original = providers.runTurn;
   t.after(() => { providers.runTurn = original; });
   const prompts = [];
@@ -595,7 +595,7 @@ test('callAgent (plan mode) states the calibration and its parameters in the pro
 });
 
 test('#273 the Product Owner\'s turn has a "The owner\'s time" section with the zone only when a zone is given (runTurn stubbed: no real CLI is started)', async (t) => {
-  const providers = require('../../src/engine/providers');
+  const providers = require('@multiagent/engine/engine/providers');
   const original = providers.runTurn;
   t.after(() => { providers.runTurn = original; });
   const prompts = [];
@@ -760,14 +760,14 @@ test('runHistory reads merge conflicts and the files they named from events.json
   const runDir = path.join(dir, 'run1');
   fs.mkdirSync(runDir, { recursive: true });
   const events = [
-    { type: 'log', message: 'merge conflict in src/engine/workflow.js' },
+    { type: 'log', message: 'merge conflict in packages/engine/engine/workflow.js' },
     { type: 'log', message: 'all good' },
   ];
   fs.writeFileSync(path.join(runDir, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n'));
   const runs = [{ runId: 'run1', workflow: 'software-development.yaml', status: 'success', finishedAt: '2026-09-29T00:00:00Z', mock: false, issues: [{ number: 1 }], durationMs: 60000, gateWaitMs: 0, costUsd: 1, tokens: { total: 100 }, runDir }];
   const [h] = productOwner.runHistory(runs, ISSUES);
   assert.equal(h.conflicts.count, 1);
-  assert.deepEqual(h.conflicts.files, ['src/engine/workflow.js']);
+  assert.deepEqual(h.conflicts.files, ['packages/engine/engine/workflow.js']);
   assert.equal(h.complexity, 2); // issue #1's complexity:2
 });
 
@@ -1002,12 +1002,12 @@ test('runs.listRuns ignores a runs/po-<project>-<stamp> folder: it has no events
 // ---- #124: splitting what is too big for one run, applied on the owner's click ---------------------
 
 const BIG_BODY = [
-  '- [ ] Update src/engine/workflow.js for X',
-  '- [ ] Add src/engine/queue.js handling',
-  '- [ ] Fix src/engine/graph.js edge case',
-  '- [ ] Tweak src/engine/retry.js',
-  '- [ ] Update src/engine/state.js',
-  '- [ ] Adjust src/engine/index.js',
+  '- [ ] Update packages/engine/engine/workflow.js for X',
+  '- [ ] Add packages/engine/engine/queue.js handling',
+  '- [ ] Fix packages/engine/engine/graph.js edge case',
+  '- [ ] Tweak packages/engine/engine/retry.js',
+  '- [ ] Update packages/engine/engine/state.js',
+  '- [ ] Adjust packages/engine/engine/index.js',
   '- [ ] Update src/renderer/backlog.js UI',
   '- [ ] Add src/renderer/kanban.js view',
   '- [ ] Fix src/renderer/style.css',

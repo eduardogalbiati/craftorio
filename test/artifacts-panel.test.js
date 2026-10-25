@@ -156,7 +156,7 @@ test('preview: selecting a markdown artifact renders it through markdownHtml', a
   assert.match(body.innerHTML, /<article class="md"><md># Handoff\n\nDone\.<\/md><\/article>/);
 });
 
-// A manifest (#146, src/domains/evidence/evidence.js, as returned by src/service/index.js's runEvidence) with one
+// A manifest (#146, packages/engine/domains/evidence/evidence.js, as returned by packages/engine/service/index.js's runEvidence) with one
 // final original/modified pair for issue #146.
 function evidenceFixture() {
   const modified = '/r/evidence/evidence/round-1/146-login-default.modified.png';
@@ -196,7 +196,7 @@ test('preview: a final original/modified pair from the evidence manifest renders
   assert.ok(body.innerHTML.includes(`data-ap-img="${original}"`));
 });
 
-// listArtifacts walks every file under the run folder (src/domains/run/runs.js), so a run with evidence images
+// listArtifacts walks every file under the run folder (packages/engine/domains/run/runs.js), so a run with evidence images
 // also lists them as plain files; the fixtures below include matching entries, as a real run would.
 const fileEntry = (file, mtime = '2026-01-01T00:00:00Z') => ({ path: file, name: path.basename(file), rel: file.replace('/r/', ''), kind: 'image', size: 1, mtime });
 
@@ -300,7 +300,7 @@ test('extras: an empty changes list without changesReported (a real run with no 
 // with that step's own round, original/modified side by side, older rounds in History.
 
 // A manifest with two rounds of the same step ("developer"): round 1 has a full pair, round 2 (the
-// latest) recaptured only the modified side (its original capture failed). buildManifest (src/domains/evidence/evidence.js)
+// latest) recaptured only the modified side (its original capture failed). buildManifest (packages/engine/domains/evidence/evidence.js)
 // still points round 2's modified image at round 1's original as its `pair` (the newest earlier one
 // available) — the stale pairing the gate itself must ignore.
 function developerRoundsFixture() {

@@ -20,13 +20,13 @@ function tree(t, files) {
 
 test('areaOf: folders, the desktop entry, the root utilities and the domain modules', () => {
   assert.equal(areaOf('packages/shared/time-zone.js'), 'shared');
-  assert.equal(areaOf('src/engine/run/load.js'), 'engine');
-  assert.equal(areaOf('src/service/areas/backlog.js'), 'service');
-  assert.equal(areaOf('src/control/index.js'), 'server');
-  assert.equal(areaOf('src/server/index.js'), 'server');
+  assert.equal(areaOf('packages/engine/engine/run/load.js'), 'engine');
+  assert.equal(areaOf('packages/engine/service/areas/backlog.js'), 'service');
+  assert.equal(areaOf('packages/engine/control/index.js'), 'server');
+  assert.equal(areaOf('packages/engine/server/index.js'), 'server');
   assert.equal(areaOf('src/host/main.js'), 'desktop');
-  assert.equal(areaOf('src/domains/machine/shell.js'), 'utility');
-  assert.equal(areaOf('src/domains/backlog/backlog.js'), 'root');
+  assert.equal(areaOf('packages/engine/domains/machine/shell.js'), 'utility');
+  assert.equal(areaOf('packages/engine/domains/backlog/backlog.js'), 'root');
   assert.equal(areaOf('src/renderer/views/backlog/backlog.js'), 'renderer');
   assert.equal(areaOf('src/elsewhere/x.js'), null);
 });

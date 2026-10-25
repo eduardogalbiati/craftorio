@@ -1,14 +1,14 @@
 // Internals of the conflict map (#150): a `-U0` patch parsed into hunks, a line carried through later
-// hunks to HEAD (src/domains/project/conflict-map.js), and a decongest fix filed as an issue in preview
-// (src/domains/po/product-owner.js fileDecongest: the command only, recorded in the conversation).
+// hunks to HEAD (packages/engine/domains/project/conflict-map.js), and a decongest fix filed as an issue in preview
+// (packages/engine/domains/po/product-owner.js fileDecongest: the command only, recorded in the conversation).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { buildConflictMap, carry, parsePatch } = require('../../src/domains/project/conflict-map');
-const productOwner = require('../../src/domains/po/product-owner');
+const { buildConflictMap, carry, parsePatch } = require('@multiagent/engine/domains/project/conflict-map');
+const productOwner = require('@multiagent/engine/domains/po/product-owner');
 
 // Isolated identity on every call: nothing depends on the machine's git config.
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();

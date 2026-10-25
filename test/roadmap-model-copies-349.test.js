@@ -1,4 +1,4 @@
-// #349 acceptance: the roadmap's rules live in packages/shared/roadmap-model.js only, src/domains/roadmap/roadmap.js is
+// #349 acceptance: the roadmap's rules live in packages/shared/roadmap-model.js only, packages/engine/domains/roadmap/roadmap.js is
 // the only writer of the roadmap's state, and the views ask the model. Source scans over src/
 // (tests and fixtures live outside src/ and are not scanned).
 const test = require('node:test');
@@ -35,10 +35,10 @@ test('the model exists where the views and the engine can load it', () => {
   assert.equal(fs.existsSync(MODEL), true);
 });
 
-test('only src/domains/roadmap/roadmap.js writes the roadmap\'s state, pausedBy and scope', () => {
+test('only packages/engine/domains/roadmap/roadmap.js writes the roadmap\'s state, pausedBy and scope', () => {
   const writes = /\b(pausedBy|scope)\s*:|\bstate\s*:\s*['"`](planned|running|paused|done)['"`]/;
   const hits = [];
-  for (const rel of ['src/domains/roadmap/live-roadmap.js', 'src/domains/night/night-watch.js', 'src/domains/roadmap/roadmap-undo.js', 'src/service/areas/roadmap.js']) {
+  for (const rel of ['packages/engine/domains/roadmap/live-roadmap.js', 'packages/engine/domains/night/night-watch.js', 'packages/engine/domains/roadmap/roadmap-undo.js', 'packages/engine/service/areas/roadmap.js']) {
     read(rel).split(/\r?\n/).forEach((line, n) => { if (writes.test(line)) hits.push(`${rel}:${n + 1}: ${line.trim()}`); });
   }
   assert.deepEqual(hits, []);

@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const night = require('../src/domains/night/night-watch');
+const night = require('@multiagent/engine/domains/night/night-watch');
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const nightSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'nightwatch', 'nightwatch.js'), 'utf8');
@@ -117,7 +117,7 @@ test('#335 Night watch screen: the incidents line names a regression with a labe
   }];
   const m = night.nightMetrics({ night: { startedAt: new Date(W0).toISOString(), until: new Date(W0 + 540 * MIN).toISOString() }, log, runs: [], now: W0 + 540 * MIN });
   const box = body();
-  // nightwatch:report's nights are metrics + summary (src/service/channels/nightwatch.js report)
+  // nightwatch:report's nights are metrics + summary (packages/engine/service/channels/nightwatch.js report)
   const { view } = sandboxFor({ box, report: { nights: [{ ...m, summary: night.morningSummary(m) }], baseline: night.BASELINE } });
   view().mount();
   await view().show();

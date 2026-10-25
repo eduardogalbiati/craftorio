@@ -1,6 +1,6 @@
 // A release on the project city (#376): the city as it was at the previous release, in grey, with
 // what the release added, changed, renamed or removed in colour. No model call. Pure and
-// deterministic: no I/O, clock or randomness (src/domains/releases/release-city.js reads git in the main process; the
+// deterministic: no I/O, clock or randomness (packages/engine/domains/releases/release-city.js reads git in the main process; the
 // City view's release overlay, src/renderer/views/project/project-city-release.js, draws it).
 // - parseNameStatus(text) → [{ status, path, from? }] sorted by path, from `git diff --name-status -M`:
 //   A → added, M/T → changed, D → removed, R → renamed (from the old path), C → added (the copy).

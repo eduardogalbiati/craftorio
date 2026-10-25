@@ -1,7 +1,7 @@
 /* global api */
 // Night watch screen (#172): the switch with its required end time, the owner's permissions (what
 // the Oracle may do without asking at night; the never-allowed actions locked), and each night's
-// metrics from the Oracle's night log (src/domains/night/night-watch.js, channels nightwatch:*): the summary
+// metrics from the Oracle's night log (packages/engine/domains/night/night-watch.js, channels nightwatch:*): the summary
 // cards, a timeline of the window, the actions with their permission, backup and Undo, and a
 // table to compare nights (and the baseline night). The sidebar entry shows a moon and the runs
 // it watches while the watch is on; Home shows the morning summary (renderMorning).

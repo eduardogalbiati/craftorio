@@ -5,9 +5,9 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
-const { setupWorkspace } = require('../src/domains/workspace/workspace');
-const { createService } = require('../src/service');
-const { createServer } = require('../src/server');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService } = require('@multiagent/engine/service');
+const { createServer } = require('@multiagent/engine/server');
 
 const TOKEN = 'test-token-0123456789abcdef';
 const WORKFLOW = `apiVersion: multiagent/v1
@@ -166,7 +166,7 @@ test('serves only the UI folders: no source, no other packages, no traversal', a
   const get = (p) => request(base, { path: p, headers: bearer }).then((r) => r.status);
   assert.equal(await get('/src/renderer/app.js'), 200);
   assert.equal(await get('/src/host/main.js'), 404);
-  assert.equal(await get('/src/host/auth-config.js'), 404);
+  assert.equal(await get('/packages/engine/domains/account/auth-config.js'), 404);
   assert.equal(await get('/package.json'), 404);
   assert.equal(await get('/node_modules/ws/package.json'), 404);
   assert.equal(await get('/src/renderer/../../package.json'), 404);
@@ -236,7 +236,7 @@ test('the auth channels are served and account changes are pushed', async (t) =>
 });
 
 // #77: window.api (desktop and browser) is built at runtime from the channel manifest
-// (src/service/manifest.js), not from a hand-listed method per file: nothing here parses source
+// (packages/engine/service/manifest.js), not from a hand-listed method per file: nothing here parses source
 // text for method names any more.
 
 // src/host/preload.js requires 'electron' at load and calls contextBridge.exposeInMainWorld once: stub
@@ -308,7 +308,7 @@ test('the browser client reports the external terminal unavailable, with a reaso
 });
 
 test('a channel manifest declaring the same channel twice is refused', () => {
-  const { declarations } = require('../src/service/manifest');
+  const { declarations } = require('@multiagent/engine/service/manifest');
   assert.throws(() => declarations([{ channel: 'x:y', method: 'a' }, { channel: 'x:y', method: 'b' }]), /x:y is declared twice/);
   assert.throws(() => declarations([{ channel: 'a:b', method: 'same' }, { channel: 'c:d', method: 'same' }]), /method same is declared twice/);
 });
@@ -316,7 +316,7 @@ test('a channel manifest declaring the same channel twice is refused', () => {
 // #162: Keep awake has no equivalent in the browser client (npm run serve has no powerSaveBlocker):
 // its state is desktop-only, and its change is a pushed event like any other.
 test('manifest: keepAwake:state is desktop-only, keepAwake:changed is a pushed event, and the browser client refuses to read the state', async () => {
-  const { DESKTOP, declarations } = require('../src/service/manifest');
+  const { DESKTOP, declarations } = require('@multiagent/engine/service/manifest');
   const stateEntry = DESKTOP.find((e) => e.channel === 'keepAwake:state');
   assert.equal(stateEntry.method, 'keepAwakeState');
   assert.ok(stateEntry.desktop, 'declared desktop-only');

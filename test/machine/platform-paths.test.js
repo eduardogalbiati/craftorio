@@ -1,6 +1,6 @@
-// src/domains/machine/platform-paths.js (#318): the one rule to compare paths. Case-insensitive on Windows and
+// packages/engine/domains/machine/platform-paths.js (#318): the one rule to compare paths. Case-insensitive on Windows and
 // macOS (default APFS/HFS+), case-sensitive on Linux; on Windows the same normalisation as
-// today's src/domains/workspace/store.js / src/host/permissions.js (path.resolve, then lower case), so slashes and a
+// today's packages/engine/domains/workspace/store.js / src/host/permissions.js (path.resolve, then lower case), so slashes and a
 // trailing separator do not matter. Also: the call sites that compare paths agree with it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const load = () => require('../../src/domains/machine/platform-paths');
+const load = () => require('@multiagent/engine/domains/machine/platform-paths');
 
 test('samePath: Windows ignores case', () => {
   assert.equal(load().samePath('C:\\Repo\\X', 'c:\\repo\\x', 'win32'), true);
@@ -52,7 +52,7 @@ test('samePath/pathKey: the platform defaults to process.platform', () => {
 
 test('worktree.samePath agrees with platform-paths on this OS', () => {
   const { samePath } = load();
-  const worktree = require('../../src/engine/worktree');
+  const worktree = require('@multiagent/engine/engine/worktree');
   const p = path.join(os.tmpdir(), 'Platform-Paths-Missing', 'Repo');
   for (const other of [p, p.toLowerCase(), p.toUpperCase()]) {
     assert.equal(worktree.samePath(p, other), samePath(p, other), other);

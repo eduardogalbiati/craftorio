@@ -2,7 +2,7 @@
 // current shape, and every reader of recorded runs reads that shape instead of handling each old
 // one itself. The run's files are never rewritten.
 // Seams:
-// - readRunRecord(runDir) of src/domains/run/run-record.js: reads summary.json and events.jsonl, returns
+// - readRunRecord(runDir) of packages/engine/domains/run/run-record.js: reads summary.json and events.jsonl, returns
 //   { summary, events } in the current shape (summary null while the run has no summary.json).
 // - upgradeRunRecord({ summary, events }) of packages/shared/run-record.js: the same upgrade, pure, on
 //   in-memory events (the renderer loads it for live events); UPGRADES: one { name, ... } per change.
@@ -24,15 +24,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { runFigures } = require('../../src/domains/run/run-analysis');
-const { analyzeRun } = require('../../src/domains/oracle/oracle-run-analysis');
-const runs = require('../../src/domains/run/runs');
-const { actualCost, actualTime, stepMinutes } = require('../../src/domains/usage/cost-estimate');
-const { computeAnalytics } = require('../../src/domains/analytics/analytics');
+const { runFigures } = require('@multiagent/engine/domains/run/run-analysis');
+const { analyzeRun } = require('@multiagent/engine/domains/oracle/oracle-run-analysis');
+const runs = require('@multiagent/engine/domains/run/runs');
+const { actualCost, actualTime, stepMinutes } = require('@multiagent/engine/domains/usage/cost-estimate');
+const { computeAnalytics } = require('@multiagent/engine/domains/analytics/analytics');
 const fx = require('../run-record-fixtures-350');
-const GOLDEN = require('../fixtures/run-record-golden-350.json');
+const GOLDEN = require('@multiagent/engine/test/fixtures/run-record-golden-350.json');
 
-const loadReader = () => require('../../src/domains/run/run-record');
+const loadReader = () => require('@multiagent/engine/domains/run/run-record');
 const loadUpgrade = () => require('@multiagent/shared/run-record');
 
 const near = (actual, expected, msg) => assert.ok(typeof actual === 'number' && Math.abs(actual - expected) < 1e-6, `${msg}: expected ${expected}, got ${actual}`);

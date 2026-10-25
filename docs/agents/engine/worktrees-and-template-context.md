@@ -5,7 +5,7 @@ The run's worktree option, what templates can read, and transition actions.
 - `orchestrator.worktree: { repo, base }` + `defaults.working_dir: "{{ worktree_dir }}"`: see [worktrees.md](../worktrees.md).
 - Starting a run executes the repository's own scripts (#472, SEC-7): `prepareDeps` installs through
   the deps cache (`npm ci` runs `postinstall`), then the check step (`npm run check`) and the suite
-  (the detected test command) run through a shell. `logRepoCommands` (src/engine/run/checkout.js),
+  (the detected test command) run through a shell. `logRepoCommands` (packages/engine/engine/run/checkout.js),
   called by `setupWorktree` before the install, emits one `log` event naming them. The project's
   `ignoreInstallScripts` (Projects › Edit, on by default for a repository `createProject` clones,
   and always on for a run whose `repo_path` is a URL with no project: `startRun` adds a notice)
@@ -22,8 +22,8 @@ The run's worktree option, what templates can read, and transition actions.
 - `action:` and `ship.build` run through a shell (`exec`), so `loadWorkflow` allows there only what
   is safe for a shell (#469): a `{{ }}` (or a `{% set %}` / `{% for %}`) passes when it is one value
   through a filter that validates or quotes it (`github_repo`, `pr_url`, `shell_quote`;
-  `SHELL_SAFE_FILTERS` in src/engine/run/templates.js), or when every name it reads is one the
-  workflow or the user controls (`SHELL_SAFE_NAMES` in src/engine/run/load.js: `inputs`, `run_id`,
+  `SHELL_SAFE_FILTERS` in packages/engine/engine/run/templates.js), or when every name it reads is one the
+  workflow or the user controls (`SHELL_SAFE_NAMES` in packages/engine/engine/run/load.js: `inputs`, `run_id`,
   the run's folders, `skill_dir()`, `release`, `iteration`, a gate's `choice`, names a `{% set %}` /
   `{% for %}` binds) or an output field (`steps.<id>.output.<f>`, the step's own `output.<f>`) its
   `output_schema` types `integer`, `number` or `boolean` (enforced before the output is stored).

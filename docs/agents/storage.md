@@ -1,7 +1,7 @@
 # Storage: files and the SQLite index
 
 Read this before touching run listings, the Backlog queue, pending gates, notifications or
-`src/domains/workspace/store.js` (#76).
+`packages/engine/domains/workspace/store.js` (#76).
 
 ## Files are the source of truth
 
@@ -15,13 +15,13 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 - `runs/po-<project>-<stamp>/`: a Product Owner issue thread (#117: `conversation.jsonl`,
   `analysis/`, `attachments/`, `filed/`), not a run; it has no `events.jsonl` or `summary.json`,
   so run listings skip it.
-- `oracle/` (#122, `src/domains/oracle/oracle.js`): the Oracle's conversation `messages.jsonl` (kept across
+- `oracle/` (#122, `packages/engine/domains/oracle/oracle.js`): the Oracle's conversation `messages.jsonl` (kept across
   resets), `state.json` (provider session, context size, compaction due), `memory.md` (saved only
   by the owner), `session.md` (the current session's opening prompt), `handoffs/<stamp>-<reason>.md`,
   `usage.jsonl` (one line per real answer; added to Usage and the monthly budgets as one
   summary-like run per day, `usageRuns`) and `owner.json` (the one app process that answers, a
   run-owner heartbeat). Written by the service, never by the model.
-- The three conversational agents' usage (#280, `src/domains/agents/agents-usage.js`): every real turn appends one line
+- The three conversational agents' usage (#280, `packages/engine/domains/agents/agents-usage.js`): every real turn appends one line
   (a simulated turn records nothing; nothing is ever rewritten) to `oracle/usage.jsonl` (the Oracle),
   `backlog/product-owner.usage.jsonl` (the Product Owner, every project; Clear keeps it) or
   `supervisor/usage.jsonl` (the Supervisor chat; Clear keeps it). Fields: `ts`, `agent` (`oracle`,
@@ -37,12 +37,12 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   in `supervisor/chat.jsonl` (cost only, until Clear removes them). Readers: Analytics' Agents tab
   (`analytics:agents`), Usage and the monthly budgets (the Oracle's and the Supervisor chat's days as
   summary-like runs, the Product Owner's month through `usage.withPeerUsage`).
-- `phone-gates/devices.json` (#226, `src/domains/workspace/mobile-gates.js`): the phones paired with the gates page
+- `phone-gates/devices.json` (#226, `packages/engine/domains/workspace/mobile-gates.js`): the phones paired with the gates page
   (`id`, `name`, `tokenHash` (SHA-256; the token itself is only on the phone), `pairedAt`,
   `lastSeen`); Revoke removes the entry. `phone-gates/secret`: the key that signs the gate links,
   created once, so a link keeps working across restarts until it expires. Pairing codes live in
   memory only: a restart voids them.
-- `discovery/<project id>/` (#256, `src/domains/discovery/discovery.js`): the discovery cards, private to the
+- `discovery/<project id>/` (#256, `packages/engine/domains/discovery/discovery.js`): the discovery cards, private to the
   workspace (`discovery/.gitignore` ignores everything; never committed, never sent to the git
   platform). `board.json` (columns `{ id, title, wip }`, the card order per column),
   `cards/<card id>/` (`<yyyymmdd>-<4 hex>`) with `card.json` (id, title, type `idea | prd | rfc | bug |
@@ -60,7 +60,7 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `attachments/` (any file up to 50 MB, original names, a taken name gets a `-2` suffix, the same
   content is stored once) and `conversation.jsonl` (the thread, appended). `archive/<card id>/`: a
   discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`.
-  A committed card (#258, `src/domains/discovery/discovery-commit.js`): `card.column = 'committed'` (no board column,
+  A committed card (#258, `packages/engine/domains/discovery/discovery-commit.js`): `card.column = 'committed'` (no board column,
   in no `order`; `moveCard` and `mergeCard` refuse it, `restoreCard` keeps it committed, and it is
   kept as it was committed: `updateCard` only takes `links.release`, a new document, attachment,
   restored version, run result or Grill me interview is refused; its thread still takes notes),
@@ -69,11 +69,11 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   text of each issue, a thread entry `{ kind: 'commit', issues }`; `links.from` on a card created
   from another (`createCard`'s `from`). Its delivery is never stored: the `discovery:board`
   channel computes it on each read from the synced backlog and the release history. Every
-  file is written whole (temp file + rename, `writeFileAtomic` in `src/domains/workspace/state-file.js`); project
+  file is written whole (temp file + rename, `writeFileAtomic` in `packages/engine/domains/workspace/state-file.js`); project
   ids, card ids and attachment names are checked before a path is built, so nothing outside a
   card's folder is read or written. No index row: the folders are read directly. Screens, the
   Oracle and agents reach a card only through the `discovery:` channels
-  (`src/service/channels/discovery.js`), never by reading the folder.
+  (`packages/engine/service/channels/discovery.js`), never by reading the folder.
 - **The gate answer record**: a gate's `approval.resolved` event in `events.jsonl` carries
   `approval_id`, `step_id`, `choice` (or `approved`), `by`, `wait_ms`, `feedback?`, `commit?`;
   answered from a paired phone it adds `answered_by: "owner"`, `via: "mobile"`, `device` (the
@@ -90,7 +90,7 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 ### Old runs: the run record upgrades them on read (#350)
 
 A run's files keep the shape they were recorded in, forever: no migration rewrites a run folder.
-`readRunRecord(runDir)` (`src/domains/run/run-record.js`) reads `summary.json` and `events.jsonl` and returns
+`readRunRecord(runDir)` (`packages/engine/domains/run/run-record.js`) reads `summary.json` and `events.jsonl` and returns
 `{ summary, events }` in the **current shape** (summary null while the run has none);
 `readRunSummary(runDir)` returns the summary alone and reads the events only when it needs them.
 The upgrade itself, `upgradeRunRecord({ summary, events })` in `packages/shared/run-record.js`, is pure
@@ -100,8 +100,8 @@ of a run's shape, in order: `single issue: issues`, `#233 stopped attempt`, `#23
 `#277 multi-result turn`, `sessions in the summary`. The readers (`runFigures`, `analyzeRun`,
 `runs.readRun` and the run index, `usage.readRuns` and Analytics, the cost estimates through the
 run list, the Oracle's focus) read the current shape only: they never test for an older one. The
-run index stores the upgraded summary; bump `READ_VERSION` in `src/domains/run/runs.js` (and the figures' sig
-in `src/service/areas/insights.js`) when an upgrade changes what was indexed.
+run index stores the upgraded summary; bump `READ_VERSION` in `packages/engine/domains/run/runs.js` (and the figures' sig
+in `packages/engine/service/areas/insights.js`) when an upgrade changes what was indexed.
 
 When a change alters what a run records (a field renamed, a cost counted another way, a list moved):
 1. Change the engine to write the new shape, with a marker an older record lacks when the shape
@@ -118,8 +118,8 @@ When a change alters what a run records (a field renamed, a cost counted another
 
 GitHub/GitLab own the issues; everything local is a read-only replica, and issue changes are
 never made locally nor flow back from local data to the platform. Only the explicit, previewed
-owner actions write to the platform (Save to issue, create, close, epics: `src/domains/backlog/backlog.js`,
-`src/domains/po/po-split.js`, `src/domains/backlog/epics.js`).
+owner actions write to the platform (Save to issue, create, close, epics: `packages/engine/domains/backlog/backlog.js`,
+`packages/engine/domains/po/po-split.js`, `packages/engine/domains/backlog/epics.js`).
 
 - `backlog/<project>.json`: the sync cache (`syncedAt`, every issue with its PRs/MRs and epic),
   rewritten by each sync (`syncBacklog`); a save to an issue re-reads that one issue into it.
@@ -128,7 +128,7 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/d
   `knownPullRequests`) so the screen and the Product Owner can show it. Each sync refreshes the
   copies of the items not started yet (`refreshQueuedCopies`, `roadmap.refreshCopies`); an item
   with a run keeps the text its run used.
-- The roadmap file also holds the **Live roadmap** switch (#164, `src/domains/roadmap/live-roadmap.js`): `live`
+- The roadmap file also holds the **Live roadmap** switch (#164, `packages/engine/domains/roadmap/live-roadmap.js`): `live`
   (true/false), `liveSince` and `liveBy` (when and who turned it on), `liveRefill` (the last refill:
   `status` refilling | added | empty | budget | failed | off, `at`, `added`, `costUsd`, `message`)
   and `liveRefills` (`[{ at, costUsd }]` of the last 24 h, for the daily budget). It is a file
@@ -146,16 +146,16 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/d
 ### Who writes the backlog files, and the change event (#204)
 
 - Writers of `backlog/`: the sync (`<project>.json`, `<project>.local.json`), the queue snapshot
-  (`writeQueueFile`), the roadmap (`writeRoadmap`, `src/domains/roadmap/roadmap.js`: the screen, the service's
+  (`writeQueueFile`), the roadmap (`writeRoadmap`, `packages/engine/domains/roadmap/roadmap.js`: the screen, the service's
   dispatch and live refill, the Oracle's `roadmap.stages`, the Product Owner), the refresh banner's
   dismissal (`<project>.refresh.json`), and anything outside the app (another window, a script).
-  The roadmap and the queue go through `src/domains/workspace/state-file.js` (temp file + rename, `.bak`).
-- The conflict map (#150, `src/domains/project/conflict-map.js`): `<project>.conflict-map.json`, written (temp file +
+  The roadmap and the queue go through `packages/engine/domains/workspace/state-file.js` (temp file + rename, `.bak`).
+- The conflict map (#150, `packages/engine/domains/project/conflict-map.js`): `<project>.conflict-map.json`, written (temp file +
   rename) when the Product Owner plans and finds none, and after a real run of a git project merges
-  (`src/service/areas/conflict-map.js`, on `workflow.finished`). The Backlog payload (`conflictMap`)
+  (`packages/engine/service/areas/conflict-map.js`, on `workflow.finished`). The Backlog payload (`conflictMap`)
   and a simulated Product Owner only read it; deleting it makes the next plan rebuild it.
-- Releases (#260): `<workspace>/releases/<project>.json` (`src/domains/releases/releases.js`, through
-  `src/domains/workspace/state-file.js` too) holds the shipped releases and the next release's notes. It is the only
+- Releases (#260): `<workspace>/releases/<project>.json` (`packages/engine/domains/releases/releases.js`, through
+  `packages/engine/domains/workspace/state-file.js` too) holds the shipped releases and the next release's notes. It is the only
   record of what a release shipped: an issue's "Released" badge is read from it on every Backlog
   read (`releasedIssues`), never written into the synced `<project>.json`, which each sync rewrites.
   A roadmap's cut line keeps its release run in `<project>.roadmap.json` (`stage.release`).
@@ -165,7 +165,7 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/d
   script) keeps what is stored. Undo and "Restore an earlier version…" put the stage back with the
   switch it had (`roadmap-undo.js` `head`). A save or an Undo that would disable a stage while one
   of its items runs is refused with the reason (`saveStages`, `restoreStages`), whoever writes it.
-- **The roadmap's history** (#281, `src/domains/roadmap/roadmap-history.js`): before each owner edit of a roadmap
+- **The roadmap's history** (#281, `packages/engine/domains/roadmap/roadmap-history.js`): before each owner edit of a roadmap
   (a save from the screen, a proposal added or replacing it, the queue moved in, Clear, an Undo, a
   Restore) the roadmap channels keep its stages as they were in
   `backlog/<project>.roadmap.history/<time>-<n>.json` (`{ at, label, stages }`, the label being what
@@ -173,7 +173,7 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/d
   lists them ("Restore an earlier version…"). The engine's own writes (a run started or finished, a
   live refill) and the Oracle's actions (their own backup, `oracle/backups/`) are not kept there.
   **Undo** (the toast after an edit) does not read the history: the service keeps the last edit of
-  each project in memory (`{ before, after, label }`, `src/domains/roadmap/roadmap-undo.js`) until the next edit or
+  each project in memory (`{ before, after, label }`, `packages/engine/domains/roadmap/roadmap-undo.js`) until the next edit or
   a restart. Undo and Restore put back what changed, never the whole file: an item that exists now
   keeps its run (`status`, `runId`, `runs`, `error`), one that is running or done is not changed,
   items and stages added since stay, and both refuse (changing nothing) when an issue they bring
@@ -185,11 +185,11 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/d
   it in one synchronous step (`updateRoadmap`: `readRoadmap` → change → `writeRoadmap`, no `await`
   between), so the service's writers (the screen's save, the Product Owner, the Oracle, the
   dispatch) never interleave in the service process. `updatedAt` only grows (+1 ms over the last
-  one seen, so two writes in the same millisecond differ), and `src/domains/roadmap/roadmap.js` keeps in memory the
+  one seen, so two writes in the same millisecond differ), and `packages/engine/domains/roadmap/roadmap.js` keeps in memory the
   stages of the last 50 reads and writes of each file by `updatedAt` (`readRoadmapAt`). A save from
   the screen carries the `updatedAt` it read (`roadmap:save` `base`); the Product Owner's move
   carries its read too (the Oracle's `roadmap.stages` `base`). When the file was written since
-  (another writer, another window, a script), `src/domains/roadmap/roadmap-merge.js` applies only what the edit
+  (another writer, another window, a script), `packages/engine/domains/roadmap/roadmap-merge.js` applies only what the edit
   changed against that read to the stored stages, by item and stage id: a stage's name, note, cut
   line or switch; an item's workflow, simulation, chain, each input, its issues (the ones the edit
   added or took out); a move, a removal, a new item or stage. Everything else stays as stored. It
@@ -198,7 +198,7 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/d
   restart): the screen gets the Backlog with `conflict: { reason }`. A merged save keeps one
   history version with its label, and its Undo takes back only that edit. An Oracle
   `roadmap.stages` without `base` still replaces the stages (it is the whole list it means).
-- `src/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
+- `packages/engine/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
   `setWorkspace`, closed on a switch and on `shutdown`) and pushes `backlog:changed { projectId,
   file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after
   its last write; a write that leaves the same mtime and size pushes nothing. A watcher error
@@ -220,16 +220,16 @@ the packaged app). WAL mode, `busy_timeout` 5 s, schema in `MIGRATIONS` (`PRAGMA
 | `queues`, `queue_items`, `queue_claims` | Backlog queues; claims of items a dispatcher is starting | yes: a project with no row is imported from `backlog/<id>.queue.json` (a snapshot written under the same lock) |
 | `gates` | one row per `approval.requested`; `open` → `resolved` / `withdrawn` / `closed` (run end) / `interrupted` (startup) | no: history only, the live gates are in the engine |
 | `notifications` | every notice (`type` = `<kind>.<event>`, run/project/issue, title, body, target, created/read at) | no: deleting `index.db` loses the history |
-| `run_files` | the files each run's own commits changed, keyed by the commit range read (`src/domains/project/repo-performance.js`) | yes: read again from the clone's git history when missing |
-| `run_artifacts`, `artifact_paths` | each run's artifact list (`src/domains/run/run-artifacts.js`, #200), keyed by `events.jsonl`'s and the run folder's size + mtime, with how far `events.jsonl` was read (a live run reads only what was appended); the project copies' paths → their runs (finding one artifact checks only its run) | yes: computed again from the run folder when missing |
+| `run_files` | the files each run's own commits changed, keyed by the commit range read (`packages/engine/domains/project/repo-performance.js`) | yes: read again from the clone's git history when missing |
+| `run_artifacts`, `artifact_paths` | each run's artifact list (`packages/engine/domains/run/run-artifacts.js`, #200), keyed by `events.jsonl`'s and the run folder's size + mtime, with how far `events.jsonl` was read (a live run reads only what was appended); the project copies' paths → their runs (finding one artifact checks only its run) | yes: computed again from the run folder when missing |
 
 Why: listing runs read every run folder on each call; the queue files were read-modify-written by
 concurrent runs without a lock; gates and notifications lived only in memory.
 
 ## Repository performance: where the numbers come from (#159)
 
-Analytics › Repository performance and the Product Owner's conflict map (`src/domains/project/conflict-map.js`, the
-"## Conflict map" section of its report, #150) share `src/domains/project/repo-performance.js` (`commitRanges`,
+Analytics › Repository performance and the Product Owner's conflict map (`packages/engine/domains/project/conflict-map.js`, the
+"## Conflict map" section of its report, #150) share `packages/engine/domains/project/repo-performance.js` (`commitRanges`,
 `filesEditedByRuns`; the map adds per-line counts from `git -U0` hunks carried to HEAD, and falls back
 to the last commits of the branch when no real run merged yet):
 
@@ -252,10 +252,10 @@ to the last commits of the branch when no real run merged yet):
 Files only, in `<workspace>/oracle/` (no index.db table): `night-watch.json` (the switch: `on`,
 `until`, `startedAt`, `by`), `night-permissions.json` (the owner's checklist; missing = the
 defaults) and `night-log.jsonl`, appended by the service, never by the model: `oracle.watch`
-(on, end time moved, off), `oracle.detected` (`src/service/channels/nightwatch.js`, from run events
+(on, end time moved, off), `oracle.detected` (`packages/engine/service/channels/nightwatch.js`, from run events
 and a one-minute roadmap check), `oracle.action` / `oracle.blocked` / `oracle.escalated` /
-`oracle.undone` (`src/domains/oracle/oracle.js`). The nights are the `oracle.watch` windows; every metric
-(`src/domains/night/night-watch.js` `nightMetrics`) is recomputed on read from that log, the runs'
+`oracle.undone` (`packages/engine/domains/oracle/oracle.js`). The nights are the `oracle.watch` windows; every metric
+(`packages/engine/domains/night/night-watch.js` `nightMetrics`) is recomputed on read from that log, the runs'
 `events.jsonl` (start, end, status, cost, progress events, gates) and the Oracle's `usage.jsonl`.
 Lines unblocked come from `git diff --shortstat` of a run's local merge commit.
 Self-healing (#278): the switch is `settings.oracle.selfHealing` (settings.json);
@@ -264,7 +264,7 @@ is turned off. Each change writes an `oracle.watch` entry with `selfHealing: tru
 null`; those are not nights but days of the report (`selfHealingDays`: one window per UTC day).
 A detector's `oracle.detected` carries its `evidence` and is written once per run and kind (the
 log is read at the first finding after a start, so a restart does not log it again).
-An app update (#279, `src/domains/workspace/app-update.js`) writes `oracle/app-update.json` `{ from, to, subjects,
+An app update (#279, `packages/engine/domains/workspace/app-update.js`) writes `oracle/app-update.json` `{ from, to, subjects,
 roadmaps, appDir, at }` right before its restart, and an `oracle.action` entry of kind `app.update`
 (`from`, `to`, `subjects`). The next start reads it before the roadmap dispatch: within 2 minutes of
 `at` it resumes the listed roadmaps and deletes it; later it is kept for the failed-update banner
@@ -278,7 +278,7 @@ both removed by #285).
   index. Nothing is rewritten when the zone changes.
 - **The zone** is `settings.timeZone` (Settings › General › Time zone, an IANA name). Unset, it is
   the computer's: `readSettings` fills it in, `writeSettings` does not save it until one is chosen.
-- **One helper** cuts and formats: `packages/shared/time-zone.js` (`window.TimeZone`; `src/domains/analytics/time-zone.js`
+- **One helper** cuts and formats: `packages/shared/time-zone.js` (`window.TimeZone`; `packages/engine/domains/analytics/time-zone.js`
   in the main process). Day keys, local midnights, weeks, months and visible times go through it.
 - **What follows the zone**: Analytics and Usage days and months, the agents' usage days, the
   Oracle's daily budget and its reset, the day budget (#206), the Product Owner's month, GitHub
@@ -291,10 +291,10 @@ both removed by #285).
 
 ## Rules
 
-- **Only the service opens it** (`openIndex` in `src/service/areas/index-db.js`, on `setWorkspace`; closed in
+- **Only the service opens it** (`openIndex` in `packages/engine/service/areas/index-db.js`, on `setWorkspace`; closed in
   `shutdown`). The engine emits, the service writes (`indexEvent`, `notify`). The renderer and the
-  browser UI use channels (`src/service/channels/storage.js`), never the file.
-- `storeFor(dir)` lets `src/domains/run/runs.js` and `src/domains/backlog/backlog.js` use the open store and fall back to the
+  browser UI use channels (`packages/engine/service/channels/storage.js`), never the file.
+- `storeFor(dir)` lets `packages/engine/domains/run/runs.js` and `packages/engine/domains/backlog/backlog.js` use the open store and fall back to the
   plain files without one (`scripts/run.js`, unit tests, `node:sqlite` unavailable). Keep both paths.
 - Every queue change goes through `updateQueue` (one `BEGIN IMMEDIATE` transaction). The dispatcher
   uses `claimQueued` (pick + claim atomically) and `releaseQueued` when a start fails; a claim expires

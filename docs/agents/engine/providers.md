@@ -23,13 +23,13 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   set and session mode. Adding a provider: the code map's "A provider".
 - **Where a turn's cost comes from (#369)**: the CLI's own figure when it reports one (Claude Code's
   `total_cost_usd`, the difference with the session's previous total, #233; Grok), else the tokens ×
-  the model's price (`src/domains/usage/usage.js` `sessionCost`: input, output, cache read, and cache write at the
+  the model's price (`packages/engine/domains/usage/usage.js` `sessionCost`: input, output, cache read, and cache write at the
   model's `cache_write` price, else 1.25× input for a 5-minute cache and 2× for an hour). A model's
   price is `settings.prices[model]`, else the adapter's `prices` table (`priceOf`; Claude:
   `claude-haiku-5-5`). One exception: when Claude Code does not know the model it runs, it writes
   `[claude-code:unrecognized_model] {"model":...}` to stderr (the adapter's `parse.stderr`) and prices
   the turn at another model's rates. Such a turn is priced by the app from its tokens at the session's
-  cache tier (`priceUnrecognizedTurn`, `src/engine/run/costs.js`): its `session.message_received`
+  cache tier (`priceUnrecognizedTurn`, `packages/engine/engine/run/costs.js`): its `session.message_received`
   carries `cost_source: 'tokens'` and the CLI's figure as `cli_cost_usd`, the session snapshot a
   `cost_estimate` `{ source, model, cli_version, cli_cost_usd }`. With no price for the model its cost
   is unknown (`cost_usd: null`, `cost_source: 'unknown'`, `cost_note: 'no price for <model>'`) and the
@@ -68,8 +68,8 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   every turn on a listed entry fail with that CLI's usage-limit message (the hint carries the agent's
   own provider; a simulated session records it as `simulates`, shown instead of `mock`).
 - **Accounts per provider (#312)**: Settings' `providers.<provider>.accounts: [{ name, dir, enabled }]`
-  (WorkflowRun's `accounts`, from `settingsAccounts` in `src/service/areas/runs.js`; an account without
-  `enabled` counts as enabled) are config folders of the same CLI, in order (`src/engine/run/accounts.js`).
+  (WorkflowRun's `accounts`, from `settingsAccounts` in `packages/engine/service/areas/runs.js`; an account without
+  `enabled` counts as enabled) are config folders of the same CLI, in order (`packages/engine/engine/run/accounts.js`).
   A new session runs on the first enabled account that is not out and records it (`session.account`,
   shown in the run's cost breakdown); the folder reaches the CLI as described in capabilities.md. A
   quota error on an account comes **before** the fallback chain: the account is out until the reset

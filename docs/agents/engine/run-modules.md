@@ -1,11 +1,11 @@
 # The engine's modules by area (#250)
 
-Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop, one module per area in `src/engine/run/` holds the rest, so an engine change touches one module.
+Which file owns which part of a run: `packages/engine/engine/workflow.js` keeps the run loop, one module per area in `packages/engine/engine/run/` holds the rest, so an engine change touches one module.
 
-- `WorkflowRun` (src/engine/workflow.js) keeps only the run loop: the constructor (run state, inputs,
+- `WorkflowRun` (packages/engine/engine/workflow.js) keeps only the run loop: the constructor (run state, inputs,
   agents, template context), `start` and `finish`, `runStep` (one visit of a step, by type), `runAgentStep`
   (prompt, turn, schema retries, `save_as`), `runFanOut`, `startChildRun`, `stop`, `emitEvent`, the
-  chaining `then`. Everything else lives in `src/engine/run/<area>.js` and is mixed into the prototype
+  chaining `then`. Everything else lives in `packages/engine/engine/run/<area>.js` and is mixed into the prototype
   at the end of workflow.js (`mixin(...)`): a module exports `methods`, an object of methods written
   like class methods (`this` is the run), plus the helpers other modules or the public API need;
   `templates.js` and `load.js` export helpers only (no methods, not in `mixin(...)`).

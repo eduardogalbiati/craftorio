@@ -3,7 +3,7 @@
 // Seams this file expects:
 // 1. A new plain-logic module, no DOM: packages/shared/backlog-archive.js (moved from views/backlog/, #345)
 //    (Browser: window.BacklogArchive, loaded by src/renderer/index.html; Node: module.exports, like
-//    backlog-labels.js; the service may require it too, as src/domains/roadmap/roadmap.js requires chain-model):
+//    backlog-labels.js; the service may require it too, as packages/engine/domains/roadmap/roadmap.js requires chain-model):
 //      ARCHIVED_LABEL                         'archived'
 //      isArchived(issue)                      closed and labelled `archived` (any case)
 //      issueState(issue)                      'open' | 'closed' | 'archived' (the state chips)

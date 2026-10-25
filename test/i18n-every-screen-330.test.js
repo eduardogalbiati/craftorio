@@ -12,8 +12,8 @@
 //     (po-calibration.js label, cost.label), the platforms' epic help (platforms/github.js,
 //     gitlab.js epicHelp); the English text is today's, unchanged;
 // (c) fixed text the engine and the service build to be shown follows it too: the memory guard's
-//     `process.killed` message (src/engine/run/turns.js watchMemory) and the Oracle's monthly budget
-//     refusal (src/domains/oracle/oracle.js monthlyBlock); engine errors and logs stay English (not tested here);
+//     `process.killed` message (packages/engine/engine/run/turns.js watchMemory) and the Oracle's monthly budget
+//     refusal (packages/engine/domains/oracle/oracle.js monthlyBlock); engine errors and logs stay English (not tested here);
 // (d) pt-BR.json has every key of en.json (#329 only checks a missing key falls back to English);
 // (e) a few screens rendered in Portuguese (the real page, test/renderer-app-harness.js): Home's empty
 //     state, the Inbox, the Backlog's kanban show none of the English labels they show today, and no
@@ -28,6 +28,7 @@ const { report, sourceFiles, untranslated, untranslatedHtml } = require('./untra
 
 const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
+const ENGINE = path.join(ROOT, 'packages', 'engine');
 const RENDERER = path.join(SRC, 'renderer');
 const SHARED = path.join(ROOT, 'packages', 'shared');
 const CATALOGS = path.join(SHARED, 'i18n');
@@ -136,7 +137,7 @@ test('#330 (b) platforms: the epic help follows the interface language (GitHub a
 // ---- (c) engine and service text shown on screen ------------------------------------------------
 test('#330 (c) the memory guard\'s process.killed message follows the interface language', (t) => {
   t.after(restoreEnglish);
-  const { methods, gib } = require(path.join(SRC, 'engine', 'run', 'turns.js'));
+  const { methods, gib } = require(path.join(ENGINE, 'engine', 'run', 'turns.js'));
   const kill = { pid: 42, commandLine: 'node build.js', bytes: 5 * 1024 ** 3, limitBytes: 4 * 1024 ** 3 };
   const message = () => {
     const events = [];
@@ -159,7 +160,7 @@ test('#330 (c) the memory guard\'s process.killed message follows the interface 
 
 test('#330 (c) the Oracle\'s monthly budget refusal follows the interface language', (t) => {
   t.after(restoreEnglish);
-  const oracle = require(path.join(SRC, 'domains', 'oracle', 'oracle.js'));
+  const oracle = require(path.join(ENGINE, 'domains', 'oracle', 'oracle.js'));
   const budget = { claude: { name: 'Claude Code', blockOnLimit: true, limitUsd: 10, usedUsd: 10 } };
   const { en, pt } = inBoth(() => oracle.monthlyBlock(budget));
   assert.equal(en, 'Claude Code already reached its monthly budget. Raise it in Usage to ask the Oracle.');

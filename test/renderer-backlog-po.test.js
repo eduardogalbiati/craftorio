@@ -421,7 +421,7 @@ test('the conversation and the applied-group notes reset when the drawer switche
 
 // ---- registering an issue (#117): the draft shown in the chat is filed only on the owner's click ---
 
-test('openDraftIndex uses the same rule as currentDraft in src/domains/po/product-owner.js: a draft is open until a non-preview filing or a discard closes it', () => {
+test('openDraftIndex uses the same rule as currentDraft in packages/engine/domains/po/product-owner.js: a draft is open until a non-preview filing or a discard closes it', () => {
   const fn = /function openDraftIndex\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /if \(\(m\.filed && !m\.filed\.preview\) \|\| m\.discarded\) return -1;/);
   assert.match(fn, /if \(m\.role === 'po' && m\.mode === 'issue' && \(m\.issue\?\.draft \|\| m\.issue\?\.existingIssue\)\) return i;/);

@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const evidence = require('../../../src/domains/evidence/evidence');
+const evidence = require('@multiagent/engine/domains/evidence/evidence');
 const {
   DEMO_ISSUES,
   DEMO_REPO,
@@ -15,7 +15,7 @@ const {
   writeEvents,
 } = require('../helpers');
 
-// A roadmap (Backlog › Roadmap, src/domains/roadmap/roadmap.js): stage 1 done (the local-hero run of #11), then a
+// A roadmap (Backlog › Roadmap, packages/engine/domains/roadmap/roadmap.js): stage 1 done (the local-hero run of #11), then a
 // group of two issues (with the Product Owner's reasons, mode auto), then one UI issue (mode
 // validated, no stage note); planned, so nothing starts. `--click "[data-rm-edit]"` opens the first
 // planned item's Edit form (the workflow's inputs: select, checkbox, text).
@@ -78,7 +78,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
       ] }] : []),
       { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', ...(states ? { disabled: true } : {}), items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
         // #193: a reason of 500+ characters ends with "…" at the card's edge, whole when opened
-        reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server. Split from #136, whose tasks were spread over two stages: the report export needs the formatter that the health endpoint introduces, and both register their routes in src/server/routes.js, which every parallel run of this area edits; running them apart would conflict there and in the formatter tests. The health endpoint is small (complexity 3) and the export reuses its formatter, so together they stay under the group size of five issues per run and take one review instead of two.',
+        reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in packages/engine/server. Split from #136, whose tasks were spread over two stages: the report export needs the formatter that the health endpoint introduces, and both register their routes in packages/engine/server/routes.js, which every parallel run of this area edits; running them apart would conflict there and in the formatter tests. The health endpoint is small (complexity 3) and the export reuses its formatter, so together they stay under the group size of five issues per run and take one review instead of two.',
         modeReason: 'Auto: server code with no screen to try.',
         origin: new Date(Date.UTC(2026, 0, 20, 10, 1, 50)).toISOString(), // the demo Product Owner's plan answer
         inputs: { language: 'js', mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off', ...(tonight ? { base_branch: 'release/2026-01-reports-and-health-with-a-very-long-branch-name-for-the-roadmap-card' } : {}) },

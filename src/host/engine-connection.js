@@ -22,7 +22,8 @@
 //   startUrl, routeUrl, allowRemotePermission   the browser's first address (the remote window sends
 //                               the token as `Authorization: Bearer` instead, #480), the remote window's
 //                               navigation and permission rules (clipboard-read only over https)
-//   lanAddresses, resolveListenHost   the server's side (scripts/serve.js): the addresses another
+//   lanAddresses, resolveListenHost   the server's side (packages/engine/server/listen-host.js, the
+//                               multiagent-engine bin): the addresses another
 //                               computer can type, and `--host tailscale` (this computer's Tailscale address);
 //                               another non-loopback host needs `--insecure-http` (#479)
 
@@ -247,46 +248,18 @@ async function testConnection({ address, token, fetch: fetchImpl = globalThis.fe
   };
 }
 
-// ---- the server's side: the addresses another computer can type (scripts/serve.js) ------------
+// ---- the server's side (packages/engine/server/listen-host.js, re-exported for the host's callers and tests) ----
 
-// 100.64.0.0/10: the addresses Tailscale gives the machines of a tailnet
-function isTailscaleIp(ip) {
-  const m = /^100\.(\d+)\.\d+\.\d+$/.exec(String(ip || ''));
-  return !!m && Number(m[1]) >= 64 && Number(m[1]) <= 127;
-}
-
-/** This computer's IPv4 addresses beyond loopback (os.networkInterfaces()) → [{ address, name, tailscale }], Tailscale's first. */
-function lanAddresses(interfaces) {
-  const out = [];
-  for (const [name, list] of Object.entries(interfaces || {})) {
-    for (const a of list || []) {
-      if ((a.family === 'IPv4' || a.family === 4) && !a.internal) out.push({ address: a.address, name, tailscale: isTailscaleIp(a.address) });
-    }
-  }
-  return out.sort((x, y) => Number(y.tailscale) - Number(x.tailscale));
-}
-
-/**
- * `--host` as typed → { host } to listen on, or { error }: 'tailscale' is this computer's Tailscale
- * address only. Beyond loopback and Tailscale the token travels as plain HTTP to the network, and the
- * token is full control of this machine (#479): refused unless `insecureHttp` (`--insecure-http`).
- */
-function resolveListenHost(host, interfaces, { insecureHttp = false } = {}) {
-  if (host === 'tailscale') {
-    const ts = lanAddresses(interfaces).find((a) => a.tailscale);
-    return ts ? { host: ts.address } : { error: '--host tailscale: this computer has no Tailscale address (100.64.0.0/10). Is Tailscale running and signed in?' };
-  }
-  if (isLoopback(host) || isTailscaleIp(host) || insecureHttp) return { host };
-  return {
-    error: `--host ${host}: the engine would serve plain HTTP to the network, and its token is full control of this machine (a shell, gate approval, paid runs). `
-      + 'Use --host tailscale (or a VPN), or put it behind a reverse proxy with TLS and pass --insecure-http to accept plain HTTP on this address.',
-  };
-}
+const {
+  isTailscaleIp,
+  lanAddresses,
+  resolveListenHost,
+} = require('@multiagent/engine/server/listen-host');
 
 // ---- the remote window's rules ------------------------------------------------------------
 
 // A browser's first address with the token (scripts/serve.js prints it): the server keeps the token in
-// a cookie and drops it from the address (src/server/index.js). The desktop app's remote window never
+// a cookie and drops it from the address (packages/engine/server/index.js). The desktop app's remote window never
 // uses it: it loads `<url>/` and sends the token as `Authorization: Bearer` (#480).
 const startUrl = (url, token) => `${url}/?token=${encodeURIComponent(token)}`;
 

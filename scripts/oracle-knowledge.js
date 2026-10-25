@@ -7,7 +7,7 @@
 //   node scripts/oracle-knowledge.js --write   # after updating a digest's text: record the new hashes
 const fs = require('fs');
 const path = require('path');
-const { digestSources, skillHash } = require('../src/domains/oracle/oracle-knowledge');
+const { digestSources, skillHash } = require('@multiagent/engine/domains/oracle/oracle-knowledge');
 
 const ROOT = path.join(__dirname, '..');
 const file = path.join(ROOT, 'skills', 'oracle', 'knowledge.md');

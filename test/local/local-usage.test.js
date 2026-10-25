@@ -4,8 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { readLocalUsage, parseClaude, parseCodex, parseGrok, IDLE_GAP_MS } = require('../../src/domains/local/local-usage');
-const usage = require('../../src/domains/usage/usage');
+const { readLocalUsage, parseClaude, parseCodex, parseGrok, IDLE_GAP_MS } = require('@multiagent/engine/domains/local/local-usage');
+const usage = require('@multiagent/engine/domains/usage/usage');
 
 const NOW = new Date('2026-09-27T12:00:00Z');
 const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';

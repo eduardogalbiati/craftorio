@@ -260,7 +260,7 @@ defaults:
     backoff: exponential
     initial_delay: 10s
 
-# v1: the graph is run by the app's deterministic engine (src/engine).
+# v1: the graph is run by the app's deterministic engine (packages/engine/engine).
 orchestrator:
   provider: claude
   model: claude-sonnet-5

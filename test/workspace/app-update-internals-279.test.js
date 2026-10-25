@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const { execFileSync } = require('child_process');
-const appUpdate = require('../../src/domains/workspace/app-update');
+const appUpdate = require('@multiagent/engine/domains/workspace/app-update');
 
 function tmp(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

@@ -1,8 +1,8 @@
 // The Product Owner's Speed ↔ Quality calibration (#189): five steps, 1 (Speed) to 5 (Quality), each
 // mapped to the planning parameters the Product Owner follows (parallel runs per stage, the max
 // complexity of a group, the mode of UI issues, where an issue is placed, review rounds). Saved in
-// agents/product-owner.json (`calibration`, src/domains/agents/agents.js); the prompt states the step and its
-// parameters (src/domains/po/product-owner.js promptRules), the simulated answer follows `maxRuns` and
+// agents/product-owner.json (`calibration`, packages/engine/domains/agents/agents.js); the prompt states the step and its
+// parameters (packages/engine/domains/po/product-owner.js promptRules), the simulated answer follows `maxRuns` and
 // `maxComplexity`, and the screens draw the same slider (sliderHtml: Agents › Product Owner, the
 // Product Owner drawer's settings panel, views/backlog/backlog-po-settings.js). A question may ask
 // for another step once ("plan this one for quality": fromQuestion) without changing the saved one.
@@ -11,7 +11,7 @@
 // wins over Speed ↔ Quality when it is not Balanced: `groupCap`), whether groups of the same area are
 // packed into one run (`pack`), the items' test options (#203: unit_tests, e2e_tests, a test-batch
 // stage), the evidence screenshots (`screenshots` input) and cheaper agents where a workflow has an
-// input for it (`costInputs`, src/domains/po/product-owner.js). "Plan this one cheap" asks for Economy once.
+// input for it (`costInputs`, packages/engine/domains/po/product-owner.js). "Plan this one cheap" asks for Economy once.
 // #235: costApplies(workflow) says whether the Cost axis means anything for a workflow: not for a
 // tests-first one (testsFirst: AI Development, whose tests are always written and run), nor for one
 // without the inputs it sets; the drawer hides the Cost chip and the plan skips the step then.

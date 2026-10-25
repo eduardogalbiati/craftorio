@@ -1,6 +1,6 @@
 // src/renderer/default-workflow.js: the default development workflow (#195). resolve() picks the
 // file among the workspace's workflows; mergeOf() reads how a loaded workflow's work lands (used by
-// src/service/areas/workflows.js to label each entry local/remote/none).
+// packages/engine/service/areas/workflows.js to label each entry local/remote/none).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const DefaultWorkflow = require('@multiagent/shared/default-workflow');

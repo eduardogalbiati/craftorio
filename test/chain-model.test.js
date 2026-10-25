@@ -1,5 +1,5 @@
 // src/renderer/chain-model.js (#134): pure functions for workflow chaining. The service
-// (src/service/areas/chain.js) and its wiring through a live run are covered by
+// (packages/engine/service/areas/chain.js) and its wiring through a live run are covered by
 // test/service/chain.test.js; this file is the model alone (no engine, no files).
 const test = require('node:test');
 const assert = require('node:assert/strict');

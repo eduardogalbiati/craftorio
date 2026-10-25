@@ -15,7 +15,7 @@
 //                      "[data-testid=supervisor-fab]"; a folded menu group: --click ".nav-group[data-group=workflows]
 //                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
 //                      header button; Home shows its docked panel; nightwatch (#172): two
-//                      replayed nights, src/domains/night/night-watch-demo.js, also Home's morning
+//                      replayed nights, packages/engine/domains/night/night-watch-demo.js, also Home's morning
 //                      summary; its turn-on form: --click "#nw-switch", the permissions' Save /
 //                      Cancel: --click ".nw-perm-check[data-perm=skip]")
 //   --oracle <state>   the Oracle's demo state (#171), on any view: empty | conversation | answering |
@@ -122,7 +122,7 @@
 //   --side <s>         original | modified: saves <name>.<side>.png, the two images of a pair
 //                      (default original with --ref, modified with --caption, else no suffix)
 //   --caption <text>   records this shot with its caption and commit in <run_dir>/evidence/manifest.json
-//                      (src/domains/evidence/evidence.js): needs --out <run_dir>/evidence/<step>/round-<n>
+//                      (packages/engine/domains/evidence/evidence.js): needs --out <run_dir>/evidence/<step>/round-<n>
 //   --wait <ms>        extra time before the capture (default 1500; run: 20000)
 //   --timeout <ms>     hard limit: the app exits with code 1 after it (default 90000)
 //
@@ -141,7 +141,7 @@
 // `--view run --input mode=validated --stop-at developer_check --click ".run-gate-side [data-iv-thumb]"`
 // opens the viewer (then `--click '.iv [data-iv-zoom="in"]'` zooms).
 // One capture at a time on the machine (#199): it first takes the machine-wide screenshot slot
-// (src/engine/machine-slot.js) and prints `screenshot: waiting for the screenshot slot` while
+// (packages/engine/engine/machine-slot.js) and prints `screenshot: waiting for the screenshot slot` while
 // another run's capture holds it; a slot held by a dead process is freed.
 // Prints `screenshot: <path>` and exits 0, or exits 1 with the error.
 // The Playwright E2E suite (features/support/app.js, #222) seeds its scratch workspaces with the same
@@ -151,9 +151,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
-const evidence = require('../src/domains/evidence/evidence');
+const evidence = require('@multiagent/engine/domains/evidence/evidence');
 const I18n = require('@multiagent/shared/i18n');
-const machineSlot = require('../src/engine/machine-slot');
+const machineSlot = require('@multiagent/engine/engine/machine-slot');
 const {
   demoKeepAwake,
   demoMissingClis,
@@ -409,7 +409,7 @@ function main() {
     sha = extractRef(repo, args.ref, appDir);
     console.log(`app at ${args.ref} (${sha.slice(0, 12)})`);
   }
-  const src = (m) => require(path.join(appDir, 'src', m));
+  const src = (m) => require(path.join(appDir, 'packages', 'engine', m));
   const workspace = src('domains/workspace/workspace');
   const ws = workspace.setupWorkspace(wsDir, { persist: false });
 

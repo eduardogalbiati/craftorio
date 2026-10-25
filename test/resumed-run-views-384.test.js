@@ -5,7 +5,7 @@
 //   card that shows a run uses.
 // - The Run screen's summary (#run-summary) and the Chat's finished note (run-chat-finished), through
 //   the whole page (test/agent-chat-page-harness.js) with a fake api.listRuns.
-// - runs.findRun (src/domains/run/runs.js) with the index open: a resume written just after a lookup is still
+// - runs.findRun (packages/engine/domains/run/runs.js) with the index open: a resume written just after a lookup is still
 //   found; an unchanged runs folder is not listed again within 2 s (fs.readdirSync is the boundary).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -144,7 +144,7 @@ function writeRun(runsDir, runId, { status, resumedFrom = null, startMs }) {
 const T0 = Date.parse('2026-10-14T10:00:00.000Z');
 
 test('#384 findRun: a resume written right after a lookup (within 2 s) is still found', async (t) => {
-  const { makeService } = require('./service/helpers');
+  const { makeService } = require('@multiagent/engine/test/service/helpers');
   const { service, api } = makeService(t);
   const runsDir = service.workspace().runs;
   writeRun(runsDir, FAILED, { status: 'failed', startMs: T0 });
@@ -156,7 +156,7 @@ test('#384 findRun: a resume written right after a lookup (within 2 s) is still 
 });
 
 test('#384 findRun: an unchanged runs folder is not listed again within 2 s', async (t) => {
-  const { makeService } = require('./service/helpers');
+  const { makeService } = require('@multiagent/engine/test/service/helpers');
   const { service, api } = makeService(t);
   const runsDir = service.workspace().runs;
   writeRun(runsDir, FAILED, { status: 'failed', startMs: T0 });

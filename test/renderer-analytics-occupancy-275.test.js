@@ -25,7 +25,7 @@ const FILE = path.join(__dirname, '..', 'src', 'renderer', 'views', 'analytics',
 const LS = 'multiagent.analytics.occupancy';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-// ---- fixture: two local days, oldest first as src/domains/run/occupancy.js builds them -------------------------
+// ---- fixture: two local days, oldest first as packages/engine/domains/run/occupancy.js builds them -------------------------
 const NEWEST = '2026-10-04';
 const OLDEST = '2026-10-03';
 function newestHourly() {

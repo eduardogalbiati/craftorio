@@ -1,7 +1,7 @@
 // A project's Conflict map tab (#354): one table merging the Roadmap's former Conflict map panel
-// (#150: the saved map of src/domains/project/conflict-map.js, the Backlog payload's `conflictMap`, read-only) and
+// (#150: the saved map of packages/engine/domains/project/conflict-map.js, the Backlog payload's `conflictMap`, read-only) and
 // Analytics › Performance's former "Files most runs edit" (#159, channel analytics:performance,
-// src/domains/project/repo-performance.js). A row per file, ranked by how many runs edited it: its run count and
+// packages/engine/domains/project/repo-performance.js). A row per file, ranked by how many runs edited it: its run count and
 // share of runs, the "hot" badge past the Product Owner's threshold (more than half of the map's
 // newest 20 runs), the merge conflicts that named it. A click on a row opens the runs behind the
 // count, the single lines most changed in that file and the trend (the newer half of the map's runs
@@ -34,7 +34,7 @@
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const plural = (n, key) => t(key, { count: n });
 
-  // more than half of the map's newest 20 runs (src/domains/project/conflict-map.js hotSpots)
+  // more than half of the map's newest 20 runs (packages/engine/domains/project/conflict-map.js hotSpots)
   function isHot(map, runIds) {
     const recent = new Set((map?.runIds || []).slice(0, HOT_WINDOW));
     const n = (runIds || []).filter((id) => recent.has(id)).length;

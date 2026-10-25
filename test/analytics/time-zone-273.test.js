@@ -1,11 +1,11 @@
-// #273 acceptance tests (written before the code): the shared date helper src/domains/analytics/time-zone.js (a Node
+// #273 acceptance tests (written before the code): the shared date helper packages/engine/domains/analytics/time-zone.js (a Node
 // re-export of src/renderer/time-zone.js). Every function takes the IANA zone explicitly as its last
 // argument, so these tests never depend on the machine's TZ (CI runs in UTC, the owner in UTC-3).
 // The module is required inside each test: this file loads before the module exists.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('../../src/domains/analytics/time-zone');
+const load = () => require('@multiagent/engine/domains/analytics/time-zone');
 const HOUR = 3600e3;
 
 test('#273 dayKey: 22:00 in Sao Paulo (01:00Z the next day) is still the local day', () => {

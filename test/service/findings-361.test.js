@@ -3,11 +3,11 @@
 // the Product Owner's agent inbox (#240) as a request naming the finding's folder.
 //
 // The interface these tests define (tests-first):
-// - Settings: settings.findingsButton, false by default (src/domains/workspace/workspace.js DEFAULT_SETTINGS), saved by
+// - Settings: settings.findingsButton, false by default (packages/engine/domains/workspace/workspace.js DEFAULT_SETTINGS), saved by
 //   settings:set and read back by settings:get.
 // - app:info adds isPackaged: the host's isPackaged (a boolean), so the renderer can apply
 //   FindingsModel.buttonVisible (src/renderer/findings-model.js).
-// - findings:save { image, marked, marks, note, context } → { id, dir, status: 'saved' }: src/domains/evidence/findings.js
+// - findings:save { image, marked, marks, note, context } → { id, dir, status: 'saved' }: packages/engine/domains/evidence/findings.js
 //   saveFinding on the service's workspace (<workspace>/findings/<id>/); the service may add the main
 //   process's own context (log, channel calls) before saving.
 // - findings:list → [{ id, dir, at, note, status }], newest first (Settings › General › Findings).
@@ -23,7 +23,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeService, roadmapProject } = require('./helpers');
+const { makeService, roadmapProject } = require('@multiagent/engine/test/service/helpers');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 

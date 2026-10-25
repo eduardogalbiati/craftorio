@@ -1,15 +1,15 @@
 // Acceptance tests for #342 (the session tail and the control client as Rust binaries, so the packaged
 // app needs no system Node): everything but the binaries' own behaviour (test/session/session-tail-342.test.js
 // and test/ctl-342.test.js run those). Seams, loaded inside each test (they do not exist before the change):
-// - src/domains/machine/native-bin.js: nativeBinaryPath(name, { isPackaged, resourcesPath, platform }) where a native
+// - packages/engine/domains/machine/native-bin.js: nativeBinaryPath(name, { isPackaged, resourcesPath, platform }) where a native
 //   sidecar (multiagent-mcp, multiagent-tail, multiagent-ctl) lives: packaged resources/bin/<name>[.exe],
-//   dev cargo's output under native/; never PATH. mcpBinaryPath (src/domains/supervisor/supervisor-bridge.js) agrees with it.
-// - src/domains/machine/native-bin.js: tailCommand(isPackaged, resolveCommand, { binary }) → { command, args, env }, the
-//   twin of mcpCommand: the binary when it exists (args []), else src/domains/session/session-tail.js under node (dev:
+//   dev cargo's output under native/; never PATH. mcpBinaryPath (packages/engine/domains/supervisor/supervisor-bridge.js) agrees with it.
+// - packages/engine/domains/machine/native-bin.js: tailCommand(isPackaged, resolveCommand, { binary }) → { command, args, env }, the
+//   twin of mcpCommand: the binary when it exists (args []), else packages/engine/domains/session/session-tail.js under node (dev:
 //   process.execPath; packaged: resolveCommand('node'), throwing /Node\.js on the PATH/ without it).
-//   terminalSpec(runId, sessionId, 'live') (src/service/areas/sessions.js) starts tailCommand's command
+//   terminalSpec(runId, sessionId, 'live') (packages/engine/service/areas/sessions.js) starts tailCommand's command
 //   with [...args, runDir, sessionId].
-// - src/control/index.js: createControlChannel({ service, ctlPath }); its status carries `ctlPath` (main.js
+// - packages/engine/control/index.js: createControlChannel({ service, ctlPath }); its status carries `ctlPath` (main.js
 //   passes nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }); without it, the dev path).
 //   Settings › Execution (renderControlChannel in src/renderer/views/settings/settings.js) shows it.
 // - scripts/package.js: buildNative builds and stages the three binaries; app.asar unpacks only node-pty.
@@ -23,13 +23,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const { makeService } = require('./service/helpers');
+const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 const root = path.join(__dirname, '..');
 const abs = (p) => path.join(root, p);
 const exists = (p) => fs.existsSync(abs(p));
 const read = (p) => fs.readFileSync(abs(p), 'utf8');
-const nativeBin = () => require('../src/domains/machine/native-bin');
+const nativeBin = () => require('@multiagent/engine/domains/machine/native-bin');
 const exe = (name, platform = process.platform) => (platform === 'win32' ? `${name}.exe` : name);
 
 const BINARIES = ['multiagent-ctl', 'multiagent-mcp', 'multiagent-tail'];
@@ -62,7 +62,7 @@ function missingBinary(t, name) {
 
 test('#342 nativeBinaryPath: packaged, every sidecar is in resources/bin, with .exe on Windows only', () => {
   const { nativeBinaryPath } = nativeBin();
-  assert.equal(typeof nativeBinaryPath, 'function', 'src/domains/machine/native-bin.js exports nativeBinaryPath');
+  assert.equal(typeof nativeBinaryPath, 'function', 'packages/engine/domains/machine/native-bin.js exports nativeBinaryPath');
   const res = path.join(path.sep, 'apps', 'Multiagent', 'resources');
   for (const name of BINARIES) {
     for (const platform of ['win32', 'darwin', 'linux']) {
@@ -73,7 +73,7 @@ test('#342 nativeBinaryPath: packaged, every sidecar is in resources/bin, with .
 
 test('#342 nativeBinaryPath: in a dev checkout, under native/; mcpBinaryPath gives the same file', () => {
   const { nativeBinaryPath } = nativeBin();
-  const { mcpBinaryPath } = require('../src/domains/supervisor/supervisor-bridge');
+  const { mcpBinaryPath } = require('@multiagent/engine/domains/supervisor/supervisor-bridge');
   for (const name of BINARIES) {
     for (const platform of ['win32', 'linux']) {
       const p = nativeBinaryPath(name, { isPackaged: false, platform });
@@ -143,7 +143,7 @@ test('#342 terminalSpec live: starts tailCommand\'s command with the run folder 
 
 test('#342 packaged with its binaries, no spawn spec resolves node from the PATH (MCP server, live terminal, control client)', (t) => {
   const { nativeBinaryPath, tailCommand } = nativeBin();
-  const { mcpCommand } = require('../src/domains/supervisor/supervisor-bridge');
+  const { mcpCommand } = require('@multiagent/engine/domains/supervisor/supervisor-bridge');
   const res = fakeResources(t);
   const at = (name) => nativeBinaryPath(name, { isPackaged: true, resourcesPath: res });
   const lookup = pathWithoutNode();
@@ -157,7 +157,7 @@ test('#342 packaged with its binaries, no spawn spec resolves node from the PATH
 // ---- the control client's path in Settings ------------------------------------------------------
 
 test('#342 control channel status: carries the multiagent-ctl path it is given, the dev path by default', async (t) => {
-  const { createControlChannel } = require('../src/control');
+  const { createControlChannel } = require('@multiagent/engine/control');
   const { nativeBinaryPath } = nativeBin();
   const { service } = makeService(t);
   const given = path.join(path.sep, 'apps', 'Multiagent', 'resources', 'bin', exe('multiagent-ctl'));

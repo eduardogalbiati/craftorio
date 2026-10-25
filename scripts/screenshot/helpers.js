@@ -9,14 +9,14 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const evidence = require('../../src/domains/evidence/evidence');
+const evidence = require('@multiagent/engine/domains/evidence/evidence');
 
 const DEMO_REPO = 'https://github.com/example/demo-app';
 // #124: an issue too big for one run (complexity 5, 12 tasks in two areas of the code): the Product
 // Owner's plan answer proposes its split. #138: two epics (#14, #13), members with `epic`, #9 in none.
 const BIG_TASKS = [
-  'One app per workspace: a lock file in `src/domains/workspace/workspace.js`', 'A second app opens read-only, with a banner', 'Run owners recorded in `src/domains/run/runs.js`',
-  'Only the owner resumes a run', 'Queue claims survive a restart (`src/domains/workspace/store.js`)', 'Roadmap writes are atomic (`src/domains/roadmap/roadmap.js`)',
+  'One app per workspace: a lock file in `packages/engine/domains/workspace/workspace.js`', 'A second app opens read-only, with a banner', 'Run owners recorded in `packages/engine/domains/run/runs.js`',
+  'Only the owner resumes a run', 'Queue claims survive a restart (`packages/engine/domains/workspace/store.js`)', 'Roadmap writes are atomic (`packages/engine/domains/roadmap/roadmap.js`)',
   'Resume dialog lists the steps (`src/renderer/run.js`)', 'Duplicate runs are flagged on the card (`src/renderer/backlog.js`)', 'Safe-write notice in the run header (`src/renderer/run.js`)',
   'Roadmap status derived from runs, shown in `src/renderer/backlog-roadmap.js`', 'Docs: run safety in the README', 'Tests',
 ];
@@ -141,7 +141,7 @@ function writeDemoPackage(folder) {
 // data-heavy screen (lists, reports, charts, the city) uses it for its real-scale state, where
 // density and layout problems show (the 31-file demo hides them).
 const LARGE_AREAS = [
-  ['src/engine', 'js', 260], ['src/renderer/views', 'js', 300], ['src/service', 'ts', 180], ['tools/analysis', 'py', 140],
+  ['packages/engine/engine', 'js', 260], ['src/renderer/views', 'js', 300], ['packages/engine/service', 'ts', 180], ['tools/analysis', 'py', 140],
   ['services/billing', 'go', 120], ['docs/guides', 'md', 110], ['test', 'js', 90],
 ];
 const LARGE_KINDS = ['duplicated-rule', 'oversized-unit', 'test-gap', 'layer-breach', 'dead-code', 'cyclic-dependency'];

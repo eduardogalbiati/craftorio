@@ -9,7 +9,7 @@
 //   the nearest winning, and the rounded box); a pin on empty space says so ({ empty: true });
 // - remember(list, entry, cap): appends to a ring buffer of the last `cap` entries (UI actions,
 //   service calls).
-// Browser: window.FindingsModel; Node: module.exports (src/service/areas/findings.js, the tests).
+// Browser: window.FindingsModel; Node: module.exports (packages/engine/service/areas/findings.js, the tests).
 (function (root) {
   const SHORTCUT = 'Ctrl+Shift+F';
   const ID_KEYS = ['run', 'step', 'stage', 'item', 'issue', 'session'];

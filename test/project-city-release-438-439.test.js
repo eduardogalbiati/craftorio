@@ -35,8 +35,8 @@ const RAMP = ['#f6d58e', '#f2a541', '#e8743b', '#d9480f'];
 const ORANGE = '#f2a541';
 const hash = '43'.repeat(20);
 const FILES = [
-  { path: 'src/engine/run.js', lines: 100 }, { path: 'src/engine/queue.js', lines: 40 },
-  { path: 'src/engine/gates.js', lines: 30 }, { path: 'src/engine/jobs.js', lines: 20 },
+  { path: 'packages/engine/engine/run.js', lines: 100 }, { path: 'packages/engine/engine/queue.js', lines: 40 },
+  { path: 'packages/engine/engine/gates.js', lines: 30 }, { path: 'packages/engine/engine/jobs.js', lines: 20 },
   { path: 'docs/a.md', lines: 5 },
 ];
 const facts = () => buildModel({
@@ -50,23 +50,23 @@ const PLAN = {
   version: 1, project: 'fixture-app',
   zones: [{ id: 'core', name: 'Core', kind: 'industrial' }, { id: 'books', name: 'Books', kind: 'civic' }],
   districts: [
-    { id: 'engine', name: 'Engine', zone: 'core', include: ['src/engine/**'] },
+    { id: 'engine', name: 'Engine', zone: 'core', include: ['packages/engine/engine/**'] },
     { id: 'docs', name: 'Docs', zone: 'books', include: ['docs/**'] },
     { id: 'later', name: 'Later', zone: 'core', include: ['src/later/**'] },
   ],
-  landmarks: [{ path: 'src/later/start.js', label: 'Start' }, { path: 'src/engine/server.js', label: 'Server' }],
+  landmarks: [{ path: 'src/later/start.js', label: 'Start' }, { path: 'packages/engine/engine/server.js', label: 'Server' }],
 };
-const MISSING = ['src/engine/server.js', 'src/later/start.js'];
+const MISSING = ['packages/engine/engine/server.js', 'src/later/start.js'];
 const city = () => buildCity({ plan: PLAN, facts: facts() });
 
 // 1.1.1 → 1.1.2: one added, two changed (12 and 300 lines), one renamed (12 lines, like run.js), one removed
 const RELEASE = (base = city()) => ({
   state: 'ok', from: '1.1.1', to: '1.1.2', tags: ['1.1.2', '1.1.1'], plan: PLAN, base,
   changes: [
-    { status: 'added', path: 'src/engine/new.js', lines: 5 },
-    { status: 'changed', path: 'src/engine/run.js', lines: 12 },
-    { status: 'changed', path: 'src/engine/gates.js', lines: 300 },
-    { status: 'renamed', from: 'src/engine/queue.js', path: 'src/engine/work.js', lines: 12 },
+    { status: 'added', path: 'packages/engine/engine/new.js', lines: 5 },
+    { status: 'changed', path: 'packages/engine/engine/run.js', lines: 12 },
+    { status: 'changed', path: 'packages/engine/engine/gates.js', lines: 300 },
+    { status: 'renamed', from: 'packages/engine/engine/queue.js', path: 'packages/engine/engine/work.js', lines: 12 },
     { status: 'removed', path: 'docs/a.md', lines: 5 },
   ],
   commits: [],
@@ -154,7 +154,7 @@ test('#438 every colour the map gives a changed file is shown on the changed chi
   const chip = coloursIn(q(city.el, 'city-release-count-changed')?.innerHTML);
   const layer = lastLayer(calls);
   assert.ok(layer && layer.highlight, 'the release layer');
-  for (const p of ['src/engine/run.js', 'src/engine/gates.js']) {
+  for (const p of ['packages/engine/engine/run.js', 'packages/engine/engine/gates.js']) {
     const colour = String(layer.highlight[p] || '').toLowerCase();
     assert.ok(chip.includes(colour), `${p}: ${colour} is on the chip (${chip.join(', ')})`);
   }
@@ -185,8 +185,8 @@ test('#438 a renamed file carries a sign on the map that a changed file of the s
   assert.ok(layer, 'the release layer');
   const { highlight, ...rest } = layer;
   const s = JSON.stringify(rest);
-  assert.ok(s.includes('src/engine/queue.js') || s.includes('src/engine/work.js'), `the rename is marked: ${s}`);
-  assert.equal(s.includes('src/engine/run.js'), false, `the changed file of the same lines is not: ${s}`);
+  assert.ok(s.includes('packages/engine/engine/queue.js') || s.includes('packages/engine/engine/work.js'), `the rename is marked: ${s}`);
+  assert.equal(s.includes('packages/engine/engine/run.js'), false, `the changed file of the same lines is not: ${s}`);
 });
 
 test('#438 the renamed chip shows no orange dot', async (t) => {
@@ -276,7 +276,7 @@ const missing = (root) => root.querySelector('[data-testid="city-release-missing
 const summaryExpanded = (root) => String(missing(root)?.querySelector('[data-testid="city-release-missing-toggle"]')?.getAttribute('aria-expanded'));
 
 test('#439 opening the list of what did not exist yet sets aria-expanded, and the list stays open when the card is redrawn', async (t) => {
-  const withIssues = () => ({ ...RELEASE(), commits: [{ commit: 'c'.repeat(40), subject: 'Edit run (#12)', issues: [12], files: ['src/engine/run.js'] }] });
+  const withIssues = () => ({ ...RELEASE(), commits: [{ commit: 'c'.repeat(40), subject: 'Edit run (#12)', issues: [12], files: ['packages/engine/engine/run.js'] }] });
   const { w, city: c } = await shown(t, { release: async () => withIssues() });
   assert.equal(summaryExpanded(c.el), 'false', 'closed at first');
   toggle(w, missing(c.el), true);

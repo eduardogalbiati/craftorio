@@ -1,11 +1,11 @@
 // #396, beyond the acceptance tests (test/suite-red-outside-change-396.test.js):
-// - classifyFailures (src/engine/affected-tests.js): the cases where the change cannot be told apart
+// - classifyFailures (packages/engine/engine/affected-tests.js): the cases where the change cannot be told apart
 //   (unknown changed files, a shared root, no JS/TS graph, no file, a file the graph does not know)
 //   count as in the change, so the owner's policy never lets them through;
-// - runSuite's timed-out round (src/engine/suite-step.js): a file that fails alone on the branch, a hang
+// - runSuite's timed-out round (packages/engine/engine/suite-step.js): a file that fails alone on the branch, a hang
 //   with no base checkout or a base without the file, and the alone reruns' own timeout history;
 // - the suite step's routing in workflows/ai-development-local-hero.yaml (evalExpr on its transitions);
-// - where `tested` shows: the run's row (src/domains/run/runs.js readRun) and the run chat's end item.
+// - where `tested` shows: the run's row (packages/engine/domains/run/runs.js readRun) and the run chat's end item.
 // runSuite runs with a stubbed `run` (the child-process boundary): no real process is spawned.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -13,10 +13,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { classifyFailures } = require('../src/engine/affected-tests');
-const { runSuite } = require('../src/engine/suite-step');
-const { loadWorkflow, evalExpr } = require('../src/engine/workflow');
-const runs = require('../src/domains/run/runs');
+const { classifyFailures } = require('@multiagent/engine/engine/affected-tests');
+const { runSuite } = require('@multiagent/engine/engine/suite-step');
+const { loadWorkflow, evalExpr } = require('@multiagent/engine/engine/workflow');
+const runs = require('@multiagent/engine/domains/run/runs');
 const { RunChatModel } = require('../src/renderer/views/runchat/run-chat-model.js');
 
 const IN = 'in the change';

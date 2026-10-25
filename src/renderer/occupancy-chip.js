@@ -1,6 +1,6 @@
 /* global api, state */
 // The top bar's 24/7 chip (#188): one number, the last 24 h occupancy ("24/7 · 87%": time with at
-// least one real run active, src/domains/run/occupancy.js), green from 90 %, amber from 60 %, red below; a dot
+// least one real run active, packages/engine/domains/run/occupancy.js), green from 90 %, amber from 60 %, red below; a dot
 // that pulses while a run is active (grey when none is); a one-line tooltip; a click opens Analytics'
 // 24/7 tab. No chart or breakdown here. Settings › General can hide it (settings.showOccupancyChip).
 // Refreshed on workflow.started / workflow.finished and every minute (channel analytics:occupancy

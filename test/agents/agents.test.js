@@ -1,10 +1,10 @@
-// User-defined agents (src/domains/agents/agents.js) and the built-in supervisor.
+// User-defined agents (packages/engine/domains/agents/agents.js) and the built-in supervisor.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const agents = require('../../src/domains/agents/agents');
+const agents = require('@multiagent/engine/domains/agents/agents');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-'));

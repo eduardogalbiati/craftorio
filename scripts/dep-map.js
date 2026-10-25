@@ -135,7 +135,7 @@ function report() {
   say(hostSide.map((r) => path.basename(r, '.js')).sort().join(' '));
 
   say(''); say('## engine/ requiring loose files (what an engine package would take along)');
-  const eng = [...new Set(all.filter(([a, b]) => area(a) === 'engine' && area(b) === 'src-root').map(([a, b]) => `${rel(a).replace('src/engine/', '')} -> ${path.basename(b)}`))];
+  const eng = [...new Set(all.filter(([a, b]) => area(a) === 'engine' && area(b) === 'src-root').map(([a, b]) => `${rel(a).replace('packages/engine/engine/', '')} -> ${path.basename(b)}`))];
   say(eng.join('\n'));
 
   const outside = all.filter(([a, b]) => area(a) === 'shared' && area(b) !== 'shared');

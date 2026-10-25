@@ -17,7 +17,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // what a person reads: tags (and their attributes) dropped
 const visible = (html) => String(html).replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 
-// the suite outputs of the engine (src/engine/workflow.js, scope: affected and a red check's listed files)
+// the suite outputs of the engine (packages/engine/engine/workflow.js, scope: affected and a red check's listed files)
 const SELECTION = { mode: 'affected', files: ['test/roadmap.test.js'], reasons: { 'test/roadmap.test.js': 'imports src/roadmap.js' } };
 const AFFECTED_THEN_FULL = {
   kind: 'suite', status: 'pass', round: 1, scope: 'full', log: 'logs/suite-1-full.log',

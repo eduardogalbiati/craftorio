@@ -14,7 +14,7 @@ marks the ones the maintainer would welcome a hand with. How the code fits toget
 4. Optional: the Rust toolchain (`rustup`, stable; on Windows with the MSVC build tools). `cargo`
    builds the native sidecars in `native/` (the supervisor's MCP server, `multiagent-mcp`). It is
    optional for JS-only changes: without cargo the app uses the JS fallback
-   (`src/domains/supervisor/supervisor-mcp.js`) and `npm test` skips the binary's cases. A change under `native/`, and
+   (`packages/engine/domains/supervisor/supervisor-mcp.js`) and `npm test` skips the binary's cases. A change under `native/`, and
    `npm run package`, need it.
 
 **Sign-in during development**: the packaged app asks for an account (it only counts the people
@@ -36,7 +36,7 @@ Read when running from source; the packaged app ignores the ones marked "source 
 | Variable | What it does |
 |---|---|
 | `MULTIAGENT_AUTH` | `off` skips the sign-in (development, tests, screenshots, `npm run serve`). Source only. |
-| `MULTIAGENT_SUPABASE_URL` | The accounts backend's URL instead of the one in `src/host/auth-config.js`. Source only. |
+| `MULTIAGENT_SUPABASE_URL` | The accounts backend's URL instead of the one in `packages/engine/domains/account/auth-config.js`. Source only. |
 | `MULTIAGENT_SUPABASE_KEY` | Its publishable key, with `MULTIAGENT_SUPABASE_URL`. Source only. |
 | `MULTIAGENT_WORKSPACE` | The workspace folder (runs, repos, worktrees). Unset from source: a scratch workspace when another app already holds the owner's one, or in simulation-only mode. |
 | `MULTIAGENT_USER_DATA` | Electron's `userData` folder (settings, account session). Source only. |

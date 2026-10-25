@@ -1,5 +1,5 @@
 /* global api */
-// Releases screen (#260; Code & Build › Releases, src/domains/releases/releases.js): for the project chosen in the
+// Releases screen (#260; Code & Build › Releases, packages/engine/domains/releases/releases.js): for the project chosen in the
 // header, the next release (what merged locally since the last one: its issues, the commits not
 // pushed, the runs and their cost; notes generated from them, editable until Ship and saved when the
 // field is left; "Run the release checks" starts the release workflow, whose Ship gate is answered

@@ -12,7 +12,7 @@ function demoActionsUsage() {
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
   const item = (sku, quantity, price) => ({ date, product: 'actions', sku, unitType: 'minutes', quantity, grossAmount: quantity * price, netAmount: 0 });
-  const { summarizeActionsUsage } = require('../../src/domains/usage/actions-usage'); // only apps that have the channel ask
+  const { summarizeActionsUsage } = require('@multiagent/engine/domains/usage/actions-usage'); // only apps that have the channel ask
   return { login: 'demo-user', ...summarizeActionsUsage({ usageItems: [item('Actions Linux', 353, 0.008), item('Actions Windows', 560, 0.016), item('Actions macOS', 35, 0.08)] }, { includedMinutes: 2000, now }) };
 }
 
@@ -26,17 +26,17 @@ function demoPoTurn(sender, which, projectId) {
   const done = (id) => ({ kind: 'tool_result', id, is_error: false });
   send('items', [
     { kind: 'thinking' },
-    call('t1', 'Read', { file_path: 'C:/projects/demo-app/src/domains/roadmap/roadmap.js' }), done('t1'),
+    call('t1', 'Read', { file_path: 'C:/projects/demo-app/packages/engine/domains/roadmap/roadmap.js' }), done('t1'),
     call('t2', 'Grep', { pattern: 'dispatchRoadmaps' }), done('t2'),
-    call('t3', 'Read', { file_path: 'C:/projects/demo-app/src/server/routes.js' }), done('t3'),
-    call('t4', 'Bash', { command: 'git log --oneline -20 -- src/server' }), done('t4'),
+    call('t3', 'Read', { file_path: 'C:/projects/demo-app/packages/engine/server/routes.js' }), done('t3'),
+    call('t4', 'Bash', { command: 'git log --oneline -20 -- packages/engine/server' }), done('t4'),
     call('t5', 'Bash', { command: 'gh issue view 15 --json body' }), done('t5'),
     call('t6', 'Bash', { command: 'gh issue list --state open --limit 100' }),
   ]);
   if (which === 'writing') {
     send('items', [
       done('t6'),
-      { kind: 'text', text: '## Proposal\n\nThree runs: the **rename crash** (#11) first, since it blocks the rest; then **#12** and **#9** together: both add a server route, and one run avoids a merge conflict in `src/server`.' },
+      { kind: 'text', text: '## Proposal\n\nThree runs: the **rename crash** (#11) first, since it blocks the rest; then **#12** and **#9** together: both add a server route, and one run avoids a merge conflict in `packages/engine/server`.' },
       { kind: 'text', text: 'Then the small UI fixes, **#10** and **#16**, in one validated run you can check in the app.' },
       { kind: 'text', text: '```json\n{ "summary": "Three runs.", "groups": [] }\n```' },
     ]);
@@ -143,7 +143,7 @@ function demoRunDiffFile(file) {
 function demoMissingClis(appDir, on) {
   if (!on) return null;
   let ic = null;
-  try { ic = require(path.join(appDir, 'src', 'domains', 'machine', 'install-commands')); } catch { /* older ref */ }
+  try { ic = require(path.join(appDir, 'packages', 'engine', 'domains', 'machine', 'install-commands')); } catch { /* older ref */ }
   const ids = ['claude', 'gh', 'glab', 'grok'];
   return {
     'usage:actions': () => ({ error: 'GitHub billing usage needs the gh "user" scope', hint: 'gh auth refresh -s user', includedMinutes: 2000 }),

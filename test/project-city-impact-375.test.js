@@ -69,8 +69,8 @@ const text = (el) => String(el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 const PREVIEW = {
   issue: { number: 375, title: 'City: an <b>impact</b> preview' },
   files: [
-    { path: 'src/engine/big.js', sources: ['cited', 'po'] },
-    { path: 'src/engine/small.js', sources: ['cited'] },
+    { path: 'packages/engine/engine/big.js', sources: ['cited', 'po'] },
+    { path: 'packages/engine/engine/small.js', sources: ['cited'] },
     { path: 'src/renderer/app.js', sources: ['po'] },
     { path: 'docs/a.md', sources: ['cited'] },
   ],
@@ -130,7 +130,7 @@ test('#375 headerMarkup: predicted vs actual, the three sets\' counts and the hi
   assert.equal(q(render(PREVIEW), 'city-impact-comparison'), null, 'no comparison before a run');
   const box = render({
     ...PREVIEW,
-    comparison: { hit: ['src/engine/big.js', 'src/engine/small.js'], missed: ['docs/a.md', 'src/renderer/app.js'], unexpected: ['src/engine/gates.js'], hitRate: 0.5 },
+    comparison: { hit: ['packages/engine/engine/big.js', 'packages/engine/engine/small.js'], missed: ['docs/a.md', 'src/renderer/app.js'], unexpected: ['packages/engine/engine/gates.js'], hitRate: 0.5 },
   });
   const cmp = q(box, 'city-impact-comparison');
   assert.equal(!!cmp, true, 'data-testid="city-impact-comparison"');

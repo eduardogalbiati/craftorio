@@ -1,6 +1,6 @@
 # Agent capabilities and isolation
 
-Read this before changing an agent's tools in a workflow, `src/engine/capabilities.js`, or a
+Read this before changing an agent's tools in a workflow, `packages/engine/engine/capabilities.js`, or a
 skill for a read-only agent.
 
 ## In the YAML
@@ -50,7 +50,7 @@ them in `~/.cargo/bin`) on the PATH the app starts with; nothing else is install
 | Request budget (`max_requests`, #302) | `--max-turns <n>` (unless the provider or `cli_args` set one); an `error_max_turns` result is a cut, wrapped up and continued (engine/sessions-and-handoff-notes.md) | **not enforceable** (noted in the `capabilities:` log line); the turn runs to its end | **not enforceable** (noted) |
 | Images (#129, **not yet confirmed with a real call**) | `--add-dir <attachments folder>` + `Read` added to a restricted `--tools` (read-only agents and the tool-less Supervisor chat included) + the "Attached images" block with the absolute paths | not enabled until a real call confirms it: the block with the paths only, plus the same warning as Grok. Once `codex exec --image` is confirmed, `IMAGE_INPUT['codex-cli'] = 'flag'` passes `--image=<file>` per image (the `=` form: `--image` takes several values and would swallow `resume` or the stdin `-`) | no known way: the block with the paths only, plus one `log` `kind: attachments_unsupported` warning per step and agent; the step does not fail |
 
-Images row: `src/engine/providers.js` (`IMAGE_INPUT`, `cliInvocation`). Limits, checked by
+Images row: `packages/engine/engine/providers.js` (`IMAGE_INPUT`, `cliInvocation`). Limits, checked by
 `checkAttachments` before anything is spawned (an error names the file and the limit): PNG, JPEG,
 GIF and WebP (extension and first bytes), at most 10 images per turn, 10 MB each
 (`ATTACHMENT_LIMITS`). Without attachments, the arguments and the prompt are exactly as before. To
@@ -79,7 +79,7 @@ prompt-injection channel the capabilities above contain: an agent still has only
 `.claude/settings*.json` files are not loaded under isolation (`--setting-sources ''`): they could
 declare hooks and `permissions.allow` rules that Claude Code honours before `--allowedTools`. The
 app auto-trusts only its own folders (`runs/`, `skills/`, `workflows/`, `trustWorkspaceFolder` in
-`src/domains/cli/cli-trust.js`); `repos/`, `worktrees/` and project folders keep each CLI's own trust prompt,
+`packages/engine/domains/cli/cli-trust.js`); `repos/`, `worktrees/` and project folders keep each CLI's own trust prompt,
 which a live "cli-new" terminal shows to the user.
 
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
@@ -88,11 +88,11 @@ tokens with the user's setup → 22.0k isolated with the developer's capabilitie
 
 **Which account a CLI runs on (#312)**: each adapter names the variable of its config folder
 (`configDirEnv` in `packages/shared/providers/<id>.js`: Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME`, Grok
-none, always `~/.grok`); `src/domains/cli/cli-config-dirs.js` reads it from there. A session on one of Settings'
-accounts gets `{ <configDirEnv>: <folder> }` (`accountEnv` in `src/engine/providers.js`) added to the
+none, always `~/.grok`); `packages/engine/domains/cli/cli-config-dirs.js` reads it from there. A session on one of Settings'
+accounts gets `{ <configDirEnv>: <folder> }` (`accountEnv` in `packages/engine/engine/providers.js`) added to the
 CLI process environment by `runCli`, after the agents' variables. It is never part of
 `capabilities.agentEnv`, which is printed in prompts and allow rules. Adding an account in Settings
-shows its login command (`src/domains/cli/provider-accounts.js`, e.g. `CLAUDE_CONFIG_DIR=<folder> claude /login`)
+shows its login command (`packages/engine/domains/cli/provider-accounts.js`, e.g. `CLAUDE_CONFIG_DIR=<folder> claude /login`)
 and whether the folder is signed in, read from that folder only (Claude: `claudeSignedIn` with only
 that variable and no Keychain; Codex: `auth.json` exists, never read); no credential is stored,
 logged or shown.
@@ -100,7 +100,7 @@ logged or shown.
 ## Child environment (#470, SEC-5)
 
 Every child process (agent turns in `providers.runCli`, transition actions, probes, the suite step,
-the terminals' `cliEnv`) gets `childEnv` from `src/engine/child-env.js`, never the app's whole
+the terminals' `cliEnv`) gets `childEnv` from `packages/engine/engine/child-env.js`, never the app's whole
 environment:
 - **Always**: `PATH`, `HOME` / `USERPROFILE`, `TMP` / `TEMP` / `TMPDIR`, `LANG` / `LC_*`,
   `SystemRoot` / `ComSpec` / `APPDATA` / `LOCALAPPDATA`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GIT_*`,
@@ -111,7 +111,7 @@ environment:
   `VIRTUAL_ENV`, `PYTHONPATH`, `CARGO_HOME`, `RUSTUP_HOME`). Any other variable a toolchain needs
   goes into `env.passthrough`.
 - **Platform tokens**: `GH_*` and `GITHUB_TOKEN` only for an agent with `bash:gh` (or a free
-  `bash`), `GITLAB_*` only with `bash:glab` (`platformsOf` in `src/engine/capabilities.js`).
+  `bash`), `GITLAB_*` only with `bash:glab` (`platformsOf` in `packages/engine/engine/capabilities.js`).
   Transition actions, probes and the terminals get both (they run the workflow's own `gh`/`glab`
   commands); the suite step gets none.
 - **On top**: the engine's `AGENT_ENV`, the scratch variables, the account's config folder and
@@ -163,11 +163,11 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   screenshot`, the app, engine scripts) resolve to it with no flag. Without it, simulation only
   never resolves to the registered workspace (`resolveWorkspace` → OS temp).
 - **Test workers (#367)**: every run gets the machine profile's test workers per run
-  (`src/domains/machine/machine-profile.js`, Settings › Execution › Concurrent runs: auto from the machine, or the
+  (`packages/engine/domains/machine/machine-profile.js`, Settings › Execution › Concurrent runs: auto from the machine, or the
   owner's manual value) as `MULTIAGENT_TEST_WORKERS` and `MULTIAGENT_E2E_WORKERS` (the same number;
   this repository's `playwright.config.js` reads the second one). `capabilities.agentEnv(scratch,
   { testWorkers })` adds them to the agents' env (so their prefixes are allowed and the command guide
-  names them), `WorkflowRun` gets them from `testWorkers` (src/service/areas/runs.js), child runs
+  names them), `WorkflowRun` gets them from `testWorkers` (packages/engine/service/areas/runs.js), child runs
   inherit them. The suite step and the orchestrator-run test requests set them in `suiteEnv` (never
   an inherited value) and add `--workers=<n>` to a `playwright test` command / `--maxWorkers=<n>` to
   a `jest` one that sets none (`suite-step.js withWorkers`). The test and build skills
@@ -230,11 +230,11 @@ someone is present by definition, and it is never a workflow step. Inside a run 
 
 ## The app-wide Supervisor chat (#28)
 
-The Supervisor drawer and page (`src/domains/supervisor/supervisor-chat.js`) run `claude` isolated with `--tools ""`
+The Supervisor drawer and page (`packages/engine/domains/supervisor/supervisor-chat.js`) run `claude` isolated with `--tools ""`
 (no built-in tool: no file reads, no commands) and one MCP server, `orchestrator`
-(`src/domains/supervisor/supervisor-mcp.js`, allowed as `mcp__orchestrator`). That server forwards to a loopback bridge
-in the app (`src/domains/supervisor/supervisor-bridge.js`, 127.0.0.1, per-process bearer token) that runs the read-only
-tools of `src/domains/supervisor/supervisor-tools.js` over the service. So it sees the app's data (workflows, projects,
+(`packages/engine/domains/supervisor/supervisor-mcp.js`, allowed as `mcp__orchestrator`). That server forwards to a loopback bridge
+in the app (`packages/engine/domains/supervisor/supervisor-bridge.js`, 127.0.0.1, per-process bearer token) that runs the read-only
+tools of `packages/engine/domains/supervisor/supervisor-tools.js` over the service. So it sees the app's data (workflows, projects,
 runs, skills, agents, usage, analytics) and never the repositories' code. New tools go in
 `supervisor-tools.js`; write tools must preview and apply only on the user's click. Its model has
 no write tool; the changes it owns (runs, workflows, skills) arrive as requests from the Oracle
@@ -242,9 +242,9 @@ no write tool; the changes it owns (runs, workflows, skills) arrive as requests 
 
 ## The Oracle (#122)
 
-The Oracle (`src/domains/oracle/oracle.js`, the built-in `oracle` agent) runs `claude` the same way: isolated,
+The Oracle (`packages/engine/domains/oracle/oracle.js`, the built-in `oracle` agent) runs `claude` the same way: isolated,
 `--tools ""`, one MCP server `orchestrator` allowed as `mcp__orchestrator`, over its own bridge.
-Its tools are `src/domains/oracle/oracle-tools.js`: the supervisor's, plus `active_runs`, `run_events`,
+Its tools are `packages/engine/domains/oracle/oracle-tools.js`: the supervisor's, plus `active_runs`, `run_events`,
 `run_file`, `roadmap`, `backlog` (with the queue), `unpushed`, `seed_status`, and the repositories
 read-only: `repo_read` (a file or a listing, the path kept inside the project folder) and
 `repo_git`, which runs only `READ_GIT_COMMANDS` (blame, diff, grep, log, ls-files, ls-tree,
@@ -255,12 +255,12 @@ tool there is no shell or file write to try: read-only is enforced, not a conven
 points at the project holding the orchestrator's source (its `package.json` name), the only way to
 read the app's code (the packaged app's is in app.asar). #184 adds: `run_analysis` (runs' cost and
 tokens by agent and step, review rounds, timeouts, invalid outputs, refused calls, merge conflicts,
-tool timeouts, the test writer's context, whole-suite starts; `src/domains/oracle/oracle-run-analysis.js`, no
+tool timeouts, the test writer's context, whole-suite starts; `packages/engine/domains/oracle/oracle-run-analysis.js`, no
 model; #321: its `focus` `time`, `context`, `tools`, `cache` or `tests` reads the same run files
-for where the time, the context and the tool calls went, `src/domains/oracle/oracle-run-focus.js`, also no model
-and read-only); `issues_search`, `issue_view`, `labels` and `ci_runs` (#360) (`src/domains/oracle/oracle-platform.js`: gh / glab `issue
+for where the time, the context and the tool calls went, `packages/engine/domains/oracle/oracle-run-focus.js`, also no model
+and read-only); `issues_search`, `issue_view`, `labels` and `ci_runs` (#360) (`packages/engine/domains/oracle/oracle-platform.js`: gh / glab `issue
 list`, `issue view`, `label list` and `run list` / `ci list` only, built by the app on the synced backlog's repository,
-never a command from the model); and the `checker` delegate (`src/domains/oracle/oracle-check.js`): one test
+never a command from the model); and the `checker` delegate (`packages/engine/domains/oracle/oracle-check.js`): one test
 runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that fetches a package:
 no npx, npm exec, go run, pip) with plain arguments, no shell syntax or inline code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
 `MULTIAGENT_SIMULATION_ONLY=1`, stopped after 2 min; a longer check is a `check.run` card (20 min)
@@ -271,7 +271,7 @@ files (storage.md).
 roadmap, queue) is the Product Owner's, runs, workflows and skills are the Supervisor's. The
 Oracle's only write tool is `request_agent({ to: 'po' | 'supervisor', kind, params, reason })`
 (channel `oracle:requestAgent`), which hands the change to the owner's inbox (`po:request`,
-`supervisor:request`, `src/domains/agents/agent-inbox.js`): the owner runs it with the code of its own buttons
+`supervisor:request`, `packages/engine/domains/agents/agent-inbox.js`): the owner runs it with the code of its own buttons
 (no model call; `plan` is one paid question to the Product Owner's model) and records the request
 and its result in its own conversation. Its `propose_action` keeps only its own cards (`check.run`,
 `process.stop`); an owner's kind proposed as a card (`oracle-actions.js` `ownerOf`) is routed to
@@ -292,9 +292,9 @@ workspace, a terminal) acts on the running app through the control endpoint, nev
 workspace files such as `backlog/<project>.roadmap.json`: an edited file races the screens (#287)
 and starts nothing. With Settings › Execution › "Allow outside sessions to control this app" on, the
 app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`); `node scripts/ctl.js
-<channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `src/control/allowlist.js`,
+<channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `packages/engine/control/allowlist.js`,
 and each call is logged in `control/calls.jsonl`. The allowlist never holds a channel that answers,
 skips or bypasses a human gate, nor `settings:set`; `confirmGate` is refused on any channel
-(`src/control/index.js`, docs/features/control-channel.md). The file is written with mode 0600, but
+(`packages/engine/control/index.js`, docs/features/control-channel.md). The file is written with mode 0600, but
 the workflow's agents run as the same OS user and can read it: the allowlist is what limits that
 token (SEC-25, SECURITY.md's threat model).

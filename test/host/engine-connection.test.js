@@ -346,12 +346,12 @@ function loadApiHttp({ userAgent = '', manifest = [], language = null } = {}) {
 }
 
 const DESKTOP_MANIFEST = () => {
-  const { DESKTOP, declarations } = require('../../src/service/manifest');
+  const { DESKTOP, declarations } = require('@multiagent/engine/service/manifest');
   return declarations(DESKTOP);
 };
 
 test('engine:openConnection is a desktop channel the preload exposes as openEngineConnection', () => {
-  const entry = require('../../src/service/manifest').DESKTOP.find((e) => e.channel === 'engine:openConnection');
+  const entry = require('@multiagent/engine/service/manifest').DESKTOP.find((e) => e.channel === 'engine:openConnection');
   assert.equal(entry.method, 'openEngineConnection');
   assert.ok(entry.desktop);
   const main = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'host', 'main.js'), 'utf8');
@@ -431,5 +431,5 @@ test('#329 every text key of the connection page is in both catalogs', () => {
     const missing = [...keys].filter((k) => !(k in c));
     assert.deepEqual(missing, [], `missing from ${lang}.json`);
   }
-  assert.match(html, /<script src="\.\.\/\.\.\/shared\/i18n\.js"><\/script>\s*<script src="connection\.js">/, 'the catalog loads before the page\'s script');
+  assert.match(html, /<script src="\.\.\/\.\.\/\.\.\/packages\/shared\/i18n\.js"><\/script>\s*<script src="connection\.js">/, 'the catalog loads before the page\'s script');
 });

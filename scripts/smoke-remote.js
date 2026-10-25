@@ -51,7 +51,7 @@ function startEngine() {
     MULTIAGENT_USER_DATA: path.join(scratch, 'engine-user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
   };
   delete env.MULTIAGENT_WORKSPACE;
-  engine = spawn(process.execPath, [path.join(__dirname, 'serve.js'), '--port', '0', '--workspace', path.join(scratch, 'engine-workspace')], {
+  engine = spawn(process.execPath, [path.join(__dirname, '..', 'packages', 'engine', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(scratch, 'engine-workspace')], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,

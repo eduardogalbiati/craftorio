@@ -1,5 +1,5 @@
-// The Oracle (#122, src/domains/oracle/oracle.js): one persistent conversation per workspace, reached through the
-// oracle:* channels (src/service/channels/oracle.js), the way the Dashboard drawer and every screen
+// The Oracle (#122, packages/engine/domains/oracle/oracle.js): one persistent conversation per workspace, reached through the
+// oracle:* channels (packages/engine/service/channels/oracle.js), the way the Dashboard drawer and every screen
 // (#171) call it. Service-level tests drive it through a real service on a scratch workspace, the
 // way test/supervisor-chat.test.js does for the app-wide Supervisor chat; a couple of unit-level
 // tests call createOracle directly for what the channel's own simulation guard would hide
@@ -12,9 +12,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createService } = require('../../src/service');
-const { setupWorkspace } = require('../../src/domains/workspace/workspace');
-const oracle = require('../../src/domains/oracle/oracle');
+const { createService } = require('@multiagent/engine/service');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const oracle = require('@multiagent/engine/domains/oracle/oracle');
 
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-ws-'));
@@ -138,7 +138,7 @@ test('chat:cancel(\'oracle\') stops an oracle:ask turn in flight: the answer is 
   service.events.on('chat:progress', (ev) => events.push(ev));
 
   // the turn's AbortController is wired synchronously, before the mock turn's first real wait
-  // (src/domains/chat/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
+  // (packages/engine/domains/chat/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
   const asking = api['oracle:ask']({ question: 'What is going on?', mock: true });
   assert.equal(await api['chat:cancel']({ chat: 'oracle', key: '' }), true);
 

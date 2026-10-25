@@ -48,7 +48,7 @@ function makeModel({ fileCount = 20, dz = DZ, languages = LANGUAGES } = {}) {
   };
 }
 
-// as src/domains/project/architecture-facts.js qualityGate builds it
+// as packages/engine/domains/project/architecture-facts.js qualityGate builds it
 const GATE = [
   { name: 'complexity', state: 'pending', source: 'node scripts/code-health.js --check', value: null },
   { name: 'coverage', state: 'measured', source: 'package.json', value: '81.2% of lines' },

@@ -2,7 +2,7 @@
 // original side, while the modified side succeeded, is an element the change adds: recorded as
 // "not on the original (new element)", not an error; the modified screenshot is kept.
 //
-// Seam: src/engine/screenshot-step.js captureScreenshots (existing export) with an injected
+// Seam: packages/engine/engine/screenshot-step.js captureScreenshots (existing export) with an injected
 // `run` (the screenshot command, writes <out>/<name>.<side>.png or fails like scripts/screenshot.js
 // does: exit 1, last line "screenshot: nothing matches <selector>") and a fake `slot`.
 // New output field (#185):
@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { captureScreenshots } = require('../src/engine/screenshot-step');
+const { captureScreenshots } = require('@multiagent/engine/engine/screenshot-step');
 const { fakeRoot, loadPanel, waitTick } = require('./artifacts-panel-helpers');
 
 function tmpDir(t, prefix) {

@@ -1,5 +1,5 @@
 // #308: a turn's recorded tokens include its sub-agents' model calls, as its cost already does.
-// - parseClaude (src/engine/providers.js) fed stream-json events with a fresh acc per turn (as runCli
+// - parseClaude (packages/engine/engine/providers.js) fed stream-json events with a fresh acc per turn (as runCli
 //   gives it); the parsed turn (what runCli resolves with, and the engine records in
 //   session.message_received) is read through `turnResult(acc)`, the provider module's builder of
 //   that object (new export, required inside the tests). Its `usage` is the whole turn (main
@@ -15,9 +15,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseClaude, parseGrok } = require('../src/engine/providers');
-const { runFigures } = require('../src/domains/run/run-analysis');
-const { runReport } = require('../src/domains/supervisor/supervisor');
+const { parseClaude, parseGrok } = require('@multiagent/engine/engine/providers');
+const { runFigures } = require('@multiagent/engine/domains/run/run-analysis');
+const { runReport } = require('@multiagent/engine/domains/supervisor/supervisor');
 const M = require('../src/renderer/run3d-model');
 
 const newSid = () => `sess-308-${crypto.randomUUID()}`;
@@ -31,7 +31,7 @@ const tokens = (input, output, cacheRead, cacheWrite) => ({ input, output, cache
 const four = (u) => ({ input: u.input, output: u.output, cache_read: u.cache_read, cache_write: u.cache_write });
 
 function parsedTurn(parser, events) {
-  const { turnResult } = require('../src/engine/providers');
+  const { turnResult } = require('@multiagent/engine/engine/providers');
   const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId: null, error: null };
   for (const ev of events) parser(ev, () => {}, acc);
   return turnResult(acc);
@@ -94,7 +94,7 @@ test('a Claude turn with two result events (#277): usage_main is the largest of 
 });
 
 test('a Codex turn has no subagents field', () => {
-  const { parseCodex } = require('../src/engine/providers');
+  const { parseCodex } = require('@multiagent/engine/engine/providers');
   const res = parsedTurn(parseCodex, [
     { type: 'thread.started', thread_id: 'th-308' },
     { type: 'item.completed', item: { id: 'i1', type: 'agent_message', text: 'done' } },

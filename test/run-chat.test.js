@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun } = require('../src/engine/workflow');
-const { Recorder } = require('../src/engine/recorder');
-const { runEvents } = require('../src/domains/run/runs');
+const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
+const { Recorder } = require('@multiagent/engine/engine/recorder');
+const { runEvents } = require('@multiagent/engine/domains/run/runs');
 const { RunChatModel, splitAnswer, providerType } = require('../src/renderer/views/runchat/run-chat-model.js');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
@@ -46,7 +46,7 @@ function chatOf(events) {
 }
 const kinds = (model, kind) => model.items.filter((it) => it.kind === kind);
 
-const FANOUT = path.join(__dirname, 'fixtures', 'fanout.yaml');
+const FANOUT = path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'fanout.yaml');
 
 test('RunChatModel#sideOf: alternates left, right, left… for each new agent and keeps it; the orchestrator and the supervisor have none', () => {
   const model = new RunChatModel();
@@ -385,7 +385,7 @@ test('run chat: the supervisor shows its decision, not its raw turn', () => {
 });
 
 test('run chat: turns carry their handoff note and context; a max_context rotation shows as a line', { timeout: 60000 }, async () => {
-  const events = await mockRun(path.join(__dirname, 'fixtures', 'handoff.yaml'), { mockSequences: { verdict: ['changes_requested', 'changes_requested', 'approved'] } });
+  const events = await mockRun(path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'handoff.yaml'), { mockSequences: { verdict: ['changes_requested', 'changes_requested', 'approved'] } });
   const model = chatOf(events);
   const turns = kinds(model, 'turn');
   assert.equal(turns.length, 6);

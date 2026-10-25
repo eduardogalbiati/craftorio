@@ -1,7 +1,7 @@
 // Keep awake (#162): while the setting is on (settings.keepAwake, per workspace, off by default)
 // and the app has work to do, the computer is kept from sleeping, so an overnight run or roadmap
 // is not interrupted. No Electron here: src/host/main.js passes Electron's powerSaveBlocker (tests a
-// fake one) and the service's pendingWork() (src/service/areas/keep-awake.js).
+// fake one) and the service's pendingWork() (packages/engine/service/areas/keep-awake.js).
 // - workToDo(work): the rule that decides "work to do", from the runs in progress
 //   ({ waiting }), the roadmaps ({ state, stage, of, disabled? }) and the queued items not paused. A
 //   running run counts; a run waiting at a gate counts only when a roadmap or a queue continues after it.

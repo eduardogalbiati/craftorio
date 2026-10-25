@@ -9,7 +9,7 @@
 // - Save: findings:save with the capture, the capture with the marks drawn (marked.png), the marks
 //   and the context: view and tab, project, the run ids on screen, window size, theme and the last
 //   50 UI actions recorded here (navigation, clicks with their data-* targets); the service adds its
-//   channel calls, the main log and the app's version and commit (src/service/channels/findings.js).
+//   channel calls, the main log and the app's version and commit (packages/engine/service/channels/findings.js).
 //   Saved: the path and "Open folder".
 // - File as issue: saves first, then findings:file to the current project's Product Owner: "Filed"
 //   with the issue link, or "Sent" while the request waits for the owner's click in its drawer.

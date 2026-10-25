@@ -1,5 +1,5 @@
 // Path globs and the test files' default patterns, shared by the engine's test-file guard
-// (src/engine/test-paths.js, `tests_paths`) and the Architecture tab's exclusions
+// (packages/engine/engine/test-paths.js, `tests_paths`) and the Architecture tab's exclusions
 // (packages/shared/architecture-model.js, #356). Patterns are globs over the repository-relative path,
 // with forward slashes: `*` and `?` stay within one folder, `**` crosses folders, and a pattern
 // without a slash matches the file name at any depth (as in .gitignore). Case-sensitive.

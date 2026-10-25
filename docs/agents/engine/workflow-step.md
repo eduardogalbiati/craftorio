@@ -3,7 +3,7 @@
 A step that runs another workflow as child runs: inputs, `foreach`, output, limits, stop and resume, parent and child links.
 
 - `{ type: workflow, workflow: <file>, inputs: {...}, foreach?, max_parallel?, on_error?, transitions? }`
-  (src/engine/workflow-step.js, `runChildWorkflows` in workflow.js). `inputs` are templates over the
+  (packages/engine/engine/workflow-step.js, `runChildWorkflows` in workflow.js). `inputs` are templates over the
   run, plus `item` / `index` with `foreach`; a whole `{{ expr }}` keeps its type (a list stays a list).
   `foreach` (a list or a template giving one) starts one child per item, at most `max_parallel`
   (default 1) at a time, and never two items whose `files` overlap.

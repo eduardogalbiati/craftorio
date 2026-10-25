@@ -57,7 +57,7 @@ Read this before changing anything in `src/renderer/`.
   `init()` opens it when `settings.setupDone === false` (strictly: a workspace or a test double
   without the key never sees it); Settings › Agents & CLIs › Run setup again calls
   `window.Setup.open()`. Its pure parts (status badges, requirement badges, preselection, hidden
-  workflows) are `packages/shared/setup-model.js`, shared with Node (`src/domains/workflow/workflow-requirements.js`). It sits under
+  workflows) are `packages/shared/setup-model.js`, shared with Node (`packages/engine/domains/workflow/workflow-requirements.js`). It sits under
   the other dialogs (z-index 9, so the Skip confirm and New project show above it) and lifts the
   terminal dock above itself while open. Check it with `npm run screenshot -- --view setup --mode
   <agents | try-it-safely | workflows | first-project>` (`--missing-clis` for CLIs not installed).
@@ -246,7 +246,7 @@ Read this before changing anything in `src/renderer/`.
   (`switchTab`, `#tab-artifacts`, with a count on the tab). The Artifacts tab and the approval
   gate's side panel are one component, `artifacts-panel.js` (`ArtifactsPanel.mount(root, { runId,
   flat, extras })`): the run's files from `artifacts:list { runId }`, what the run produced first
-  (#225: each file's `category` from `src/domains/evidence/artifact-categories.js`; "Produced" = Result, Screenshots &
+  (#225: each file's `category` from `packages/engine/domains/evidence/artifact-categories.js`; "Produced" = Result, Screenshots &
   images, Tests, Reports by default, "Show all" adds Process, Internal is never listed; category and
   kind chips; the Artifacts screen reuses `filtersHtml` / `filterFiles` / `onFilterClick`),
   grouped by category (newest first in one; `flat` for the gate), a preview in place (markdown, images with their original/modified
@@ -266,7 +266,7 @@ Read this before changing anything in `src/renderer/`.
   test notes and evidence plan). Stacked under 1100 px. The Run screen and the run chat use the same
   helpers; the sidebar card only links to the run (no room). **Run App** asks `localPreview:info`:
   with a config it starts the preview (`localPreview:start`), without one it opens a setup
-  prefilled from the worktree (`suggestConfig` in `src/domains/local/local-preview.js`) that saves the project's
+  prefilled from the worktree (`suggestConfig` in `packages/engine/domains/local/local-preview.js`) that saves the project's
   `localPreview`. Its state (running / stopped / failed, Stop, Terminal, Open URL, the port-in-use
   error) is painted by `paintGateApps` from the run view's `preview` (local_preview events).
   `npm run screenshot -- --view run --workflow software-development-local-hero.yaml --input
@@ -299,7 +299,7 @@ Read this before changing anything in `src/renderer/`.
   error when the run's branch was deleted). Screenshots: `--view workflows --tab runs` with the demo
   runs (every run's `run:diff` is `demoRunDiff`). Its data is `run:diff` (the files with their status, counts and patches,
   and the branch's commits) and `run:diffFile` (one file's patch and both sides, used to expand
-  context, load a huge diff and preview images). Both are served by `src/service/areas/diff.js`,
+  context, load a huge diff and preview images). Both are served by `packages/engine/service/areas/diff.js`,
   which takes the folder and base from the open gate or the run's `worktree.ready`. The model is pure
   and Node-testable: `parsePatch`, `rows` (gaps and expansion), `splitRows` (split and unified
   share the hunks), `wordDiff`, `highlightHtml` and `groupByFolder`. In screenshots, `run:diff` /
@@ -355,7 +355,7 @@ Read this before changing anything in `src/renderer/`.
   it runs and after it ended. `run.js` keeps each step's latest log from its `step.log` events (else
   the log its output names) and the base check's of that round (`step.log` with `base`); a new round
   switches the tab to the new file. `term:open` with `kind: 'log'` follows `runs/<id>/logs/…` only
-  (the service refuses any other path) through `followFile` (`src/domains/session/session-tail.js`) embedded, or
+  (the service refuses any other path) through `followFile` (`packages/engine/domains/session/session-tail.js`) embedded, or
   `multiagent-tail <runDir> --file <path>` in the external window (same ↗ rules as #318). The
   terminal is read-only (no keys, no paste). The base check (#405) pushes `baseCheck:changed` when it
   starts and ends (`baseCheck:state` answers a screen opened meanwhile); the Roadmap draws its card
@@ -458,7 +458,7 @@ with `renderMessage`; the component wraps each message in `[data-testid="agent-c
 and its scan/attach pattern (a MutationObserver), so a new AI prompt field gets the mic and image
 paste from one selector. One document-level `paste` listener takes the clipboard's images (none
 when it holds text) and saves each through `clipboard:saveImage` (a service channel, so the browser
-UI works too; `src/domains/chat/pasted-images.js` writes `<workspace>/attachments/pending/`). Fields with their
+UI works too; `packages/engine/domains/chat/pasted-images.js` writes `<workspace>/attachments/pending/`). Fields with their
 own image paste (`#po-question`, `.oracle-input`) are skipped. A screen that submits a field calls
 `await PasteImage.collect(field)` (`[{ path, name }]`, empty when nothing was pasted: send the
 request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena's `.ar-chip` plus
@@ -466,7 +466,7 @@ request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena'
 
 ## The agents' prompt cache: Next turn and the Continue line (#320)
 
-`packages/shared/session-cache.js` (`window.SessionCache`, the engine's `src/domains/session/session-cache.js` too) derives how a
+`packages/shared/session-cache.js` (`window.SessionCache`, the engine's `packages/engine/domains/session/session-cache.js` too) derives how a
 session's next turn starts from its snapshot (`currentTurn`: snake_case snapshots or sessionView's
 camelCase, recomputed against the clock). The run lists' session table has a **Next turn** column
 (`nextTurnCell`, `td[data-testid="session-next-turn"][data-next-turn]`): "fresh from note", "warm ·
@@ -478,7 +478,7 @@ card (`gateCardHtml` → `gateNextTurnsHtml`, `p[data-testid="gate-next-turns"]`
 `state.runs.get(runId).sessions`, one entry per agent with an open session (a handoff agent whose
 last session closed with its note counts as fresh): "Continue: developer fresh from note ~20K ·
 reviewer resumes cold ~140K ≈ $0.70", or "every agent starts fresh or warm · …". It never answers
-the gate. The phone page (`src/domains/workspace/mobile-gates.js`) prints the same line from `runs:active`'s
+the gate. The phone page (`packages/engine/domains/workspace/mobile-gates.js`) prints the same line from `runs:active`'s
 `nextTurns`.
 
 ## Findings button (#361)
@@ -490,7 +490,7 @@ sidebar entry at the menu's end (`[data-testid="findings-button"]`). It shows fr
 (app:info's `isPackaged` and `screenshot`). It opens `[data-testid="findings-overlay"]` over the
 window's capture (`window:capture`, desktop only). Pins are DOM `[data-testid="findings-pin"]`
 elements and the shapes are drawn on the canvas. It records the last 50 clicks and navigations;
-the service records the last 50 channel calls (`areas/findings.js`) and `src/domains/workspace/main-log.js` keeps
+the service records the last 50 channel calls (`areas/findings.js`) and `packages/engine/domains/workspace/main-log.js` keeps
 the main log. Screenshots: `--view findings --mode marking|saved|list`.
 
 **Reading a finding bundle** (`<workspace>/findings/<id>/`, named in the issue the Product Owner
@@ -535,7 +535,7 @@ How a screen is built and reviewed (#387):
   (`scripts/screenshot/checks.js`): axe-core's `color-contrast` and `target-size` rules and the
   visible native controls (a bare `<select>`, date or datetime-local field), into
   `<name>.<side>.checks.json` beside the PNG. The screenshots step turns them into `axe_findings`
-  (`src/domains/evidence/ui-review-checks.js`): a finding the original side has too is a baseline (a ratchet), never
+  (`packages/engine/domains/evidence/ui-review-checks.js`): a finding the original side has too is a baseline (a ratchet), never
   blocking. A data-heavy screen adds a real-scale state from the shared `largeProjectFixture`
   (`scripts/screenshot/helpers.js`; e.g. `--view project --tab architecture --mode large`).
 - **Review**: the `ui_reviewer` gets the `axe_findings` in its prompt and keeps each one in
@@ -653,7 +653,7 @@ In this app:
   Screenshot state: `--roadmap parked`.
 - **Releases on the Roadmap** (#291, `releaseView` / `releaseBlockHtml` / `releaseLineHtml` in
   `backlog-roadmap.js`, `.rm-release*` in `backlog.css`): `data.releases` comes with the Backlog read
-  (`roadmapReleases` in `src/service/areas/releases.js`: the history plus the release runs not
+  (`roadmapReleases` in `packages/engine/service/areas/releases.js`: the history plus the release runs not
   shipped, or `{ error }`). A block `roadmap-release-block` (card `roadmap-release-card`, `role=group`,
   aria-label "Release <version>, <state>") and its dashed `roadmap-release-line` follow the release's
   stage; they are never stages (no `data-stage`, no menu, no drop target) and replace the cut line's

@@ -7,7 +7,7 @@
 // Browser: window.OracleChatModel; Node: module.exports.
 (function (root) {
   const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
-  // src/domains/oracle/oracle.js ATTACHMENT_LIMITS (the service checks them again)
+  // packages/engine/domains/oracle/oracle.js ATTACHMENT_LIMITS (the service checks them again)
   const LIMITS = Object.freeze({ maxBytes: 5 * 1048576, maxCount: 4 });
   const IMAGE_TYPES = ['image/gif', 'image/jpeg', 'image/png', 'image/webp'];
   // a run id (20261002-003425-77147dbf), an issue (#171, not an HTML entity), a run's file

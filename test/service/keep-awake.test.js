@@ -1,4 +1,4 @@
-// Keep awake (#162): service.pendingWork (src/service/areas/keep-awake.js) collects the runs,
+// Keep awake (#162): service.pendingWork (packages/engine/service/areas/keep-awake.js) collects the runs,
 // roadmaps and queued items src/host/keep-awake.js's workToDo turns into "work to keep the computer
 // awake for". createService is used directly (not makeService) for the "no workspace" case, since
 // makeService always opens one.
@@ -6,8 +6,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { createService } = require('../../src/service');
-const { ISSUE_WORKFLOW, makeService, roadmapProject, until, watchRuns } = require('./helpers');
+const { createService } = require('@multiagent/engine/service');
+const { ISSUE_WORKFLOW, makeService, roadmapProject, until, watchRuns } = require('@multiagent/engine/test/service/helpers');
 
 test('pendingWork: no workspace open returns no runs, roadmaps or queued items', () => {
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });

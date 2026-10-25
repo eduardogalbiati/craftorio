@@ -28,9 +28,9 @@ const H = require('./roadmap-status-helpers');
 const HERO = 'software-development-local-hero.yaml';
 const DEV_WORKFLOWS = ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-development-local-hero.yaml'];
 
-// a bundled workflow as api.listWorkflows gives it (src/service/areas/workflows.js), with its groups
+// a bundled workflow as api.listWorkflows gives it (packages/engine/service/areas/workflows.js), with its groups
 function wfEntry(file) {
-  const { loadWorkflow } = require('../src/engine/workflow');
+  const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
   const wf = loadWorkflow(path.join(__dirname, '..', 'workflows', file));
   return {
     file,

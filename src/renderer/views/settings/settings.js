@@ -1,7 +1,7 @@
 /* global api */
 // Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
-// its Rebuild index, src/domains/workspace/store.js), Agents & CLIs (installed CLIs and
+// its Rebuild index, packages/engine/domains/workspace/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (where the engine runs (settings-engine.js), developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
@@ -26,7 +26,7 @@ function renderTimeZone() {
   $('#set-time-zone-now').textContent = t('settings.time_zone.now', { time: TimeZone.formatDateTime(Date.now(), zone), offset: TimeZone.offsetLabel(Date.now(), zone) });
 }
 
-// Control channel (#336, src/control): main's endpoint state { enabled, port, file, error, ctlPath }.
+// Control channel (#336, packages/engine/control): main's endpoint state { enabled, port, file, error, ctlPath }.
 // While on, the multiagent-ctl client's path (#342) with a Copy button. The browser client (npm run
 // serve) has no endpoint: the switch is disabled there.
 const controlChannelAvailable = () => api.platform !== 'browser' && typeof api.controlChannelState === 'function';
@@ -119,7 +119,7 @@ function renderDefaultWorkflow() {
 
 // Settings › Agents & CLIs › Fallbacks and Limits per model (#262): settings.providers.<p>.fallbacks
 // (the ordered "provider:model" entries a turn out of credits moves on to) and settings.models.<id>
-// ({ timeout_factor, max_total_cost_usd }); every run gets them (src/service/areas/runs.js).
+// ({ timeout_factor, max_total_cost_usd }); every run gets them (packages/engine/service/areas/runs.js).
 // One Save / Cancel for both groups.
 const FALLBACK_ENTRY = /^[A-Za-z0-9_.-]+:\S+$/;
 function renderFallbackSettings() {
@@ -180,7 +180,7 @@ async function saveFallbackSettings() {
 }
 
 // Settings › Execution › Concurrent runs (settings.concurrentRuns) and the machine profile (#367,
-// settings.machineProfile, src/domains/machine/machine-profile.js through settings:machineProfile): the maximum and
+// settings.machineProfile, packages/engine/domains/machine/machine-profile.js through settings:machineProfile): the maximum and
 // the test workers per run follow this machine in auto; a value typed here makes them manual.
 async function renderConcurrency() {
   const c = state.settings.concurrentRuns || {};
@@ -267,7 +267,7 @@ async function applyMachineSuggestion() {
   });
 }
 
-// Settings › Execution › Memory guard (settings.memoryGuard, #276, src/engine/memory-guard.js): the
+// Settings › Execution › Memory guard (settings.memoryGuard, #276, packages/engine/engine/memory-guard.js): the
 // hint gives the limit in GB for this machine (app:info totalMemoryBytes, binary GB like Task Manager).
 async function renderMemoryGuard() {
   const g = { enabled: true, limitPercent: 25, floorPercent: 10, ...(state.settings.memoryGuard || {}) };
@@ -301,7 +301,7 @@ async function saveMemoryGuard() {
   await renderMemoryGuard();
 }
 
-// Settings › General › Live roadmap (settings.liveRoadmap, read by src/domains/roadmap/live-roadmap.js, #164): every
+// Settings › General › Live roadmap (settings.liveRoadmap, read by packages/engine/domains/roadmap/live-roadmap.js, #164): every
 // field is saved together, since setSettings replaces the whole object.
 function renderLiveSettings() {
   const l = state.settings.liveRoadmap || {};
@@ -329,7 +329,7 @@ async function saveLiveSettings() {
   renderLiveSettings();
 }
 
-// Settings › General › Budget (settings.budget, src/domains/usage/budget.js, #206): the daily and nightly caps in
+// Settings › General › Budget (settings.budget, packages/engine/domains/usage/budget.js, #206): the daily and nightly caps in
 // USD (empty or 0: no cap), saved together; a "Raise for today" (`raised`) is kept.
 function renderBudgetSettings() {
   const b = state.settings.budget || {};
@@ -347,7 +347,7 @@ async function saveBudgetSettings() {
   renderBudgetSettings();
 }
 
-// Settings › Execution › Oracle (settings.oracle, read by src/domains/oracle/oracle.js): both fields are saved
+// Settings › Execution › Oracle (settings.oracle, read by packages/engine/domains/oracle/oracle.js): both fields are saved
 // together, since setSettings replaces the whole object.
 function renderOracleSettings() {
   const o = state.settings.oracle || {};
@@ -409,7 +409,7 @@ async function renderSelfHealing() {
   $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
 }
 
-// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate, src/domains/workspace/app-update.js):
+// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate, packages/engine/domains/workspace/app-update.js):
 // the row under Self-healing. `o`: settings.oracle; `info`: the app-update:state result (null while it
 // is read): { applies, reason } or { applies, project, short, behind }. Off and disabled, with the
 // reason, when it does not apply or Self-healing is off; the source line otherwise. One trigger (#285):
@@ -446,7 +446,7 @@ async function renderAppUpdate(fresh = true) {
   $('#set-app-update').onchange = (e) => save({ appUpdate: !!e.target.checked });
 }
 
-// The Oracle's wake-ups (#123, src/domains/oracle/oracle-wake.js): which runs wake it and on which events, saved
+// The Oracle's wake-ups (#123, packages/engine/domains/oracle/oracle-wake.js): which runs wake it and on which events, saved
 // with the rest of settings.oracle. The kinds (oracle-wake.js WAKE_KINDS), in display order.
 const ORACLE_WAKE_KINDS = [
   ['gate', () => t('settings.wake.gate')],
@@ -476,7 +476,7 @@ async function saveOracleWake() {
   renderOracleWake();
 }
 
-// Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/domains/chat/speech.js).
+// Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (packages/engine/domains/chat/speech.js).
 const VOICE_LANGUAGES = ['auto', 'de', 'en', 'es', 'fr', 'it', 'pt'];
 async function renderVoice(st) {
   try {

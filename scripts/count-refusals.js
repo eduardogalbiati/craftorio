@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { isPermissionDenial } = require('../src/engine/providers');
+const { isPermissionDenial } = require('@multiagent/engine/engine/providers');
 
 // Claude Code's refusals of a Bash call it would ask about (plus the generic denial wording);
 // "Contains ..." is its static check of shell syntax ("Contains simple_expansion", "Contains shell

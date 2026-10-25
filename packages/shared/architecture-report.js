@@ -1,8 +1,8 @@
 // The architecture analysis report's format (#356): { summary, areas: [{ area, verdict }], findings:
 // [{ kind, title, files: [{ path, lines }], evidence, severity, refactor }] } as a JSON Schema, with
-// its finding kinds and severities. One definition for the Oracle's turn (src/domains/oracle/oracle-architecture.js
+// its finding kinds and severities. One definition for the Oracle's turn (packages/engine/domains/oracle/oracle-architecture.js
 // validateReport and analysisPrompt) and for a workflow step's `output_schema: architecture_report`
-// (#378, workflows/refactor-proposals.yaml; resolved by src/engine/run/load.js NAMED_SCHEMAS).
+// (#378, workflows/refactor-proposals.yaml; resolved by packages/engine/engine/run/load.js NAMED_SCHEMAS).
 // Pure: no DOM, no files.
 (function (root) {
   const SEVERITIES = ['low', 'medium', 'high'];

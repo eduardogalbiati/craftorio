@@ -1,4 +1,4 @@
-// src/domains/chat/mic-permission.js (#318): before the first recording on macOS the main process asks
+// packages/engine/domains/chat/mic-permission.js (#318): before the first recording on macOS the main process asks
 // systemPreferences.askForMediaAccess('microphone'); a denial is the voice-input error pointing to
 // System Settings. Other OSes never ask. Also the renderer side (src/renderer/voice.js): it calls
 // api.micAccess() (channel 'voice:mic-access') before getUserMedia, and a denial shows the error in
@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const load = () => require('../../src/domains/chat/mic-permission');
+const load = () => require('@multiagent/engine/domains/chat/mic-permission');
 const SETTINGS_HINT = 'System Settings › Privacy & Security › Microphone';
 
 function fakePrefs(answer) {

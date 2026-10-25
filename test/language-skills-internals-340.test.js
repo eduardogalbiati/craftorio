@@ -1,4 +1,4 @@
-// #340 internals: src/engine/language-skills.js (which languages a run's changed files need, the
+// #340 internals: packages/engine/engine/language-skills.js (which languages a run's changed files need, the
 // skill names expanded per language) and the multi-value control of src/renderer/workflow-inputs.js
 // (a `multiple: true` enum: one toggle per value, the value comma-separated).
 const test = require('node:test');
@@ -9,8 +9,8 @@ const {
   isLanguageFile,
   languagesFor,
   splitValues,
-} = require('../src/engine/language-skills');
-const { render } = require('../src/engine/run/templates');
+} = require('@multiagent/engine/engine/language-skills');
+const { render } = require('@multiagent/engine/engine/run/templates');
 const wi = require('../src/renderer/workflow-inputs');
 
 test('splitValues: trims, drops empty and repeated items, keeps the order', () => {

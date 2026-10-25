@@ -1,6 +1,6 @@
 // Screenshot seed of Analytics (--view analytics, a tab of Home, #255): its tabs, 30 days of finished
 // runs with Claude, Codex and Grok sessions, and per tab: a git repository of three nights of merges
-// and a marker (performance, #159), from src/domains/analytics/analytics-demo.js one AI Development run in depth (run,
+// and a marker (performance, #159), from packages/engine/domains/analytics/analytics-demo.js one AI Development run in depth (run,
 // #228), 30 days of runs and nights (occupancy, #188) and the agents' turns (agents, #280).
 
 const fs = require('fs');
@@ -46,7 +46,7 @@ function demoPerformanceRuns(ws, folder, projectId) {
   write('src/renderer/index.html', lines(320, '<div>line'));
   write('README.md', `# demo-app\n\n<!-- generated:skills -->\n${lines(40, '| skill')}<!-- /generated:skills -->\n`);
   write('src/renderer/style.css', lines(900, '.rule'));
-  write('src/service/manifest.js', lines(120, '// channel'));
+  write('packages/engine/service/manifest.js', lines(120, '// channel'));
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'Initial commit'], new Date(Date.now() - 20 * 864e5).toISOString());
   const initial = git(['rev-parse', 'HEAD']);
@@ -62,7 +62,7 @@ function demoPerformanceRuns(ws, folder, projectId) {
       const shared = night < 2 ? ['src/renderer/index.html', 'README.md', ...(k % 2 ? ['src/renderer/style.css'] : [])] : (k === 0 ? ['src/renderer/style.css'] : []);
       runs.push({
         n, start, finish, title: titles[n], pr: night === 1 && k === 3,
-        files: [...shared, `src/features/${titles[n].toLowerCase().replace(/[^a-z]+/g, '-')}.js`, ...(k === 1 ? ['src/service/manifest.js'] : [])],
+        files: [...shared, `src/features/${titles[n].toLowerCase().replace(/[^a-z]+/g, '-')}.js`, ...(k === 1 ? ['packages/engine/service/manifest.js'] : [])],
         conflict: night === 0 && k >= 2 ? 'resolve_merge' : night === 1 && k === 2 ? 'resolve_merge' : null,
         stage: `Stage ${night + 1}`,
       });

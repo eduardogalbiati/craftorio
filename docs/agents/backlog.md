@@ -16,7 +16,7 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
 - Idle agents (#46 → #41): the `agent_idle` warning wakes the supervisor (wait / interrupt) only on
   a step's turn, not on delegated turns; there is no UI for the `idleWarningMinutes` setting.
 - Worktree follow-ups: see [worktrees.md](worktrees.md).
-- Local merges not pushed (#89, done): `src/domains/local/local-push.js` (`localStatus` / `pushBase` /
+- Local merges not pushed (#89, done): `packages/engine/domains/local/local-push.js` (`localStatus` / `pushBase` /
   `updateAndPush`), cached per project in `<workspace>/backlog/<id>.local.json`, column `local` in
   `linkRuns`, auto-push per project (`project.autoPush`). A conflict of Update and push goes to a
   run (`backlog:resolve-push`, task from `conflictTask`) of the last local workflow of the project:
@@ -26,7 +26,7 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
   next push is rejected again); auto-push is per project, not per workflow; the Update and push
   rebase runs in the checkout where the base is checked out, so it refuses when that checkout has
   uncommitted changes.
-- One run's figures (#228): `src/domains/run/run-analysis.js` `runFigures` (cached in the index, `run_figures`)
+- One run's figures (#228): `packages/engine/domains/run/run-analysis.js` `runFigures` (cached in the index, `run_figures`)
   feeds Analytics › Run; the roadmap estimates (#206, #215) still compute their own durations and
   costs, so the two can disagree. Next: move the estimates onto `runFigures`.
 - 24/7 meter (#188): a paused roadmap or a stall counts as blocked only inside a Night watch window

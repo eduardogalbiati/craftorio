@@ -1,7 +1,7 @@
 // #284 Disable a roadmap stage: what the review of the first round added (the developer's own tests).
 // - src/host/keep-awake.js keepAwakeLabel / workToDo: the disabled stages are said apart in the status
 //   line ("roadmap stage 3/6 (1 disabled)"); a roadmap without one reads as before.
-// - src/domains/roadmap/roadmap.js saveStages / restoreStages: a stage with a running item is not disabled by any
+// - packages/engine/domains/roadmap/roadmap.js saveStages / restoreStages: a stage with a running item is not disabled by any
 //   writer (the screen's Disable is off then); enabling it, or keeping it disabled, still saves.
 
 const test = require('node:test');
@@ -11,7 +11,7 @@ const os = require('os');
 const path = require('path');
 
 const { keepAwakeLabel, workToDo } = require('../../src/host/keep-awake');
-const roadmaps = require('../../src/domains/roadmap/roadmap');
+const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-disabled-writers-'));
@@ -72,7 +72,7 @@ test('#284 restore: an Undo that would disable a stage whose item started meanwh
   assert.equal('disabled' in roadmaps.readRoadmap(dir, 'p1').stages[0], false);
 });
 
-// The file stores an item whose run is in progress as `planned` with its runId (src/domains/roadmap/roadmap.js
+// The file stores an item whose run is in progress as `planned` with its runId (packages/engine/domains/roadmap/roadmap.js
 // persisted): a running run is told by the service's `alive(runId)`, as for propose / dropIssues /
 // itemAction. The cases above store `status: 'running'`, which the file never holds.
 const alive = (id) => id === 'live';

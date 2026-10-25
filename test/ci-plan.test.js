@@ -4,12 +4,12 @@ const assert = require('node:assert/strict');
 const { planOs, alreadyTested, testedStatus, testedStatusBody } = require('../scripts/ci-plan');
 
 test('planOs: a PR runs on ubuntu and windows, not macOS', () => {
-  assert.deepEqual(planOs({ event: 'pull_request', files: ['src/engine/workflow.js', 'test/engine.test.js'] }),
+  assert.deepEqual(planOs({ event: 'pull_request', files: ['packages/engine/engine/workflow.js', 'test/engine.test.js'] }),
     ['ubuntu-latest', 'windows-latest']);
 });
 
 test('planOs: a PR touching a platform-sensitive path also runs on macOS', () => {
-  for (const file of ['src/engine/worktree.js', 'scripts/package.js', 'package-lock.json', '.github/workflows/ci.yml']) {
+  for (const file of ['packages/engine/engine/worktree.js', 'scripts/package.js', 'package-lock.json', '.github/workflows/ci.yml']) {
     assert.deepEqual(planOs({ event: 'pull_request', files: ['README.md', file] }),
       ['ubuntu-latest', 'windows-latest', 'macos-latest'], file);
   }

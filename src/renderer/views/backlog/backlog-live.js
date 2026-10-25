@@ -1,7 +1,7 @@
 // Backlog › Roadmap kept live without redrawing it (#491) and the base check's card (#465), used by
 // backlog-roadmap.js (re-exported as BacklogRoadmap.patch / mergeState) and backlog.js's liveReload.
 // patch: the list drawn again with its item rows kept in place; mergeState: the light backlog:state
-// (src/domains/backlog/backlog.js backlogState) merged into the Backlog shown, or null when only the full read can
+// (packages/engine/domains/backlog/backlog.js backlogState) merged into the Backlog shown, or null when only the full read can
 // tell; readLight: that state read with its key and mark; baseCheckHtml / baseCheckTerm: the "Base check: running since HH:MM on <commit>" card in the
 // roadmap's bar and its read-only log terminal (term-dock.js termButtons / termAction).
 // Uses app.js globals (esc, t).

@@ -11,7 +11,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 - **2026-10-24** (#558, the reorganisation study `docs/reorganisation-study-2026-10.md`): the app
   becomes an engine package plus modular fronts, in one git repository with npm workspaces (no
   submodules, no separate repositories), by phases that each stop on their own: 0 these decisions,
-  1 a tidy of `src/` (host files in `src/host/`, the backend's loose files in `src/domains/<name>/`,
+  1 a tidy of `src/` (host files in `src/host/`, the backend's loose files in `packages/engine/domains/<name>/`,
   tests following their modules), 2 the engine package, 3 the UI kit and the fronts, 4 vertical
   slices. Seven decisions: (1) the fronts are vertical, reached in phase 4 (phases 2 and 3 keep every
   channel file and domain module in the engine package; in phase 4 each front takes its channels,
@@ -54,7 +54,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   the user controls and output fields its `output_schema` types as a number or a boolean, anything
   else goes through `github_repo`, `pr_url` or `shell_quote`, and `npm run check` loads every workflow. nunjucks cannot be sandboxed, so a template naming
   `constructor`, `__proto__`, `require` or `process` is refused at load (one list, in
-  src/engine/run/templates.js). The Workflows screen says to install only trusted ones, and the
+  packages/engine/engine/run/templates.js). The Workflows screen says to install only trusted ones, and the
   Builder asks once before saving a custom workflow, remembered per file by the fingerprint of its
   text (settings' `trustedFiles`, like Run App's confirmation). Skills and seeds have no import or
   save flow in the app yet, so only the notice covers them. Why: a downloaded workflow could run a
@@ -100,7 +100,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   issue" and the epic body line (one place: `packages/shared/language.js`). JSON keys and enum values,
   paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled
   workflows and skills, logs and tests stay English. Grill me's questions come from the clarity
-  rubric (`src/domains/discovery/clarity.js`, no model call): app text, so they follow the interface language (#329),
+  rubric (`packages/engine/domains/discovery/clarity.js`, no model call): app text, so they follow the interface language (#329),
   not this setting. Why: an owner who works in another language
   read English summaries and documents, and a repository's issues are not always in the owner's
   chat language; the output contract keeps the keys in English so #94 does not come back.
@@ -210,4 +210,4 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   overlapping test responsibilities made one run pay for the full suite up to four times; the tests
   are why the app works, so savings go where they do not lower what is tested.
 - **Isolated Claude agents load no settings file** (#468, SEC-3): `--setting-sources ''` instead of `project,local`; the checkout's `.claude/settings*.json` is never read (no scan-and-refuse path). The app auto-trusts only `runs/`, `skills/` and `workflows/`; `repos/`, `worktrees/` and project folders keep the CLI's own trust prompt, which a live cli-new terminal shows to the user. Why: those files come from the repository and can declare hooks or `permissions.allow` that Claude Code honours before `--allowedTools`, headless and without a prompt.
-- **Child processes get an allowlisted environment** (#470, SEC-5): `childEnv` (`src/engine/child-env.js`) for agents, actions, probes, the suite and the terminals; `GH_*`/`GITHUB_TOKEN` only with `bash:gh` (or a free `bash`), `GITLAB_*` only with `bash:glab`; the suite gets no platform token; `printenv` is no longer an allowed utility; the spawn event records only the keys. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and proxies stay out: a workflow that needs them lists them in `env.passthrough` (workflow level only). Why: a prompt-injected agent or a repository's test script could read and publish the user's cloud and API credentials.
+- **Child processes get an allowlisted environment** (#470, SEC-5): `childEnv` (`packages/engine/engine/child-env.js`) for agents, actions, probes, the suite and the terminals; `GH_*`/`GITHUB_TOKEN` only with `bash:gh` (or a free `bash`), `GITLAB_*` only with `bash:glab`; the suite gets no platform token; `printenv` is no longer an allowed utility; the spawn event records only the keys. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and proxies stay out: a workflow that needs them lists them in `env.passthrough` (workflow level only). Why: a prompt-injected agent or a repository's test script could read and publish the user's cloud and API credentials.

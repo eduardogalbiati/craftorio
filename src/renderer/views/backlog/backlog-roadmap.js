@@ -1,5 +1,5 @@
-// The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (src/domains/roadmap/roadmap.js), each stage started
-// when the previous one has finished and merged; the bar names the base's known failures (#405, src/domains/project/base-health.js). The item card reads in three bands (#282). 1: its
+// The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (packages/engine/domains/roadmap/roadmap.js), each stage started
+// when the previous one has finished and merged; the bar names the base's known failures (#405, packages/engine/domains/project/base-health.js). The item card reads in three bands (#282). 1: its
 // issues' titles (what leads: a list, one line per issue, linked, #110; under it "4 issues ·
 // complexity 9", the total of their `complexity:n` labels) | cost and time (one line each: the
 // estimate, or the real value against it with a verdict and a bar; the time of a run at work is its
@@ -961,7 +961,7 @@
     if (list?.querySelector('[data-rm-earlier]')) list.querySelector('.rm-stage.current')?.scrollIntoView({ block: 'nearest' });
   }
 
-  // ---- Live roadmap (#164, src/domains/roadmap/live-roadmap.js) ----------------------------------------------------
+  // ---- Live roadmap (#164, packages/engine/domains/roadmap/live-roadmap.js) ----------------------------------------------------
   const clock = (at) => {
     const d = new Date(at);
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone() });
@@ -1363,7 +1363,7 @@
   }
 
   // `edit` (#281): { label, detail?, quiet? }: what the edit did, in the roadmap's words: the line of
-  // the version kept before it (src/domains/roadmap/roadmap-history.js) and the title of its toast with Undo (not for a
+  // the version kept before it (packages/engine/domains/roadmap/roadmap-history.js) and the title of its toast with Undo (not for a
   // `quiet` one: a mode, an input, a note).
   // #287 `r`: the roadmap the edit was made on (its updatedAt is the save's base); `edit.form`: the
   // item with the Edit form's values, kept when the save is refused; `edit.dialog` (#454): a dialog
@@ -1550,7 +1550,7 @@
   }
 
   // #281: an edit saved at once can be taken back from its toast: Undo puts back what the edit changed
-  // (api.undoRoadmap → src/domains/roadmap/roadmap-undo.js), "Restored" or why it cannot be done takes the toast's place
+  // (api.undoRoadmap → packages/engine/domains/roadmap/roadmap-undo.js), "Restored" or why it cannot be done takes the toast's place
   function undoToast(ctx, out, title, detail) {
     if (!out?.edit?.id) return;
     window.showToast?.(title, detail || '', null, null, {

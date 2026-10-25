@@ -14,13 +14,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { createService, BUNDLED_SKILLS_DIR } = require('../../src/service');
-const { setupWorkspace } = require('../../src/domains/workspace/workspace');
+const { createService, BUNDLED_SKILLS_DIR } = require('@multiagent/engine/service');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
 
 const ROOT = path.join(__dirname, '..', '..');
-const loadTools = () => require('../../src/domains/oracle/oracle-tools');
-const loadOracle = () => require('../../src/domains/oracle/oracle');
-const loadActions = () => require('../../src/domains/oracle/oracle-actions');
+const loadTools = () => require('@multiagent/engine/domains/oracle/oracle-tools');
+const loadOracle = () => require('@multiagent/engine/domains/oracle/oracle');
+const loadActions = () => require('@multiagent/engine/domains/oracle/oracle-actions');
 const KNOWLEDGE_SKILLS = ['backlog-product-owner', 'run-supervisor', 'issue-writing', 'context-economy'];
 const near = (actual, expected, msg) => assert.ok(Math.abs(Number(actual) - expected) < 1e-6, `${msg}: expected ${expected}, got ${actual}`);
 
@@ -53,7 +53,7 @@ function makeService(t) {
 }
 
 // The tools' ctx, wired like test/oracle-tools.test.js (the service's own channels), plus the
-// injected platform CLI runner: execCli(cli, args) → stdout (src/domains/backlog/backlog.js execCli's signature).
+// injected platform CLI runner: execCli(cli, args) → stdout (packages/engine/domains/backlog/backlog.js execCli's signature).
 function makeCtx(t, { execCli } = {}) {
   const { service, api } = makeService(t);
   const runFolder = (runId) => {
@@ -135,7 +135,7 @@ function digestHashes(id) {
   const lf = Buffer.from(raw.toString('utf8').replace(/\r\n/g, '\n'));
   const hashes = [];
   for (const algo of ['sha256', 'sha1', 'md5']) for (const b of [raw, lf]) hashes.push(crypto.createHash(algo).update(b).digest('hex'));
-  const kind = require('../../src/domains/agents/skills').SKILL_KIND;
+  const kind = require('@multiagent/engine/domains/agents/skills').SKILL_KIND;
   if (typeof kind?.hash === 'function') hashes.push(kind.hash(BUNDLED_SKILLS_DIR, id));
   return hashes.map((h) => h.slice(0, 12));
 }
@@ -156,7 +156,7 @@ test('knowledge: a new Oracle session loads backlog-product-owner, run-superviso
   const { service, api } = makeService(t);
   await api['oracle:ask']({ question: 'What do you know?', mock: true });
   const session = fs.readFileSync(path.join(service.workspace().oracle, 'session.md'), 'utf8').replace(/\r\n/g, '\n');
-  const { resolveSkill } = require('../../src/domains/agents/skills');
+  const { resolveSkill } = require('@multiagent/engine/domains/agents/skills');
   const digests = digestTexts();
   for (const id of KNOWLEDGE_SKILLS) {
     const body = resolveSkill([BUNDLED_SKILLS_DIR], id).body.replace(/\r\n/g, '\n').trim();
@@ -546,7 +546,7 @@ test('skill: the oracle skill states the method (whole branch, primary sources, 
 test('compaction: 150k tokens of context still compacts; a large cache re-read per answer compacts below it', () => {
   const o = loadOracle();
   assert.equal(o.DEFAULTS.compactAtTokens, 150000);
-  assert.equal(typeof o.shouldCompact, 'function', 'src/domains/oracle/oracle.js exports shouldCompact');
+  assert.equal(typeof o.shouldCompact, 'function', 'packages/engine/domains/oracle/oracle.js exports shouldCompact');
   const settings = {};
   assert.equal(o.shouldCompact({ contextTokens: 150000, cacheReadTokens: 0 }, settings), true);
   assert.equal(o.shouldCompact({ contextTokens: 60000, cacheReadTokens: 60000 }, settings), false);

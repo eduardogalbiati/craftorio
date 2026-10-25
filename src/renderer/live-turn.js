@@ -1,11 +1,11 @@
 // The agent chats' live turn (#180), shared by the Product Owner's drawer (views/backlog/backlog-po.js),
 // the Oracle drawer (views/oracle/oracle.js) and the Supervisor chat (views/supervisor/supervisor.js):
-// while the agent answers, an activity line with a spinner says what it does ("Reading src/domains/roadmap/roadmap.js",
+// while the agent answers, an activity line with a spinner says what it does ("Reading packages/engine/domains/roadmap/roadmap.js",
 // "Searching the code for dispatchRoadmaps", "Listing open issues (gh)", "Thinking…") with a running
 // timer and a Stop button; the last steps stay listed under it, collapsible ("6 steps"); the answer's
 // prose shows as it is written (Markdown; the trailing ```json block never shows). States: starting,
 // working, writing, stopping, then done, failed or stopped; a turn with no item for STALE_MS says
-// "Still working: last step 1 min ago". Fed by the service's chat:progress events (src/domains/chat/chat-progress.js:
+// "Still working: last step 1 min ago". Fed by the service's chat:progress events (packages/engine/domains/chat/chat-progress.js:
 // { chat, key, turnId, phase, items, status }). The structured answer (cards) comes from the final
 // message as before: the view drops the live turn when the ask returns.
 // Pure state (create, apply, view, stepLabel, visibleText, duration) and the markup (html, which uses

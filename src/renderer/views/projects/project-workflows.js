@@ -10,7 +10,7 @@
 // data-workflow / data-origin / data-category; its label starts with the workflow's name.
 // Uses app.js globals ($, esc, t, state, errMsg, showToast, closeModal), workflows.js's
 // WF_SECTIONS, wfSectionOf, wfSectionName and showWorkflowsTab, and DefaultWorkflow.firstBuild
-// (the default's rule, shared with src/domains/project/projects.js).
+// (the default's rule, shared with packages/engine/domains/project/projects.js).
 
 window.ProjectWorkflows = (() => {
   const bare = (s) => String(s || '').replace(/\.ya?ml$/i, '');

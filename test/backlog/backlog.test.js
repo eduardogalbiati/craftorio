@@ -1,10 +1,10 @@
-// Backlog (src/domains/backlog/backlog.js): repository URLs, issue fetching per platform and the sync cache.
+// Backlog (packages/engine/domains/backlog/backlog.js): repository URLs, issue fetching per platform and the sync cache.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const backlog = require('../../src/domains/backlog/backlog');
+const backlog = require('@multiagent/engine/domains/backlog/backlog');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'backlog-'));
@@ -175,7 +175,7 @@ test('sync shows each issue its open PRs; PRs that cannot be read leave a note, 
 
 // ---- epics (#138): read alongside the issues and PRs, cached with the rest -----------------------
 
-test('sync reads an epic and its sub-issues into the cache (src/domains/backlog/epics.js readEpics)', async (t) => {
+test('sync reads an epic and its sub-issues into the cache (packages/engine/domains/backlog/epics.js readEpics)', async (t) => {
   const dir = tmp(t);
   const project = { id: 'p', repo: 'https://github.com/o/r' };
   const epicIssue = { ...GH_ISSUE, number: 40, title: 'Theme epic', labels: [{ name: 'epic', color: '5319e7' }] };

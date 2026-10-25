@@ -1,5 +1,5 @@
 // The function measure of JavaScript and TypeScript (#344, #385), one pure core shared by
-// `scripts/code-health.js` (its ratchets) and the Architecture facts (src/domains/project/architecture-facts.js),
+// `scripts/code-health.js` (its ratchets) and the Architecture facts (packages/engine/domains/project/architecture-facts.js),
 // so both always agree. A real parser (acorn, a runtime dependency) gives each function's lines,
 // cyclomatic complexity (1 + each `if`, `else if`, ternary, `&&`, `||`, `??`, `case`, `catch` and
 // loop), max nesting and parameter count. A nested function is measured on its own. Functions are

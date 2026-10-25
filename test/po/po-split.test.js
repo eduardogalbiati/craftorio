@@ -1,4 +1,4 @@
-// Splitting what is too big for one run (#124, src/domains/po/po-split.js): which issues get flagged, the
+// Splitting what is too big for one run (#124, packages/engine/domains/po/po-split.js): which issues get flagged, the
 // deterministic proposal, repairing a model's answer so every parent task lands in exactly one
 // child, the owner's edit check, and filing the children on the owner's click.
 const test = require('node:test');
@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const poSplit = require('../../src/domains/po/po-split');
+const poSplit = require('@multiagent/engine/domains/po/po-split');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'po-split-'));
@@ -14,7 +14,7 @@ function tmp(t) {
   return dir;
 }
 
-// 12 tasks in two unrelated areas of the code (src/engine, src/renderer), no headings.
+// 12 tasks in two unrelated areas of the code (packages/engine/engine, src/renderer), no headings.
 const BIG_BODY = [
   '- [ ] Update src/engine/workflow.js for X',
   '- [ ] Add src/engine/queue.js handling',

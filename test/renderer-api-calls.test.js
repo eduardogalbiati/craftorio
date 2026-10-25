@@ -1,5 +1,5 @@
-// Every window.api call in src/renderer against the channel manifest (src/service/manifest.js,
-// merged from src/service/channels/*.js): window.api maps a method's positional arguments to the
+// Every window.api call in src/renderer against the channel manifest (packages/engine/service/manifest.js,
+// merged from packages/engine/service/channels/*.js): window.api maps a method's positional arguments to the
 // channel's names (`params`, src/host/preload.js), so for a channel whose params are exactly ['x'] a call
 // `api.method({ x: ... })` sends { x: { x: ... } } (#239: the Night watch's Save sent
 // { allowed: { allowed } } and the service saved "nothing allowed"). No such call site may exist.
@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { createService } = require('../src/service');
+const { createService } = require('@multiagent/engine/service');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
 

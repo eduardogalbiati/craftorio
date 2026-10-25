@@ -84,7 +84,7 @@ three). Tests must not depend on the machine:
   (`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`) and pass identity, `init.defaultBranch` and
   `core.autocrlf` with `-c`; match git messages that changed across versions loosely;
 - paths: build them with `path.join` under `os.tmpdir()` (no hard-coded `C:/`, `/tmp` or
-  separators) and compare them with `samePath`/`canonicalPath` (`src/engine/worktree.js`). The
+  separators) and compare them with `samePath`/`canonicalPath` (`packages/engine/engine/worktree.js`). The
   worktree tests deliberately pass non-canonical spellings: a symlink (a junction on Windows) and,
   on Windows, an 8.3 short name, since git prints canonical paths (macOS `/var` is
   `/private/var`; the GitHub Windows runner's temp folder is `C:\Users\RUNNER~1\...`);

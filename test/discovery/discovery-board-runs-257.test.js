@@ -3,7 +3,7 @@
 // through discovery:record-result when the run finishes (window.DiscoveryRuns, views/discovery/
 // discovery.js, with the hooks in views/duo/duo.js and views/arena/arena.js), also when it ended
 // while nobody listened; a card outside the fast lane that skips Shape asks first; an edit with
-// changes is never dropped (another card, another project); and, in the store (src/domains/discovery/discovery.js),
+// changes is never dropped (another card, another project); and, in the store (packages/engine/domains/discovery/discovery.js),
 // a card's threadCount, snapshots that never replace each other and what recordResult refuses.
 // Loaded through test/discovery-board-harness.js; no run starts: api.startRun is faked.
 const test = require('node:test');
@@ -11,8 +11,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const discovery = require('../../src/domains/discovery/discovery');
-const { layout } = require('../../src/domains/workspace/workspace');
+const discovery = require('@multiagent/engine/domains/discovery/discovery');
+const { layout } = require('@multiagent/engine/domains/workspace/workspace');
 const { card, openBoard, settle, P } = require('../discovery-board-harness');
 
 const finished = (page, ev) => { for (const fn of page.handlers.onEvent || []) fn({ type: 'workflow.finished', ...ev }); };
@@ -211,7 +211,7 @@ test('another project chosen in the header closes a card without unsaved changes
   assert.equal(page.$('[data-testid="discovery-card-detail"]'), null);
 });
 
-// ---- the store (src/domains/discovery/discovery.js) -----------------------------------------------------------------
+// ---- the store (packages/engine/domains/discovery/discovery.js) -----------------------------------------------------------------
 
 function tmpStore(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'discovery-board-own-'));

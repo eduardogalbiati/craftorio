@@ -3,12 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { IdleWatch } = require('../src/engine/idle');
-const { WorkflowRun } = require('../src/engine/workflow');
+const { IdleWatch } = require('@multiagent/engine/engine/idle');
+const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
 const { RunChatModel } = require('../src/renderer/views/runchat/run-chat-model.js');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
-const FIXTURE = path.join(__dirname, 'fixtures', 'handoff.yaml');
+const FIXTURE = path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'handoff.yaml');
 const VERDICTS = { verdict: ['approved'] };
 
 // A clock the test moves by hand.

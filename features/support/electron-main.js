@@ -11,7 +11,7 @@
 // - the main process's clock starts at MULTIAGENT_E2E_NOW (ms) when set: the visual scenarios
 //   render at a fixed instant (#362, features/support/fixed-clock.js);
 // - the locale is en-US, so the interface is English until a scenario chooses another (#329);
-// - the service's base-health area (src/service/areas/base-health.js) is kept in
+// - the service's base-health area (packages/engine/service/areas/base-health.js) is kept in
 //   global.multiagentE2E.baseHealth when the service loads it, so a step can start the base check a
 //   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527).
 
@@ -49,7 +49,7 @@ simulateChannels(ipcMain);
 
 // the base-health area as the service creates it (the service requires the area files by path: the
 // cached module's export is the factory it calls)
-const baseHealthArea = require.resolve(path.join(__dirname, '..', '..', 'src', 'service', 'areas', 'base-health'));
+const baseHealthArea = require.resolve(path.join(__dirname, '..', '..', 'packages', 'engine', 'service', 'areas', 'base-health'));
 const makeBaseHealth = require(baseHealthArea);
 require.cache[baseHealthArea].exports = (ctx) => {
   const area = makeBaseHealth(ctx);

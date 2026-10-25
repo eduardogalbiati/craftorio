@@ -54,7 +54,7 @@ steps:
 `;
 
 function listed(t) {
-  const { makeService } = require('./service/helpers');
+  const { makeService } = require('@multiagent/engine/test/service/helpers');
   const { service, api } = makeService(t);
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-renderer-ao-262.yaml'), FIXTURE);
   return api['workflows:list']().find((w) => w.file === 'fixture-renderer-ao-262.yaml');

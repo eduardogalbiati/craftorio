@@ -352,7 +352,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 const ref = (number, title) => ({ number, title, url: `https://github.com/o/r/issues/${number}` });
 /** A roadmap item; `extra` overrides (run, runId, origin, estimate, error…). */
 const item = (id, status, number, title, extra = {}) => ({ id, status, workflow: 'software-development-local-hero.yaml', workflowName: 'Software development, local hero', inputs: {}, issues: [ref(number, title)], ...extra });
-/** A run as the service attaches it to an item (src/service/areas/roadmap.js runView). */
+/** A run as the service attaches it to an item (packages/engine/service/areas/roadmap.js runView). */
 const run = (extra = {}) => ({ status: 'running', mock: false, startedAt: null, finishedAt: null, waiting: false, gate: null, progress: [], groups: [], agentNames: null, stepNames: null, workflow: 'software-development-local-hero.yaml', error: null, stepTimes: {}, history: 0, ...extra });
 const roadmapOf = (stages, extra = {}) => ({ roadmap: { state: 'running', stages, ...extra }, issues: [] });
 

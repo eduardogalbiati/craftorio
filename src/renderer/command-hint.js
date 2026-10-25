@@ -2,7 +2,7 @@
 // A command the app suggests (#147: a CLI's install command, gh's billing scope) shown as code with a
 // play button: commandHint(command) is the markup, used by the Usage screen and Settings. A click on
 // the button asks for confirmation (the command may download and install software), then runs that
-// exact command in a terminal of the dock (term:open kind 'command', src/service/areas/terminals.js,
+// exact command in a terminal of the dock (term:open kind 'command', packages/engine/service/areas/terminals.js,
 // which refuses any command it does not suggest itself). Uses app.js's helpers and term-dock.js.
 
 const PLAY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z"/></svg>';

@@ -1,10 +1,10 @@
 // #226 Answer human gates from the phone: a gates-only web page served by the running app on its own
-// localhost port (never the engine server of src/server/index.js), reached by a paired device.
-// Tests-first: src/domains/workspace/mobile-gates.js does not exist yet; this header is the interface it implements.
+// localhost port (never the engine server of packages/engine/server/index.js), reached by a paired device.
+// Tests-first: packages/engine/domains/workspace/mobile-gates.js does not exist yet; this header is the interface it implements.
 //
-// const { createMobileGatesServer } = require('../../src/domains/workspace/mobile-gates');
+// const { createMobileGatesServer } = require('@multiagent/engine/domains/workspace/mobile-gates');
 // const m = createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 30 * 60e3 })
-//   service    the engine service (src/service): its open gates (runs:active → gates) and the answer
+//   service    the engine service (packages/engine/service): its open gates (runs:active → gates) and the answer
 //   secret     the key gate links are signed with (HMAC); a fresh random one when absent
 //   now()      the clock in ms (injected: link expiry)
 // m.listen(port = 0, host = '127.0.0.1') → Promise<{ port, url }>   url = `http://<host>:<port>`
@@ -30,15 +30,15 @@
 //   The answer is the engine's: its `approval.resolved` event (pushed on run:event and written to the
 //   run's events.jsonl) carries the choice and answered_by: 'owner', via: 'mobile', device: <device id>, ts.
 //
-// The gate's notification carries the link: src/domains/workspace/notifications.js runNotice(ev, run, { gateLink })
+// The gate's notification carries the link: packages/engine/domains/workspace/notifications.js runNotice(ev, run, { gateLink })
 // sets `url: gateLink(ev.run_id, ev.approval_id)` on the `waiting` notice (test/notifications.test.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeService, untilTrue } = require('../service/helpers');
+const { makeService, untilTrue } = require('@multiagent/engine/test/service/helpers');
 
-const load = () => require('../../src/domains/workspace/mobile-gates');
+const load = () => require('@multiagent/engine/domains/workspace/mobile-gates');
 const SECRET = 'mobile-gates-test-secret-0123456789';
 const MIN = 60e3;
 

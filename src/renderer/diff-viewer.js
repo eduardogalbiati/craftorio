@@ -13,7 +13,7 @@
 //   ImageViewer on click), a huge one is collapsed with "Load diff";
 // - top: the commit picker (all the branch's changes or one commit), the mode, wrap, close (Esc).
 // A simulated run, or one without a worktree, lists the files the developer reported with a note.
-// Data: api.runDiff / api.runDiffFile (src/service/areas/diff.js); the pure part is
+// Data: api.runDiff / api.runDiffFile (packages/engine/service/areas/diff.js); the pure part is
 // diff-viewer-model.js. DiffViewer.open({ runId, approvalId?, file?, title? }).
 (() => {
   const M = window.DiffViewerModel;

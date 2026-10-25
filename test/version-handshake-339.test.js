@@ -2,14 +2,14 @@
 //
 // The interfaces these tests expect (the developer implements them; this file is not edited):
 //
-// 1. `contractHash(manifest)` exported by src/service/contract.js: a pure function of an array of
-//    manifest entries (as src/service/manifest.js declares them, with or without their `fn`) to a
+// 1. `contractHash(manifest)` exported by packages/engine/service/contract.js: a pure function of an array of
+//    manifest entries (as packages/engine/service/manifest.js declares them, with or without their `fn`) to a
 //    short lowercase hex string (/^[0-9a-f]{6,16}$/). It hashes the contract only: the channel names
 //    (channel / send / event), their params and their schema. The same content gives the same hash
 //    (a JSON copy of the manifest too); an entry's `fn` never changes it; a change to a channel's
 //    schema.params or schema.result, or a channel added or removed, changes it.
 //
-// 2. `GET /api/version` on the engine server (src/server/index.js) answers 200 with the JSON body
+// 2. `GET /api/version` on the engine server (packages/engine/server/index.js) answers 200 with the JSON body
 //    `{ app, contract }` (top level, not wrapped in `result`): `app` is package.json's version and
 //    `contract` is contractHash(service.manifest). Like every other request it needs the server
 //    token (Bearer header or the cookie): without it, 401.
@@ -40,9 +40,9 @@ const path = require('path');
 const http = require('http');
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { setupWorkspace } = require('../src/domains/workspace/workspace');
-const { createService } = require('../src/service');
-const { createServer } = require('../src/server');
+const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService } = require('@multiagent/engine/service');
+const { createServer } = require('@multiagent/engine/server');
 
 const PKG = require('../package.json');
 const TOKEN = 'test-token-339-0123456789abcdef';
@@ -51,8 +51,8 @@ const API_HTTP = path.join(__dirname, '..', 'src', 'renderer', 'api-http.js');
 
 // the module the change adds to: required inside each test (the export does not exist yet)
 const contractHash = () => {
-  const { contractHash: fn } = require('../src/service/contract');
-  assert.equal(typeof fn, 'function', 'src/service/contract.js exports contractHash(manifest)');
+  const { contractHash: fn } = require('@multiagent/engine/service/contract');
+  assert.equal(typeof fn, 'function', 'packages/engine/service/contract.js exports contractHash(manifest)');
   return fn;
 };
 

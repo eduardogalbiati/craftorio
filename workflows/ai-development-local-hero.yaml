@@ -323,7 +323,7 @@ defaults:
 models:
   claude-fable-5-1: { timeout_factor: 3 }
 
-# v1: the graph is run by the app's deterministic engine (src/engine).
+# v1: the graph is run by the app's deterministic engine (packages/engine/engine).
 orchestrator:
   provider: claude
   model: claude-sonnet-5
@@ -1125,7 +1125,7 @@ steps:
 
   # #246: the test ids of the E2E scenarios written first, checked by the orchestrator right after
   # develop commits (no agent, no model call, milliseconds): every static getByTestId('…') of the
-  # step definitions must be in the renderer (src/engine/test-ids.js, the rule of
+  # step definitions must be in the renderer (packages/engine/engine/test-ids.js, the rule of
   # test/e2e-playwright.test.js). Missing ones go back to the developer with the list and where each
   # is used, at most twice in the run; then the run goes on and the suite's test reports them. A
   # project without BDD step definitions is skipped (a note in the output). Another project's
@@ -1427,7 +1427,7 @@ steps:
               convention: { type: string }
               screenshot: { type: string }
               blocking:   { type: boolean }
-              # a deterministic check's finding (#387, src/domains/evidence/ui-review-checks.js): its rule (axe's
+              # a deterministic check's finding (#387, packages/engine/domains/evidence/ui-review-checks.js): its rule (axe's
               # id or native-control), where it came from (axe, markup), and a baseline (the
               # original side has it too: a ratchet, never blocking)
               rule:       { type: string }

@@ -1,6 +1,6 @@
 // window.api for the browser: the same methods as src/host/preload.js, built from the same channel
-// manifest (src/service/manifest.js), fetched from the engine server (GET /api/manifest) and
-// called over its HTTP + WebSocket API (src/server). In the desktop app the preload has already
+// manifest (packages/engine/service/manifest.js), fetched from the engine server (GET /api/manifest) and
+// called over its HTTP + WebSocket API (packages/engine/server). In the desktop app the preload has already
 // defined window.api and this file does nothing. Nothing here lists channels: only the few methods
 // the browser does its own way (below) are named. On each connection it compares the engine's
 // contract (GET /api/version) with the manifest's and shows a reload banner when they differ (#339).

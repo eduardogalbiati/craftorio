@@ -62,10 +62,10 @@ const GATE = {
   choices: CHOICES,
   feedback: { label: 'Instructions (optional)', placeholder: 'What to change' },
 };
-const DIFF = 'diff --git a/src/engine/scenarios.js b/src/engine/scenarios.js\n+const PASTED_DIFF_LINE = 1;';
+const DIFF = 'diff --git a/packages/engine/engine/scenarios.js b/packages/engine/engine/scenarios.js\n+const PASTED_DIFF_LINE = 1;';
 const OUTPUT = {
   summary: 'Added the scenarios step to the workflow.',
-  files_changed: ['src/engine/scenarios.js'],
+  files_changed: ['packages/engine/engine/scenarios.js'],
   test_notes: 'Unit tests for the scenario parser.',
   evidence_plan: 'Screenshot of the gate with the scenarios.',
   left_out: 'No visual baseline yet.',
@@ -96,7 +96,7 @@ test('#183 gateContext: the context carries the gate\'s message and its choices'
 
 test('#183 gateContext: the context carries the developer\'s summary, files_changed, test_notes, evidence_plan and left_out', () => {
   const text = contextText();
-  for (const v of ['Added the scenarios step to the workflow.', 'src/engine/scenarios.js', 'Unit tests for the scenario parser.', 'Screenshot of the gate with the scenarios.', 'No visual baseline yet.']) {
+  for (const v of ['Added the scenarios step to the workflow.', 'packages/engine/engine/scenarios.js', 'Unit tests for the scenario parser.', 'Screenshot of the gate with the scenarios.', 'No visual baseline yet.']) {
     assert.ok(text.includes(v), `the context has ${v}`);
   }
 });

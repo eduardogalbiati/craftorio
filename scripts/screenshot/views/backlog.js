@@ -29,8 +29,8 @@ function demoConflictMap(ws, projectId) {
   const entry = (file, n, conflicts = 0, from = 0) => ({ file, runs: n, runIds: runIds.slice(from, from + n), lastRun: runIds[from], conflicts });
   const map = {
     source: 'runs', runs: runIds.length, runIds, builtAt: new Date().toISOString(),
-    files: [entry('src/renderer/app.js', 14, 3), entry('src/renderer/index.html', 13, 1), entry('src/service/index.js', 11), entry('README.md', 7, 0, 4), entry('src/engine/runner.js', 3, 0, 9)],
-    lines: [{ file: 'src/service/index.js', line: 12, text: "const { backlog, gates, notifications, projects, roadmap, runs, settings, usage, workflows } = require('./areas');", runs: 12, runIds: runIds.slice(0, 12) }],
+    files: [entry('src/renderer/app.js', 14, 3), entry('src/renderer/index.html', 13, 1), entry('packages/engine/service/index.js', 11), entry('README.md', 7, 0, 4), entry('packages/engine/engine/runner.js', 3, 0, 9)],
+    lines: [{ file: 'packages/engine/service/index.js', line: 12, text: "const { backlog, gates, notifications, projects, roadmap, runs, settings, usage, workflows } = require('./areas');", runs: 12, runIds: runIds.slice(0, 12) }],
   };
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.conflict-map.json`), JSON.stringify(map, null, 2));
 }
@@ -53,7 +53,7 @@ function demoPoConversation(ws, projectId, po = null) {
     'Related: #12',
   ].join('\n');
   const big = DEMO_ISSUES.find((x) => x.number === 15);
-  const poSplit = require('../../../src/domains/po/po-split');
+  const poSplit = require('@multiagent/engine/domains/po/po-split');
   const split = poSplit.normalizeSplit(poSplit.proposeSplit(big, { complexity: 5 }), big, { complexity: 5 });
   // #242: a long title and a long task line with inline Markdown, so the card must fit the drawer
   split.title = `${split.title || big.title}: keep every run's worktree, branch and logs safe when the app closes, crashes or the workspace moves to another disk`;
@@ -78,8 +78,8 @@ function demoPoConversation(ws, projectId, po = null) {
       estimateUsd: 27.4,
       estimateMissing: 1,
       groups: [
-        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['src/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
-        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in src/server.', files: ['src/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
+        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['packages/engine/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
+        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in packages/engine/server.', files: ['packages/engine/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
           inputs: { mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
           costEstimate: { usd: 15.8, perPoint: 3.16, complexity: 5, runs: 12, estimated: false, basis: 'Median cost per step and complexity point of the last 12 successful runs of software-development-local-hero.yaml, × complexity 5 (test ×0.35, evidence ×0.5, developer_screenshots off).' },
           cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] } },
@@ -177,7 +177,7 @@ function demoBacklogRefresh(ws, folder, projectId) {
   }
 }
 
-// #405: two tests known to fail on the base (src/domains/project/base-health.js store), one with its bug issue
+// #405: two tests known to fail on the base (packages/engine/domains/project/base-health.js store), one with its bug issue
 function demoBaseFailures(ws, projectId) {
   const dir = path.join(ws.backlog, 'base-health');
   const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();

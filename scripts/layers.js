@@ -2,7 +2,7 @@
 // and the directions they may require each other.
 // From the bottom: shared (packages/shared/, pure dual-load modules) requires nothing of the app; the
 // low-level utilities (ENGINE_ROOT_UTILITIES) only shared; the engine those two; the domain modules
-// (src/domains/<name>/, phase 1 of docs/reorganisation-study-2026-10.md; a loose file at the root of
+// (packages/engine/domains/<name>/, phase 1 of docs/reorganisation-study-2026-10.md; a loose file at the root of
 // src/ counts as one too) the engine too; the service all of these; the desktop entry and the server what is below
 // them; the renderer only shared, and nothing else requires it. The desktop entry is src/host/ (phase 1
 // of docs/reorganisation-study-2026-10.md): the Electron host, required by nothing else.
@@ -24,36 +24,37 @@ const ROOT = path.join(__dirname, '..');
 // The low-level utilities the engine may require: domain files that require nothing but each other
 // and packages/shared/ (area `utility`). A domain file that needs more is a domain module (area `root`).
 const ENGINE_ROOT_UTILITIES = [
-  'src/domains/evidence/coverage-summary.js',
-  'src/domains/evidence/evidence.js',
-  'src/domains/evidence/result-summary.js',
-  'src/domains/local/local-preview.js',
-  'src/domains/machine/install-commands.js',
-  'src/domains/machine/machine-profile.js',
-  'src/domains/machine/platform-paths.js',
-  'src/domains/machine/shell.js',
-  'src/domains/run/run-owner.js',
-  'src/domains/session/app-sessions.js',
-  'src/domains/session/session-cache.js',
-  'src/domains/workspace/json-schema.js',
-  'src/domains/workspace/state-file.js',
+  'packages/engine/domains/evidence/coverage-summary.js',
+  'packages/engine/domains/evidence/evidence.js',
+  'packages/engine/domains/evidence/result-summary.js',
+  'packages/engine/domains/local/local-preview.js',
+  'packages/engine/domains/machine/install-commands.js',
+  'packages/engine/domains/machine/machine-profile.js',
+  'packages/engine/domains/machine/platform-paths.js',
+  'packages/engine/domains/machine/shell.js',
+  'packages/engine/domains/run/run-owner.js',
+  'packages/engine/domains/session/app-sessions.js',
+  'packages/engine/domains/session/session-cache.js',
+  'packages/engine/domains/workspace/app-root.js',
+  'packages/engine/domains/workspace/json-schema.js',
+  'packages/engine/domains/workspace/state-file.js',
 ];
 
 // area -> the areas it may require (its own included) and what it holds. A file's area: areaOf.
 const AREAS = {
   shared: { may: ['shared'], what: 'pure modules both sides use (dual-load: require and a renderer <script>)' },
   utility: { may: ['utility', 'shared'], what: 'the low-level files of ENGINE_ROOT_UTILITIES' },
-  engine: { may: ['engine', 'utility', 'shared'], what: 'the workflow engine (src/engine/)' },
-  root: { may: ['root', 'engine', 'utility', 'shared'], what: 'the domain modules (src/domains/<name>/, and any loose file at the root of src/)' },
-  service: { may: ['service', 'root', 'engine', 'utility', 'shared'], what: 'the app\'s operations, no Electron and no transport (src/service/)' },
+  engine: { may: ['engine', 'utility', 'shared'], what: 'the workflow engine (packages/engine/engine/)' },
+  root: { may: ['root', 'engine', 'utility', 'shared'], what: 'the domain modules (packages/engine/domains/<name>/, and any loose file at the root of src/)' },
+  service: { may: ['service', 'root', 'engine', 'utility', 'shared'], what: 'the app\'s operations, no Electron and no transport (packages/engine/service/)' },
   desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron host (src/host/: main.js, the preloads, the windows and their guards)' },
-  server: { may: ['server', 'service', 'root', 'utility', 'shared'], what: 'the HTTP server and the control channel (src/server/, src/control/)' },
+  server: { may: ['server', 'service', 'root', 'utility', 'shared'], what: 'the HTTP server and the control channel (packages/engine/server/, packages/engine/control/)' },
   renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (src/renderer/)' },
 };
 
 // The top-level folders of src/ and their area (domains: a domain module, or a utility when
 // ENGINE_ROOT_UTILITIES lists the file, see areaOf). scripts/dep-map.js reads this list too.
-const FOLDERS = { control: 'server', domains: 'root', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
+const FOLDERS = { bin: 'server', control: 'server', domains: 'root', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
 // The workspaces (phase 2 of docs/reorganisation-study-2026-10.md) and their area: a whole package
 // (packages/shared), or its folders by FOLDERS (packages/engine/<folder>/, apps/desktop/<folder>/).
 const PACKAGES = { 'apps/desktop': null, 'packages/engine': null, 'packages/shared': 'shared' };
@@ -76,20 +77,20 @@ function areaOf(file) {
 // Requires the table does not allow, each with why it stays for now. Only remove entries: a new
 // direction moves the shared code down instead (docs/agents/code-map.md, "Where a new module goes").
 const EXCEPTIONS = [
-  { from: 'src/engine/machine-actions.js', to: 'src/domains/releases/releases.js', reason: 'the real machine adapter (#353) writes the release version (writeReleaseVersion) and pushes and tags the local base for a transition\'s `ship: { tag }` (shipRelease)' },
-  { from: 'src/engine/run/costs.js', to: 'src/domains/night/night-limits.js', reason: 'the night\'s cost and run limits (#337) are checked at each turn; night-limits.js also reads the night watch\'s log and the run loader' },
-  { from: 'src/engine/run/costs.js', to: 'src/domains/usage/usage.js', reason: 'the cost limits read the usage ledger of earlier runs (usage.js reads the runs list)' },
-  { from: 'src/engine/run/machine-steps.js', to: 'src/domains/releases/release-city.js', reason: 'the release_version step names the release\'s previous tag (#378, release.yaml\'s previous_version) as the Release city tab does (previousTag)' },
-  { from: 'src/engine/run/machine-steps.js', to: 'src/domains/releases/releases.js', reason: 'the release_version step tells a semver release name from another (releaseSemver) to pick its previous tag (#378)' },
-  { from: 'src/engine/run/project-map-steps.js', to: 'src/domains/project/project-map.js', reason: 'the project map\'s machine steps (#372) read the project\'s city with its git facts (src/domains/project/architecture-facts.js readCity) and save its plan in the workspace (src/domains/oracle/oracle-architecture.js writePlan), as the Architecture tab\'s channels do' },
-  { from: 'src/engine/run/refactor-proposals-steps.js', to: 'src/domains/refactor/refactor-proposals-run.js', reason: 'the Refactor proposals workflow\'s machine steps (#378) read the architecture facts and write the Refactor tab\'s proposals, ranking and issues in the workspace, as the Refactor tab\'s channels do' },
-  { from: 'src/engine/run/sessions.js', to: 'src/domains/agents/skills.js', reason: 'a turn\'s prompt resolves its skills in the workspace and the project (skills.js reads the projects)' },
-  { from: 'src/engine/run/sessions.js', to: 'src/domains/usage/usage.js', reason: 'totalTokens of the usage module counts a session\'s tokens' },
-  { from: 'src/engine/run/setup.js', to: 'src/domains/agents/skills.js', reason: 'a run leaves out the agents\' skills that no longer exist (resolveSkill)' },
-  { from: 'src/engine/run/supervision.js', to: 'src/domains/supervisor/supervisor.js', reason: 'the engine calls the AI supervisor when a step fails; supervisor.js uses the engine\'s providers' },
-  { from: 'src/engine/run/turns.js', to: 'src/domains/usage/usage.js', reason: 'sessionCost of the usage module prices each turn' },
-  { from: 'src/engine/workflow.js', to: 'src/domains/agents/skills.js', reason: 'the templates\' skill_dir(name) resolves a skill\'s folder (workspace first, then bundled)' },
-  { from: 'src/engine/worktree.js', to: 'src/domains/workspace/workspace.js', reason: 'a lazy read of the workspace\'s git credentials (gitAuthArgs) for the worktree\'s git commands' },
+  { from: 'packages/engine/engine/machine-actions.js', to: 'packages/engine/domains/releases/releases.js', reason: 'the real machine adapter (#353) writes the release version (writeReleaseVersion) and pushes and tags the local base for a transition\'s `ship: { tag }` (shipRelease)' },
+  { from: 'packages/engine/engine/run/costs.js', to: 'packages/engine/domains/night/night-limits.js', reason: 'the night\'s cost and run limits (#337) are checked at each turn; night-limits.js also reads the night watch\'s log and the run loader' },
+  { from: 'packages/engine/engine/run/costs.js', to: 'packages/engine/domains/usage/usage.js', reason: 'the cost limits read the usage ledger of earlier runs (usage.js reads the runs list)' },
+  { from: 'packages/engine/engine/run/machine-steps.js', to: 'packages/engine/domains/releases/release-city.js', reason: 'the release_version step names the release\'s previous tag (#378, release.yaml\'s previous_version) as the Release city tab does (previousTag)' },
+  { from: 'packages/engine/engine/run/machine-steps.js', to: 'packages/engine/domains/releases/releases.js', reason: 'the release_version step tells a semver release name from another (releaseSemver) to pick its previous tag (#378)' },
+  { from: 'packages/engine/engine/run/project-map-steps.js', to: 'packages/engine/domains/project/project-map.js', reason: 'the project map\'s machine steps (#372) read the project\'s city with its git facts (packages/engine/domains/project/architecture-facts.js readCity) and save its plan in the workspace (packages/engine/domains/oracle/oracle-architecture.js writePlan), as the Architecture tab\'s channels do' },
+  { from: 'packages/engine/engine/run/refactor-proposals-steps.js', to: 'packages/engine/domains/refactor/refactor-proposals-run.js', reason: 'the Refactor proposals workflow\'s machine steps (#378) read the architecture facts and write the Refactor tab\'s proposals, ranking and issues in the workspace, as the Refactor tab\'s channels do' },
+  { from: 'packages/engine/engine/run/sessions.js', to: 'packages/engine/domains/agents/skills.js', reason: 'a turn\'s prompt resolves its skills in the workspace and the project (skills.js reads the projects)' },
+  { from: 'packages/engine/engine/run/sessions.js', to: 'packages/engine/domains/usage/usage.js', reason: 'totalTokens of the usage module counts a session\'s tokens' },
+  { from: 'packages/engine/engine/run/setup.js', to: 'packages/engine/domains/agents/skills.js', reason: 'a run leaves out the agents\' skills that no longer exist (resolveSkill)' },
+  { from: 'packages/engine/engine/run/supervision.js', to: 'packages/engine/domains/supervisor/supervisor.js', reason: 'the engine calls the AI supervisor when a step fails; supervisor.js uses the engine\'s providers' },
+  { from: 'packages/engine/engine/run/turns.js', to: 'packages/engine/domains/usage/usage.js', reason: 'sessionCost of the usage module prices each turn' },
+  { from: 'packages/engine/engine/workflow.js', to: 'packages/engine/domains/agents/skills.js', reason: 'the templates\' skill_dir(name) resolves a skill\'s folder (workspace first, then bundled)' },
+  { from: 'packages/engine/engine/worktree.js', to: 'packages/engine/domains/workspace/workspace.js', reason: 'a lazy read of the workspace\'s git credentials (gitAuthArgs) for the worktree\'s git commands' },
 ];
 
 const posix = (p) => p.split(path.sep).join('/');

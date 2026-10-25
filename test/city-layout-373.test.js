@@ -33,10 +33,10 @@ const FILES = [
   { path: 'docs/c.md', lines: 5 },
   { path: 'package.json', lines: 12 },
   { path: 'scripts/build.js', lines: 20 },
-  { path: 'src/engine/big.js', lines: 400 },
-  { path: 'src/engine/small.js', lines: 20 },
-  { path: 'src/engine/tall.js', lines: 60 },
-  { path: 'src/engine/flat.js', lines: 60 },
+  { path: 'packages/engine/engine/big.js', lines: 400 },
+  { path: 'packages/engine/engine/small.js', lines: 20 },
+  { path: 'packages/engine/engine/tall.js', lines: 60 },
+  { path: 'packages/engine/engine/flat.js', lines: 60 },
   { path: 'src/renderer/app.js', lines: 60 },
   { path: 'src/renderer/views/board.js', lines: 25 },
   { path: 'src/renderer/views/kanban.js', lines: 25 },
@@ -50,11 +50,11 @@ const COMPLEXITY = {
   tool: 'lizard',
   metric: 'cyclomatic',
   functions: [
-    { file: 'src/engine/big.js', name: 'a', line: 1, complexity: 3, length: 10 },
-    { file: 'src/engine/small.js', name: 'a', line: 1, complexity: 3, length: 10 },
-    { file: 'src/engine/tall.js', name: 'a', line: 1, complexity: 30, length: 50 },
-    { file: 'src/engine/tall.js', name: 'b', line: 52, complexity: 9, length: 5 },
-    { file: 'src/engine/flat.js', name: 'a', line: 1, complexity: 1, length: 50 },
+    { file: 'packages/engine/engine/big.js', name: 'a', line: 1, complexity: 3, length: 10 },
+    { file: 'packages/engine/engine/small.js', name: 'a', line: 1, complexity: 3, length: 10 },
+    { file: 'packages/engine/engine/tall.js', name: 'a', line: 1, complexity: 30, length: 50 },
+    { file: 'packages/engine/engine/tall.js', name: 'b', line: 52, complexity: 9, length: 5 },
+    { file: 'packages/engine/engine/flat.js', name: 'a', line: 1, complexity: 1, length: 50 },
   ],
 };
 
@@ -85,13 +85,13 @@ const PLAN = {
     { id: 'books', name: 'Books', kind: 'library', purpose: 'Docs and project files.' },
   ],
   districts: [
-    { id: 'engine', name: 'Engine', zone: 'core', purpose: 'The engine.', include: ['/src/engine/**'], exclude: [] },
+    { id: 'engine', name: 'Engine', zone: 'core', purpose: 'The engine.', include: ['/packages/engine/engine/**'], exclude: [] },
     { id: 'views', name: 'Views', zone: 'ui', purpose: 'The views.', include: ['/src/renderer/views/**'], exclude: [] },
     { id: 'renderer', name: 'Renderer', zone: 'ui', purpose: 'The rest of the UI.', include: ['/src/renderer/**'], exclude: [] },
     { id: 'docs', name: 'Docs', zone: 'books', purpose: 'Markdown.', include: ['*.md'], exclude: [] },
     { id: 'root', name: 'Root', zone: 'books', purpose: 'Root files.', include: ['/*'], exclude: [] },
   ],
-  landmarks: [{ path: 'src/engine/big.js', label: 'The big one' }],
+  landmarks: [{ path: 'packages/engine/engine/big.js', label: 'The big one' }],
   ports: [{ id: 'cli', name: 'CLI', via: ['package.json'] }],
   evidence: ['README.md'],
 };
@@ -102,7 +102,7 @@ const folderModel = () => loadModel().buildCity({ plan: null, facts: facts() }).
 // a model of n drawn files: the plan model's districts with synthetic buildings spread over them
 function bigModel(n) {
   const model = planModel();
-  const template = model.buildings.find((b) => b.path === 'src/engine/big.js');
+  const template = model.buildings.find((b) => b.path === 'packages/engine/engine/big.js');
   const districts = model.districts.map((d) => d.id);
   const buildings = Array.from({ length: n }, (_, i) => ({
     ...template,
@@ -278,22 +278,22 @@ test('#373 layoutCity: more lines, a larger footprint; more complexity, a taller
   const layout = load().layoutCity(planModel());
   const b = Object.fromEntries(layout.buildings.map((x) => [x.path, x]));
   const foot = (p) => b[p].w * b[p].d;
-  assert.ok(foot('src/engine/big.js') > foot('src/engine/small.js'), `400 lines ${foot('src/engine/big.js')} vs 20 lines ${foot('src/engine/small.js')}`);
-  assert.ok(b['src/engine/tall.js'].h > b['src/engine/flat.js'].h, `complexity 39 ${b['src/engine/tall.js'].h} vs 1 ${b['src/engine/flat.js'].h}`);
+  assert.ok(foot('packages/engine/engine/big.js') > foot('packages/engine/engine/small.js'), `400 lines ${foot('packages/engine/engine/big.js')} vs 20 lines ${foot('packages/engine/engine/small.js')}`);
+  assert.ok(b['packages/engine/engine/tall.js'].h > b['packages/engine/engine/flat.js'].h, `complexity 39 ${b['packages/engine/engine/tall.js'].h} vs 1 ${b['packages/engine/engine/flat.js'].h}`);
 });
 
 test('#449 layoutCity: the mast follows the worst function (a quarter of it from 8), none under it', () => {
   const b = Object.fromEntries(load().layoutCity(planModel()).buildings.map((x) => [x.path, x]));
-  assert.ok(near(b['src/engine/tall.js'].antenna, 7.5), `worst 30: ${b['src/engine/tall.js'].antenna}`);
-  assert.equal(b['src/engine/big.js'].antenna, 0, 'worst 3: no mast');
+  assert.ok(near(b['packages/engine/engine/tall.js'].antenna, 7.5), `worst 30: ${b['packages/engine/engine/tall.js'].antenna}`);
+  assert.equal(b['packages/engine/engine/big.js'].antenna, 0, 'worst 3: no mast');
   assert.equal(b['README.md'].antenna, 0, 'not measured: no mast');
 });
 
 test('#449 layoutCity: each building carries its score from `scores`, null without one', () => {
-  const b = Object.fromEntries(load().layoutCity(planModel(), { scores: { 'src/engine/tall.js': 42, 'src/engine/flat.js': 0 } }).buildings.map((x) => [x.path, x]));
-  assert.equal(b['src/engine/tall.js'].score, 42);
-  assert.equal(b['src/engine/flat.js'].score, 0, 'a zero score is kept');
-  assert.equal(b['src/engine/big.js'].score, null);
+  const b = Object.fromEntries(load().layoutCity(planModel(), { scores: { 'packages/engine/engine/tall.js': 42, 'packages/engine/engine/flat.js': 0 } }).buildings.map((x) => [x.path, x]));
+  assert.equal(b['packages/engine/engine/tall.js'].score, 42);
+  assert.equal(b['packages/engine/engine/flat.js'].score, 0, 'a zero score is kept');
+  assert.equal(b['packages/engine/engine/big.js'].score, null);
   assert.equal(load().layoutCity(planModel()).buildings.every((x) => x.score === null), true, 'no scores: every score null');
 });
 
@@ -364,13 +364,13 @@ test('#373 defaultColourBy: quadrant when complexity was measured, zone otherwis
 test('#373 applyOverlay: highlighted files get their colour, every other building is greyed', () => {
   const { layoutCity, applyOverlay } = load();
   const layout = layoutCity(planModel());
-  const out = applyOverlay(layout, { highlight: { 'src/engine/big.js': '#ff0000', 'docs/a.md': '#00ff00' }, markers: [] });
+  const out = applyOverlay(layout, { highlight: { 'packages/engine/engine/big.js': '#ff0000', 'docs/a.md': '#00ff00' }, markers: [] });
   const of = Object.fromEntries(out.buildings.map((b) => [b.path, { colour: b.colour, greyed: b.greyed }]));
-  assert.deepEqual(of['src/engine/big.js'], { colour: '#ff0000', greyed: false });
+  assert.deepEqual(of['packages/engine/engine/big.js'], { colour: '#ff0000', greyed: false });
   assert.deepEqual(of['docs/a.md'], { colour: '#00ff00', greyed: false });
   assert.equal(out.buildings.length, layout.buildings.length);
   for (const b of out.buildings) {
-    if (!['src/engine/big.js', 'docs/a.md'].includes(b.path)) assert.equal(b.greyed, true, `${b.path} is greyed`);
+    if (!['packages/engine/engine/big.js', 'docs/a.md'].includes(b.path)) assert.equal(b.greyed, true, `${b.path} is greyed`);
   }
 });
 
@@ -383,10 +383,10 @@ test('#373 applyOverlay: with no highlight nothing is greyed', () => {
 test('#373 applyOverlay: a marker sits on its building\'s roof; one for an unknown path is dropped', () => {
   const { layoutCity, applyOverlay } = load();
   const layout = layoutCity(planModel());
-  const out = applyOverlay(layout, { highlight: {}, markers: ['src/engine/tall.js', 'nowhere/missing.js'] });
-  assert.deepEqual(out.markers.map((m) => m.path), ['src/engine/tall.js']);
+  const out = applyOverlay(layout, { highlight: {}, markers: ['packages/engine/engine/tall.js', 'nowhere/missing.js'] });
+  assert.deepEqual(out.markers.map((m) => m.path), ['packages/engine/engine/tall.js']);
   const [m] = out.markers;
-  const b = layout.buildings.find((x) => x.path === 'src/engine/tall.js');
+  const b = layout.buildings.find((x) => x.path === 'packages/engine/engine/tall.js');
   assert.ok(near(m.y, b.h), `marker at y ${m.y}, roof at ${b.h}`);
   assert.ok(inside(m, b), `marker ${m.x},${m.z} inside the footprint`);
 });
@@ -394,9 +394,9 @@ test('#373 applyOverlay: a marker sits on its building\'s roof; one for an unkno
 test('#373 flyTarget: a file or a district gives a point inside it; an unknown name gives null', () => {
   const { layoutCity, flyTarget } = load();
   const layout = layoutCity(planModel());
-  const b = layout.buildings.find((x) => x.path === 'src/engine/big.js');
+  const b = layout.buildings.find((x) => x.path === 'packages/engine/engine/big.js');
   const d = layout.districts.find((x) => x.id === 'views');
-  const toFile = flyTarget(layout, 'src/engine/big.js');
+  const toFile = flyTarget(layout, 'packages/engine/engine/big.js');
   const toDistrict = flyTarget(layout, 'views');
   assert.ok(toFile && inside(toFile, b), JSON.stringify(toFile));
   assert.ok(toDistrict && inside(toDistrict, d), JSON.stringify(toDistrict));

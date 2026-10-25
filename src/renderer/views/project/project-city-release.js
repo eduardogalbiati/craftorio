@@ -2,7 +2,7 @@
 // overlay API, so the city's own module does not grow. "Show on the map" (a release of the Releases
 // screen, the release run's page: showRelease(projectId, { to, from? })) opens the project's City
 // view (#430: in the city modal over the screen, project-city-modal.js, unless a city of the project is on screen) on the city as it was at the previous release (architecture:release: the tree and the facts at
-// `from`, the current plan's rules; src/domains/releases/release-city.js), with what the release added in green, what
+// `from`, the current plan's rules; packages/engine/domains/releases/release-city.js), with what the release added in green, what
 // it changed on the release's own ramp by the lines changed (#438: CityRelease.releaseRamp), renamed
 // files on their old building with the rename sign (an accent marker labelled "renamed") and removed files
 // marked as ghosts (a ghost-coloured marker labelled "removed" on the base building: #373's overlay

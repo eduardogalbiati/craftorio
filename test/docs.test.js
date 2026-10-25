@@ -27,8 +27,8 @@ test('every source file has a header comment the code map can build from', () =>
 });
 
 test('the generated code map documents the channel manifest folder', () => {
-  assert.match(codeMap(root), /src\/service\/manifest\.js/);
-  assert.match(codeMap(root), /src\/service\/channels\//);
+  assert.match(codeMap(root), /packages\/engine\/service\/manifest\.js/);
+  assert.match(codeMap(root), /packages\/engine\/service\/channels\//);
 });
 
 // A temporary root with just src/renderer/views/: enough for codeMap's own views-folder rows

@@ -1,4 +1,4 @@
-// src/domains/local/local-preview.js (#70): which config a gate's "Run locally" uses, whether an install is due,
+// packages/engine/domains/local/local-preview.js (#70): which config a gate's "Run locally" uses, whether an install is due,
 // the safe scratch workspace default, and the port check that reports a clash instead of failing silently.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -6,7 +6,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const lp = require('../../src/domains/local/local-preview');
+const lp = require('@multiagent/engine/domains/local/local-preview');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-'));
@@ -150,7 +150,7 @@ test('previewEnv: an extra env from the config never overrides the simulation gu
 test('startView: the most touched view under src/renderer/views/<view>/ or src/renderer/<view>*.{js,css}; null without a match', () => {
   assert.equal(lp.startView(['src/renderer/views/backlog/board.js', 'src/renderer/views/backlog/card.js', 'src/renderer/views/artifacts/list.js']), 'backlog', 'two files touch backlog, one touches artifacts');
   assert.equal(lp.startView(['src/renderer/artifacts.js', 'src/renderer/style.css']), 'artifacts');
-  assert.equal(lp.startView(['src/service/index.js', 'README.md']), null, 'no renderer screen changed');
+  assert.equal(lp.startView(['packages/engine/service/index.js', 'README.md']), null, 'no renderer screen changed');
   assert.equal(lp.startView([]), null);
   assert.equal(lp.startView(undefined), null);
 });

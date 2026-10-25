@@ -23,33 +23,33 @@ the workspace folder.
   folder is per worktree** (`native/target/`, gitignored; `CARGO_TARGET_DIR` moves it, and
   `test/supervisor/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `multiagent-mcp` in
   release (about a minute), later ones are incremental. Without cargo, `npm test` skips the
-  binary's cases with one line; CI never does. `mcpCommand` (`src/domains/supervisor/supervisor-bridge.js`) starts
+  binary's cases with one line; CI never does. `mcpCommand` (`packages/engine/domains/supervisor/supervisor-bridge.js`) starts
   `native/target/release/multiagent-mcp[.exe]` when it exists (packaged: `resources/bin/`), else
-  `src/domains/supervisor/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
+  `packages/engine/domains/supervisor/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
   release target of the platform and arch (`rustup target add` first) and needs cargo.
 - **No system Node in the packaged app** (#342): it ships three sidecars in `resources/bin/`
-  (`nativeBinaryPath`, `src/domains/machine/native-bin.js`): `multiagent-mcp`, `multiagent-tail` (the external
+  (`nativeBinaryPath`, `packages/engine/domains/machine/native-bin.js`): `multiagent-mcp`, `multiagent-tail` (the external
   live terminal, `tailCommand` in `terminalSpec`; the embedded one keeps `followSession` in
-  `src/domains/session/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
+  `packages/engine/domains/session/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
   Settings › Execution). Node is needed for development only: `npm start`, the tests and the
-  JS fallbacks of a checkout without cargo (`src/domains/session/session-tail.js`, `src/domains/supervisor/supervisor-mcp.js`,
+  JS fallbacks of a checkout without cargo (`packages/engine/domains/session/session-tail.js`, `packages/engine/domains/supervisor/supervisor-mcp.js`,
   `scripts/ctl.js`). `test/session/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
   binaries in release on their first run, like `multiagent-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).
   A shell opened outside the app may still lack it on PATH.
-- macOS and Linux (#316): `resolveCommand` (`src/engine/providers.js`) returns the absolute path
+- macOS and Linux (#316): `resolveCommand` (`packages/engine/engine/providers.js`) returns the absolute path
   of an executable file on PATH or in the known folders (`~/.local/bin`, `~/.grok/bin`,
   `~/.npm-global/bin`, the `~/.npmrc` prefix, `/opt/homebrew/bin`, `/usr/local/bin`), else `null`
   (as on Windows). Before the first lookup it merges the login shell's PATH once per process
   (`mergeLoginShellPath`, 3 s timeout; a failing or noisy shell changes nothing). Config folders
-  follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (`src/domains/cli/cli-config-dirs.js`).
-- Spawned CLIs get the lookup's folders (#397): `withCliPath` (`src/engine/providers.js`) appends
+  follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (`packages/engine/domains/cli/cli-config-dirs.js`).
+- Spawned CLIs get the lookup's folders (#397): `withCliPath` (`packages/engine/engine/providers.js`) appends
   the `cliDirs()` that exist (the known folders above; Windows `~\.local\bin`, `%APPDATA%\npm`),
   re-read per launch, after the env's own PATH, without duplicates. `cliEnv()`
-  (`src/service/common.js`: command, shell, Sessions and supervisor terminals) and agent turns use it.
-- macOS without Homebrew (#398): `installCommands(platform, { brew })` (`src/domains/machine/install-commands.js`)
+  (`packages/engine/service/common.js`: command, shell, Sessions and supervisor terminals) and agent turns use it.
+- macOS without Homebrew (#398): `installCommands(platform, { brew })` (`packages/engine/domains/machine/install-commands.js`)
   offers brew commands only when `brew` resolves; otherwise git gets `xcode-select --install` and
   gh, glab and whisper-cli get prose (`MAC_NO_BREW_TEXT`). The command terminal's allowlist uses the
   same list.
@@ -70,7 +70,7 @@ the workspace folder.
   `xvfb-run`), then one `publish` job puts every asset in the same GitHub Release. A failing build or
   smoke stops the release. `preview.yml` runs the same jobs for the OS its `os` input picks
   (`windows` by default, `macos`, `linux`, `all`).
-- Voice input (optional, `src/domains/chat/speech.js`): `whisper-cli` from whisper.cpp. On Windows download
+- Voice input (optional, `packages/engine/domains/chat/speech.js`): `whisper-cli` from whisper.cpp. On Windows download
   `whisper-bin-x64.zip` from https://github.com/ggml-org/whisper.cpp/releases, unzip it (e.g. to
   `%LOCALAPPDATA%\whisper.cpp`) and add that folder to PATH, or put the full path of
   `whisper-cli.exe` in Settings › General › Voice input. Models (`ggml-<id>.bin`) are downloaded
@@ -84,7 +84,7 @@ the workspace folder.
 - **Developing while runs are active**: pulling or merging changes `src/` under the running app.
   Ctrl+R reloads only the window (renderer + preload); the main process (or the `npm run serve`
   server) keeps the code it started with, so new channels are missing. The process records its
-  code version at startup (`src/domains/workspace/code-version.js`: app version + a hash of `src/` without
+  code version at startup (`packages/engine/domains/workspace/code-version.js`: app version + a hash of `src/` without
   `renderer/` and `preload.js`; the packaged app uses its version only) and the window compares it
   with the code on disk (`app:codeVersion`) when it loads and gets the focus. On a difference a
   banner offers **Restart** (`app:relaunch`): it lists the runs in progress with their step,
@@ -92,7 +92,7 @@ the workspace folder.
   the interrupted runs are listed with Resume. A missing channel shows "This feature needs an app
   restart" instead of the IPC error. So: pull, then restart. With the browser UI, restart the server
   and reload the page.
-- **The app updates itself** (#279, `src/domains/workspace/app-update.js`, `areas/app-update.js`): with Self-healing
+- **The app updates itself** (#279, `packages/engine/domains/workspace/app-update.js`, `areas/app-update.js`): with Self-healing
   and Settings › Execution › Oracle › "Apply merged fixes to this app" on, a source checkout
   (`app.isPackaged` false) whose repository is a project of the workspace (same `origin`, or the
   app's commit in the clone's local main) takes the fixes merged into that clone's **local main**
@@ -114,7 +114,7 @@ the workspace folder.
 
 The app runs on Windows, macOS and Linux. What differs per OS, and where:
 
-- **Path comparison**: one rule, `samePath` / `pathKey` in `src/domains/machine/platform-paths.js`:
+- **Path comparison**: one rule, `samePath` / `pathKey` in `packages/engine/domains/machine/platform-paths.js`:
   case-insensitive on Windows and macOS, case-sensitive on Linux. Never compare paths with an
   inline `process.platform === 'win32' ? toLowerCase()`; use the helper (store, runs, artifacts,
   permissions, worktrees, deps cache, process lists, `path:open`).
@@ -126,12 +126,12 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
 - **Process trees**: Windows `taskkill /T /F`. macOS/Linux: every process `killTree` may stop is
   spawned with `OWN_GROUP` (`detached: true`, its own process group) and `killTree` signals the
   group (SIGTERM, SIGKILL after 2 s), so grandchildren (test servers, sub-agents, npm) die too.
-  Embedded terminals (node-pty) have their own kill in `src/domains/machine/terminals.js`.
+  Embedded terminals (node-pty) have their own kill in `packages/engine/domains/machine/terminals.js`.
 - **Microphone**: macOS asks `systemPreferences.askForMediaAccess('microphone')` before the first
-  recording (`src/domains/chat/mic-permission.js`, channel `voice:mic-access`); a denial points to System
+  recording (`packages/engine/domains/chat/mic-permission.js`, channel `voice:mic-access`); a denial points to System
   Settings. Other OSes never ask. The `NSMicrophoneUsageDescription` string belongs to packaging.
 - **App data**: Electron's `userData` on every OS (speech models in `<userData>/speech-models`).
-  Without Electron (`npm run serve`, tests) `src/domains/chat/speech.js` falls back to `%APPDATA%`,
+  Without Electron (`npm run serve`, tests) `packages/engine/domains/chat/speech.js` falls back to `%APPDATA%`,
   `~/Library/Application Support` or `$XDG_CONFIG_HOME`/`~/.config`, plus `multiagent-orchestrator`.
 
 ## Remote engine (the app as a window onto `npm run serve`)

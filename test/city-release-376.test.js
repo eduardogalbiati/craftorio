@@ -130,16 +130,16 @@ test('#376 releaseOverlay: added green, changed and renamed on the ramp (renamed
   const ramp = Array.from(CHANGE_RAMP);
   const out = plain(releaseOverlay([
     { status: 'added', path: 'src/fresh.js', lines: 1000 },
-    { status: 'changed', path: 'src/engine/big.js', lines: 1 },
-    { status: 'renamed', from: 'src/engine/small.js', path: 'lib/small.js', lines: 100 },
+    { status: 'changed', path: 'packages/engine/engine/big.js', lines: 1 },
+    { status: 'renamed', from: 'packages/engine/engine/small.js', path: 'lib/small.js', lines: 100 },
     { status: 'removed', path: 'src/z.js', lines: 2000 },
     { status: 'removed', path: 'docs/a.md', lines: 5 },
   ]));
   // #438: the overlay may carry more (the rename sign): highlight and ghosts are checked on their own
   assert.deepEqual(out.highlight, {
     'src/fresh.js': ADDED_COLOUR,
-    'src/engine/big.js': ramp[0],
-    'src/engine/small.js': ramp[ramp.length - 1],
+    'packages/engine/engine/big.js': ramp[0],
+    'packages/engine/engine/small.js': ramp[ramp.length - 1],
   });
   assert.deepEqual(out.ghosts, ['docs/a.md', 'src/z.js']);
 });
@@ -190,7 +190,7 @@ test('#376 filterByIssue: no issue → every change; an issue no commit names �
 const hash = '01'.repeat(20);
 const FILES = [
   { path: 'README.md', lines: 4 }, { path: 'docs/a.md', lines: 5 }, { path: 'package.json', lines: 12 },
-  { path: 'src/engine/big.js', lines: 400 }, { path: 'src/engine/small.js', lines: 20 },
+  { path: 'packages/engine/engine/big.js', lines: 400 }, { path: 'packages/engine/engine/small.js', lines: 20 },
   { path: 'src/renderer/app.js', lines: 60 }, { path: 'src/renderer/views/board.js', lines: 25 },
   { path: 'src/renderer/views/list.js', lines: 25 },
 ];
@@ -203,7 +203,7 @@ const PLAN = {
   version: 1, project: 'fixture', summary: 'A fixture.', ignore: [],
   zones: [{ id: 'core', name: 'Core', kind: 'industrial', purpose: 'x' }, { id: 'ui', name: 'UI', kind: 'commercial', purpose: 'x' }, { id: 'books', name: 'Books', kind: 'library', purpose: 'x' }],
   districts: [
-    { id: 'engine', name: 'Engine', zone: 'core', purpose: 'x', include: ['/src/engine/**'], exclude: [] },
+    { id: 'engine', name: 'Engine', zone: 'core', purpose: 'x', include: ['/packages/engine/engine/**'], exclude: [] },
     { id: 'views', name: 'Views', zone: 'ui', purpose: 'x', include: ['/src/renderer/views/**'], exclude: [] },
     { id: 'renderer', name: 'Renderer', zone: 'ui', purpose: 'x', include: ['/src/renderer/**'], exclude: [] },
     { id: 'docs', name: 'Docs', zone: 'books', purpose: 'x', include: ['*.md'], exclude: [] },
@@ -233,7 +233,7 @@ test('#376 releaseModel: the base model is untouched and a removed file keeps it
   const base = baseModel();
   const before = JSON.stringify(base);
   const model = plain(releaseModel(base, [
-    { status: 'added', path: 'src/engine/made.js', lines: 8 },
+    { status: 'added', path: 'packages/engine/engine/made.js', lines: 8 },
     { status: 'removed', path: 'docs/a.md', lines: 5 },
   ], { plan: plain(PLAN) }));
   assert.equal(JSON.stringify(base), before, 'the input is not mutated');
@@ -243,8 +243,8 @@ test('#376 releaseModel: the base model is untouched and a removed file keeps it
 
 test('#376 releaseModel: an added file already in the base is not drawn twice', () => {
   const { releaseModel } = load();
-  const model = plain(releaseModel(baseModel(), [{ status: 'added', path: 'src/engine/big.js', lines: 400 }], { plan: plain(PLAN) }));
-  assert.equal(model.buildings.filter((x) => x.path === 'src/engine/big.js').length, 1);
+  const model = plain(releaseModel(baseModel(), [{ status: 'added', path: 'packages/engine/engine/big.js', lines: 400 }], { plan: plain(PLAN) }));
+  assert.equal(model.buildings.filter((x) => x.path === 'packages/engine/engine/big.js').length, 1);
 });
 
 // ---------- releaseHeader ----------
@@ -252,10 +252,10 @@ test('#376 releaseModel: an added file already in the base is not drawn twice', 
 test('#376 releaseHeader: counts by status, and by district and zone over the drawn buildings (a rename on its old path)', () => {
   const { releaseHeader } = load();
   const out = plain(releaseHeader(layout(), [
-    { status: 'changed', path: 'src/engine/big.js', lines: 40 },
+    { status: 'changed', path: 'packages/engine/engine/big.js', lines: 40 },
     { status: 'changed', path: 'src/renderer/app.js', lines: 4 },
     { status: 'removed', path: 'docs/a.md', lines: 5 },
-    { status: 'renamed', from: 'src/engine/small.js', path: 'lib/small.js', lines: 0 },
+    { status: 'renamed', from: 'packages/engine/engine/small.js', path: 'lib/small.js', lines: 0 },
     { status: 'added', path: 'tools/gen.py', lines: 3 },
   ]));
   assert.deepEqual(out, {
@@ -274,11 +274,11 @@ test('#376 releaseHeader: no change → zero counts', () => {
 
 test('#376 releaseOverlay feeds CityLayout.applyOverlay: changed buildings coloured, the rest grey', () => {
   const { releaseOverlay } = load();
-  const { highlight } = plain(releaseOverlay([{ status: 'changed', path: 'src/engine/big.js', lines: 10 }]));
+  const { highlight } = plain(releaseOverlay([{ status: 'changed', path: 'packages/engine/engine/big.js', lines: 10 }]));
   const out = plain(loadLayout().applyOverlay(layout(), { highlight }));
-  const big = out.buildings.find((b) => b.path === 'src/engine/big.js');
-  const small = out.buildings.find((b) => b.path === 'src/engine/small.js');
-  assert.equal(big.colour, highlight['src/engine/big.js']);
+  const big = out.buildings.find((b) => b.path === 'packages/engine/engine/big.js');
+  const small = out.buildings.find((b) => b.path === 'packages/engine/engine/small.js');
+  assert.equal(big.colour, highlight['packages/engine/engine/big.js']);
   assert.equal(big.greyed, false);
   assert.equal(small.greyed, true);
 });

@@ -1,5 +1,5 @@
-// src/domains/chat/speech.js: local speech-to-text with the whisper.cpp CLI. The real CLI is stood in for by
-// test/fixtures/fake-whisper.js (a Windows .cmd wrapper, since src/engine/providers.js's
+// packages/engine/domains/chat/speech.js: local speech-to-text with the whisper.cpp CLI. The real CLI is stood in for by
+// test/fixtures/fake-whisper.js (a Windows .cmd wrapper, since packages/engine/engine/providers.js's
 // resolveCommand only checks a bare command name against PATH on Windows; elsewhere the script
 // itself, made executable, is the command).
 const test = require('node:test');
@@ -7,13 +7,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const speech = require('../../src/domains/chat/speech');
-const { installCommand } = require('../../src/domains/machine/install-commands');
+const speech = require('@multiagent/engine/domains/chat/speech');
+const { installCommand } = require('@multiagent/engine/domains/machine/install-commands');
 const { encodeWav } = require('../../src/renderer/voice.js');
 
 const FAKE_CLI = process.platform === 'win32'
-  ? path.join(__dirname, '..', 'fixtures', 'fake-whisper.cmd')
-  : path.join(__dirname, '..', 'fixtures', 'fake-whisper.js');
+  ? path.join(__dirname, '..', '..', 'packages', 'engine', 'test', 'fixtures', 'fake-whisper.cmd')
+  : path.join(__dirname, '..', '..', 'packages', 'engine', 'test', 'fixtures', 'fake-whisper.js');
 if (process.platform !== 'win32') fs.chmodSync(FAKE_CLI, 0o755);
 
 const RAW_WAV = Buffer.from(encodeWav(new Float32Array(1600))).toString('base64'); // 100ms of silence

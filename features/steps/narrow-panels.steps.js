@@ -2,7 +2,7 @@
 // status pills stay on one line with short Portuguese labels (#437), at the main window's minimum
 // size (src/host/main.js minWidth / minHeight), in English or Portuguese (Brasil).
 // The interface language is written into the scratch workspace's settings.json (language.interface,
-// src/domains/workspace/workspace.js) and the page reloads, so a scenario starts in that language; the steps that
+// packages/engine/domains/workspace/workspace.js) and the page reloads, so a scenario starts in that language; the steps that
 // navigate read their labels from the app's catalogs (packages/shared/i18n/<lang>.json) in the language
 // the page shows (the html lang attribute, src/renderer/interface-language.js).
 // Locators are roles and data-testid only (skills/ui-conventions). Existing: run-list-row (data-run:

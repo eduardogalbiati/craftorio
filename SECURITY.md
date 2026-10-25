@@ -52,4 +52,4 @@ What the app protects, and what it does not (the security review of 2026-10-22,
 - **The account backend** (Supabase) only counts the people using the app. Its publishable key is
   meant to ship; row-level security (each user reads and writes only their own row) is the only
   trust boundary. Auth rate limits and captcha against abuse of the public key are dashboard
-  settings, outside this repository (`src/host/auth-config.js`, `supabase/migrations`).
+  settings, outside this repository (`packages/engine/domains/account/auth-config.js`, `supabase/migrations`).

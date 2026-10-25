@@ -6,10 +6,10 @@
 // is doing, so its card can say "Resumed → succeeded" with a link (test/renderer-resumed-run-384.test.js).
 //
 // Seams:
-// - runs.listRuns(runsDir) (src/domains/run/runs.js): the RunInfo rows the lists are built from (no index open).
-// - The service's `runs:list` channel (src/service/areas/run-lists.js), index open: one page, and
+// - runs.listRuns(runsDir) (packages/engine/domains/run/runs.js): the RunInfo rows the lists are built from (no index open).
+// - The service's `runs:list` channel (packages/engine/service/areas/run-lists.js), index open: one page, and
 //   `{ ids }` (what a run event uses to refresh one row, refreshRunRow in src/renderer/run-list.js).
-// - The service's `roadmap:get` channel (src/service/areas/roadmap.js roadmapView).
+// - The service's `roadmap:get` channel (packages/engine/service/areas/roadmap.js roadmapView).
 // The run folders are written by hand, the way a resume leaves them on disk (summary.json,
 // events.jsonl with workflow.started's resumed_from, owner.json while a run is alive): the link
 // comes from the resumed run's recorded resumed_from (through the run record, #350), never from
@@ -38,13 +38,13 @@ const RESUMED = '20261014-110000-resumed1';
 const T0 = Date.parse('2026-10-14T10:00:00.000Z');
 const iso = (ms) => new Date(ms).toISOString();
 
-const loadRuns = () => require('../src/domains/run/runs');
-const loadHelpers = () => require('./service/helpers');
-const loadRoadmaps = () => require('../src/domains/roadmap/roadmap');
+const loadRuns = () => require('@multiagent/engine/domains/run/runs');
+const loadHelpers = () => require('@multiagent/engine/test/service/helpers');
+const loadRoadmaps = () => require('@multiagent/engine/domains/roadmap/roadmap');
 
 /**
  * Writes a run folder as the engine leaves it. status 'running': no summary.json, an owner.json of
- * this process with a fresh heartbeat (src/domains/run/run-owner.js), so the lists read it as running.
+ * this process with a fresh heartbeat (packages/engine/domains/run/run-owner.js), so the lists read it as running.
  */
 function writeRun(runsDir, runId, { status, resumedFrom = null, startMs = T0, projectId = null }) {
   const dir = path.join(runsDir, runId);

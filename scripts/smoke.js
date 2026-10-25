@@ -100,8 +100,8 @@ function seedStartupWorkspace() {
   process.env.CLAUDE_CONFIG_DIR = home;
   process.env.CODEX_HOME = path.join(home, 'codex');
   const ws = { root: wsDir, runs: runsDir, backlog: path.join(wsDir, 'backlog'), index: path.join(wsDir, 'index.db') };
-  const { openStore } = require('../src/domains/workspace/store');
-  const runs = require('../src/domains/run/runs');
+  const { openStore } = require('@multiagent/engine/domains/workspace/store');
+  const runs = require('@multiagent/engine/domains/run/runs');
   const store = openStore(ws);
   runs.listRuns(runsDir);
   for (const [, row] of store.runEntries()) store.putRun(row.info, String(row.sig).replace(/\|[^|]*$/, '|an-older-reading'), null);
