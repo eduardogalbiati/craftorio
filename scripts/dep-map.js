@@ -13,14 +13,9 @@ const { FOLDERS, PACKAGES } = require('./layers');
 const { resolvePackagePath, sourceDirs, sourceFiles } = require('./source-tree');
 
 const ROOT = path.resolve(__dirname, '..');
-<<<<<<< HEAD
-const SRC = path.join(ROOT, 'src');
-// the area folders (scripts/layers.js FOLDERS): anything else under a src/ tree is a loose file
-=======
 // the first source folder (scripts/source-tree.js) holding `sub`, e.g. service/channels (packages/engine) or renderer/views (apps/desktop)
 const sourceDirWith = (sub) => sourceDirs(ROOT).map((d) => path.join(ROOT, d, sub)).find((p) => fs.existsSync(p));
-// the top-level folders of src/ (scripts/layers.js FOLDERS): anything else under src/ is a loose file
->>>>>>> reorg-phase-2-desktop
+// the area folders (scripts/layers.js FOLDERS): anything else under a src/ tree is a loose file
 const AREA = new RegExp(`^src/(${Object.keys(FOLDERS).join('|')})/`);
 // a workspace's folders (scripts/layers.js PACKAGES): the whole package, or its area folders
 const PKG_AREA = new RegExp(`^(${Object.keys(PACKAGES).join('|')})/(?:(${Object.keys(FOLDERS).join('|')})/)?`);
