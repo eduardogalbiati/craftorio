@@ -50,10 +50,10 @@ test('runSuite with feature files and `npm run test:e2e` runs only those files (
     fs.appendFileSync(logFile, 'ℹ pass 2\nℹ fail 0\n');
     return { code: 0, timedOut: false, error: null };
   };
-  const files = ['fronts/plan/features/discovery.feature', 'features/backlog.feature'];
-  const selection = { mode: 'affected', files, reasons: { 'fronts/plan/features/discovery.feature': 'failed in round 1', 'features/backlog.feature': 'failed in round 1' }, why: 'failed in round 1' };
+  const files = ['fronts/plan/features/discovery.feature', 'fronts/build/features/backlog.feature'];
+  const selection = { mode: 'affected', files, reasons: { 'fronts/plan/features/discovery.feature': 'failed in round 1', 'fronts/build/features/backlog.feature': 'failed in round 1' }, why: 'failed in round 1' };
   const out = await runSuite({ command: 'npm run test:e2e', cwd, runDir, round: 2, run, files, selection, logName: 'e2e-2' });
   assert.equal(out.scope, 'files');
-  assert.deepEqual(seen, ['npm run test:e2e -- fronts/plan/features/discovery.feature features/backlog.feature']);
+  assert.deepEqual(seen, ['npm run test:e2e -- fronts/plan/features/discovery.feature fronts/build/features/backlog.feature']);
   assert.equal(out.status, 'pass');
 });

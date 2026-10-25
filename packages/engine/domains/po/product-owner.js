@@ -1154,7 +1154,7 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   const [one, two, three, ...rest] = todo;
   const pairs = [];
   for (let n = 0; n < rest.length; n += 2) pairs.push(rest.slice(n, n + 2).map((i) => i.number));
-  const group = (name, list, stage, reason, extra = {}) => ({ name, issues: list, workflow, inputs: {}, reason, files: ['apps/desktop/renderer/views/backlog/backlog-po.js'], stage, ...extra });
+  const group = (name, list, stage, reason, extra = {}) => ({ name, issues: list, workflow, inputs: {}, reason, files: ['fronts/build/views/backlog/backlog-po.js'], stage, ...extra });
   const groups = [
     ...(one ? [group('Already applied', [one.number], 1, 'Already in the roadmap (simulated).', { simulated: { covered: [one.number], stage: 1 } })] : []),
     ...(two ? [group('Partly applied', [two.number, ...(three ? [three.number] : [])], 1, 'One issue already in the roadmap, one not (simulated).', { simulated: { covered: [two.number], stage: 1 } })] : []),
@@ -1164,7 +1164,7 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   return {
     summary: `${head}. ${groups.length} proposed run${groups.length === 1 ? '' : 's'}${groups.length > 1 ? ', the first one already applied and the second one partly' : ''}.${long}`,
     groups,
-    conflicts: pairs.length > 1 ? [{ issues: [pairs[0][0], pairs[1][0]], reason: 'Both change the same file (simulated).', files: ['apps/desktop/renderer/views/backlog/backlog-po.js'] }] : [],
+    conflicts: pairs.length > 1 ? [{ issues: [pairs[0][0], pairs[1][0]], reason: 'Both change the same file (simulated).', files: ['fronts/build/views/backlog/backlog-po.js'] }] : [],
     enrich: scenario === 'large-answer' ? todo.slice(0, 5).map((i) => ({ issue: i.number, reason: 'The description is too short (simulated).' })) : [],
     splits: [],
     epics: {},

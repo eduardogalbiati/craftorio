@@ -1,10 +1,10 @@
 // #375: the buttons that open an issue's impact preview on the project city.
-// - The Roadmap view (apps/desktop/renderer/views/backlog/backlog-roadmap.js, window.BacklogRoadmap.html, loaded
+// - The Roadmap view (fronts/build/views/backlog/backlog-roadmap.js, window.BacklogRoadmap.html, loaded
 //   whole in a vm sandbox like test/renderer-backlog-roadmap.test.js): every item card has a button
 //   data-testid="show-on-map" with the text "Show on the map"; every stage's header (div.rm-stage-head,
 //   not inside the closed ⋮ menu) has a button data-testid="show-stage-on-map" with the text "Show the
 //   stage on the map".
-// - The Backlog's issue card (apps/desktop/renderer/views/backlog/backlog.js `const card = (i) => ...`, a
+// - The Backlog's issue card (fronts/build/views/backlog/backlog.js `const card = (i) => ...`, a
 //   closure with no exported markup function, so checked on its source as a seam like
 //   test/renderer-backlog-filters.test.js): its markup carries a button data-testid="show-on-map"
 //   with the text "Show on the map".
@@ -46,7 +46,7 @@ function loadRoadmap() {
   sandbox.showRun = () => {};
   withI18n(sandbox);
   vm.createContext(sandbox);
-  for (const f of ['packages/ui-kit/status-pill.js', 'packages/ui-kit/estimates.js', 'packages/shared/run-progress-model.js', 'packages/shared/default-workflow.js', 'packages/shared/roadmap-model.js', 'packages/ui-kit/workflow-inputs.js', 'apps/desktop/renderer/views/backlog/backlog-roadmap.js']) {
+  for (const f of ['packages/ui-kit/status-pill.js', 'packages/ui-kit/estimates.js', 'packages/shared/run-progress-model.js', 'packages/shared/default-workflow.js', 'packages/shared/roadmap-model.js', 'packages/ui-kit/workflow-inputs.js', 'fronts/build/views/backlog/backlog-roadmap.js']) {
     vm.runInContext(read(f), sandbox, { filename: path.basename(f) });
   }
   return sandbox.window.BacklogRoadmap;
@@ -85,7 +85,7 @@ test('#375 a roadmap stage header has a "Show the stage on the map" button', () 
 });
 
 test('#375 the Backlog issue card has a "Show on the map" button', () => {
-  const src = read('apps', 'desktop', 'renderer', 'views', 'backlog', 'backlog.js');
+  const src = read('fronts', 'build', 'views', 'backlog', 'backlog.js');
   const m = /const card = \(i\) => `[\s\S]*?`;/.exec(src);
   assert.ok(m, 'the issue card markup (const card = (i) => `...`) is in backlog.js');
   // #330: the label comes from the catalog

@@ -10,7 +10,7 @@
 //   - platform defaults to process.platform; stat(filePath) → { mode } defaults to fs.statSync.
 //   main.js's `artifacts:open` and `path:open` call it before shell.openPath and answer its reason
 //   (main.js itself is not loaded by the tests).
-//   The renderer (apps/desktop/renderer/views/artifacts/artifacts.js renderArtifactViewer): an artifact of
+//   The renderer (fronts/build/views/artifacts/artifacts.js renderArtifactViewer): an artifact of
 //   kind 'other' gets no Open action (no data-art-act="open", no "Open" button in the body), only
 //   the reveal one (shell.showItemInFolder); other kinds keep Open.
 const test = require('node:test');

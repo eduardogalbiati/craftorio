@@ -147,8 +147,8 @@ test('previewEnv: an extra env from the config never overrides the simulation gu
   assert.equal(env.MULTIAGENT_AUTH, 'off');
 });
 
-test('startView: the most touched view under apps/desktop/renderer/views/<view>/ or apps/desktop/renderer/<view>*.{js,css}; null without a match', () => {
-  assert.equal(lp.startView(['apps/desktop/renderer/views/backlog/board.js', 'apps/desktop/renderer/views/backlog/card.js', 'apps/desktop/renderer/views/artifacts/list.js']), 'backlog', 'two files touch backlog, one touches artifacts');
+test('startView: the most touched view under a page layer\'s views/<view>/ (the UI kit, a front, the page folder) or a layer\'s <view>*.{js,css}; null without a match', () => {
+  assert.equal(lp.startView(['fronts/build/views/backlog/board.js', 'fronts/build/views/backlog/card.js', 'fronts/build/views/artifacts/list.js']), 'backlog', 'two files touch backlog, one touches artifacts');
   assert.equal(lp.startView(['apps/desktop/renderer/artifacts.js', 'packages/ui-kit/style.css']), 'artifacts');
   assert.equal(lp.startView(['packages/engine/service/index.js', 'README.md']), null, 'no renderer screen changed');
   assert.equal(lp.startView([]), null);

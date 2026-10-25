@@ -1,4 +1,4 @@
-// #374: the Run screen's "Replay on the map" (apps/desktop/renderer/views/run/run.js, renderRunSummary): offered
+// #374: the Run screen's "Replay on the map" (fronts/build/views/run/run.js, renderRunSummary): offered
 // for a run of a project that is not running any more, and it plays that run over the project's
 // city (ProjectCityAgents.replay(projectId, runId)). renderRunSummary runs only in the renderer, so it
 // is pulled out of the source and run in a sandbox with its collaborators stubbed, the way

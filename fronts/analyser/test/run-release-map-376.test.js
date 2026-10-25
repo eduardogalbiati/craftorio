@@ -1,4 +1,4 @@
-// #376: the release run's page offers "Show on the map" (apps/desktop/renderer/views/run/run.js,
+// #376: the release run's page offers "Show on the map" (fronts/build/views/run/run.js,
 // renderRunSummary) for a shipped run of workflows/release.yaml, and it opens the release on the
 // project's city with the tag Ship recorded (the release that lists this run: tagName turns
 // "Sprint 12: beta" into Sprint-12-beta), the run's version otherwise; a Releases read that fails

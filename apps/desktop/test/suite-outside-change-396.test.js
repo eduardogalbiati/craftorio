@@ -17,7 +17,7 @@ const { classifyFailures } = require('@multiagent/engine/engine/affected-tests')
 const { runSuite } = require('@multiagent/engine/engine/suite-step');
 const { loadWorkflow, evalExpr } = require('@multiagent/engine/engine/workflow');
 const runs = require('@multiagent/engine/domains/run/runs');
-const { RunChatModel } = require('../renderer/views/runchat/run-chat-model.js');
+const { RunChatModel } = require('@multiagent/front-build/views/runchat/run-chat-model.js');
 
 const IN = 'in the change';
 const OUT = 'outside the change';

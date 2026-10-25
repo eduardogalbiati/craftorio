@@ -5,7 +5,7 @@
 // <project>". Acceptance tests written before the code; the tabs themselves are in
 // test/renderer-projects-354.test.js.
 // The page is the real one (test/renderer-app-harness.js), read through test/project-page-helpers.js.
-// The contract assumed here (data-testids shared with features/steps/projects.steps.js):
+// The contract assumed here (data-testids shared with fronts/build/features/steps/projects.steps.js):
 // - data sources: the existing channels, api.getRepositoryPerformance({ projectId, from, to, marker })
 //   and api.getBacklog(projectId).conflictMap (no new channel);
 // - the tab is data-testid="project-conflict-map"; each file is a row data-testid="project-conflict-row"
@@ -18,7 +18,7 @@
 //   opens the project's page on its Conflict map tab.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/desktop/test/roadmap-status-helpers');
+const H = require('@multiagent/front-build/test/roadmap-status-helpers');
 const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
 const { clickRendered, hasTestId, pageMarkup, region, tabsOf } = require('./project-page-helpers');
 

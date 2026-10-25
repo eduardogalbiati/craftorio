@@ -6,7 +6,7 @@
 // - packages/engine/domains/roadmap/roadmap.js: `updateAfter` is never written: an item saved, proposed (the Product Owner's
 //   append goes through propose) or read from an older file with it loses the field at the next save;
 //   an older file that has it still reads without error.
-// - The roadmap card (apps/desktop/renderer/views/backlog/backlog-roadmap.js) never draws the switch, even
+// - The roadmap card (fronts/build/views/backlog/backlog-roadmap.js) never draws the switch, even
 //   when api.appUpdateState says the update applies.
 // - The Oracle's tool descriptions (packages/engine/domains/oracle/oracle-tools.js) and skills/oracle/SKILL.md no longer mention
 //   updateAfter or "Update the app after this".
@@ -58,7 +58,7 @@ test('#285 roadmap: a proposal (the Product Owner\'s append) with updateAfter: t
 // ---- the roadmap card -------------------------------------------------------------------------------------
 
 test('#285 roadmap card: never draws "Update the app after this", even when the update applies', async () => {
-  const H = require('../roadmap-status-helpers');
+  const H = require('@multiagent/front-build/test/roadmap-status-helpers');
   const { R, sandbox } = H.loadRoadmap();
   sandbox.api.appUpdateState = async () => ({ applies: true, project: { id: 'p1', name: 'multiagent-orchestrator' }, short: '5d9be33', behind: 3 });
   const data = () => H.roadmapOf([

@@ -22,7 +22,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const H = require('@multiagent/desktop/test/roadmap-status-helpers');
+const H = require('@multiagent/front-build/test/roadmap-status-helpers');
 
 // every css file of the page (the UI kit's, the fronts', the page folder's: scripts/source-tree.js pageFiles), as one text
 function allCss() {

@@ -54,7 +54,7 @@ Feature: Text fits in narrow panels
 
   # #437: short Portuguese labels. "The status pills read" asks the app (window.StatusPill.statusLabel)
   # for the label of each status, named by its English label; a run waiting at a human gate reads
-  # "Waiting for you". The demo run "-run00233" succeeded (features/workflow-runs.feature).
+  # "Waiting for you". The demo run "-run00233" succeeded (fronts/build/features/workflow-runs.feature).
   @issue-437
   Scenario: In Português (Brasil), the status pills use short labels
     Given the app is open in "Português (Brasil)" at its minimum window size

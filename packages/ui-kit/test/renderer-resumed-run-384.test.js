@@ -5,7 +5,7 @@
 // - The run list row (packages/ui-kit/run-list.js runListRow, shared by Workflows › Runs, Projects ›
 //   Project and the Dashboard's lists), evaluated whole in a vm sandbox with the real StatusPill
 //   (test/roadmap-status-helpers.js loadRunList), on a runs:list row.
-// - The roadmap card (apps/desktop/renderer/views/backlog/backlog-roadmap.js BacklogRoadmap.html), evaluated
+// - The roadmap card (fronts/build/views/backlog/backlog-roadmap.js BacklogRoadmap.html), evaluated
 //   whole with the real RoadmapModel (loadRoadmap), on a roadmap:get item.
 // Assertions read what a person sees (the pill's label and colour class, the row's text) and where
 // the link goes (an element whose data-* attribute or href names the resumed run), not the markup.
@@ -24,7 +24,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const H = require('@multiagent/desktop/test/roadmap-status-helpers');
+const H = require('@multiagent/front-build/test/roadmap-status-helpers');
 
 const FAILED = '20261014-100000-failed01';
 const RESUMED = '20261014-110000-resumed1';

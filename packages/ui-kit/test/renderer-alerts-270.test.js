@@ -22,7 +22,7 @@
 //       arrows, an action (its onClick is called) and dismiss (the alert leaves the list).
 // Backlog: the page markup has <div id="bl-alerts"> (the component's root carries data-testid="page-alerts",
 //   each alert data-testid="page-alert" with data-level, the counter data-testid="alerts-counter",
-//   as features/steps/backlog.steps.js expects) at the top of the
+//   as fronts/build/features/steps/backlog.steps.js expects) at the top of the
 //   page, before the filter row (.pr-toolbar); backlog.js mounts window.Alerts on it and sets, on
 //   every render, Board and Roadmap alike: unpushed local commits (info, title "Not pushed", action
 //   "Push…" opening the push dialog), a stale Backlog Refresh (warning, action "Refresh now"), a
@@ -32,7 +32,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const H = require('@multiagent/desktop/test/roadmap-status-helpers');
+const H = require('@multiagent/front-build/test/roadmap-status-helpers');
 const { loadApp, text } = require('./renderer-app-harness');
 
 const MODULE = path.join(__dirname, '..', 'alerts.js');

@@ -50,7 +50,7 @@ const I18n = () => require(path.join(SHARED, 'i18n.js'));
 test('#330 (a) every .js file under apps/desktop/renderer shows no visible text outside t()', () => {
   const files = pageFiles(ROOT).map((f) => path.join(ROOT, f.file));
   const names = files.map(rel);
-  for (const must of ['apps/desktop/renderer/views/backlog/backlog.js', 'packages/ui-kit/views/dashboard/dashboard.js', 'packages/ui-kit/agents-window.js', 'packages/ui-kit/run-list.js', 'packages/ui-kit/run-badges.js', 'packages/ui-kit/agent-chat.js', 'packages/ui-kit/artifacts-panel.js', 'packages/ui-kit/setup.js']) {
+  for (const must of ['fronts/build/views/backlog/backlog.js', 'packages/ui-kit/views/dashboard/dashboard.js', 'packages/ui-kit/agents-window.js', 'packages/ui-kit/run-list.js', 'packages/ui-kit/run-badges.js', 'packages/ui-kit/agent-chat.js', 'packages/ui-kit/artifacts-panel.js', 'packages/ui-kit/setup.js']) {
     assert.ok(names.includes(must), `the check scans ${must}`);
   }
   assert.ok(names.some((n) => n.startsWith('packages/ui-kit/views/settings/')), 'the check scans views/settings/');

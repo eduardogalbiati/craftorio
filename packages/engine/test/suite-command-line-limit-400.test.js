@@ -197,10 +197,10 @@ test('#400 win32: the release\'s focused E2E round (#324) with too many feature 
 test('#400 win32: the release\'s focused E2E round with a few feature files still runs only them', async (t) => {
   const s = setup(t);
   const { run, calls } = passingRun();
-  const files = ['fronts/plan/features/discovery.feature', 'features/backlog.feature'];
+  const files = ['fronts/plan/features/discovery.feature', 'fronts/build/features/backlog.feature'];
   const out = await runSuite({ command: 'npm run test:e2e', cwd: s.cwd, runDir: s.runDir, round: 2, run, files, selection: { mode: 'affected', files, reasons: {}, why: 'failed in round 1' }, logName: 'e2e-2', platform: 'win32' });
   assert.equal(out.scope, 'files');
-  assert.deepEqual(calls.map((c) => c.command), ['npm run test:e2e -- fronts/plan/features/discovery.feature features/backlog.feature']);
+  assert.deepEqual(calls.map((c) => c.command), ['npm run test:e2e -- fronts/plan/features/discovery.feature fronts/build/features/backlog.feature']);
 });
 
 // ---------------------------------------------------------------------------

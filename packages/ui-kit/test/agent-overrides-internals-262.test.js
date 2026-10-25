@@ -101,7 +101,7 @@ test('#262 Settings\' models are validated like the workflow\'s: an unknown limi
 });
 
 test('#262 the run chat model turns agent.fallback into a fallback item and keeps a simulated turn\'s provider', () => {
-  const { RunChatModel } = require('@multiagent/desktop/renderer/views/runchat/run-chat-model.js');
+  const { RunChatModel } = require('@multiagent/front-build/views/runchat/run-chat-model.js');
   const m = new RunChatModel();
   const session = { agent: 'writer', provider: 'mock', simulates: 'codex', model: 'gpt-6-luna' };
   for (const ev of [

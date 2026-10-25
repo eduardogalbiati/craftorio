@@ -6,7 +6,7 @@
 // by index.html) and never submits; a line under the field says why (the reason).
 // - the Roadmap's cut line dialog (#cut-line-modal of backlog.js, opened by a stage's "Release here"
 //   in backlog-roadmap.js; its field #cut-line-name);
-// - the Releases screen's next release (apps/desktop/renderer/views/releases/releases.js; its field #rel-version).
+// - the Releases screen's next release (fronts/build/views/releases/releases.js; its field #rel-version).
 // The page is the real one (test/renderer-app-harness.js loads index.html's scripts in a vm sandbox,
 // as test/renderer-releases-260.test.js does); the Roadmap's markup is read with
 // test/roadmap-status-helpers.js's reader to click its menu entries. The data-testids the change adds:
@@ -17,7 +17,7 @@
 // one `$('#id')` wires), else of its data-testid, with every attribute its markup carries.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/desktop/test/roadmap-status-helpers');
+const H = require('@multiagent/front-build/test/roadmap-status-helpers');
 const { loadApp } = require('./renderer-app-harness');
 
 // releases:list: the history (newest first) plus, here, one release that has not shipped

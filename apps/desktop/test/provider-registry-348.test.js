@@ -142,7 +142,7 @@ test('each CLI adapter\'s usage-limit message is recognised as a credit error fo
 });
 
 test('the run chat maps CLI names and models to the backend\'s provider types, with no gemini', () => {
-  const { providerType } = require('../renderer/views/runchat/run-chat-model.js');
+  const { providerType } = require('@multiagent/front-build/views/runchat/run-chat-model.js');
   assert.equal(providerType('claude'), 'claude-code');
   assert.equal(providerType('codex'), 'codex-cli');
   assert.equal(providerType('grok'), 'grok-cli');

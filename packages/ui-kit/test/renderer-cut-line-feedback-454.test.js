@@ -11,7 +11,7 @@
 // form submit (the field sits in #cut-line-form with a type="submit" button): not modelled here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/desktop/test/roadmap-status-helpers');
+const H = require('@multiagent/front-build/test/roadmap-status-helpers');
 const { loadApp } = require('./renderer-app-harness');
 
 const T1 = '2026-10-21T10:00:00.000Z';

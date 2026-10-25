@@ -52,7 +52,7 @@
 // packages/engine/service/channels/refactor.js) stays last: `propose` adds its stages before it, and so does
 // `cleanStages` with the stages a save adds after it (the owner's add stage). Enabled, it loses
 // the marker and becomes a plain stage.
-// Screen: apps/desktop/renderer/views/backlog/backlog-roadmap.js; channels: packages/engine/service/channels/roadmap.js.
+// Screen: fronts/build/views/backlog/backlog-roadmap.js; channels: packages/engine/service/channels/roadmap.js.
 
 const fs = require('fs');
 const path = require('path');

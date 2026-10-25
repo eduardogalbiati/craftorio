@@ -4,7 +4,7 @@
 // kept per project in <workspace>/backlog/<project id>.refresh.json. The issues the last refresh
 // updated (its applied-safe.json) carry a "refreshed" badge for a day after the run.
 // Service: packages/engine/service/areas/backlog.js (withIssueRuns, afterBacklogRefresh); screen:
-// apps/desktop/renderer/views/backlog/backlog.js (refreshAlert).
+// fronts/build/views/backlog/backlog.js (refreshAlert).
 
 const fs = require('fs');
 const path = require('path');

@@ -353,7 +353,7 @@ function demoCostRuns(ws, projectId) {
   });
 }
 
-// #225, #185, #182: finished runs whose artifacts the E2E scenarios (features/artifacts.feature,
+// #225, #185, #182: finished runs whose artifacts the E2E scenarios (fronts/build/features/artifacts.feature,
 // features/image-viewer.feature) and the screenshots look at, days back so tonight's runs stay as
 // they are: `-res00225` (a result summary, a screenshot, test results, a review report, process
 // files and internal ones never listed), `-new00185` (a pair, a new element with no original, a
