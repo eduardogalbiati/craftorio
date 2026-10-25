@@ -17,7 +17,7 @@
 // (`ctx.ws`, `ctx.active`, `ctx.startWorkflowRun(...)`), never when it is created; a name two
 // areas both define is refused. A new feature adds or edits an area file, not this one. A front's
 // own areas and channels (fronts/<id>/engine/, phase 4 of the study, #590) load next to these when
-// the composition serves the front: docs/agents/fronts.md.
+// the composition serves the front: docs/agents/engine/fronts.md.
 // Pure helpers the areas share: packages/engine/service/common.js.
 //
 // Today apps/desktop/host/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +

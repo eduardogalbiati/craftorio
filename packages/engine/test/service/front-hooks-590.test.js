@@ -2,9 +2,9 @@
 // fronts' engine sides. Every area (the kernel's and each installed front's) is loaded with a recording
 // ctx to learn which helper each one defines; then every engine-side source (the kernel's service,
 // engine and domains, each front's engine/) is read for its `ctx.<name>` uses. The rules
-// (docs/agents/fronts.md): a kernel file uses a helper a front's area defines only as an optional
-// call (`ctx.x?.(`), since the front may not be served; a front's engine file uses another front's
-// helper the same way; a front uses the kernel's helpers plainly. A name a channel file sets on ctx
+// (docs/agents/engine/fronts.md): a kernel file calls a helper a front's area defines only as an optional
+// call (`ctx.x?.(`), since the front may not be served, or reads it and checks it itself; a front's
+// engine file uses another front's helper the same way; a front uses the kernel's helpers plainly. A name a channel file sets on ctx
 // itself (`ctx.x = …`, the Oracle's performer, the Product Owner's request) counts as that file's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -45,16 +45,18 @@ function survey() {
   return { definedBy, sources, fronts };
 }
 
-test('#590 a kernel file calls a front\'s helper only optionally, a front another front\'s only optionally', () => {
+test('#590 a kernel file calls a front\'s helper only optionally, a front another front\'s only optionally (a plain read is allowed)', () => {
   const { definedBy, sources } = survey();
   const problems = [];
   for (const { file, owner, text: source } of sources) {
     // a comment line that names a helper is not a use (the line numbers are kept)
     const text = source.replace(/^\s*\/\/.*$/gm, '');
-    for (const m of text.matchAll(/\bctx\.([A-Za-z_$][\w$]*)(\?\.)?/g)) {
-      const [, name, optional] = m;
+    // a call (`ctx.x(`) must be optional (`ctx.x?.(`); a plain read (`const send = ctx.x`) is the
+    // caller's own check, as the Oracle's request_agent does before refusing a request
+    for (const m of text.matchAll(/\bctx\.([A-Za-z_$][\w$]*)(\?\.)?(\s*\()?/g)) {
+      const [, name, optional, call] = m;
       const by = definedBy[name];
-      if (!by || by === owner || by === 'engine' || optional) continue;
+      if (!by || by === owner || by === 'engine' || optional || !call) continue;
       const line = text.slice(0, m.index).split('\n').length;
       problems.push(`${rel(file)}:${line} uses ctx.${name}, which the ${by} front defines: call it as ctx.${name}?.(…) (the front may not be served), or move it to the kernel`);
     }

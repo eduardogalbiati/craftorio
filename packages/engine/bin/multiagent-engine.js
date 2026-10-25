@@ -6,7 +6,7 @@
 // the desktop app of another computer (Settings › Execution › Engine, apps/desktop/host/engine-connection.js).
 //   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--insecure-http] [--workspace <dir>] [--fronts <id,id>]
 //
-// The fronts it serves (phase 4, #590, docs/agents/fronts.md): the composition of the UI app it
+// The fronts it serves (phase 4, #590, docs/agents/engine/fronts.md): the composition of the UI app it
 // serves (`<multiagent.ui>/../composition.js`, apps/web/composition.js), every installed front
 // without one; --fronts narrows it to a list of ids (a one-front engine: its channels plus the
 // kernel's, the others answer 404; the page stays the app's generated one).

@@ -62,7 +62,7 @@ const AREAS = {
 // Phase 3: one area per front (`front:${id}`), which may require the kit and shared, never another
 // front, so the layering check tells a front reaching into another one apart (the fronts mostly reach
 // each other through script globals, which scripts/dep-map.js lists next to the channel crossings).
-// Phase 4 (#590, docs/agents/fronts.md): a front's engine side (`fronts/<id>/engine/`: its channels,
+// Phase 4 (#590, docs/agents/engine/fronts.md): a front's engine side (`fronts/<id>/engine/`: its channels,
 // areas and domains) is the area `front-engine:<id>`, which may require the engine kernel (the
 // service's common and schemas, the engine, the domains, the utilities) and shared, never another
 // front's engine code and never the UI; nothing requires it (the kernel never requires a front, and

@@ -179,12 +179,15 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
   const contract = contractHash(manifest);
   // { app, contract } (#339): the service's app:version when it has one (IPC answers the same),
   // else this package's version
+  // `fronts` (phase 4, #590): the ids of the fronts this engine serves, outside the contract hash (a
+  // composition is not a contract change; `main`'s hash is kept whatever the fronts installed)
+  const fronts = service.fronts || null;
   const version = async () => {
-    const own = { app: PKG.version, contract };
+    const own = { app: PKG.version, contract, fronts };
     if (!api['app:version']) return own;
     try {
       const v = await api['app:version']();
-      return { app: v.app, contract: v.contract };
+      return { app: v.app, contract: v.contract, fronts };
     } catch {
       return own;
     }

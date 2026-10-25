@@ -124,22 +124,19 @@ function uiKit(root) {
   return workspaces(root).find((w) => w.name === UI_KIT) || null;
 }
 
-// a front's manifest fields (phase 4): `multiagent.front` its id, `multiagent.engine` its engine folder
-function frontManifest(root, dir) {
-  try { return JSON.parse(fs.readFileSync(path.join(root, dir, 'package.json'), 'utf8')).multiagent || {}; } catch { return {}; }
-}
+// a front's manifest fields (phase 4): `multiagent.front` its id, `multiagent.engine` its engine folder,
+// read by the engine's own reader (packages/engine/service/fronts.js: one definition of the fields and
+// of the default folder; the runtime scan itself stays in the engine, which cannot require scripts/)
+const frontManifest = (root, dir) => require('@multiagent/engine/service/fronts').frontManifest(path.join(root, dir));
 
 function fronts(root) {
   return workspaces(root).filter((w) => w.dir.startsWith(`${FRONTS_DIR}/`))
-    .map((w) => ({ id: frontManifest(root, w.dir).front || w.dir.slice(FRONTS_DIR.length + 1), ...w }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .map((w) => ({ id: frontManifest(root, w.dir).id || w.dir.slice(FRONTS_DIR.length + 1), ...w }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-// the default name of a front's engine-side folder (packages/engine/service/fronts.js FRONT_ENGINE_DIR)
-const FRONT_ENGINE_DIR = 'engine';
-
 function frontEngineDirs(root, { all = false } = {}) {
-  return fronts(root).map((f) => ({ ...f, engine: `${f.dir}/${frontManifest(root, f.dir).engine || FRONT_ENGINE_DIR}` }))
+  return fronts(root).map((f) => ({ ...f, engine: `${f.dir}/${frontManifest(root, f.dir).engine}` }))
     .filter((f) => all || fs.existsSync(path.join(root, f.engine)));
 }
 

@@ -242,7 +242,7 @@ function report() {
   // phase 3: a channel file called from two fronts or more is what phase 4 has to place (the shell's
   // screens and the host's own methods, "?name", are left out of the count); after phase 4 (#590) only
   // kernel files may cross fronts, and a front's file is called by that front alone (or by the shell:
-  // a shell call keeps a file in the kernel, docs/agents/fronts.md)
+  // a shell call keeps a file in the kernel, docs/agents/engine/fronts.md)
   const byFront = {};
   for (const [k, s] of Object.entries(users)) byFront[k] = new Set([...s].map((v) => layerOf[v]).filter((l) => l !== 'shell' && !l.startsWith('app:')));
   const crossing = Object.entries(byFront).filter(([k, s]) => !k.startsWith('?') && s.size > 1).sort();

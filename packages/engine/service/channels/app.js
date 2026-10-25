@@ -76,13 +76,11 @@ module.exports = (ctx) => [
     schema: {
       result: shape({
         version: STRING, electron: STRING, node: STRING, workflowsDir: STRING, simulationOnly: BOOL, totalMemoryBytes: NUMBER, startView: nullable(STRING),
-        isPackaged: BOOL, screenshot: BOOL, noSandbox: BOOL, fronts: { type: 'array', items: STRING },
+        isPackaged: BOOL, screenshot: BOOL, noSandbox: BOOL,
       },['simulationOnly']),
     },
     fn: () => ({
       version: ctx.host.appVersion,
-      // the fronts this engine serves (phase 4, #590): the composition's, or every installed one
-      fronts: ctx.fronts,
       electron: process.versions.electron,
       node: process.versions.node,
       workflowsDir: ctx.ws.workflows,

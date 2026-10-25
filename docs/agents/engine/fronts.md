@@ -35,18 +35,25 @@ fronts/<id>/
 ## How the engine discovers it
 
 - **Installed fronts**: the packages under `<appRoot>/fronts/*/` and `<appRoot>/node_modules/@multiagent/*/`
-  whose `package.json` has `multiagent.front`, by id; a package found at both places (the checkout's
-  workspace link, the packaged copies) counts once, `fronts/<dir>` first. The app root is
+  whose `package.json` has `multiagent.front`, by id (an id is lower-case letters, digits and dashes).
+  The same package found at both places (the checkout's workspace link, the packaged copies: the same
+  `name`) counts once, `fronts/<dir>` first; two different packages claiming one id, a
+  `multiagent.front` that is no id or an unreadable `package.json` fail at startup. The app root is
   `packages/engine/domains/workspace/app-root.js`'s.
 - **The service takes a composition**: `createService({ host, fronts })` with `fronts` a list of front
-  ids (an unknown one is an error) or absent (every installed front: what the tests' `makeService`,
-  the contract suite and `npm run docs` get). `installed` replaces the scan (tests). The service
-  reports `fronts`, and `app:info` carries them.
+  ids (an unknown or a repeated one is an error) or absent (every installed front: what the tests'
+  `makeService`, the contract suite and `npm run docs` get). `installed` replaces the scan (tests).
+  The service reports `fronts`, and the server's `GET /api/version` carries them next to the contract
+  hash, outside it: a composition is not a contract change, and no channel declares the fronts (an
+  `app:info` field would change the hash).
 - **One load order**: `loadAreas` and `loadChannels` read the kernel's folder plus each served front's
   `engine/areas/` and `engine/channels/`, and load the files **sorted by file name across all
-  folders** (`serviceFiles`): the order a single folder had, so the areas' creation order, the
-  manifest's order and the contract hash (#339) do not depend on which package holds a file. Moving
-  a file changes nothing for the shipped compositions.
+  folders, by code unit** (`serviceFiles`, the order `Array.prototype.sort()` gave one folder,
+  whatever the process locale), so the areas' creation order, the manifest's order and the contract
+  hash (#339) do not depend on which package holds a file. Moving a file changes nothing for the
+  shipped compositions: the full composition's hash is `main`'s (`1f24c407e630`, pinned by
+  `packages/engine/test/service/one-front-composition-590.test.js`; a channel change made on purpose
+  updates the pin with its PR).
 - **Which fronts an engine serves**: the desktop app passes its `apps/desktop/composition.js` (the same
   list its page is generated from, `apps/desktop/host/main.js`); `multiagent-engine` serves the
   composition of the UI app it serves (`multiagent.ui` → `apps/web/composition.js`), narrowed by
@@ -85,20 +92,30 @@ The mapping after the moves (the study's phase 4 row records the final one): `an
 `architecture`, `refactor`, `seeds`, `diff`, the area `diff`, the domains `refactor-outcome`,
 `seed-tool-issue`; `plan` the channel `discovery`, the area `discovery-automations`, the domain
 `discovery-import`; `ai` the `oracle:*` channels; `build` the channels `local-preview`, `supervisor`,
-the area `local-preview`, the domain `supervisor-watch`.
+the area `local-preview` and the domain `supervisor-watch`. The kernel's tests run with every installed
+front (`makeService` without a composition), so a kernel test may still call a front's channel through
+the service, never require a front's file; a test about a front's channel or domain goes in the front.
+The owner's decision of 2026-10-25 (#590): `release-city` and `project-map` stay in the kernel although
+decision 4 of 2026-10-24 gave the project city to the analyser: the city's screens and bundle are the
+analyser's, its engine-side domains are the kernel's because the engine's steps run them on any
+composition.
 
 ## Hooks: helpers across the kernel and the fronts
 
 The areas share one `ctx`; a helper is read at call time. Since a front may not be served:
 
-- a kernel file uses a helper **a front's area defines only as an optional call**
-  (`ctx.stopLocalPreview?.(…)`, `ctx.discoveryIssueCards?.()`, `ctx.refactorPriorityOptions?.()`);
-- a front's engine file uses **another front's** helper the same way (`ctx.supervisorRequest?.`);
+- a kernel file calls a helper **a front's area defines only as an optional call**
+  (`ctx.stopLocalPreview?.(…)`, `ctx.discoveryIssueCards?.()`, `ctx.refactorPriorityOptions?.()`), or
+  reads it and checks it itself (the Oracle's `request_agent` reads `ctx.supervisorRequest` and, without
+  the build front, answers that the Supervisor is not served by this engine);
+- a front's engine file uses **another front's** helper the same way;
 - a front uses the kernel's helpers plainly.
 
 `packages/engine/test/service/front-hooks-590.test.js` loads every area with a recording ctx and
-checks the three rules over every `ctx.<name>` use of the kernel and the fronts (a name a channel
-file sets on ctx itself, `ctx.x = …`, counts as that file's).
+checks the three rules over every `ctx.<name>(` call of the kernel and the fronts (a name a channel
+file sets on ctx itself, `ctx.x = …`, counts as that file's). `front-channels-590.test.js` is the
+fronts' schema ratchet: every channel of every installed front has a schema, and the front's engine
+files require only the kernel and shared.
 
 ## The layering rule (`scripts/layers.js`)
 
