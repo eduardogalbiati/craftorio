@@ -102,7 +102,7 @@ test('#590 a front fails at startup when two packages claim its id, when its id 
   const linked = tmpRoot(t);
   writeFront(linked, 'fronts/a', 'a', { name: '@multiagent/front-a' });
   fs.mkdirSync(path.join(linked, 'node_modules', '@multiagent'), { recursive: true });
-  fs.symlinkSync(path.join(linked, 'fronts', 'a'), path.join(linked, 'node_modules', '@multiagent', 'front-a'), 'dir');
+  fs.symlinkSync(path.join(linked, 'fronts', 'a'), path.join(linked, 'node_modules', '@multiagent', 'front-a'), process.platform === 'win32' ? 'junction' : 'dir'); // a junction needs no privilege on Windows (#600)
   writeFront(linked, 'node_modules/@multiagent/front-copy', 'a', { name: '@multiagent/front-a' }); // a packaged copy
   assert.deepEqual(installedFronts(linked).map((f) => [f.id, path.basename(f.dir)]), [['a', 'a']]);
   assert.equal(frontManifest(path.join(linked, 'fronts', 'a')).engine, 'engine', 'the default engine folder');
