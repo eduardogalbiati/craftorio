@@ -271,6 +271,34 @@ test('#541 a loopback server without allowed names refuses the ts.net name as be
   }
 });
 
+test('#541 normalizeHostName: lower case, no surrounding spaces, no trailing dot; empty stays empty', () => {
+  const { normalizeHostName } = require('../server');
+  assert.equal(normalizeHostName(' Desktop-IFRSSED.tail522a91.TS.NET. '), TS_NAME);
+  assert.equal(normalizeHostName(TS_NAME), TS_NAME);
+  assert.equal(normalizeHostName(''), '');
+  assert.equal(normalizeHostName(undefined), '');
+  assert.equal(normalizeHostName(null), '');
+});
+
+test('#541 the 403 for another name lists the names the server answers, the allowed ones included', async (t) => {
+  const { port } = await start(t, { allowedHosts: [`${TS_NAME}.`] });
+  const res = await request(port, { path: '/api/version', headers: { Host: `attacker.example:${port}`, Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(res.status, 403);
+  assert.match(res.text, /localhost/);
+  assert.ok(res.text.includes(TS_NAME), res.text);
+});
+
+test('#541 hostAllowed with allowed names: exact name with or without a port on loopback; ignored off loopback', () => {
+  const { hostAllowed } = require('../server');
+  const req = (host) => ({ headers: { host } });
+  assert.equal(hostAllowed(req(`${TS_NAME}:8443`), '127.0.0.1', [TS_NAME]), true);
+  assert.equal(hostAllowed(req(TS_NAME), '::1', [TS_NAME]), true);
+  assert.equal(hostAllowed(req(`evil.${TS_NAME}`), '127.0.0.1', [TS_NAME]), false);
+  assert.equal(hostAllowed(req(undefined), '127.0.0.1', [TS_NAME]), false);
+  assert.equal(hostAllowed(req(`${TS_NAME}:8443`), '127.0.0.1'), false, 'no allowed names: as before');
+  assert.equal(hostAllowed(req('attacker.example'), '0.0.0.0', [TS_NAME]), true, 'another address behaves as today');
+});
+
 test('#541 loopback names still work on a server with allowed names', async (t) => {
   const { port } = await start(t, { allowedHosts: [TS_NAME] });
   for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]) {

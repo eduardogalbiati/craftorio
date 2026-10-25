@@ -19,7 +19,29 @@ function scratch(t) {
 }
 
 // npm run serve with these args → { child, out(), exited }
-function serve(t, dir, args, { noTailscale = false } = {}) {
+// #541: a fake `tailscale` on the PATH: this Node binary linked (or copied) as tailscale(.exe), a real
+// executable as execFile needs on Windows. `tailscale status --json` then runs the script `status` of
+// the server's working folder, which answers as FAKE_TAILSCALE says: running (Self.DNSName with its
+// trailing dot), stopped (BackendState Stopped) or hang (never answers within the 3 s limit).
+const FAKE_STATUS = [
+  "const mode = process.env.FAKE_TAILSCALE;",
+  "const self = { DNSName: 'Desktop-IFRSSED.tail522a91.ts.net.', TailscaleIPs: ['100.84.99.15'] };",
+  "if (mode === 'hang') setTimeout(() => {}, 10000);",
+  "else process.stdout.write(JSON.stringify({ BackendState: mode === 'stopped' ? 'Stopped' : 'Running', Self: self }));",
+].join('\n');
+
+function fakeTailscale(dir) {
+  const bin = path.join(dir, 'fake-bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const exe = path.join(bin, process.platform === 'win32' ? 'tailscale.exe' : 'tailscale');
+  try { fs.linkSync(process.execPath, exe); } catch { fs.copyFileSync(process.execPath, exe); fs.chmodSync(exe, 0o755); }
+  const cwd = path.join(dir, 'cwd');
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(path.join(cwd, 'status'), FAKE_STATUS);
+  return { bin, cwd };
+}
+
+function serve(t, dir, args, { noTailscale = false, tailscale = null } = {}) {
   const home = path.join(dir, 'home');
   fs.mkdirSync(home, { recursive: true });
   const env = {
@@ -36,7 +58,15 @@ function serve(t, dir, args, { noTailscale = false } = {}) {
     fs.mkdirSync(empty, { recursive: true });
     env.PATH = empty;
   }
-  const child = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(dir, 'workspace'), ...args], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  let cwd;
+  if (tailscale) {
+    const fake = fakeTailscale(dir);
+    for (const k of Object.keys(env)) if (/^path$/i.test(k)) delete env[k];
+    env.PATH = fake.bin;
+    env.FAKE_TAILSCALE = tailscale;
+    cwd = fake.cwd;
+  }
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(dir, 'workspace'), ...args], { env, cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let text = '';
   child.stdout.on('data', (c) => { text += c; });
   child.stderr.on('data', (c) => { text += c; });
@@ -124,5 +154,57 @@ test('#541 npm run serve --host 127.0.0.1 without --allow-host and without Tails
   const says = () => bannerLines(s.out()).some((l) => /localhost|loopback/i.test(l) && /\bonly\b|\bnone\b|\bno\b/i.test(l));
   for (let i = 0; i < 50 && !says(); i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(says(), `a banner line says only the loopback names (localhost) are answered:\n${s.out()}`);
+  assert.equal(await get(portOf(s.out()), `${TS_NAME}:8443`), 403);
+});
+
+// waits (5 s at most) for a banner line the predicate accepts
+async function bannerLine(s, ok) {
+  for (let i = 0; i < 50 && !bannerLines(s.out()).some(ok); i++) await new Promise((r) => setTimeout(r, 100));
+  return bannerLines(s.out()).find(ok);
+}
+const loopbackOnly = (l) => /localhost/i.test(l) && /\bonly\b/i.test(l);
+
+test('#541 with Tailscale running, the loopback server answers this machine\'s MagicDNS name and the banner lists it without the trailing dot', async (t) => {
+  const s = serve(t, scratch(t), ['--host', '127.0.0.1'], { tailscale: 'running' });
+  await settle(s);
+  assert.match(s.out(), /Open: http/, s.out());
+  const line = await bannerLine(s, (l) => l.toLowerCase().includes(TS_NAME));
+  assert.ok(line, `the banner lists ${TS_NAME}:\n${s.out()}`);
+  assert.doesNotMatch(line, new RegExp(`${TS_NAME.replace(/\./g, '\\.')}\\.`, 'i'), 'no trailing dot');
+  const port = portOf(s.out());
+  assert.equal(await get(port, `${TS_NAME}:8443`), 200);
+  assert.equal(await get(port, TS_NAME), 200);
+  assert.equal(await get(port, `attacker.example:${port}`), 403);
+});
+
+test('#541 with Tailscale running, --allow-host adds to this machine\'s MagicDNS name', async (t) => {
+  const s = serve(t, scratch(t), ['--host', '127.0.0.1', '--allow-host', TS_OTHER], { tailscale: 'running' });
+  await settle(s);
+  assert.match(s.out(), /Open: http/, s.out());
+  assert.ok(await bannerLine(s, (l) => l.toLowerCase().includes(TS_NAME)), s.out());
+  assert.ok(await bannerLine(s, (l) => l.includes(TS_OTHER)), s.out());
+  const port = portOf(s.out());
+  assert.equal(await get(port, `${TS_NAME}:8443`), 200);
+  assert.equal(await get(port, TS_OTHER), 200);
+});
+
+test('#541 with Tailscale stopped, the server starts with loopback names only and says Tailscale is stopped', async (t) => {
+  const s = serve(t, scratch(t), ['--host', '127.0.0.1'], { tailscale: 'stopped' });
+  await settle(s);
+  assert.match(s.out(), /Open: http/, s.out());
+  const line = await bannerLine(s, loopbackOnly);
+  assert.ok(line, s.out());
+  assert.match(s.out(), /stopped/i, 'says why the name was not read');
+  assert.equal(await get(portOf(s.out()), `${TS_NAME}:8443`), 403);
+});
+
+test('#541 a tailscale status that never answers does not block the start: loopback names only, and the banner says it did not answer', async (t) => {
+  const s = serve(t, scratch(t), ['--host', '127.0.0.1'], { tailscale: 'hang' });
+  const started = Date.now();
+  await settle(s);
+  assert.match(s.out(), /Open: http/, s.out());
+  assert.ok(Date.now() - started < 30000, 'the 3 s limit applies, not the fake\'s 10 s');
+  assert.ok(await bannerLine(s, loopbackOnly), s.out());
+  assert.match(s.out(), /did not answer|timed out|timeout/i, s.out());
   assert.equal(await get(portOf(s.out()), `${TS_NAME}:8443`), 403);
 });
