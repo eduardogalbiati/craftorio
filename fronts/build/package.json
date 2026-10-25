@@ -5,6 +5,9 @@
   "description": "The Code & Build front: projects, the backlog with the Roadmap and the Product Owner, releases, sessions, workflows, runs, run chats, artifacts and the supervisor; its screens, their CSS, its features and its tests.",
   "license": "MIT",
   "author": "Eduardo Galbiati",
+  "multiagent": {
+    "front": "build"
+  },
   "scripts": {
     "test": "node ../../scripts/test.js --workspace .",
     "test:e2e": "node ../../scripts/e2e.js --front build"

@@ -4,7 +4,12 @@
 // (packages/engine/server) and the UI in a browser (the folder the root package.json's `multiagent.ui`
 // names, served from the app root), or in
 // the desktop app of another computer (Settings › Execution › Engine, apps/desktop/host/engine-connection.js).
-//   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--insecure-http] [--workspace <dir>]
+//   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--insecure-http] [--workspace <dir>] [--fronts <id,id>]
+//
+// The fronts it serves (phase 4, #590, docs/agents/engine/fronts.md): the composition of the UI app it
+// serves (`<multiagent.ui>/../composition.js`, apps/web/composition.js), every installed front
+// without one; --fronts narrows it to a list of ids (a one-front engine: its channels plus the
+// kernel's, the others answer 404; the page stays the app's generated one).
 //
 // The token is full control of this machine (a shell, gate approval, paid runs, #479): the banner
 // says so and prints the URL that carries it once (clear it from the shell history).
@@ -36,7 +41,7 @@ const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../server/li
 const { appPackage, appRoot } = require('../domains/workspace/app-root');
 
 function parseArgs(argv) {
-  const a = { port: 7300, host: '127.0.0.1', workspace: null, insecureHttp: false };
+  const a = { port: 7300, host: '127.0.0.1', workspace: null, insecureHttp: false, fronts: null };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`Missing value for ${k}`); return v; };
@@ -44,6 +49,7 @@ function parseArgs(argv) {
     else if (k === '--host') a.host = next();
     else if (k === '--insecure-http') a.insecureHttp = true;
     else if (k === '--workspace') a.workspace = path.resolve(next());
+    else if (k === '--fronts') a.fronts = next().split(',').map((x) => x.trim()).filter(Boolean);
     else throw new Error(`Unknown argument: ${k}`);
   }
   if (!Number.isInteger(a.port) || a.port < 0 || a.port > 65535) throw new Error('--port must be a number between 0 and 65535.');
@@ -58,6 +64,15 @@ function openBrowser(url) {
   try {
     spawn(cmd, args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: process.platform === 'win32' }).on('error', () => {}).unref();
   } catch { /* printed above */ }
+}
+
+// the composition of the UI app this server serves (apps/web/composition.js: `{ fronts: [ids] }`), if any
+function uiComposition() {
+  const ui = appPackage().multiagent?.ui;
+  const file = ui ? path.join(appRoot(), ui, '..', 'composition.js') : null;
+  if (!file || !fs.existsSync(file)) return null;
+  const def = require(file);
+  return Array.isArray(def.fronts) ? def.fronts : null;
 }
 
 const args = parseArgs(process.argv.slice(2));
@@ -109,6 +124,7 @@ const service = createService({
     // the engine host's language, as the app's app.getLocale(): an unset Interface and the agents' default follow it (#424)
     locale: Intl.DateTimeFormat().resolvedOptions().locale,
   },
+  fronts: args.fronts || uiComposition(),
 });
 service.setWorkspace(ws);
 service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.message));

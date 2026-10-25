@@ -5,6 +5,9 @@
   "description": "The Design & Plan front: the Inbox, Discovery and the ideation tools (AI Arena, Write & Review); its screens, their CSS, its features and its tests.",
   "license": "MIT",
   "author": "Eduardo Galbiati",
+  "multiagent": {
+    "front": "plan"
+  },
   "scripts": {
     "test": "node ../../scripts/test.js --workspace .",
     "test:e2e": "node ../../scripts/e2e.js --front plan"

@@ -1,4 +1,4 @@
-// The source tree of the repository, as the layout-bound tooling sees it (phases 2 and 3 of
+// The source tree of the repository, as the layout-bound tooling sees it (phases 2, 3 and 4 of
 // docs/reorganisation-study-2026-10.md): the npm workspaces (`packages/*`, `fronts/*`, `apps/*`, from
 // the root package.json), the folders their sources live in, the files of each, and the UI's
 // composition (the UI kit, the fronts and the apps that list them). Everything that scans "every
@@ -17,7 +17,15 @@
 //   resolvePackagePath(root, spec)  '@multiagent/shared/i18n' → 'packages/shared/i18n' (no extension
 //                           resolution), or null when `spec` names no workspace
 //   uiKit(root)             the UI kit workspace (`@multiagent/ui-kit`, packages/ui-kit), or null
-//   fronts(root)            the front workspaces, [{ id: 'build', dir: 'fronts/build', name }], by id
+//   fronts(root)            the front workspaces, [{ id: 'build', dir: 'fronts/build', name }], by id:
+//                           the workspaces under fronts/ whose package.json declares `multiagent.front`
+//                           (the id; the folder name before phase 4), the field the engine reads too
+//                           (packages/engine/service/fronts.js)
+//   frontEngineDirs(root)   the fronts' engine-side folders (phase 4, #590): [{ id, dir, engine:
+//                           'fronts/build/engine' }] for the fronts that have one (`multiagent.engine`
+//                           names another folder name; { all: true } lists every front's, existing or
+//                           not); their channels/, areas/ and domains/ hold engine code the service
+//                           loads when the composition serves the front
 //   composition(root, app)  what the app `app` ('apps/desktop') ships: { app, page: 'apps/desktop/renderer',
 //                           fronts: [{ id, dir, name }] } from `<app>/composition.js` (`fronts`, in
 //                           order; a front it names that is not installed is an error; without the
@@ -116,9 +124,20 @@ function uiKit(root) {
   return workspaces(root).find((w) => w.name === UI_KIT) || null;
 }
 
+// a front's manifest fields (phase 4): `multiagent.front` its id, `multiagent.engine` its engine folder,
+// read by the engine's own reader (packages/engine/service/fronts.js: one definition of the fields and
+// of the default folder; the runtime scan itself stays in the engine, which cannot require scripts/)
+const frontManifest = (root, dir) => require('@multiagent/engine/service/fronts').frontManifest(path.join(root, dir));
+
 function fronts(root) {
-  return workspaces(root).filter((w) => w.dir.startsWith(`${FRONTS_DIR}/`)).map((w) => ({ id: w.dir.slice(FRONTS_DIR.length + 1), ...w }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+  return workspaces(root).filter((w) => w.dir.startsWith(`${FRONTS_DIR}/`))
+    .map((w) => ({ id: frontManifest(root, w.dir).id || w.dir.slice(FRONTS_DIR.length + 1), ...w }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+function frontEngineDirs(root, { all = false } = {}) {
+  return fronts(root).map((f) => ({ ...f, engine: `${f.dir}/${frontManifest(root, f.dir).engine}` }))
+    .filter((f) => all || fs.existsSync(path.join(root, f.engine)));
 }
 
 function composition(root, app) {
@@ -202,6 +221,7 @@ module.exports = {
   appPages,
   composition,
   featureDirs,
+  frontEngineDirs,
   frontOf,
   fronts,
   listFiles,

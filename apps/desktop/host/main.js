@@ -164,6 +164,9 @@ const service = createService({
     appDir: app.getAppPath(),
     relaunch: () => restartApp(),
   },
+  // the fronts this app ships (apps/desktop/composition.js, phase 4 of the study, #590): their
+  // engine-side channels and areas load with the kernel's
+  fronts: require('../composition').fronts,
 });
 
 // The account channels (declared in packages/engine/service/manifest.js). `auth` is created once the app is

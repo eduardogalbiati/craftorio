@@ -1,6 +1,7 @@
 // The channel manifest: the single list of what `window.api` offers. Each area of the service
 // declares its channels in its own file under packages/engine/service/channels/ (found by listing the folder,
-// so a new area edits no shared list); this module merges them and adds the channels the desktop
+// so a new area edits no shared list), and a front's under its own engine/channels/ (phase 4, #590:
+// packages/engine/service/fronts.js, loaded only when the composition serves the front); this module merges them and adds the channels the desktop
 // layer (apps/desktop/host/main.js) and the account module (apps/desktop/host/auth.js) answer. The clients build `window.api`
 // from it at runtime: apps/desktop/host/preload.js asks main (`api:manifest`, sync IPC) and
 // apps/web/renderer/api-http.js asks the server (`GET /api/manifest`). No generated file.
@@ -18,8 +19,8 @@
 // from them); the service refuses a call that breaks it before fn runs, and the tests check what fn
 // answers against `result` (packages/engine/service/contract.js). Shared definitions: packages/engine/service/schemas.js.
 
-const fs = require('fs');
 const path = require('path');
+const { serviceFiles } = require('./fronts');
 
 const CHANNELS_DIR = path.join(__dirname, 'channels');
 
@@ -92,10 +93,11 @@ const PUSHED_EVENTS = [
   'term:exit',
 ];
 
-// Every area file exports (ctx) => [entries]; ctx is the service's shared state and helpers.
-function loadChannels(ctx, dir = CHANNELS_DIR) {
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.js')).sort();
-  return files.flatMap((f) => require(path.join(dir, f))(ctx));
+// Every area file exports (ctx) => [entries]; ctx is the service's shared state and helpers. The
+// files come from this folder and from each served front's engine/channels/ (phase 4, #590;
+// packages/engine/service/fronts.js serviceFiles: one order by file name, no name twice).
+function loadChannels(ctx, fronts = [], dir = CHANNELS_DIR) {
+  return serviceFiles(dir, fronts, 'channels').flatMap(({ file }) => require(file)(ctx));
 }
 
 // What the clients receive: the entries without their functions. Refuses a channel or a method

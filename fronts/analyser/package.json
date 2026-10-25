@@ -5,6 +5,9 @@
   "description": "The Project Analyser front: a project's architecture, refactor proposals, seeds, conflict map and city, and the analytics; its screens, their CSS, its features and its tests.",
   "license": "MIT",
   "author": "Eduardo Galbiati",
+  "multiagent": {
+    "front": "analyser"
+  },
   "scripts": {
     "test": "node ../../scripts/test.js --workspace .",
     "test:e2e": "node ../../scripts/e2e.js --front analyser"

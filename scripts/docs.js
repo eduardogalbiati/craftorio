@@ -62,6 +62,7 @@ const { fieldReference } = require('@multiagent/engine/engine/run/field-rules');
 const {
   appPages,
   composition,
+  frontEngineDirs,
   pageDirs,
   sourceFiles,
   uiKit,
@@ -92,6 +93,7 @@ const FOLDERS = [
   ['fronts/', 'The fronts (phase 3 of `docs/reorganisation-study-2026-10.md`, decision 7): one workspace `fronts/<id>/` = `@multiagent/front-<id>` per front (`analyser`, `build`, `plan`, `ai`), each a package of `views/<view>/` folders that register themselves with `registerView`, their CSS, its `features/` and its `test/`. An app\'s `composition.js` lists the fronts it ships; `scripts/source-tree.js` is where the tooling learns them. A front never requires another one (layer `renderer`). See [renderer.md](renderer.md), "Composition".'],
   ['apps/web/', 'The workspace `@multiagent/web` (phase 3 of `docs/reorganisation-study-2026-10.md`): the browser UI the engine server serves at `/` (the root `package.json`\'s `multiagent.ui`): `composition.js` (the fronts it ships), `renderer/index.html` (generated from the composition) and `renderer/api-http.js` (`window.api` over the server\'s HTTP and WebSocket API). Not part of the desktop asar: the desktop app attached to a remote engine loads this page from the engine.'],
   ['packages/engine/service/channels/', 'The service\'s channels, one file per area (see `packages/engine/service/manifest.js`).'],
+  ['fronts/<id>/engine/', 'A front\'s engine side (phase 4 of `docs/reorganisation-study-2026-10.md`, #590): `channels/` and `areas/`, loaded next to the kernel\'s when the app\'s composition serves the front (`packages/engine/service/fronts.js`), and `domains/`, the modules only that front\'s engine files require. It requires `@multiagent/engine` and `@multiagent/shared`, never another front (layer `front-engine:<id>`); the front\'s UI reaches it only through `window.api`. See [fronts.md](engine/fronts.md).'],
   ['native/', 'The cargo workspace of the native sidecars (#341), one crate per binary, shipped in `resources/bin/`: `multiagent-mcp`, the Rust twin of `packages/engine/domains/supervisor/supervisor-mcp.js` (started by `mcpCommand` when built). See [environment.md](environment.md).'],
   ['workflows/*.yaml', 'The bundled workflows (seeded into `<workspace>/workflows/`). See [engine.md](engine.md).'],
   ['fragments/*.yaml', 'Step bodies the bundled workflows share (#434), included by a step\'s `fragment: <name>` and read from the app folder only. See [step-fragments.md](engine/step-fragments.md).'],
@@ -134,7 +136,9 @@ function headerOf(text) {
 }
 
 function codeMap(root = ROOT) {
-  const files = listSources(root).filter((f) => !f.startsWith('packages/engine/service/channels/'));
+  // the channel files are documented by docs/agents/channels.md, the kernel's and the fronts' alike
+  const channelFolders = ['packages/engine/service/channels/', ...frontEngineDirs(root).map((f) => `${f.engine}/channels/`)];
+  const files = listSources(root).filter((f) => !channelFolders.some((d) => f.startsWith(d)));
   const rows = files.map((f) => `| \`${f}\` | ${cell(headerOf(read(root, f))) || '(no header comment)'} |`);
   // One row per screen folder (<layer>/views/<view>/: the UI kit's, each front's and each app's page
   // folder's, scripts/source-tree.js), discovered: its files, from disk.
@@ -153,7 +157,8 @@ function codeMap(root = ROOT) {
     '## Adding things without editing shared lists',
     '',
     '- **A channel** (`window.api` method): add an entry to the area\'s file in `packages/engine/service/channels/`',
-    '  (or a new file there: files are discovered). `apps/desktop/host/preload.js` and `apps/web/renderer/api-http.js` build',
+    '  (or a new file there: files are discovered), or, when one front\'s screens alone call it, in that',
+    '  front\'s `fronts/<id>/engine/channels/` (phase 4, [fronts.md](engine/fronts.md)). `apps/desktop/host/preload.js` and `apps/web/renderer/api-http.js` build',
     '  `window.api` from the manifest at runtime; nothing else to edit. The entry carries its',
     '  `schema: { params, result }` (JSON Schema, #338; shared ids and builders in `packages/engine/service/schemas.js`):',
     '  the service refuses arguments that break `params` with a 400 before the channel runs, and the tests',
@@ -161,8 +166,9 @@ function codeMap(root = ROOT) {
     '  `test/service/channel-schema-ratchet-338.test.js`. The reference of every channel is',
     '  [channels.md](channels.md) (generated, gitignored).',
     '- **Service state or a helper behind a channel**: add it to its area\'s file in `packages/engine/service/areas/`',
-    '  (or a new file there: files are discovered, see `packages/engine/service/index.js`), never to `packages/engine/service/index.js`;',
-    '  its tests go in `test/service/<area>.test.js` (see [testing.md](testing.md)).',
+    '  (or a new file there: files are discovered, see `packages/engine/service/index.js`; a front\'s own in',
+    '  `fronts/<id>/engine/areas/`), never to `packages/engine/service/index.js`;',
+    '  its tests go in `test/service/<area>.test.js` (a front\'s in `fronts/<id>/test/`; see [testing.md](testing.md)).',
     '- **A screen**: a folder `views/<view>/` in the front that owns it (`fronts/<id>/views/<view>/`; a shell',
     '  screen in `packages/ui-kit/views/`) with',
     '  `<view>.js` calling `registerView` and `<view>.css` (see [renderer.md](renderer.md), "Composition"),',
@@ -511,23 +517,26 @@ function renderIndexHtml(text, root = ROOT, app = DEFAULT_APP) {
 // when it is called, and without a workspace (`ws` null) their minute timers do nothing.
 function channelReference() {
   const { CHANNELS_DIR } = require('@multiagent/engine/service/manifest');
+  const { installedFronts, serviceFiles } = require('@multiagent/engine/service/fronts');
   const stub = new Proxy(function stub() {}, { get: () => stub, apply: () => undefined });
   const ctx = new Proxy({}, { get: (target, key) => (key in target ? target[key] : key === 'ws' ? null : stub) });
   const json = (s) => (s === undefined ? '(none)' : `\`${JSON.stringify(s)}\``);
   const lines = [
     '# Channel reference',
     '',
-    '<!-- Generated by `npm run docs` from the manifest entries\' `schema` (packages/engine/service/channels/): edit the entry, not this file. -->',
+    '<!-- Generated by `npm run docs` from the manifest entries\' `schema` (packages/engine/service/channels/ and the fronts\' engine/channels/): edit the entry, not this file. -->',
     '',
     'Every request/reply channel the service answers (IPC `ipcRenderer.invoke`, `POST /api/<channel>`),',
     'with its arguments and result as JSON Schema (#338; shared definitions: `packages/engine/service/schemas.js`).',
     'A call whose arguments break the schema is refused with a 400 before the channel runs.',
     '',
   ];
-  for (const f of fs.readdirSync(CHANNELS_DIR).filter((x) => x.endsWith('.js')).sort()) {
-    const entries = require(path.join(CHANNELS_DIR, f))(ctx).filter((e) => e.channel);
+  // the kernel's files and every installed front's (fronts/<id>/engine/channels/, phase 4, #590), in
+  // the service's own order; a front's section says which front holds it
+  for (const { file, name, from } of serviceFiles(CHANNELS_DIR, installedFronts(ROOT), 'channels')) {
+    const entries = require(file)(ctx).filter((e) => e.channel);
     if (!entries.length) continue;
-    lines.push(`## ${f.replace(/\.js$/, '')}`, '');
+    lines.push(`## ${name.replace(/\.js$/, '')}${from === 'engine' ? '' : ` (the ${from} front)`}`, '');
     for (const e of entries) {
       lines.push(`### ${e.channel}`, '', `- method: ${e.method ? `\`window.api.${e.method}\`` : '(not exposed)'}`);
       const params = e.schema?.params;
