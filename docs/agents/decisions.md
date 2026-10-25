@@ -8,6 +8,27 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-24** (#558, the reorganisation study `docs/reorganisation-study-2026-10.md`): the app
+  becomes an engine package plus modular fronts, in one git repository with npm workspaces (no
+  submodules, no separate repositories), by phases that each stop on their own: 0 these decisions,
+  1 a tidy of `src/` (host files in `src/host/`, the backend's loose files in `src/domains/<name>/`,
+  tests following their modules), 2 the engine package, 3 the UI kit and the fronts, 4 vertical
+  slices. Seven decisions: (1) the fronts are vertical, reached in phase 4 (phases 2 and 3 keep every
+  channel file and domain module in the engine package; in phase 4 each front takes its channels,
+  areas and domain modules and the engine discovers channel files from the installed fronts);
+  (2) Settings is the shell (Settings, Setup, Usage, Account) and the fourth front is `ai` (Oracle,
+  Night watch, agents, skills: the menu's AI group of #254); (3) Arena and Duo stay in Design & Plan
+  as ideation tools until a user asks otherwise; (4) the 3D bundles split by owner, the project city
+  to the `analyser` front and the run's 3D view to the UI kit, one bundle per owner from
+  `scripts/build-3d.js`; (5) Home is the shell and each front registers its cards, as screens
+  register themselves with `registerView`; (6) npm workspaces hoist by default, one `node_modules`
+  at the root, `node-pty` and any other native module a dependency of `apps/desktop`; (7) folders
+  and ids as proposed: `packages/{shared,engine,ui-kit}`, `fronts/{analyser,build,plan,ai}`,
+  `apps/{desktop,web}`, `content/`, the front ids becoming the menu group ids of #254. Why: the
+  owner wants the engine reusable (a remote engine, a browser UI) and each front developed and
+  tested on its own, and the measurements showed the seam already exists (the service never
+  requires the renderer, the renderer never requires the backend) while 135 loose files at the
+  root of `src/` made every later step costlier.
 - **2026-10-23** (#476): the Linux AppImage keeps its AppRun fallback to `--no-sandbox` when the
   kernel forbids unprivileged user namespaces (Ubuntu 23.10+), but only as a last resort and never
   silently: the launcher warns on stderr and sets `MULTIAGENT_NO_SANDBOX=1`, Settings › About shows
@@ -160,12 +181,12 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   value the owner set by hand on its own, never stops a run and never changes the memory guard's
   limits; the memory guard's history only suggests (Apply). Why: a new user could not tell how many
   runs at once were safe until the machine froze.
-- **2026-10-11** (#313, #314, #315): the app is free, open-source software under the MIT licence,
+- **2026-10-11** (#313, #314, #315; and #247, #245, #241 of 2026-10-04): the app is free, open-source software under the MIT licence,
   for Windows, macOS and Linux. The trial is removed; sign-in stays required in the packaged app
   only to count the people using it (the account gates nothing). The history is not rewritten.
   Why: without a licence the code is not open source, and the owner wants to know how many people
   use the app.
-- **2026-10-04** (#247, #245, #241): Ask for changes at a validation gate goes to the test writer first. It
+  (#247, 2026-10-04) Ask for changes at a validation gate goes to the test writer first. It
   only checks whether the request changes the acceptance criteria: if so, it updates the affected
   acceptance tests and scenarios (then the red check); otherwise the run goes straight to the
   developer. Why: the locked tests still described the old behaviour and cost extra rounds.
