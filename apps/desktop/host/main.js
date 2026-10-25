@@ -101,6 +101,11 @@ if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE && process.env.MULTIAGE
   if (!process.env.MULTIAGENT_USER_DATA) app.setPath('userData', scratch.userData);
   console.log(`Simulation only: using the scratch workspace ${scratch.workspace}.`);
 }
+// A simulation never reaches the owner's keychain: on macOS, safeStorage (the account session, the
+// engine connection) asks for "Chromium Safe Storage" at every launch of a scratch copy (the smoke,
+// the screenshots, each E2E scenario), and the dialog blocks the run until it is dismissed. Chromium's
+// mock keychain answers in memory instead: a scratch copy's account.bin is throwaway anyway.
+if (!app.isPackaged && process.env.MULTIAGENT_SIMULATION_ONLY === '1') app.commandLine.appendSwitch('use-mock-keychain');
 const secondCopy = !process.env.MULTIAGENT_WORKSPACE && !app.requestSingleInstanceLock();
 if (secondCopy) {
   const dir = workspace.resolveWorkspace().dir || os.tmpdir();
