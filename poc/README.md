@@ -17,7 +17,13 @@ built. They are references, not part of the app:
   with the app's HUD stylesheets verbatim; a demo bar picks the use case; the owner's approved
   screenshots are in `city-modes-screenshots/` (the issues port this layout, not a new reading);
 - `project-map/`, the cartographer skill draft (`SKILL.md`: how an AI writes a city plan) and the
-  plans of this repository and of photocraft, a public Rust repository used to try the plan format.
+  plans of this repository and of photocraft, a public Rust repository used to try the plan format;
+- `docs-site/`, the README as a static documentation site in the app's theme (pages on the left,
+  content in the middle, the page's sections on the right): `node poc/docs-site/build.js` splits
+  the assembled `README.md` into one page per `## ` section and writes `build/docs-site/`
+  (gitignored; serve the folder with any static server), once per language (`en/`, `pt/`): the
+  chrome is translated in `build.js`, a page's content comes from `docs-site/i18n/<lang>/<page>.md`
+  when it exists (the intro and Install are the samples), else English with a notice.
 
 Rules:
 
