@@ -162,6 +162,15 @@ test('#345 every <script src> of src/renderer/index.html names an existing file,
   const missing = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1])
     .filter((s) => !/^[a-z]+:/i.test(s) && !fs.existsSync(path.resolve(RENDERER, s)));
   assert.deepEqual(missing, []);
+  // the other pages (the engine connection page, src/renderer/connection/) write their script paths by hand
+  const pages = fs.readdirSync(RENDERER, { recursive: true }).filter((f) => f.endsWith('.html') && f !== 'index.html' && !f.includes('node_modules'));
+  assert.ok(pages.length >= 1, 'the renderer has other pages');
+  for (const page of pages) {
+    const text = read(path.join(RENDERER, page));
+    const lost = [...text.matchAll(/<(?:script src|link rel="stylesheet" href)="([^"]+)"/g)].map((m) => m[1])
+      .filter((s) => !/^[a-z]+:/i.test(s) && !fs.existsSync(path.resolve(RENDERER, path.dirname(page), s)));
+    assert.deepEqual(lost, [], `${page}: script or style files that do not exist`);
+  }
   const { renderIndexHtml } = require('../scripts/docs.js');
   assert.equal(renderIndexHtml(html, root) === html, true, 'index.html matches npm run docs');
 });
