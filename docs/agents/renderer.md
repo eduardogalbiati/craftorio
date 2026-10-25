@@ -151,6 +151,18 @@ Read this before changing anything in `src/renderer/`.
   file that overrides another's rules too (`load: after <file>.css`). The vendor files
   (`node_modules`) stay hand-kept outside the markers. The CSP and the packaged app are unchanged:
   the page still lists plain files.
+- **Composition** (the reorganisation study, #558; the contract phase 3 implements, written here
+  first so no screen is built against another one): a **front** is a package of `views/` folders,
+  each calling `registerView` as today, plus its stylesheets and its `features/`; it registers its
+  screens, its menu entries and its Home cards itself, and never names another front. An **app**
+  (the desktop app, the browser UI the engine serves) lists the fronts it ships in one
+  **composition file** (`apps/desktop/composition.js`, `apps/web/composition.js`): an ordered
+  list of front packages, nothing else. `index.html` is generated from the composition (the
+  `<link>`/`<script>` lists above, extended from `src/renderer/` to the fronts the composition
+  names, by the same `load:` rules); a composition of one front builds that front alone, the
+  default composition builds them all. The shell (the app frame, Settings, Setup, Usage, Account,
+  the run kernel and the controls) belongs to no front: it is the UI kit every composition starts
+  from. Until phase 3 the one composition is implicit: every folder under `src/renderer/views/`.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
   `state.runId` (the one the Run screen shows; #412: the top bar shows no run); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
