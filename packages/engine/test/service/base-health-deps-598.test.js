@@ -119,6 +119,38 @@ test('#598 a workspaces project gets its dependencies in the check\'s checkout b
   assert.match(log, /workspace package loaded/, 'the suite ran after it');
 });
 
+test('#598 a project the cache refuses (a file: dependency) gets the project\'s own install in the checkout, in the check\'s log, and its suite runs green', { timeout: 180000 }, async (t) => {
+  const repo = workspacesRepo(t);
+  const head = repo.commit('a local file: dependency', {
+    'package.json': { ...repo.rootPkg, dependencies: { local: 'file:vendor/local' } },
+    'vendor/local/package.json': { name: 'local', version: '1.0.0', main: 'index.js' },
+    'vendor/local/index.js': 'module.exports = 1;\n',
+    'package-lock.json': {
+      name: 'wsfix', version: '1.0.0', lockfileVersion: 3, requires: true,
+      packages: {
+        '': { name: 'wsfix', version: '1.0.0', workspaces: ['packages/*'], dependencies: { local: 'file:vendor/local' } },
+        'node_modules/@scope/a': { resolved: 'packages/a', link: true },
+        'node_modules/local': { resolved: 'vendor/local', link: true },
+        'packages/a': { name: '@scope/a', version: '1.0.0' },
+        'vendor/local': { version: '1.0.0' },
+      },
+    },
+    'check.js': "require('@scope/a');\nrequire('local');\nconsole.log('workspace package loaded');\n",
+  });
+  const { ws, project, notices, area } = await setup(t, repo.dir);
+  const r = await area.afterBaseMerge(run(project), { base: 'main' });
+  assert.equal(r.status, 'green', `the suite ran with its dependencies: ${r.error || ''}`);
+  assert.equal(r.commit, head);
+  assert.equal(notices.length, 0);
+  const log = fs.readFileSync(loadHealth().baseCheckLog(ws.root, project.id), 'utf8');
+  assert.match(log, /not cached/, 'the log says the cache does not serve it');
+  assert.match(log, /npm ci --no-audit --no-fund/, 'the project\'s own install command');
+  assert.match(log, /dependencies: installed in the checkout in \d+\.\d s/, 'with its time');
+  assert.ok(log.indexOf('npm ci') < log.indexOf('workspace package loaded'), 'the install before the suite');
+  const projectCache = path.join(ws.cache, 'deps', require('../../engine/deps-cache').projectSlug(project.id));
+  assert.equal(fs.existsSync(projectCache) && fs.readdirSync(projectCache).length > 0, false, 'nothing went into the shared cache');
+});
+
 test('#598 a check that could not run (no test command) is announced: one engine log line with the reason and the log file, a notification, no issue and no fix item', async (t) => {
   const repo = gitRepo(t);
   const { ws, project, notices, area } = await setup(t, repo.dir);

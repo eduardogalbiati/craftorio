@@ -269,3 +269,97 @@ test('#599 a workspaces project with a link: dependency stays not cached', (t) =
   const d = depsCache.detect(dir);
   assert.ok(d && d.notCached, 'a link: dependency is not cached');
 });
+
+// ---- after the review: edges of the workspaces shape -------------------------------------------
+
+test('#599 a file: dependency declared by a workspace package (not the root) also keeps the project uncached', (t) => {
+  const dir = wsProject(tmpDir(t, 'ws-filedep-'));
+  fs.writeFileSync(path.join(dir, 'packages', 'b', 'package.json'), JSON.stringify({ name: '@scope/b', version: '1.0.0', dependencies: { vendored: 'file:../../vendor/x' } }));
+  const d = depsCache.detect(dir);
+  assert.match(String(d?.notCached), /file:.*link:.*dependencies/);
+});
+
+test('#599 yarn workspaces stay uncached, with a reason that says only npm\'s are cached', (t) => {
+  const dir = wsProject(tmpDir(t, 'ws-yarn-'));
+  fs.rmSync(path.join(dir, 'package-lock.json'));
+  fs.writeFileSync(path.join(dir, 'yarn.lock'), '# yarn lockfile v1\n');
+  const d = depsCache.detect(dir);
+  assert.match(String(d?.notCached), /workspaces/);
+  assert.equal(d.manager, 'yarn');
+});
+
+test('#599 a project without workspaces keeps today\'s key: the workspaces facet only exists for a workspaces project', () => {
+  const base = { lockText: '{"a":1}', manager: 'npm', managerVersion: '10.0.0', node: '22.0.0', platform: 'win32', arch: 'x64' };
+  assert.equal(depsCache.cacheKey({ ...base, workspaces: undefined }).key, depsCache.cacheKey(base).key);
+});
+
+test('#599 a miss whose tree cannot be linked back from the cache leaves the install in the worktree, its workspace packages still its own, and no entry', async (t) => {
+  const cacheDir = tmpDir(t, 'ws-cache-');
+  const npm = fakeNpm();
+  const wtA = wsProject(tmpDir(t, 'ws-wtA-'));
+  // the filesystem refuses the links into the cache (e.g. junctions not allowed there)
+  const symlink = fs.symlinkSync;
+  const refused = t.mock.method(fs, 'symlinkSync', (target, p, type) => {
+    if (real(path.dirname(String(target))).startsWith(real(cacheDir))) throw Object.assign(new Error('EPERM: operation not permitted, symlink'), { code: 'EPERM' });
+    return symlink(target, p, type);
+  });
+  const r = await ensure(wtA, cacheDir, npm.run);
+  refused.mock.restore();
+  assert.equal(r.status, 'local', `the install stays in the worktree: ${r.reason}`);
+  assert.match(String(r.reason), /link the cache/);
+  assertInside(resolved('hoisted', wtA), wtA, 'hoisted');
+  assertOwnPackages(wtA);
+
+  const wtB = wsProject(tmpDir(t, 'ws-wtB-'));
+  const rB = await ensure(wtB, cacheDir, npm.run);
+  assert.equal(rB.status, 'miss', 'no entry was left for the key: the next worktree installs');
+  assert.equal(npm.installs.length, 2);
+  assertOwnPackages(wtB);
+});
+
+test('#599 unlinkDeps on a worktree whose marker file was deleted, then a recursive delete, never removes the cache entry\'s tree', async (t) => {
+  const cacheDir = tmpDir(t, 'ws-cache-');
+  const npm = fakeNpm();
+  const wtA = wsProject(tmpDir(t, 'ws-wtA-'));
+  const r1 = await ensure(wtA, cacheDir, npm.run);
+  const wtB = wsProject(tmpDir(t, 'ws-wtB-'));
+  await ensure(wtB, cacheDir, npm.run);
+  fs.rmSync(path.join(wtB, 'node_modules', '.deps-cache.json'), { force: true });
+
+  depsCache.unlinkDeps(wtB);
+  fs.rmSync(wtB, { recursive: true, force: true, maxRetries: 3 });
+
+  assert.ok(fs.existsSync(path.join(r1.entry, 'node_modules', 'hoisted', 'index.js')), 'the shared tree is intact');
+  assert.equal(depsCache.entryUsable(r1.entry), true);
+  assertOwnPackages(wtA);
+});
+
+// ---- packages/engine/engine/run/checkout.js: what a run says about a workspaces hit -------------
+
+test('#599 a run\'s dependency step on a workspaces hit logs that the workspace links were recreated, and the agent guide says they point into its worktree', { timeout: 120000 }, async (t) => {
+  const { methods } = require('../engine/run/checkout');
+  const ws = tmpDir(t, 'ws-run-');
+  const cacheDir = path.join(ws, 'cache', 'deps');
+  // the first worktree fills the cache (a fake install, the real npm/node versions the run's key uses)
+  const npm = fakeNpm();
+  const run = (cmd, args, opts) => (args[0] === '--version' ? depsCache.runCommand(cmd, args, opts) : npm.run(cmd, args, opts));
+  const wtA = wsProject(tmpDir(t, 'ws-wtA-'));
+  assert.equal((await depsCache.ensureDeps({ workDir: wtA, cacheDir, project: 'mono', env: process.env, run })).status, 'miss');
+
+  const events = [];
+  const fakeRun = {
+    machine: { simulated: false }, runDir: path.join(ws, 'runs', 'r1'), projectId: 'mono', abort: new AbortController(), ctx: {},
+    emitEvent: (type, ev) => events.push({ type, ...ev }),
+  };
+  const wtB = wsProject(tmpDir(t, 'ws-wtB-'));
+  const r = await methods.prepareDeps.call(fakeRun, 'worktree', wtB, 'setup');
+  assert.equal(r.status, 'hit', `the run's worktree is served by the cache: ${r.reason || ''}`);
+  const lines = events.filter((e) => e.type === 'log').map((e) => e.message);
+  assert.equal(lines.some((m) => /^dependencies \(worktree, package-lock\.json\): linked from the cache .*; workspace links recreated \(3\) in \d+\.\d s$/.test(m)), true, JSON.stringify(lines));
+  const ready = events.find((e) => e.type === 'deps.ready');
+  assert.equal(ready?.workspace_links, 3);
+
+  const guide = methods.depsGuide.call(fakeRun);
+  assert.match(guide, /Dependencies are ready/);
+  assert.match(guide, /workspace packages in `node_modules` \(3\) link to this worktree's own folders/);
+});
