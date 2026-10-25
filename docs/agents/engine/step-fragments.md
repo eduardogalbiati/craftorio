@@ -17,7 +17,7 @@ Step bodies several workflows share, kept once in `fragments/<name>.yaml` and in
 
 ## Composed workflows (#487)
 
-`src/workflow-compose.js` builds a project's workflow set from its ways-of-working profile (the
+`src/domains/workflow/workflow-compose.js` builds a project's workflow set from its ways-of-working profile (the
 `ways-of-working` seed, [seeds.md](../seeds.md)) and the interview's answers, out of fragments only:
 `intake-pipeline` (write, review, file), `dev-pipeline` (develop, code_review, suite, verify_change,
 validate, verify_failed), then `local-merge-pipeline` (resolve_merge, merge_blocked: the

@@ -1,6 +1,6 @@
 /* global api */
 // Notification center (#76): the bell in the header (#254, top right) with the unread count, and a panel with the
-// history of notifications kept in the workspace index (src/store.js; run started/finished/failed,
+// history of notifications kept in the workspace index (src/domains/workspace/store.js; run started/finished/failed,
 // gates waiting or interrupted, CLI sessions waiting, push merge conflicts...). A click on one marks
 // it read and opens its run, terminal or project Backlog; "Mark all read" clears the count. The count
 // follows 'notifications:changed', pushed by the service, and a desktop notification's click marks

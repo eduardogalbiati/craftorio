@@ -1,7 +1,7 @@
 /* global api, Robots, ChatModels, $, esc, errMsg, state, showToast, confirmDialog, openDrawer, showWorkflowsTab, showView, openModal, closeModal */
 // Workflows > Builder: a workflow drawn as desks in a line, each with an agent seated at it (the
 // robots of robots.js), plus approval gates. Saved as a regular workflow YAML in the workspace
-// (src/workflow-builder.js converts both ways; the engine runs it unchanged).
+// (src/domains/workflow/workflow-builder.js converts both ways; the engine runs it unchanged).
 // Modes (from builder:load): 'full' = made with the builder, everything editable; 'fixed' = uses
 // what the builder doesn't draw (loops, fan-outs...): agents and prompts editable, steps fixed;
 // 'readonly' = bundled with the app: clone it to change it.

@@ -10,7 +10,7 @@ const { execFile, exec: execShell } = require('child_process');
 const path = require('path');
 const agents = require('../domains/agents/agents');
 const oracleSeeds = require('../domains/oracle/oracle-seeds');
-const projects = require('../projects');
+const projects = require('../domains/project/projects');
 const simulation = require('../engine/simulation');
 const { clientError, requireId } = require('./common');
 

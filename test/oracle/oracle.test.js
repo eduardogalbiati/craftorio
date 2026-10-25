@@ -13,7 +13,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createService } = require('../../src/service');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 const oracle = require('../../src/domains/oracle/oracle');
 
 function makeService(t) {

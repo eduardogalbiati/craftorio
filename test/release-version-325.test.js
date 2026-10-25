@@ -1,4 +1,4 @@
-// Release version (#325), src/releases.js `writeReleaseVersion({ dir, version, mock })`: before the
+// Release version (#325), src/domains/releases/releases.js `writeReleaseVersion({ dir, version, mock })`: before the
 // suites, a release run writes the release's version into the project folder's package.json (and the
 // root `version` / `packages[""].version` of package-lock.json or npm-shrinkwrap.json) and commits it
 // on the branch checked out there. Formatting is kept (indentation, key order, CRLF or LF); workspace
@@ -16,12 +16,12 @@ const { execFileSync } = require('child_process');
 
 // loaded inside each test: the function is created by the change
 const load = () => {
-  delete require.cache[require.resolve('../src/releases')];
-  return require('../src/releases');
+  delete require.cache[require.resolve('../src/domains/releases/releases')];
+  return require('../src/domains/releases/releases');
 };
 const writeReleaseVersion = (opts) => {
   const fn = load().writeReleaseVersion;
-  assert.equal(typeof fn, 'function', 'src/releases.js exports writeReleaseVersion');
+  assert.equal(typeof fn, 'function', 'src/domains/releases/releases.js exports writeReleaseVersion');
   return fn(opts);
 };
 

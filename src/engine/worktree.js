@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { unlinkDeps } = require('./deps-cache');
-const { ownerAlive, readOwner } = require('../run-owner');
+const { ownerAlive, readOwner } = require('../domains/run/run-owner');
 const { samePath: platformSamePath } = require('../domains/machine/platform-paths');
 
 const FETCH_TIMEOUT_MS = 60e3;
@@ -27,7 +27,7 @@ const GIT_TIMEOUT_MS = 120e3;
 
 // Credential helper args for private GitHub repositories over https (gh auth), as for cloning.
 function authArgs() {
-  try { return require('../workspace').gitAuthArgs(); } catch { return []; }
+  try { return require('../domains/workspace/workspace').gitAuthArgs(); } catch { return []; }
 }
 
 function git(args, cwd, { timeout = GIT_TIMEOUT_MS, auth = false } = {}) {

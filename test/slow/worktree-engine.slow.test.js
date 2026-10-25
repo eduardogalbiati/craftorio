@@ -8,7 +8,7 @@ const path = require('path');
 const { samePath, canonicalPath } = require('../../src/engine/worktree');
 const { WorkflowRun } = require('../../src/engine/workflow');
 const { Recorder } = require('../../src/engine/recorder');
-const supervisor = require('../../src/supervisor');
+const supervisor = require('../../src/domains/supervisor/supervisor');
 const { fixture, git, spelled, SPELLINGS } = require('../worktree-helpers');
 
 // ---- engine -----------------------------------------------------------------------
@@ -189,7 +189,7 @@ test('engine: `goto: end` + `status` sets the outcome; a rejected failure gate i
   git(f.repo, 'rev-parse', '--verify', `refs/heads/${gone.branch}`); // the branch is kept
   // summary.json and the runs list agree (the UI reads them)
   assert.equal(JSON.parse(fs.readFileSync(path.join(bad.run.runDir, 'summary.json'), 'utf8')).status, 'failed');
-  const listed = require('../../src/runs').readRun(runsDir, bad.run.runId);
+  const listed = require('../../src/domains/run/runs').readRun(runsDir, bad.run.runId);
   assert.equal(listed.status, 'failed');
   assert.match(listed.error, /work_failed/);
 });

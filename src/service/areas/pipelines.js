@@ -1,4 +1,4 @@
-// Service area: saved pipelines (#135, src/pipelines.js). The list for Workflows › Definitions, the
+// Service area: saved pipelines (#135, src/domains/workflow/pipelines.js). The list for Workflows › Definitions, the
 // Start drawer and the Backlog's Assign (each file checked against its workflows' declared outputs,
 // with its origin: default, modified or custom); starting one (its first stage's run with the rest of
 // the pipeline as its chain, areas/chain.js carries it on); what Assign queues for one; a pipeline
@@ -9,8 +9,8 @@ const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const chain = require('../../shared/chain-model');
-const pipelines = require('../../pipelines');
-const runs = require('../../runs');
+const pipelines = require('../../domains/workflow/pipelines');
+const runs = require('../../domains/run/runs');
 
 module.exports = (ctx) => {
   const dir = () => ctx.ws.pipelines;

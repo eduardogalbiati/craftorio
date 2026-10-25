@@ -4,14 +4,14 @@
 // - statusBadge(tool): { label, state } for an envDetails entry ({ id, path, connected, checking });
 //   state is 'checking' | 'missing' | 'signed-out' | 'ready';
 // - toolRequirement(id): 'Required' or 'Optional: <what it enables>';
-// - requirementBadges(reqs): 'Needs Codex'... for a workflow's { clis, forge } (src/workflow-requirements.js);
+// - requirementBadges(reqs): 'Needs Codex'... for a workflow's { clis, forge } (src/domains/workflow/workflow-requirements.js);
 // - missingRequirements(reqs, states): the CLI ids not 'ready', plus 'forge' when neither gh nor glab is;
 // - missingLabel(missing): 'Missing Codex CLI' for a card or the Start panel ('' when nothing);
 // - preselectedWorkflows(workflows, states): the ready ids, ai-development-local-hero first;
 // - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
 // - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml).
 // The labels are in the interface language (#329, src/shared/i18n.js); the states never change.
-// Browser: window.SetupModel; Node: module.exports (src/workflow-requirements.js, the tests).
+// Browser: window.SetupModel; Node: module.exports (src/domains/workflow/workflow-requirements.js, the tests).
 (function (root) {
   const node = typeof module === 'object' && module.exports;
   // the catalog's helper, at call time (in the browser i18n.js may load after this file)

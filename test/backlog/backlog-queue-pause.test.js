@@ -2,7 +2,7 @@
 // translates, and a stale pause does not stay. Acceptance tests written before the code.
 //
 // The service side: src/service/areas/runs.js's afterRunFinished (what follows a run's
-// workflow.finished) with the real src/domains/backlog/backlog.js on a scratch workspace (src/workspace.js
+// workflow.finished) with the real src/domains/backlog/backlog.js on a scratch workspace (src/domains/workspace/workspace.js
 // setupWorkspace). Real runs are refused in simulation and afterRunFinished is private, so the area
 // is compiled from its own source with afterRunFinished added to what its factory returns, and called
 // with a run object and its workflow.finished event; every ctx hook it calls besides `ws` is a no-op.
@@ -28,9 +28,9 @@ const path = require('path');
 const Module = require('module');
 const { EventEmitter } = require('events');
 const H = require('../roadmap-status-helpers');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 const backlog = require('../../src/domains/backlog/backlog');
-const roadmaps = require('../../src/roadmap');
+const roadmaps = require('../../src/domains/roadmap/roadmap');
 
 const PROJECT = 'p1';
 const RUNS_AREA = path.join(__dirname, '..', '..', 'src', 'service', 'areas', 'runs.js');

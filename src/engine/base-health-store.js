@@ -2,13 +2,13 @@
 // <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen }). Each failure is keyed
 // by file + test: first_seen, last_seen, the runs that saw it, its issue. Here so the engine can
 // record a run's pre-existing failures (recordSightings, src/engine/machine-actions.js) without the
-// root area; filing issues and the base check stay in src/base-health.js.
+// root area; filing issues and the base check stay in src/domains/project/base-health.js.
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const { writeJsonSafe } = require('../state-file');
+const { writeJsonSafe } = require('../domains/workspace/state-file');
 
 // sightings of a pre-existing failure that file its issue
 const RUNS_FOR_ISSUE = 2;
@@ -36,7 +36,7 @@ function knownFailures(ws, projectId) {
 
 /**
  * #527: the known failures a base check confirmed red alone since the last green check (confirmed_at,
- * set by src/base-health.js runBaseCheck; a run's sightings never confirm): the only ones a run's
+ * set by src/domains/project/base-health.js runBaseCheck; a run's sightings never confirm): the only ones a run's
  * suite may count as pre-existing.
  */
 function confirmedFailures(ws, projectId) {
@@ -92,7 +92,7 @@ function addSightings(store, { runId, commit, failures = [], at }) {
 
 /**
  * A run's pre-existing failures recorded in the store, nothing filed (the engine's suite step; the
- * service's src/base-health.js recordPreexisting files what is due for the same run).
+ * service's src/domains/project/base-health.js recordPreexisting files what is due for the same run).
  * @param {string} ws the workspace root
  * @param {{ projectId: string, runId?: string, commit?: string, failures: object[], at?: string }} opts
  */

@@ -2,7 +2,7 @@
 // in Settings › Voice input, and the model download (see src/domains/chat/speech.js).
 
 const speech = require('../../domains/chat/speech');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 const { ensureMicrophoneAccess } = require('../../domains/chat/mic-permission');
 const {
   args,

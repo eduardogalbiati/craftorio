@@ -1,4 +1,4 @@
-// The Oracle's read-only tools (#122): the supervisor's tools (src/supervisor-tools.js) plus live
+// The Oracle's read-only tools (#122): the supervisor's tools (src/domains/supervisor/supervisor-tools.js) plus live
 // workspace state through the engine's read functions (runs in progress, run events and files,
 // roadmaps, Backlog queues and caches, local merges not pushed, seed status of workflows and skills)
 // and the projects' repositories read-only (git log/diff/show/... from READ_GIT_COMMANDS, files).
@@ -23,13 +23,13 @@ const path = require('path');
 const { execFile } = require('child_process');
 const backlog = require('../backlog/backlog');
 const platform = require('./oracle-platform');
-const projects = require('../../projects');
-const runs = require('../../runs');
+const projects = require('../project/projects');
+const runs = require('../run/runs');
 const skills = require('../agents/skills');
-const workflows = require('../../workflows');
+const workflows = require('../workflow/workflows');
 const { ORACLE_KINDS, REQUESTERS } = require('./oracle-actions');
-const { REQUEST_KINDS: PO_KINDS } = require('../../product-owner');
-const { REQUEST_KINDS: SUPERVISOR_KINDS } = require('../../supervisor-chat');
+const { REQUEST_KINDS: PO_KINDS } = require('../po/product-owner');
+const { REQUEST_KINDS: SUPERVISOR_KINDS } = require('../supervisor/supervisor-chat');
 const {
   analyzeRun,
   briefOf,
@@ -41,10 +41,10 @@ const {
   FOCUSES,
   regressionsAnswer,
 } = require('./oracle-run-focus');
-const { readRunRecord } = require('../../run-record');
-const { bundleStatus } = require('../../seed');
-const { readEvents } = require('../../supervisor');
-const { callTool, supervisorTools } = require('../../supervisor-tools');
+const { readRunRecord } = require('../run/run-record');
+const { bundleStatus } = require('../seed/seed');
+const { readEvents } = require('../supervisor/supervisor');
+const { callTool, supervisorTools } = require('../supervisor/supervisor-tools');
 
 const APP_PACKAGE = 'multiagent-orchestrator';
 // the agents the Oracle can delegate to (#123)
@@ -157,7 +157,7 @@ function oracleTools(ctx, hooks = {}) {
     const p = orNull(() => projects.readProject(ws().projects, pid));
     const data = orNull(() => backlog.readBacklog(ws().backlog, pid));
     if (!p && !data) throw new Error(`Unknown project: ${id}`);
-    const kind = data?.platform || require('../../workspace').readSettings(ws()).backlogPlatform || backlog.DEFAULT_PLATFORM;
+    const kind = data?.platform || require('../workspace/workspace').readSettings(ws()).backlogPlatform || backlog.DEFAULT_PLATFORM;
     return { platform: kind, target: backlog.cliTarget(kind, data?.repo || p?.repo) };
   };
   const execCli = (cmd) => (ctx.execCli || backlog.execCli)(cmd.cli, cmd.args);
@@ -328,7 +328,7 @@ function oracleTools(ctx, hooks = {}) {
         if (focus === 'regressions') {
           const orNull = (read) => { try { return read(); } catch { return null; } };
           const issues = projects.listProjects(ws().projects).flatMap((p) => orNull(() => backlog.readBacklog(ws().backlog, p.id))?.issues || []);
-          const prices = orNull(() => require('../../workspace').readSettings(ws()).prices) || {};
+          const prices = orNull(() => require('../workspace/workspace').readSettings(ws()).prices) || {};
           return JSON.stringify(regressionsAnswer(runs.listRuns(ws().runs), { issues, prices }));
         }
         if (focus !== 'cost') {

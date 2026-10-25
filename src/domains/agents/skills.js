@@ -5,8 +5,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 const yaml = require('js-yaml');
-const { slugify } = require('../../projects');
-const { seedBundle, copyDir } = require('../../seed');
+const { slugify } = require('../project/projects');
+const { seedBundle, copyDir } = require('../seed/seed');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -128,7 +128,7 @@ function skillPrompt(skill, reader = null) {
   return `<skill name="${skill.name}" dir="${skill.path}">\n${readerBody(skill, reader).trim()}${files}${reads}\n</skill>`;
 }
 
-// Skills bundled with the app are seeded into the workspace (src/seed.js): copied once, untouched
+// Skills bundled with the app are seeded into the workspace (src/domains/seed/seed.js): copied once, untouched
 // copies updated when the app ships a new version, edited or deleted ones left alone.
 // Content hash of a skill folder (paths + bytes), used to tell whether the user edited a seeded copy.
 function hashDir(dir) {

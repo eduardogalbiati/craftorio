@@ -7,7 +7,7 @@
 // The module is created by the change: it is loaded inside each test (tests first).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSchema } = require('../../src/json-schema');
+const { validateSchema } = require('../../src/domains/workspace/json-schema');
 
 const load = () => require('../../src/domains/oracle/oracle-architecture');
 

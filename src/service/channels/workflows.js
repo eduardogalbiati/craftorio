@@ -55,7 +55,7 @@ module.exports = (ctx) => [
   { channel: 'workflows:compose', method: 'workflowCompose', params: 'opts', schema: { params: args({ projectId: PROJECT_ID, answers: orNone(OBJECT), write: FLAG }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowCompose({ projectId: requireId(opts?.projectId, 'project id'), answers: opts.answers || {}, write: !!opts.write }) },
   // → { file, mode, problems, spec }: the workflow as the builder edits it
   { channel: 'builder:load', method: 'loadBuilderWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: shape({ file: STRING, mode: STRING, problems: listOf(ANY), spec: OBJECT }, ['spec']) }, fn: (file) => ctx.loadBuilderWorkflow(requireId(file, 'workflow file')) },
-  // spec: the builder's workflow (src/workflow-builder.js turns it into YAML and checks it); trust: the
+  // spec: the builder's workflow (src/domains/workflow/workflow-builder.js turns it into YAML and checks it); trust: the
   // owner confirmed the warning that a workflow not bundled with the app is code (#474)
   { channel: 'builder:save', method: 'saveBuilderWorkflow', params: ['file', 'spec', 'trust'], schema: { params: args({ file: orNone(WORKFLOW_FILE), spec: OBJECT, trust: orNone(BOOL) }, ['spec']), result: SAVED }, fn: (arg) => ctx.saveBuilderWorkflow({ ...arg, file: optionalFile(arg.file) }) },
   { channel: 'builder:clone', method: 'cloneWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: SAVED }, fn: (file) => ctx.cloneBuilderWorkflow(requireId(file, 'workflow file')) },

@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { decodeEntry, encodeEntry, scanLocalUsage } = require('../../src/domains/local/local-usage');
-const { workerClient } = require('../../src/worker-client');
+const { workerClient } = require('../../src/domains/workspace/worker-client');
 
 const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
 const msg = (id, minute) => ({

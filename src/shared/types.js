@@ -7,7 +7,7 @@
 //   - RunSummary: runs/<id>/summary.json (WorkflowRun.finish, src/engine/workflow.js), upgraded on
 //     read by src/shared/run-record.js;
 //   - RunEvent: a line of runs/<id>/events.jsonl (emitEvent), a union by `type`;
-//   - Roadmap, RoadmapStage, RoadmapItem: backlog/<project>.roadmap.json (src/roadmap.js);
+//   - Roadmap, RoadmapStage, RoadmapItem: backlog/<project>.roadmap.json (src/domains/roadmap/roadmap.js);
 //   - Workflow, WorkflowStep: a loaded workflow YAML (src/engine/run/load.js, FIELD_RULES);
 //   - SessionRecord: a session's snapshot (src/engine/run/sessions.js) in session.* events and
 //     summary.sessions.
@@ -235,7 +235,7 @@
  * @property {string} note
  * @property {RoadmapItem[]} items
  * @property {true} [disabled]
- * @property {true} [waiting] the refactor stage waiting for the owner's OK (#435, src/refactor-cadence.js)
+ * @property {true} [waiting] the refactor stage waiting for the owner's OK (#435, src/domains/refactor/refactor-cadence.js)
  * @property {RoadmapRelease} [release]
  */
 

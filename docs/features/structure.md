@@ -5,19 +5,19 @@ order: 100
 <!-- section:structure -->
 src/host/main.js              Electron main process + IPC
 src/host/preload.js           safe API exposed to the renderer
-src/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
-src/projects.js          projects: CRUD and folder/repository setup
+src/domains/workspace/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
+src/domains/project/projects.js          projects: CRUD and folder/repository setup
 src/domains/backlog/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue
-src/roadmap.js           backlog roadmap: ordered stages of runs, each after the previous one merged
+src/domains/roadmap/roadmap.js           backlog roadmap: ordered stages of runs, each after the previous one merged
 src/domains/local/local-push.js        local merges not pushed: status (commits, issues they close), push, update and push
-src/seed.js              seeding of bundled defaults into the workspace (.seeded.json, origin status, restore)
+src/domains/seed/seed.js              seeding of bundled defaults into the workspace (.seeded.json, origin status, restore)
 src/domains/agents/skills.js            skills: CRUD, lookup, seeding and prompt block
 src/domains/agents/agents.js            agents: CRUD, appearance validation, the built-in supervisor, the workflows' agents (read-only)
-src/workflows.js         workflows: seeding, origin status, lookup (workspace, then bundled)
-src/workflow-builder.js  visual builder: spec <-> workflow YAML, what the builder can't draw
-src/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
+src/domains/workflow/workflows.js         workflows: seeding, origin status, lookup (workspace, then bundled)
+src/domains/workflow/workflow-builder.js  visual builder: spec <-> workflow YAML, what the builder can't draw
+src/domains/usage/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
 src/domains/local/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)
-src/actions-usage.js     GitHub Actions minutes of the month vs the included quota (Usage, CI step)
+src/domains/usage/actions-usage.js     GitHub Actions minutes of the month vs the included quota (Usage, CI step)
 src/engine/workflow.js   engine that runs the YAML graph
 src/engine/providers.js  claude / codex / grok / mock adapters
 src/engine/capabilities.js  agent capabilities and isolation → each CLI's flags

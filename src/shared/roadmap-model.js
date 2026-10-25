@@ -1,6 +1,6 @@
 // Roadmap model (#349): the roadmap's rules, pure (no DOM, no files, never changes what it is given).
 // The states, what counts as finished, the current stage and which owner action applies where.
-// src/roadmap.js (the only writer of a roadmap's state, pausedBy, scope and item statuses), the
+// src/domains/roadmap/roadmap.js (the only writer of a roadmap's state, pausedBy, scope and item statuses), the
 // service, the night watch, the Roadmap view and the Dashboard ask it instead of keeping copies; it
 // loads in node (require) and in the renderer (<script>, window.RoadmapModel).
 //
@@ -73,7 +73,7 @@
   /** #391: the roadmap bar's two pauses, the default first ([{ after, label, hint }]; the stage in progress named). */
   function pauseChoices(roadmap) {
     const at = scopeIndex(roadmap) >= 0 ? scopeIndex(roadmap) : currentStage(roadmap);
-    // a cut line held before the stage: "after this stage" pauses at once (src/roadmap.js pauseAfterStage)
+    // a cut line held before the stage: "after this stage" pauses at once (src/domains/roadmap/roadmap.js pauseAfterStage)
     const now = at < 0 || pendingRelease(roadmap, at);
     return [
       { after: 'stage', label: t('roadmap.pause_after_stage'), hint: now ? t('roadmap.pause_after_stage_now') : t('roadmap.pause_after_stage_hint', { stage: at + 1 }) },

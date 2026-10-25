@@ -9,11 +9,11 @@
 // apply here, over every run, and the counts are of every run of the picked workflow; `upTo` extends the page to a run (a deep link to an older run); `ids` answers just those rows
 // (a run event updates its row). Listing is asynchronous (runs.listRunsAsync, the artifact index).
 
-const runs = require('../../runs');
-const projects = require('../../projects');
+const runs = require('../../domains/run/runs');
+const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
-const roadmaps = require('../../roadmap');
-const { artifactIndex } = require('../../run-artifacts');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const { artifactIndex } = require('../../domains/run/run-artifacts');
 const { cliReason, sessionView } = require('../common');
 
 const RUN_PAGE = 30;

@@ -476,7 +476,7 @@ test('backlog:save-doc: a run still in progress is refused', async (t) => {
 
 // ---- Backlog Refresh banner and badge (#161) ---------------------------------------------------
 
-// A hand-built run folder for backlog-refresh.yaml, the shape src/runs.js reads (events.jsonl's
+// A hand-built run folder for backlog-refresh.yaml, the shape src/domains/run/runs.js reads (events.jsonl's
 // first line for `file`, summary.json for status/timing), plus the skill's own applied-safe.json.
 function writeRefreshRun(ws, { runId, projectId, startedAt, finishedAt, results = [] }) {
   const runDir = path.join(ws.runs, runId);

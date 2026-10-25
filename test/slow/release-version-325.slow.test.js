@@ -1,5 +1,5 @@
 // Release version (#325) in a release run: before the `unit` step, workflows/release.yaml writes the
-// release's version into the project's package.json (src/releases.js); a mock run writes and commits
+// release's version into the project's package.json (src/domains/releases/releases.js); a mock run writes and commits
 // nothing and its event says what it would set. The Ship gate and the review's "Before you ship"
 // name the version change (e.g. "package.json 0.3.0 → 1.2.0"). A name that is not a semver, or a
 // project without package.json, never stops the run: it goes on to `unit` and the ship gate.

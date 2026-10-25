@@ -27,7 +27,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { layout } = require('../../src/workspace');
+const { layout } = require('../../src/domains/workspace/workspace');
 
 const load = () => require('../../src/domains/discovery/discovery');
 const ID = /^\d{8}-[0-9a-f]{4}$/;
@@ -208,7 +208,7 @@ test('removeAttachment deletes the file; a name outside attachments/ is refused 
   const name = d.addAttachment(dir, P, c.id, { name: 'a.txt', data: Buffer.from('x') });
   d.removeAttachment(dir, P, c.id, name);
   assert.deepEqual(d.readCard(dir, P, c.id).attachments, []);
-  for (const bad of ['../../document.md', '..\\card.json', '../../../board.json', path.join(cardDir(dir, c.id), 'document.md')]) {
+  for (const bad of ['../document.md', '..\\card.json', '../../board.json', path.join(cardDir(dir, c.id), 'document.md')]) {
     assert.throws(() => d.removeAttachment(dir, P, c.id, bad), `${bad} was not refused`);
   }
   assert.equal(fs.readFileSync(path.join(cardDir(dir, c.id), 'document.md'), 'utf8'), 'keep me');
@@ -220,7 +220,7 @@ test('an attachment name with a path cannot escape attachments/, and a project o
   const d = load();
   const { root, dir } = tmp(t);
   const c = d.createCard(dir, P, { title: 'A', text: '', author: 'a' });
-  for (const name of ['../../evil.txt', '..\\..\\evil.txt', '../../../../evil.txt']) {
+  for (const name of ['../evil.txt', '..\\..\\evil.txt', '../../../evil.txt']) {
     let stored;
     try { stored = d.addAttachment(dir, P, c.id, { name, data: Buffer.from('evil') }); } catch { /* refusing is fine */ }
     if (stored !== undefined) {
@@ -231,10 +231,10 @@ test('an attachment name with a path cannot escape attachments/, and a project o
   const outside = walk(root).filter((f) => path.basename(f) === 'evil.txt' && !f.includes(`attachments${path.sep}`));
   assert.deepEqual(outside, [], 'a file was written outside attachments/');
   assert.throws(() => d.createCard(dir, '..', { title: 'x', text: '', author: 'a' }));
-  assert.throws(() => d.createCard(dir, '../../escape', { title: 'x', text: '', author: 'a' }));
+  assert.throws(() => d.createCard(dir, '../escape', { title: 'x', text: '', author: 'a' }));
   assert.throws(() => d.readCard(dir, P, '..\\x'));
-  assert.throws(() => d.readCard(dir, P, '../../cards'));
-  assert.throws(() => d.updateCard(dir, P, '../../../p2', { title: 'x' }));
+  assert.throws(() => d.readCard(dir, P, '../cards'));
+  assert.throws(() => d.updateCard(dir, P, '../../p2', { title: 'x' }));
   assert.ok(!fs.existsSync(path.join(root, 'escape')));
 });
 
@@ -337,7 +337,7 @@ test('readAttachment gives an image as a data: URL for a preview, another file w
   assert.equal(a.folder, path.join(cardDir(dir, c.id), 'attachments'));
   assert.equal(a.dataUrl, `data:image/png;base64,${png.toString('base64')}`);
   assert.equal(d.readAttachment(dir, P, c.id, doc).dataUrl, null);
-  assert.throws(() => d.readAttachment(dir, P, c.id, '../../card.json'));
+  assert.throws(() => d.readAttachment(dir, P, c.id, '../card.json'));
   assert.throws(() => d.readAttachment(dir, P, c.id, '..\\document.md'));
 });
 

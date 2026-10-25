@@ -3,7 +3,7 @@
 // Product Owner (src/domains/agents/agents.js, id `oracle`: model and effort from agents/oracle.json); its
 // instructions are the bundled `oracle` skill. Claude Code only, resumed turn after turn
 // (claude --resume), read-only: no built-in tool, only its MCP tools (src/domains/oracle/oracle-tools.js over its
-// own src/supervisor-bridge.js). It proposes; it never writes, and never crosses a human gate.
+// own src/domains/supervisor/supervisor-bridge.js). It proposes; it never writes, and never crosses a human gate.
 // Part 2 (#123): run events wake it (src/domains/oracle/oracle-wake.js → wake(): one short turn per batch); its
 // actions are cards (src/domains/oracle/oracle-actions.js → propose()) that the service performs only on the
 // owner's click (act()), or at once under the owner's Night watch for the repairs it allows; the
@@ -70,7 +70,7 @@ const I18n = require('../../shared/i18n');
 const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('../chat/chat-progress');
 const night = require('../night/night-watch');
-const { hold, ownerAlive } = require('../../run-owner');
+const { hold, ownerAlive } = require('../run/run-owner');
 const sessionCache = require('../session/session-cache');
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
@@ -224,7 +224,7 @@ function decodeImages(images) {
 /** Claude Code's flags for the Oracle: isolated, its MCP server only, no built-in tool (no file writes, no commands). */
 function readOnlyArgs(server) {
   const { providerArgs } = require('../../engine/capabilities');
-  const { PROVIDERS } = require('../../workflow-builder');
+  const { PROVIDERS } = require('../workflow/workflow-builder');
   return [
     ...providerArgs(PROVIDERS.claude.type, { caps: null, isolated: true }).args,
     '--mcp-config', JSON.stringify({ mcpServers: { [MCP_NAME]: server } }),
@@ -245,7 +245,7 @@ function monthlyBlock(budget) {
 /**
  * The Oracle of a workspace. Functions are read at call time (the workspace can change):
  * `dir()` its folder; `tools()` its read-only tools; `bridge` its loopback bridge; `mcpCommand()`
- * how to start src/supervisor-mcp.js; `agent()` { model, effort } (agents.readAgent); `settings()`
+ * how to start src/domains/supervisor/supervisor-mcp.js; `agent()` { model, effort } (agents.readAgent); `settings()`
  * the workspace settings; `budget()` the monthly budget state with every peer's spend.
  * Part 2 (#123): `perform(action, { mock })` → { ok, text, backup?, preview? } runs a card (the
  * service's functions); `restore(action, backup)` → { text } puts its backup back; `notify(notice)` a
@@ -408,7 +408,7 @@ function createOracle({
     const { runTurn } = require('../../engine/providers');
     const { render } = require('../../engine/workflow');
     const { dedupeFlags } = require('../../engine/capabilities');
-    const { PROVIDERS } = require('../../workflow-builder');
+    const { PROVIDERS } = require('../workflow/workflow-builder');
     const provider = PROVIDERS.claude;
     if (!resolveCommand(provider.command)) throw new Error(`The Oracle needs ${provider.command}, which is not installed.`);
     const { url, token } = await bridge.start();
@@ -437,7 +437,7 @@ function createOracle({
       const prev = fresh ? 0 : Number(state().contextTokens) || 0;
       return { text, costUsd: 0, tokens: {}, sessionId: sessionId || `mock-${crypto.randomUUID()}`, simulated: true, contextTokens: prev + Math.ceil((prompt.length + text.length) / 4) };
     }
-    const { callTool } = require('../../supervisor-tools');
+    const { callTool } = require('../supervisor/supervisor-tools');
     const count = async (name, pick = (x) => x) => {
       const out = await callTool(tools(), name, {});
       try { return out.isError ? '?' : pick(JSON.parse(out.text)).length; } catch { return '?'; }
@@ -466,7 +466,7 @@ function createOracle({
 
   // ---- state.md and handoff notes (#244: written by the app, never by a model turn) -------------
   async function stateNote() {
-    const { callTool } = require('../../supervisor-tools');
+    const { callTool } = require('../supervisor/supervisor-tools');
     let runs = [];
     try { runs = JSON.parse((await callTool(tools(), 'active_runs', {})).text); } catch { runs = []; }
     const watching = readJson(files().wake, {}).watching || [];

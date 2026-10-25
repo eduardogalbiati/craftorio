@@ -2,7 +2,7 @@
 // events, answering a gate and resuming a run from a step. Several runs can be in progress (Settings ›
 // Execution › Concurrent runs): the channels that act on one take its runId.
 
-const runs = require('../../runs');
+const runs = require('../../domains/run/runs');
 const {
   clientError,
   requireId,

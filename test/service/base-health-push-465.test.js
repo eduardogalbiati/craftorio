@@ -1,4 +1,4 @@
-// #465 a live terminal on the deterministic steps: the base check (src/base-health.js, its service
+// #465 a live terminal on the deterministic steps: the base check (src/domains/project/base-health.js, its service
 // area src/service/areas/base-health.js) tells the screens when it starts and ends, so its log can be
 // followed live. Acceptance tests written before the code.
 // Seam: the area built from a small ctx, as test/service/base-health-wiring-405.test.js builds it,

@@ -1,12 +1,12 @@
 // Internals of #188 / #228 the acceptance tests do not reach: the per-calibration split
 // (repo-performance byCalibration), the app's heartbeat log (src/domains/session/app-sessions.js) and the index's
-// run_figures cache (src/store.js).
+// run_figures cache (src/domains/workspace/store.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { byCalibration } = require('../src/repo-performance');
+const { byCalibration } = require('../src/domains/project/repo-performance');
 const { beat, GAP_MS, readAppSessions } = require('../src/domains/session/app-sessions');
 
 test('byCalibration: a run takes the calibration of the latest plan before it that planned one of its issues', () => {
@@ -45,7 +45,7 @@ test('app-sessions: beats within the gap extend the session; a later beat starts
 });
 
 test('store: run_figures keeps a run\'s figures for one signature and drops them with the run', (t) => {
-  const { openStore } = require('../src/store');
+  const { openStore } = require('../src/domains/workspace/store');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'figures-store-'));
   const ws = { root, runs: path.join(root, 'runs'), backlog: path.join(root, 'backlog') };
   const store = openStore(ws);

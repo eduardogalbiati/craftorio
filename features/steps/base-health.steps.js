@@ -1,7 +1,7 @@
 // Steps of the "main stays green" scenarios (#405) in features/roadmap.feature and
 // features/settings.feature: the Roadmap's one line of the base's known failures, the red-base choice
 // in Settings › Execution, and the fix item a red base check puts at the front of the roadmap.
-// State is seeded through src/base-health.js (required inside the steps, never at the top: bddgen
+// State is seeded through src/domains/project/base-health.js (required inside the steps, never at the top: bddgen
 // loads this file before the module exists). Locators are roles and data-testid only.
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -30,7 +30,7 @@ const { Given, When, Then } = require('./fixtures');
 
 const LOAD_TIMEOUT = 30000;
 const root = path.join(__dirname, '..', '..');
-const baseHealth = () => require(path.join(root, 'src', 'base-health'));
+const baseHealth = () => require(path.join(root, 'src', 'domains', 'project', 'base-health'));
 const wsRoot = (e2e) => path.join(e2e.scratch, 'workspace');
 
 const failuresLine = (page) => page.getByTestId('base-failures');

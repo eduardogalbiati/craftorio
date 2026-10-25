@@ -5,8 +5,8 @@
 // startReason: first, compaction, model-change, idle, reset, cleared or one-shot.
 // Files: <workspace>/oracle/usage.jsonl, <workspace>/backlog/product-owner.usage.jsonl and (new)
 // <workspace>/supervisor/usage.jsonl.
-// Seams: createOracle (src/domains/oracle/oracle.js), productOwner.ask (src/product-owner.js) and createSupervisorChat
-// (src/supervisor-chat.js), each driven on a real turn (mock: false) whose provider CLI is faked at its
+// Seams: createOracle (src/domains/oracle/oracle.js), productOwner.ask (src/domains/po/product-owner.js) and createSupervisorChat
+// (src/domains/supervisor/supervisor-chat.js), each driven on a real turn (mock: false) whose provider CLI is faked at its
 // boundary: engine/providers' runTurn is replaced on its exports for the test (the modules require it
 // when a turn starts), so no CLI starts and no model is called. Simulated turns record nothing (as the
 // Product Owner's ledger already does), so the real-turn path is the one under test. Time is mocked
@@ -17,8 +17,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const oracle = require('../src/domains/oracle/oracle');
-const productOwner = require('../src/product-owner');
-const { createSupervisorChat } = require('../src/supervisor-chat');
+const productOwner = require('../src/domains/po/product-owner');
+const { createSupervisorChat } = require('../src/domains/supervisor/supervisor-chat');
 
 const SKILLS = path.join(__dirname, '..', 'skills');
 const USAGE = { input: 120, output: 30, cache_read: 400, cache_write: 50 };

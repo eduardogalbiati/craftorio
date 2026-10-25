@@ -12,9 +12,9 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const providers = require('../src/engine/providers');
-const supervisor = require('../src/supervisor');
-const { createWatches } = require('../src/supervisor-watch');
-const { prioritize } = require('../src/refactor-priority');
+const supervisor = require('../src/domains/supervisor/supervisor');
+const { createWatches } = require('../src/domains/supervisor/supervisor-watch');
+const { prioritize } = require('../src/domains/refactor/refactor-priority');
 const epics = require('../src/domains/backlog/epics');
 const Language = require('../src/shared/language');
 

@@ -3,7 +3,7 @@
 // and test/ctl-342.test.js run those). Seams, loaded inside each test (they do not exist before the change):
 // - src/domains/machine/native-bin.js: nativeBinaryPath(name, { isPackaged, resourcesPath, platform }) where a native
 //   sidecar (multiagent-mcp, multiagent-tail, multiagent-ctl) lives: packaged resources/bin/<name>[.exe],
-//   dev cargo's output under native/; never PATH. mcpBinaryPath (src/supervisor-bridge.js) agrees with it.
+//   dev cargo's output under native/; never PATH. mcpBinaryPath (src/domains/supervisor/supervisor-bridge.js) agrees with it.
 // - src/domains/machine/native-bin.js: tailCommand(isPackaged, resolveCommand, { binary }) → { command, args, env }, the
 //   twin of mcpCommand: the binary when it exists (args []), else src/domains/session/session-tail.js under node (dev:
 //   process.execPath; packaged: resolveCommand('node'), throwing /Node\.js on the PATH/ without it).
@@ -73,7 +73,7 @@ test('#342 nativeBinaryPath: packaged, every sidecar is in resources/bin, with .
 
 test('#342 nativeBinaryPath: in a dev checkout, under native/; mcpBinaryPath gives the same file', () => {
   const { nativeBinaryPath } = nativeBin();
-  const { mcpBinaryPath } = require('../src/supervisor-bridge');
+  const { mcpBinaryPath } = require('../src/domains/supervisor/supervisor-bridge');
   for (const name of BINARIES) {
     for (const platform of ['win32', 'linux']) {
       const p = nativeBinaryPath(name, { isPackaged: false, platform });
@@ -143,7 +143,7 @@ test('#342 terminalSpec live: starts tailCommand\'s command with the run folder 
 
 test('#342 packaged with its binaries, no spawn spec resolves node from the PATH (MCP server, live terminal, control client)', (t) => {
   const { nativeBinaryPath, tailCommand } = nativeBin();
-  const { mcpCommand } = require('../src/supervisor-bridge');
+  const { mcpCommand } = require('../src/domains/supervisor/supervisor-bridge');
   const res = fakeResources(t);
   const at = (name) => nativeBinaryPath(name, { isPackaged: true, resourcesPath: res });
   const lookup = pathWithoutNode();

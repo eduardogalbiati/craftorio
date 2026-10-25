@@ -230,11 +230,11 @@ someone is present by definition, and it is never a workflow step. Inside a run 
 
 ## The app-wide Supervisor chat (#28)
 
-The Supervisor drawer and page (`src/supervisor-chat.js`) run `claude` isolated with `--tools ""`
+The Supervisor drawer and page (`src/domains/supervisor/supervisor-chat.js`) run `claude` isolated with `--tools ""`
 (no built-in tool: no file reads, no commands) and one MCP server, `orchestrator`
-(`src/supervisor-mcp.js`, allowed as `mcp__orchestrator`). That server forwards to a loopback bridge
-in the app (`src/supervisor-bridge.js`, 127.0.0.1, per-process bearer token) that runs the read-only
-tools of `src/supervisor-tools.js` over the service. So it sees the app's data (workflows, projects,
+(`src/domains/supervisor/supervisor-mcp.js`, allowed as `mcp__orchestrator`). That server forwards to a loopback bridge
+in the app (`src/domains/supervisor/supervisor-bridge.js`, 127.0.0.1, per-process bearer token) that runs the read-only
+tools of `src/domains/supervisor/supervisor-tools.js` over the service. So it sees the app's data (workflows, projects,
 runs, skills, agents, usage, analytics) and never the repositories' code. New tools go in
 `supervisor-tools.js`; write tools must preview and apply only on the user's click. Its model has
 no write tool; the changes it owns (runs, workflows, skills) arrive as requests from the Oracle

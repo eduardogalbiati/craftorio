@@ -1,8 +1,8 @@
 // Projects screen: the projects (a git folder or a cloned repository) and the runs of each.
 // projects:inputHints: what the workflow input forms prefill (detected language, local branches).
 
-const projects = require('../../projects');
-const projectInputs = require('../../project-inputs');
+const projects = require('../../domains/project/projects');
+const projectInputs = require('../../domains/project/project-inputs');
 const { clientError, requireId, requireObject } = require('../common');
 const {
   ANY,
@@ -22,7 +22,7 @@ const {
 const folderOf = (ctx, id) => { try { return projects.readProject(ctx.ws.projects, id).folder; } catch { return null; } };
 
 // a project's fields ({ name, folder, repo, workflows: [{ name, origin }], defaultWorkflow, ... }),
-// checked by src/projects.js
+// checked by src/domains/project/projects.js
 const PROJECT_DATA = OBJECT;
 
 // #486: projects:manifest's one object, { url } (a remote repository) or { folder }

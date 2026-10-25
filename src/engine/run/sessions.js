@@ -16,7 +16,7 @@ const { resolveSkill, skillPrompt } = require('../../domains/agents/skills');
 const {
   priceOf,
   totalTokens,
-} = require('../../usage');
+} = require('../../domains/usage/usage');
 const capabilities = require('../capabilities');
 const evidence = require('../../domains/evidence/evidence');
 const testPaths = require('../test-paths');

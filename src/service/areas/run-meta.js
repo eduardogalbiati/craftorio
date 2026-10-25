@@ -5,8 +5,8 @@
 // host.readPrJson stands in for gh/glab).
 
 const path = require('path');
-const runs = require('../../runs');
-const runPr = require('../../run-pr');
+const runs = require('../../domains/run/runs');
+const runPr = require('../../domains/run/run-pr');
 
 const SIMULATED_PR = { state: 'unknown', detail: 'simulated run: its PR is not real, so it is not read' };
 

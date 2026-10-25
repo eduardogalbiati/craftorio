@@ -7,7 +7,7 @@
 
 'use strict';
 
-const supervisor = require('../../supervisor');
+const supervisor = require('../../domains/supervisor/supervisor');
 const { render } = require('./templates');
 const {
   answeredKey,

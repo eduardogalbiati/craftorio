@@ -26,8 +26,8 @@ const { changedFiles, selectionLines } = require('../affected-tests');
 const { machineSlotDir } = require('../machine-slot');
 const { runWorkflowStep } = require('../workflow-step');
 const testIds = require('../test-ids');
-const { previousTag } = require('../../release-city');
-const { releaseSemver } = require('../../releases');
+const { previousTag } = require('../../domains/releases/release-city');
+const { releaseSemver } = require('../../domains/releases/releases');
 const { render } = require('./templates');
 const { parseDuration, renderFileList } = require('./load');
 const { pausedError } = require('./resume');
@@ -63,7 +63,7 @@ function testedTree(dir) {
 }
 
 // #378: the tag before the release `version` (release.yaml's `previous_version` output, the `since`
-// a refactor-proposals stage reads), as the Release city tab names it (src/release-city.js
+// a refactor-proposals stage reads), as the Release city tab names it (src/domains/releases/release-city.js
 // previousTag: semver order for a semver name, even before Ship tags it); a name that is not a
 // semver and not tagged yet: the newest tag reachable from HEAD. '' without a git checkout or a tag
 async function previousReleaseTag(dir, version) {
@@ -192,7 +192,7 @@ const methods = {
   // process, its own lock folder, #210), its log in logs/suite-<visit>.log; the run's known
   // pre-existing failures do not count, and the other failures are checked on the base checkout
   // (#211: those failing there too become the run's pre-existing failures and go to the project's
-  // base-health store, #405 src/base-health.js). Without a step `timeout`, the timeout comes from the project's recent suite
+  // base-health store, #405 src/domains/project/base-health.js). Without a step `timeout`, the timeout comes from the project's recent suite
   // durations (cache/suite-durations.json). Simulation: mockSequences.suite: { <step>: [...] }.
   // #403: each round of a local workflow first brings the moved local base into the branch
   // (bringBaseIn); the output's `base_commit` is the base commit it tested on.
@@ -509,7 +509,7 @@ const methods = {
   },
 
   // `type: release_version` (#325, release.yaml before the suites): the release's version written into
-  // the project's package.json and committed on the run's branch (src/releases.js writeReleaseVersion).
+  // the project's package.json and committed on the run's branch (src/domains/releases/releases.js writeReleaseVersion).
   // Never fails the run: a name that is not a semver, no package.json, nothing to change or a git
   // error is said in the output and the log. Only in the run's own worktree (never the owner's
   // checkout); a simulation writes nothing and says what it would set.

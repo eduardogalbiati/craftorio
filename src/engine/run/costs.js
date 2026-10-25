@@ -17,7 +17,7 @@ const {
   tokensCost,
   totalTokens,
   WARN_AT,
-} = require('../../usage');
+} = require('../../domains/usage/usage');
 const nightLimits = require('../../domains/night/night-limits');
 const sessionCache = require('../../domains/session/session-cache');
 const { render } = require('./templates');

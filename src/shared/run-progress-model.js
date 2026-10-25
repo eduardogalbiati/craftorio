@@ -2,7 +2,7 @@
 // Run screen's sidebar. Two pure parts, no DOM:
 // - StepTrail turns run events into a light list of step visits (step, agents with provider and
 //   model, status, duration, cost). The engine writes it into summary.json (`progress`); runs
-//   without it are rebuilt from events.jsonl (src/runs.js); the UI feeds it live run:event.
+//   without it are rebuilt from events.jsonl (src/domains/run/runs.js); the UI feeds it live run:event.
 // - progressGroups folds a trail into the chips the runs list shows: only the groups visited, in
 //   order, a return to a group counted (×N), the last one with the run's state.
 // hydrationEvents merges a run's recorded and live events for a window that opened mid-run.

@@ -302,7 +302,7 @@ test('#312 no credential of an account reaches the run folder', async (t) => {
 
 // ---- resumed runs: a conversation continues only on the account that opened it ----------------
 test('#312 resumeSpec records the account of each agent\'s last conversation (null without accounts)', (t) => {
-  const supervisor = require('../../src/supervisor');
+  const supervisor = require('../../src/domains/supervisor/supervisor');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-312-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const ev = (o) => JSON.stringify({ ts: '2026-10-22T10:00:00Z', ...o });

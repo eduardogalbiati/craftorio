@@ -8,9 +8,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { claudeAccount, claudeSignedIn } = require('../src/domains/cli/claude-auth');
-const { workflowRequirements } = require('../src/workflow-requirements');
+const { workflowRequirements } = require('../src/domains/workflow/workflow-requirements');
 const { missingLabel, workflowId } = require('../src/shared/setup-model');
-const { layout, readSettings, writeSettings } = require('../src/workspace');
+const { layout, readSettings, writeSettings } = require('../src/domains/workspace/workspace');
 
 const tmp = (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-319-'));

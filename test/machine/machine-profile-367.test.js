@@ -48,7 +48,7 @@ const path = require('path');
 const load = () => require('../../src/domains/machine/machine-profile');
 const capabilities = require('../../src/engine/capabilities');
 const suiteStep = require('../../src/engine/suite-step');
-const workspace = require('../../src/workspace');
+const workspace = require('../../src/domains/workspace/workspace');
 
 const GIB = 1024 ** 3;
 // sample machines: [threads, total bytes as os.totalmem() reports them (a little under nominal), runs]

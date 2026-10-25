@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const projects = require('../src/projects');
+const projects = require('../src/domains/project/projects');
 const skills = require('../src/domains/agents/skills');
-const { setupWorkspace, readSettings, writeSettings, DEFAULT_SETTINGS } = require('../src/workspace');
+const { setupWorkspace, readSettings, writeSettings, DEFAULT_SETTINGS } = require('../src/domains/workspace/workspace');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lib-'));

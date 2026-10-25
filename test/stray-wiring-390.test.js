@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { createMemoryGuard } = require('../src/engine/memory-guard');
 const { selectProcesses } = require('../src/engine/processes');
-const notifier = require('../src/notifications');
+const notifier = require('../src/domains/workspace/notifications');
 
 const wt = path.join(os.tmpdir(), 'ws-390-wiring', 'worktrees', 'run-1');
 

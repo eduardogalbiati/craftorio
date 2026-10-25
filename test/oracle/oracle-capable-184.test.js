@@ -15,7 +15,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { createService, BUNDLED_SKILLS_DIR } = require('../../src/service');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 
 const ROOT = path.join(__dirname, '..', '..');
 const loadTools = () => require('../../src/domains/oracle/oracle-tools');

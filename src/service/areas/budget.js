@@ -1,13 +1,13 @@
-// Service area: the spending budget (#206, src/budget.js). `budgetNow` is today's (and the Night
+// Service area: the spending budget (#206, src/domains/usage/budget.js). `budgetNow` is today's (and the Night
 // watch's) spending against the caps of settings.json, from the run list (live runs included);
 // `budgetBlock` is the cap the next roadmap start would pass, for the roadmaps (areas/roadmap.js) and
 // the live roadmap's refills (areas/live-roadmap.js); `budgetAction` is the paused roadmap's "Raise
 // for today" / "Resume anyway". The top bar reads `budgetNow` (channel budget:get).
 
-const budget = require('../../budget');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
-const workspace = require('../../workspace');
+const budget = require('../../domains/usage/budget');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
+const workspace = require('../../domains/workspace/workspace');
 const { nightWatch } = require('../../domains/oracle/oracle-actions');
 
 module.exports = (ctx) => {

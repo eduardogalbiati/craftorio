@@ -3,7 +3,7 @@
 // plain SVG/CSS. "Ask the supervisor" writes a report on the range (a real model call: it asks first).
 // Two tabs (the selected one is remembered with the scope and range): Usage (the above) and Repository
 // performance (#159: per project, the runs that hit a merge conflict, the runs at once, split
-// before/after a marker; channel analytics:performance, src/repo-performance.js).
+// before/after a marker; channel analytics:performance, src/domains/project/repo-performance.js).
 // #197, #254: the analysed project is the header's (window.CurrentProject), named at the top of that tab.
 // #354: the files most runs edit (their recommendations, "Create issue", "Ask for a plan") moved to
 // the project's Conflict map tab: a one-line link leads there (views/project/project-conflict-map.js).

@@ -3,7 +3,7 @@
 // the Product Owner's agent inbox (#240) as a request naming the finding's folder.
 //
 // The interface these tests define (tests-first):
-// - Settings: settings.findingsButton, false by default (src/workspace.js DEFAULT_SETTINGS), saved by
+// - Settings: settings.findingsButton, false by default (src/domains/workspace/workspace.js DEFAULT_SETTINGS), saved by
 //   settings:set and read back by settings:get.
 // - app:info adds isPackaged: the host's isPackaged (a boolean), so the renderer can apply
 //   FindingsModel.buttonVisible (src/renderer/findings-model.js).

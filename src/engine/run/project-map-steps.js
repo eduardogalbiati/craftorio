@@ -1,6 +1,6 @@
 // @ts-check
 // `type: project_map` (#372,workflows/project-map.yaml): the project map's machine steps, no model
-// call and read-only on the project (src/project-map.js does the work), the same in a simulation.
+// call and read-only on the project (src/domains/project/project-map.js does the work), the same in a simulation.
 // `action` says which:
 // - facts: the cartographer's inputs (the tree counted by folder and file-name pattern, the
 //   manifests, #371's folder city and its edges, the plan saved now), also written to
@@ -21,7 +21,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const projectMap = require('../../project-map');
+const projectMap = require('../../domains/project/project-map');
 
 const methods = {
   // where the step works: { folder, archRoot, projectId }

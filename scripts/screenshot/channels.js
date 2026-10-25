@@ -12,7 +12,7 @@ function demoActionsUsage() {
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
   const item = (sku, quantity, price) => ({ date, product: 'actions', sku, unitType: 'minutes', quantity, grossAmount: quantity * price, netAmount: 0 });
-  const { summarizeActionsUsage } = require('../../src/actions-usage'); // only apps that have the channel ask
+  const { summarizeActionsUsage } = require('../../src/domains/usage/actions-usage'); // only apps that have the channel ask
   return { login: 'demo-user', ...summarizeActionsUsage({ usageItems: [item('Actions Linux', 353, 0.008), item('Actions Windows', 560, 0.016), item('Actions macOS', 35, 0.08)] }, { includedMinutes: 2000, now }) };
 }
 
@@ -26,7 +26,7 @@ function demoPoTurn(sender, which, projectId) {
   const done = (id) => ({ kind: 'tool_result', id, is_error: false });
   send('items', [
     { kind: 'thinking' },
-    call('t1', 'Read', { file_path: 'C:/projects/demo-app/src/roadmap.js' }), done('t1'),
+    call('t1', 'Read', { file_path: 'C:/projects/demo-app/src/domains/roadmap/roadmap.js' }), done('t1'),
     call('t2', 'Grep', { pattern: 'dispatchRoadmaps' }), done('t2'),
     call('t3', 'Read', { file_path: 'C:/projects/demo-app/src/server/routes.js' }), done('t3'),
     call('t4', 'Bash', { command: 'git log --oneline -20 -- src/server' }), done('t4'),

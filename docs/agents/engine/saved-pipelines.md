@@ -2,7 +2,7 @@
 
 Saved pipelines (`<workspace>/pipelines/*.yaml`): their shape, how they are checked, and how they run as a chain.
 
-- `src/pipelines.js`: `<workspace>/pipelines/*.yaml` (bundled `pipelines/`, seeded and restorable like
+- `src/domains/workflow/pipelines.js`: `<workspace>/pipelines/*.yaml` (bundled `pipelines/`, seeded and restorable like
   the workflows). `parsePipeline` checks the shape (≥ 2 stages, the first a workflow, a `product_owner` /
   `queue` target only last, `on: success` only); `validatePipeline` checks each stage against its
   workflows: fixed `inputs` and `map` keys are inputs of the stage's workflow, `map` values are outputs

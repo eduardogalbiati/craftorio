@@ -33,7 +33,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const night = require('../../src/domains/night/night-watch');
-const productOwner = require('../../src/product-owner');
+const productOwner = require('../../src/domains/po/product-owner');
 const { makeService, roadmapProject, untilTrue, ISSUE_WORKFLOW } = require('../service/helpers');
 
 // The channel the request_agent tool runs, or a clear failure while it does not exist yet.

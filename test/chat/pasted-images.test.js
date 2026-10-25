@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { clearPending, discardImage, pendingDir, saveImage } = require('../../src/domains/chat/pasted-images');
 const { ATTACHMENT_LIMITS } = require('../../src/engine/providers');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 const { createService } = require('../../src/service');
 
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
@@ -67,7 +67,7 @@ test('discardImage deletes a staged file', (t) => {
   assert.ok(!fs.existsSync(out.path));
 });
 
-test('discardImage refuses a path outside the staging folder: a "../../" escape, the folder itself, a sibling prefix and an unrelated absolute path', (t) => {
+test('discardImage refuses a path outside the staging folder: a "../" escape, the folder itself, a sibling prefix and an unrelated absolute path', (t) => {
   const dir = path.join(tmpDir(t, 'pasted-escape-'), 'pending');
   fs.mkdirSync(dir, { recursive: true });
   const escaped = path.join(dir, '..', 'evil.png');

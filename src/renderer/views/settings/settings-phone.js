@@ -1,6 +1,6 @@
 /* global api */
 // Settings › Phone gates (#226): the gates-only page the app serves to the owner's paired phones
-// (src/mobile-gates.js, src/service/areas/phone-gates.js). Shows whether the page is served and
+// (src/domains/workspace/mobile-gates.js, src/service/areas/phone-gates.js). Shows whether the page is served and
 // where, "Pair a phone" (a one-time code and its QR code), the setup steps to reach the page
 // privately from outside (Tailscale serve, Cloudflare Tunnel with access rules), the address from
 // outside with Save and Check, and the paired phones with Revoke. Drawn into #set-phone by

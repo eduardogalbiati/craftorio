@@ -5,7 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { installCommands } = require('../../src/domains/machine/install-commands');
-const { SCOPE_HINT } = require('../../src/actions-usage');
+const { SCOPE_HINT } = require('../../src/domains/usage/actions-usage');
 const terminalsArea = require('../../src/service/areas/terminals');
 const { makeService } = require('./helpers');
 

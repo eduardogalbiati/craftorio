@@ -3,7 +3,7 @@
 // current stage, and the items of the Backlog queues that are not paused. Read by src/host/main.js.
 
 const backlog = require('../../domains/backlog/backlog');
-const roadmaps = require('../../roadmap');
+const roadmaps = require('../../domains/roadmap/roadmap');
 
 module.exports = (ctx) => {
   function pendingWork() {

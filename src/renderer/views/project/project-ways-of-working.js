@@ -14,7 +14,7 @@
 (function () {
   // the proposed workflow's category as the owner reads it: solo / team are the development workflow
   const shownCategory = (c) => (c === 'solo' || c === 'team' ? 'development' : c);
-  // an open question's label (src/workflow-compose.js openQuestions ids)
+  // an open question's label (src/domains/workflow/workflow-compose.js openQuestions ids)
   const QUESTION_LABELS = {
     budget: 'ways_of_working.q_budget',
     merge: 'ways_of_working.q_merge',
@@ -24,7 +24,7 @@
     team: 'ways_of_working.q_team',
     validate: 'ways_of_working.q_validate',
   };
-  // the profile's fields the owner may override (src/workflow-compose.js PROFILE_FIELDS): a fixed list is
+  // the profile's fields the owner may override (src/domains/workflow/workflow-compose.js PROFILE_FIELDS): a fixed list is
   // a select (an empty value keeps the inferred one), a command or a list of languages is free text
   const PROFILE_EDIT = [
     { id: 'team', label: 'ways_of_working.q_team', options: [['solo', 'ways_of_working.solo'], ['team', 'ways_of_working.team']] },

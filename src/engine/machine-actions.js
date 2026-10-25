@@ -24,7 +24,7 @@ const { runProbe } = require('./probes');
 const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
 const { affectedTests, relatedTests } = require('./affected-tests');
-const { shipRelease, writeReleaseVersion } = require('../releases');
+const { shipRelease, writeReleaseVersion } = require('../domains/releases/releases');
 const {
   confirmedFailures,
   recordSightings,

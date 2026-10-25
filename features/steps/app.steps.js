@@ -207,8 +207,8 @@ const projectSelect = (page) => header(page).getByTestId('header-project');
 // A second project, with its own synced backlog of one open issue, added to the scratch workspace;
 // the app reloads to read the project list again
 Given('the workspace has a second project {string} whose backlog has the open issue {string}', async ({ e2e }, name, title) => {
-  const workspace = require(path.join(root, 'src', 'workspace'));
-  const projects = require(path.join(root, 'src', 'projects'));
+  const workspace = require(path.join(root, 'src', 'domains', 'workspace', 'workspace'));
+  const projects = require(path.join(root, 'src', 'domains', 'project', 'projects'));
   const { taskProgress } = require(path.join(root, 'src', 'domains', 'backlog', 'backlog'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const repo = `https://github.com/example/${name}`;

@@ -19,7 +19,7 @@
 //   reason: <the provider's error message> }.
 // - `isQuotaError(type, message)` exported by src/engine/providers.js, `type` a provider type
 //   (claude-code | codex-cli | grok-cli): true for that CLI's quota / credit / usage-limit errors.
-// - src/notifications.js runNotice(ev) for an `agent.fallback` event: a `run` notice, event `fallback`.
+// - src/domains/workspace/notifications.js runNotice(ev) for an `agent.fallback` event: a `run` notice, event `fallback`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -216,7 +216,7 @@ test('#262 loadWorkflow refuses a fallback entry that is not "<provider>:<model>
 });
 
 test('#262 a fallback notifies the owner: runNotice of agent.fallback names the agent, from, to and the reason', () => {
-  const { runNotice } = require('../src/notifications');
+  const { runNotice } = require('../src/domains/workspace/notifications');
   const n = runNotice({
     type: 'agent.fallback', run_id: '20261012-120000-abcd', agent: 'writer', step_id: 'write',
     from: 'claude:claude-opus-5-5', to: 'codex:gpt-6-luna', reason: 'Claude AI usage limit reached|1760227200',

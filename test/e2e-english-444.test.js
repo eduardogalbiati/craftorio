@@ -21,7 +21,7 @@ async function seeded(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
   const { seedWorkspace } = loadHarness();
   const { ws } = await seedWorkspace(path.join(dir, 'workspace'));
-  return require('../src/workspace').readSettings(ws);
+  return require('../src/domains/workspace/workspace').readSettings(ws);
 }
 
 test('the demo workspace of the E2E suite shows English on a computer in Portuguese (#444)', async (t) => {

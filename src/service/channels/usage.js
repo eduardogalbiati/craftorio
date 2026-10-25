@@ -1,7 +1,7 @@
 // Usage screen: tokens and cost per provider, budgets, model prices and GitHub Actions minutes.
 
-const actionsUsage = require('../../actions-usage');
-const workspace = require('../../workspace');
+const actionsUsage = require('../../domains/usage/actions-usage');
+const workspace = require('../../domains/workspace/workspace');
 const { requireText } = require('../common');
 const {
   ANY,

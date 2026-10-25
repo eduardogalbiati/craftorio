@@ -2,17 +2,17 @@
 // newest run first. Only a file some run lists as an artifact can be read, opened or copied, and
 // only inside the workspace or the folder of the run's project.
 //
-// The lists come from the cached artifact index (src/run-artifacts.js, #200), asynchronously: the
+// The lists come from the cached artifact index (src/domains/run/run-artifacts.js, #200), asynchronously: the
 // Artifacts screen lists the runs with their counts first and loads one run's files when it opens
 // (artifacts:list { runId }, filtered and paged here); finding one file asks the index which runs it
 // can belong to (its run folder, or the runs that saved it as a project copy) and checks only those.
 
 const fs = require('fs');
 const path = require('path');
-const projects = require('../../projects');
-const runs = require('../../runs');
+const projects = require('../../domains/project/projects');
+const runs = require('../../domains/run/runs');
 const evidence = require('../../domains/evidence/evidence');
-const { artifactIndex, runsOfArtifact } = require('../../run-artifacts');
+const { artifactIndex, runsOfArtifact } = require('../../domains/run/run-artifacts');
 const { folderMatcher } = require('../common');
 const { pathKey } = require('../../domains/machine/platform-paths');
 

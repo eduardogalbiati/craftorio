@@ -1,5 +1,5 @@
 // Desktop notifications: what the window shows, so there is no notification about the run or
-// session the user is looking at (the notifications themselves: src/notifications.js).
+// session the user is looking at (the notifications themselves: src/domains/workspace/notifications.js).
 
 const {
   NULL,

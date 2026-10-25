@@ -1,7 +1,7 @@
 // Install commands suggested for the CLIs the app calls (#147): the Usage screen's provider cards,
 // Settings › Agents & CLIs and Settings › General › Voice input show them next to a play button that
 // runs them in a terminal (the 'command' terminal kind, src/service/areas/terminals.js, which refuses
-// any command that is not suggested here or by src/actions-usage.js). Per platform; a tool without a
+// any command that is not suggested here or by src/domains/usage/actions-usage.js). Per platform; a tool without a
 // one-line installer has no command, only the prose of INSTALL_TEXT. Linux has no single package
 // manager (#316): gh, git and glab get prose that names the distro package instead of a command.
 // macOS (#398): the brew commands only when `brew` resolves; without Homebrew, git installs with
@@ -48,7 +48,7 @@ const MAC_NO_BREW_TEXT = {
 };
 
 // The options for one tool: Homebrew is only looked up for a tool that installs with it (not for
-// claude, codex and grok, whose commands src/usage.js reads when it loads).
+// claude, codex and grok, whose commands src/domains/usage/usage.js reads when it loads).
 const needsBrew = (id) => /\bbrew\b/.test(installCommands('darwin', { brew: true })[id] || '');
 const optsFor = (id, opts) => (opts.brew === undefined && !needsBrew(id) ? { brew: false } : opts);
 

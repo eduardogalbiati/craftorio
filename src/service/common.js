@@ -13,9 +13,9 @@ const { canonicalPath } = require('../engine/worktree');
 const { execShim } = require('../domains/machine/shell');
 const registry = require('../shared/providers');
 const sessionCache = require('../domains/session/session-cache');
-const usage = require('../usage');
-const workflows = require('../workflows');
-const { workerClient } = require('../worker-client');
+const usage = require('../domains/usage/usage');
+const workflows = require('../domains/workflow/workflows');
+const { workerClient } = require('../domains/workspace/worker-client');
 
 const SRC = path.join(__dirname, '..');
 const ROOT = path.join(SRC, '..');

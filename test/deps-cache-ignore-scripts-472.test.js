@@ -9,7 +9,7 @@
 //     lifecycle scripts (runLifecycle is what executes them on a hit).
 //   - The per-project setting is `ignoreInstallScripts` in <workspace>/projects/<id>.json, camelCase
 //     like the existing per-project booleans (`autoPush`, `autoEpic`), set through
-//     src/projects.js updateProject(dir, id, { ignoreInstallScripts }) and read back by readProject.
+//     src/domains/project/projects.js updateProject(dir, id, { ignoreInstallScripts }) and read back by readProject.
 //     Absent = off (the user's own projects run their scripts as today). The run gets it as the
 //     WorkflowRun option `ignoreInstallScripts` and passes it to ensureDeps as `ignoreScripts`
 //     (see test/run-repo-commands-log-472.test.js).
@@ -114,17 +114,17 @@ test('#472 a cache hit with ignoreScripts: true runs none of the project\'s life
   assert.deepEqual(scriptsIn(wtB), []);
 });
 
-// ---- the per-project setting (src/projects.js) --------------------------------------------------
+// ---- the per-project setting (src/domains/project/projects.js) --------------------------------------------------
 
 test('#472 a new project has the "install without scripts" setting off', async (t) => {
-  const projects = require('../src/projects');
+  const projects = require('../src/domains/project/projects');
   const dir = tmpDir(t, 'projects-472-');
   const p = await projects.createProject(dir, { name: 'Mine', folder: path.join(dir, 'mine') });
   assert.equal(!!projects.readProject(dir, p.id).ignoreInstallScripts, false);
 });
 
 test('#472 updateProject stores ignoreInstallScripts: true and readProject returns it', async (t) => {
-  const projects = require('../src/projects');
+  const projects = require('../src/domains/project/projects');
   const dir = tmpDir(t, 'projects-472-');
   const p = await projects.createProject(dir, { name: 'Cloned', folder: path.join(dir, 'cloned') });
   projects.updateProject(dir, p.id, { ignoreInstallScripts: true });
@@ -132,7 +132,7 @@ test('#472 updateProject stores ignoreInstallScripts: true and readProject retur
 });
 
 test('#472 updateProject turns ignoreInstallScripts back off', async (t) => {
-  const projects = require('../src/projects');
+  const projects = require('../src/domains/project/projects');
   const dir = tmpDir(t, 'projects-472-');
   const p = await projects.createProject(dir, { name: 'Cloned', folder: path.join(dir, 'cloned') });
   projects.updateProject(dir, p.id, { ignoreInstallScripts: true });

@@ -1,6 +1,6 @@
 // Agent inboxes (#240): another agent (the Oracle) asks the owner of an area for a change, and the
 // owner executes it and keeps it in its own conversation. Each owner has a closed list of request
-// kinds (src/product-owner.js REQUEST_KINDS: the Backlog; src/supervisor-chat.js REQUEST_KINDS:
+// kinds (src/domains/po/product-owner.js REQUEST_KINDS: the Backlog; src/domains/supervisor/supervisor-chat.js REQUEST_KINDS:
 // workflows, skills and runs) and a handleRequest built on handle() below:
 //   1. the request is recorded in the owner's history ({ role: 'request', request: { from, kind, ref } },
 //      "Request from the Oracle: <kind> (<reason>)"), ref being the sender's message id;

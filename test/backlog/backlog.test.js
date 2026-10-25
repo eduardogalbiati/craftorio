@@ -95,7 +95,7 @@ test('sync caches the issues per project, newest update first', async (t) => {
   assert.deepEqual(backlog.readBacklog(dir, 'p'), data);
   await assert.rejects(backlog.syncBacklog({ dir, project: { id: 'q', repo: null }, platform: 'github', exec }), /has no repository/);
   // project ids never reach outside the backlog folder
-  assert.deepEqual(backlog.readBacklog(dir, '../../p'), data);
+  assert.deepEqual(backlog.readBacklog(dir, '../p'), data);
 });
 
 // ---- open PRs/MRs ------------------------------------------------------------------------------

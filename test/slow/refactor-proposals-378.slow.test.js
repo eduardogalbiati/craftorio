@@ -7,7 +7,7 @@
 // - The run is started for a project: WorkflowRun's `projectId` (also given as the input
 //   `project_id`) and the input `project_path` (the project's folder). The workspace is the runs
 //   folder's parent, so the proposals are those the Refactor tab reads: <workspace>/refactor
-//   (src/service/channels/refactor.js root()), through src/refactor-proposals.js listProposals.
+//   (src/service/channels/refactor.js root()), through src/domains/refactor/refactor-proposals.js listProposals.
 // - The mock analyst answers from the analyze step's output schema (one finding); a second run on the
 //   same project finds the same finding, so propose drops it as known.
 // - facts lists the files changed since `since` (an array holding 'src/changed.js', as a string or
@@ -23,8 +23,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../../src/engine/workflow');
 const { Recorder } = require('../../src/engine/recorder');
-const projects = require('../../src/projects');
-const proposals = require('../../src/refactor-proposals');
+const projects = require('../../src/domains/project/projects');
+const proposals = require('../../src/domains/refactor/refactor-proposals');
 const { validateReport } = require('../../src/domains/oracle/oracle-architecture');
 const { producedIssues } = require('../../src/shared/chain-model');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';

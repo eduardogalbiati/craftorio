@@ -5,11 +5,11 @@
 // - The area's afterStepFinished (a run's pre-existing failures) and afterBaseMerge (the base
 //   check), built from a small ctx like test/service/base-health-wiring-405.test.js, with the
 //   service's own workflow listing (ctx.listWorkflows = workflows:list) and its settings (settings:set).
-// - The roadmap the fix item lands in (src/roadmap.js readRoadmap): its item's workflow.
+// - The roadmap the fix item lands in (src/domains/roadmap/roadmap.js readRoadmap): its item's workflow.
 //
 // Assumptions:
 // - In simulation the area's issue CLI is a no-op, so no issue number and no fix item would come
-//   out. The only fake is at that boundary: the calls into src/base-health.js go through unchanged
+//   out. The only fake is at that boundary: the calls into src/domains/project/base-health.js go through unchanged
 //   except for the issue CLI (a fake gh that returns a new issue URL) and, for the base check, a red
 //   suite instead of the project's (it has no test command). What the area decides (the workflow,
 //   onRed) is left untouched.
@@ -40,8 +40,8 @@ test.afterEach(() => {
 });
 
 const loadArea = () => require('../../src/service/areas/base-health');
-const loadHealth = () => require('../../src/base-health');
-const loadRoadmap = () => require('../../src/roadmap');
+const loadHealth = () => require('../../src/domains/project/base-health');
+const loadRoadmap = () => require('../../src/domains/roadmap/roadmap');
 
 const AI_DEV = 'ai-development-local-hero.yaml';
 const LOCAL = 'software-development-local-hero.yaml';

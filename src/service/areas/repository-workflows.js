@@ -1,5 +1,5 @@
 // Service area (#485): a project's repository workflows, the ones its .multiagent/project.yaml
-// declares with a `file` (src/project-manifest.js). They are read from the checkout's HEAD (the
+// declares with a `file` (src/domains/project/project-manifest.js). They are read from the checkout's HEAD (the
 // committed text, never an uncommitted edit), written to <workspace>/repository-workflows/<project>/<sha>/
 // for the engine and the builder, and accepted by the owner per commit: projects/<id>.json keeps
 // { <file>: { commit, blob } }, and a later commit that changes the file asks again (#468's answer
@@ -8,9 +8,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const projects = require('../../projects');
-const { MANIFEST_FILE, parseManifest } = require('../../project-manifest');
-const { repositoryEntry } = require('../../workflows');
+const projects = require('../../domains/project/projects');
+const { MANIFEST_FILE, parseManifest } = require('../../domains/project/project-manifest');
+const { repositoryEntry } = require('../../domains/workflow/workflows');
 const { gitOut } = require('../common');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);

@@ -248,7 +248,7 @@ test('#386 complexityLine: nothing measured (no tool, or its check failed) is st
   }
 });
 
-// src/architecture-facts.js: 'missing' also when lizard is there but the checkout is not at the analysed commit
+// src/domains/project/architecture-facts.js: 'missing' also when lizard is there but the checkout is not at the analysed commit
 test('#386 complexityLine: not measured because of the checkout says so, never "no tool found"', () => {
   const { complexityLine } = load();
   const line = complexityLine({ status: 'missing', reason: 'the checkout is not at the default branch\'s commit: complexity is measured on the files on disk' }, LANGS);
@@ -261,7 +261,7 @@ test('#386 complexityLine: not measured because of the checkout says so, never "
 
 // ---------- the quality gate row ----------
 
-// as src/architecture-facts.js qualityGate builds it: [{ name, state, source, value }]
+// as src/domains/project/architecture-facts.js qualityGate builds it: [{ name, state, source, value }]
 const GATE = [
   { name: 'complexity', state: 'pending', source: 'node scripts/code-health.js --check', value: null },
   { name: 'coverage', state: 'measured', source: '.github/workflows/ci.yml, package.json', value: '81.2% of lines' },

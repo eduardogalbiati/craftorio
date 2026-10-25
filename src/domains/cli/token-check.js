@@ -1,5 +1,5 @@
 // The constant-time comparison of a shared secret: the engine server's token (src/server/index.js,
-// which re-exports it for the control channel) and the supervisor bridge's bearer (src/supervisor-bridge.js, SEC-21).
+// which re-exports it for the control channel) and the supervisor bridge's bearer (src/domains/supervisor/supervisor-bridge.js, SEC-21).
 
 const crypto = require('crypto');
 

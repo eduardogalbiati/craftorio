@@ -6,7 +6,7 @@
 // Resume dialog as their decision; `resumeSession` continues an agent's previous provider
 // conversation (#233: the CLI's running total seeded); `previousChildren` (#175) the child runs the
 // previous run finished; `resumableSteps` the steps the supervisor may resume from. The worktree
-// reuse is in src/engine/run/checkout.js (setupWorktree); the dialog and its channels in src/supervisor.js.
+// reuse is in src/engine/run/checkout.js (setupWorktree); the dialog and its channels in src/domains/supervisor/supervisor.js.
 
 'use strict';
 

@@ -23,8 +23,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const productOwner = require('../../src/product-owner');
-const roadmaps = require('../../src/roadmap');
+const productOwner = require('../../src/domains/po/product-owner');
+const roadmaps = require('../../src/domains/roadmap/roadmap');
 
 const ROOT = path.join(__dirname, '..', '..');
 const loadBacklog = () => require('../../src/domains/backlog/backlog');

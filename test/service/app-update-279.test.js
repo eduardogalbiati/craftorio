@@ -1,5 +1,5 @@
 // Acceptance tests for #279 at the service seam: after the app restarted for an update, the new
-// process reads the intent (<workspace>/oracle/app-update.json, written with src/app-update.js),
+// process reads the intent (<workspace>/oracle/app-update.json, written with src/domains/workspace/app-update.js),
 // sets the paused roadmaps back to running before the start-up dispatch (trap 3 of the issue) and
 // deletes the intent, so the next stage starts without any click.
 const test = require('node:test');
@@ -7,10 +7,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { createService } = require('../../src/service');
-const roadmapModel = require('../../src/roadmap');
+const roadmapModel = require('../../src/domains/roadmap/roadmap');
 const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until } = require('./helpers');
 
-const load = () => require('../../src/app-update');
+const load = () => require('../../src/domains/workspace/app-update');
 
 test('#279 service: after an update restart the paused roadmap starts its stage by itself and the intent is gone', async (t) => {
   const { writeIntent } = load();

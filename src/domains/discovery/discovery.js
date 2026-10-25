@@ -46,7 +46,7 @@
 // runId, name, column, costUsd?, startedAt, endedAt? } (markAutomation), and the result comes back
 // like a run's (recordAutomation: the document as a version automation-<column>, a thread entry
 // { kind: 'automation', runId, costUsd }). An automation never moves or commits a card.
-// Every file is written whole (temp file + rename, src/state-file.js); the thread is appended one
+// Every file is written whole (temp file + rename, src/domains/workspace/state-file.js); the thread is appended one
 // line at a time. Project ids, card ids and attachment names are checked before any path is built:
 // nothing outside a card's folder is read or written. Used by the discovery: channels
 // (src/service/channels/discovery.js), the only way the screens, the Oracle and agents reach a card.
@@ -56,7 +56,7 @@ const fs = require('fs');
 const path = require('path');
 const clarity = require('./clarity');
 const { sniffImage } = require('../../engine/providers');
-const { renameWithRetry, writeFileAtomic } = require('../../state-file');
+const { renameWithRetry, writeFileAtomic } = require('../workspace/state-file');
 
 const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix'];
 // the board's columns, in order: the Inbox screen shows the first, the Discovery board the others

@@ -1,4 +1,4 @@
-// Service area: Self-healing applies merged fixes to the app (#279, src/app-update.js). The source
+// Service area: Self-healing applies merged fixes to the app (#279, src/domains/workspace/app-update.js). The source
 // (the workspace project that is this app's repository) for Settings and the roadmap cards; the
 // trigger the roadmap calls when a marked item merged or a stage ended (appUpdateEvent); the cycle
 // with the roadmaps and the Backlog queues paused, the runs in progress waited for, `npm install`
@@ -7,15 +7,15 @@
 // (appUpdateAfterRestart). Never in simulation-only mode, never without a host that can restart.
 
 const path = require('path');
-const appUpdate = require('../../app-update');
+const appUpdate = require('../../domains/workspace/app-update');
 const backlog = require('../../domains/backlog/backlog');
 const { resolveCommand } = require('../../engine/providers');
-const notifier = require('../../notifications');
-const projects = require('../../projects');
-const roadmaps = require('../../roadmap');
+const notifier = require('../../domains/workspace/notifications');
+const projects = require('../../domains/project/projects');
+const roadmaps = require('../../domains/roadmap/roadmap');
 const { runShim } = require('../../domains/machine/shell');
 const simulation = require('../../engine/simulation');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 
 // the app folder of a source checkout: src/service/areas → its root
 const APP_DIR = path.resolve(__dirname, '..', '..', '..');

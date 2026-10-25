@@ -1,6 +1,6 @@
 // src/domains/machine/platform-paths.js (#318): the one rule to compare paths. Case-insensitive on Windows and
 // macOS (default APFS/HFS+), case-sensitive on Linux; on Windows the same normalisation as
-// today's src/store.js / src/host/permissions.js (path.resolve, then lower case), so slashes and a
+// today's src/domains/workspace/store.js / src/host/permissions.js (path.resolve, then lower case), so slashes and a
 // trailing separator do not matter. Also: the call sites that compare paths agree with it.
 const test = require('node:test');
 const assert = require('node:assert/strict');

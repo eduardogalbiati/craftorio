@@ -1,4 +1,4 @@
-# The pull-request half of a composed development workflow (#487, src/workflow-compose.js), adapted
+# The pull-request half of a composed development workflow (#487, src/domains/workflow/workflow-compose.js), adapted
 # from software-development's ci and ci_failed: the CI pusher pushes the run's branch and opens the
 # PR/MR, the engine waits on its checks (`wait: pr_checks`) and calls the agent only when one failed;
 # a fix goes to the developer (delegate). pr_review hands the green PR/MR to the team, who merge it on

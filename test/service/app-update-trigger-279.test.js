@@ -10,7 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const roadmapModel = require('../../src/roadmap');
+const roadmapModel = require('../../src/domains/roadmap/roadmap');
 const { makeService, roadmapIssue, until } = require('./helpers');
 
 // a workflow with no agent: even a real (not mock) start can never call a model

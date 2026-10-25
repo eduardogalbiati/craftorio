@@ -117,14 +117,14 @@ const testedSummary = (ctx) => (ctx.vars?.tested ? { tested: ctx.vars.tested, te
 
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
-  // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
+  // (this month's usage before this run, see src/domains/usage/usage.js); prices: USD per 1M tokens by model.
   // projectId: the project the run belongs to (recorded in workflow.started and summary.json).
   // issues: [{ number, url, title }] the run implements (Backlog screen; several when a group of issues
   //   goes as one run), recorded the same way. `issue` (one issue, the option before groups) is still accepted.
   // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, handoffs: { agent: note },
   //   instruction, worktree: { dir, branch } }
   //   starts at fromStep with the previous run's step outputs, agent conversations and handoff notes
-  //   (src/supervisor.js resumeSpec), in the previous run's worktree.
+  //   (src/domains/supervisor/supervisor.js resumeSpec), in the previous run's worktree.
   // worktreesDir: where orchestrator.worktree creates the run's git worktree (<workspace>/worktrees);
   //   without it (e.g. simulation runs) the agents work in the repository folder itself.
   // mockSequences: { field: [value per visit] } over the mock provider's defaults (tests).
@@ -137,7 +137,7 @@ class WorkflowRun extends EventEmitter {
   // probe: ({ probe, target, cwd, signal, stepId, baseline }) => Promise<{ state, detail, fingerprint? }>, the
   //   check of a `wait:` step (src/engine/probes.js). Default: the machine's (simulations use MOCK_PROBES).
   // actionsQuota: (owner) => Promise<string | null>, the message when that GitHub account's Actions quota is
-  //   exhausted (src/actions-usage.js), passed to the probe as `quota`: pr_checks then reports `quota_exhausted`.
+  //   exhausted (src/domains/usage/actions-usage.js), passed to the probe as `quota`: pr_checks then reports `quota_exhausted`.
   // peerSessions: () => [{ provider, model, tokens, costUsd, cliOnlyUsd }], the sessions of the other runs in progress (and of
   //   those that finished after `budget` was computed): the per-turn budget check counts them too (concurrent runs).
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).

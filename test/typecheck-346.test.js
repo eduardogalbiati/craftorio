@@ -20,7 +20,7 @@ const load = () => require('../scripts/typecheck.js');
 const posix = (p) => String(p).replace(/\\/g, '/');
 const read = (rel) => fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8').replace(/\r\n/g, '\n');
 const hasTsCheck = (text) => /^\s*\/\/\s*@ts-check\b/m.test(text);
-const FIRST_FILES = ['src/roadmap.js', 'src/run-costs.js', 'src/cost-estimate.js'];
+const FIRST_FILES = ['src/domains/roadmap/roadmap.js', 'src/domains/run/run-costs.js', 'src/domains/usage/cost-estimate.js'];
 const runFiles = () => fs.readdirSync(path.join(root, 'src', 'engine', 'run')).filter((f) => f.endsWith('.js')).map((f) => `src/engine/run/${f}`);
 const found = (problems) => problems.map((p) => ({ file: posix(p.file), kind: p.kind })).sort((a, b) => a.file.localeCompare(b.file));
 const errorFiles = (errors) => [...new Set(errors.map((e) => posix(e.file).replace(/^.*?(?=src\/)/, '')))].sort();

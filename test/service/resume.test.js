@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const backlogModule = require('../../src/domains/backlog/backlog');
-const roadmapModule = require('../../src/roadmap');
+const roadmapModule = require('../../src/domains/roadmap/roadmap');
 const {
   ISSUE_WORKFLOW, makeService, makeResumeService, roadmapProject, until, watchRuns,
 } = require('./helpers');

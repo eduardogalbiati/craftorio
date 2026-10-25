@@ -6,7 +6,7 @@
 // - src/shared/roadmap-model.js: ITEM_STATES gains 'paused' (an item whose run ended paused);
 //   allowedActions on a paused item refuses retry, skip, edit and move, each with a reason that says
 //   it is paused; the roadmap's resume stays allowed.
-// - src/roadmap.js: withStatus reads an item whose run's status is 'paused' as 'paused' (error null,
+// - src/domains/roadmap/roadmap.js: withStatus reads an item whose run's status is 'paused' as 'paused' (error null,
 //   never 'failed'); advance never pauses the roadmap on a paused item (no pausedBy) and never starts
 //   it again; pauseStage(dir, projectId, stageId) pauses the roadmap at that stage
 //   (state 'paused', pausedStage: stageId, pausedBy null, no "failed" in its message).
@@ -23,7 +23,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const roadmapModel = require('../src/shared/roadmap-model');
-const roadmap = require('../src/roadmap');
+const roadmap = require('../src/domains/roadmap/roadmap');
 const night = require('../src/domains/night/night-watch');
 const runProgress = require('../src/shared/run-progress-model');
 const { prepareWorktree, cleanupWorktrees } = require('../src/engine/worktree');
@@ -56,7 +56,7 @@ test('roadmap model (#368): a paused item offers Resume on its roadmap, never Re
   }
 });
 
-// ---- src/roadmap.js: statuses, sequencing, pauseStage ----------------------------------------
+// ---- src/domains/roadmap/roadmap.js: statuses, sequencing, pauseStage ----------------------------------------
 
 test('withStatus (#368): an item whose run ended paused reads paused, not failed', () => {
   const r = plan('paused', [stage('s1', [item('i1', 'planned', { runId: 'run-1', runs: ['run-1'] })])]);

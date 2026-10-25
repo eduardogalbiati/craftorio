@@ -11,8 +11,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const providers = require('../src/engine/providers');
-const { runFigures } = require('../src/run-analysis');
-const { runReport } = require('../src/supervisor');
+const { runFigures } = require('../src/domains/run/run-analysis');
+const { runReport } = require('../src/domains/supervisor/supervisor');
 
 const WORKFLOW = path.resolve(__dirname, '../src/engine/workflow.js');
 const tokens = (input, output, cacheRead, cacheWrite) => ({ input, output, cache_read: cacheRead, cache_write: cacheWrite, reasoning: 0 });

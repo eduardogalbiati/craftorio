@@ -14,7 +14,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { builtinModules } = require('module');
 const { ISSUE_WORKFLOW, makeService, roadmapProject, until } = require('./service/helpers');
-const { setupWorkspace } = require('../src/workspace');
+const { setupWorkspace } = require('../src/domains/workspace/workspace');
 
 const ROOT = path.join(__dirname, '..');
 const loadAllowlist = () => require('../src/control/allowlist');

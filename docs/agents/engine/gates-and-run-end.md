@@ -137,11 +137,11 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   untouched: no approval is resolved or rejected, it keeps waiting at the same gate with the same
   choices. The item's `status: 'parked'` (stored, with `parked: { at, gate }`) counts as finished,
   so the next stage starts without its change. When the owner answers the gate later the item takes
-  the run's outcome (`src/roadmap.js` `itemStatus`): done when it merged, else failed, still marked
+  the run's outcome (`src/domains/roadmap/roadmap.js` `itemStatus`): done when it merged, else failed, still marked
   `parked`, so it counts as finished and never sets `pausedBy`. Retry clears the mark; Undo of the
-  move puts the item back in its stage (`src/roadmap-undo.js`).
+  move puts the item back in its stage (`src/domains/roadmap/roadmap-undo.js`).
 - `ship: { tag, build? }` on a transition (#260, release.yaml's `ship` and `ship_failed` gates; both
-  templates): after the transition's `action` and `merge: local`, `shipRelease` (src/releases.js)
+  templates): after the transition's `action` and `merge: local`, `shipRelease` (src/domains/releases/releases.js)
   pushes the local base to origin (never forced; a rejected push throws) and tags that commit, then
   runs `build` when it renders non-empty (a shell command: the rule of `action:` applies, #469, see
   [worktrees-and-template-context.md](worktrees-and-template-context.md)). `loadWorkflow` only accepts it on a `human_approval` step
@@ -179,7 +179,7 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   runs recorded with `issue` load as `issues: [issue]` (`runs.readRun`, `resumeSpec`, the run chat).
   The Backlog fills the `issue` (first URL) and `issues` (every URL) inputs when a workflow declares them.
 - Backlog dispatch (service, not the engine): `dispatchQueue` starts the plain queue's items whenever a
-  slot is free; `dispatchRoadmaps` (src/roadmap.js `advance`) runs a started roadmap stage by stage,
+  slot is free; `dispatchRoadmaps` (src/domains/roadmap/roadmap.js `advance`) runs a started roadmap stage by stage,
   first after every `workflow.finished` (before the queue) and when a workspace opens. An item is done when
   its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
   and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`

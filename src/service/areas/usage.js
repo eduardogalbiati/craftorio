@@ -1,6 +1,6 @@
-// Service area: usage, budgets and prices (the Usage screen, src/usage.js) and analytics (tokens
+// Service area: usage, budgets and prices (the Usage screen, src/domains/usage/usage.js) and analytics (tokens
 // and session metrics over a date range, src/domains/analytics/analytics.js), with the supervisor's report on it, and
-// Analytics' Repository performance tab (src/repo-performance.js, #159) and Agents tab (#280,
+// Analytics' Repository performance tab (src/domains/project/repo-performance.js, #159) and Agents tab (#280,
 // src/domains/agents/agents-usage.js: what the Oracle, the Product Owner and the Supervisor chat cost).
 // `agentUsageRuns` is the spend that is in no run folder, for Usage and every monthly budget check.
 
@@ -10,24 +10,24 @@ const {
   resolveCommandAsync,
 } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
-const workspace = require('../../workspace');
-const projects = require('../../projects');
-const usage = require('../../usage');
+const workspace = require('../../domains/workspace/workspace');
+const projects = require('../../domains/project/projects');
+const usage = require('../../domains/usage/usage');
 const agentsUsage = require('../../domains/agents/agents-usage');
 const analytics = require('../../domains/analytics/analytics');
 const oracle = require('../../domains/oracle/oracle');
-const productOwner = require('../../product-owner');
-const supervisorChat = require('../../supervisor-chat');
-const repoPerformance = require('../../repo-performance');
-const roadmap = require('../../roadmap');
-const runs = require('../../runs');
+const productOwner = require('../../domains/po/product-owner');
+const supervisorChat = require('../../domains/supervisor/supervisor-chat');
+const repoPerformance = require('../../domains/project/repo-performance');
+const roadmap = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
 const { itemRuns } = require('../../shared/roadmap-model');
 const {
   computeUsageAsync,
   readLocalUsageAsync,
 } = require('../../domains/local/local-usage');
-const { storeFor } = require('../../store');
-const supervisor = require('../../supervisor');
+const { storeFor } = require('../../domains/workspace/store');
+const supervisor = require('../../domains/supervisor/supervisor');
 const {
   BUNDLED_SKILLS_DIR,
   folderMatcher,

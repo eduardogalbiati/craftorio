@@ -1,15 +1,15 @@
 // Service area: the open workspace ({ root, runs, repos, projects, skills, workflows, worktrees,
-// settings }, see src/workspace.js). Opening one seeds the bundled skills, workflows, pipelines and
+// settings }, see src/domains/workspace/workspace.js). Opening one seeds the bundled skills, workflows, pipelines and
 // analysis seeds (#360), opens its index, pauses the Backlog queues and lets started roadmaps continue. `ctx.ws` is read at call
 // time: it changes with the workspace.
 
 const fs = require('fs');
 const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
-const pipelines = require('../../pipelines');
-const seeds = require('../../seeds');
+const pipelines = require('../../domains/workflow/pipelines');
+const seeds = require('../../domains/seed/seeds');
 const skills = require('../../domains/agents/skills');
-const workflows = require('../../workflows');
+const workflows = require('../../domains/workflow/workflows');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('../common');
 
 module.exports = (ctx) => {

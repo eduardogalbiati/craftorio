@@ -3,7 +3,7 @@
 // src/service/seed-runs.js, the same run the Architecture tab's seeds:run makes: saved under
 // <workspace>/architecture/, so seeds:estimate, seeds:list and seeds:history see it, and refused as
 // busy while that seed already runs on the project) and answers its profile, the evidence behind each
-// field and the questions the profile leaves open (src/workflow-compose.js openQuestions). Under
+// field and the questions the profile leaves open (src/domains/workflow/workflow-compose.js openQuestions). Under
 // MULTIAGENT_SIMULATION_ONLY no model is called: the profile is read from the project's git history
 // (authors, merges) and files (test and check commands, languages) and the release style is left open.
 // workflowCompose builds the workflow set from the last profile and the owner's answers, its manifest
@@ -13,19 +13,19 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const builder = require('../../workflow-builder');
-const compose = require('../../workflow-compose');
+const builder = require('../../domains/workflow/workflow-builder');
+const compose = require('../../domains/workflow/workflow-compose');
 const oracleSeeds = require('../../domains/oracle/oracle-seeds');
-const projects = require('../../projects');
+const projects = require('../../domains/project/projects');
 const seedRuns = require('../seed-runs');
-const seeds = require('../../seeds');
+const seeds = require('../../domains/seed/seeds');
 const simulation = require('../../engine/simulation');
 const { checkCommand } = require('../../engine/check-step');
-const { detectLanguage } = require('../../project-inputs');
+const { detectLanguage } = require('../../domains/project/project-inputs');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { firstBuild } = require('../../shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
-const { MANIFEST_FILE, readManifest } = require('../../project-manifest');
+const { MANIFEST_FILE, readManifest } = require('../../domains/project/project-manifest');
 const { clientError } = require('../common');
 
 const SEED_ID = 'ways-of-working';

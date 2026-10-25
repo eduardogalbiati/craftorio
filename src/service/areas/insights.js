@@ -1,10 +1,10 @@
-// Service area: Analytics' 24/7 tab and the top bar chip (#188, src/occupancy.js), the Run tab (#228,
-// src/run-analysis.js) and Repository performance's "Ask for a plan" (#197). Local and offline except
+// Service area: Analytics' 24/7 tab and the top bar chip (#188, src/domains/run/occupancy.js), the Run tab (#228,
+// src/domains/run/run-analysis.js) and Repository performance's "Ask for a plan" (#197). Local and offline except
 // the plan (a real-model call, refused in simulation-only mode unless `mock`).
 //   occupancySnapshot  the meter over the last 24 h, 7 and 30 days, the Night watch split and its
 //                      nights, the cost figures and the per-calibration split (cached; the cache is
 //                      dropped on workflow.started / workflow.finished)
-//   runAnalysis        one run's figures (cached in the index, src/store.js run_figures) and its
+//   runAnalysis        one run's figures (cached in the index, src/domains/workspace/store.js run_figures) and its
 //                      comparison with the latest real successful runs of its workflow
 //   performancePlan    the supervisor's plan for the files over the shared limit
 
@@ -15,21 +15,21 @@ const { readAppSessions } = require('../../domains/session/app-sessions');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const night = require('../../domains/night/night-watch');
-const occupancy = require('../../occupancy');
+const occupancy = require('../../domains/run/occupancy');
 const poCalibration = require('../../shared/po-calibration');
-const productOwner = require('../../product-owner');
-const projects = require('../../projects');
-const repoPerformance = require('../../repo-performance');
+const productOwner = require('../../domains/po/product-owner');
+const projects = require('../../domains/project/projects');
+const repoPerformance = require('../../domains/project/repo-performance');
 const {
   ownerAlive,
   readOwner,
-} = require('../../run-owner');
-const runAnalysisLib = require('../../run-analysis');
-const { readRunRecord } = require('../../run-record');
-const runs = require('../../runs');
-const supervisor = require('../../supervisor');
+} = require('../../domains/run/run-owner');
+const runAnalysisLib = require('../../domains/run/run-analysis');
+const { readRunRecord } = require('../../domains/run/run-record');
+const runs = require('../../domains/run/runs');
+const supervisor = require('../../domains/supervisor/supervisor');
 const TimeZone = require('../../domains/analytics/time-zone');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 const { BUNDLED_SKILLS_DIR } = require('../common');
 
 const DAY = 864e5;

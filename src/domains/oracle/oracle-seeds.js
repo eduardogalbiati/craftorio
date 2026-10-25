@@ -1,7 +1,7 @@
-// Running an analysis seed (#360, seeds in src/seeds.js) on a project: one Oracle turn, outside its
+// Running an analysis seed (#360, seeds in src/domains/seed/seeds.js) on a project: one Oracle turn, outside its
 // conversation and in its daily budget (src/domains/oracle/oracle.js oneTurn / budgetRefusal), runs the seed
 // read-only (repo_read, repo_git) and answers { html, model }; or, when the project recorded a tool
-// for the seed ("Make it a tool", src/seed-tool-issue.js), that command runs in the project's folder
+// for the seed ("Make it a tool", src/domains/seed/seed-tool-issue.js), that command runs in the project's folder
 // instead, with no model cost, and its stdout JSON is the model. Simulated (mock,
 // MULTIAGENT_SIMULATION_ONLY): a result page derived from the seed, no model, no cost.
 // Every result is scrubbed of token-shaped strings and secret-named keys (src/domains/evidence/findings.js) before it

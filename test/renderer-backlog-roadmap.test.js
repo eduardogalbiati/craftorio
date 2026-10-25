@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const { withI18n } = require('./i18n-sandbox.js');
-const roadmaps = require('../src/roadmap');
+const roadmaps = require('../src/domains/roadmap/roadmap');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));

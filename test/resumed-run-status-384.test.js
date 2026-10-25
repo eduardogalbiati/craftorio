@@ -6,7 +6,7 @@
 // is doing, so its card can say "Resumed → succeeded" with a link (test/renderer-resumed-run-384.test.js).
 //
 // Seams:
-// - runs.listRuns(runsDir) (src/runs.js): the RunInfo rows the lists are built from (no index open).
+// - runs.listRuns(runsDir) (src/domains/run/runs.js): the RunInfo rows the lists are built from (no index open).
 // - The service's `runs:list` channel (src/service/areas/run-lists.js), index open: one page, and
 //   `{ ids }` (what a run event uses to refresh one row, refreshRunRow in src/renderer/run-list.js).
 // - The service's `roadmap:get` channel (src/service/areas/roadmap.js roadmapView).
@@ -38,13 +38,13 @@ const RESUMED = '20261014-110000-resumed1';
 const T0 = Date.parse('2026-10-14T10:00:00.000Z');
 const iso = (ms) => new Date(ms).toISOString();
 
-const loadRuns = () => require('../src/runs');
+const loadRuns = () => require('../src/domains/run/runs');
 const loadHelpers = () => require('./service/helpers');
-const loadRoadmaps = () => require('../src/roadmap');
+const loadRoadmaps = () => require('../src/domains/roadmap/roadmap');
 
 /**
  * Writes a run folder as the engine leaves it. status 'running': no summary.json, an owner.json of
- * this process with a fresh heartbeat (src/run-owner.js), so the lists read it as running.
+ * this process with a fresh heartbeat (src/domains/run/run-owner.js), so the lists read it as running.
  */
 function writeRun(runsDir, runId, { status, resumedFrom = null, startMs = T0, projectId = null }) {
   const dir = path.join(runsDir, runId);

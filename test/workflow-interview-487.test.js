@@ -7,7 +7,7 @@
 //       ways-of-working seed on the project (src/domains/oracle/oracle-seeds.js runSeed, one Oracle turn through
 //       ctx.oracleService() -> { oneTurn, budgetRefusal }, the boundary stubbed here; the seed read
 //       from ctx.ws.seeds) and answers the seed's model.profile / model.evidence with
-//       src/workflow-compose.js openQuestions(profile) as `questions`.
+//       src/domains/workflow/workflow-compose.js openQuestions(profile) as `questions`.
 //     workflowCompose({ projectId, answers, write }) -> Promise<{ workflows: [{ name, path, yaml }],
 //       manifest: { path, yaml } }>: composeWorkflowSet over the project's latest interview profile
 //       (its last ways-of-working run) and the answers. Without `write: true` nothing is written;
@@ -24,9 +24,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { setupWorkspace } = require('../src/workspace');
-const projects = require('../src/projects');
-const seeds = require('../src/seeds');
+const { setupWorkspace } = require('../src/domains/workspace/workspace');
+const projects = require('../src/domains/project/projects');
+const seeds = require('../src/domains/seed/seeds');
 
 const loadArea = () => require('../src/service/areas/workflow-interview');
 

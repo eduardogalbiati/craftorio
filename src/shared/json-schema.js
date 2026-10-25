@@ -5,7 +5,7 @@
 // minimum/maximum, oneOf. A `title` names the value in a pattern's refusal ("runId: not a valid run
 // id"); other keywords (description, ...) are ignored. validateSchema(value, schema, path) returns
 // the errors as '<path>: <rule>' strings, empty when the value matches; an absent (undefined)
-// optional property is not checked. In src/shared/ so the pure cores can use it; src/json-schema.js
+// optional property is not checked. In src/shared/ so the pure cores can use it; src/domains/workspace/json-schema.js
 // re-exports it for the root and the engine. Browser: window.JsonSchema; Node: module.exports.
 
 (function (root) {

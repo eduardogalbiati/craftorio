@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../src/engine/workflow');
 const { Recorder } = require('../../src/engine/recorder');
-const { runEvents } = require('../../src/runs');
+const { runEvents } = require('../../src/domains/run/runs');
 const { RunChatModel, splitAnswer } = require('../../src/renderer/views/runchat/run-chat-model.js');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';

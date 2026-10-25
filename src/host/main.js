@@ -38,9 +38,9 @@ const { pathKey } = require('../domains/machine/platform-paths');
 const { psQuote } = require('../domains/machine/shell');
 const I18n = require('../shared/i18n');
 const { t } = I18n;
-const workspace = require('../workspace');
+const workspace = require('../domains/workspace/workspace');
 const localPreview = require('../domains/local/local-preview');
-const runOwner = require('../run-owner');
+const runOwner = require('../domains/run/run-owner');
 const { allowPermission } = require('./permissions');
 const { guardIpc } = require('./ipc-guard');
 const { guardWindow } = require('./window-guards');
@@ -58,7 +58,7 @@ const { createEngineConnection } = require('./engine-connection-window');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
 const { createKeepAwake } = require('./keep-awake');
-const mainLog = require('../main-log');
+const mainLog = require('../domains/workspace/main-log');
 
 // the last lines of this process's console, for a finding's context (#361)
 mainLog.capture();
@@ -80,7 +80,7 @@ if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData',
 // - The owner's app (no MULTIAGENT_WORKSPACE) holds Electron's single-instance lock for its user
 //   data folder; a second copy gets a user data folder of its own and offers a scratch copy or quit.
 // - Whatever the user data folder, the app locks the workspace it opens (<workspace>/.lock with a
-//   heartbeat, src/run-owner.js); a locked workspace is never opened read-write by a second copy.
+//   heartbeat, src/domains/run/run-owner.js); a locked workspace is never opened read-write by a second copy.
 // Scratch copies (screenshots, Run locally, smoke checks, tests) have their own workspaces: unaffected.
 const APP_DIR = path.join(__dirname, '..', '..');
 if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
@@ -170,7 +170,7 @@ const account = {
   signOut: () => auth.signOut(),
 };
 // Every channel below answers only the app's page in a window's top frame (#467, src/host/ipc-guard.js):
-// another page or a subframe is refused and logged (the console, kept by src/main-log.js)
+// another page or a subframe is refused and logged (the console, kept by src/domains/workspace/main-log.js)
 const APP_PAGE = path.join(__dirname, '..', 'renderer', 'index.html');
 const ipc = guardIpc(ipcMain, { appPage: APP_PAGE, log: (...a) => console.warn('[ipc]', ...a) });
 for (const { channel, fn } of authChannels(account)) if (channel) ipc.handle(channel, (arg) => fn(arg));

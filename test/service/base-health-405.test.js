@@ -2,7 +2,7 @@
 //
 // Seams:
 // - settings:get / settings:set (DEFAULT_SETTINGS.baseCheck, Settings › Execution).
-// - backlog:get for a project: its `baseFailures` (src/base-health.js knownFailures of that project),
+// - backlog:get for a project: its `baseFailures` (src/domains/project/base-health.js knownFailures of that project),
 //   after recordPreexisting wrote into the service's workspace root (service.workspace().root).
 //
 // Assumptions:
@@ -13,7 +13,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeService, roadmapProject } = require('./helpers');
 
-const load = () => require('../../src/base-health');
+const load = () => require('../../src/domains/project/base-health');
 
 test('#405 settings: baseCheck.onRed defaults to \'fix\' and settings:set { onRed: \'issue\' } reads back', (t) => {
   const { api } = makeService(t);

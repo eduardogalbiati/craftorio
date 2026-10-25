@@ -15,6 +15,9 @@ Read this before writing or changing tests, and before any check that could star
   `test/service/helpers.js`.
 - A new area (a new `src/service/areas/<area>.js`, a new module) gets a new test file; no list to
   edit: `scripts/test.js` finds it.
+- A domain module's tests (`src/domains/<domain>/<module>.js`) live in `test/<domain>/`, the Electron
+  host's (`src/host/`) in `test/host/`; the shared helpers (`mini-dom.js`, `i18n-sandbox.js`, …) stay
+  at the root of `test/`, required as `../<helper>`. Renderer tests stay at the root of `test/`.
 - Node 24's test reporter is "spec", not TAP: look for `ℹ pass N` / `✖`, not `# pass`.
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
   plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +
@@ -70,7 +73,7 @@ Read this before writing or changing tests, and before any check that could star
   test reads with `fs`) reaches the test files whose code names its path. A shared root
   (`package.json`, a lockfile, `scripts/test.js`) or a project without a JS/TS graph selects the
   whole suite. `node scripts/affected-tests.js --base main` prints the files and why each was
-  chosen (`imports src/roadmap.js`); `--files` prints only the paths, for `npm test -- <files>`.
+  chosen (`imports src/domains/roadmap/roadmap.js`); `--files` prints only the paths, for `npm test -- <files>`.
 - **Slow tests**: files under `test/slow/` or named `*.slow.test.js` (whole simulated runs) never
   join the affected set; they run with the full suite only. Put a test that simulates a whole run
   there, and keep big files split by area so `node --test` runs them in parallel (one file's tests
@@ -231,7 +234,7 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   `notifications` (which events notify, the history), `phone-gates` (pairing, answering a gate);
   channels `discovery` (card move, clarity, commit), `oracle` (conversation, memory, tools: the
   largest), `storage` (notification history, unread, mark-read), `supervisor` (on-demand analysis,
-  watch start/stop/ask), `voice` (status, error path); `src/supervisor-watch.js` (batching window,
+  watch start/stop/ask), `voice` (status, error path); `src/domains/supervisor/supervisor-watch.js` (batching window,
   `FLAG:` → notification, stop at run end); `src/renderer/run-meta.js` (issuesOfRun, issueRefs,
   display title); `src/renderer/toast.js` (countdown and action timing); `views/arena/arena.js`
   (no feature of its own: an E2E scenario or a model to extract); `scripts/lint-lists.js`.
@@ -346,7 +349,7 @@ changed or trashed, and nothing is left unhandled. The calls run in a child proc
 ## The channel contract (#338)
 
 Every manifest entry carries `schema: { params, result }` (JSON Schema; shared definitions in
-`src/service/schemas.js`, the validator in `src/json-schema.js`). The service checks the arguments
+`src/service/schemas.js`, the validator in `src/domains/workspace/json-schema.js`). The service checks the arguments
 against `params` before the channel runs, in the app too (a refusal is a 400 naming the parameter
 and the rule). **The result is checked only under the test runner** (`src/service/contract.js`:
 `node --test` sets `NODE_TEST_CONTEXT` in each test file's process): every channel call any test
@@ -481,7 +484,7 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
 - `run:start` takes `mockSequences` (simulation only): the Write & Review scenario picker uses it.
 - The Backlog's Product Owner drawer has its own scenario picker (#148, `#po-scenario`, orange,
   shown only in developer or simulation-only mode): `po:ask`'s `scenario` forces the simulated
-  answer (`MOCK_SCENARIOS` / `mockScenario` in `src/product-owner.js`: a pending question, a draft,
+  answer (`MOCK_SCENARIOS` / `mockScenario` in `src/domains/po/product-owner.js`: a pending question, a draft,
   a duplicate, a large draft, a long attachments list, applied and partly applied groups, a large
   answer, an error). Ignored for a real call.
   Settings `developerMode` (replaces `mockByDefault`) shows the `.dev-only` Simulation checkboxes,

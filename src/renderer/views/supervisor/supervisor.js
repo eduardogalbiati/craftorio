@@ -7,7 +7,7 @@
 // The drawer shows the latest exchanges; Expand widens it to the whole conversation and what the
 // supervisor can read. Each message carries what the person is looking at (screenContext(): "Builder, editing workflow X",
 // "Analytics, range 2026-09-01 to 2026-09-30"), so requests need not repeat it. The supervisor reads the
-// app's data with its read-only MCP tools (src/supervisor-tools.js); it cannot change anything yet.
+// app's data with its read-only MCP tools (src/domains/supervisor/supervisor-tools.js); it cannot change anything yet.
 // Developer or simulated mode asks the simulated supervisor (no model call).
 // Live progress (#180, window.LiveTurn, live-turn.js): while it answers, what the supervisor does and
 // its answer as it is written (chat:progress 'supervisor'); Stop (api.cancelChatTurn) keeps what was written.

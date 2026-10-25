@@ -1,5 +1,5 @@
 // Artifacts panel: one run's artifacts as a list with an in-place preview, the same source as the
-// Artifacts screen (artifacts:list → runArtifacts in src/runs.js). One component for the Run
+// Artifacts screen (artifacts:list → runArtifacts in src/domains/run/runs.js). One component for the Run
 // screen's Artifacts tab (#109) and the approval gate's side panel (#108):
 // - what the run produced first (#225): every file has a category (src/domains/evidence/artifact-categories.js);
 //   the list opens on "Produced" (Result, Screenshots & images, Tests, Reports), grouped by category,

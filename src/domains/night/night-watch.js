@@ -30,7 +30,7 @@
 const fs = require('fs');
 const path = require('path');
 const { unfinishedItems } = require('../../shared/roadmap-model');
-const { regressionLine, stepRegressions } = require('../../step-regressions');
+const { regressionLine, stepRegressions } = require('../run/step-regressions');
 
 // What the Oracle may do without asking, each with what it does and its undo. Defaults: retry and refresh.
 const PERMISSIONS = [
@@ -73,7 +73,7 @@ const INCIDENT_KINDS = {
   // #276: the engine's memory guard stopped a run's process or held a suite / run for low memory;
   // the engine already acted, the watch only records it
   memory: 'Process stopped or run held for memory',
-  // #335: a step's recent median cost or minutes above its baseline (src/step-regressions.js); report only
+  // #335: a step's recent median cost or minutes above its baseline (src/domains/run/step-regressions.js); report only
   regression: 'Step cost or time regressed',
   // #278: the same command failing or stopped REPEAT_TIMES times in one step of a run
   repeat: 'Same command failing repeatedly',
@@ -402,10 +402,10 @@ function detectSelfHealing(runs = []) {
 }
 
 /**
- * The regression detector (#335), next to detectSelfHealing but over the run list (src/runs.js
+ * The regression detector (#335), next to detectSelfHealing but over the run list (src/domains/run/runs.js
  * listRuns rows, not events): one { kind: 'regression', key, runId (the newest recent run), since,
  * evidence: { workflow, step, class, baseline, recent, regressed, line } } per regressed step and class
- * (src/step-regressions.js) whose key is not in `flagged`, so a step is reported once until it
+ * (src/domains/run/step-regressions.js) whose key is not in `flagged`, so a step is reported once until it
  * recovers. Report only: a finding carries no action and no proposal.
  */
 function regressionFindings(runs, { issues = [], prices = {}, thresholds = {}, flagged = [] } = {}) {
@@ -541,7 +541,7 @@ const total = (list) => list.reduce((n, [a, b]) => n + (b - a), 0);
 /**
  * The active time of runs (runFacts) inside [w0, w1]: each run from its start to its end (w1 while it
  * runs), minus the time it waited at a human gate. → { active, gates } merged intervals [a, b] (ms).
- * One implementation for the Night watch and the 24/7 meter (src/occupancy.js).
+ * One implementation for the Night watch and the 24/7 meter (src/domains/run/occupancy.js).
  */
 function activeIntervals(facts, w0, w1) {
   const clip = ([a, b]) => [Math.max(a, w0), Math.min(b, w1)];

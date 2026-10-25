@@ -192,8 +192,8 @@ const CITY_PLAN = {
 };
 
 async function seedGitProject(e2e, name, { withReport = false, findings = null, planFolders = null, withPlan = false } = {}) {
-  const workspace = require(path.join(root, 'src', 'workspace'));
-  const projects = require(path.join(root, 'src', 'projects'));
+  const workspace = require(path.join(root, 'src', 'domains', 'workspace', 'workspace'));
+  const projects = require(path.join(root, 'src', 'domains', 'project', 'projects'));
   const arch = require(path.join(root, 'src', 'domains', 'oracle', 'oracle-architecture'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const folder = path.join(e2e.scratch, 'repos', name);
@@ -311,7 +311,7 @@ let seededRuns = 0;
 // A run in progress of the project `name`, in "another app": its agent `agent` of step `step` edited
 // `file` (relative to the run's worktree). The heartbeat stops once the scratch folder is removed.
 function seedRunInProgress(e2e, name, agent, step, file) {
-  const projects = require(path.join(root, 'src', 'projects'));
+  const projects = require(path.join(root, 'src', 'domains', 'project', 'projects'));
   const wsDir = path.join(e2e.scratch, 'workspace');
   const project = projects.listProjects(path.join(wsDir, 'projects')).find((p) => p.name === name);
   if (!project) throw new Error(`no project "${name}" in the scratch workspace`);
@@ -546,7 +546,7 @@ Then('the city is back inside the tab', async ({ e2e }) => {
 // open issues whose bodies cite files; its roadmap (<id>.roadmap.json) a planned stage of those issues.
 
 function projectOf(e2e, name) {
-  const projects = require(path.join(root, 'src', 'projects'));
+  const projects = require(path.join(root, 'src', 'domains', 'project', 'projects'));
   const project = projects.listProjects(path.join(e2e.scratch, 'workspace', 'projects')).find((p) => p.name === name);
   if (!project) throw new Error(`no project "${name}" in the scratch workspace`);
   return project;
@@ -566,7 +566,7 @@ async function addIssue(e2e, name, title, body) {
   const file = path.join(backlogDir(e2e), `${project.id}.json`);
   const repo = repoOf(name);
   fs.mkdirSync(backlogDir(e2e), { recursive: true });
-  if (!project.repo) require(path.join(root, 'src', 'projects')).updateProject(path.join(e2e.scratch, 'workspace', 'projects'), project.id, { repo });
+  if (!project.repo) require(path.join(root, 'src', 'domains', 'project', 'projects')).updateProject(path.join(e2e.scratch, 'workspace', 'projects'), project.id, { repo });
   const data = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))
     : { projectId: project.id, platform: 'github', repo, syncedAt: new Date().toISOString(), issues: [], epics: [], epicsError: null };
   const number = data.issues.reduce((n, i) => Math.max(n, i.number), 0) + 1;
@@ -969,8 +969,8 @@ Then('every finding of the Architecture tab is marked sent to Refactor', async (
 
 // the Refactor tab's proposals, read from the scratch workspace (<workspace>/refactor/<id>/proposals.json)
 Then('the Refactor tab of {string} has {int} proposals from the Architecture tab', async ({ e2e }, name, count) => {
-  const projects = require(path.join(root, 'src', 'projects'));
-  const { listProposals } = require(path.join(root, 'src', 'refactor-proposals'));
+  const projects = require(path.join(root, 'src', 'domains', 'project', 'projects'));
+  const { listProposals } = require(path.join(root, 'src', 'domains', 'refactor', 'refactor-proposals'));
   const wsDir = path.join(e2e.scratch, 'workspace');
   const project = projects.listProjects(path.join(wsDir, 'projects')).find((p) => p.name === name);
   expect(project, `the project "${name}"`).toBeTruthy();
@@ -1334,7 +1334,7 @@ Given('the workspace has a git project {string} with a JavaScript and a Python f
     return f;
   };
   await seedGitProject(e2e, name, { withReport: true, findings: [pick(kept), pick(added)] });
-  const projects = require(path.join(root, 'src', 'projects'));
+  const projects = require(path.join(root, 'src', 'domains', 'project', 'projects'));
   const project = projects.listProjects(path.join(e2e.scratch, 'workspace', 'projects')).find((p) => p.name === name);
   const dir = path.join(e2e.scratch, 'workspace', 'architecture', project.id);
   const later = JSON.parse(fs.readFileSync(path.join(dir, fs.readdirSync(dir).find((f) => f.endsWith('.json') && f !== 'city-plan.json')), 'utf8'));

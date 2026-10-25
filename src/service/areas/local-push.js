@@ -5,11 +5,11 @@
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
-const projects = require('../../projects');
+const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
 const localPush = require('../../domains/local/local-push');
-const runs = require('../../runs');
-const notifier = require('../../notifications');
+const runs = require('../../domains/run/runs');
+const notifier = require('../../domains/workspace/notifications');
 
 module.exports = (ctx) => {
   // The base a project's local runs merge into: the newest run's `merge: local`, else the

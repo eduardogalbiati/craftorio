@@ -13,7 +13,7 @@
 //
 //   each name being the YAML's `display` when set, else displayName(<id>) from
 //   src/renderer/display-name.js ("verify_change" → "Verify change").
-// - src/runs.js readRun gives the renderer those names: `stepNames` (step id → name, from
+// - src/domains/run/runs.js readRun gives the renderer those names: `stepNames` (step id → name, from
 //   display.steps) and `agentNames` (agent key → name: display.agents, the Agents menu's own names
 //   from `agent_names` winning over them).
 // - The bundled workflows (workflows/*.yaml) name their key steps: red_check "Red check (tests fail
@@ -27,7 +27,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
 const { displayName } = require('../src/shared/display-name.js');
-const runs = require('../src/runs');
+const runs = require('../src/domains/run/runs');
 
 const WORKFLOWS = path.join(__dirname, '..', 'workflows');
 const bundled = () => fs.readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/i.test(f)).sort();
@@ -143,7 +143,7 @@ test('#245 workflow.started without any display in the YAML: every agent and ste
   assert.equal(ev.display?.agents?.lead_dev, 'Lead dev');
 });
 
-// ---- a past run's names, as the renderer reads them (src/runs.js readRun) ------------------------
+// ---- a past run's names, as the renderer reads them (src/domains/run/runs.js readRun) ------------------------
 
 test('#245 readRun: a run recorded with workflow.started display gives stepNames and agentNames (the Agents menu names winning)', (t) => {
   const root = tmpDir(t, 'runs-read-');

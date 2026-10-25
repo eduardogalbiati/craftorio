@@ -129,7 +129,7 @@ test('#489 a push of the local base records its tip as a release candidate, with
   const out = await push.pushProject({ projectId: 'p1' });
   assert.equal(out.pushed, true);
 
-  const cands = require('../../src/releases').readReleases(ws.releases, 'p1').candidates || [];
+  const cands = require('../../src/domains/releases/releases').readReleases(ws.releases, 'p1').candidates || [];
   assert.deepEqual(cands.map((c) => [c.tag, c.commit]), [['v1.3.0-rc.1', tip]]);
   assert.deepEqual(cands[0].issues.map((i) => [i.number, i.title, (i.labels || []).join(',')]), [[7, 'Export runs as CSV', 'enhancement']]);
 });

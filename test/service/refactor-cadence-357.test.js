@@ -8,8 +8,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const proposals = require('../../src/refactor-proposals');
-const roadmaps = require('../../src/roadmap');
+const proposals = require('../../src/domains/refactor/refactor-proposals');
+const roadmaps = require('../../src/domains/roadmap/roadmap');
 const { makeService, roadmapProject } = require('./helpers');
 
 const ISSUE = 5;

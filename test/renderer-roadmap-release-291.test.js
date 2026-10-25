@@ -13,7 +13,7 @@
 // Interface the developer provides (the names are this test's choice; backlog.js fills them):
 // - data.releases: { releases: [{ version, status: 'checking' | 'waiting' | 'shipped' | 'held' |
 //   'failed', runId (the release run), mock, runs: [run ids in the release], date, tag, commit,
-//   issues, cost }] } (the history of src/releases.js plus the release runs not shipped yet), or
+//   issues, cost }] } (the history of src/domains/releases/releases.js plus the release runs not shipped yet), or
 //   { error } when the history could not be read. A stage's cut line names its release
 //   (`stage.release.name` = the version; `stage.release.runId` once its release run started).
 // - view.release: '' (All) | 'next' (Next release, not shipped) | a version.

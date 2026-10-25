@@ -1,4 +1,4 @@
-// #389 acceptance: after a READ_VERSION change (src/runs.js: a new way of reading a run), the run
+// #389 acceptance: after a READ_VERSION change (src/domains/run/runs.js: a new way of reading a run), the run
 // index is rebuilt incrementally and asynchronously, never in one synchronous transaction at start.
 //
 // The contract these tests assume:
@@ -18,8 +18,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const runs = require('../src/runs');
-const { openStore } = require('../src/store');
+const runs = require('../src/domains/run/runs');
+const { openStore } = require('../src/domains/workspace/store');
 
 const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
 const OLD_TITLE = 'Read by an older version';
@@ -70,7 +70,7 @@ test('listRuns answers from the rows of an older reading instead of reading ever
 });
 
 test('rebuildIndexAsync re-reads the rows of an older reading in the background, one run at a time (#389)', async (t) => {
-  assert.equal(typeof runs.rebuildIndexAsync, 'function', 'src/runs.js exports rebuildIndexAsync');
+  assert.equal(typeof runs.rebuildIndexAsync, 'function', 'src/domains/run/runs.js exports rebuildIndexAsync');
   const { ws, store } = workspaceWithRuns(t, 30);
   indexedByAnOlderReading(ws, store);
 

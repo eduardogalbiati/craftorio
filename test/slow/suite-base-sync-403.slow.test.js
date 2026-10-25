@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { WorkflowRun } = require('../../src/engine/workflow');
 const { Recorder } = require('../../src/engine/recorder');
-const supervisor = require('../../src/supervisor');
+const supervisor = require('../../src/domains/supervisor/supervisor');
 const { fixture, git, commit } = require('../worktree-helpers');
 
 const FILE = path.join(__dirname, '..', 'fixtures', 'suite-base-sync-403.yaml');

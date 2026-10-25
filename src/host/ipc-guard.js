@@ -2,7 +2,7 @@
 // src/host/permissions.js, the Agents window's `?window=agents` included) in a window's top frame. Pure of
 // Electron: guardIpc(ipcMain, { appPage, log }) → { handle(channel, fn), on(channel, fn) } registers
 // listeners that call fn(arg, event) for a trusted sender. A refused call is logged once (log(...),
-// src/host/main.js passes the console that src/main-log.js captures); a `handle` call throws (the renderer's
+// src/host/main.js passes the console that src/domains/workspace/main-log.js captures); a `handle` call throws (the renderer's
 // invoke rejects), an `on` call does nothing (a sendSync caller gets null back).
 
 const { isAppPage } = require('./permissions');

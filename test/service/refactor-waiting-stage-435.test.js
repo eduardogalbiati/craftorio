@@ -3,7 +3,7 @@
 // network, no real CLI): the issue is filed through the host's `fileIssue(draft)` (it stands in for
 // gh/glab, as host.readPrJson does for a run's PR), the project is a scratch git repository (the
 // `before` score is read from its facts), the architecture reports are saved with
-// src/domains/oracle/oracle-architecture.js saveReport. Observable state only: the roadmap file (src/roadmap.js
+// src/domains/oracle/oracle-architecture.js saveReport. Observable state only: the roadmap file (src/domains/roadmap/roadmap.js
 // readRoadmap), the proposals (refactor:proposals), the drafts the fake filer received.
 // Tests first: the waiting stage, the host filer and `runNow` come with the change.
 const test = require('node:test');
@@ -11,8 +11,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const arch = require('../../src/domains/oracle/oracle-architecture');
-const proposals = require('../../src/refactor-proposals');
-const roadmaps = require('../../src/roadmap');
+const proposals = require('../../src/domains/refactor/refactor-proposals');
+const roadmaps = require('../../src/domains/roadmap/roadmap');
 const { makeService, gitRepo, roadmapIssue } = require('./helpers');
 
 const FIRST_ISSUE = 432;

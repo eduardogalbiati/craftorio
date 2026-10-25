@@ -12,11 +12,11 @@ const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
 const findings = require('../../domains/evidence/findings');
 const Language = require('../../shared/language');
-const mainLog = require('../../main-log');
-const productOwner = require('../../product-owner');
-const projects = require('../../projects');
+const mainLog = require('../../domains/workspace/main-log');
+const productOwner = require('../../domains/po/product-owner');
+const projects = require('../../domains/project/projects');
 const simulation = require('../../engine/simulation');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 const { DEFAULT_PLATFORM, findPlatform } = require('../../shared/platforms');
 const { BUNDLED_SKILLS_DIR, clientError, requireObject } = require('../common');
 const {

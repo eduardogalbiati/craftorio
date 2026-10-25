@@ -1,4 +1,4 @@
-// Service area: main stays green (#405, src/base-health.js). A real run's suite step that counted
+// Service area: main stays green (#405, src/domains/project/base-health.js). A real run's suite step that counted
 // failures as pre-existing has them recorded by the engine; the service files their issue
 // (afterStepFinished, from the run's step.finished event); a merge into the local base starts the
 // base check in the background (afterBaseMerge, from worktree.merged; at once when the merge was
@@ -14,12 +14,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const baseHealth = require('../../base-health');
+const baseHealth = require('../../domains/project/base-health');
 const backlog = require('../../domains/backlog/backlog');
 const DefaultWorkflow = require('../../shared/default-workflow');
-const projects = require('../../projects');
-const roadmaps = require('../../roadmap');
-const workspace = require('../../workspace');
+const projects = require('../../domains/project/projects');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const workspace = require('../../domains/workspace/workspace');
 const simulation = require('../../engine/simulation');
 const depsCache = require('../../engine/deps-cache');
 const {
@@ -134,7 +134,7 @@ module.exports = (ctx) => {
     }
   }
 
-  // After a run's `merge: local`: the base check, in the background (one at a time, src/base-health.js)
+  // After a run's `merge: local`: the base check, in the background (one at a time, src/domains/project/base-health.js)
   function afterBaseMerge(run, { base, tested } = {}) {
     if (!run.projectId || run.mock || onRed() === 'off') return null;
     const project = projects.readProject(ctx.ws.projects, run.projectId);

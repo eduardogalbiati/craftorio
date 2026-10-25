@@ -3,8 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { waitReason } = require('../../src/domains/agents/agent-inbox');
-const { CONFIRM_KINDS: PO_CONFIRM } = require('../../src/product-owner');
-const { CONFIRM_KINDS: SUP_CONFIRM } = require('../../src/supervisor-chat');
+const { CONFIRM_KINDS: PO_CONFIRM } = require('../../src/domains/po/product-owner');
+const { CONFIRM_KINDS: SUP_CONFIRM } = require('../../src/domains/supervisor/supervisor-chat');
 
 test('by day, a confirm kind waits and another kind runs at once', () => {
   assert.match(waitReason('workflow.commit', {}, { confirmKinds: SUP_CONFIRM }), /owner's click/);

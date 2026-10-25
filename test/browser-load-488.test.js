@@ -1,4 +1,4 @@
-// #488: the Builder (src/workflow-builder.js), the composition (workflow-compose.js) and the field
+// #488: the Builder (src/domains/workflow/workflow-builder.js), the composition (workflow-compose.js) and the field
 // rules (src/engine/run/field-rules.js) load in a browser page without Node, so a static public page
 // can reuse them. Acceptance tests, written before the code.
 //
@@ -19,8 +19,10 @@ const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
 const JS_YAML_BROWSER = path.join(ROOT, 'node_modules', 'js-yaml', 'dist', 'js-yaml.js');
 
-// workflow-compose.js: wherever the change puts it under src/
+// workflow-compose.js: wherever the change puts it under src/ (the pure core of src/shared/ first: the
+// Node wrapper of src/domains/workflow/ requires the engine, which no browser page loads)
 function findCompose(dir = SRC) {
+  if (dir === SRC) { const shared = findCompose(path.join(SRC, 'shared')); if (shared) return shared; }
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) { const hit = findCompose(full); if (hit) return hit; }
@@ -95,8 +97,8 @@ test('#488 the field rules (src/engine/run/field-rules.js) load in a browser pag
   assert.equal(api.parseDuration('5m'), 300000);
 });
 
-test('#488 the Builder (src/workflow-builder.js) loads in a browser page and exposes its API', () => {
-  const page = loadInPage(path.join(SRC, 'workflow-builder.js'));
+test('#488 the Builder (src/domains/workflow/workflow-builder.js) loads in a browser page and exposes its API', () => {
+  const page = loadInPage(path.join(SRC, 'domains', 'workflow', 'workflow-builder.js'));
   assert.equal(page.error, null, page.error);
   const api = apiWith(page, ['toYaml', 'fromWorkflow', 'describeWorkflow', 'validateSpec', 'fileNameFor']);
   assert.equal(api !== null, true, `a window global with the builder's functions (new globals: ${page.added.join(', ')})`);
@@ -114,7 +116,7 @@ test('#488 workflow-compose.js exists and loads in a browser page, exposing its 
 
 // (fs / path in a Node-only branch is fine, as src/shared/i18n.js does: only process spawning is checked)
 test('#488 nothing the Builder, the composition or the field rules load can spawn a process', () => {
-  const targets = [path.join(SRC, 'workflow-builder.js'), path.join(SRC, 'engine', 'run', 'field-rules.js'), findCompose()].filter(Boolean);
+  const targets = [path.join(SRC, 'domains', 'workflow', 'workflow-builder.js'), path.join(SRC, 'engine', 'run', 'field-rules.js'), findCompose()].filter(Boolean);
   const offenders = [];
   for (const target of targets) {
     for (const file of scriptsFor(target)) {

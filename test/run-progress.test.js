@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { StepTrail, trailOf, progressGroups, hydrationEvents, estimateProgress, typicalStepTimes } = require('../src/shared/run-progress-model');
-const runs = require('../src/runs');
+const runs = require('../src/domains/run/runs');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
 

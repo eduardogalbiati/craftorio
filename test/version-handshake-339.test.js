@@ -40,7 +40,7 @@ const path = require('path');
 const http = require('http');
 const vm = require('vm');
 const { withI18n } = require('./i18n-sandbox');
-const { setupWorkspace } = require('../src/workspace');
+const { setupWorkspace } = require('../src/domains/workspace/workspace');
 const { createService } = require('../src/service');
 const { createServer } = require('../src/server');
 

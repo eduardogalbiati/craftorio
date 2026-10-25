@@ -86,7 +86,7 @@ function writeRepoConfig(dir, config) {
 // repository's .multiagent/local-preview.yaml, the workflow's orchestrator.local_preview.
 // { config, source: 'project' | 'repo' | 'workflow', from } or null.
 function resolveSource(project, wf, repo = null) {
-  // stored cleaned already (src/projects.js)
+  // stored cleaned already (src/domains/project/projects.js)
   const own = project?.localPreview?.command ? project.localPreview : null;
   if (own) return { config: own, source: 'project', from: 'Projects › Local preview' };
   if (repo?.command) {

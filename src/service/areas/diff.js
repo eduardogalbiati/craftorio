@@ -15,8 +15,8 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { resolveCommand } = require('../../engine/providers');
-const runs = require('../../runs');
-const supervisor = require('../../supervisor');
+const runs = require('../../domains/run/runs');
+const supervisor = require('../../domains/supervisor/supervisor');
 
 // Above either limit a file's patch is left out of runDiff (a lockfile, a generated file): the
 // viewer collapses it with "load diff" (runDiffFile).

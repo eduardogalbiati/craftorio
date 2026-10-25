@@ -17,15 +17,15 @@
 //       show 'produced': result, screenshots, tests, reports; show 'all': those plus process;
 //       internal is never returned; category / kind narrow it further;
 //       ordered by category: result, screenshots, tests, reports, process (stable inside one).
-//   src/runs.js runArtifacts(runDir) (existing): every entry also carries `category`; scratch/ and
+//   src/domains/run/runs.js runArtifacts(runDir) (existing): every entry also carries `category`; scratch/ and
 //     owner.json (internal) are not returned; result.md is listed first.
-//   src/run-artifacts.js runArtifactsAsync(runDir) (existing): the same `category` on each entry.
+//   src/domains/run/run-artifacts.js runArtifactsAsync(runDir) (existing): the same `category` on each entry.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const runs = require('../../src/runs');
+const runs = require('../../src/domains/run/runs');
 
 const load = () => require('../../src/domains/evidence/artifact-categories');
 const cat = (p, extra = {}) => load().categorizeArtifact({ path: p, ...extra }).category;
@@ -131,7 +131,7 @@ test('filterArtifacts: a category or a kind narrows the list', () => {
   assert.deepEqual(filterArtifacts(list, { category: 'internal' }), []);
 });
 
-// ---- runArtifacts (src/runs.js) on a real run folder --------------------------------------------
+// ---- runArtifacts (src/domains/run/runs.js) on a real run folder --------------------------------------------
 
 function runFolder(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'art-cat-'));
@@ -172,7 +172,7 @@ test('runArtifacts: every artifact carries its category; scratch/ and owner.json
 });
 
 test('runArtifactsAsync (the indexed listing the Artifacts screen reads) carries the same categories, without internal files', async (t) => {
-  const { runArtifactsAsync } = require('../../src/run-artifacts');
+  const { runArtifactsAsync } = require('../../src/domains/run/run-artifacts');
   const run = runFolder(t);
   const list = await runArtifactsAsync(run);
   const rels = list.map((a) => relOf(run, a));

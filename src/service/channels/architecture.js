@@ -1,15 +1,15 @@
-// A project's Architecture tab (#356): the git facts of its repository (src/architecture-facts.js,
+// A project's Architecture tab (#356): the git facts of its repository (src/domains/project/architecture-facts.js,
 // numbers from the pure core src/shared/architecture-model.js), the Oracle's analysis on demand
 // (src/domains/oracle/oracle-architecture.js: one turn in the Oracle's daily budget, simulated under mock or
 // MULTIAGENT_SIMULATION_ONLY; one analysis at a time, a second call is refused), the saved reports
 // (<workspace>/architecture/<project id>/, the latest with its findings marked new or gone, the
 // project's real finished runs since), the cost estimate from the last real analyses, the
 // project's exclude list, and "Send to Refactor": a finding becomes a proposal of the Refactor tab
-// (src/refactor-proposals.js; the Refactor tab's channels are src/service/channels/refactor.js), filed
+// (src/domains/refactor/refactor-proposals.js; the Refactor tab's channels are src/service/channels/refactor.js), filed
 // as an issue and planned in the roadmap's disabled stage waiting for the owner's OK (#435); the report
 // says where each sent finding went (`sentTo`: its issue and stage).
 // The project city (#371): architecture:city is the facts grouped by the saved city plan (folder
-// districts without one) with its edges and validation (src/architecture-facts.js readCity, core
+// districts without one) with its edges and validation (src/domains/project/architecture-facts.js readCity, core
 // src/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
 // it, keeping the one it replaces. Neither starts a model call.
 // The project map (#372): architecture:city also says whether to advise "Refresh the map"
@@ -27,26 +27,26 @@
 // `## Expected files` section (withSection, #429). No model call.
 // A release on the city (#376): architecture:release gives the City view's release overlay the city at
 // `from` (the previous tag by default), what changed up to `to` (the newest tag by default) and the
-// release's commits (src/release-city.js), the tags for the two-tag picker (the latest commits when
+// release's commits (src/domains/releases/release-city.js), the tags for the two-tag picker (the latest commits when
 // the project has no tag) and the saved plan (where an added file is drawn). Read-only git, no model call.
 
 const fs = require('fs');
 const path = require('path');
 const agents = require('../../domains/agents/agents');
 const arch = require('../../domains/oracle/oracle-architecture');
-const facts = require('../../architecture-facts');
-const projects = require('../../projects');
-const proposals = require('../../refactor-proposals');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
-const releaseCity = require('../../release-city');
-const { isWaitingStage } = require('../../refactor-cadence');
+const facts = require('../../domains/project/architecture-facts');
+const projects = require('../../domains/project/projects');
+const proposals = require('../../domains/refactor/refactor-proposals');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
+const releaseCity = require('../../domains/releases/release-city');
+const { isWaitingStage } = require('../../domains/refactor/refactor-cadence');
 const simulation = require('../../engine/simulation');
 const { localChanges } = require('../../engine/test-paths');
-const { readEvents } = require('../../supervisor');
+const { readEvents } = require('../../domains/supervisor/supervisor');
 const cityAgents = require('../../shared/city-agents');
 const { recordHitRate } = require('../../shared/city-impact');
-const { validateSchema } = require('../../json-schema');
+const { validateSchema } = require('../../domains/workspace/json-schema');
 const {
   CITY_PLAN_SCHEMA,
   refreshSignal,

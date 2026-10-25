@@ -80,7 +80,7 @@ The button's badge counts the answers that arrived while the conversation was ou
   is on, each workflow step is compared with its own history in the same class (provider, model and
   effort): the median cost per complexity point and the median minutes of its last 3 successful
   runs against the baseline, the median of its runs before them (at least 5; fewer: "not measurable
-  yet"). More than 30% above (thresholds in `src/step-regressions.js` REGRESSION_DEFAULTS) is a
+  yet"). More than 30% above (thresholds in `src/domains/run/step-regressions.js` REGRESSION_DEFAULTS) is a
   `regression` finding, logged once per step and class with the baseline, the recent figures and
   the run ids, and again only after the step recovers. Home's morning card lists each one led by the
   step and the rise ("test: +42% cost over 3 runs") with links to its runs. Simulated runs never

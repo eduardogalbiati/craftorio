@@ -1,5 +1,5 @@
 // #367 machine profile, details the acceptance tests leave out: the settings migration and the
-// manual rule of settings:set (src/workspace.js), the settings:machineProfile channel and its memory
+// manual rule of settings:set (src/domains/workspace/workspace.js), the settings:machineProfile channel and its memory
 // guard events (src/service/channels/app.js), and the suite command's workers (suite-step.js withWorkers).
 const test = require('node:test');
 const assert = require('node:assert/strict');

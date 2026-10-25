@@ -24,8 +24,8 @@ const status = (page, id) => section(page).getByTestId(`seed-status-${id}`);
 
 // The project's id, read from the scratch workspace's project entries
 function projectId(e2e, name) {
-  const workspace = require(path.join(root, 'src', 'workspace'));
-  const projects = require(path.join(root, 'src', 'projects'));
+  const workspace = require(path.join(root, 'src', 'domains', 'workspace', 'workspace'));
+  const projects = require(path.join(root, 'src', 'domains', 'project', 'projects'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const project = projects.listProjects(ws.projects).find((p) => p.name === name);
   if (!project) throw new Error(`no project named ${name} in the scratch workspace`);

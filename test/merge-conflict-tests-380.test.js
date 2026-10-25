@@ -7,7 +7,7 @@
 // - src/engine/run/supervision.js: when the supervisor says a retry would fail the same way
 //   (`retry_would_fail` in its decision) and names where to go on (`goto`), its gate offers that way
 //   forward instead of a blind Retry, and it still waits for the person.
-// - src/product-owner.js: two groups of one stage naming the same feature file are flagged as a
+// - src/domains/po/product-owner.js: two groups of one stage naming the same feature file are flagged as a
 //   conflict, as shared hot source files are (#150), and the skill says so.
 // Runs are mock runs on a git repository in a temp folder (as test/protect-files.test.js);
 // `onTurn` plays the CLI's side effects (the rebase and its resolution) before the turn is answered.
@@ -18,8 +18,8 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
-const supervisor = require('../src/supervisor');
-const productOwner = require('../src/product-owner');
+const supervisor = require('../src/domains/supervisor/supervisor');
+const productOwner = require('../src/domains/po/product-owner');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
 process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
@@ -271,7 +271,7 @@ test('supervisor gate: without retry_would_fail, Retry is still offered (control
   assert.deepEqual(ids, ['retry', 'stop']);
 });
 
-// ---- src/product-owner.js: placement warns about shared test files -----------------------------------
+// ---- src/domains/po/product-owner.js: placement warns about shared test files -----------------------------------
 
 const LONG = ' It needs a few changes in the module, described here in enough words to be implemented without guessing anything.';
 // Two to-do issues of different areas (two groups) that both add scenarios to the same feature file.

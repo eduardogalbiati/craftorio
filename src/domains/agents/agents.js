@@ -5,7 +5,7 @@
 // The platform's supervisor is built in: always listed first, it can't be removed and its
 // instructions (the run-supervisor skill) can't be changed here; only its look is saved
 // (agents/supervisor.json).
-// The Backlog's Product Owner (#105, src/product-owner.js) is built in the same way, listed second:
+// The Backlog's Product Owner (#105, src/domains/po/product-owner.js) is built in the same way, listed second:
 // its instructions are the backlog-product-owner skill; its look, model, effort and its Speed ↔ Quality
 // calibration (#189, `calibration` 1..5, src/renderer/po-calibration.js) and its Economy ↔ Generous
 // Cost step (#205, `cost` 1..5, the same file) are saved (agents/product-owner.json).
@@ -21,8 +21,8 @@ const capabilities = require('../../engine/capabilities');
 const calibration = require('../../shared/po-calibration');
 const { displayName } = require('../../shared/display-name');
 const { loadWorkflow, render } = require('../../engine/workflow');
-const { slugify } = require('../../projects');
-const { isWorkflowFile } = require('../../workflows');
+const { slugify } = require('../project/projects');
+const { isWorkflowFile } = require('../workflow/workflows');
 
 const SUPERVISOR_ID = 'supervisor';
 const PRODUCT_OWNER_ID = 'product-owner';

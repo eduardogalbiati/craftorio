@@ -1,11 +1,11 @@
 // #335: the night watch reports a step whose cost or time regresses against its own history.
-// Acceptance tests, written before the code. Runs are listRuns rows (src/runs.js).
+// Acceptance tests, written before the code. Runs are listRuns rows (src/domains/run/runs.js).
 //
 // The contract (src/domains/night/night-watch.js):
 // - INCIDENT_KINDS.regression: a label (keys stay sorted, test/night-watch*.test.js).
 // - regressionFindings(runs, { issues, prices, thresholds, flagged = [] } = {}) → one finding
 //   { kind: 'regression', key, evidence: { workflow, step, class, baseline, recent, regressed } } per
-//   stepRegressions entry (src/step-regressions.js) with status 'regressed' whose key is not in
+//   stepRegressions entry (src/domains/run/step-regressions.js) with status 'regressed' whose key is not in
 //   `flagged` (once per step and class until it recovers). Report only: no action, no proposal.
 // - morningSummary(m, { proposed, regressions }) → also `regressions`: one string per finding, led by
 //   the step and the rise, e.g. 'test: +50% cost over 3 runs'; [] when none.
@@ -88,7 +88,7 @@ test('#335 regressionFindings: a key already flagged is not reported again', () 
 test('#335 after recovery a flagged key gives no finding and its entry is recovered', () => {
   const [f] = findingsOf(history({ cost: 4.5 }));
   assert.equal(findingsOf(history(), { flagged: [f.key] }).length, 0);
-  const { stepRegressions } = require('../../src/step-regressions');
+  const { stepRegressions } = require('../../src/domains/run/step-regressions');
   const [entry] = stepRegressions(history(), { flagged: [f.key] });
   assert.equal(entry.status, 'recovered');
 });

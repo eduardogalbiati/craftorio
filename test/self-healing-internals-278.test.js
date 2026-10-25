@@ -10,7 +10,7 @@ const path = require('path');
 const actions = require('../src/domains/oracle/oracle-actions');
 const agentInbox = require('../src/domains/agents/agent-inbox');
 const night = require('../src/domains/night/night-watch');
-const notifier = require('../src/notifications');
+const notifier = require('../src/domains/workspace/notifications');
 
 function tmpDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'self-healing-internals-278-'));
