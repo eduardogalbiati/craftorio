@@ -52,7 +52,6 @@ function loadPanel(opts = {}) {
     renderJsonText: (t) => t,
     renderDelimited: (t) => `<table>${t}</table>`,
     errMsg: (e) => String(e?.message || e),
-    openArtifactsAt: (...a) => calls.openArtifactsAt.push(a),
     showToast: () => {},
     // the copy menu itself is artifact-menu.js's own seam (test/artifact-menu.test.js): here only
     // the wiring (what target onContextMenu opens it with) matters (#114)
@@ -68,7 +67,7 @@ function loadPanel(opts = {}) {
       readArtifact: opts.readArtifact || (async (p) => { calls.readArtifact.push(p); return { text: '' }; }),
       runEvidence: opts.runEvidence,
     },
-    window: {},
+    window: { Actions: { call: (name, ...a) => { if (name === 'openArtifactsAt') calls.openArtifactsAt.push(a); } } },
     document: {},
     setTimeout, clearTimeout, Date,
   };

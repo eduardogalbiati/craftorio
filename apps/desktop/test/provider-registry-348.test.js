@@ -14,6 +14,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
+const { sourceFiles } = require('../../../scripts/source-tree');
 const registry = () => require('@multiagent/shared/providers');
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'engine', 'test', 'fixtures', name), 'utf8');
 const events = (text) => text.trim().split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
@@ -154,15 +155,16 @@ test('the run chat maps CLI names and models to the backend\'s provider types, w
 });
 
 // No provider literal outside packages/shared/providers/: a provider type in quotes, or a CLI name
-// compared with a provider/cli value. The YAML files, user-facing docs and tests are outside src/
-// and exempt. Listed exceptions may only shrink (none today).
+// compared with a provider/cli value, in any source file of the workspaces (scripts/source-tree.js
+// sourceFiles, #579). The YAML files, user-facing docs, tests and features are exempt. Listed
+// exceptions may only shrink (none today).
 const EXCEPTIONS = [];
 const TYPE_LITERAL = /['"`](?:claude-code|codex-cli|grok-cli|gemini-cli)['"`]/;
 const CLI_COMPARE = /\b(?:provider|providerId|cli)\s*[!=]==?\s*['"`](?:claude|codex|grok)['"`]|['"`](?:claude|codex|grok)['"`]\s*[!=]==?\s*[\w.]*\b(?:provider|providerId|cli)\b/;
 
 test('no provider literal outside packages/shared/providers/', () => {
-  const files = execFileSync('git', ['ls-files', 'src'], { cwd: ROOT, encoding: 'utf8' }).split('\n').map((f) => f.trim()).filter(Boolean)
-    .filter((f) => /\.(?:js|jsx|mjs|cjs|html)$/.test(f))
+  const files = sourceFiles(ROOT, { match: /\.(?:js|jsx|mjs|cjs|html)$/ })
+    .filter((f) => !/(^|\/)(test|features)\//.test(f))
     .filter((f) => !f.startsWith('packages/shared/providers/') && !EXCEPTIONS.includes(f));
   const offenders = [];
   for (const rel of files) {

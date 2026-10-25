@@ -94,7 +94,9 @@ function loadArtifactsThrottled() {
   artTimer = setTimeout(() => { artTimer = null; if (state.view === 'artifacts') loadArtifacts(); }, wait);
 }
 
-// Opens the Artifacts view focused on one file (from the project view).
+// Opens the Artifacts view focused on one file (the run lists, the artifacts panel, the Oracle and
+// the supervisor ask for it as the openArtifactsAt action, actions.js).
+window.Actions.register('openArtifactsAt', (at) => openArtifactsAt(at));
 function openArtifactsAt({ projectId, runId, path, mock }) {
   const a = state.art;
   a.projectId = projectId || '';

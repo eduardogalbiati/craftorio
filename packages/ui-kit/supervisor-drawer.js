@@ -197,8 +197,8 @@ function renderSupervisor() {
     ${recs.length ? `<section class="sup-sec"><div class="sup-h">${t('supervisor_drawer.recommendations')}</div>${recs.map((r, i) => recCard(r, i, steps)).join('')}</section>` : ''}`;
   $('#sup-open-art')?.addEventListener('click', () => {
     closeSupervisor();
-    openArtifactsAt({ projectId: '', path: res.artifactPath, mock: sup.mock });
-    loadArtifacts().then(() => renderArtifactList());
+    window.Actions.call('openArtifactsAt', { projectId: '', path: res.artifactPath, mock: sup.mock });
+    window.loadArtifacts?.().then(() => window.renderArtifactList?.()); // the Artifacts screen's, when its front is shipped
   });
   box.querySelectorAll('[data-rec]').forEach((b) => (b.onclick = () => runRecommendation(Number(b.dataset.rec))));
 }

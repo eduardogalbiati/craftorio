@@ -271,7 +271,7 @@
       showView('backlog');
     } else if (target.kind === 'file') {
       closeDrawer();
-      openArtifactsAt({ projectId: '', path: target.path, mock: !!state.runs.get(target.runId)?.run?.mock });
+      window.Actions.call('openArtifactsAt', { projectId: '', path: target.path, mock: !!state.runs.get(target.runId)?.run?.mock });
     }
   }
   // a run's own line (a watch, an action) and the Oracle's settings

@@ -51,7 +51,7 @@
     if (e.target.value !== NEW) { set(e.target.value); return; }
     // the selector keeps the current project; the new one is chosen once it is created
     render();
-    openProjectModal(null, { fromHeader: true });
+    window.Actions.call('openProjectModal', null, { fromHeader: true });
   };
 
   root.CurrentProject = { get: () => current, refresh, set };

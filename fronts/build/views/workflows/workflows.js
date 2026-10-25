@@ -483,6 +483,7 @@ function showRunInList(runId) {
 
 // Opens a workflow in Workflows › Definitions, scrolled to and focused (the Agents menu's
 // "Open in workflow").
+window.Actions.register('showWorkflowDefinition', (file) => showWorkflowDefinition(file)); // the Agents menu asks for it (actions.js)
 function showWorkflowDefinition(file) {
   state.workflowsTab = 'definitions';
   // the card may be filtered out

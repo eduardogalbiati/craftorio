@@ -554,7 +554,7 @@
     if (t.closest('[data-ap-folder]')) { if (p.run?.runDir) api.openPath(p.run.runDir).catch((err) => showToast(I18n.t('artifacts_panel.could_not_open_the_folder'), errMsg(err))); return; }
     if (t.closest('[data-ap-full]')) {
       const path = p.sel?.path || [...(p.files || [])].sort(newest)[0]?.path;
-      if (path) openArtifactsAt({ projectId: p.run?.project?.id || '', path, mock: !!p.run?.mock });
+      if (path) window.Actions.call('openArtifactsAt', { projectId: p.run?.project?.id || '', path, mock: !!p.run?.mock });
       else showToast(I18n.t('artifacts_panel.no_artifacts_yet'), I18n.t('artifacts_panel.this_run_has_not_produced_files'));
     }
   }

@@ -4,7 +4,9 @@
 // page, views/project/) with Open folder and New project in the header, and the New / Edit project
 // dialog with its Local preview fields and the run command detected in the folder (#115). The dialog
 // is also opened from the Start drawer (app.js) and the header's project selector
-// (current-project.js), so openProjectModal stays a global; showProjects opens the screen.
+// (current-project.js), so openProjectModal stays a global; showProjects opens the screen. Both are
+// offered as actions (actions.js: openProjectModal, showProjects) to the kit and the other fronts; a
+// card's click asks the openProject action (the project's page, when its front is shipped).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, confirmDialog, openDrawer, renderProjectOptions, runAppCommandHtml).
 
@@ -47,7 +49,7 @@ async function onProjectsClick(e) {
   const p = card && state.projects.find((x) => x.id === card.dataset.id);
   if (!p) return;
   if (!act) {
-    if (!e.target.closest('button, a, input')) openProjectView(p.id);
+    if (!e.target.closest('button, a, input')) window.Actions.call('openProject', p.id);
     return;
   }
   if (act.dataset.act === 'run') openDrawer({ project: p.id });
@@ -63,6 +65,8 @@ async function onProjectsClick(e) {
 function showProjects() {
   showView('projects');
 }
+window.Actions.register('showProjects', showProjects);
+window.Actions.register('openProjectModal', (p, opts) => openProjectModal(p, opts));
 
 let editingProject = null;
 let projectFromDrawer = false;

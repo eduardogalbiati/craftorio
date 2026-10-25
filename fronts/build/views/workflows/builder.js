@@ -278,7 +278,8 @@
     const list = b.agents.filter((x) => !x.system && !x.workflow && !x.error);
     const box = $('#wb-agents-list');
     box.innerHTML = list.length
-      ? list.map((x) => window.AgentCards.card(x, { selected: x.id === currentId })).join('')
+      ? list.map((x) => window.Actions.call('agentCard', x, { selected: x.id === currentId })
+        ?? `<div class="card clickable agent-card${x.id === currentId ? ' selected' : ''}" data-id="${esc(x.id)}" data-testid="agent-card" tabindex="0"><b class="card-title">${esc(x.name)}</b></div>`).join('') // the Agents screen's card, else a plain one
       : `<div class="empty-state"><b>${t('builder.no_agents_yet')}</b><p class="muted">${t('builder.create_one_in_the_agents_menu')}</p></div>`;
     openModal('#wb-agents-modal');
     return new Promise((resolve) => {

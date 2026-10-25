@@ -264,7 +264,7 @@ function onHomeClick(e) {
   const run = e.target.closest('[data-home-run]');
   if (run) return state.runs.has(run.dataset.homeRun) ? openGateOf(run.dataset.homeRun) : showRun(run.dataset.homeRun);
   const act = e.target.closest('[data-home-act]')?.dataset.homeAct;
-  if (act === 'project') return openProjectModal(null, { fromHeader: true });
+  if (act === 'project') return window.Actions.call('openProjectModal', null, { fromHeader: true });
   if (act === 'idea') return viewRegistry.has('inbox') ? showView('inbox') : undefined;
   if (act === 'run') return openDrawer();
   const stage = e.target.closest('[data-stage]');

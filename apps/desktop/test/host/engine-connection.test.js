@@ -1,7 +1,7 @@
 // The engine connection's pure rules (apps/desktop/host/engine-connection.js): the address typed, the per-machine
 // setting and its encrypted token, the mode decided at start, the connection test (an injected
 // fetch), the remote window's navigation and permission rules, the server's addresses
-// (`npm run serve -- --host tailscale`), and the browser client's side (apps/desktop/renderer/api-http.js).
+// (`npm run serve -- --host tailscale`), and the browser client's side (apps/web/renderer/api-http.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -322,11 +322,11 @@ test('--host tailscale listens on the Tailscale address only; other hosts are ke
   assert.match(conn.resolveListenHost('tailscale', { Ethernet: INTERFACES.Ethernet }).error, /no Tailscale address/);
 });
 
-// ---- the browser client: apps/desktop/renderer/api-http.js ----------------------------------------------
+// ---- the browser client: apps/web/renderer/api-http.js ----------------------------------------------
 
 // api-http.js in a vm sandbox with the given user agent and manifest; window.open is recorded
 function loadApiHttp({ userAgent = '', manifest = [], language = null } = {}) {
-  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'api-http.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'web', 'renderer', 'api-http.js'), 'utf8');
   function FakeXHR() {}
   FakeXHR.prototype.open = function open() {};
   FakeXHR.prototype.send = function send() { this.status = 200; this.responseText = JSON.stringify({ result: manifest }); };

@@ -67,6 +67,15 @@ if (budget) {
 }
 require('@multiagent/desktop/host/main');
 
+// The screens the desktop composition ships (apps/desktop/composition.js): the UI kit's views and each
+// front's, read through scripts/source-tree.js, so the smoke fails when a shipped screen does not load.
+function composedViews() {
+  const tree = require('./source-tree');
+  const root = path.join(__dirname, '..');
+  const kit = tree.uiKit(root);
+  return [...(kit ? tree.viewsOf(root, kit.dir) : []), ...tree.composition(root, 'apps/desktop').fronts.flatMap((f) => tree.viewsOf(root, f.dir))];
+}
+
 const out = process.argv.find((a) => a.endsWith('.png')) || path.join(__dirname, '..', 'runs', 'smoke.png');
 setTimeout(() => { console.error('smoke: timed out'); app.exit(1); }, budget ? 180000 : 90000);
 
@@ -220,6 +229,12 @@ app.on('browser-window-created', (_e, win) => {
       console.log('status:', await js(`document.querySelector('[data-testid=run-screen-status]').textContent`), '| error:', await js(`document.querySelector('#start-error').textContent`));
       const real = realSessions();
       if (real.length) { console.error('smoke: sessions that were not simulated:', real); app.exit(1); return; }
+      // phase 3 of the reorganisation study: every screen of the app's composition registered (the
+      // UI kit's and each shipped front's views/<view>/ folders, scripts/source-tree.js)
+      const ids = await js('ViewRegistry.ids()');
+      const missing = composedViews().filter((v) => !ids.includes(v));
+      if (missing.length) { console.error('smoke: screens of the composition that did not register:', missing); app.exit(1); return; }
+      console.log(`screens: ${ids.length} registered, the composition's ${composedViews().length} among them`);
       console.log('sessions: all simulated (mock)');
       app.quit();
     }

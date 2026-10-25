@@ -98,7 +98,7 @@ function createService({ host }) {
   };
   const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
   const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(checked(e, arg))]));
-  // what window.api is built from (apps/desktop/host/preload.js, apps/desktop/renderer/api-http.js), desktop and account included
+  // what window.api is built from (apps/desktop/host/preload.js, apps/web/renderer/api-http.js), desktop and account included
   const manifest = declarations([...entries, ...DESKTOP, ...authChannels(null)]);
   // its contract (#339), which app:version answers
   ctx.contract = contractHash(manifest);

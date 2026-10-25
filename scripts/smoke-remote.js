@@ -96,7 +96,7 @@ async function capture(win, name) {
 }
 
 async function checkRemoteWindow(origin) {
-  const remote = await waitForWindow((u) => u.startsWith(`${origin}/apps/desktop/renderer/`), 'remote engine');
+  const remote = await waitForWindow((u) => u.startsWith(`${origin}/apps/web/renderer/`), 'remote engine');
   const js = (code) => remote.webContents.executeJavaScript(code);
   await waitFor(remote, 'window.api && document.querySelector("#view-settings")', 'the app page');
   const where = await js('({ platform: api.platform, engine: api.engineConnection, preload: typeof require })');

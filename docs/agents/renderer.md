@@ -158,7 +158,11 @@ Read this before changing anything in the UI: the UI kit (`packages/ui-kit/`), a
 - **Composition** (the reorganisation study, #558; phase 3, #579): a **front** is a workspace
   `fronts/<id>/` of `views/` folders, each calling `registerView` as today, plus its stylesheets, its
   `features/` and its `test/`; it registers its screens, its menu entries and its Home cards itself,
-  and never names another front. An **app** (`apps/desktop`, the browser UI the engine serves from
+  and never names another front: what it offers the others (the project's page, the Projects
+  screen and the project dialog, Workflows at a definition, Artifacts at a file, an agent's card) is
+  an **action** it registers as it loads (`Actions.register`, `packages/ui-kit/actions.js`), which
+  the kit and the other fronts call by name (`Actions.call`) and do without when no shipped front
+  offers it (`Actions.has` hides a button, picks a fallback). An **app** (`apps/desktop`, the browser UI the engine serves from
   `apps/web`) lists the fronts it ships in one **composition file** (`<app>/composition.js`): a list
   of front ids, nothing else (`scripts/source-tree.js` `composition()` reads it; without the file an
   app ships every installed front). The page is generated from the composition (the lists above); a

@@ -3,7 +3,7 @@
 // so a new area edits no shared list); this module merges them and adds the channels the desktop
 // layer (apps/desktop/host/main.js) and the account module (apps/desktop/host/auth.js) answer. The clients build `window.api`
 // from it at runtime: apps/desktop/host/preload.js asks main (`api:manifest`, sync IPC) and
-// apps/desktop/renderer/api-http.js asks the server (`GET /api/manifest`). No generated file.
+// apps/web/renderer/api-http.js asks the server (`GET /api/manifest`). No generated file.
 //
 // An entry is one of:
 //   { channel, method, params?, fn }  request/reply (ipcRenderer.invoke, POST /api/<channel>)

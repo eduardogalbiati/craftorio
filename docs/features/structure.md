@@ -23,7 +23,10 @@ packages/engine/engine/providers.js  claude / codex / grok / mock adapters
 packages/engine/engine/capabilities.js  agent capabilities and isolation → each CLI's flags
 packages/engine/engine/recorder.js   writes to disk (jsonl + summary)
 packages/engine/engine/worktree.js   git worktree per run: create, reuse on resume, remove, orphan cleanup
-apps/desktop/renderer/            UI (plain HTML/CSS/JS)
+packages/ui-kit/         the UI kit every page starts from: the shell, the run kernel, the controls, Home and Settings (plain HTML/CSS/JS, no bundler)
+fronts/<id>/             the fronts analyser, build, plan, ai: each its screens (views/), features and tests
+apps/desktop/renderer/   the desktop page (index.html, generated from apps/desktop/composition.js) and the engine connection page
+apps/web/                the browser UI the engine serves at / (its composition, page and api-http.js)
 workflows/               bundled workflow definitions (copied into <workspace>/workflows)
 skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)

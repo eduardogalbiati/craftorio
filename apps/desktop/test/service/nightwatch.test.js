@@ -1,5 +1,5 @@
 // packages/engine/service/channels/nightwatch.js: the owner's Night watch checklist (#239). The channel is called
-// the way window.api calls it (apps/desktop/host/preload.js, apps/desktop/renderer/api-http.js): the method's positional
+// the way window.api calls it (apps/desktop/host/preload.js, apps/web/renderer/api-http.js): the method's positional
 // arguments become the channel's one argument through the manifest's `params`, so these tests hold
 // whatever shape `params` takes. Save with a list keeps exactly that list; anything that is not a
 // list is refused and the saved file is left as it was (#239: Save cleared every permission).

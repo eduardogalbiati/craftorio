@@ -16,8 +16,9 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   slices. Seven decisions: (1) the fronts are vertical, reached in phase 4 (phases 2 and 3 keep every
   channel file and domain module in the engine package; in phase 4 each front takes its channels,
   areas and domain modules and the engine discovers channel files from the installed fronts);
-  (2) Settings is the shell (Settings, Setup, Usage, Account) and the fourth front is `ai` (Oracle,
-  Night watch, agents, skills: the menu's AI group of #254); (3) Arena and Duo stay in Design & Plan
+  (2) Settings is the shell (Settings, Setup, Account; the Usage screen goes with the AI group and the
+  header's usage widget with the kit, confirmed 2026-10-25, #579) and the fourth front is `ai` (Oracle,
+  Night watch, agents, skills, usage: the menu's AI group of #254); (3) Arena and Duo stay in Design & Plan
   as ideation tools until a user asks otherwise; (4) the 3D bundles split by owner, the project city
   to the `analyser` front and the run's 3D view to the UI kit, one bundle per owner from
   `scripts/build-3d.js`; (5) Home is the shell and each front registers its cards, as screens

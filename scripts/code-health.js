@@ -149,7 +149,7 @@ const DUPLICATION_BASELINE = {
   'packages/engine/engine/deps-cache.js': 1,
   'packages/engine/engine/screenshot-step.js': 1,
   'apps/desktop/host/preload.js': 1,
-  'apps/desktop/renderer/api-http.js': 1,
+  'apps/web/renderer/api-http.js': 1,
   'fronts/plan/views/arena/arena.js': 2,
   'fronts/plan/views/duo/duo.js': 2,
   'packages/engine/service/areas/chain.js': 2,
