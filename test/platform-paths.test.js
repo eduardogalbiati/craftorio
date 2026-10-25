@@ -1,6 +1,6 @@
 // src/platform-paths.js (#318): the one rule to compare paths. Case-insensitive on Windows and
 // macOS (default APFS/HFS+), case-sensitive on Linux; on Windows the same normalisation as
-// today's src/store.js / src/permissions.js (path.resolve, then lower case), so slashes and a
+// today's src/store.js / src/host/permissions.js (path.resolve, then lower case), so slashes and a
 // trailing separator do not matter. Also: the call sites that compare paths agree with it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -61,7 +61,7 @@ test('worktree.samePath agrees with platform-paths on this OS', () => {
 
 test('permissions.isAppPage compares the page path with the same rule on this OS', () => {
   const { samePath } = load();
-  const { isAppPage } = require('../src/permissions');
+  const { isAppPage } = require('../src/host/permissions');
   const appPage = path.join(os.tmpdir(), 'App-Folder', 'index.html');
   const other = path.join(os.tmpdir(), 'APP-FOLDER', 'index.html');
   assert.equal(isAppPage(pathToFileURL(other).href, appPage), samePath(other, appPage));

@@ -8,7 +8,7 @@
 // AgentsWindow.changed() when its state changes (busy, unread, model, cost): the rail and the header
 // are redrawn once per tick. A pane shows the same conversation as the agent's drawer (one
 // conversation, two places): the agent mounts a second surface of its own state there.
-// - The page: the app's page opened with `?window=agents&agent=<id>` (src/agents-window.js in the
+// - The page: the app's page opened with `?window=agents&agent=<id>` (src/host/agents-window.js in the
 //   main process) hides its shell and mounts the window into the body; agents-window:show (a second
 //   "Open in a window") switches the agent; the agent shown is reported (agents-window:agent).
 // - From the main window: every drawer's [data-agents-window="<id>"] button and Ctrl+Shift+A call

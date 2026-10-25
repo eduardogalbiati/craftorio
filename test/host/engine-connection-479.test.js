@@ -1,4 +1,4 @@
-// #479 (SEC-14), src/engine-connection.js: the server's side of `--host` and the saved token's storage.
+// #479 (SEC-14), src/host/engine-connection.js: the server's side of `--host` and the saved token's storage.
 //
 // resolveListenHost(host, interfaces, { insecureHttp }) (scripts/serve.js calls it with its
 // `--insecure-http` flag): an address beyond this machine that is not a Tailscale one (100.64.0.0/10),
@@ -15,7 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const load = () => require('../src/engine-connection');
+const load = () => require('../../src/host/engine-connection');
 const NO_INTERFACES = {};
 
 test('#479 resolveListenHost: 0.0.0.0 without insecureHttp is refused with an error naming --insecure-http', () => {

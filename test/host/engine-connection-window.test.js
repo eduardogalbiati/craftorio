@@ -1,4 +1,4 @@
-// The engine connection's windows (src/engine-connection-window.js) with a fake Electron: in remote
+// The engine connection's windows (src/host/engine-connection-window.js) with a fake Electron: in remote
 // mode the engine is tested before its window opens; the window loads `<url>/` (never the token in
 // the address, #480) with no preload in its own sandboxed session; leaving the engine's origin, a refused token or a page that does not
 // load shows the connection page; the page's channels answer only that page, never give the token
@@ -7,8 +7,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const { EventEmitter } = require('events');
-const conn = require('../src/engine-connection');
-const { createEngineConnection } = require('../src/engine-connection-window');
+const conn = require('../../src/host/engine-connection');
+const { createEngineConnection } = require('../../src/host/engine-connection-window');
 
 const TOKEN = 'tok-0123456789abcdef';
 // a Tailscale MagicDNS name: plain http to it is allowed without the insecure opt-in (#480)
@@ -61,7 +61,7 @@ function setup({ mode = 'remote', saved = { mode: 'remote', address: URL_, token
   const main = mode === 'local' ? new e.BrowserWindow({ main: true }) : null;
   const c = createEngineConnection({
     ...e,
-    dirname: path.join('app', 'src'),
+    dirname: path.join('app', 'src', 'host'),
     store,
     version: { app: '9.9.9', contract: 'abc123' },
     mode,
@@ -116,7 +116,7 @@ test('remote mode: an engine that cannot be reached shows the connection page wi
   const page = s.pageOf();
   assert.ok(page, 'the connection page is open');
   assert.equal(page.loadedFile, path.join('app', 'src', 'renderer', 'connection', 'connection.html'));
-  assert.equal(page.opts.webPreferences.preload, path.join('app', 'src', 'engine-connection-preload.js'));
+  assert.equal(page.opts.webPreferences.preload, path.join('app', 'src', 'host', 'engine-connection-preload.js'));
   assert.equal(page.opts.webPreferences.sandbox, true);
   assert.equal(page.opts.parent, undefined, 'on its own: there is no other window');
   const state = await s.call('engine-connection:state');

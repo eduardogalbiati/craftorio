@@ -165,8 +165,8 @@ test('serves only the UI folders: no source, no other packages, no traversal', a
   const { base } = await start(t);
   const get = (p) => request(base, { path: p, headers: bearer }).then((r) => r.status);
   assert.equal(await get('/src/renderer/app.js'), 200);
-  assert.equal(await get('/src/main.js'), 404);
-  assert.equal(await get('/src/auth-config.js'), 404);
+  assert.equal(await get('/src/host/main.js'), 404);
+  assert.equal(await get('/src/host/auth-config.js'), 404);
   assert.equal(await get('/package.json'), 404);
   assert.equal(await get('/node_modules/ws/package.json'), 404);
   assert.equal(await get('/src/renderer/../../package.json'), 404);
@@ -239,11 +239,11 @@ test('the auth channels are served and account changes are pushed', async (t) =>
 // (src/service/manifest.js), not from a hand-listed method per file: nothing here parses source
 // text for method names any more.
 
-// src/preload.js requires 'electron' at load and calls contextBridge.exposeInMainWorld once: stub
+// src/host/preload.js requires 'electron' at load and calls contextBridge.exposeInMainWorld once: stub
 // both so the module can run under plain Node, and capture what it exposed.
 function loadPreloadApi(manifest) {
   const electronPath = require.resolve('electron');
-  const preloadPath = require.resolve('../src/preload.js');
+  const preloadPath = require.resolve('../src/host/preload.js');
   let exposed = null;
   require.cache[electronPath] = {
     id: electronPath, filename: electronPath, loaded: true,

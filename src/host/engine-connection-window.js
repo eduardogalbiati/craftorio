@@ -1,7 +1,7 @@
-// The desktop app's windows for the engine connection (rules in src/engine-connection.js): in remote
+// The desktop app's windows for the engine connection (rules in src/host/engine-connection.js): in remote
 // mode the main window is the remote engine's page, and the connection page
-// (src/renderer/connection/, preload src/engine-connection-preload.js) sets where the engine runs.
-// Pure of Electron, like src/agents-window.js: createEngineConnection({ BrowserWindow, ipcMain, shell,
+// (src/renderer/connection/, preload src/host/engine-connection-preload.js) sets where the engine runs.
+// Pure of Electron, like src/host/agents-window.js: createEngineConnection({ BrowserWindow, ipcMain, shell,
 // session, dirname, store, version, ... }) → { startRemote(decision), openPage(), window() }.
 //
 // - The remote window loads `<url>/` with no preload (remote content: context isolation, no Node,
@@ -108,7 +108,7 @@ function createEngineConnection({
       if (pageAlone()) quit();
     });
     const query = typeof lang === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(lang) ? { query: { lang } } : undefined;
-    w.loadFile(path.join(dirname, 'renderer', 'connection', 'connection.html'), query);
+    w.loadFile(path.join(dirname, '..', 'renderer', 'connection', 'connection.html'), query);
     return w;
   }
 

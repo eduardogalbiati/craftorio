@@ -1,5 +1,5 @@
 // The terminal window the ↗ button opens (#318), per OS, and the spawn that opens it. Pure: the
-// caller (src/main.js openConsole) injects the platform, the environment and `exists(name)`, true
+// caller (src/host/main.js openConsole) injects the platform, the environment and `exists(name)`, true
 // when a program is installed; nothing is spawned here.
 //   Windows  cmd.exe /c start "<title>" /D "<cwd>" cmd /k "<command line>" (unchanged; the title
 //            without "&|<>^, which cmd.exe would parse, SEC-27)
@@ -11,7 +11,7 @@
 // the command line. No terminal found (Linux): terminalLaunch is null and externalTerminal says why,
 // so the renderer disables the button (src/renderer/term-dock.js termButtons).
 
-const { shQuote } = require('./shell');
+const { shQuote } = require('../shell');
 
 const LINUX_TERMINALS = [
   'x-terminal-emulator',

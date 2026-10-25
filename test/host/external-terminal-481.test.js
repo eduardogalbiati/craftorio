@@ -1,11 +1,11 @@
-// #481 (SEC-27), src/external-terminal.js on Windows: the window title comes from session names, and
+// #481 (SEC-27), src/host/external-terminal.js on Windows: the window title comes from session names, and
 // cmd.exe parses `start "<title>" ...` itself, so `"`, `&`, `|`, `<`, `>` and `^` in it could end the
 // quoted title and run another command. The title part of the cmd.exe line must hold none of them
 // (dropped or replaced); the rest of the title text is kept.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('../src/external-terminal');
+const load = () => require('../../src/host/external-terminal');
 const HOSTILE = 'Live terminal: x" & calc.exe | more < in > out ^ end';
 
 // the text between `start "` and `" /D ` of the cmd.exe /c line

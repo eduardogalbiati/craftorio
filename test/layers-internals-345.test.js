@@ -24,7 +24,7 @@ test('areaOf: folders, the desktop entry, the root utilities and the domain modu
   assert.equal(areaOf('src/service/areas/backlog.js'), 'service');
   assert.equal(areaOf('src/control/index.js'), 'server');
   assert.equal(areaOf('src/server/index.js'), 'server');
-  assert.equal(areaOf('src/main.js'), 'desktop');
+  assert.equal(areaOf('src/host/main.js'), 'desktop');
   assert.equal(areaOf('src/shell.js'), 'utility');
   assert.equal(areaOf('src/backlog.js'), 'root');
   assert.equal(areaOf('src/renderer/views/backlog/backlog.js'), 'renderer');

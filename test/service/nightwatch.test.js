@@ -1,5 +1,5 @@
 // src/service/channels/nightwatch.js: the owner's Night watch checklist (#239). The channel is called
-// the way window.api calls it (src/preload.js, src/renderer/api-http.js): the method's positional
+// the way window.api calls it (src/host/preload.js, src/renderer/api-http.js): the method's positional
 // arguments become the channel's one argument through the manifest's `params`, so these tests hold
 // whatever shape `params` takes. Save with a list keeps exactly that list; anything that is not a
 // list is refused and the saved file is left as it was (#239: Save cleared every permission).
@@ -10,7 +10,7 @@ const path = require('path');
 const night = require('../../src/night-watch');
 const { makeService } = require('./helpers');
 
-// The same mapping as src/preload.js payload(): positional arguments -> the channel's argument.
+// The same mapping as src/host/preload.js payload(): positional arguments -> the channel's argument.
 function payload(params, args) {
   if (!params) return undefined;
   if (typeof params === 'string') return args[0];

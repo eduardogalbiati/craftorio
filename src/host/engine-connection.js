@@ -1,8 +1,8 @@
 // The engine connection: the desktop app runs the engine on this computer (the default) or is a
 // window onto an engine another computer runs with `npm run serve` (e.g. over Tailscale), the
 // setting being per machine. Pure: no Electron and no network of its own (fetch is given), so the
-// rules are unit-tested (test/engine-connection.test.js); src/engine-connection-window.js draws the
-// windows with them and src/main.js decides at start.
+// rules are unit-tested (test/engine-connection.test.js); src/host/engine-connection-window.js draws the
+// windows with them and src/host/main.js decides at start.
 //
 //   parseAddress(text)          'host', 'host:port' or an http(s):// URL → { url, host, ... } (port 7300 by
 //                               default); a pasted `…/?token=<t>` URL from the server gives its token too

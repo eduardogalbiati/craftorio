@@ -2,7 +2,8 @@
 // From the bottom: shared (src/shared/, pure dual-load modules) requires nothing of the app; the
 // low-level root utilities (ENGINE_ROOT_UTILITIES) only shared; the engine those two; the root domain
 // modules the engine too; the service all of these; the desktop entry and the server what is below
-// them; the renderer only shared, and nothing else requires it.
+// them; the renderer only shared, and nothing else requires it. The desktop entry is src/host/ (phase 1
+// of docs/reorganisation-study-2026-10.md): the Electron host, required by nothing else.
 // Every relative `require` of every .js file under src/ is read, lazy ones (inside a function)
 // included, comments skipped. A require is allowed when AREAS lets the requiring area reach the
 // required one, or when EXCEPTIONS lists it with its reason. The exceptions may only shrink: one
@@ -42,19 +43,18 @@ const AREAS = {
   engine: { may: ['engine', 'utility', 'shared'], what: 'the workflow engine (src/engine/)' },
   root: { may: ['root', 'engine', 'utility', 'shared'], what: 'the domain modules at the root of src/' },
   service: { may: ['service', 'root', 'engine', 'utility', 'shared'], what: 'the app\'s operations, no Electron and no transport (src/service/)' },
-  desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron entry (src/main.js, src/preload.js, src/agents-window.js)' },
+  desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron host (src/host/: main.js, the preloads, the windows and their guards)' },
   server: { may: ['server', 'service', 'root', 'utility', 'shared'], what: 'the HTTP server and the control channel (src/server/, src/control/)' },
   renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (src/renderer/)' },
 };
 
-const DESKTOP = ['src/agents-window.js', 'src/main.js', 'src/preload.js'];
-const FOLDERS = { control: 'server', engine: 'engine', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
+const FOLDERS = { control: 'server', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
 
 // The area of a file (path from the repository root, with /), or null when no area holds it.
 function areaOf(file) {
   const parts = file.split('/');
   if (parts[0] !== 'src' || parts.length < 2) return null;
-  if (parts.length === 2) return DESKTOP.includes(file) ? 'desktop' : ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
+  if (parts.length === 2) return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
   return FOLDERS[parts[1]] || null;
 }
 

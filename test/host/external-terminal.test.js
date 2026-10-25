@@ -1,4 +1,4 @@
-// src/external-terminal.js (#318): which terminal window the ↗ button opens on each OS, and the
+// src/host/external-terminal.js (#318): which terminal window the ↗ button opens on each OS, and the
 // spawn command that opens it (pure: the caller injects the platform, the environment and
 // `exists(name)`, true when a program is on PATH; nothing is spawned here). Windows keeps today's
 // `cmd.exe /c start "<title>" /D "<cwd>" cmd /k "<command line>"`; macOS uses Terminal.app;
@@ -11,9 +11,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('../i18n-sandbox');
 
-const load = () => require('../src/external-terminal');
+const load = () => require('../../src/host/external-terminal');
 
 const only = (...names) => (name) => names.includes(name);
 const none = () => false;
@@ -190,8 +190,8 @@ test('externalTerminal: available where a terminal is found, else unavailable wi
 
 // --- the ↗ button (src/renderer/term-dock.js termButtons) -----------------------------------------
 
-const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
-const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'term-dock.js'), 'utf8');
+const appSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'app.js'), 'utf8');
+const dockSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'term-dock.js'), 'utf8');
 
 function loadTermButtons(api) {
   const sandbox = { api, navigator: { platform: '' } };

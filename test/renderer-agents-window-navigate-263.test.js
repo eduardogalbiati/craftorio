@@ -2,7 +2,7 @@
 // request, the settings) opens in the main window: on the window's page AgentsWindow.toMainWindow
 // sends the target (api.navigateMainWindow, channel agents-window:navigate) and answers true; in the
 // main window it answers false and the view opens the screen itself; the main window subscribes to
-// main-window:navigate (api.onMainWindowNavigate, the relay of src/main.js) and runs the handler the
+// main-window:navigate (api.onMainWindowNavigate, the relay of src/host/main.js) and runs the handler the
 // view registered (AgentsWindow.onNavigate). The
 // Oracle and the Product Owner register their run links (window.showRun). Developer's tests through
 // the page harness (test/agent-chat-page-harness.js).

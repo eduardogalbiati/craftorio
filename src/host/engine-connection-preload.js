@@ -1,6 +1,6 @@
 // window.connection for the engine connection page (src/renderer/connection/), and nothing else: the
-// page's own channels, answered by src/engine-connection-window.js only for that page's window. The
-// app's window.api is not here (src/preload.js): this page also opens when the app runs no engine of
+// page's own channels, answered by src/host/engine-connection-window.js only for that page's window. The
+// app's window.api is not here (src/host/preload.js): this page also opens when the app runs no engine of
 // its own (remote mode). Sandboxed: only `electron` can be required.
 const { contextBridge, ipcRenderer } = require('electron');
 

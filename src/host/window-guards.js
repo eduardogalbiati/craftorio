@@ -2,7 +2,7 @@
 // guardWindow(webContents, { openExternal }) prevents every navigation (the app is a single page; a
 // form in untrusted markdown or a dropped file would otherwise load a local page with the preload's
 // window.api), sends http(s) links to the browser through openExternal, denies window.open and
-// prevents attaching a webview. src/main.js and src/agents-window.js install it on their windows.
+// prevents attaching a webview. src/host/main.js and src/host/agents-window.js install it on their windows.
 // A reload the page starts itself (location.reload) is prevented too: the desktop app restarts
 // through app:relaunch (code-banner.js's Reload button is for the app in a browser).
 

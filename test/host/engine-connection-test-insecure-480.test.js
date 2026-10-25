@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { createEngineConnection } = require('../src/engine-connection-window');
+const { createEngineConnection } = require('../../src/host/engine-connection-window');
 
 const TOKEN = 'tok-0123456789abcdef';
 const LAN = 'http://192.168.1.10:7300';
@@ -34,7 +34,7 @@ function setup() {
     ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) },
     shell: { openExternal() {} },
     session: { fromPartition: () => ses },
-    dirname: path.join('app', 'src'),
+    dirname: path.join('app', 'src', 'host'),
     store: { read: () => ({ mode: 'local', address: LAN, token: TOKEN }), write() {} },
     version: { app: '9.9.9', contract: 'abc123' },
     mode: 'local',

@@ -1,5 +1,5 @@
 // Keep awake (#162): service.pendingWork (src/service/areas/keep-awake.js) collects the runs,
-// roadmaps and queued items src/keep-awake.js's workToDo turns into "work to keep the computer
+// roadmaps and queued items src/host/keep-awake.js's workToDo turns into "work to keep the computer
 // awake for". createService is used directly (not makeService) for the "no workspace" case, since
 // makeService always opens one.
 const test = require('node:test');

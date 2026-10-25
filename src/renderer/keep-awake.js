@@ -1,7 +1,7 @@
 /* global api */
 // Keep awake (#162): the switch in the Workflows screen's header (Runs, Definitions and Pipelines) and in
 // Settings › Execution, one setting (settings.keepAwake, per workspace): changing one changes the
-// other. Shows the blocker's state from main (src/keep-awake.js): Off, "On: waiting for work",
+// other. Shows the blocker's state from main (src/host/keep-awake.js): Off, "On: waiting for work",
 // "Active: 2 runs, roadmap stage 3/6", or the error of a blocker that failed to start (the switch
 // stays on); a moon-off item in the sidebar while the blocker is held. The browser client (npm run
 // serve) has no blocker: the switch is disabled there. initKeepAwake() runs from app.js's init().

@@ -13,7 +13,7 @@ const ADAPTERS = path.join(ROOT, 'shared', 'platforms');
 const LITERAL = /(['"`])(github|gitlab|gh|gl)\1/g;
 const EXCEPTIONS = {
   'actions-usage.js': 2, // the GitHub Actions billing API: a GitHub-only feature run with the gh CLI
-  'auth.js': 1, // the GitHub sign-in (OAuth) provider, not a git platform
+  'host/auth.js': 1, // the GitHub sign-in (OAuth) provider, not a git platform
   'renderer/setup.js': 1, // the CLIs the setup checks
   'service/areas/settings.js': 1, // the CLIs the settings check
   'shared/setup-model.js': 1, // the CLIs the setup describes

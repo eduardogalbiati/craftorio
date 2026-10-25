@@ -1,8 +1,8 @@
 // The channel manifest: the single list of what `window.api` offers. Each area of the service
 // declares its channels in its own file under src/service/channels/ (found by listing the folder,
 // so a new area edits no shared list); this module merges them and adds the channels the desktop
-// layer (src/main.js) and the account module (src/auth.js) answer. The clients build `window.api`
-// from it at runtime: src/preload.js asks main (`api:manifest`, sync IPC) and
+// layer (src/host/main.js) and the account module (src/host/auth.js) answer. The clients build `window.api`
+// from it at runtime: src/host/preload.js asks main (`api:manifest`, sync IPC) and
 // src/renderer/api-http.js asks the server (`GET /api/manifest`). No generated file.
 //
 // An entry is one of:
@@ -23,7 +23,7 @@ const path = require('path');
 
 const CHANNELS_DIR = path.join(__dirname, 'channels');
 
-// Answered by src/main.js (native dialogs, the file explorer, the clipboard, console windows).
+// Answered by src/host/main.js (native dialogs, the file explorer, the clipboard, console windows).
 const DESKTOP = [
   { channel: 'path:open', method: 'openPath', params: 'path', desktop: 'Opening folders' },
   { channel: 'dialog:pickFolder', method: 'pickFolder', desktop: 'Picking a folder' },
@@ -40,18 +40,18 @@ const DESKTOP = [
   { channel: 'clipboard:writeFile', method: 'clipboardWriteFile', params: ['path'], desktop: 'Copying a file' },
   // restarts the app (the code changed on disk); refuses with runs in progress unless interruptRuns
   { channel: 'app:relaunch', method: 'relaunchApp', params: ['interruptRuns'], desktop: 'Restarting the app' },
-  // the engine connection page (src/engine-connection-window.js): this computer or a remote engine;
+  // the engine connection page (src/host/engine-connection-window.js): this computer or a remote engine;
   // the desktop app showing a remote engine opens it through api-http.js (CONNECTION_PATH)
   { channel: 'engine:openConnection', method: 'openEngineConnection', desktop: 'Choosing where the engine runs' },
   // a click on a desktop notification ({ runId, workflow } | { terminalId })
   { event: 'notify:open', method: 'onNotificationClick' },
-  // Keep awake (#162, src/keep-awake.js): the blocker's state, re-checked; pushed when it changes
+  // Keep awake (#162, src/host/keep-awake.js): the blocker's state, re-checked; pushed when it changes
   { channel: 'keepAwake:state', method: 'keepAwakeState', desktop: 'Keeping the computer awake' },
   { event: 'keepAwake:changed', method: 'onKeepAwakeChange' },
   // Control channel (#336, src/control): { enabled, url, port, file, error, ctlPath }, re-checked; pushed when it changes
   { channel: 'control:state', method: 'controlChannelState', desktop: 'The control channel for outside sessions' },
   { event: 'control:changed', method: 'onControlChannelChange' },
-  // The Agents window (#263, src/agents-window.js): open it on an agent ({ agent }), tell it which
+  // The Agents window (#263, src/host/agents-window.js): open it on an agent ({ agent }), tell it which
   // agent it shows (remembered for the next open), and the main process asking it to switch
   { channel: 'agents-window:open', method: 'openAgentsWindow', params: 'options', desktop: 'The Agents window' },
   { send: 'agents-window:agent', method: 'setAgentsWindowAgent', params: 'options', desktop: 'The Agents window' },

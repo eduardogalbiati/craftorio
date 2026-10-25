@@ -221,7 +221,7 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   (`count-refusals`, `simulated-strays`, `serve`, `smoke`, `smoke-package`, `affected-tests` CLI);
   the channel tables that only forward to an area (agents, analytics, app-update, artifacts, chain,
   chat, diff, local-preview, notify, pasted-images, phonegates, pipelines, projects, releases,
-  sessions, usage, workflows); `src/main.js` (Electron main, E2E app.feature), `src/auth-config.js`
+  sessions, usage, workflows); `src/host/main.js` (Electron main, E2E app.feature), `src/host/auth-config.js`
   and `src/renderer/chat-models.js` (constants), `areas/chat-turns.js` (12-line wrapper); renderer
   glue over a tested model or covered by a feature (account, chain-picker, code-banner,
   diff-viewer, image-viewer, keep-awake, kept-work-dialog, run3d/*, setup, usage-widget,

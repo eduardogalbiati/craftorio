@@ -1,8 +1,8 @@
 // Electron main process: the window, the workspace dialog, desktop-only actions (native dialogs,
 // clipboard, opening files and folders, external console windows) and the IPC transport to the
 // engine service (src/service), which holds everything else. With a remote engine set (Settings ›
-// Execution › Engine, src/engine-connection.js) the process runs no engine and opens no workspace:
-// its window shows the engine another computer serves (src/engine-connection-window.js).
+// Execution › Engine, src/host/engine-connection.js) the process runs no engine and opens no workspace:
+// its window shows the engine another computer serves (src/host/engine-connection-window.js).
 
 const path = require('path');
 const os = require('os');
@@ -28,37 +28,37 @@ const {
   systemPreferences,
 } = require('electron');
 const { createAgentsWindow } = require('./agents-window');
-const { resolveCommand } = require('./engine/providers');
+const { resolveCommand } = require('../engine/providers');
 const {
   externalTerminal,
   NO_TERMINAL,
   terminalLaunch,
 } = require('./external-terminal');
-const { pathKey } = require('./platform-paths');
-const { psQuote } = require('./shell');
-const I18n = require('./shared/i18n');
+const { pathKey } = require('../platform-paths');
+const { psQuote } = require('../shell');
+const I18n = require('../shared/i18n');
 const { t } = I18n;
-const workspace = require('./workspace');
-const localPreview = require('./local-preview');
-const runOwner = require('./run-owner');
+const workspace = require('../workspace');
+const localPreview = require('../local-preview');
+const runOwner = require('../run-owner');
 const { allowPermission } = require('./permissions');
 const { guardIpc } = require('./ipc-guard');
 const { guardWindow } = require('./window-guards');
 const { checkOpenable } = require('./open-guard');
-const { createService } = require('./service');
-const { createControlChannel } = require('./control');
-const { nativeBinaryPath } = require('./native-bin');
+const { createService } = require('../service');
+const { createControlChannel } = require('../control');
+const { nativeBinaryPath } = require('../native-bin');
 const {
   authChannels,
   PUSHED_EVENTS,
-} = require('./service/manifest');
-const { contractHash } = require('./service/contract');
+} = require('../service/manifest');
+const { contractHash } = require('../service/contract');
 const engineConnection = require('./engine-connection');
 const { createEngineConnection } = require('./engine-connection-window');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
 const { createKeepAwake } = require('./keep-awake');
-const mainLog = require('./main-log');
+const mainLog = require('../main-log');
 
 // the last lines of this process's console, for a finding's context (#361)
 mainLog.capture();
@@ -82,7 +82,7 @@ if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData',
 // - Whatever the user data folder, the app locks the workspace it opens (<workspace>/.lock with a
 //   heartbeat, src/run-owner.js); a locked workspace is never opened read-write by a second copy.
 // Scratch copies (screenshots, Run locally, smoke checks, tests) have their own workspaces: unaffected.
-const APP_DIR = path.join(__dirname, '..');
+const APP_DIR = path.join(__dirname, '..', '..');
 if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
   const scratch = localPreview.worktreeAppScratch(APP_DIR);
   if (scratch) {
@@ -169,9 +169,9 @@ const account = {
   cancelSignIn: () => auth.cancelSignIn(),
   signOut: () => auth.signOut(),
 };
-// Every channel below answers only the app's page in a window's top frame (#467, src/ipc-guard.js):
+// Every channel below answers only the app's page in a window's top frame (#467, src/host/ipc-guard.js):
 // another page or a subframe is refused and logged (the console, kept by src/main-log.js)
-const APP_PAGE = path.join(__dirname, 'renderer', 'index.html');
+const APP_PAGE = path.join(__dirname, '..', 'renderer', 'index.html');
 const ipc = guardIpc(ipcMain, { appPage: APP_PAGE, log: (...a) => console.warn('[ipc]', ...a) });
 for (const { channel, fn } of authChannels(account)) if (channel) ipc.handle(channel, (arg) => fn(arg));
 
@@ -195,7 +195,7 @@ for (const channel of PUSHED_EVENTS) {
   service.events.on(channel, (payload) => broadcast(channel, payload));
 }
 
-// ---- the Agents window (#263, src/agents-window.js) -----------------------------------------
+// ---- the Agents window (#263, src/host/agents-window.js) -----------------------------------------
 // Created once the workspace is known (its state file lives there); opened from the drawers'
 // "Open in a window" buttons and Ctrl+Shift+A (agents-window:open), told which agent the window
 // shows (agents-window:agent) so it reopens there. A link in its chats to a screen of the app
@@ -213,7 +213,7 @@ ipc.on('agents-window:navigate', (arg) => {
 
 // ---- keep awake (#162) -----------------------------------------------------------------
 // The app that runs the work (#112) holds the blocker, only while the setting is on and there is
-// work (src/keep-awake.js). Re-checked after run events, when the settings change and every 15 s
+// work (src/host/keep-awake.js). Re-checked after run events, when the settings change and every 15 s
 // (a roadmap or a queue changed from the Backlog); released when idle, switched off and on quit.
 const keepAwake = createKeepAwake({
   blocker: powerSaveBlocker,
@@ -324,7 +324,7 @@ async function pickWorkspaceDir(parent) {
 }
 
 // The microphone (voice input, #82) for the app's own page only, audio only; every other
-// permission and page is denied (see src/permissions.js). A check names the page through its
+// permission and page is denied (see src/host/permissions.js). A check names the page through its
 // webContents (its origin is just "file://").
 function restrictPermissions(ses) {
   ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(allowPermission(permission, details, APP_PAGE)));
@@ -345,7 +345,7 @@ const WINDOW = {
   autoHideMenuBar: true,
 };
 
-// ---- the engine connection (src/engine-connection.js, src/engine-connection-window.js) --------
+// ---- the engine connection (src/host/engine-connection.js, src/host/engine-connection-window.js) --------
 // Per machine, in the user data folder (never the workspace), the token encrypted with the OS: this
 // computer runs the engine (the default), or the window shows an engine another computer serves
 // (`npm run serve`). Read once the app is ready (safeStorage); switching restarts the app.
@@ -497,7 +497,7 @@ ipc.handle('clipboard:writeFile', async ({ path: file }) => {
 
 // External terminal window for a session: its live log or its CLI conversation. The window per OS
 // (cmd on Windows, Terminal.app on macOS, the first terminal installed on Linux) comes from
-// src/external-terminal.js; without one the renderer keeps the ↗ button disabled (#318).
+// src/host/external-terminal.js; without one the renderer keeps the ↗ button disabled (#318).
 const terminalHost = () => ({ exists: (name) => !!resolveCommand(name) });
 function openConsole({ title, cwd, file, args, env }) {
   const launch = terminalLaunch({ ...terminalHost(), title, cwd, file, args, childEnv: env });

@@ -13,7 +13,7 @@
   "bugs": {
     "url": "https://github.com/eduardogalbiati/multiagent-orchestrator/issues"
   },
-  "main": "src/main.js",
+  "main": "src/host/main.js",
   "engines": {
     "node": ">=24"
   },

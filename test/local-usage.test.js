@@ -139,7 +139,7 @@ test('parseClaude: per-session metrics from prompts, tool_use blocks, tool resul
     { type: 'assistant', sessionId, timestamp: t5, message: { id: 'm2', model: 'claude-opus-5-5',
       usage: { input_tokens: 2000, output_tokens: 300, cache_read_input_tokens: 800, cache_creation_input_tokens: 50 },
       content: [
-        { type: 'tool_use', id: 't-edit', name: 'Edit', input: { file_path: 'src/auth.js', old_string: 'a\nb', new_string: 'a\nb\nc' } },
+        { type: 'tool_use', id: 't-edit', name: 'Edit', input: { file_path: 'src/host/auth.js', old_string: 'a\nb', new_string: 'a\nb\nc' } },
         { type: 'tool_use', id: 't-write', name: 'Write', input: { file_path: 'src/new-file.js', content: 'x\ny' } },
         { type: 'tool_use', id: 't-multi', name: 'MultiEdit', input: { file_path: 'src/multi.js', edits: [{ old_string: 'p', new_string: 'p\nq' }, { old_string: 'r\ns\nt', new_string: '' }] } },
         { type: 'tool_use', id: 't-bash', name: 'Bash', input: { command: 'npm test' } },
@@ -162,7 +162,7 @@ test('parseClaude: per-session metrics from prompts, tool_use blocks, tool resul
   assert.equal(s.interrupts, 1);
   assert.equal(s.compactions, 1);
   assert.equal(s.peakContext, 2850); // max(1000+500+100, 2000+800+50)
-  assert.deepEqual(s.files, ['src/auth.js', 'src/new-file.js', 'src/multi.js']);
+  assert.deepEqual(s.files, ['src/host/auth.js', 'src/new-file.js', 'src/multi.js']);
   assert.equal(s.linesAdded, 7); // Edit new_string(3) + Write content(2) + MultiEdit new_string(2)
   assert.equal(s.linesRemoved, 6); // Edit old_string(2) + MultiEdit old_string(1+3)
   assert.equal(s.durationMs, Date.parse(t7) - Date.parse(t1));

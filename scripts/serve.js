@@ -1,5 +1,5 @@
 // Runs the engine as a server: the HTTP/WebSocket API (src/server) and the UI in a browser, or in
-// the desktop app of another computer (Settings › Execution › Engine, src/engine-connection.js).
+// the desktop app of another computer (Settings › Execution › Engine, src/host/engine-connection.js).
 //   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--insecure-http] [--workspace <dir>]
 //
 // The token is full control of this machine (a shell, gate approval, paid runs, #479): the banner
@@ -25,10 +25,10 @@ const { spawn } = require('child_process');
 const workspace = require('../src/workspace');
 const { createService } = require('../src/service');
 const { createServer } = require('../src/server');
-const { createAuth, fileStorage } = require('../src/auth');
-const authConfig = require('../src/auth-config');
+const { createAuth, fileStorage } = require('../src/host/auth');
+const authConfig = require('../src/host/auth-config');
 const runOwner = require('../src/run-owner');
-const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../src/engine-connection');
+const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../src/host/engine-connection');
 
 function parseArgs(argv) {
   const a = { port: 7300, host: '127.0.0.1', workspace: null, insecureHttp: false };

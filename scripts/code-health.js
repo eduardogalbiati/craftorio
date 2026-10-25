@@ -146,7 +146,7 @@ const DUPLICATION_BASELINE = {
   'src/engine/deps-cache.js': 1,
   'src/engine/screenshot-step.js': 1,
   'src/night-watch.js': 1,
-  'src/preload.js': 1,
+  'src/host/preload.js': 1,
   'src/renderer/api-http.js': 1,
   'src/renderer/views/arena/arena.js': 2,
   'src/renderer/views/duo/duo.js': 2,

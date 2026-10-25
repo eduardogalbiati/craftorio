@@ -9,9 +9,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const conn = require('../src/engine-connection');
-const { startEngine } = require('./contract/harness');
-const PKG = require('../package.json');
+const conn = require('../../src/host/engine-connection');
+const { startEngine } = require('../contract/harness');
+const PKG = require('../../package.json');
 
 test('the connection test and the remote window\'s first load against npm run serve', async (t) => {
   const engine = await startEngine();
@@ -61,7 +61,7 @@ function serve(t, workspace) {
   };
   delete env.MULTIAGENT_WORKSPACE;
   delete env.NODE_TEST_CONTEXT;
-  const child = spawn(process.execPath, [path.join(__dirname, '..', 'scripts', 'serve.js'), '--port', '0', '--workspace', workspace], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const child = spawn(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'serve.js'), '--port', '0', '--workspace', workspace], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let text = '';
   child.stdout.on('data', (c) => { text += c; });
   child.stderr.on('data', (c) => { text += c; });

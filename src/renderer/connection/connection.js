@@ -3,7 +3,7 @@
 // Change the address and Use this computer. Cancel (or Esc) closes it without changing anything;
 // when it is the app's only window (the engine failed) the button reads Quit and quits the app
 // (Esc does not: quitting is never one stray key). Talks only to window.connection
-// (src/engine-connection-preload.js); the saved token never comes back to the page (a blank token
+// (src/host/engine-connection-preload.js); the saved token never comes back to the page (a blank token
 // field keeps it); a warning shows when the token is (or would be) stored unencrypted (#479). A
 // plain-http address outside loopback and Tailscale shows "Allow an insecure connection", and its
 // warning every time it is checked (#480). Its texts are connection.* keys of the catalog (#329, window.I18n): the language

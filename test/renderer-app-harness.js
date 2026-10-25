@@ -20,7 +20,7 @@ const vm = require('vm');
 const { FileXHR, setCurrentScript } = require('./page-i18n');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
-// window.api's plain values (not methods), as src/preload.js exposes them
+// window.api's plain values (not methods), as src/host/preload.js exposes them
 const API_VALUES = { platform: 'win32' };
 // what a few methods app.js's init() reads resolve to by default (simulation only, no CLI checks)
 const API_DEFAULTS = {

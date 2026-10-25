@@ -3,8 +3,8 @@ order: 100
 ---
 
 <!-- section:structure -->
-src/main.js              Electron main process + IPC
-src/preload.js           safe API exposed to the renderer
+src/host/main.js              Electron main process + IPC
+src/host/preload.js           safe API exposed to the renderer
 src/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 src/projects.js          projects: CRUD and folder/repository setup
 src/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue

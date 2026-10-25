@@ -20,7 +20,7 @@ const workspace = require('../../src/workspace');
 const budget = require('../../src/budget');
 const { makeService } = require('./helpers');
 
-// The same mapping as src/preload.js payload(): positional arguments -> the channel's argument.
+// The same mapping as src/host/preload.js payload(): positional arguments -> the channel's argument.
 function payload(params, args) {
   if (!params) return undefined;
   if (typeof params === 'string') return args[0];

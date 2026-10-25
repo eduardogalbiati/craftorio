@@ -1,4 +1,4 @@
-// #263: the Agents window's owner in the main process, pure of Electron: src/agents-window.js
+// #263: the Agents window's owner in the main process, pure of Electron: src/host/agents-window.js
 // createAgentsWindow({ BrowserWindow, statePath, dirname }) → { open({ agent }), current() }. A fake
 // BrowserWindow stands in for the real one (like test/keep-awake.test.js's fake powerSaveBlocker).
 // The window loads with the main window's preload (dirname/preload.js, contextIsolation, no
@@ -6,19 +6,19 @@
 // its bounds and the last agent in the state file (a JSON file in the workspace), and survives a
 // missing or corrupt state file. Acceptance tests, written before the code.
 // #466 CONTRACT: after open(), the window's webContents prevents EVERY 'will-navigate' (a file: URL
-// included) and every 'will-attach-webview' (src/window-guards.js guardWindow, or the same rule inline).
+// included) and every 'will-attach-webview' (src/host/window-guards.js guardWindow, or the same rule inline).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const SRC = path.join(__dirname, '..', 'src');
+const SRC = path.join(__dirname, '..', '..', 'src');
 
 // resolved inside each test: the module does not exist until the change lands
 function create(opts) {
-  const mod = require('../src/agents-window.js');
-  assert.equal(typeof mod.createAgentsWindow, 'function', 'src/agents-window.js exports createAgentsWindow (#263)');
+  const mod = require('../../src/host/agents-window.js');
+  assert.equal(typeof mod.createAgentsWindow, 'function', 'src/host/agents-window.js exports createAgentsWindow (#263)');
   return mod.createAgentsWindow(opts);
 }
 

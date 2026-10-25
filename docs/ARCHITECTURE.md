@@ -7,9 +7,9 @@ the user-facing documentation is the [README](../README.md).
 ```
 renderer (src/renderer/)  ──window.api──▶  service (src/service/)  ──▶  engine (src/engine/)
    desktop window or browser                 channels, one per area        runs workflows
-        ▲ IPC (src/preload.js)                                                │ spawns
+        ▲ IPC (src/host/preload.js)                                                │ spawns
         │ or HTTP/WebSocket (src/server/)                                     ▼
-   main process (src/main.js)                                   agent CLIs: claude, codex, grok
+   main process (src/host/main.js)                                   agent CLIs: claude, codex, grok
                                                                 native sidecars (resources/bin/)
 ```
 
@@ -28,8 +28,8 @@ written to the local workspace (`<workspace>/runs/<run>/`).
 `src/service/` is everything the UI can ask of the engine, with no dependency on Electron or on a
 transport. Each area declares its channels in one file under `src/service/channels/`;
 `src/service/manifest.js` merges them into the list the clients build `window.api` from. Two
-transports carry the same channels: Electron IPC in the desktop app (`src/main.js`,
-`src/preload.js`) and HTTP/WebSocket when the engine runs as a server (`npm run serve`,
+transports carry the same channels: Electron IPC in the desktop app (`src/host/main.js`,
+`src/host/preload.js`) and HTTP/WebSocket when the engine runs as a server (`npm run serve`,
 `src/server/`). The optional control channel (`src/control/`) lets a terminal or another agent drive
 the running app through an allowlist of those channels.
 

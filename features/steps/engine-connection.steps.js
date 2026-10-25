@@ -1,5 +1,5 @@
 // Steps of features/engine-connection-security.feature (#479): the engine connection page, a second
-// Electron window (src/renderer/connection/, src/engine-connection-window.js) opened by Settings ›
+// Electron window (src/renderer/connection/, src/host/engine-connection-window.js) opened by Settings ›
 // Execution › Engine › Change… (data-testid="settings-engine-change"). Locators are roles and
 // data-testid only (skills/ui-conventions):
 //   engine-connection                   the page's root (found among e2e.app.windows())
@@ -8,7 +8,7 @@
 //   engine-token-unencrypted-warning    (#479) the warning that the token is stored unencrypted, shown
 //                                       when safeStorage is unavailable on this computer
 // "This computer cannot encrypt" replaces safeStorage.isEncryptionAvailable() in the app's main
-// process (e2e.app.evaluate: the same electron module src/main.js uses), before the page opens.
+// process (e2e.app.evaluate: the same electron module src/host/main.js uses), before the page opens.
 // The window is kept on the scenario's fixture as e2e.connectionWindow; the fixture closes the app,
 // and every window with it, after the scenario (fixtures.js).
 

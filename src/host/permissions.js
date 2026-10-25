@@ -1,10 +1,10 @@
-// Which web permissions the app's window gets (src/main.js installs it on the session): the
+// Which web permissions the app's window gets (src/host/main.js installs it on the session): the
 // microphone for voice input (#82, `media` with audio only) and only for the app's own page
 // (src/renderer/index.html, a file: URL). Everything else (camera, geolocation, notifications
 // from pages, ...) and every other page is denied.
 
 const { fileURLToPath } = require('url');
-const { pathKey } = require('./platform-paths');
+const { pathKey } = require('../platform-paths');
 
 const norm = (p) => pathKey(p);
 

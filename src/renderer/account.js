@@ -1,6 +1,6 @@
 /* global api */
 // Account: the sign-in screen and the account chip in the top bar (initAccount, from app.js's init()).
-// The account gates nothing: it only counts the people using the app (#315, src/auth.js).
+// The account gates nothing: it only counts the people using the app (#315, src/host/auth.js).
 
 // Account: sign-in screen and the account chip (name or email) in the top bar
 function initAccount() {

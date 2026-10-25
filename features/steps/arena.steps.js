@@ -13,7 +13,7 @@ const { expect } = require('@playwright/test');
 const { Given, Then } = require('./fixtures');
 
 const LOAD_TIMEOUT = 30000;
-// the main window's minWidth / minHeight (src/main.js)
+// the main window's minWidth / minHeight (src/host/main.js)
 const MIN_SIZE = '1100x700';
 const WORKFLOW = 'ai-arena';
 const LONG_NAME = 'quarterly-planning-reference-notes-for-the-appointment-booking-platform-for-small-clinics-with-payments-and-reminders-v12-final-reviewed.md';

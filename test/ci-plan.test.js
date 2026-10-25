@@ -16,7 +16,7 @@ test('planOs: a PR touching a platform-sensitive path also runs on macOS', () =>
 });
 
 test('planOs: the ci:macos label adds macOS to a PR', () => {
-  assert.deepEqual(planOs({ event: 'pull_request', files: ['src/main.js'], labels: ['bug', 'ci:macos'] }),
+  assert.deepEqual(planOs({ event: 'pull_request', files: ['src/host/main.js'], labels: ['bug', 'ci:macos'] }),
     ['ubuntu-latest', 'windows-latest', 'macos-latest']);
 });
 

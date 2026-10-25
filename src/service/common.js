@@ -161,7 +161,7 @@ const ID_PARAMS = {
 };
 
 // The argument of a channel whose manifest entry names its params (an array): an object, as the
-// clients build it from the positional arguments (src/preload.js payload). None at all is the
+// clients build it from the positional arguments (src/host/preload.js payload). None at all is the
 // object of a call without arguments; null, a list or a scalar is refused before the channel runs,
 // and so is an ID_PARAMS value that is not a file name (none, null or '' is left to the channel:
 // several take "no run" or "no project").
