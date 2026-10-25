@@ -55,7 +55,7 @@ jobs:
       run:
         shell: bash   # Git Bash on Windows: the same scripts on every OS
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # The PR's CI already tested this code when the merge kept the tree CI tested (main unchanged since):
       # do not repeat `npm test`.
       - id: plan
@@ -125,7 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v8
@@ -158,7 +158,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Promote the release candidate
         env:
           GH_TOKEN: ${{ github.token }}

@@ -88,7 +88,7 @@ jobs:
       run:
         shell: bash   # Git Bash on Windows: the same scripts on every OS
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}

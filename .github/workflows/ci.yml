@@ -29,7 +29,7 @@ jobs:
     outputs:
       os: ${{ steps.plan.outputs.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: scripts/ci-plan.js
           sparse-checkout-cone-mode: false
@@ -64,7 +64,7 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"   # the tests do not open the UI
       MULTIAGENT_SIMULATION_ONLY: "1"      # automated checks never call real models
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: github.event_name == 'pull_request'
         with:
           sparse-checkout: scripts/ci-plan.js
