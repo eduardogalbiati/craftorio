@@ -48,7 +48,9 @@ function survey() {
 test('#590 a kernel file calls a front\'s helper only optionally, a front another front\'s only optionally', () => {
   const { definedBy, sources } = survey();
   const problems = [];
-  for (const { file, owner, text } of sources) {
+  for (const { file, owner, text: source } of sources) {
+    // a comment line that names a helper is not a use (the line numbers are kept)
+    const text = source.replace(/^\s*\/\/.*$/gm, '');
     for (const m of text.matchAll(/\bctx\.([A-Za-z_$][\w$]*)(\?\.)?/g)) {
       const [, name, optional] = m;
       const by = definedBy[name];
