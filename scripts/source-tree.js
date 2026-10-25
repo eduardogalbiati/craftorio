@@ -26,8 +26,11 @@
 //   viewsOf(root, dir)      the screen folders of a layer (`<dir>/views/<view>/`), sorted
 //   frontOf(root, view)     the front that holds the screen `view` (its views/<view>/ folder), the
 //                           UI kit for a shell screen, or null
+//   appPages(root)          the apps with a page folder: [{ app: 'apps/desktop', page: 'apps/desktop/renderer' }]
 //   pageDirs(root)          the folders holding page files, in load order: the kit, the fronts, the
-//                           apps' page folders (`apps/<app>/renderer/`)
+//                           apps' page folders
+//   featureDirs(root)       the folders holding Playwright features: the repository's `features`, the
+//                           kit's and each front's `features/` (playwright.config.js builds its globs from them)
 //   pageFile(root, rel)     the absolute path of a page file by its page-relative name
 //                           ('select.js', 'views/run/run.js'), in whichever layer holds it, or null
 //   pageFiles(root, opts)   every page file of every layer, [{ dir, rel, file }]; { match } the extension
@@ -143,22 +146,33 @@ function viewsOf(root, dir) {
   return fs.readdirSync(abs, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.readdirSync(path.join(abs, e.name)).length).map((e) => e.name).sort();
 }
 
+// The apps with a page folder (`apps/<app>/renderer/`, where index.html lives), by path.
+function appPages(root) {
+  const appsDir = path.join(root, 'apps');
+  if (!fs.existsSync(appsDir)) return [];
+  return fs.readdirSync(appsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(appsDir, e.name, PAGE_DIR)))
+    .map((e) => ({ app: `apps/${e.name}`, page: `apps/${e.name}/${PAGE_DIR}` })).sort((a, b) => a.app.localeCompare(b.app));
+}
+
+// The folders that hold page files, in load order: the UI kit, every front, every app's page folder;
+// before phase 3's moves, the page folder alone.
+function pageDirs(root) {
+  const kit = uiKit(root);
+  return [...(kit ? [kit.dir] : []), ...fronts(root).map((f) => f.dir), ...appPages(root).map((a) => a.page)];
+}
+
+// The folders that hold Playwright features (the shell's at the root, a package's in its features/).
+function featureDirs(root) {
+  const kit = uiKit(root);
+  return ['features', ...(kit ? [`${kit.dir}/features`] : []), ...fronts(root).map((f) => `${f.dir}/features`)];
+}
+
 function frontOf(root, view) {
   const kit = uiKit(root);
   if (kit && viewsOf(root, kit.dir).includes(view)) return kit;
   return fronts(root).find((f) => viewsOf(root, f.dir).includes(view)) || null;
 }
 
-// The folders that hold page files, in load order: the UI kit, every front, every app's page folder
-// (`apps/<app>/renderer/`); before phase 3's moves, the page folder alone.
-function pageDirs(root) {
-  const appsDir = path.join(root, 'apps');
-  const pages = fs.existsSync(appsDir)
-    ? fs.readdirSync(appsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(appsDir, e.name, PAGE_DIR))).map((e) => `apps/${e.name}/${PAGE_DIR}`).sort()
-    : [];
-  const kit = uiKit(root);
-  return [...(kit ? [kit.dir] : []), ...fronts(root).map((f) => f.dir), ...pages];
-}
 
 // The file of a page by its page-relative name ('select.js', 'views/run/run.js', 'index.html'),
 // wherever it lives (the UI kit, a front, an app's page folder; the first that has it, in load
@@ -185,7 +199,9 @@ function pageFiles(root, { match = /\.js$/ } = {}) {
 }
 
 module.exports = {
+  appPages,
   composition,
+  featureDirs,
   frontOf,
   fronts,
   listFiles,

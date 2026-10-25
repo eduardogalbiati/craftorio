@@ -5,7 +5,7 @@ A short tour for people reading the code for the first time. The details live in
 the user-facing documentation is the [README](../README.md).
 
 ```
-renderer (apps/desktop/renderer/)  ──window.api──▶  service (packages/engine/service/)  ──▶  engine (packages/engine/engine/)
+renderer (packages/ui-kit/, fronts/<id>/)  ──window.api──▶  service (packages/engine/service/)  ──▶  engine (packages/engine/engine/)
    desktop window or browser                 channels, one per area        runs workflows
         ▲ IPC (apps/desktop/host/preload.js)                                                │ spawns
         │ or HTTP/WebSocket (packages/engine/server/)                                     ▼
@@ -35,8 +35,9 @@ the running app through an allowlist of those channels.
 
 ## The renderer
 
-`apps/desktop/renderer/` is the UI: plain HTML, CSS and JavaScript, no bundler and no framework. One script
-per screen (moved screens in `views/<view>/`), shared tokens in `style.css`, and `window.api` as the
+The UI is plain HTML, CSS and JavaScript, no bundler and no framework: the UI kit (`packages/ui-kit/`:
+the shell, the run kernel, the controls, `style.css`) and the fronts (`fronts/<id>/views/<view>/`, one
+folder per screen), composed into each app's page (`apps/<app>/renderer/index.html`), with `window.api` as the
 only way to the engine, so the same UI runs in the desktop window and in a browser against a remote
 engine. The 3D views (the run view and the project city) are the exception: React and three.js,
 bundled by `scripts/build-3d.js` into `generated/`. Modules both sides use live in `packages/shared/`.
