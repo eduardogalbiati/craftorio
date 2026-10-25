@@ -20,7 +20,7 @@ const path = require('path');
 const actions = require('../src/domains/oracle/oracle-actions');
 const night = require('../src/domains/night/night-watch');
 const oracle = require('../src/domains/oracle/oracle');
-const workspace = require('../src/workspace');
+const workspace = require('../src/domains/workspace/workspace');
 
 function tmpDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'self-healing-278-'));

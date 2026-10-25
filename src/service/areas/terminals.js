@@ -8,15 +8,15 @@ const os = require('os');
 const path = require('path');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
-const projects = require('../../projects');
+const projects = require('../../domains/project/projects');
 const Language = require('../../shared/language');
 const registry = require('../../shared/providers');
 const skills = require('../../domains/agents/skills');
-const supervisor = require('../../supervisor');
-const notifier = require('../../notifications');
+const supervisor = require('../../domains/supervisor/supervisor');
+const notifier = require('../../domains/workspace/notifications');
 const { Terminals } = require('../../domains/machine/terminals');
-const workspace = require('../../workspace');
-const { SCOPE_HINT } = require('../../actions-usage');
+const workspace = require('../../domains/workspace/workspace');
+const { SCOPE_HINT } = require('../../domains/usage/actions-usage');
 const {
   followFile,
   followSession,

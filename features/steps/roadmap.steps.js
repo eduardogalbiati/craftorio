@@ -839,7 +839,7 @@ Then('no roadmap item shows an {string} control', async ({ e2e }, name) => {
 const releaseRe = (version) => new RegExp(`${escapeRe(version)}(?![\\w.])`);
 const releaseBlock = (page, version) => page.getByTestId('roadmap-release-block').filter({ hasText: new RegExp(`Release ${releaseRe(version).source}`) }).first();
 
-// A shipped release in the project's history (<workspace>/releases/<projectId>.json, src/releases.js,
+// A shipped release in the project's history (<workspace>/releases/<projectId>.json, src/domains/releases/releases.js,
 // as scripts/screenshot.js demoReleases writes it), holding the runs of stage n's done items (stage n
 // as the roadmap numbers it: the demo's stage 1 "Stability first", stage 2 "Tonight"). Added to the
 // releases already there; the app reloads to read it.

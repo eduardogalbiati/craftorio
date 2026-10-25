@@ -16,8 +16,8 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const actions = require('../../src/domains/oracle/oracle-actions');
 const night = require('../../src/domains/night/night-watch');
-const workspace = require('../../src/workspace');
-const budget = require('../../src/budget');
+const workspace = require('../../src/domains/workspace/workspace');
+const budget = require('../../src/domains/usage/budget');
 const { makeService } = require('./helpers');
 
 // The same mapping as src/host/preload.js payload(): positional arguments -> the channel's argument.

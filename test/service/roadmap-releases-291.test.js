@@ -1,13 +1,13 @@
 // #291: the releases the Roadmap draws (src/service/areas/releases.js roadmapReleases): the shipped
 // history with its release run's stations, the release runs not shipped since (checking, waiting at
-// Ship in another app, on hold), and { error } when the history cannot be read (src/releases.js
+// Ship in another app, on hold), and { error } when the history cannot be read (src/domains/releases/releases.js
 // historyError).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const releases = require('../../src/releases');
+const releases = require('../../src/domains/releases/releases');
 const area = require('../../src/service/areas/releases');
 
 function setup(t, history) {

@@ -5,7 +5,7 @@
 // Product Owner (the produced issues as planned roadmap stages, never started by itself), or the
 // Backlog queue. Only a success goes on (a development workflow must also have merged); anything
 // else pauses the chain with a notice, and the owner resumes or drops it. The chain's state lives in
-// runs/<id>/chain.json (src/runs.js readChain/writeChain). It never answers a gate: the next run's
+// runs/<id>/chain.json (src/domains/run/runs.js readChain/writeChain). It never answers a gate: the next run's
 // gates wait for the owner like any run's. A simulated run only chains simulated runs, and queues
 // nothing (it filed no real issue).
 
@@ -16,14 +16,14 @@ const chain = require('../../shared/chain-model');
 const { platformOrDefault } = require('../../shared/platforms');
 const agents = require('../../domains/agents/agents');
 const backlog = require('../../domains/backlog/backlog');
-const live = require('../../live-roadmap');
-const notifier = require('../../notifications');
-const productOwner = require('../../product-owner');
-const projects = require('../../projects');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
-const usage = require('../../usage');
-const workspace = require('../../workspace');
+const live = require('../../domains/roadmap/live-roadmap');
+const notifier = require('../../domains/workspace/notifications');
+const productOwner = require('../../domains/po/product-owner');
+const projects = require('../../domains/project/projects');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
+const usage = require('../../domains/usage/usage');
+const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
 
 // stages a Product Owner proposal may add for one finished run

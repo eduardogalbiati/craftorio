@@ -69,7 +69,7 @@ test('#262 a fallback skips an entry whose provider the workflow does not define
 });
 
 test('#262 resumeSpec: a resumed run gets the run\'s overrides, then the fallbacks its agents took', async (t) => {
-  const { resumeSpec } = require('../src/supervisor');
+  const { resumeSpec } = require('../src/domains/supervisor/supervisor');
   const { run } = await runRecorded(t, {
     agentOverrides: { reviewer: { effort: '' } },
     fallbacks: SETTINGS_CHAIN, mockSequences: { usage_limits: ['claude:claude-opus-5-5'] },

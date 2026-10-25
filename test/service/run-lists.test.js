@@ -1,7 +1,7 @@
 // src/service/areas/run-lists.js (#200): the paged, server-filtered run lists behind runs:list and
 // projects:runs — newest first, running (or gate-waiting) runs and their children pinned to the
 // first page, filter/search/"Show simulated" applied over every run (not just the loaded pages),
-// upTo (a deep link to an older run) and ids (one row's live refresh). src/run-artifacts.js's own
+// upTo (a deep link to an older run) and ids (one row's live refresh). src/domains/run/run-artifacts.js's own
 // cache is covered by test/run-artifacts.test.js; this file checks the service actually benefits
 // from it (no events.jsonl re-read on an unchanged listing) and that rows never carry a file list.
 const test = require('node:test');

@@ -4,7 +4,7 @@
 //   checkCommit(card)        whether the card may be committed: { ok, score, bar, gaps, reason }
 //   proposeSplit(card)       the deterministic proposal: the tasks of acceptance.md (its `- [ ]`
 //                            lines, else its list items) in one issue, or in two to four when they
-//                            are too many for one run (the Product Owner's split rules, src/po-split.js);
+//                            are too many for one run (the Product Owner's split rules, src/domains/po/po-split.js);
 //                            the simulated answer, and the fallback for a model's unusable one
 //   normalizeSplit(raw, …)   a model's proposal kept to the card: only tasks the card has, each once
 //   checkSplit(split)        the proposal the owner confirmed (titles, tasks, complexity and workflow
@@ -23,7 +23,7 @@
 //                            a committed card's progress from the Backlog's issues (their `column`):
 //                            counts { todo, running (in progress or waiting), local, done } and the
 //                            stage: in_delivery, delivered (every issue done), released (every issue in
-//                            a shipped release, src/releases.js)
+//                            a shipped release, src/domains/releases/releases.js)
 // Service: src/service/channels/discovery.js (discovery:commit-proposal, discovery:commit, the board's
 // `committed` list); screen: src/renderer/views/discovery/discovery-commit.js.
 
@@ -32,7 +32,7 @@ const path = require('path');
 const backlog = require('../backlog/backlog');
 const discovery = require('./discovery');
 const Language = require('../../shared/language');
-const poSplit = require('../../po-split');
+const poSplit = require('../po/po-split');
 const { platformOrDefault } = require('../../shared/platforms');
 
 const { COMMIT_BAR } = discovery;
@@ -282,7 +282,7 @@ function simulatedExec({ backlogDir, projectId, platform, repo }) {
  * @param {{ links?: { issues?: number[] } }} card
  * @param {{ number, column?, state?, title?, url? }[]} issues the Backlog's issues (the service's withIssueRuns);
  *   a linked issue the backlog does not have (not synced yet) counts as to do
- * @param {{ version, status, issues?: { number }[] }[]} releases the project's release history (src/releases.js)
+ * @param {{ version, status, issues?: { number }[] }[]} releases the project's release history (src/domains/releases/releases.js)
  * @returns {{ stage: 'in_delivery'|'delivered'|'released', counts: { todo, running, local, done }, issues: { number, column, title, url, release }[], release: string|null }}
  *   release: the version that shipped the card's last issue, once released
  */

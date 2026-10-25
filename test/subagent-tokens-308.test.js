@@ -16,8 +16,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseClaude, parseGrok } = require('../src/engine/providers');
-const { runFigures } = require('../src/run-analysis');
-const { runReport } = require('../src/supervisor');
+const { runFigures } = require('../src/domains/run/run-analysis');
+const { runReport } = require('../src/domains/supervisor/supervisor');
 const M = require('../src/renderer/run3d-model');
 
 const newSid = () => `sess-308-${crypto.randomUUID()}`;

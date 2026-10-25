@@ -1,4 +1,4 @@
-// Service area: releases (#260, src/releases.js). A project's release history and its next release
+// Service area: releases (#260, src/domains/releases/releases.js). A project's release history and its next release
 // for the Releases screen (`listReleases`, the owner's notes: `saveReleaseNotes`, a shipped release's
 // summary its release run wrote, #290: `readReleaseSummary`), the release run
 // (`startRelease`: the bundled release workflow with the history since the last release, started
@@ -25,10 +25,10 @@ const { loadWorkflow } = require('../../engine/workflow');
 const backlog = require('../../domains/backlog/backlog');
 const { clientError } = require('../common');
 const night = require('../../domains/night/night-watch');
-const projects = require('../../projects');
-const releases = require('../../releases');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
+const projects = require('../../domains/project/projects');
+const releases = require('../../domains/releases/releases');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
 
 const RELEASE_WORKFLOW = 'release.yaml';
 

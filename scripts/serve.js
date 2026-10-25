@@ -22,12 +22,12 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const workspace = require('../src/workspace');
+const workspace = require('../src/domains/workspace/workspace');
 const { createService } = require('../src/service');
 const { createServer } = require('../src/server');
 const { createAuth, fileStorage } = require('../src/host/auth');
 const authConfig = require('../src/host/auth-config');
-const runOwner = require('../src/run-owner');
+const runOwner = require('../src/domains/run/run-owner');
 const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../src/host/engine-connection');
 
 function parseArgs(argv) {

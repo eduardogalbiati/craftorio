@@ -20,7 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { validateSchema } = require('../../json-schema');
+const { validateSchema } = require('../workspace/json-schema');
 const { KINDS, REPORT_SCHEMA, SEVERITIES } = require('../../shared/architecture-report');
 
 const ESTIMATE_BASIS = 5;

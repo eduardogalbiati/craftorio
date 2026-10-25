@@ -5,7 +5,7 @@
 // hatched), per-agent time, turns, cost and tokens (new input, output, cache read, cache creation, the
 // effective $/M), steps, suite rounds, the slowest tool calls, and the comparison with the latest real
 // successful runs of the same workflow (median, p25-p75, better/worse with signs, not colour only).
-// Channel analytics:run (src/service/areas/insights.js, src/run-analysis.js). A tab of
+// Channel analytics:run (src/service/areas/insights.js, src/domains/run/run-analysis.js). A tab of
 // views/analytics/analytics.js (window.AnalyticsTabs).
 // Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, window.showRun.
 (() => {

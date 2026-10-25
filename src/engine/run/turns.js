@@ -16,7 +16,7 @@ const {
   isToolTimeout,
   sleep,
 } = require('../providers');
-const { sessionCost } = require('../../usage');
+const { sessionCost } = require('../../domains/usage/usage');
 const capabilities = require('../capabilities');
 const suiteStep = require('../suite-step');
 const { IdleWatch } = require('../idle');

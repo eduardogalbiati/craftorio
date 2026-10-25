@@ -1,4 +1,4 @@
-// #488: the Builder (src/workflow-builder.js), the composition (workflow-compose.js) and the field
+// #488: the Builder (src/domains/workflow/workflow-builder.js), the composition (workflow-compose.js) and the field
 // rules (src/engine/run/field-rules.js) load in a browser page without Node, so a static public page
 // can reuse them. Acceptance tests, written before the code.
 //
@@ -88,8 +88,8 @@ test('#488 the field rules (src/engine/run/field-rules.js) load in a browser pag
   assert.equal(api.parseDuration('5m'), 300000);
 });
 
-test('#488 the Builder (src/workflow-builder.js) loads in a browser page and exposes its API', () => {
-  const page = loadInPage(path.join(SRC, 'workflow-builder.js'));
+test('#488 the Builder (src/domains/workflow/workflow-builder.js) loads in a browser page and exposes its API', () => {
+  const page = loadInPage(path.join(SRC, 'domains', 'workflow', 'workflow-builder.js'));
   assert.equal(page.error, null, page.error);
   const api = apiWith(page, ['toYaml', 'fromWorkflow', 'describeWorkflow', 'validateSpec', 'fileNameFor']);
   assert.equal(api !== null, true, `a window global with the builder's functions (new globals: ${page.added.join(', ')})`);
@@ -107,7 +107,7 @@ test('#488 workflow-compose.js exists and loads in a browser page, exposing its 
 
 // (fs / path in a Node-only branch is fine, as src/shared/i18n.js does: only process spawning is checked)
 test('#488 nothing the Builder, the composition or the field rules load can spawn a process', () => {
-  const targets = [path.join(SRC, 'workflow-builder.js'), path.join(SRC, 'engine', 'run', 'field-rules.js'), COMPOSE];
+  const targets = [path.join(SRC, 'domains', 'workflow', 'workflow-builder.js'), path.join(SRC, 'engine', 'run', 'field-rules.js'), COMPOSE];
   const offenders = [];
   for (const target of targets) {
     for (const file of scriptsFor(target)) {

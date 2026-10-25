@@ -139,7 +139,7 @@ async function atGate(t, file = FIXTURE) {
     if (ev.type === 'approval.requested') {
       const latest = {};
       for (const e of events) if (e.session && typeof e.session === 'object' && e.session.agent) latest[e.session.agent] = e.session;
-      const { readRun } = require('../../src/runs');
+      const { readRun } = require('../../src/domains/run/runs');
       const recorded = readRun(runsDir, path.basename(run.runDir));
       seen = { latest, recorded, events: events.slice() };
       setImmediate(() => run.resolveApproval(ev.approval_id, true, 'user'));

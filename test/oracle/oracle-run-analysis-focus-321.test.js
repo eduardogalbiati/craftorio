@@ -31,7 +31,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createService, BUNDLED_SKILLS_DIR } = require('../../src/service');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 
 const ROOT = path.join(__dirname, '..', '..');
 const loadTools = () => require('../../src/domains/oracle/oracle-tools');
@@ -44,7 +44,7 @@ function scratchDir(t, prefix) {
   return dir;
 }
 
-// The tools' ctx on a fresh workspace (as test/oracle-capable-184.test.js wires it).
+// The tools' ctx on a fresh workspace (as test/oracle/oracle-capable-184.test.js wires it).
 function makeCtx(t) {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-321-ws-'));
@@ -643,7 +643,7 @@ test('#321 a focus over many runs stays within 40 KB, shortened per run, with a 
 });
 
 // ---- regressions (#335) -----------------------------------------------------------------------------
-// focus 'regressions': each regressed step (src/step-regressions.js over the workspace's real runs) with
+// focus 'regressions': each regressed step (src/domains/run/step-regressions.js over the workspace's real runs) with
 // its workflow, step, class (model), baseline vs recent cost and minutes and the run ids behind both.
 
 const REG_WF = 'software-development.yaml';

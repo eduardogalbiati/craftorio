@@ -79,7 +79,7 @@ function trustFolder(provider, dir, { home } = {}) {
   return trustDirs(provider, foldersToTrust(dir), home);
 }
 
-// #468 (SEC-3): the keys of the workspace layout (src/workspace.js) whose folders the app writes
+// #468 (SEC-3): the keys of the workspace layout (src/domains/workspace/workspace.js) whose folders the app writes
 // itself. repos/, worktrees/ and project folders hold repository-controlled code: the CLI keeps its
 // own trust prompt there.
 const APP_FOLDERS = [
@@ -99,7 +99,7 @@ function isInside(dir, root) {
  */
 function trustWorkspaceFolder(provider, dir, { workspace, home } = {}) {
   if (!workspace) return false;
-  const ws = require('../../workspace').layout(workspace); // lazy: workspace.js loads the engine
+  const ws = require('../workspace/workspace').layout(workspace); // lazy: workspace.js loads the engine
   const roots = APP_FOLDERS.map((f) => ws[f]);
   const owned = (d) => roots.some((r) => isInside(d, r));
   if (!owned(dir)) return false;

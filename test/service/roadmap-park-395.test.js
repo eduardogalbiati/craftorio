@@ -13,8 +13,8 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const actions = require('../../src/domains/oracle/oracle-actions');
 const night = require('../../src/domains/night/night-watch');
-const roadmaps = require('../../src/roadmap');
-const workspace = require('../../src/workspace');
+const roadmaps = require('../../src/domains/roadmap/roadmap');
+const workspace = require('../../src/domains/workspace/workspace');
 const { ISSUE_WORKFLOW, makeService, roadmapProject, roadmapIssue, until, watchRuns } = require('./helpers');
 
 const MINUTE = 60e3;

@@ -1,13 +1,13 @@
-// A project's Refactor tab (#357): its refactor proposals (src/refactor-proposals.js: sent from the
+// A project's Refactor tab (#357): its refactor proposals (src/domains/refactor/refactor-proposals.js: sent from the
 // Architecture tab or written by the owner, refactor:add), each with its issue's open state and its
 // roadmap item's status (planned, running, failed, done, skipped); the Product Owner's ranking
-// (src/refactor-priority.js: one read-only turn, simulated under `mock` or MULTIAGENT_SIMULATION_ONLY,
+// (src/domains/refactor/refactor-priority.js: one read-only turn, simulated under `mock` or MULTIAGENT_SIMULATION_ONLY,
 // one at a time per project) saved on the proposals; Dismiss with a reason; "File as issue"
-// (src/refactor-issues.js: the `refactor` label, a preview in simulation, never gh/glab; host.fileIssue
+// (src/domains/refactor/refactor-issues.js: the `refactor` label, a preview in simulation, never gh/glab; host.fileIssue
 // stands in for gh/glab when given, #435); "Add to roadmap now" on the Refactor workflow, in the
-// disabled stage at the end waiting for the owner's OK (#435, src/refactor-cadence.js placeWaiting:
+// disabled stage at the end waiting for the owner's OK (#435, src/domains/refactor/refactor-cadence.js placeWaiting:
 // enabling it is the owner's authorization), or with `runNow` after the stage in progress
-// (placeRunNow), written through src/roadmap.js, the target's Danger Zone score kept on the proposal
+// (placeRunNow), written through src/domains/roadmap/roadmap.js, the target's Danger Zone score kept on the proposal
 // (`before`). ctx.planRefactor (#435) is the Architecture tab's Send to Refactor: it files the issue
 // and plans it the same way (in a simulation without host.fileIssue, a simulated issue in the synced
 // backlog).
@@ -15,7 +15,7 @@
 // cadence.json { on, every, since }) listens to run:event: after every X real finished runs of the
 // project since it was turned on (or since its last item) the top ranked proposal with an issue and
 // no unfinished item joins the roadmap where placeRefactor puts it (never in the waiting stage). A finished refactor run records the proposal's
-// `outcome` (src/refactor-outcome.js). It never answers a gate: an item counts in the budget cap
+// `outcome` (src/domains/refactor/refactor-outcome.js). It never answers a gate: an item counts in the budget cap
 // like any other. No model call outside refactor:prioritize.
 
 const fs = require('fs');
@@ -23,17 +23,17 @@ const path = require('path');
 const agentsMod = require('../../domains/agents/agents');
 const arch = require('../../domains/oracle/oracle-architecture');
 const backlog = require('../../domains/backlog/backlog');
-const cadenceRules = require('../../refactor-cadence');
+const cadenceRules = require('../../domains/refactor/refactor-cadence');
 const commits = require('../../domains/discovery/discovery-commit');
-const conflictMaps = require('../../conflict-map');
-const facts = require('../../architecture-facts');
-const outcomes = require('../../refactor-outcome');
-const priority = require('../../refactor-priority');
-const projects = require('../../projects');
-const proposals = require('../../refactor-proposals');
-const refactorIssues = require('../../refactor-issues');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
+const conflictMaps = require('../../domains/project/conflict-map');
+const facts = require('../../domains/project/architecture-facts');
+const outcomes = require('../../domains/refactor/refactor-outcome');
+const priority = require('../../domains/refactor/refactor-priority');
+const projects = require('../../domains/project/projects');
+const proposals = require('../../domains/refactor/refactor-proposals');
+const refactorIssues = require('../../domains/refactor/refactor-issues');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
 const simulation = require('../../engine/simulation');
 const { clientError, requireId } = require('../common');
 const {
@@ -126,7 +126,7 @@ module.exports = (ctx) => {
       return out.state === 'ok' ? out.model : null;
     } catch { return null; }
   }
-  // the files each planned issue will change (src/refactor-priority.js plannedFiles)
+  // the files each planned issue will change (src/domains/refactor/refactor-priority.js plannedFiles)
   const plannedFiles = (id) => priority.plannedFiles({ refactorRoot: root(), backlogDir: ctx.ws.backlog, projectId: id });
   const { filesOf } = cadenceRules;
   const { withFiles } = priority;
@@ -190,7 +190,7 @@ module.exports = (ctx) => {
     return { proposal: stored, stage: placed?.stage || 0, waiting: cadenceRules.isWaitingStage(placed) };
   }
 
-  // ---- the issue (src/refactor-issues.js) ------------------------------------------------------
+  // ---- the issue (src/domains/refactor/refactor-issues.js) ------------------------------------------------------
   // #435: host.fileIssue(draft) → { number, url } stands in for gh/glab (tests, UI checks), in simulation too
   async function fileWithHost(p, proposal, draft, file = ctx.host.fileIssue) {
     const out = await file(draft);

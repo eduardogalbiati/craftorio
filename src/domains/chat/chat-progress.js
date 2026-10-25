@@ -1,5 +1,5 @@
-// Live progress of the agent chats (#180): the Product Owner (src/product-owner.js), the Oracle
-// (src/domains/oracle/oracle.js) and the Supervisor chat (src/supervisor-chat.js). A turn's items (runTurn's
+// Live progress of the agent chats (#180): the Product Owner (src/domains/po/product-owner.js), the Oracle
+// (src/domains/oracle/oracle.js) and the Supervisor chat (src/domains/supervisor/supervisor-chat.js). A turn's items (runTurn's
 // onItem: thinking, text, tool_call, tool_result) go to the UI as they arrive, on one pushed event,
 // 'chat:progress' { chat, key, turnId, phase: 'start' | 'items' | 'end', items, status }, batched at
 // most every THROTTLE_MS and cut to what the UI shows (no tool output, no thinking text). Nothing

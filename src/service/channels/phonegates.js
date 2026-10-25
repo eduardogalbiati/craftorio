@@ -1,6 +1,6 @@
 // Settings › Phone gates (#226, src/service/areas/phone-gates.js): the gates-only page for the owner's
 // paired phones. None of these answers a gate: only the phone page does, with a paired device, the
-// gate's signed link and the owner's confirmation (src/mobile-gates.js).
+// gate's signed link and the owner's confirmation (src/domains/workspace/mobile-gates.js).
 
 const {
   args,

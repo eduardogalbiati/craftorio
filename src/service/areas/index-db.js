@@ -1,11 +1,11 @@
-// Service area: the workspace's SQLite index (src/store.js, #76). Opened with the workspace;
+// Service area: the workspace's SQLite index (src/domains/workspace/store.js, #76). Opened with the workspace;
 // without it (node:sqlite missing, a locked or broken file) everything still works on the plain
 // files, the notification center and the gate history excepted. What the engine emits is written
 // to it here: the run's row and its pending gates.
 
 const { releaseUsageIndex } = require('../../domains/local/local-usage');
-const runs = require('../../runs');
-const { openStore } = require('../../store');
+const runs = require('../../domains/run/runs');
+const { openStore } = require('../../domains/workspace/store');
 
 // #389: the background rebuild of the run index starts once the window had time for its first reads,
 // and pauses between two runs so that what the screens ask for answers first

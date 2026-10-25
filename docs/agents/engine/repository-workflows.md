@@ -2,14 +2,14 @@
 
 A repository's `.multiagent/project.yaml`: the workflows a project is worked on with, how a name resolves, and why a repository's own workflow is accepted per commit and capped.
 
-- **The manifest** (`src/project-manifest.js`, pure): `workflows: [{ name, file?, category?, description? }]`,
+- **The manifest** (`src/domains/project/project-manifest.js`, pure): `workflows: [{ name, file?, category?, description? }]`,
   `version`, `requires` (an app version range, e.g. `>=1.2`). `{ name }` names a bundled or workspace
   workflow; `{ name, file: workflows/<x>.yaml }` the repository's own copy in `.multiagent/workflows/`
   (a file outside that folder is an error). `category` is `intake`, `solo`, `team`, `release` or a
   bundled one (`plan`, `build`, `monitor`). Invalid YAML, a non-list `workflows`, an entry without a
   name, a duplicate name, an unknown category or an unmet `requires` make the manifest malformed: the
   Workflows screen shows the error and the project runs on the workspace's workflows. No manifest: no error.
-- **Resolution** (`src/workflows.js` `resolveWorkflow`, #554): a project's workflow of a name resolves
+- **Resolution** (`src/domains/workflow/workflows.js` `resolveWorkflow`, #554): a project's workflow of a name resolves
   workspace (edited: `origin: modified` or `custom`) → repository → workspace (untouched `default`) →
   bundled: the owner's edited copy wins over the repository's copy of the same name. The project's
   setting "Prefer the repository's workflows" (`preferRepositoryWorkflows` in `<workspace>/projects/<id>.json`,
@@ -36,7 +36,7 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   acceptance is asked only when the repository copy is the one that runs, and the refusal names it
   ("from the repository @ sha7"). The Start drawer passes `workspace: true` and runs the workspace's file,
   as before. A resume reloads the file the run started with.
-- **Read at creation** (#486, `src/projects.js` `projectManifest`, channel `projects:manifest { url | folder }`):
+- **Read at creation** (#486, `src/domains/project/projects.js` `projectManifest`, channel `projects:manifest { url | folder }`):
   a folder's manifest from disk; a remote one through `gh api .../contents/` or `glab api .../files/.../raw`,
   else an unauthenticated raw read; never clones. No manifest: `null`; a repository nothing can read:
   `{ workflows: [], pending: true }` ("will be read after cloning"). The project record keeps the checked

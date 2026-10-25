@@ -38,8 +38,8 @@ const iso = (ms) => new Date(ms).toISOString();
 
 const loadArea = () => require('../../src/service/areas/runs');
 const loadGuard = () => require('../../src/engine/memory-guard');
-const loadWorkspace = () => require('../../src/workspace');
-const loadNotifier = () => require('../../src/notifications');
+const loadWorkspace = () => require('../../src/domains/workspace/workspace');
+const loadNotifier = () => require('../../src/domains/workspace/notifications');
 
 /** A run folder as the engine leaves it; `alive`: owner.json of another live process, no summary. */
 function writeRun(runsDir, runId, { status, worktree, resumedFrom = null, startMs = T0, alive = false }) {

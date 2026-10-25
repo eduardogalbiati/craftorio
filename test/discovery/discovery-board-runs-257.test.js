@@ -12,7 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const discovery = require('../../src/domains/discovery/discovery');
-const { layout } = require('../../src/workspace');
+const { layout } = require('../../src/domains/workspace/workspace');
 const { card, openBoard, settle, P } = require('../discovery-board-harness');
 
 const finished = (page, ev) => { for (const fn of page.handlers.onEvent || []) fn({ type: 'workflow.finished', ...ev }); };

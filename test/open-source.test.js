@@ -188,12 +188,12 @@ test('#314: no tracked file under src/ or test/ has the owner\'s GitHub alias or
 });
 
 test('#314: the Product Owner\'s enrich-first link no longer points at the owner\'s repository issues', () => {
-  const productOwner = require('../src/product-owner');
+  const productOwner = require('../src/domains/po/product-owner');
   const issues = [{ number: 3, state: 'open', title: 'C', labels: [], body: 'short' }];
   const out = productOwner.normalizeAnswer({ summary: 'ok', groups: [], conflicts: [], enrich: [{ issue: 3, reason: 'too short' }] }, { issues, history: [], workflows: [{ file: 'software-development.yaml' }] });
   assert.deepEqual(out.enrich.map((e) => e.issue), [3]);
   assert.doesNotMatch(String(out.enrich[0].link ?? ''), /eduardogalbiati\/multiagent-orchestrator\/issues/);
-  assert.doesNotMatch(read('src/product-owner.js'), /github\.com\/eduardogalbiati\/multiagent-orchestrator\/issues/);
+  assert.doesNotMatch(read('src/domains/po/product-owner.js'), /github\.com\/eduardogalbiati\/multiagent-orchestrator\/issues/);
 });
 
 test('#314: docs/agents/environment.md no longer says the repository is private', () => {

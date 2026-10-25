@@ -304,8 +304,8 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
 // #357: the Refactor tab's proposals on the Architecture demo (the roadmap's #10 planned, #11 done),
 // the Product Owner's ranking and the cadence on with 6 of its runs counted ("next in 4 runs")
 function demoRefactor(ws, projectId) {
-  const runs = require('../../../src/runs');
-  const cadence = require('../../../src/refactor-cadence');
+  const runs = require('../../../src/domains/run/runs');
+  const cadence = require('../../../src/domains/refactor/refactor-cadence');
   const dir = path.join(ws.root, 'refactor', projectId);
   const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
   const arch = (id, f, extra) => ({ id, source: 'architecture', key: `demo:${id}`, reportId: 'demo-report-2', kind: f.kind, title: f.title, files: f.files, evidence: f.evidence, severity: f.severity, refactor: f.refactor, createdAt: at(20), status: 'proposed', ...extra });

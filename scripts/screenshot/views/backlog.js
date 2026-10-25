@@ -53,7 +53,7 @@ function demoPoConversation(ws, projectId, po = null) {
     'Related: #12',
   ].join('\n');
   const big = DEMO_ISSUES.find((x) => x.number === 15);
-  const poSplit = require('../../../src/po-split');
+  const poSplit = require('../../../src/domains/po/po-split');
   const split = poSplit.normalizeSplit(poSplit.proposeSplit(big, { complexity: 5 }), big, { complexity: 5 });
   // #242: a long title and a long task line with inline Markdown, so the card must fit the drawer
   split.title = `${split.title || big.title}: keep every run's worktree, branch and logs safe when the app closes, crashes or the workspace moves to another disk`;
@@ -78,7 +78,7 @@ function demoPoConversation(ws, projectId, po = null) {
       estimateUsd: 27.4,
       estimateMissing: 1,
       groups: [
-        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['src/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
+        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['src/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
         { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in src/server.', files: ['src/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
           inputs: { mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
           costEstimate: { usd: 15.8, perPoint: 3.16, complexity: 5, runs: 12, estimated: false, basis: 'Median cost per step and complexity point of the last 12 successful runs of software-development-local-hero.yaml, × complexity 5 (test ×0.35, evidence ×0.5, developer_screenshots off).' },
@@ -177,7 +177,7 @@ function demoBacklogRefresh(ws, folder, projectId) {
   }
 }
 
-// #405: two tests known to fail on the base (src/base-health.js store), one with its bug issue
+// #405: two tests known to fail on the base (src/domains/project/base-health.js store), one with its bug issue
 function demoBaseFailures(ws, projectId) {
   const dir = path.join(ws.backlog, 'base-health');
   const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();

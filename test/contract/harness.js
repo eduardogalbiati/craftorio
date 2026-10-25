@@ -16,7 +16,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { validateSchema } = require('../../src/json-schema');
+const { validateSchema } = require('../../src/domains/workspace/json-schema');
 
 const ROOT = path.join(__dirname, '..', '..');
 

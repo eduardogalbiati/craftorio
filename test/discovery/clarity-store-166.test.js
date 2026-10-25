@@ -16,7 +16,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { layout } = require('../../src/workspace');
+const { layout } = require('../../src/domains/workspace/workspace');
 const discovery = require('../../src/domains/discovery/discovery');
 
 const P = 'p1';

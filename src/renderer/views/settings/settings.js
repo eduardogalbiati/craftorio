@@ -1,7 +1,7 @@
 /* global api */
 // Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
-// its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
+// its Rebuild index, src/domains/workspace/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (where the engine runs (settings-engine.js), developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
@@ -301,7 +301,7 @@ async function saveMemoryGuard() {
   await renderMemoryGuard();
 }
 
-// Settings › General › Live roadmap (settings.liveRoadmap, read by src/live-roadmap.js, #164): every
+// Settings › General › Live roadmap (settings.liveRoadmap, read by src/domains/roadmap/live-roadmap.js, #164): every
 // field is saved together, since setSettings replaces the whole object.
 function renderLiveSettings() {
   const l = state.settings.liveRoadmap || {};
@@ -329,7 +329,7 @@ async function saveLiveSettings() {
   renderLiveSettings();
 }
 
-// Settings › General › Budget (settings.budget, src/budget.js, #206): the daily and nightly caps in
+// Settings › General › Budget (settings.budget, src/domains/usage/budget.js, #206): the daily and nightly caps in
 // USD (empty or 0: no cap), saved together; a "Raise for today" (`raised`) is kept.
 function renderBudgetSettings() {
   const b = state.settings.budget || {};
@@ -409,7 +409,7 @@ async function renderSelfHealing() {
   $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
 }
 
-// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate, src/app-update.js):
+// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate, src/domains/workspace/app-update.js):
 // the row under Self-healing. `o`: settings.oracle; `info`: the app-update:state result (null while it
 // is read): { applies, reason } or { applies, project, short, behind }. Off and disabled, with the
 // reason, when it does not apply or Self-healing is off; the source line otherwise. One trigger (#285):

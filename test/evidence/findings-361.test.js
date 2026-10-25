@@ -6,7 +6,7 @@
 // The interface these tests define:
 // - src/domains/evidence/findings.js:
 //   - saveFinding(ws, { image, marked, marks, note, context, at }) → { id, dir, status: 'saved' }
-//     ws: a workspace layout (src/workspace.js; only ws.root is needed). image / marked: the window's
+//     ws: a workspace layout (src/domains/workspace/workspace.js; only ws.root is needed). image / marked: the window's
 //     capture and the capture with the marks, PNG data URLs ('data:image/png;base64,...'). marks: the
 //     marks (circle, box, arrow, freehand, numbered pins with their resolved element), each with an
 //     optional note. note: the finding's note. at: a Date (default now) naming the folder.

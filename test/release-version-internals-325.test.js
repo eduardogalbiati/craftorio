@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const yaml = require('js-yaml');
 const { execFileSync } = require('child_process');
-const { writeReleaseVersion } = require('../src/releases');
+const { writeReleaseVersion } = require('../src/domains/releases/releases');
 const { suiteScope } = require('../src/engine/suite-step');
 const { loadWorkflow } = require('../src/engine/run/load');
 

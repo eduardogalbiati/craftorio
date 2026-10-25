@@ -5,7 +5,7 @@
 //   card that shows a run uses.
 // - The Run screen's summary (#run-summary) and the Chat's finished note (run-chat-finished), through
 //   the whole page (test/agent-chat-page-harness.js) with a fake api.listRuns.
-// - runs.findRun (src/runs.js) with the index open: a resume written just after a lookup is still
+// - runs.findRun (src/domains/run/runs.js) with the index open: a resume written just after a lookup is still
 //   found; an unchanged runs folder is not listed again within 2 s (fs.readdirSync is the boundary).
 const test = require('node:test');
 const assert = require('node:assert/strict');

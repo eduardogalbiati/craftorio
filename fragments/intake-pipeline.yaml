@@ -1,4 +1,4 @@
-# The steps of a composed intake workflow (#487, src/workflow-compose.js), adapted from
+# The steps of a composed intake workflow (#487, src/domains/workflow/workflow-compose.js), adapted from
 # issue-tracker: the issue writer reads the code and drafts the issue from the owner's request, the
 # owner reviews it (when the interview chose to validate), the filer files it with gh or glab. A step
 # `{ id, fragment: intake-pipeline }` gets the body under its id; the step's own keys win

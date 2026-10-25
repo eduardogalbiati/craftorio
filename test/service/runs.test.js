@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 const { createService } = require('../../src/service');
 const backlog = require('../../src/domains/backlog/backlog');
 const {
@@ -444,7 +444,7 @@ test('two services on one workspace: the second sees the first\'s active run as 
   assert.deepEqual(b.api['runs:active'](), [], 'b never started or tracks this run itself');
 
   // a roadmap item that names a's live run: b's advance must never fail it as "interrupted", or start a twin
-  const roadmapModel = require('../../src/roadmap');
+  const roadmapModel = require('../../src/domains/roadmap/roadmap');
   roadmapModel.writeRoadmap(wsA.backlog, 'proj-twoapp', {
     state: 'running', simulated: false, error: null, pausedBy: null, updatedAt: null,
     stages: [{

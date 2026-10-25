@@ -4,13 +4,13 @@
 // - The area's functions, built from a small ctx (the service's workspace, its active runs, the
 //   release test and the notifier): afterStepFinished (a run's step.finished), afterBaseMerge (its
 //   worktree.merged), afterBaseReleased (a run ended).
-// - The store, read back with src/base-health.js knownFailures; the base check's result (the promise
+// - The store, read back with src/domains/project/base-health.js knownFailures; the base check's result (the promise
 //   afterBaseMerge returns): its status and the base commit it checked.
 //
 // Assumptions:
 // - The project's folder is a git repo without a test command: the check runs on its base tip and
 //   ends with an error notice (no suite to run); what matters here is whether and when it runs.
-// - In simulation the area's issue CLI is a no-op, so nothing is filed here (src/base-health.js tests
+// - In simulation the area's issue CLI is a no-op, so nothing is filed here (src/domains/project/base-health.js tests
 //   cover the filing).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -20,7 +20,7 @@ const path = require('path');
 const { makeService, gitRepo } = require('./helpers');
 
 const loadArea = () => require('../../src/service/areas/base-health');
-const loadHealth = () => require('../../src/base-health');
+const loadHealth = () => require('../../src/domains/project/base-health');
 
 // #538, #539: the check takes the `suite` slot (#527) in MULTIAGENT_LOCKS_DIR; each test gets its
 // own folder, so it never waits for a whole suite holding the machine's slot (the one running this file)

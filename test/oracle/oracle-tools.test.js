@@ -11,8 +11,8 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { createService, BUNDLED_SKILLS_DIR } = require('../../src/service');
-const { setupWorkspace } = require('../../src/workspace');
-const roadmaps = require('../../src/roadmap');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
+const roadmaps = require('../../src/domains/roadmap/roadmap');
 const { callTool, oracleTools, refusedGitCommand, READ_GIT_COMMANDS } = require('../../src/domains/oracle/oracle-tools');
 
 const WORKFLOW = `apiVersion: multiagent/v1
@@ -150,7 +150,7 @@ test('run_file: lists the run folder and reads summary.json; a path outside the 
   assert.equal(summary.isError, false);
   assert.match(summary.text, /"status"/);
 
-  const escape = await callTool(tools, 'run_file', { runId, path: '../../../secret' });
+  const escape = await callTool(tools, 'run_file', { runId, path: '../../secret' });
   assert.equal(escape.isError, true);
 });
 
@@ -224,7 +224,7 @@ test('repo_read: reads a file and lists a folder inside the project; ".." cannot
   assert.equal(listing.isError, false);
   assert.match(listing.text, /README\.md/);
 
-  const escape = await callTool(tools, 'repo_read', { projectId: project.id, path: '../../../etc/passwd' });
+  const escape = await callTool(tools, 'repo_read', { projectId: project.id, path: '../../etc/passwd' });
   assert.equal(escape.isError, true);
   assert.doesNotMatch(escape.text, /root:/);
 });

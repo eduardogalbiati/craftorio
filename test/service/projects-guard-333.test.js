@@ -1,5 +1,5 @@
 // #333: the project channels take a project id that is a file name in the projects folder. A
-// '../..' id is refused with a 400 naming the project id before src/projects.js joins it into a
+// '../..' id is refused with a 400 naming the project id before src/domains/project/projects.js joins it into a
 // path: projects:remove deletes with rmSync({ force }), so the sweep's sentinels cannot see a
 // traversal whose target does not exist; this test puts a victim file where it would land.
 // Seams: the service channels projects:remove and projects:update.
@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 const { createService } = require('../../src/service');
 
 // A workspace at base/ws (projects in base/ws/projects) and a victim.json at base, where

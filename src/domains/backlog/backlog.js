@@ -8,7 +8,7 @@
 // / done; done = closed on the platform). Simulated (mock) runs and queue items are listed but never
 // move the column: it comes from the newest real run and the real queue items. Each sync also reads the open PRs/MRs
 // (`fetchOpenPullRequests`, `referencedIssues`) into `issue.pullRequests`. Assigning a workflow
-// queues issues (the index's queue tables, src/store.js, snapshotted to `<id>.queue.json`) (`enqueue`, `group: true` = one item with `issues` for one run,
+// queues issues (the index's queue tables, src/domains/workspace/store.js, snapshotted to `<id>.queue.json`) (`enqueue`, `group: true` = one item with `issues` for one run,
 // `itemIssues`, `unqueue`, `runInputs` builds one task listing every issue of a group; before a real
 // start `newPullRequests` and `skipQueued`); the service's `dispatchQueue` starts queued issues while
 // there are free run slots (`claimQueued`: atomic with the index). Column `local`: an open issue whose latest run merged
@@ -50,9 +50,9 @@ const {
   taskProgress,
   withSyncedText,
 } = require('./issues');
-const { refreshCopies } = require('../../roadmap');
-const { writeJsonSafe } = require('../../state-file');
-const { storeFor } = require('../../store');
+const { refreshCopies } = require('../roadmap/roadmap');
+const { writeJsonSafe } = require('../workspace/state-file');
+const { storeFor } = require('../workspace/store');
 const TimeZone = require('../analytics/time-zone');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('../../shared/backlog-archive');
 const { LIVE_ITEM_STATES } = require('../../shared/roadmap-model');
@@ -252,7 +252,7 @@ function writeLocal(dir, projectId, status) {
 // sent as a single run (one branch, one PR/MR), which also has `issues`: the same fields per issue,
 // in the order selected; its number/url/title are the first issue's.
 // `skipped` lists the issues taken out right before their start, with the reason (an open PR/MR).
-// With the service's index open (src/store.js, #76) the queue lives in its tables: each change is
+// With the service's index open (src/domains/workspace/store.js, #76) the queue lives in its tables: each change is
 // one transaction and the file is only a readable snapshot written under that lock; without it
 // (scripts, unit tests) the file is the queue.
 const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
@@ -281,7 +281,7 @@ function withoutStalePause(q, done = () => false) {
   return { ...rest, paused: false, error: null };
 }
 
-// What a queue must look like (#112: a write that breaks it is refused, src/state-file.js).
+// What a queue must look like (#112: a write that breaks it is refused, src/domains/workspace/state-file.js).
 function queueProblem(q) {
   if (!q || typeof q !== 'object') return 'not an object';
   if (!Array.isArray(q.items)) return 'items is not a list';
@@ -290,7 +290,7 @@ function queueProblem(q) {
   return bad ? `an item has no workflow or issue number: ${JSON.stringify(bad).slice(0, 120)}` : null;
 }
 
-// atomic, with the previous version kept as .bak (src/state-file.js)
+// atomic, with the previous version kept as .bak (src/domains/workspace/state-file.js)
 function writeQueueFile(dir, projectId, queue) {
   return writeJsonSafe(queueFile(dir, projectId), queue, { validate: queueProblem });
 }

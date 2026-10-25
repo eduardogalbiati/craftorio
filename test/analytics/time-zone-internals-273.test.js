@@ -58,7 +58,7 @@ function tempWs(t) {
 }
 
 test('#273 writeSettings: the computer\'s zone is not saved until one is chosen; a chosen one is kept', (t) => {
-  const workspace = require('../../src/workspace');
+  const workspace = require('../../src/domains/workspace/workspace');
   const ws = tempWs(t);
   workspace.writeSettings(ws, { backlogMaxGroup: 4 });
   assert.equal(JSON.parse(fs.readFileSync(ws.settings, 'utf8')).timeZone, null);
@@ -69,13 +69,13 @@ test('#273 writeSettings: the computer\'s zone is not saved until one is chosen;
 });
 
 test('#273 writeSettings refuses an unknown time zone', (t) => {
-  const workspace = require('../../src/workspace');
+  const workspace = require('../../src/domains/workspace/workspace');
   const ws = tempWs(t);
   assert.throws(() => workspace.writeSettings(ws, { timeZone: 'Not/AZone' }), /Unknown time zone/);
 });
 
 test('#273 Supervisor chat: a question carries the [Time] line when the zone is given', () => {
-  const { questionText } = require('../../src/supervisor-chat');
+  const { questionText } = require('../../src/domains/supervisor/supervisor-chat');
   assert.equal(questionText('Why?', 'Runs'), '[Screen] Runs\n\nWhy?');
   const text = questionText('Why?', 'Runs', 'Asia/Tokyo');
   assert.match(text.split('\n')[0], /^\[Time\] .*Asia\/Tokyo/);
@@ -83,7 +83,7 @@ test('#273 Supervisor chat: a question carries the [Time] line when the zone is 
 });
 
 test('#273 day budget (#206): today is the owner\'s local day', () => {
-  const budget = require('../../src/budget');
+  const budget = require('../../src/domains/usage/budget');
   const runs = [{ startedAt: '2026-10-04T16:00:00Z', sessions: [{ cost_usd: 2 }] }, { startedAt: '2026-10-04T14:00:00Z', sessions: [{ cost_usd: 7 }] }];
   // 19:00 on Oct 5 in Tokyo: only the 01:00 JST run (16:00Z the day before) is today
   const st = budget.budgetState({ settings: { timeZone: 'Asia/Tokyo', budget: { dailyUsd: 10 } }, runs, now: new Date('2026-10-05T10:00:00Z') });

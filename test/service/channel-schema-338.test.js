@@ -85,7 +85,7 @@ test('#338 runs:setTitle refuses a title over 200 characters, naming the paramet
 });
 
 test('#338 a shared definition: the run id and the project id have one schema across channels', (t) => {
-  const { validateSchema } = require('../../src/json-schema');
+  const { validateSchema } = require('../../src/domains/workspace/json-schema');
   const { service } = makeService(t);
   const prop = (channel, name) => {
     const entry = entryOf(service, channel);

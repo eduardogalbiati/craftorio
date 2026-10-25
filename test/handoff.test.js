@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun, takeHandoff, parseTokens } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
-const supervisor = require('../src/supervisor');
+const supervisor = require('../src/domains/supervisor/supervisor');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
 const FIXTURE = path.join(__dirname, 'fixtures', 'handoff.yaml');

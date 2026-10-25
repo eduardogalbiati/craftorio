@@ -14,7 +14,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { setupWorkspace } = require('../src/workspace');
+const { setupWorkspace } = require('../src/domains/workspace/workspace');
 const { createService } = require('../src/service');
 const { createServer } = require('../src/server');
 

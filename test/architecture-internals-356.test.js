@@ -1,7 +1,7 @@
 // #356 internals (the developer's own tests): the core's glob and .gitattributes rules, the
 // `{a => b}` rename form, the complexity check, the monthly Danger Zone frames; lizard's CSV
-// (src/architecture-facts.js parseLizard); a finding sent twice stays one Refactor proposal
-// (src/refactor-proposals.js); the simulated report and the prompt (src/domains/oracle/oracle-architecture.js).
+// (src/domains/project/architecture-facts.js parseLizard); a finding sent twice stays one Refactor proposal
+// (src/domains/refactor/refactor-proposals.js); the simulated report and the prompt (src/domains/oracle/oracle-architecture.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -9,8 +9,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const core = require('../src/shared/architecture-model');
-const { parseLizard } = require('../src/architecture-facts');
-const proposals = require('../src/refactor-proposals');
+const { parseLizard } = require('../src/domains/project/architecture-facts');
+const proposals = require('../src/domains/refactor/refactor-proposals');
 const arch = require('../src/domains/oracle/oracle-architecture');
 
 test('#356 parseIgnoreRevs: hashes lowercased, comments and blanks dropped (the app and code-health.js share it)', () => {

@@ -1,6 +1,6 @@
 // #527 no cascade (review 1): the roadmap's dispatcher skips a base-health fix item whose issue has an
 // ended run's kept work (#112's "a run stopped at …" refusal, not only "already has a live run"),
-// and goes on instead of pausing. Seams: runBaseCheck (src/base-health.js) inserts the item; the
+// and goes on instead of pausing. Seams: runBaseCheck (src/domains/project/base-health.js) inserts the item; the
 // service's roadmap with mock runs (test/service/helpers.js); the ended run fabricated as in
 // test/service/resume.test.js (keptWorkRepo, fabricateKeptRun).
 const test = require('node:test');
@@ -12,7 +12,7 @@ const { execFileSync } = require('child_process');
 const { fixture } = require('../worktree-helpers');
 const { ISSUE_WORKFLOW, makeService, roadmapProject, until } = require('./helpers');
 const { SUITE_SLOT_ENV } = require('../../src/engine/machine-slot');
-const { runBaseCheck } = require('../../src/base-health');
+const { runBaseCheck } = require('../../src/domains/project/base-health');
 
 let saved;
 test.beforeEach(() => { saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });

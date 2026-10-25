@@ -1,7 +1,7 @@
 // #280, internal details the acceptance tests leave out: the shared record's writer and reader
 // (src/domains/agents/agents-usage.js), sessions across lines from before #280, the Oracle's wake-ups against
 // questions, the range's last session staying open, the Supervisor chat's earlier turns
-// (src/supervisor-chat.js usageTurns) and the demo data's `today: false` (src/domains/analytics/analytics-demo.js).
+// (src/domains/supervisor/supervisor-chat.js usageTurns) and the demo data's `today: false` (src/domains/analytics/analytics-demo.js).
 // No model call: the provider CLI is faked at engine/providers' runTurn, as in
 // test/agents-usage-record-280.test.js.
 const test = require('node:test');
@@ -11,7 +11,7 @@ const os = require('os');
 const path = require('path');
 const agentsUsage = require('../../src/domains/agents/agents-usage');
 const oracle = require('../../src/domains/oracle/oracle');
-const supervisorChat = require('../../src/supervisor-chat');
+const supervisorChat = require('../../src/domains/supervisor/supervisor-chat');
 const { writeDemoAgents } = require('../../src/domains/analytics/analytics-demo');
 
 const M = 'claude-opus-5-5';

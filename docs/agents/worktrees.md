@@ -98,7 +98,7 @@ actions, or any code that deletes or checks out branches.
   worktree (`finishWorktree` on success, `cleanupWorktrees` for orphans, `removeScratch` in
   `src/engine/worktree.js`), whatever the status (#202); the cleanup also removes the scratch of a
   run that ended 3 days ago and has no worktree folder (#201). Scratch files are not artifacts:
-  `walkFiles` (`src/run-artifacts.js`) skips `scratch/` like `sessions/`; a `file.saved` under it is
+  `walkFiles` (`src/domains/run/run-artifacts.js`) skips `scratch/` like `sessions/`; a `file.saved` under it is
   still listed. The
   evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
   the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
@@ -116,7 +116,7 @@ actions, or any code that deletes or checks out branches.
   `walkFiles` skips `tmp/` (not artifacts). A mock run creates none.
 - **One app per workspace (#112)**: `src/host/main.js` takes Electron's single-instance lock (the owner's
   user data folder) and `<workspace>/.lock` (pid, host, heartbeat; `lockWorkspace` in
-  `src/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old
+  `src/domains/run/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old
   heartbeat) is taken over. Each run in progress has `runs/<id>/owner.json` with a heartbeat
   (`claimRun`): another process lists it as `running` (`runningElsewhere`), never `interrupted`,
   and the roadmap, Retry, Resume and a new run for the same issues leave it alone.

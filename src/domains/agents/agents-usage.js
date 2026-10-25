@@ -2,8 +2,8 @@
 // every real turn the same way, and Analytics' Agents tab reads the three (channel analytics:agents,
 // src/service/areas/usage.js).
 //   <workspace>/oracle/usage.jsonl                  the Oracle (src/domains/oracle/oracle.js: also cumulativeUsd, wake)
-//   <workspace>/backlog/product-owner.usage.jsonl   the Product Owner (src/product-owner.js: projectId)
-//   <workspace>/supervisor/usage.jsonl              the Supervisor chat (src/supervisor-chat.js: also cumulativeUsd)
+//   <workspace>/backlog/product-owner.usage.jsonl   the Product Owner (src/domains/po/product-owner.js: projectId)
+//   <workspace>/supervisor/usage.jsonl              the Supervisor chat (src/domains/supervisor/supervisor-chat.js: also cumulativeUsd)
 // One line per real turn (a simulated turn records nothing), appended, never rewritten:
 //   { ts, agent, projectId?, provider, model, tokens: { input, output, cache_read, cache_write }, costUsd,
 //     sessionId, session: 'fresh' | 'resumed', startReason? (why a fresh session started: first,

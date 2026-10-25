@@ -1,4 +1,4 @@
-// #276 memory guard: its settings (src/workspace.js DEFAULT_SETTINGS.memoryGuard) and what the
+// #276 memory guard: its settings (src/domains/workspace/workspace.js DEFAULT_SETTINGS.memoryGuard) and what the
 // Settings › Execution screen needs from the service to show the limit in GB.
 // Assumptions (acceptance tests written before the code):
 //   - the key is `memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 }`, one nested
@@ -16,7 +16,7 @@ const os = require('os');
 const { makeService } = require('./helpers');
 
 test('DEFAULT_SETTINGS.memoryGuard: on, a 25% limit and a 10% floor', () => {
-  const workspace = require('../../src/workspace');
+  const workspace = require('../../src/domains/workspace/workspace');
   assert.equal(typeof workspace.DEFAULT_SETTINGS.memoryGuard, 'object');
   assert.equal(workspace.DEFAULT_SETTINGS.memoryGuard?.enabled, true);
   assert.equal(workspace.DEFAULT_SETTINGS.memoryGuard?.limitPercent, 25);

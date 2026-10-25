@@ -1,11 +1,11 @@
-// The workspace's index (src/store.js, #76): the notification center (history, unread count, mark
+// The workspace's index (src/domains/workspace/store.js, #76): the notification center (history, unread count, mark
 // as read; 'notifications:changed' is pushed on each new one), the gates of runs that did not
 // survive a restart, and Settings' index status and "Rebuild index" (the runs cache, from runs/).
 // Also the dependency cache's size and "Clear dependency cache" (#198).
 
 const path = require('path');
 const depsCache = require('../../engine/deps-cache');
-const runs = require('../../runs');
+const runs = require('../../domains/run/runs');
 const {
   ANY,
   args,

@@ -4,7 +4,7 @@
 // cache tier) with the model's prices: the Claude adapter's price table, overridden by
 // settings.prices. The CLI's figure is kept as cli_cost_usd. With no price for the model the cost
 // is unknown and the run's limits count the CLI's figure. Known models keep the CLI's cost.
-// Also: sessionCost (src/usage.js) prices cache writes.
+// Also: sessionCost (src/domains/usage/usage.js) prices cache writes.
 // Turn seam: a WorkflowRun whose claude-code provider is node + test/fixtures/fake-claude-unrecognized-model.js
 // (calls no model), with the simulation-only guard lifted for each turn test like
 // cost-limit-multi-result-277.test.js. Prices in the expected values are per million tokens.
@@ -15,7 +15,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
 const registry = require('../src/shared/providers');
-const { sessionCost } = require('../src/usage');
+const { sessionCost } = require('../src/domains/usage/usage');
 
 const near = (actual, expected, msg) => assert.ok(typeof actual === 'number' && Math.abs(actual - expected) <= 1e-6, `${msg}: expected ${expected}, got ${actual}`);
 const CLI_COST = 0.185271;

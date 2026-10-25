@@ -186,7 +186,7 @@ test('#286 ai-development-local-hero: developer_effort high gives the developer 
 });
 
 test('#286 Product Owner costInputs never sets developer_effort outside its enum', () => {
-  const { costInputs } = require('../src/product-owner');
+  const { costInputs } = require('../src/domains/po/product-owner');
   const file = 'ai-development-local-hero.yaml';
   const declared = readYaml(file).inputs;
   const allowed = (declared.developer_effort?.enum || ['default', 'low', 'medium', 'high', 'xhigh']).map(String);

@@ -1,4 +1,4 @@
-// #450, the city's Glow in Settings: the `cityGlow` setting (src/workspace.js, on by default), its
+// #450, the city's Glow in Settings: the `cityGlow` setting (src/domains/workspace/workspace.js, on by default), its
 // switch in Settings › Execution, and the project city (src/renderer/views/project/project-city.js)
 // mounting the scene with it and showing the header's Glow switch unpressed when it is off.
 const test = require('node:test');

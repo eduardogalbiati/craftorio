@@ -1,5 +1,5 @@
 // Phone gates (#226): the gates-only page the running app serves to the owner's paired phones
-// (src/mobile-gates.js). Off until the owner pairs a phone or turns it on in Settings › Phone gates
+// (src/domains/workspace/mobile-gates.js). Off until the owner pairs a phone or turns it on in Settings › Phone gates
 // (settings.phoneGates); then it listens on 127.0.0.1:<port> (the next free port when taken) and is
 // started again with the workspace. Reaching it from outside is the owner's private tunnel
 // (Tailscale serve, Cloudflare Tunnel with access rules) to that port; its address (publicUrl) is
@@ -7,13 +7,13 @@
 // phone: { answered_by: 'owner', via: 'mobile', device } on the gate's approval.resolved event.
 
 const qrcode = require('qrcode-generator');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 const {
   createMobileGatesServer,
   linkSecret,
   listDevices,
   revokeDevice,
-} = require('../../mobile-gates');
+} = require('../../domains/workspace/mobile-gates');
 
 module.exports = (ctx) => {
   let gates = null; // the server while it runs

@@ -13,7 +13,7 @@ const { demoRoadmap } = require('./roadmap');
 // and three saved pipelines, connected with their mappings and conditions.
 function demoPipelines(ws, appDir) {
   // seeded now (the app would at start) so the edited default counts as modified, not custom
-  require(path.join(appDir, 'src', 'workflows')).seedWorkflows(path.join(appDir, 'workflows'), ws.workflows);
+  require(path.join(appDir, 'src', 'domains', 'workflow', 'workflows')).seedWorkflows(path.join(appDir, 'workflows'), ws.workflows);
   const wf = (f) => path.join(ws.workflows, f);
   const tracker = fs.readFileSync(wf('issue-tracker.yaml'), 'utf8');
   fs.writeFileSync(wf('issue-tracker.yaml'), tracker.replace('description: "The issues created:', 'description: "The filed issues:'));
@@ -24,7 +24,7 @@ function demoPipelines(ws, appDir) {
   // the bundled pipelines (#135), one of them edited (modified: Restore default), plus two of the
   // owner's: a valid one and one whose mapping names an output its workflow doesn't declare (refused)
   const dir = path.join(ws.root, 'pipelines');
-  require(path.join(appDir, 'src', 'pipelines')).seedPipelines(path.join(appDir, 'pipelines'), dir);
+  require(path.join(appDir, 'src', 'domains', 'workflow', 'pipelines')).seedPipelines(path.join(appDir, 'pipelines'), dir);
   const rfc = path.join(dir, 'rfc-to-issues.yaml');
   if (fs.existsSync(rfc)) fs.writeFileSync(rfc, fs.readFileSync(rfc, 'utf8').replace('description: AI Arena writes an RFC', 'description: AI Arena writes our quarterly RFC'));
   fs.writeFileSync(path.join(dir, 'ship-and-learn.yaml'), [

@@ -6,7 +6,7 @@
 // connection of its own opened for each save (the service's handle keeps its own). When the service
 // closes the index (releaseUsageIndex), the saves still pending for it are dropped (kept unsaved).
 //
-// It also computes the Usage screen's totals (src/usage.js computeUsage, op 'usage'), so the records
+// It also computes the Usage screen's totals (src/domains/usage/usage.js computeUsage, op 'usage'), so the records
 // of the machine scope never cross to the main process.
 //
 // Message in: { id, op: 'scan' | 'usage', home, index, opts }; out: { id, result } or { id, error }.
@@ -130,8 +130,8 @@ parentPort.on('message', ({ id, op, home, index, opts, gen }) => {
   try {
     let local = null;
     if (op !== 'usage' || opts.scope === 'machine') ({ out: local, persist } = scan(home, index, gen));
-    // 'usage': src/usage.js computeUsage here (only the totals go back)
-    const result = op === 'usage' ? require('../../usage').computeUsage({ ...opts, local }) : local;
+    // 'usage': src/domains/usage/usage.js computeUsage here (only the totals go back)
+    const result = op === 'usage' ? require('../usage/usage').computeUsage({ ...opts, local }) : local;
     parentPort.postMessage({ id, result });
   } catch (e) {
     parentPort.postMessage({ id, error: e.message || String(e) });

@@ -287,7 +287,7 @@ const resumeDialog = (page) => page.getByRole('dialog', { name: 'Resume from ste
 // A simulated software-development-local-hero run of the demo project, written like scripts/screenshot.js
 // demoRoadmapRuns: develop and its screenshots done, then the gate `gate` (its readable name:
 // "Developer check" → developer_check) asked for an answer. No summary.json and no owner.json: the
-// app reads it as interrupted (src/runs.js liveStatus). The run list reads the runs folder when the
+// app reads it as interrupted (src/domains/run/runs.js liveStatus). The run list reads the runs folder when the
 // screen opens, so no reload is needed.
 Given('the demo project has a run {string} interrupted at the gate {string}', async ({ e2e }, suffix, gate) => {
   const min = 6e4;
@@ -365,7 +365,7 @@ Then('the resume dialog opens with the step {string} preselected', async ({ e2e 
 // Warm Up is a "Warm Up failed: ..." line of the chat (run-chat-fail, NEW), and Develop runs after it.
 // #304: the suite step (scope affected) on the Run screen has a card (data-testid run-suite-card, NEW)
 // with its scope (run-suite-scope, NEW: says the affected tests ran), why each file ran
-// (run-suite-selection, NEW: output.selection, e.g. "imports src/roadmap.js") and, when the whole
+// (run-suite-selection, NEW: output.selection, e.g. "imports src/domains/roadmap/roadmap.js") and, when the whole
 // suite ran after them, a link to that run's log (run-suite-full-log, NEW). Analytics › Run, the run
 // report, gives each suite round a row (an-suite-round, NEW) with the same scope and selection.
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -436,14 +436,14 @@ Given('the demo project has a finished AI Development run {string} whose Warm Up
 Given('the demo project has a finished AI Development run {string} whose suite ran the affected tests, then the whole suite', async ({ e2e }, suffix) => {
   const files = ['test/roadmap.test.js'];
   const selection = {
-    mode: 'affected', files, reasons: { 'test/roadmap.test.js': 'imports src/roadmap.js' }, changed: ['src/roadmap.js'], slow: [],
+    mode: 'affected', files, reasons: { 'test/roadmap.test.js': 'imports src/domains/roadmap/roadmap.js' }, changed: ['src/domains/roadmap/roadmap.js'], slow: [],
     why: 'the 1 affected test file(s) passed; the whole suite runs once before the merge',
   };
   seedAiDevRun(e2e, suffix, `A run with an affected suite (${suffix})`, (at) => [
     ...agentTurn(at, 1, 20, 'develop', 'developer', 'Done.'),
     { ts: at(20), type: 'step.finished', step_id: 'develop', duration_ms: 19 * 6e4, output: { summary: 'Implemented the task.' } },
     { ts: at(21), type: 'step.started', step_id: 'suite', step_type: 'suite', visit: 1 },
-    { ts: at(21), type: 'log', level: 'info', kind: 'suite', step_id: 'suite', message: 'suite: 1 test file(s) reach the 1 changed file(s)\n- test/roadmap.test.js: imports src/roadmap.js' },
+    { ts: at(21), type: 'log', level: 'info', kind: 'suite', step_id: 'suite', message: 'suite: 1 test file(s) reach the 1 changed file(s)\n- test/roadmap.test.js: imports src/domains/roadmap/roadmap.js' },
     {
       ts: at(25),
       type: 'step.finished',

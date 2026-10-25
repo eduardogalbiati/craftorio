@@ -4,7 +4,7 @@
 // ~25k tokens of context on every call; the digest keeps their rules and lessons in a few lines.
 // Each section of the digest starts with `<!-- skill: <id> sha256:<12 hex> -->`, the hash of its
 // source SKILL.md (LF line endings): a source edited without reviewing its digest fails
-// test/oracle-capable-184.test.js; scripts/oracle-knowledge.js lists and refreshes the hashes.
+// test/oracle/oracle-capable-184.test.js; scripts/oracle-knowledge.js lists and refreshes the hashes.
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');

@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const projects = require('../../projects');
+const projects = require('../../domains/project/projects');
 const localPreview = require('../../domains/local/local-preview');
 const { cliEnv } = require('../common');
 const { isUnder } = require('../../engine/worktree');

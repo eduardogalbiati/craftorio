@@ -28,7 +28,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { layout, setupWorkspace } = require('../../src/workspace');
+const { layout, setupWorkspace } = require('../../src/domains/workspace/workspace');
 const discovery = require('../../src/domains/discovery/discovery');
 
 const P = 'p1';
@@ -191,7 +191,7 @@ test('readVersion and restoreVersion refuse a version name that is a path', (t) 
   assert.equal(typeof discovery.readVersion, 'function', 'readVersion is exported');
   assert.equal(typeof discovery.restoreVersion, 'function', 'restoreVersion is exported');
   const id = cardIn(dir, 'triage', { title: 'A', text: 'x' });
-  for (const name of ['../../card.json', 'a/b.md', '..\\card.json']) {
+  for (const name of ['../card.json', 'a/b.md', '..\\card.json']) {
     assert.throws(() => discovery.readVersion(dir, P, id, name), undefined, `readVersion ${name}`);
     assert.throws(() => discovery.restoreVersion(dir, P, id, name, { by: 'tester' }), undefined, `restoreVersion ${name}`);
   }
@@ -302,5 +302,5 @@ test('discovery:move with an index orders the column; record-result, versions, v
   const older = versions.find((v) => !/write-review/.test(v.name));
   const restored = await api['discovery:restore-version']({ projectId: P, cardId: ids[0], name: older.name });
   assert.equal(restored.document, await api['discovery:version']({ projectId: P, cardId: ids[0], name: older.name }));
-  await assert.rejects(async () => api['discovery:version']({ projectId: P, cardId: ids[0], name: '../../card.json' }));
+  await assert.rejects(async () => api['discovery:version']({ projectId: P, cardId: ids[0], name: '../card.json' }));
 });

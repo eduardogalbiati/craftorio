@@ -53,7 +53,7 @@ test('#334 the exceptions list starts at the files over 1,000 lines, each with a
   const atIssue = {
     'src/renderer/views/backlog/backlog-roadmap.js': 2072,
     'src/renderer/views/backlog/backlog.js': 1779,
-    'src/product-owner.js': 1732,
+    'src/domains/po/product-owner.js': 1732,
     'src/renderer/views/discovery/discovery.js': 1560,
     'src/domains/discovery/discovery.js': 1164,
     'src/renderer/views/backlog/backlog-po.js': 1102,

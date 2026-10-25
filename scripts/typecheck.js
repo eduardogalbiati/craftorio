@@ -15,7 +15,9 @@ const ROOT = path.join(__dirname, '..');
 
 // files that opted in with // @ts-check (sorted, one per line)
 const CHECKED = [
-  'src/cost-estimate.js',
+  'src/domains/roadmap/roadmap.js',
+  'src/domains/run/run-costs.js',
+  'src/domains/usage/cost-estimate.js',
   'src/engine/run/accounts.js',
   'src/engine/run/checkout.js',
   'src/engine/run/costs.js',
@@ -34,17 +36,15 @@ const CHECKED = [
   'src/engine/run/test-requests.js',
   'src/engine/run/transitions.js',
   'src/engine/run/turns.js',
-  'src/roadmap.js',
-  'src/run-costs.js',
   'src/shared/types.js',
 ];
 
 // files the owner wants checked next (sorted, one per line); a file leaves this list when it opts in
 const NEXT = [
-  'src/budget.js',
+  'src/domains/roadmap/live-roadmap.js',
+  'src/domains/run/runs.js',
+  'src/domains/usage/budget.js',
   'src/engine/workflow.js',
-  'src/live-roadmap.js',
-  'src/runs.js',
   'src/shared/roadmap-model.js',
   'src/shared/run-record.js',
 ];

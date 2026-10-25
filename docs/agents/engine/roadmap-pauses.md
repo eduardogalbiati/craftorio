@@ -2,7 +2,7 @@
 
 The three ways to pause a roadmap, where each one is written and when each one stops.
 
-| Control | Writer (`src/roadmap.js`) | Stops |
+| Control | Writer (`src/domains/roadmap/roadmap.js`) | Stops |
 |---|---|---|
 | Roadmap bar › Pause › **Pause after this stage** (#391, the default) | `pauseAfterStage`: `scope: { stage, pauseAfter: true }` on the current stage | When the current stage is over: every item of it still starts (also those waiting for a slot); then `advance` pauses with "Stage N done" (`scopeOver`, the scope cleared) |
 | Roadmap bar › Pause › **Pause now** (#269's pause) | `setState(…, 'paused')` | At once: nothing new starts, runs in progress go on |

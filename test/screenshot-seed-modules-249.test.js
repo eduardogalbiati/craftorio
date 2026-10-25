@@ -11,8 +11,8 @@ const { DEMO_REPO, demoBacklog, parseArgs, VIEWS } = require('../scripts/screens
 
 const appDir = path.join(__dirname, '..');
 const src = (m) => require(path.join(appDir, 'src', m));
-const workspace = src('workspace');
-const projects = src('projects');
+const workspace = src('domains/workspace/workspace');
+const projects = src('domains/project/projects');
 
 // the runner's base workspace (scripts/screenshot.js main()), then the view's seed
 // (withFolder: the project gets an empty folder in the scratch dir, for seeds that make it a repository)

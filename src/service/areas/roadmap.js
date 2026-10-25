@@ -1,8 +1,8 @@
-// Service area: roadmaps (src/roadmap.js). Settles each started roadmap from its runs and starts
+// Service area: roadmaps (src/domains/roadmap/roadmap.js). Settles each started roadmap from its runs and starts
 // the current stage's items while there are free run slots; called after every run and when a
 // workspace opens. Also the roadmap as the Backlog shows it (item statuses from their runs, #112)
 // and Start (the whole roadmap, or one stage, #141). A live roadmap's refill (#164): areas/live-roadmap.js.
-// Cost (#206): the view gives each item and stage its estimate (src/cost-estimate.js, from the
+// Cost (#206): the view gives each item and stage its estimate (src/domains/usage/cost-estimate.js, from the
 // project's past runs) and each item with a run its real cost; a real start that would pass the
 // budget cap (areas/budget.js) pauses the roadmap instead (budgetStop) and notifies the owner.
 // Cut lines (#260): a roadmap that reached one starts its release run (areas/releases.js roadmapRelease).
@@ -12,13 +12,13 @@
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
-const workspace = require('../../workspace');
-const projects = require('../../projects');
+const workspace = require('../../domains/workspace/workspace');
+const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
-const budget = require('../../budget');
-const costEstimate = require('../../cost-estimate');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
+const budget = require('../../domains/usage/budget');
+const costEstimate = require('../../domains/usage/cost-estimate');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
 const RoadmapModel = require('../../shared/roadmap-model');
 const RunProgress = require('../../shared/run-progress-model');
 const { clientError } = require('../common');

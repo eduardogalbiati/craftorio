@@ -13,7 +13,7 @@
 //     and stop() on the handle when that turn/execution ends; onKill may be called synchronously;
 //   - each onKill(event) becomes a run event `process.killed` { pid, command_line, bytes,
 //     limit_bytes, step_id, session }; the second stop of the same command line in the same step
-//     carries `notify: true` (and only that one), and runNotice (src/notifications.js) turns a
+//     carries `notify: true` (and only that one), and runNotice (src/domains/workspace/notifications.js) turns a
 //     `process.killed` event with notify: true into one run notice (null without it);
 //   - the agent's next prompt says: The orchestrator stopped `<command line>` at <n> GB for passing
 //     the memory limit (GB = bytes / 1024^3, one decimal);
@@ -34,7 +34,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
-const { runNotice } = require('../src/notifications');
+const { runNotice } = require('../src/domains/workspace/notifications');
 
 const GB = 1024 * 1024 * 1024;
 const FIXTURE = path.join(__dirname, 'fixtures', 'memory-guard-suite.yaml');

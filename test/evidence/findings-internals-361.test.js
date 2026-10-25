@@ -1,13 +1,13 @@
 // Findings (#361), internals the acceptance tests do not reach: the issue a finding is filed as
 // (src/domains/evidence/findings.js issueOf), the filing status kept in filing.json (markFiling), and the main log's
-// ring of the last 200 lines (src/main-log.js).
+// ring of the last 200 lines (src/domains/workspace/main-log.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const findings = require('../../src/domains/evidence/findings');
-const mainLog = require('../../src/main-log');
+const mainLog = require('../../src/domains/workspace/main-log');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
@@ -43,7 +43,7 @@ test('a finding\'s status follows filing.json, and an unknown or path-like id is
   assert.equal(filed.status, 'filed');
   assert.equal(filed.issueUrl, 'https://github.com/o/r/issues/7');
   assert.equal(findings.listFindings(ws)[0].status, 'filed');
-  assert.equal(findings.getFinding(ws, '../../../etc'), null);
+  assert.equal(findings.getFinding(ws, '../../etc'), null);
   assert.equal(findings.markFiling(ws, 'nope', { status: 'filed' }), null);
 });
 

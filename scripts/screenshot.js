@@ -410,13 +410,13 @@ function main() {
     console.log(`app at ${args.ref} (${sha.slice(0, 12)})`);
   }
   const src = (m) => require(path.join(appDir, 'src', m));
-  const workspace = src('workspace');
+  const workspace = src('domains/workspace/workspace');
   const ws = workspace.setupWorkspace(wsDir, { persist: false });
 
   const view = VIEWS[args.view];
   const setup = (async () => {
     // the repository is set afterwards: createProject would clone it
-    const projects = src('projects');
+    const projects = src('domains/project/projects');
     const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });
     const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO });
     workspace.writeSettings(ws, {

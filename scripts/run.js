@@ -12,10 +12,18 @@
 const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
-const { resolveWorkspace, setupWorkspace, readSettings } = require('../src/workspace');
-const usage = require('../src/usage');
+const {
+  readSettings,
+  resolveWorkspace,
+  setupWorkspace,
+} = require('../src/domains/workspace/workspace');
+const usage = require('../src/domains/usage/usage');
 const { resolveCommand } = require('../src/engine/providers');
-const { BUNDLED_WORKFLOWS_DIR, seedWorkflows, resolveWorkflow } = require('../src/workflows');
+const {
+  BUNDLED_WORKFLOWS_DIR,
+  resolveWorkflow,
+  seedWorkflows,
+} = require('../src/domains/workflow/workflows');
 const { seedSkills } = require('../src/domains/agents/skills');
 
 const root = path.join(__dirname, '..');

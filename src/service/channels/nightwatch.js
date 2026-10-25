@@ -15,7 +15,7 @@
 // ctx.oracleFindingsScope). While a budget pauses the Oracle the findings are still logged and the owner gets one
 // notification. The report gains one window per Self-healing day (selfHealingDays).
 // Step regressions (#335): after each finished run, while a watch is active, a step whose recent cost
-// or minutes rose past its baseline (src/step-regressions.js) is logged once per step and class
+// or minutes rose past its baseline (src/domains/run/step-regressions.js) is logged once per step and class
 // (oracle.detected kind regression; the keys flagged until they recover in oracle/regressions.json).
 // Report only: it wakes no one and changes nothing. The morning card lists the current regressions
 // with the runs behind them.
@@ -36,12 +36,12 @@ const actions = require('../../domains/oracle/oracle-actions');
 const night = require('../../domains/night/night-watch');
 const nightLimits = require('../../domains/night/night-limits');
 const demo = require('../../domains/night/night-watch-demo');
-const notifier = require('../../notifications');
-const projects = require('../../projects');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
+const notifier = require('../../domains/workspace/notifications');
+const projects = require('../../domains/project/projects');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
 const simulation = require('../../engine/simulation');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 const { requireObject } = require('../common');
 const {
   args,

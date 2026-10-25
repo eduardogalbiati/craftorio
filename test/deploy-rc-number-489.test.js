@@ -1,5 +1,5 @@
 // #489 the rc number N is the same in deploy.yml (the GitHub prerelease vX.Y.Z-rc.N) and in the app
-// (the candidate recordCandidate writes, src/releases.js): the shell lines of deploy.yml that compute
+// (the candidate recordCandidate writes, src/domains/releases/releases.js): the shell lines of deploy.yml that compute
 // N run in a throwaway repository, against the app's candidates for the same pushes, including a
 // push that carries several first-parent commits. Needs a POSIX shell (Git Bash on Windows).
 const test = require('node:test');
@@ -39,7 +39,7 @@ function rcScript() {
 test('#489 deploy.yml and the app give a push the same rc number, also for a push of several merges', (t) => {
   const sh = bash();
   if (!sh) return t.skip('no POSIX shell (Git Bash) here');
-  const releases = require('../src/releases');
+  const releases = require('../src/domains/releases/releases');
   const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rcnum489-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
   const repo = path.join(root, 'repo');

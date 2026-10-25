@@ -1,4 +1,4 @@
-// The Backlog's Product Owner (#105, src/product-owner.js): questions about a project's backlog and
+// The Backlog's Product Owner (#105, src/domains/po/product-owner.js): questions about a project's backlog and
 // the conversation kept per project. Read-only: it proposes, the owner applies (Assign, roadmap).
 // `mock` (the screen's developer mode) and MULTIAGENT_SIMULATION_ONLY answer from the simulated
 // Product Owner: no model call, no cost. po:ask's `issues` (#169): the issues the owner selected on
@@ -12,7 +12,7 @@
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.
 // po:decongest (#150) files one hot spot of an answer's `decongest` as an issue, previewing like po:file.
 // po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
-// real answer raises a `po` notice (#149, src/notifications.js); a simulated or stopped one does not.
+// real answer raises a `po` notice (#149, src/domains/workspace/notifications.js); a simulated or stopped one does not.
 // po:ask's progress is pushed on chat:progress ('po', the project id) and chat:cancel stops it (#180).
 // po:ask's `calibration` (#189): a Speed ↔ Quality step for this question only (the saved one is unchanged).
 // po:request (#240): another agent's request (the Oracle's) in the Product Owner's inbox
@@ -28,14 +28,14 @@ const agents = require('../../domains/agents/agents');
 const backlog = require('../../domains/backlog/backlog');
 const DefaultWorkflow = require('../../shared/default-workflow');
 const Language = require('../../shared/language');
-const notifier = require('../../notifications');
-const productOwner = require('../../product-owner');
-const projects = require('../../projects');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
+const notifier = require('../../domains/workspace/notifications');
+const productOwner = require('../../domains/po/product-owner');
+const projects = require('../../domains/project/projects');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
 const simulation = require('../../engine/simulation');
-const usage = require('../../usage');
-const workspace = require('../../workspace');
+const usage = require('../../domains/usage/usage');
+const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
 const { isArchived } = require('../../shared/backlog-archive');
 const { requireObject } = require('../common');
@@ -372,7 +372,7 @@ module.exports = (ctx) => {
       channel: 'po:request',
       method: 'productOwnerRequest',
       params: 'opts',
-      // params: the request kind's own (src/product-owner.js checks them per kind)
+      // params: the request kind's own (src/domains/po/product-owner.js checks them per kind)
       schema: {
         params: args({ projectId: orNone(PROJECT_ID), kind: STRING, params: ANY, reason: ANY, from: ANY, ref: ANY, byContent: FLAG, mock: FLAG }),
         result: REQUEST_ANSWER,

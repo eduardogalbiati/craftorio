@@ -11,7 +11,7 @@
 (function (root) {
   const node = typeof module === 'object' && module.exports;
   const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
-  // the form src/releases.js accepts (SEMVER there), with a two-part "v1.4" too
+  // the form src/domains/releases/releases.js accepts (SEMVER there), with a two-part "v1.4" too
   const VERSION = /^([vV]?)(\d+)\.(\d+)(?:\.(\d+))?$/;
   const KINDS = ['breaking', 'enhancement', 'bug', 'documentation'];
   const kindOf = (label) => {

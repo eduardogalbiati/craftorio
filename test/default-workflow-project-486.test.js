@@ -1,5 +1,5 @@
 // #486: src/shared/default-workflow.js's project rules: firstBuild (the default of a project's set,
-// shared by src/projects.js and the Overview), and in the renderer the header project's own default
+// shared by src/domains/project/projects.js and the Overview), and in the renderer the header project's own default
 // and set first in the pickers (current, projectFirst), run in a vm with window.CurrentProject and state.
 const test = require('node:test');
 const assert = require('node:assert/strict');

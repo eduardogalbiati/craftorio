@@ -106,7 +106,7 @@ Given('the failed run {string} was resumed as the run {string}, which is still r
   writeResumedRun(e2e, run.runId, resumed, OUTCOMES['is still running'], { task: run.task, start: Date.now() - 10 * MIN });
 });
 
-// the demo roadmap's failed run resumed, recorded on its item as src/roadmap.js adoptResumed does
+// the demo roadmap's failed run resumed, recorded on its item as src/domains/roadmap/roadmap.js adoptResumed does
 Given('the failed run {string} of the roadmap item {string} was resumed as the run {string}, which is still running', async ({ e2e }, failed, title, resumed) => {
   const dir = fs.readdirSync(runsDir(e2e)).find((d) => d.endsWith(`-${failed}`));
   expect(dir, `the demo workspace has a run ending in -${failed}`).toBeTruthy();

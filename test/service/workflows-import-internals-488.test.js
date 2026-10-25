@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { makeService } = require('./helpers');
-const { requiresProblem, parseManifest } = require('../../src/project-manifest');
+const { requiresProblem, parseManifest } = require('../../src/domains/project/project-manifest');
 const { summarize } = require('../../src/shared/workflow-compose');
 
 const FLOW = `apiVersion: multiagent/v1

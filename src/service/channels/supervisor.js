@@ -1,24 +1,24 @@
 // The AI supervisor on demand: analysis of any run (running, failed or finished), the watch mode
-// that follows a running run in a chat (src/supervisor-watch.js), and the app-wide Supervisor chat
-// with its read-only tools over the service (src/supervisor-chat.js, #28), and its request inbox (#240).
+// that follows a running run in a chat (src/domains/supervisor/supervisor-watch.js), and the app-wide Supervisor chat
+// with its read-only tools over the service (src/domains/supervisor/supervisor-chat.js, #28), and its request inbox (#240).
 
 const path = require('path');
 const simulation = require('../../engine/simulation');
-const supervisor = require('../../supervisor');
-const workspace = require('../../workspace');
-const { createBridge, mcpCommand } = require('../../supervisor-bridge');
+const supervisor = require('../../domains/supervisor/supervisor');
+const workspace = require('../../domains/workspace/workspace');
+const { createBridge, mcpCommand } = require('../../domains/supervisor/supervisor-bridge');
 const {
   CLICK_KINDS,
   CONFIRM_KINDS,
   createSupervisorChat,
-} = require('../../supervisor-chat');
-const { createWatches } = require('../../supervisor-watch');
+} = require('../../domains/supervisor/supervisor-chat');
+const { createWatches } = require('../../domains/supervisor/supervisor-watch');
 const {
   requireId,
   requireObject,
 } = require('../common');
 const { resolveCommand } = require('../../engine/providers');
-const { supervisorTools } = require('../../supervisor-tools');
+const { supervisorTools } = require('../../domains/supervisor/supervisor-tools');
 const {
   ANY,
   args,

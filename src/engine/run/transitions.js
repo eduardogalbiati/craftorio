@@ -391,7 +391,7 @@ const methods = {
 
   // The `ship: { tag, build? }` transition (#260, the release workflow's Ship), after `shipGuard` and
   // the transition's merge: pushes the local base to origin, never forced, and tags that commit
-  // (shipRelease in src/releases.js), which must be the worktree's (what the suites ran on). A
+  // (shipRelease in src/domains/releases/releases.js), which must be the worktree's (what the suites ran on). A
   // simulation pushes nothing. A failure (origin moved, the tag exists elsewhere) goes to the
   // transition's `on_error`, like a failed merge.
   async shipRelease(step, ship, scope) {

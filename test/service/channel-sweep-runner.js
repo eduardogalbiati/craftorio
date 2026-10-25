@@ -8,7 +8,7 @@
 // { type: 'done', swept, polluted, relaunched }. A helper script: it registers no test.
 const path = require('path');
 const { createService } = require('../../src/service');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 const SKIPS = require('./channel-sweep-skips');
 
 const LIMIT_MS = 4000;

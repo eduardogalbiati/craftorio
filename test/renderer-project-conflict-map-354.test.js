@@ -1,6 +1,6 @@
 // #354 A project's Conflict map tab: one table merging the Roadmap's Conflict map panel (the saved
-// map of src/conflict-map.js, the Backlog payload's `conflictMap`) and Analytics › Performance's
-// "Files most runs edit" (channel analytics:performance, src/repo-performance.js). The Roadmap and
+// map of src/domains/project/conflict-map.js, the Backlog payload's `conflictMap`) and Analytics › Performance's
+// "Files most runs edit" (channel analytics:performance, src/domains/project/repo-performance.js). The Roadmap and
 // Analytics › Performance lose their own copy for a one-line link "Conflict map: in Projects ›
 // <project>". Acceptance tests written before the code; the tabs themselves are in
 // test/renderer-projects-354.test.js.

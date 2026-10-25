@@ -1,12 +1,12 @@
-// Service area: the conflict map (#150, src/conflict-map.js). Rebuilt in the background after a real
+// Service area: the conflict map (#150, src/domains/project/conflict-map.js). Rebuilt in the background after a real
 // run of a git project merges (locally or through its PR), so the Product Owner's next plan reads it;
 // a failure is logged and never touches the run. The Backlog reads the saved map as it is.
 
 const path = require('path');
-const conflictMap = require('../../conflict-map');
-const projects = require('../../projects');
-const runs = require('../../runs');
-const { storeFor } = require('../../store');
+const conflictMap = require('../../domains/project/conflict-map');
+const projects = require('../../domains/project/projects');
+const runs = require('../../domains/run/runs');
+const { storeFor } = require('../../domains/workspace/store');
 
 module.exports = (ctx) => {
   // Rebuilds the project's map after `run` finished with a merge (`ev`: its workflow.finished event).

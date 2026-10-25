@@ -1,12 +1,12 @@
 // #389 internals: the local-usage scan's per-file entries survive an app start through the workspace's
-// index (usage_files, src/store.js), and a scan from entries read back parses nothing again.
+// index (usage_files, src/domains/workspace/store.js), and a scan from entries read back parses nothing again.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { decodeEntry, encodeEntry, readLocalUsageAsync, scanLocalUsage } = require('../../src/domains/local/local-usage');
-const { openStore } = require('../../src/store');
+const { openStore } = require('../../src/domains/workspace/store');
 
 const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
 const msg = (id) => ({

@@ -443,7 +443,7 @@ function loadWorkflow(file) {
   return wf;
 }
 
-// #485: a repository's own workflow (.multiagent/workflows/, src/project-manifest.js) is code from the
+// #485: a repository's own workflow (.multiagent/workflows/, src/domains/project/project-manifest.js) is code from the
 // checkout: off until the owner accepts it for its commit, and capped even then. It never ships, runs
 // its `action:`s only in the run's worktree and gives its agents only the tools of the workspace's
 // policy: settings.json's `repositoryWorkflowTools` (no Settings field yet), else the tools the app's

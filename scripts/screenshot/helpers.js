@@ -15,8 +15,8 @@ const DEMO_REPO = 'https://github.com/example/demo-app';
 // #124: an issue too big for one run (complexity 5, 12 tasks in two areas of the code): the Product
 // Owner's plan answer proposes its split. #138: two epics (#14, #13), members with `epic`, #9 in none.
 const BIG_TASKS = [
-  'One app per workspace: a lock file in `src/workspace.js`', 'A second app opens read-only, with a banner', 'Run owners recorded in `src/runs.js`',
-  'Only the owner resumes a run', 'Queue claims survive a restart (`src/store.js`)', 'Roadmap writes are atomic (`src/roadmap.js`)',
+  'One app per workspace: a lock file in `src/domains/workspace/workspace.js`', 'A second app opens read-only, with a banner', 'Run owners recorded in `src/domains/run/runs.js`',
+  'Only the owner resumes a run', 'Queue claims survive a restart (`src/domains/workspace/store.js`)', 'Roadmap writes are atomic (`src/domains/roadmap/roadmap.js`)',
   'Resume dialog lists the steps (`src/renderer/run.js`)', 'Duplicate runs are flagged on the card (`src/renderer/backlog.js`)', 'Safe-write notice in the run header (`src/renderer/run.js`)',
   'Roadmap status derived from runs, shown in `src/renderer/backlog-roadmap.js`', 'Docs: run safety in the README', 'Tests',
 ];

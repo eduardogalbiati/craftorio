@@ -12,7 +12,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { validateSchema } = require('../json-schema');
+const { validateSchema } = require('../domains/workspace/json-schema');
 const { clientError } = require('./common');
 
 const CHECK_RESULTS = !!process.env.NODE_TEST_CONTEXT;

@@ -1,4 +1,4 @@
-# Saved pipeline (#135, src/pipelines.js): Write & Review enriches an issue into a task, its gate's
+# Saved pipeline (#135, src/domains/workflow/pipelines.js): Write & Review enriches an issue into a task, its gate's
 # "Accept and save to issue" saves it to the issue, then the local developer workflow implements it.
 name: Enrich → Save → Develop
 description: Write & Review turns a request (or an issue, started from the Backlog's Enrich) into an implementable task; accept it at its gate ("Accept and save to issue" saves it to the issue), then software-development-local-hero implements the accepted document.

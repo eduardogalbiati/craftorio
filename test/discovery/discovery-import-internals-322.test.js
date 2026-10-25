@@ -10,7 +10,7 @@ const os = require('os');
 const path = require('path');
 const discovery = require('../../src/domains/discovery/discovery');
 const imports = require('../../src/domains/discovery/discovery-import');
-const { setupWorkspace } = require('../../src/workspace');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 const { createService } = require('../../src/service');
 
 const P = 'p1';

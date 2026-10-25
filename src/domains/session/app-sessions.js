@@ -1,7 +1,7 @@
 // The app's own heartbeat log (#188): <workspace>/app-sessions.json, { sessions: [{ start, end }] },
-// the times an app process held the workspace lock (src/run-owner.js lockWorkspace beats it every
+// the times an app process held the workspace lock (src/domains/run/run-owner.js lockWorkspace beats it every
 // minute). A gap between two sessions is "app closed / machine asleep" for the 24/7 meter
-// (src/occupancy.js). Small: the sessions of the last KEEP_DAYS days only.
+// (src/domains/run/occupancy.js). Small: the sessions of the last KEEP_DAYS days only.
 
 const fs = require('fs');
 const path = require('path');

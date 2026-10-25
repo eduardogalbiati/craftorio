@@ -7,17 +7,17 @@
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
-const workspace = require('../../workspace');
-const projects = require('../../projects');
+const workspace = require('../../domains/workspace/workspace');
+const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
-const baseHealth = require('../../base-health');
+const baseHealth = require('../../domains/project/base-health');
 const refreshes = require('../../domains/backlog/backlog-refresh');
 const { git } = require('../../engine/worktree');
 const epics = require('../../domains/backlog/epics');
-const roadmaps = require('../../roadmap');
+const roadmaps = require('../../domains/roadmap/roadmap');
 const { normalizeThen } = require('../../shared/chain-model');
 const { platformOrDefault, requestRef } = require('../../shared/platforms');
-const runs = require('../../runs');
+const runs = require('../../domains/run/runs');
 
 module.exports = (ctx) => {
   // A synced backlog with each issue's runs and place in the queue (computed on every read: runs

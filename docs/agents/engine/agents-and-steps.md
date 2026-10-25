@@ -77,7 +77,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   test files run in the base checkout (`suiteBase`, prepared on demand, so `run_existing`/`off` runs
   get it too), cached per base commit + file in `cache/base-tests/`; those failing there too become
   `preexisting_failures` (the run's list, the summary, the project's base-health store below).
-  **Main stays green (#405, `src/base-health.js`, wired in `src/service/areas/base-health.js`)**: a
+  **Main stays green (#405, `src/domains/project/base-health.js`, wired in `src/service/areas/base-health.js`)**: a
   real run's `preexisting_failures` are recorded per project in `backlog/base-health/<project>.json`
   (test, file, first/last seen, runs; the engine records them, the service files); seen by 2 runs, a
   failure files one bug issue, updated (a comment) by every later sighting, never a second one.
@@ -129,7 +129,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
     round, `suiteFailedFiles`), the command filtered to them (`filteredCommand`); when they pass and
     the whole suite has not passed yet in the run (`fullSuitePassed`), the whole suite runs right after
     (log `suite-<visit>-full.log`, the affected run in `output.affected`). Output adds `scope` (full |
-    files), `selection` ({ mode, files, reasons, why }: "imports src/roadmap.js"), `passed`, `failed`;
+    files), `selection` ({ mode, files, reasons, why }: "imports src/domains/roadmap/roadmap.js"), `passed`, `failed`;
     `summary.suite_runs.affected` counts the affected runs. Simulation: two simulated files.
   - **`scope: failed`** (#324, release.yaml's `e2e`): the first visit runs the whole suite; a later
     visit runs only the files that failed in the step's previous round (its `failures[].file`) plus
@@ -168,7 +168,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   (a semver, a leading `v` dropped) into the package.json of `dir` (default `{{ worktree_dir }}`)
   and the root `version` / `packages[""].version` of its package-lock.json or npm-shrinkwrap.json,
   formatting and line endings kept, one commit on `branch` (created when the worktree is detached)
-  (`src/releases.js` `writeReleaseVersion`). Nothing written, with the reason in the output and the
+  (`src/domains/releases/releases.js` `writeReleaseVersion`). Nothing written, with the reason in the output and the
   run log, for a name that is not a semver, no package.json, the same or a lower version, a run
   without its own worktree, or a git error: it never fails the run. Output: { status: written |
   unchanged, from, to, files, commit, change: "package.json 0.3.0 → 1.2.0", message }. Simulation:

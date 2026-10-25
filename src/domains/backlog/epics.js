@@ -9,7 +9,7 @@
 // ({ id, number, iid?, groupId?, kind: issue | label | group, slug?, title, url, state, members,
 // progress: { open, closed, total } }). A failed read leaves `epicsError`, not a failed sync.
 // `applyEpic` creates an epic and/or moves issues into it; it writes to the platform, so it runs
-// only on the owner's click (the Product Owner's proposals, src/product-owner.js applyEpicProposal)
+// only on the owner's click (the Product Owner's proposals, src/domains/po/product-owner.js applyEpicProposal)
 // or, for a new issue the PO registers or the issue tracker files (`filedToEpic`), when the project's
 // `autoEpic` option is on. A preview never
 // calls the CLI: it returns the commands it would run.

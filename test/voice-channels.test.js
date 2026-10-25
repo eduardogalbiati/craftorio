@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setupWorkspace } = require('../src/workspace');
+const { setupWorkspace } = require('../src/domains/workspace/workspace');
 const { createService } = require('../src/service');
 const { encodeWav } = require('../src/renderer/voice.js');
 
@@ -43,7 +43,7 @@ test('the manifest declares audio:transcribe, audio:status and audio:downloadMod
 test('audio:status reads the settings and the models under host.userDataDir', (t) => {
   const { service, userDataDir } = makeService(t);
   const st = service.api['audio:status']();
-  assert.equal(st.command, 'whisper-cli'); // default setting (src/workspace.js DEFAULT_SETTINGS)
+  assert.equal(st.command, 'whisper-cli'); // default setting (src/domains/workspace/workspace.js DEFAULT_SETTINGS)
   assert.equal(st.modelsDir, path.join(userDataDir, 'speech-models'));
   assert.equal(st.modelReady, false); // nothing downloaded in the fresh temp userDataDir
 });

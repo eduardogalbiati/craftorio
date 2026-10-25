@@ -53,7 +53,7 @@ const sorted = (set) => [...set].sort((a, b) => a - b);
 const backlog = () => require('../src/domains/backlog/backlog');
 const epics = () => require('../src/domains/backlog/epics');
 const oracle = () => require('../src/domains/oracle/oracle-platform');
-const runPr = () => require('../src/run-pr');
+const runPr = () => require('../src/domains/run/run-pr');
 const probes = () => require('../src/engine/probes');
 const archive = () => require('../src/shared/backlog-archive');
 

@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { layout } = require('../../src/workspace');
+const { layout } = require('../../src/domains/workspace/workspace');
 const discovery = require('../../src/domains/discovery/discovery');
 const commits = require('../../src/domains/discovery/discovery-commit');
 
@@ -262,7 +262,7 @@ test('the store: issueCards maps each filed issue to its card; a committed card 
   const ws = tmp(t);
   const dir = ws.discovery;
   assert.equal(discovery.issueCards(dir, P).size, 0);
-  assert.equal(discovery.issueCards(dir, '../../x').size, 0);
+  assert.equal(discovery.issueCards(dir, '../x').size, 0);
   const id = readyCard(dir);
   assert.throws(() => discovery.markCommitted(dir, P, id, { issues: [] }), /issues filed/);
   discovery.markCommitted(dir, P, id, { issues: [7, 8], by: 'tester' });

@@ -1,4 +1,4 @@
-// Service area: the live roadmap's refill (#164, src/live-roadmap.js). When `advance` asks for one
+// Service area: the live roadmap's refill (#164, src/domains/roadmap/live-roadmap.js). When `advance` asks for one
 // (a live roadmap's last stage ended), refillRoadmap checks the daily budget (and the spending budget, #206), syncs the backlog first
 // (setting refreshFirst; never in a simulation), asks the Product Owner the fixed refill question
 // about the issues it may pick (the simulated Product Owner in a simulated roadmap or
@@ -8,15 +8,15 @@
 
 const agents = require('../../domains/agents/agents');
 const backlog = require('../../domains/backlog/backlog');
-const live = require('../../live-roadmap');
-const notifier = require('../../notifications');
-const productOwner = require('../../product-owner');
-const projects = require('../../projects');
-const roadmaps = require('../../roadmap');
-const runs = require('../../runs');
+const live = require('../../domains/roadmap/live-roadmap');
+const notifier = require('../../domains/workspace/notifications');
+const productOwner = require('../../domains/po/product-owner');
+const projects = require('../../domains/project/projects');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const runs = require('../../domains/run/runs');
 const simulation = require('../../engine/simulation');
-const usage = require('../../usage');
-const workspace = require('../../workspace');
+const usage = require('../../domains/usage/usage');
+const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
 
 module.exports = (ctx) => {

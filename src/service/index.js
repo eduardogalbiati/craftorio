@@ -4,8 +4,8 @@
 // file per area in src/service/channels/ (a new channel is one edit there), and `manifest` is what
 // the clients build `window.api` from (see src/service/manifest.js). Pushed data
 // ('chat:progress', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
-// ('notify', see src/notifications.js), already filtered by the settings and what the UI shows.
-// The service owns the workspace's SQLite index (src/store.js, #76): it writes the run index, the
+// ('notify', see src/domains/workspace/notifications.js), already filtered by the settings and what the UI shows.
+// The service owns the workspace's SQLite index (src/domains/workspace/store.js, #76): it writes the run index, the
 // pending gates and every notification as the engine emits, and pushes 'notifications:changed'.
 //
 // This file only composes (#155): the state and helpers live in one file per area in
@@ -26,7 +26,7 @@
 //   appVersion       shown in Settings
 //   isPackaged       the packaged app can't run itself as node (see terminalSpec)
 //   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
-//   fileIssue(draft) optional; files a refactor issue (#435, src/refactor-issues.js issueDraft) and
+//   fileIssue(draft) optional; files a refactor issue (#435, src/domains/refactor/refactor-issues.js issueDraft) and
 //                    returns { number, url }, instead of gh/glab, in a simulation too (tests, UI checks)
 //   userDataDir      optional; the app's user data folder, where speech models live (src/domains/chat/speech.js)
 //   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
@@ -38,8 +38,8 @@ const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 const pastedImages = require('../domains/chat/pasted-images');
-const projects = require('../projects');
-const { createCodeVersion } = require('../code-version');
+const projects = require('../domains/project/projects');
+const { createCodeVersion } = require('../domains/workspace/code-version');
 const {
   BUNDLED_SKILLS_DIR,
   BUNDLED_WORKFLOWS_DIR,
@@ -133,7 +133,7 @@ function createService({ host }) {
     notifyInterruptedRun: ctx.notifyInterruptedRun,
     // before a restart (the code changed on disk, #83), see src/service/areas/runs.js
     prepareRestart: ctx.prepareRestart,
-    // the owner's answer from a paired phone (#226, src/mobile-gates.js): never a channel
+    // the owner's answer from a paired phone (#226, src/domains/workspace/mobile-gates.js): never a channel
     answerPhoneGate: ctx.answerPhoneGate,
     shutdown() {
       ctx.stopPhoneGates();

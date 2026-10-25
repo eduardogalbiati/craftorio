@@ -164,7 +164,7 @@ test('#345 every <script src> of src/renderer/index.html names an existing file,
 
 test('#345 the browser server serves the src/shared/ modules', async (t) => {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  const { setupWorkspace } = require('../src/workspace');
+  const { setupWorkspace } = require('../src/domains/workspace/workspace');
   const { createService } = require('../src/service');
   const { createServer } = require('../src/server');
   const TOKEN = 'test-token-0123456789abcdef';

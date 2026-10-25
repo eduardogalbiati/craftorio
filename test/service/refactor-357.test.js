@@ -112,8 +112,8 @@ test('#357 refactor:prioritize in simulation gives a valid ranking and the propo
   const out = await call(api, 'refactor:prioritize', { projectId });
   assert.equal(typeof out.at, 'string');
   assert.equal(typeof out.costUsd, 'number');
-  const { PRIORITY_SCHEMA } = require('../../src/refactor-priority');
-  const { validateSchema } = require('../../src/json-schema');
+  const { PRIORITY_SCHEMA } = require('../../src/domains/refactor/refactor-priority');
+  const { validateSchema } = require('../../src/domains/workspace/json-schema');
   assert.deepEqual(validateSchema({ ranking: out.ranking }, PRIORITY_SCHEMA), []);
   assert.deepEqual(out.ranking.map((r) => r.id).sort(), [a.id, b.id].sort());
   const list = await call(api, 'refactor:proposals', { projectId });

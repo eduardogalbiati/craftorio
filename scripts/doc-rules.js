@@ -3,7 +3,7 @@
 //   - the decisions log (#332): docs/agents/decisions.md keeps 3 to 16 dated entries, newest first,
 //     each naming its issue(s) and why (test/decisions-log-332.test.js);
 //   - the Oracle's capabilities list (#184): the README's "The Oracle" section names the skills it
-//     knows and its tools, docs/agents/capabilities.md its tools (test/oracle-capable-184.test.js).
+//     knows and its tools, docs/agents/capabilities.md its tools (test/oracle/oracle-capable-184.test.js).
 // Each check returns [{ file, message }], empty when the rule holds.
 
 const fs = require('fs');

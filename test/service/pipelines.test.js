@@ -1,5 +1,5 @@
 // Service area: saved pipelines (#135, src/service/areas/pipelines.js). test/pipelines.test.js
-// covers src/pipelines.js alone (parsing, validation, the chain it builds, seeding); this file only
+// covers src/domains/workflow/pipelines.js alone (parsing, validation, the chain it builds, seeding); this file only
 // checks that a real run, through the service, really starts every stage in turn (or pauses, or
 // stops at a bad mapping), the way test/service/chain.test.js checks a phase-1 chain.
 const test = require('node:test');

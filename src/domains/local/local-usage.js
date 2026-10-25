@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs, cliSessionDirs } = require('../cli/cli-config-dirs');
 const { pathKey } = require('../machine/platform-paths');
-const { workerClient } = require('../../worker-client');
+const { workerClient } = require('../workspace/worker-client');
 
 // A pause longer than this between two messages is idle time (the person was away), not active time.
 const IDLE_GAP_MS = 5 * 60e3;
@@ -524,12 +524,12 @@ function readLocalUsageAsync({ home, index } = {}) {
 }
 
 /**
- * src/usage.js computeUsage(opts) in the usage worker (#389): the machine scope's records never
+ * src/domains/usage/usage.js computeUsage(opts) in the usage worker (#389): the machine scope's records never
  * cross to the calling thread, only the totals. The runs are read from runs/ (the index is the
  * service's), `local` from the worker's own scan of `home`'s transcripts.
  */
 function computeUsageAsync({ home, index, ...opts }) {
-  return inUsageWorker({ op: 'usage', home, index: index || null, opts }, () => require('../../usage').computeUsage({
+  return inUsageWorker({ op: 'usage', home, index: index || null, opts }, () => require('../usage/usage').computeUsage({
     ...opts, local: opts.scope === 'machine' ? readLocalUsage({ home }) : null,
   }));
 }

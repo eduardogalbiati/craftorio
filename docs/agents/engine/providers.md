@@ -23,7 +23,7 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   set and session mode. Adding a provider: the code map's "A provider".
 - **Where a turn's cost comes from (#369)**: the CLI's own figure when it reports one (Claude Code's
   `total_cost_usd`, the difference with the session's previous total, #233; Grok), else the tokens ×
-  the model's price (`src/usage.js` `sessionCost`: input, output, cache read, and cache write at the
+  the model's price (`src/domains/usage/usage.js` `sessionCost`: input, output, cache read, and cache write at the
   model's `cache_write` price, else 1.25× input for a 5-minute cache and 2× for an hour). A model's
   price is `settings.prices[model]`, else the adapter's `prices` table (`priceOf`; Claude:
   `claude-haiku-5-5`). One exception: when Claude Code does not know the model it runs, it writes

@@ -5,8 +5,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { cleanStages } = require('../src/roadmap');
-const { dropWaitingSuffix, placeWaiting, WAITING_STAGE_NAME } = require('../src/refactor-cadence');
+const { cleanStages } = require('../src/domains/roadmap/roadmap');
+const { dropWaitingSuffix, placeWaiting, WAITING_STAGE_NAME } = require('../src/domains/refactor/refactor-cadence');
 
 const item = (id, number, files = []) => ({ id, workflow: 'refactor', number, title: `Issue ${number}`, status: 'planned', files });
 const previous = {

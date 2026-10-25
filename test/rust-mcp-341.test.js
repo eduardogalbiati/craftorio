@@ -1,10 +1,10 @@
 // Acceptance tests for #341 (phase 1 of the path to Rust: the supervisor's MCP server as a Rust
 // binary, multiagent-mcp, so the packaged app stops depending on a system Node). Two kinds of checks:
-// - src/supervisor-bridge.js through its exports: mcpBinaryPath({ isPackaged, resourcesPath, platform })
+// - src/domains/supervisor/supervisor-bridge.js through its exports: mcpBinaryPath({ isPackaged, resourcesPath, platform })
 //   (where the binary of the current platform lives: never PATH) and
 //   mcpCommand(isPackaged, resolveCommand, { binary }) (the binary when it exists, else the JS script);
 // - the repository's files: the cargo workspace in native/, packaging, the CI and release workflows,
-//   the docs. The MCP protocol itself (both servers, the same cases) is test/supervisor-mcp.test.js.
+//   the docs. The MCP protocol itself (both servers, the same cases) is test/supervisor/supervisor-mcp.test.js.
 // Nothing here builds, packages, launches the app or calls a model.
 
 const test = require('node:test');
@@ -19,7 +19,7 @@ const root = path.join(__dirname, '..');
 const abs = (p) => path.join(root, p);
 const exists = (p) => fs.existsSync(abs(p));
 const read = (p) => fs.readFileSync(abs(p), 'utf8');
-const bridge = () => require('../src/supervisor-bridge');
+const bridge = () => require('../src/domains/supervisor/supervisor-bridge');
 
 const SCRIPT_NAME = 'supervisor-mcp.js';
 
@@ -39,7 +39,7 @@ const pathWithoutNode = (name) => (name === 'node' ? null : pathWithEverything(n
 
 test('#341 mcpBinaryPath: packaged, the binary is in resources/bin, with .exe on Windows only', () => {
   const { mcpBinaryPath } = bridge();
-  assert.equal(typeof mcpBinaryPath, 'function', 'src/supervisor-bridge.js exports mcpBinaryPath');
+  assert.equal(typeof mcpBinaryPath, 'function', 'src/domains/supervisor/supervisor-bridge.js exports mcpBinaryPath');
   const res = path.join(path.sep, 'apps', 'Multiagent', 'resources');
   assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'win32' }), path.join(res, 'bin', 'multiagent-mcp.exe'));
   assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'darwin' }), path.join(res, 'bin', 'multiagent-mcp'));
@@ -206,7 +206,7 @@ test('#341 packagerOptions: app.asar gets nothing from native/ (sources, Cargo f
     for (const p of ['/native', '/native/Cargo.toml', '/native/Cargo.lock', '/native/target/release/multiagent-mcp.exe', '/native/multiagent-mcp/src/main.rs']) {
       assert.equal(ignored(p), true, `${platform}-${arch}: ${p} is kept in app.asar`);
     }
-    for (const p of ['/src/supervisor-mcp.js', '/src/host/main.js', '/nativeish.js', '/src/native/x.js']) {
+    for (const p of ['/src/domains/supervisor/supervisor-mcp.js', '/src/host/main.js', '/nativeish.js', '/src/native/x.js']) {
       assert.equal(ignored(p), false, `${platform}-${arch}: ${p} is dropped`);
     }
   }

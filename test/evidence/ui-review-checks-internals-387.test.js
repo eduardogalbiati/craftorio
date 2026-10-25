@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { checksPath, readChecks, screenChecks } = require('../../src/domains/evidence/ui-review-checks');
 const { stepOutputSchema } = require('../../src/engine/run/outputs');
-const { validateSchema } = require('../../src/json-schema');
+const { validateSchema } = require('../../src/domains/workspace/json-schema');
 const { captureScreenshots } = require('../../src/engine/screenshot-step');
 
 const contrast = (target) => ({ id: 'color-contrast', impact: 'serious', help: 'Contrast', nodes: [{ target: [target] }] });

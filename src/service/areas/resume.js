@@ -7,9 +7,9 @@ const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const { displayName } = require('../../shared/display-name');
-const runs = require('../../runs');
+const runs = require('../../domains/run/runs');
 const sessionCache = require('../../shared/session-cache');
-const supervisor = require('../../supervisor');
+const supervisor = require('../../domains/supervisor/supervisor');
 const { gitOut } = require('../common');
 
 module.exports = (ctx) => {

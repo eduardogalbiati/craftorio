@@ -15,7 +15,7 @@ const {
   readRuns,
   sessionCost,
   totalTokens,
-} = require('../../usage');
+} = require('../usage/usage');
 const { TOOL_KINDS } = require('../local/local-usage');
 
 const DAY = 864e5;

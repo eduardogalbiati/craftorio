@@ -9,7 +9,7 @@ Feature: A failed run that was resumed
   # (its workflow.started event carries resumed_from: { run_id: <the failed run>, step: "test" }),
   # either finished (summary.json status "success") or still running (no summary, a fresh owner.json
   # heartbeat from another machine). The roadmap scenario resumes the demo roadmap's failed run
-  # "-run00013" (#13 "Run reports", stage "Tonight") and records it as src/roadmap.js adoptResumed
+  # "-run00013" (#13 "Run reports", stage "Tonight") and records it as src/domains/roadmap/roadmap.js adoptResumed
   # does: the item's runId is the resumed run, its runs list both.
 
   @issue-384

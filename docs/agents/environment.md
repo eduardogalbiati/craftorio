@@ -21,19 +21,19 @@ the workspace folder.
   native/Cargo.toml --all -- --check`, `cargo clippy --manifest-path native/Cargo.toml
   --all-targets -- -D warnings`, `cargo test --manifest-path native/Cargo.toml`. The **target
   folder is per worktree** (`native/target/`, gitignored; `CARGO_TARGET_DIR` moves it, and
-  `test/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `multiagent-mcp` in
+  `test/supervisor/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `multiagent-mcp` in
   release (about a minute), later ones are incremental. Without cargo, `npm test` skips the
-  binary's cases with one line; CI never does. `mcpCommand` (`src/supervisor-bridge.js`) starts
+  binary's cases with one line; CI never does. `mcpCommand` (`src/domains/supervisor/supervisor-bridge.js`) starts
   `native/target/release/multiagent-mcp[.exe]` when it exists (packaged: `resources/bin/`), else
-  `src/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
+  `src/domains/supervisor/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
   release target of the platform and arch (`rustup target add` first) and needs cargo.
 - **No system Node in the packaged app** (#342): it ships three sidecars in `resources/bin/`
   (`nativeBinaryPath`, `src/domains/machine/native-bin.js`): `multiagent-mcp`, `multiagent-tail` (the external
   live terminal, `tailCommand` in `terminalSpec`; the embedded one keeps `followSession` in
   `src/domains/session/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
   Settings › Execution). Node is needed for development only: `npm start`, the tests and the
-  JS fallbacks of a checkout without cargo (`src/domains/session/session-tail.js`, `src/supervisor-mcp.js`,
-  `scripts/ctl.js`). `test/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
+  JS fallbacks of a checkout without cargo (`src/domains/session/session-tail.js`, `src/domains/supervisor/supervisor-mcp.js`,
+  `scripts/ctl.js`). `test/session/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
   binaries in release on their first run, like `multiagent-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
@@ -84,7 +84,7 @@ the workspace folder.
 - **Developing while runs are active**: pulling or merging changes `src/` under the running app.
   Ctrl+R reloads only the window (renderer + preload); the main process (or the `npm run serve`
   server) keeps the code it started with, so new channels are missing. The process records its
-  code version at startup (`src/code-version.js`: app version + a hash of `src/` without
+  code version at startup (`src/domains/workspace/code-version.js`: app version + a hash of `src/` without
   `renderer/` and `preload.js`; the packaged app uses its version only) and the window compares it
   with the code on disk (`app:codeVersion`) when it loads and gets the focus. On a difference a
   banner offers **Restart** (`app:relaunch`): it lists the runs in progress with their step,
@@ -92,7 +92,7 @@ the workspace folder.
   the interrupted runs are listed with Resume. A missing channel shows "This feature needs an app
   restart" instead of the IPC error. So: pull, then restart. With the browser UI, restart the server
   and reload the page.
-- **The app updates itself** (#279, `src/app-update.js`, `areas/app-update.js`): with Self-healing
+- **The app updates itself** (#279, `src/domains/workspace/app-update.js`, `areas/app-update.js`): with Self-healing
   and Settings › Execution › Oracle › "Apply merged fixes to this app" on, a source checkout
   (`app.isPackaged` false) whose repository is a project of the workspace (same `origin`, or the
   app's commit in the clone's local main) takes the fixes merged into that clone's **local main**

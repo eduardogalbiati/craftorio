@@ -1,14 +1,14 @@
 // src/service/channels/product-owner.js: po:ask (#149) notifies the bell for a real answer, never
 // for a simulated one (the drawer's avatar dot is enough for that). The test workspace always runs
 // with MULTIAGENT_SIMULATION_ONLY=1 (see docs/agents/testing.md), so a "real" answer is exercised by
-// stubbing src/product-owner.js's own ask() and forcing simulation.simulationOnly() false just for
+// stubbing src/domains/po/product-owner.js's own ask() and forcing simulation.simulationOnly() false just for
 // that call: no model or CLI is ever started here.
 // Live progress (#180): po:ask's turn is pushed on chat:progress and chat:cancel stops it; mockSteps'
 // delays are scaled down (like the mock provider) so these tests stay fast.
 process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const productOwner = require('../../src/product-owner');
+const productOwner = require('../../src/domains/po/product-owner');
 const simulation = require('../../src/engine/simulation');
 const { makeService, roadmapProject } = require('./helpers');
 

@@ -1,5 +1,5 @@
 // #445 the queue's pause by a failure, at the storage seam (src/domains/backlog/backlog.js readQueue / setPaused /
-// pauseForFailure, src/store.js's index): the owner's legacy file (an English sentence over an empty
+// pauseForFailure, src/domains/workspace/store.js's index): the owner's legacy file (an English sentence over an empty
 // queue) is not paused any more when read, a pause by hand stays, and the structured `reason` survives
 // the SQLite index (a reopen, the import of a .queue.json).
 const test = require('node:test');
@@ -8,8 +8,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const backlog = require('../../src/domains/backlog/backlog');
-const { openStore } = require('../../src/store');
-const { setupWorkspace } = require('../../src/workspace');
+const { openStore } = require('../../src/domains/workspace/store');
+const { setupWorkspace } = require('../../src/domains/workspace/workspace');
 
 const LEGACY = '#330 failed: resume to start the next issues.';
 const item = (number) => ({ number, url: `u${number}`, title: `T${number}`, body: '', workflow: 'sd.yaml', inputs: {}, addedAt: '2026-10-16T00:00:00.000Z' });

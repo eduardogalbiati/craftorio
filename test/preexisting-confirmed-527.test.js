@@ -28,7 +28,7 @@ const { fixture } = require('./worktree-helpers');
 const { runSuite } = require('../src/engine/suite-step');
 
 const loadStore = () => require('../src/engine/base-health-store');
-const loadHealth = () => require('../src/base-health');
+const loadHealth = () => require('../src/domains/project/base-health');
 
 const PROJECT = 'proj-527-pre';
 const SLOW = { test: 'renders the big board', file: 'test/board.test.js', error: 'test timed out after 30000ms' };

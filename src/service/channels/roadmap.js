@@ -1,19 +1,19 @@
-// Backlog roadmap (src/roadmap.js): ordered stages of runs per project, each stage after the
+// Backlog roadmap (src/domains/roadmap/roadmap.js): ordered stages of runs per project, each stage after the
 // previous one merged. Every channel returns the Backlog (withIssueRuns), whose `roadmap` the
 // screen shows (src/renderer/backlog-roadmap.js); the service's dispatchRoadmaps runs it.
 // #281: an owner edit (save, propose, from-queue, clear, restore) first keeps the stages as they were
-// (src/roadmap-history.js: backlog/<project>.roadmap.history/, the last 20). A save, a proposal that
+// (src/domains/roadmap/roadmap-history.js: backlog/<project>.roadmap.history/, the last 20). A save, a proposal that
 // replaces the roadmap, Clear and a restore answer with `edit` ({ id, label }): the last such edit of
-// a project is the one roadmap:undo takes back (src/roadmap-undo.js), kept in memory until the next
+// a project is the one roadmap:undo takes back (src/domains/roadmap/roadmap-undo.js), kept in memory until the next
 // one. roadmap:versions lists the kept versions and roadmap:restore-version puts one back; both
 // follow Undo's rule and never stop a run.
 
 const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
-const history = require('../../roadmap-history');
-const merge = require('../../roadmap-merge');
-const roadmaps = require('../../roadmap');
-const undo = require('../../roadmap-undo');
+const history = require('../../domains/roadmap/roadmap-history');
+const merge = require('../../domains/roadmap/roadmap-merge');
+const roadmaps = require('../../domains/roadmap/roadmap');
+const undo = require('../../domains/roadmap/roadmap-undo');
 const RoadmapModel = require('../../shared/roadmap-model');
 const { requireText } = require('../common');
 const {
@@ -88,7 +88,7 @@ module.exports = (ctx) => {
     // the edited stages ([{ id?, name, note, items: [{ id?, workflow, inputs, mock, issues }] }]); runs are kept by item id;
     // label: what the edit did, in the roadmap's words (the history's line and the toast's title).
     // #287 base: the roadmap's updatedAt the screen read. When the roadmap was written since, only what
-    // the edit changed is applied to the stored stages (src/roadmap-merge.js); an edit that cannot be
+    // the edit changed is applied to the stored stages (src/domains/roadmap/roadmap-merge.js); an edit that cannot be
     // applied saves nothing and answers the Backlog with `conflict: { reason }`. The read, the merge and
     // the write happen in one synchronous step: two writers never interleave.
     {

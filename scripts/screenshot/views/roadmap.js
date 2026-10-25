@@ -15,7 +15,7 @@ const {
   writeEvents,
 } = require('../helpers');
 
-// A roadmap (Backlog › Roadmap, src/roadmap.js): stage 1 done (the local-hero run of #11), then a
+// A roadmap (Backlog › Roadmap, src/domains/roadmap/roadmap.js): stage 1 done (the local-hero run of #11), then a
 // group of two issues (with the Product Owner's reasons, mode auto), then one UI issue (mode
 // validated, no stage note); planned, so nothing starts. `--click "[data-rm-edit]"` opens the first
 // planned item's Edit form (the workflow's inputs: select, checkbox, text).

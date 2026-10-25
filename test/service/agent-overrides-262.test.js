@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const workspace = require('../../src/workspace');
+const workspace = require('../../src/domains/workspace/workspace');
 const { makeService } = require('./helpers');
 
 const FIXTURE = `apiVersion: multiagent/v1

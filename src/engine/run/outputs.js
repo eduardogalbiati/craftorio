@@ -1,6 +1,6 @@
 // @ts-check
 // Step outputs and their validation (#250, from src/engine/workflow.js): `extractJson` reads the
-// ```json block of an answer, `validateSchema` (src/json-schema.js) checks it against the step's `output` schema (the
+// ```json block of an answer, `validateSchema` (src/domains/workspace/json-schema.js) checks it against the step's `output` schema (the
 // retry prompt `retryPrompt` asks for a fix), `parseTestRequest` reads a ```run-tests block,
 // `takeHandoff` splits the answer from its ```handoff note; `stepOutputSchema` gives one agent's
 // schema (a fan-out agent's `agent_output_schema` extension, #387); the repeat keys of an output the stall
@@ -45,8 +45,8 @@ function parseTestRequest(text) {
   return affected || files.length ? { affected, files } : null;
 }
 
-// the shared validator (#338, src/json-schema.js): its paths start at `output`
-const { validateSchema } = require('../../json-schema');
+// the shared validator (#338, src/domains/workspace/json-schema.js): its paths start at `output`
+const { validateSchema } = require('../../domains/workspace/json-schema');
 
 // The schema one agent of a step answers with (#387): the step's `output_schema`, extended for a
 // fan-out agent by `agent_output_schema: { <agent>: { properties, required } }` (its properties

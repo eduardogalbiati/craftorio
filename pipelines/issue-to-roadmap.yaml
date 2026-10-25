@@ -1,4 +1,4 @@
-# Saved pipeline (#135, src/pipelines.js): the issue tracker files the issues of a request, then the
+# Saved pipeline (#135, src/domains/workflow/pipelines.js): the issue tracker files the issues of a request, then the
 # Product Owner places them in the roadmap as planned stages. Nothing starts until you press Start.
 name: Issue → Roadmap
 description: The issue tracker files the issues of your request, then the Product Owner places them in the project's roadmap as planned stages (nothing starts until you press Start on the Backlog).

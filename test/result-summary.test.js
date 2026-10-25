@@ -3,7 +3,7 @@
 //
 // Seam chosen: a real (mock, simulation-only) run of a minimal workflow with one human gate, no
 // agent turn (src/engine/workflow.js WorkflowRun, as in test/engine-helpers.js), then
-// src/runs.js runArtifacts(runDir) (existing). Interfaces relied on:
+// src/domains/run/runs.js runArtifacts(runDir) (existing). Interfaces relied on:
 //   - <run_dir>/result.md exists once `workflow.finished` was emitted, markdown starting with "# ";
 //   - runArtifacts(runDir)[0] is result.md with category 'result' (#225 categories).
 const test = require('node:test');
@@ -12,7 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
-const runs = require('../src/runs');
+const runs = require('../src/domains/run/runs');
 
 const WORKFLOW = `apiVersion: multiagent/v1
 kind: Workflow

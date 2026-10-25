@@ -11,9 +11,9 @@ const os = require('os');
 const path = require('path');
 const yaml = require('js-yaml');
 const { execFileSync } = require('child_process');
-const { setupWorkspace } = require('../src/workspace');
-const projects = require('../src/projects');
-const seeds = require('../src/seeds');
+const { setupWorkspace } = require('../src/domains/workspace/workspace');
+const projects = require('../src/domains/project/projects');
+const seeds = require('../src/domains/seed/seeds');
 const workflowInterview = require('../src/service/areas/workflow-interview');
 const seedChannels = require('../src/service/channels/seeds');
 

@@ -21,9 +21,9 @@ plan, and records the decisions the owner took (section 5). The figures come fro
 
 The renderer talks to the engine only through `window.api`, built from the channel manifest
 (`src/service/manifest.js`): 276 channels in 33 files under `src/service/channels/`, each with a JSON
-schema. Two transports carry them unchanged: Electron IPC (`src/preload.js`) and HTTP + WebSocket
+schema. Two transports carry them unchanged: Electron IPC (`src/host/preload.js`) and HTTP + WebSocket
 (`src/server/`, `src/renderer/api-http.js`). `npm run serve` is already the engine without Electron,
-and the desktop app can attach to an engine another computer serves (`src/engine-connection.js`).
+and the desktop app can attach to an engine another computer serves (`src/host/engine-connection.js`).
 
 So "engine vs app" is a runtime boundary today. It is not a package boundary: one `package.json`,
 one `node_modules`, one test tree, one build. The study is about turning the runtime seam into a
@@ -186,7 +186,7 @@ fronts/
   plan/                      views: inbox, discovery; features; tests
   ai/                        views: oracle, nightwatch, agents, skills, usage; features; tests
 apps/
-  desktop/                   src/main.js, preload, ipc-guard, window-guards, permissions,
+  desktop/                   src/host/main.js, preload, ipc-guard, window-guards, permissions,
                              engine-connection*, external-terminal, keep-awake, auth, package.js,
                              assets; its composition lists the fronts it ships
   web/                       the browser composition served by the engine (index.html + api-http)
@@ -220,7 +220,7 @@ merged, packaged for Windows and run against a remote engine. Sizes are PR count
 | Phase | What | Gate | Size |
 |---|---|---|---|
 | 0 | Decisions (section 5) recorded in [decisions.md](agents/decisions.md); the composition contract written in [renderer.md](agents/renderer.md). | Owner's sign-off. | 1 PR |
-| 1 | **Tidy, no packages.** The 32 host files to `src/host/`; the 103 backend loose files to `src/domains/<name>/` by the clusters of 1.3; tests follow their modules into `test/<area>/`. `docs.js`, `ci-plan.js`, the smoke and screenshot runners learn the new paths once. The `AGENTS.md` rules that name folders are updated. | `npm test`, `npm run docs --check`, smoke, packaged exe on Windows. Measured by `scripts/dep-map.js`: zero loose files. | 3–5 PRs, mechanical |
+| 1 | **Tidy, no packages.** The 32 host files to `src/host/`; the 103 backend loose files to `src/domains/<name>/` by the clusters of 1.3; tests follow their modules into `test/<area>/`. `docs.js`, `ci-plan.js`, the smoke and screenshot runners learn the new paths once. The `AGENTS.md` rules that name folders are updated. | `npm test`, `npm run docs --check`, smoke, packaged exe on Windows. Measured by `scripts/dep-map.js`: zero loose files. | 3–5 PRs, mechanical. **Done** (#560, #561, #562): 14 host files (the workers, `supervisor-mcp` and the demo seeds stay with the domain that spawns or requires them); domains: agents (agent-inbox, agents, agents-usage, skills), analytics (analytics, analytics-demo, time-zone), backlog (backlog, backlog-refresh, epics, issues), chat (chat-progress, mic-permission, pasted-images, speech), cli (claude-auth, cli-config-dirs, cli-sessions, cli-trust, provider-accounts, token-check), discovery (clarity, discovery, discovery-commit, discovery-import), evidence (artifact-categories, coverage-summary, evidence, findings, result-summary, ui-review-checks), local (local-preview, local-push, local-usage, local-usage-worker), machine (install-commands, machine-profile, native-bin, platform-paths, shell, terminals, tool-worker), night (night-limits, night-watch, night-watch-demo), oracle (oracle-*), po (po-hot-files, po-split, product-owner), project (architecture-facts, base-health, conflict-map, project-inputs, project-manifest, project-map, projects, repo-performance), refactor (refactor-*), releases (release-city, releases), roadmap (live-roadmap, roadmap, roadmap-history, roadmap-merge, roadmap-undo), run (occupancy, run-analysis, run-artifacts, run-costs, run-owner, run-pr, run-record, runs, step-regressions), seed (seed, seed-tool-issue, seeds), session (app-sessions, session-cache, session-tail), supervisor (supervisor-*), usage (actions-usage, budget, cost-estimate, usage), workflow (pipelines, workflow-builder, workflow-categories, workflow-compose, workflow-requirements, workflows), workspace (app-update, code-version, json-schema, main-log, mobile-gates, notifications, state-file, store, worker-client, workspace). |
 | 2 | **Engine package.** `packages/shared`, `packages/engine` (engine + service + server + control + domains), `apps/desktop` (host); root `workspaces`. `npm run serve` becomes the engine's bin. Contract tests move to the engine. Packager and asar checked with workspace symlinks; `node-pty` stays in `apps/desktop`. | The desktop app runs with the in-process engine and attached to a remote one; `test/contract/` green over HTTP; Windows exe. | 4–6 PRs |
 | 3 | **UI kit and fronts.** `packages/ui-kit` from the renderer's root; four front packages from `views/`; the composition file; `index.html` generated from the composition; `features/` split per front; `apps/web`. | Each front builds alone (composition of one) and all together; e2e per front; screenshots unchanged. | 5–8 PRs |
 | 4 | **Vertical slices.** Each front's channel files, areas and domain modules move into its package; the engine discovers channels from installed fronts; `channel-schema-ratchet` runs per package. | A front's `npm test` touches only its files; an engine build with one front serves only its channels. | 4–6 PRs |
@@ -233,9 +233,9 @@ true.
 
 ## 5. Decisions taken by the owner (2026-10-24)
 
-The seven questions this study raised, decided in the owner's session of 2026-10-24. They become
-the entry of [decisions.md](agents/decisions.md) when phase 0 starts; until then this section is the
-record. The study is a plan: nothing below is implemented.
+The seven questions this study raised, decided in the owner's session of 2026-10-24. Phase 0 (#559)
+recorded them as the 2026-10-24 entry of [decisions.md](agents/decisions.md); this section keeps the
+longer form. Phase 1 (#560, #561, #562) is the first to implement anything of this study.
 
 1. **Vertical fronts, reached in phase 4.** Phases 2 and 3 keep every channel file and domain
    module in the engine package; in phase 4 each front takes its channels, areas and domain

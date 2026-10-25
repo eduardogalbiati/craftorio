@@ -1,5 +1,5 @@
 // Issues as the git platform gives them (#345: moved down from src/domains/backlog/backlog.js so src/domains/backlog/epics.js and
-// src/roadmap.js no longer require the backlog, which requires them; src/domains/backlog/backlog.js re-exports all).
+// src/domains/roadmap/roadmap.js no longer require the backlog, which requires them; src/domains/backlog/backlog.js re-exports all).
 // - PLATFORMS, parseRepoUrl, platformOfHost, cliTarget (cliTargetOrName: an owner/name too): a repository URL read for gh (GitHub) / glab (GitLab);
 // - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress);
 // - issueCreateCommand, repoLabels: filing an issue (the Product Owner's Create, the epics);

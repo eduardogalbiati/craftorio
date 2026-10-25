@@ -15,7 +15,7 @@ const path = require('path');
 const { samePath } = require('../../src/engine/worktree');
 const { WorkflowRun } = require('../../src/engine/workflow');
 const { Recorder } = require('../../src/engine/recorder');
-const supervisor = require('../../src/supervisor');
+const supervisor = require('../../src/domains/supervisor/supervisor');
 const { fixture } = require('../worktree-helpers');
 
 test('#414 engine: an agent of a run with a worktree gets TMP, TEMP and TMPDIR set to <run dir>/tmp, which exists during its turn and is one of its --add-dir folders; removed once the run succeeds', { timeout: 30000 }, async (t) => {

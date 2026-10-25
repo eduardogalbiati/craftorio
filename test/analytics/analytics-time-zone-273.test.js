@@ -2,7 +2,7 @@
 // workspace's time zone (settings.timeZone), not in UTC. The zone is America/Los_Angeles (UTC-7 in
 // October): 22:00 there is the next day both in UTC (CI) and in UTC-3 (the owner's machine), so a
 // cut in either of those zones fails these tests. Stored stamps stay UTC ISO.
-// Also: GitHub Actions minutes' month (src/actions-usage.js) resets on the local first of the month.
+// Also: GitHub Actions minutes' month (src/domains/usage/actions-usage.js) resets on the local first of the month.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -44,21 +44,21 @@ test('#273 Analytics: the default range ends on the local today', (t) => {
 // ---- Usage (today and the month in progress) ---------------------------------------------------
 
 test('#273 Usage: a run at 13:00 local today counts in today while it is 22:30 local', (t) => {
-  const usage = require('../../src/usage');
+  const usage = require('../../src/domains/usage/usage');
   const dir = runsDir(t, ['2026-10-04T20:00:00Z']);
   const u = usage.computeUsage({ runsDir: dir, settings: LA, now: new Date('2026-10-05T05:30:00Z') });
   assert.equal(u.totals.today.runs, 1);
 });
 
 test('#273 Usage: on Oct 31 at 23:45 local (06:45Z Nov 1) the month is still October', (t) => {
-  const usage = require('../../src/usage');
+  const usage = require('../../src/domains/usage/usage');
   const dir = runsDir(t, ['2026-10-31T12:00:00Z']);
   const u = usage.computeUsage({ runsDir: dir, settings: LA, now: new Date('2026-11-01T06:45:00Z') });
   assert.equal(u.totals.month.runs, 1);
 });
 
 test('#273 Usage: the month resets at local midnight of the 1st', (t) => {
-  const usage = require('../../src/usage');
+  const usage = require('../../src/domains/usage/usage');
   const dir = runsDir(t, ['2026-11-01T06:30:00Z']); // 23:30 on Oct 31 local
   const u = usage.computeUsage({ runsDir: dir, settings: LA, now: new Date('2026-11-01T08:00:00Z') }); // 01:00 on Nov 1 local
   assert.equal(u.totals.month.runs, 0);
@@ -67,7 +67,7 @@ test('#273 Usage: the month resets at local midnight of the 1st', (t) => {
 // ---- GitHub Actions minutes -------------------------------------------------------------------
 
 test('#273 Actions minutes: on Oct 31 at 23:45 local the month is October and it resets on Nov 1', () => {
-  const { summarizeActionsUsage } = require('../../src/actions-usage');
+  const { summarizeActionsUsage } = require('../../src/domains/usage/actions-usage');
   const s = summarizeActionsUsage({ usageItems: [] }, { now: new Date('2026-11-01T06:45:00Z'), timeZone: 'America/Los_Angeles' });
   assert.equal(s.month, '2026-10');
   assert.equal(s.resetsOn, '2026-11-01');

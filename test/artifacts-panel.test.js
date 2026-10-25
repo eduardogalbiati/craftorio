@@ -196,7 +196,7 @@ test('preview: a final original/modified pair from the evidence manifest renders
   assert.ok(body.innerHTML.includes(`data-ap-img="${original}"`));
 });
 
-// listArtifacts walks every file under the run folder (src/runs.js), so a run with evidence images
+// listArtifacts walks every file under the run folder (src/domains/run/runs.js), so a run with evidence images
 // also lists them as plain files; the fixtures below include matching entries, as a real run would.
 const fileEntry = (file, mtime = '2026-01-01T00:00:00Z') => ({ path: file, name: path.basename(file), rel: file.replace('/r/', ''), kind: 'image', size: 1, mtime });
 

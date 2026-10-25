@@ -1,5 +1,5 @@
 // #319 (acceptance tests, written before the code): the first-run Setup's settings in the
-// workspace's settings.json (src/workspace.js, existing).
+// workspace's settings.json (src/domains/workspace/workspace.js, existing).
 //
 // Contract:
 // - New settings `setupDone` (default false) and `hiddenWorkflows` (default [], workflow ids hidden
@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const workspace = require('../src/workspace');
+const workspace = require('../src/domains/workspace/workspace');
 
 // a fresh workspace in a temp dir; an in-memory store so no global registry file is touched
 function freshWs(t) {

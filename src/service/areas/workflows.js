@@ -9,25 +9,25 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const workspace = require('../../workspace');
-const projects = require('../../projects');
+const workspace = require('../../domains/workspace/workspace');
+const projects = require('../../domains/project/projects');
 const {
   loadWorkflow,
   render,
 } = require('../../engine/workflow');
 const capabilities = require('../../engine/capabilities');
-const workflows = require('../../workflows');
-const builder = require('../../workflow-builder');
+const workflows = require('../../domains/workflow/workflows');
+const builder = require('../../domains/workflow/workflow-builder');
 const skills = require('../../domains/agents/skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
-const { bundleStatus, restoreBundled } = require('../../seed');
+const { bundleStatus, restoreBundled } = require('../../domains/seed/seed');
 const { mergeOf } = require('../../shared/default-workflow');
 const {
   MANIFEST_FILE,
   requiresProblem,
-} = require('../../project-manifest');
+} = require('../../domains/project/project-manifest');
 const compose = require('../../shared/workflow-compose');
-const { workflowRequirements } = require('../../workflow-requirements');
+const { workflowRequirements } = require('../../domains/workflow/workflow-requirements');
 
 // #488: an import by url gives up after this long, and refuses a body larger than a workflow can be
 const IMPORT_TIMEOUT_MS = 30000;

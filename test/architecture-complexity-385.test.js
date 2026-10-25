@@ -1,10 +1,10 @@
-// #385 acceptance: the Architecture facts (src/architecture-facts.js readFacts) measure JavaScript
+// #385 acceptance: the Architecture facts (src/domains/project/architecture-facts.js readFacts) measure JavaScript
 // and TypeScript complexity inside the app, without lizard or Python, with the same rules as
 // scripts/code-health.js (acorn); one pure measuring core in src/shared/ used by both; a language
 // without a tool is "not measured" (null, never 0) and named; the Facts tab says which languages
 // are not measured and how to measure them (`pip install lizard`, which needs Python).
 // lizard is made unavailable by stubbing src/engine/providers.js resolveCommand/resolveCommandAsync
-// for 'lizard' only (git keeps working) and loading src/architecture-facts.js afresh.
+// for 'lizard' only (git keeps working) and loading src/domains/project/architecture-facts.js afresh.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -71,15 +71,15 @@ function makeRepo() {
   return dir;
 }
 
-// src/architecture-facts.js loaded afresh with lizard not installed; restored afterwards
+// src/domains/project/architecture-facts.js loaded afresh with lizard not installed; restored afterwards
 function factsWithoutLizard(t) {
   const providers = require('../src/engine/providers');
   const { resolveCommand, resolveCommandAsync } = providers;
   providers.resolveCommand = (cmd, ...rest) => (/^lizard/i.test(String(cmd)) ? null : resolveCommand(cmd, ...rest));
   providers.resolveCommandAsync = async (cmd, ...rest) => (/^lizard/i.test(String(cmd)) ? null : resolveCommandAsync(cmd, ...rest));
-  const id = require.resolve('../src/architecture-facts');
+  const id = require.resolve('../src/domains/project/architecture-facts');
   delete require.cache[id];
-  const facts = require('../src/architecture-facts');
+  const facts = require('../src/domains/project/architecture-facts');
   t.after(() => {
     providers.resolveCommand = resolveCommand;
     providers.resolveCommandAsync = resolveCommandAsync;
@@ -234,7 +234,7 @@ test('#385 the note names lizard when no tool is listed and lizard gives no inst
 });
 
 // lizard "installed": resolveCommand finds it, and the external process (child_process.execFile, the
-// system boundary) answers with `csv`; src/architecture-facts.js loaded afresh, restored afterwards
+// system boundary) answers with `csv`; src/domains/project/architecture-facts.js loaded afresh, restored afterwards
 function factsWithFakeLizard(t, csv) {
   const providers = require('../src/engine/providers');
   const cp = require('child_process');
@@ -247,9 +247,9 @@ function factsWithFakeLizard(t, csv) {
     setImmediate(() => cb(null, csv, ''));
     return null;
   };
-  const id = require.resolve('../src/architecture-facts');
+  const id = require.resolve('../src/domains/project/architecture-facts');
   delete require.cache[id];
-  const facts = require('../src/architecture-facts');
+  const facts = require('../src/domains/project/architecture-facts');
   t.after(() => {
     providers.resolveCommand = resolveCommand;
     cp.execFile = execFile;

@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveWorkspace, layout } = require('../src/workspace');
+const { resolveWorkspace, layout } = require('../src/domains/workspace/workspace');
 const { simulationOnly } = require('../src/engine/simulation');
 
 function parseArgs(argv) {

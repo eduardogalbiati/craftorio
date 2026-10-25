@@ -12,7 +12,7 @@
 // because a base-health fix item's issue "already has a live run": that item is skipped (with a log
 // line) and the roadmap goes on.
 //
-// Seams: runBaseCheck with faked runSuite / exec (src/base-health.js); the service with mock runs
+// Seams: runBaseCheck with faked runSuite / exec (src/domains/project/base-health.js); the service with mock runs
 // (test/service/helpers.js): a manual run of issue #1 waiting at its gate, the roadmap read back.
 //
 // Contract assumed for the developer:
@@ -35,9 +35,9 @@ const { fixture } = require('../worktree-helpers');
 const { ISSUE_WORKFLOW, makeService, gitRepo, roadmapProject, until, watchRuns } = require('./helpers');
 const { acquireSlot, SUITE_SLOT, SUITE_SLOT_ENV } = require('../../src/engine/machine-slot');
 
-const loadHealth = () => require('../../src/base-health');
+const loadHealth = () => require('../../src/domains/project/base-health');
 const loadArea = () => require('../../src/service/areas/base-health');
-const loadRoadmap = () => require('../../src/roadmap');
+const loadRoadmap = () => require('../../src/domains/roadmap/roadmap');
 
 const RED = { test: 'cart totals include tax', file: 'test/cart.test.js', error: 'expected 110, got 100' };
 

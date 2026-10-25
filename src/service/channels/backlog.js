@@ -6,9 +6,9 @@ const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
 const refreshes = require('../../domains/backlog/backlog-refresh');
 const simulation = require('../../engine/simulation');
-const projects = require('../../projects');
-const runs = require('../../runs');
-const workspace = require('../../workspace');
+const projects = require('../../domains/project/projects');
+const runs = require('../../domains/run/runs');
+const workspace = require('../../domains/workspace/workspace');
 const { clientError, requireId } = require('../common');
 const {
   ANY,

@@ -1,8 +1,8 @@
 // #327 acceptance tests (written before the code): the agent chats carry the same [Language] line as
 // a run's turns (src/shared/language.js languageLine), from the workspace settings, built like the
 // [Time] line (#273): the Oracle (src/domains/oracle/oracle.js, its turn context from settings()), the Product Owner
-// (src/product-owner.js ask, option `language`), the Supervisor chat (src/supervisor-chat.js
-// questionText, 5th argument `language`) and the engine-side supervisor prompts (src/supervisor.js,
+// (src/domains/po/product-owner.js ask, option `language`), the Supervisor chat (src/domains/supervisor/supervisor-chat.js
+// questionText, 5th argument `language`) and the engine-side supervisor prompts (src/domains/supervisor/supervisor.js,
 // field `language`), which no longer pin English when the agents write Português.
 // A run's chat shows the run's own agent turns: those are covered by test/language-engine-327.test.js.
 process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
@@ -12,9 +12,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { makeService } = require('./service/helpers');
-const productOwner = require('../src/product-owner');
-const supervisor = require('../src/supervisor');
-const { questionText } = require('../src/supervisor-chat');
+const productOwner = require('../src/domains/po/product-owner');
+const supervisor = require('../src/domains/supervisor/supervisor');
+const { questionText } = require('../src/domains/supervisor/supervisor-chat');
 
 const load = () => require('../src/shared/language');
 const PT = { agents: 'pt-BR', issues: 'en' };

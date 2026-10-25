@@ -52,7 +52,7 @@ test('the supervisor, the Product Owner and the Oracle are always listed first, 
 
 test('create, edit and list agents; ids never collide with the supervisor', (t) => {
   const dir = tmp(t);
-  const a = agents.createAgent(dir, { name: 'Security Reviewer', description: 'Finds holes', prompt: 'You review diffs.', skills: ['code-review', 'code-review', '../../x'], appearance: LOOK });
+  const a = agents.createAgent(dir, { name: 'Security Reviewer', description: 'Finds holes', prompt: 'You review diffs.', skills: ['code-review', 'code-review', '../x'], appearance: LOOK });
   assert.equal(a.id, 'security-reviewer');
   assert.deepEqual(a.skills, ['code-review', 'x']);
   assert.equal(a.appearance.body, '#10B981');
@@ -91,7 +91,7 @@ test('the supervisor keeps its prompt and skills: only its look is saved', (t) =
   assert.equal(agents.listAgents(dir)[0].appearance.body, '#10B981');
   assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(dir, 'supervisor.json'), 'utf8'))).sort(), ['appearance', 'updatedAt']);
   assert.throws(() => agents.agentPathForRemoval(dir, 'supervisor'), /can't be removed/);
-  assert.throws(() => agents.agentPathForRemoval(dir, '../../supervisor'), /can't be removed/);
+  assert.throws(() => agents.agentPathForRemoval(dir, '../supervisor'), /can't be removed/);
 });
 
 test('the Product Owner keeps its prompt and skills: only its look, model and effort are saved', (t) => {
@@ -164,7 +164,7 @@ test('the Oracle keeps its prompt and skills: only its look, model and effort ar
   assert.throws(() => agents.saveAgent(dir, 'oracle', { model: 'not a model!' }), /Not a model name/);
   assert.throws(() => agents.saveAgent(dir, 'oracle', { effort: 'ultra' }), /Pick the effort/);
   assert.throws(() => agents.agentPathForRemoval(dir, 'oracle'), /can't be removed/);
-  assert.throws(() => agents.agentPathForRemoval(dir, '../../oracle'), /can't be removed/);
+  assert.throws(() => agents.agentPathForRemoval(dir, '../oracle'), /can't be removed/);
 });
 
 test('an empty or missing model/effort for the Oracle falls back to its defaults (claude-opus-5-5, high)', (t) => {
@@ -177,7 +177,7 @@ test('an empty or missing model/effort for the Oracle falls back to its defaults
 test('removal resolves only files inside the agents folder', (t) => {
   const dir = tmp(t);
   const a = agents.createAgent(dir, { name: 'Writer', prompt: 'p' });
-  assert.equal(agents.agentPathForRemoval(dir, `../../../${a.id}`), path.join(dir, 'writer.json'));
+  assert.equal(agents.agentPathForRemoval(dir, `../../${a.id}`), path.join(dir, 'writer.json'));
   assert.throws(() => agents.agentPathForRemoval(dir, 'nope'), /not found/);
 });
 

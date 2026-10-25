@@ -26,11 +26,11 @@ const commits = require('../../domains/discovery/discovery-commit');
 const imports = require('../../domains/discovery/discovery-import');
 const discovery = require('../../domains/discovery/discovery');
 const Language = require('../../shared/language');
-const productOwner = require('../../product-owner');
-const projects = require('../../projects');
-const releases = require('../../releases');
+const productOwner = require('../../domains/po/product-owner');
+const projects = require('../../domains/project/projects');
+const releases = require('../../domains/releases/releases');
 const simulation = require('../../engine/simulation');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 const { clientError, requireText } = require('../common');
 const {
   ANY,

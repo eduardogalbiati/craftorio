@@ -46,7 +46,7 @@
 # 4. ship: your gate, never answered by automation (a decision gate: not the supervisor, no
 #           timeout, not --auto-approve). Ship: the run's branch (the version commit, a fix made
 #           here) is merged into the local base (merge: local), the local base is pushed to origin (never forced) and tagged with the
-#           release's name, then the optional build command runs (`ship:`, src/releases.js). A
+#           release's name, then the optional build command runs (`ship:`, src/domains/releases/releases.js). A
 #           local base that moved since the suites ran (another run merged) is refused: it would
 #           ship commits nobody checked. Hold:
 #           the run ends, nothing is pushed or tagged; its branch keeps the version commit and a fix

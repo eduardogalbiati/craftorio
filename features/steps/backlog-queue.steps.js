@@ -8,7 +8,7 @@
 //   error titled "Queue"; new for #422: a "Resume" button in that alert (the backlog:pause channel,
 //   paused false, as the queue's own Resume), and no "Dismiss" (×) button.
 //
-// The demo workspace has no issue queue. The queue lives in the service's index (src/store.js), not
+// The demo workspace has no issue queue. The queue lives in the service's index (src/domains/workspace/store.js), not
 // in a file the app follows, and no channel pauses it with an error, so the Given makes, inside the
 // app's main process, the call the service makes when a queued run fails (src/service/areas/runs.js:
 // backlog.setPaused(dir, projectId, true, "#n failed: resume to start the next issues.")).

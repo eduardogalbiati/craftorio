@@ -56,7 +56,7 @@ Read this before changing anything in `src/renderer/`.
   `init()` opens it when `settings.setupDone === false` (strictly: a workspace or a test double
   without the key never sees it); Settings › Agents & CLIs › Run setup again calls
   `window.Setup.open()`. Its pure parts (status badges, requirement badges, preselection, hidden
-  workflows) are `src/shared/setup-model.js`, shared with Node (`src/workflow-requirements.js`). It sits under
+  workflows) are `src/shared/setup-model.js`, shared with Node (`src/domains/workflow/workflow-requirements.js`). It sits under
   the other dialogs (z-index 9, so the Skip confirm and New project show above it) and lifts the
   terminal dock above itself while open. Check it with `npm run screenshot -- --view setup --mode
   <agents | try-it-safely | workflows | first-project>` (`--missing-clis` for CLIs not installed).
@@ -465,7 +465,7 @@ card (`gateCardHtml` → `gateNextTurnsHtml`, `p[data-testid="gate-next-turns"]`
 `state.runs.get(runId).sessions`, one entry per agent with an open session (a handoff agent whose
 last session closed with its note counts as fresh): "Continue: developer fresh from note ~20K ·
 reviewer resumes cold ~140K ≈ $0.70", or "every agent starts fresh or warm · …". It never answers
-the gate. The phone page (`src/mobile-gates.js`) prints the same line from `runs:active`'s
+the gate. The phone page (`src/domains/workspace/mobile-gates.js`) prints the same line from `runs:active`'s
 `nextTurns`.
 
 ## Findings button (#361)
@@ -477,7 +477,7 @@ sidebar entry at the menu's end (`[data-testid="findings-button"]`). It shows fr
 (app:info's `isPackaged` and `screenshot`). It opens `[data-testid="findings-overlay"]` over the
 window's capture (`window:capture`, desktop only). Pins are DOM `[data-testid="findings-pin"]`
 elements and the shapes are drawn on the canvas. It records the last 50 clicks and navigations;
-the service records the last 50 channel calls (`areas/findings.js`) and `src/main-log.js` keeps
+the service records the last 50 channel calls (`areas/findings.js`) and `src/domains/workspace/main-log.js` keeps
 the main log. Screenshots: `--view findings --mode marking|saved|list`.
 
 **Reading a finding bundle** (`<workspace>/findings/<id>/`, named in the issue the Product Owner

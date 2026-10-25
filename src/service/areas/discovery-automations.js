@@ -23,8 +23,8 @@ const { childRunCost, loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
 const chainModel = require('../../shared/chain-model');
 const discovery = require('../../domains/discovery/discovery');
-const projects = require('../../projects');
-const runs = require('../../runs');
+const projects = require('../../domains/project/projects');
+const runs = require('../../domains/run/runs');
 
 // the stages of a pipeline followed from the run folders (a chain's nextRunId), at most
 const MAX_STAGES = 20;

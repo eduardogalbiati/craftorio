@@ -6,7 +6,7 @@ const path = require('path');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const machineProfile = require('../../domains/machine/machine-profile');
-const workspace = require('../../workspace');
+const workspace = require('../../domains/workspace/workspace');
 const {
   args,
   BOOL,
@@ -147,7 +147,7 @@ module.exports = (ctx) => [
     schema: { params: args({ pid: NUMBER }, ['pid']), result: OBJECT },
     fn: (opts) => ctx.stopStray(opts?.pid),
   },
-  // patch: the settings to change (src/workspace.js writeSettings checks each one) → the settings
+  // patch: the settings to change (src/domains/workspace/workspace.js writeSettings checks each one) → the settings
   {
     channel: 'settings:set',
     method: 'setSettings',
@@ -167,7 +167,7 @@ module.exports = (ctx) => [
   {
     channel: 'workspace:get',
     method: 'getWorkspace',
-    // the workspace's folders (src/workspace.js layout), and where its location is registered
+    // the workspace's folders (src/domains/workspace/workspace.js layout), and where its location is registered
     schema: { result: shape({ root: STRING }, ['root']) },
     fn: () => ({ ...ctx.ws, registry: process.env[workspace.ENV_VAR] ? null : workspace.defaultStore().describe }),
   },

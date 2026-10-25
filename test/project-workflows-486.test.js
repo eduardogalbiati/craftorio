@@ -1,9 +1,9 @@
 // #486: a project's workflow set and default, read from the repository's manifest (#485's
-// `.multiagent/project.yaml`, src/project-manifest.js) when the project is created. Acceptance tests,
+// `.multiagent/project.yaml`, src/domains/project/project-manifest.js) when the project is created. Acceptance tests,
 // written before the code.
 //
 // Spec (the interface these tests assume):
-//   require('../src/projects').projectManifest(target, { exec, fetch }) -> Promise of
+//   require('../src/domains/project/projects').projectManifest(target, { exec, fetch }) -> Promise of
 //     - { workflows: [{ name, file?, category, description }] } (the manifest's entries, in order);
 //     - null when the folder / repository has no manifest;
 //     - { workflows: [], pending: true, message } when a remote repository cannot be read without
@@ -56,8 +56,8 @@ function folderWithManifest(t, text = MANIFEST) {
 }
 
 const projectManifest = (...args) => {
-  const projects = require('../src/projects');
-  assert.equal(typeof projects.projectManifest, 'function', 'src/projects.js exports projectManifest');
+  const projects = require('../src/domains/project/projects');
+  assert.equal(typeof projects.projectManifest, 'function', 'src/domains/project/projects.js exports projectManifest');
   return projects.projectManifest(...args);
 };
 
@@ -165,7 +165,7 @@ function cloningGit(text = MANIFEST) {
 test('#486 createProject on a freshly cloned repository with no workflows checked adopts the clone\'s manifest and derives the default', async (t) => {
   const root = tempDir(t, 'pj-wf-486-clone-');
   const { git, calls } = cloningGit();
-  const projects = require('../src/projects');
+  const projects = require('../src/domains/project/projects');
   const p = await projects.createProject(path.join(root, 'projects'), { name: 'Cloned', repo: 'https://github.com/o/r.git' }, { git, reposDir: path.join(root, 'repos') });
   assert.ok(calls.some((c) => c.startsWith('clone ')), 'the repository was cloned');
   assert.deepEqual(setOf(p), MANIFEST_NAMES.map((n) => `${n}:manifest`));
@@ -179,7 +179,7 @@ test('#486 createProject on a freshly cloned repository with no workflows checke
 test('#486 createProject on a freshly cloned repository keeps the checked workflows, not the clone\'s manifest', async (t) => {
   const root = tempDir(t, 'pj-wf-486-clone-checked-');
   const { git } = cloningGit();
-  const projects = require('../src/projects');
+  const projects = require('../src/domains/project/projects');
   const workflows = [{ name: 'writer-reviewer', origin: 'bundled', category: 'build' }];
   const p = await projects.createProject(path.join(root, 'projects'), { name: 'Checked', repo: 'https://github.com/o/r.git', workflows }, { git, reposDir: path.join(root, 'repos') });
   assert.deepEqual(setOf(p), ['writer-reviewer:bundled']);

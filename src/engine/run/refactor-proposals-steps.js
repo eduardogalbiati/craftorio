@@ -1,6 +1,6 @@
 // @ts-check
 // `type: refactor_proposals` (#378, workflows/refactor-proposals.yaml): the Refactor proposals
-// workflow's machine steps (src/refactor-proposals-run.js does the work). `action` says which:
+// workflow's machine steps (src/domains/refactor/refactor-proposals-run.js does the work). `action` says which:
 // - facts: the Architecture facts at the default branch, the files changed since the input `since`
 //   and the analyst's prompt (#356's, focused on the Danger Zone and the changed files);
 // - propose: the `from` step's report (#356's format) saved in the Architecture tab's history with
@@ -16,7 +16,7 @@
 'use strict';
 
 const path = require('path');
-const work = require('../../refactor-proposals-run');
+const work = require('../../domains/refactor/refactor-proposals-run');
 
 const methods = {
   // where the step works: { folder, wsRoot, projectId }

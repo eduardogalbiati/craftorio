@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const Module = require('module');
-const roadmaps = require('../../src/roadmap');
+const roadmaps = require('../../src/domains/roadmap/roadmap');
 const { ISSUE_WORKFLOW, makeService, roadmapProject, until } = require('./helpers');
 
 // The card store the releases area loads: `store.impl` is the current test's store.

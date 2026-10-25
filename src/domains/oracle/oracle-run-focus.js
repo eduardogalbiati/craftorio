@@ -12,13 +12,13 @@
 // - tests: the suite logs' time per test file and slowest tests, two runs compared, and the test
 //   step's time on E2E vs unit tests.
 // - regressions (#335): over the workspace's whole run list (not per run), each step whose recent cost
-//   or minutes regressed against its baseline of the same class (src/step-regressions.js).
+//   or minutes regressed against its baseline of the same class (src/domains/run/step-regressions.js).
 // Pure, no model: the caller reads summary.json, events.jsonl, the suite logs and the test files.
 
 const { CHANGE_TOOLS } = require('../../shared/city-agents');
 const { upgradeRunRecord } = require('../../shared/run-record');
 const { cacheLifetimeMs, cacheTier } = require('../session/session-cache');
-const { REGRESSION_DEFAULTS, regressionLine, stepRegressions } = require('../../step-regressions');
+const { REGRESSION_DEFAULTS, regressionLine, stepRegressions } = require('../run/step-regressions');
 
 // focus names run_analysis takes (cost is src/domains/oracle/oracle-run-analysis.js)
 const FOCUSES = [
@@ -533,7 +533,7 @@ function focusAnswer(focus, items, options = {}) {
 /**
  * The regressions focus (#335): { regressions: [{ line, workflow, step, class, regressed, baseline,
  * recent }] (baseline and recent: median cost per point, minutes and their run ids), measured,
- * notMeasurable (classes counted), thresholds }. `rows`: src/runs.js listRuns rows.
+ * notMeasurable (classes counted), thresholds }. `rows`: src/domains/run/runs.js listRuns rows.
  */
 function regressionsAnswer(rows, { issues = [], prices = {} } = {}) {
   const entries = stepRegressions(rows, { issues, prices });

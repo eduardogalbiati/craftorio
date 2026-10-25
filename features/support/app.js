@@ -27,8 +27,8 @@ const src = (m) => require(path.join(root, 'src', m));
 
 // The demo workspace: what every scenario starts from
 async function seedWorkspace(wsDir) {
-  const workspace = src('workspace');
-  const projects = src('projects');
+  const workspace = src('domains/workspace/workspace');
+  const projects = src('domains/project/projects');
   const ws = workspace.setupWorkspace(wsDir, { persist: false });
   // the repository is set afterwards: createProject would clone it
   const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });

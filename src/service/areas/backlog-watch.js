@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEBOUNCE_MS = 300;
-// <project id>[.<kind>].json; .bak and .tmp files (src/state-file.js) are not the data
+// <project id>[.<kind>].json; .bak and .tmp files (src/domains/workspace/state-file.js) are not the data
 const KINDS = ['local', 'queue', 'refresh', 'roadmap'];
 
 // 'proj.roadmap.json' → { projectId: 'proj', file: 'roadmap' }; 'proj.json' → { projectId: 'proj', file: 'issues' }
