@@ -1,5 +1,6 @@
 // The base-health store (#405): the tests known to fail on a project's base, one file per project,
-// <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen }). Each failure is keyed
+// <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck: the last base
+// check's { commit, at, status }, #598 }). Each failure is keyed
 // by file + test: first_seen, last_seen, the runs that saw it, its issue. Here so the engine can
 // record a run's pre-existing failures (recordSightings, packages/engine/engine/machine-actions.js) without the
 // root area; filing issues and the base check stay in packages/engine/domains/project/base-health.js.
@@ -22,7 +23,8 @@ const keyOf = (f) => `${f.file || ''}\n${f.test || ''}`;
 function readStore(ws, projectId) {
   try {
     const s = JSON.parse(fs.readFileSync(storeFile(ws, projectId), 'utf8'));
-    return { failures: Array.isArray(s.failures) ? s.failures : [], lastGreen: s.lastGreen || null };
+    // #598: the last check (commit, at, status), kept when there is one
+    return { failures: Array.isArray(s.failures) ? s.failures : [], lastGreen: s.lastGreen || null, ...(s.lastCheck ? { lastCheck: s.lastCheck } : {}) };
   } catch { return { failures: [], lastGreen: null }; }
 }
 const writeStore = (ws, projectId, store) => writeJsonSafe(storeFile(ws, projectId), store, {

@@ -89,7 +89,16 @@ fields (references between steps, agents, transitions, groups) are the named rul
   that release run ends. The check takes the machine-wide `suite` slot (#527, like a run's
   whole-suite round, #455) before its `npm test` and frees it on every exit (green, red, error);
   while a run holds it the check waits, logs "base check waiting for the suite slot" in the server
-  log and shows `waiting` on the Roadmap's base-check card. A failure whose error is `test timed
+  log and shows `waiting` on the Roadmap's base-check card. Before the suite the checkout gets its
+  dependencies (#598, `depsFor` in `packages/engine/service/areas/base-health.js`): the shared cache
+  when it serves the project (a workspaces monorepo included, #599), else the project's own install
+  (`npm ci --no-audit --no-fund` for npm), its time and output in the check's log
+  (`worktrees/base-check-<project>-suite.log`). A check that could not run (`status: 'error'`: the
+  install failed, no test command, the runner crashed) writes one engine log line with the reason and
+  the log file and notifies "Base check could not run: <reason>", with no issue and no fix item
+  (nothing is known about the tests). The store records the last check as
+  `lastCheck: { commit, at, status }` (`green`, `red`, `error`); `lastGreen` stays the last green
+  commit. A failure whose error is `test timed
   out` or a timing assertion is re-run alone (`runFileAlone`, the per-test budget) in the base
   checkout before anything is recorded: green alone, it is logged "red under load, green alone"
   with the runs active at the time, and records, files and reopens nothing. Only confirmed

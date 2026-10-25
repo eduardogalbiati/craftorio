@@ -30,6 +30,17 @@ const depsCache = require('../deps-cache');
 const { scratchWorkspace } = require('../../domains/local/local-preview');
 const { render } = require('./templates');
 
+// The `dependencies (<which>, <lockfile>): …` line of a deps-cache result (#198)
+function depsLine(which, r) {
+  const what = {
+    hit: `linked from the cache (key ${r.key})`, linked: `linked from the cache (key ${r.key})`, miss: `installed once into the cache (key ${r.key})`,
+    local: `installed in the worktree only: ${r.reason}`, failed: `not ready: ${r.reason}`, not_cached: `not cached: ${r.reason}`,
+  }[r.status];
+  // #599: a workspaces project's links to this worktree's own packages, made again
+  const links = r.workspace_links != null && ['hit', 'miss'].includes(r.status) ? `; workspace links recreated (${r.workspace_links})` : '';
+  return `dependencies (${which}, ${r.lockfile}): ${what}${links}${r.seconds != null ? ` in ${r.seconds.toFixed(1)} s` : ''}`;
+}
+
 const methods = {
   // ---- git worktree per run (orchestrator.worktree: { repo, base }) ------------------------
   // The run works in its own checkout, <worktreesDir>/<run_id>, detached at the freshly fetched
@@ -131,12 +142,9 @@ const methods = {
     this.emitEvent('deps.ready', {
       for: which, dir, after, status: r.status, hit, lockfile: r.lockfile || null, manager: r.manager || null, key: r.key || null,
       entry: r.entry || null, seconds: r.seconds != null ? Math.round(r.seconds * 10) / 10 : null, waited: !!r.waited, reason: r.reason || null,
+      ...(r.workspace_links != null ? { workspace_links: r.workspace_links } : {}),
     });
-    const what = {
-      hit: `linked from the cache (key ${r.key})`, linked: `linked from the cache (key ${r.key})`, miss: `installed once into the cache (key ${r.key})`,
-      local: `installed in the worktree only: ${r.reason}`, failed: `not ready: ${r.reason}`, not_cached: `not cached: ${r.reason}`,
-    }[r.status];
-    this.emitEvent('log', { level: r.status === 'failed' || r.status === 'local' ? 'warn' : 'info', message: `dependencies (${which}, ${r.lockfile}): ${what}${r.seconds != null ? ` in ${r.seconds.toFixed(1)} s` : ''}` });
+    this.emitEvent('log', { level: r.status === 'failed' || r.status === 'local' ? 'warn' : 'info', message: depsLine(which, r) });
     return r;
   },
 
@@ -147,6 +155,8 @@ const methods = {
     const lines = [];
     if (w?.entry && ['hit', 'linked', 'miss'].includes(w.status)) {
       lines.push(`- Dependencies are ready: \`node_modules\` links to the shared dependency cache (installed once per ${w.lockfile} content). Never run ${w.manager === 'npm' ? '`npm ci`' : `a clean ${w.manager} install`} and never delete \`node_modules\`: it would empty the cache for every run. Adding a package with the package manager (\`${w.manager} ${w.manager === 'npm' ? 'install' : 'add'} <pkg>\`) is fine: the engine installs the new lockfile into the cache after your turn. To check that the dependencies match package.json, use \`npm ls --all\`.`);
+      // #599: the workspace packages are links into this worktree, not into the cache
+      if (w.workspace_links != null) lines.push(`- The workspace packages in \`node_modules\` (${w.workspace_links}) link to this worktree's own folders: edit them there; the other runs never see your changes.`);
     } else if (w && w.status !== 'none') {
       lines.push(`- Dependencies are not linked from the shared cache (${w.reason || w.status}): install them yourself when they are missing.`);
     }

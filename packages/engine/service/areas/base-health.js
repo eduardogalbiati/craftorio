@@ -5,7 +5,10 @@
 // "not tested green"). A check deferred while a release run held the base runs when a run of the
 // project ends and nothing holds it any more (afterBaseReleased). Both read Settings › Execution
 // baseCheck.onRed each time, and file through the project's synced platform and repository. A red
-// or failed check is a notice. The fix item runs the project's default development workflow
+// or failed check is a notice. #598: the check's checkout gets its dependencies before the suite (the
+// shared cache, else the project's own install, both in the check's log); a check that could not run
+// (`error`: the install failed, no test command, the runner crashed) is one engine log line naming the
+// reason and the log, and a "Base check could not run" notice, never an issue or a fix item. The fix item runs the project's default development workflow
 // (settings.defaultWorkflow through DefaultWorkflow.resolve, read each time, #413). A simulated run
 // never reaches here; the check itself runs the suite in simulation, never pushes.
 // #527: the check waits for the machine-wide suite slot (announced `waiting`, "base check waiting for
@@ -78,7 +81,40 @@ module.exports = (ctx) => {
     return state;
   }
 
-  // The project's whole suite in the check's clean checkout: dependencies from the shared cache, the
+  // #598: the checkout's dependencies, into the check's log: the shared cache when it serves the
+  // project, else the project's own install (`npm ci --no-audit --no-fund` for npm) → null or the reason it failed
+  async function depsFor(project, { cwd, env, logFile }) {
+    const write = (line) => fs.appendFileSync(logFile, `${line}\n`);
+    const ignoreScripts = !!project.ignoreInstallScripts;
+    const t0 = Date.now();
+    let r;
+    try {
+      r = await depsCache.ensureDeps({ workDir: cwd, cacheDir: path.join(ctx.ws.cache, 'deps'), project: project.id, env, ignoreScripts, log: (level, message) => write(message) });
+    } catch (e) { r = { status: 'failed', reason: e.message }; }
+    const took = () => `in ${((Date.now() - t0) / 1000).toFixed(1)} s`;
+    const m = r.status === 'not_cached' && depsCache.MANAGERS.find((x) => x.lockfile === r.lockfile);
+    if (m) {
+      const args = depsCache.installArgs(m, ignoreScripts);
+      write(`dependencies (${r.lockfile}): not cached (${r.reason}); $ ${m.manager} ${args.join(' ')}`);
+      const i = await depsCache.runCommand(m.manager, args, { cwd, env });
+      if (i.output) write(String(i.output).trimEnd());
+      if (i.code !== 0) {
+        const why = i.timedOut ? 'the install timed out' : `${m.manager} ${args[0]} exited ${i.code ?? '?'}`;
+        write(`dependencies: ${why} ${took()}`);
+        return `dependencies: ${why} (see the check's log)`;
+      }
+      write(`dependencies: installed in the checkout ${took()}`);
+      return null;
+    }
+    if (r.status === 'failed') {
+      write(`dependencies (${r.lockfile || '?'}): the install failed ${took()}: ${r.reason}`);
+      return `dependencies: the install failed: ${r.reason}`;
+    }
+    write(r.status === 'none' ? 'dependencies: no lockfile, nothing installed' : `dependencies (${r.lockfile}): ${r.status}${r.key ? ` (key ${r.key})` : ''}${r.reason ? `: ${r.reason}` : ''} ${took()}`);
+    return null;
+  }
+
+  // The project's whole suite in the check's clean checkout: dependencies first (#598), the
   // detected command with the suite step's timeout (from the project's recent suite durations), its
   // failures parsed from the log. The log stays next to the checkout until the next check (#465)
   const suiteFor = (project) => async ({ cwd, env, commit }) => {
@@ -87,9 +123,13 @@ module.exports = (ctx) => {
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     announce(project.id, { status: 'running', message: null, holder: null, commit: commit || null, log: logFile, startedAt: new Date().toISOString(), endedAt: null, failures: null, error: null });
     const command = detectTestCommand(cwd);
-    if (!command) return { failures: [], log: '', error: 'no test command found' };
+    if (!command) {
+      fs.appendFileSync(logFile, 'no test command found\n');
+      return { failures: [], log: '', error: 'no test command found' };
+    }
+    const depsError = await depsFor(project, { cwd, env, logFile });
+    if (depsError) return { failures: [], log: '', error: depsError };
     fs.appendFileSync(logFile, `$ ${command}\n`);
-    await depsCache.ensureDeps({ workDir: cwd, cacheDir: path.join(ctx.ws.cache, 'deps'), env });
     const timeoutMs = suiteTimeout(suiteDurations({ file: path.join(ctx.ws.cache, 'suite-durations.json'), key: `${project.folder}\n${command}` }));
     const r = await runCommand({ command, cwd, env, timeoutMs, logFile });
     let log = '';
@@ -130,7 +170,9 @@ module.exports = (ctx) => {
       const filed = r.issues.length ? ` ${r.issues.length} issue(s) filed or updated${r.fixItem ? ', a fix item is at the front of the roadmap' : ''}.` : '';
       ctx.notify({ kind: 'run', event: 'failed', title: `Base is red: ${project.name}`, body: `The base check found a red test at ${String(r.commit || '').slice(0, 12)}.${filed}`.slice(0, 180), target }, { projectId: project.id });
     } else if (r.status === 'error') {
-      ctx.notify({ kind: 'run', event: 'failed', title: `Base check failed: ${project.name}`, body: String(r.error || 'unknown error').slice(0, 180), target }, { projectId: project.id });
+      // #598: nothing is known about the tests: no issue, no fix item, the reason and the engine log line
+      serverLog('warn', `base check could not run for ${project.id}: ${r.error || 'unknown error'} (log: ${logOf(project.id)})`);
+      ctx.notify({ kind: 'run', event: 'failed', title: `Base check could not run: ${project.name}`, body: `Base check could not run: ${String(r.error || 'unknown error')}`.slice(0, 180), target }, { projectId: project.id });
     }
   }
 
