@@ -35,7 +35,7 @@ License: MIT
 (no license file in the package; see its license field above)
 
 --------------------------------------------------------------------------------
-@supabase/auth-js 2.117.2
+@supabase/auth-js 2.118.0
 License: MIT
 
 MIT License
@@ -61,7 +61,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-@supabase/functions-js 2.117.2
+@supabase/functions-js 2.118.0
 License: MIT
 
 MIT License
@@ -114,7 +114,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-@supabase/postgrest-js 2.117.2
+@supabase/postgrest-js 2.118.0
 License: MIT
 
 MIT License
@@ -140,7 +140,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-@supabase/realtime-js 2.117.2
+@supabase/realtime-js 2.118.0
 License: MIT
 
 MIT License
@@ -166,7 +166,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-@supabase/storage-js 2.117.2
+@supabase/storage-js 2.118.0
 License: MIT
 
 MIT License
@@ -192,7 +192,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-@supabase/supabase-js 2.117.2
+@supabase/supabase-js 2.118.0
 License: MIT
 
 MIT License
@@ -1562,7 +1562,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-marked 18.0.14
+marked 18.1.1
 License: MIT
 
 # License information
@@ -1918,12 +1918,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-three 0.169.0
+three 0.186.1
 License: MIT
 
 The MIT License
 
-Copyright © 2010-2024 three.js authors
+Copyright © 2010-2026 three.js authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

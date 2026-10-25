@@ -34,7 +34,8 @@ function brokenCopy() {
   fs.mkdirSync(parent, { recursive: true });
   const dir = fs.mkdtempSync(path.join(parent, 'check-404-'));
   for (const name of fs.readdirSync(root).filter((n) => !SKIP.has(n))) {
-    fs.cpSync(path.join(root, name), path.join(dir, name), { recursive: true, filter: (src) => !SKIP.has(path.basename(src)) });
+    // SKIP names top-level folders only: fronts/build/ is a workspace, not the packager's build/ (#577)
+    fs.cpSync(path.join(root, name), path.join(dir, name), { recursive: true, filter: (src) => !SKIP.has(path.relative(root, src)) && path.basename(src) !== 'node_modules' });
   }
 
   // lint:lists: four names exported on one line
