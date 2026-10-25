@@ -20,12 +20,12 @@ const { createServer } = require('../server');
 
 const TOKEN = 'test-token-479-0123456789abcdef';
 
-async function start(t) {
+async function start(t, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'server-479-'));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';
   const service = createService({ host: { trashItem: async () => {}, appVersion: '1.2.3', isPackaged: false } });
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
-  const server = createServer({ service, token: TOKEN });
+  const server = createServer({ service, token: TOKEN, ...options });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   t.after(async () => {
@@ -159,4 +159,122 @@ test('#481 the cookie has a Max-Age and no Secure over plain http (/?token= and 
   const viaForm = await request(port, { method: 'POST', path: '/session', headers: { ...form(), Host: `127.0.0.1:${port}` }, body: `token=${encodeURIComponent(TOKEN)}` });
   assert.match(cookieOf(viaForm), /;\s*Max-Age=\d+/);
   assert.doesNotMatch(cookieOf(viaForm), /Secure/i);
+});
+
+// #541: `tailscale serve` (HTTPS on the tailnet) proxies to the loopback server and forwards the
+// browser's Host unchanged (`<machine>.<tailnet>.ts.net:8443`, or no port on 443). The names a
+// loopback server also answers come from createServer({ allowedHosts }) (the bin's --allow-host or the
+// machine's own MagicDNS name), never from a request header; matched exactly, case-insensitively.
+const TS_NAME = 'desktop-ifrssed.tail522a91.ts.net';
+
+function upgrade(port, headers) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      host: '127.0.0.1', port, path: '/ws',
+      headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', ...headers },
+    });
+    req.on('upgrade', (res, socket) => { socket.destroy(); resolve(res.statusCode); });
+    req.on('response', (res) => { res.resume(); resolve(res.statusCode); });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('#541 a loopback server answers an allowed tailscale serve name, with a port and without one (443)', async (t) => {
+  const { port } = await start(t, { allowedHosts: [TS_NAME] });
+  for (const host of [`${TS_NAME}:8443`, TS_NAME]) {
+    const res = await request(port, { path: '/api/version', headers: { Host: host, Authorization: `Bearer ${TOKEN}` } });
+    assert.equal(res.status, 200, host);
+  }
+});
+
+test('#541 the allowed name is matched case-insensitively (an upper-case option or Host)', async (t) => {
+  const { port } = await start(t, { allowedHosts: ['Desktop-IFRSSED.tail522a91.TS.NET'] });
+  const lower = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(lower.status, 200);
+  const upper = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME.toUpperCase()}:8443`, Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(upper.status, 200);
+});
+
+test('#541 the MagicDNS form with its trailing dot (Self.DNSName) allows the name the browser sends', async (t) => {
+  const { port } = await start(t, { allowedHosts: [`${TS_NAME}.`] });
+  const res = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(res.status, 200);
+});
+
+test('#541 an allowed name keeps the token check: no token is 401, a wrong cookie is 401', async (t) => {
+  const { port } = await start(t, { allowedHosts: [TS_NAME] });
+  const none = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443` } });
+  assert.equal(none.status, 401);
+  const wrong = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Cookie: 'multiagent_token=wrong-token-0123456789abcdef' } });
+  assert.equal(wrong.status, 401);
+});
+
+test('#541 an allowed name keeps the Origin check: same ts.net origin passes, another origin is 403', async (t) => {
+  const { port } = await start(t, { allowedHosts: [TS_NAME] });
+  const same = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Origin: `https://${TS_NAME}:8443`, Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(same.status, 200);
+  const other = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Origin: 'https://attacker.example', Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(other.status, 403);
+});
+
+test('#541 the sign-in form works through the allowed name over HTTPS (Secure cookie, 303 to /)', async (t) => {
+  const { port } = await start(t, { allowedHosts: [TS_NAME] });
+  const res = await request(port, {
+    method: 'POST', path: '/session',
+    headers: { ...form(), Host: TS_NAME, Origin: `https://${TS_NAME}`, 'X-Forwarded-Proto': 'https' },
+    body: `token=${encodeURIComponent(TOKEN)}`,
+  });
+  assert.equal(res.status, 303);
+  assert.match(cookieOf(res), /^multiagent_token=/);
+  assert.match(cookieOf(res), /;\s*Secure/i);
+});
+
+test('#541 the WebSocket upgrade through the allowed name is accepted (101), another name still 403', async (t) => {
+  const { port } = await start(t, { allowedHosts: [TS_NAME] });
+  assert.equal(await upgrade(port, { Host: `${TS_NAME}:8443`, Authorization: `Bearer ${TOKEN}` }), 101);
+  assert.equal(await upgrade(port, { Host: `attacker.example:${port}`, Authorization: `Bearer ${TOKEN}` }), 403);
+});
+
+test('#541 SEC-16 still holds with an allowed name: other names, suffixes and look-alikes are 403', async (t) => {
+  const { port } = await start(t, { allowedHosts: [TS_NAME] });
+  for (const host of [
+    `attacker.example:${port}`,
+    `evil.${TS_NAME}:8443`, // a subdomain: never a suffix match
+    `${TS_NAME}.attacker.example:8443`, // the name as a prefix of another site's name
+    `x${TS_NAME}`,
+    'other-machine.tail522a91.ts.net:8443', // another machine of the same tailnet
+    'tail522a91.ts.net',
+  ]) {
+    const res = await request(port, { path: '/api/version', headers: { Host: host, Authorization: `Bearer ${TOKEN}` } });
+    assert.equal(res.status, 403, host);
+  }
+});
+
+test('#541 a request header never adds an allowed name (Tailscale-User-Login, X-Forwarded-Host)', async (t) => {
+  const { port } = await start(t);
+  const res = await request(port, {
+    path: '/api/version',
+    headers: {
+      Host: `${TS_NAME}:8443`, Authorization: `Bearer ${TOKEN}`,
+      'Tailscale-User-Login': 'owner@example.com', 'Tailscale-User-Name': 'Owner', 'X-Forwarded-Host': `127.0.0.1:${port}`, 'X-Forwarded-For': '100.84.99.15',
+    },
+  });
+  assert.equal(res.status, 403);
+});
+
+test('#541 a loopback server without allowed names refuses the ts.net name as before (403)', async (t) => {
+  for (const options of [{}, { allowedHosts: [] }]) {
+    const { port } = await start(t, options);
+    const res = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Authorization: `Bearer ${TOKEN}` } });
+    assert.equal(res.status, 403, JSON.stringify(options));
+  }
+});
+
+test('#541 loopback names still work on a server with allowed names', async (t) => {
+  const { port } = await start(t, { allowedHosts: [TS_NAME] });
+  for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]) {
+    const res = await request(port, { path: '/api/version', headers: { Host: host, Authorization: `Bearer ${TOKEN}` } });
+    assert.equal(res.status, 200, host);
+  }
 });

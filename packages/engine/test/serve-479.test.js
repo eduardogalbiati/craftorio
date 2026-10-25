@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const http = require('http');
 const { spawn } = require('child_process');
 
 function scratch(t) {
@@ -18,7 +19,7 @@ function scratch(t) {
 }
 
 // npm run serve with these args → { child, out(), exited }
-function serve(t, dir, args) {
+function serve(t, dir, args, { noTailscale = false } = {}) {
   const home = path.join(dir, 'home');
   fs.mkdirSync(home, { recursive: true });
   const env = {
@@ -27,6 +28,14 @@ function serve(t, dir, args) {
   };
   delete env.MULTIAGENT_WORKSPACE;
   delete env.NODE_TEST_CONTEXT;
+  // #541: no `tailscale` command on the PATH (an empty folder), as on a machine where Tailscale is
+  // not installed or not running
+  if (noTailscale) {
+    for (const k of Object.keys(env)) if (/^path$/i.test(k)) delete env[k];
+    const empty = path.join(dir, 'empty-path');
+    fs.mkdirSync(empty, { recursive: true });
+    env.PATH = empty;
+  }
   const child = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(dir, 'workspace'), ...args], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let text = '';
   child.stdout.on('data', (c) => { text += c; });
@@ -76,4 +85,44 @@ test('#479 npm run serve on 127.0.0.1: the banner says the token is full control
   assert.match(s.out(), /gate/i);
   assert.match(s.out(), /paid runs/i);
   assert.match(s.out(), /shell history/i);
+});
+
+// #541: `npm run serve -- --host 127.0.0.1 --allow-host <name>` (repeatable) lets the loopback server
+// answer the name `tailscale serve` forwards; the banner lists the names, or says only the loopback
+// names are answered.
+const TS_NAME = 'desktop-ifrssed.tail522a91.ts.net';
+const TS_OTHER = 'notebook.tail522a91.ts.net';
+
+function get(port, host) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/api/version', headers: { Host: host, Authorization: 'Bearer serve-479-test-0123456789' } }, (res) => { res.resume(); resolve(res.statusCode); });
+    req.on('error', reject);
+    req.end();
+  });
+}
+const portOf = (out) => Number((/Open: http:\/\/[^\s/]+:(\d+)\//.exec(out) || [])[1]);
+// the banner lines other than the Open: URL (it carries the token)
+const bannerLines = (out) => out.split(/\r?\n/).filter((l) => !/Open: http/.test(l));
+
+test('#541 npm run serve --host 127.0.0.1 --allow-host <name> (repeated) lists the names and answers them', async (t) => {
+  const s = serve(t, scratch(t), ['--host', '127.0.0.1', '--allow-host', TS_NAME, '--allow-host', TS_OTHER], { noTailscale: true });
+  await settle(s);
+  assert.match(s.out(), /Open: http/, s.out());
+  for (let i = 0; i < 50 && !s.out().includes(TS_OTHER); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(bannerLines(s.out()).some((l) => l.includes(TS_NAME)), `the banner lists ${TS_NAME}:\n${s.out()}`);
+  assert.ok(bannerLines(s.out()).some((l) => l.includes(TS_OTHER)), `the banner lists ${TS_OTHER}:\n${s.out()}`);
+  const port = portOf(s.out());
+  assert.equal(await get(port, `${TS_NAME}:8443`), 200);
+  assert.equal(await get(port, TS_OTHER), 200);
+  assert.equal(await get(port, `attacker.example:${port}`), 403);
+});
+
+test('#541 npm run serve --host 127.0.0.1 without --allow-host and without Tailscale starts, says only loopback names are answered and refuses the ts.net name', async (t) => {
+  const s = serve(t, scratch(t), ['--host', '127.0.0.1'], { noTailscale: true });
+  await settle(s);
+  assert.match(s.out(), /Open: http/, s.out());
+  const says = () => bannerLines(s.out()).some((l) => /localhost|loopback/i.test(l) && /\bonly\b|\bnone\b|\bno\b/i.test(l));
+  for (let i = 0; i < 50 && !says(); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(says(), `a banner line says only the loopback names (localhost) are answered:\n${s.out()}`);
+  assert.equal(await get(portOf(s.out()), `${TS_NAME}:8443`), 403);
 });
