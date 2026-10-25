@@ -13,7 +13,7 @@ port, and writes `<workspace>/control/endpoint.json` (`{ "url", "token" }`, a ne
 start); off, or the app quitting, closes the port and deletes the file. The setting shows the port
 and the file's path.
 
-- Only an allowlist of channels answers (`src/control/allowlist.js`): reading runs, events,
+- Only an allowlist of channels answers (`packages/engine/control/allowlist.js`): reading runs, events,
   roadmaps, the backlog and settings (`runs:list`, `runs:active`, `runs:events`, `roadmap:get`,
   `roadmap:versions`, `backlog:get`, `settings:get`, `projects:list`, `workflows:list`) and the
   roadmap actions (`roadmap:save`, `roadmap:pause`, `roadmap:cancel-pause`, `roadmap:start`,

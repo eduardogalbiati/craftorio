@@ -12,7 +12,7 @@
 // With test files as arguments (the suite step's check of failures on the base, #211), only those
 // run, without the full flow. #553: the same with MULTIAGENT_TEST_FILES=<file> (one test path per
 // line, relative to the project), the suite step's selection too long for the command line.
-// Agent mode (#219, src/engine/agent-test-report.js isAgentMode: inside an agent or the orchestrator,
+// Agent mode (#219, packages/engine/engine/agent-test-report.js isAgentMode: inside an agent or the orchestrator,
 // never in a terminal or CI; MULTIAGENT_AGENT_MODE=1/0 forces it): stdout is one JSON line, failures
 // only (scripts/test-reporter-agent.js), with the full flow's result; the human-readable report goes
 // to MULTIAGENT_TEST_HUMAN_LOG (default .test-output/human.log), named in the JSON's `human_log`.
@@ -22,7 +22,7 @@
 // once its tests end (scripts/test-exit.js, a short grace instead of --test-force-exit, which aborts
 // processes on Windows): a hung test fails with its name and file instead of running,
 // and holding the run's worktree, forever. The default budget is per file (#402,
-// src/engine/test-timeouts.js): 90 s for test/*.test.js, 5 min for the slow files, so the unit files
+// packages/engine/engine/test-timeouts.js): 90 s for test/*.test.js, 5 min for the slow files, so the unit files
 // and the slow ones run as two node --test runs at the same time, each with its own --test-timeout
 // and half the concurrency (the slow files' half at most their count); their reports merge into one.
 // With a concurrency of 1 the two runs go one after the other. With the override, one run.
@@ -30,18 +30,18 @@
 // passes on to node --test: each run's coverage table ends its report (coverage-summary.js merges them).
 //   npm run test:coverage [-- test/a.test.js]
 // One whole suite at a time per machine (#455): in agent mode, the whole suite (no file, no list) takes
-// the machine-wide `suite` slot first (src/engine/machine-slot.js), unless it inherits it, and lends
+// the machine-wide `suite` slot first (packages/engine/engine/machine-slot.js), unless it inherits it, and lends
 // it to the test files it runs (#528).
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
-const { isAgentMode, REPORTER } = require('../src/engine/agent-test-report');
+const { isAgentMode, REPORTER } = require('@multiagent/engine/engine/agent-test-report');
 const { workspaces } = require('./source-tree');
-const machineSlot = require('../src/engine/machine-slot');
-const { TEST_FILES_ENV } = require('../src/engine/suite-command-line');
-const { testTimeoutMs } = require('../src/engine/test-timeouts');
+const machineSlot = require('@multiagent/engine/engine/machine-slot');
+const { TEST_FILES_ENV } = require('@multiagent/engine/engine/suite-command-line');
+const { testTimeoutMs } = require('@multiagent/engine/engine/test-timeouts');
 
 // decided before the variable below is set: the orchestrator's own MULTIAGENT_SIMULATION_ONLY counts
 const agent = isAgentMode(process.env, { isTTY: !!process.stdout.isTTY });
@@ -77,7 +77,7 @@ const workspaceDir = workspaceAt >= 0 ? path.relative(root, path.resolve(process
 const allTestFiles = () => (workspaceDir !== null
   ? testFiles(path.join(workspaceDir, 'test'))
   : [...testFiles('test'), ...workspaces(root).flatMap((w) => testFiles(path.join(w.dir, 'test')))]);
-// #553: the list file of a selection too long for the command line (src/engine/suite-step.js
+// #553: the list file of a selection too long for the command line (packages/engine/engine/suite-step.js
 // TEST_FILES_ENV), read once and dropped, so the test files this run spawns never inherit it
 const listed = (() => {
   const list = process.env[TEST_FILES_ENV];

@@ -10,7 +10,7 @@ const path = require('path');
 const { DEMO_REPO, demoBacklog, parseArgs, VIEWS } = require('../scripts/screenshot');
 
 const appDir = path.join(__dirname, '..');
-const src = (m) => require(path.join(appDir, 'src', m));
+const src = (m) => require(path.join(appDir, 'packages', 'engine', m));
 const workspace = src('domains/workspace/workspace');
 const projects = src('domains/project/projects');
 

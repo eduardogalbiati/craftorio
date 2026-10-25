@@ -4,7 +4,7 @@
 // labels, editable, before it is confirmed; a held candidate is marked held; promoting a commit that
 // has no rc is refused with the reason. Locators are roles and data-testid only (skills/ui-conventions).
 //
-// What the screen exposes (NEW for #489, src/renderer/views/releases/releases.js):
+// What the screen exposes (NEW for #489, apps/desktop/renderer/views/releases/releases.js):
 // - data-testid="release-candidate": one per candidate, newest first, its text holding the rc version,
 //   its run id and its issues ("#12"), and "Held" when held; data-attribute data-held="true" too;
 // - data-testid="promote-to-stable": the candidate's button "Promote to stable";

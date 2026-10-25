@@ -14,6 +14,8 @@ const { spawnSync } = require('child_process');
 
 const root = path.join(__dirname, '..');
 const testDir = path.join(root, 'test');
+// the engine package's tests (phase 2 of the reorganisation study): the slow runs, engine-helpers.js, the fixtures
+const engineTestDir = path.join(root, 'packages', 'engine', 'test');
 const slash = (p) => p.split(path.sep).join('/');
 const rel = (f) => slash(path.relative(root, f));
 
@@ -96,7 +98,7 @@ test('the helper guard finds a test registered at load (in a loop too) with its 
 
 test('no file under test/ other than *.test.js registers a test or a suite when it is loaded', () => {
   const files = helperFiles();
-  assert.ok(files.some((f) => rel(f) === 'test/engine-helpers.js'), 'test/engine-helpers.js is scanned');
+  assert.ok(files.some((f) => rel(f) === 'packages/engine/test/engine-helpers.js'), 'packages/engine/test/engine-helpers.js is scanned');
   const { calls, errors } = loadTimeRegistrations(files);
   assert.deepEqual(errors.map((e) => `${rel(e.file)}: ${e.error}`), [], 'every helper loads on its own');
   const where = calls.map((c) => `${rel(c.file)}:${c.line} calls ${c.fn}() at load; move it to a *.test.js file`);
@@ -107,12 +109,12 @@ test('the unit_tests x e2e_tests matrix of software-development runs once, from 
   const matrix = 'x e2e_tests=';
   const holders = testFiles().filter((f) => f !== __filename && fs.readFileSync(f, 'utf8').includes(matrix)).map(rel);
   assert.equal(holders.length, 1, `one test file holds the matrix, found: ${holders.join(', ') || 'none'}`);
-  assert.match(holders[0], /^test\/slow\/[^/]+\.slow\.test\.js$/, 'the matrix (nine whole simulated runs) is a slow file');
-  assert.equal(fs.readFileSync(path.join(testDir, 'engine-helpers.js'), 'utf8').includes(matrix), false, 'test/engine-helpers.js no longer holds it');
+  assert.match(holders[0], /^packages\/engine\/test\/slow\/[^/]+\.slow\.test\.js$/, 'the matrix (nine whole simulated runs) is a slow file');
+  assert.equal(fs.readFileSync(path.join(engineTestDir, 'engine-helpers.js'), 'utf8').includes(matrix), false, 'test/engine-helpers.js no longer holds it');
 });
 
 test('the software-development whole runs are split by theme into at least four slow files', () => {
-  const parts = fs.readdirSync(path.join(testDir, 'slow')).filter((f) => /^engine-software-development.*\.slow\.test\.js$/.test(f));
+  const parts = fs.readdirSync(path.join(engineTestDir, 'slow')).filter((f) => /^engine-software-development.*\.slow\.test\.js$/.test(f));
   assert.ok(parts.length >= 4, `test/slow/engine-software-development*.slow.test.js: ${parts.length} file(s): ${parts.join(', ')}`);
 });
 
@@ -125,7 +127,7 @@ test('test/worktree.test.js and test/merge-recovery.test.js are each split in tw
 });
 
 test('every test title of the split files (and the matrix) still exists, in exactly one test file', () => {
-  const snapshot = JSON.parse(fs.readFileSync(path.join(testDir, 'fixtures', 'suite-split-titles-305.json'), 'utf8'));
+  const snapshot = JSON.parse(fs.readFileSync(path.join(engineTestDir, 'fixtures', 'suite-split-titles-305.json'), 'utf8'));
   const sources = testFiles().map((f) => ({ file: rel(f), text: fs.readFileSync(f, 'utf8') }));
   const problems = [];
   let count = 0;

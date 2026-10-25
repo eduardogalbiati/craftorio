@@ -4,12 +4,12 @@
 // what the code writes today: a field that can be missing is optional, a field always written (even
 // as null) is required. Types, plus RUN_EVENT_TYPES (the union's `type` values) so the module loads
 // like every packages/shared/ module (#345).
-//   - RunSummary: runs/<id>/summary.json (WorkflowRun.finish, src/engine/workflow.js), upgraded on
+//   - RunSummary: runs/<id>/summary.json (WorkflowRun.finish, packages/engine/engine/workflow.js), upgraded on
 //     read by packages/shared/run-record.js;
 //   - RunEvent: a line of runs/<id>/events.jsonl (emitEvent), a union by `type`;
-//   - Roadmap, RoadmapStage, RoadmapItem: backlog/<project>.roadmap.json (src/domains/roadmap/roadmap.js);
-//   - Workflow, WorkflowStep: a loaded workflow YAML (src/engine/run/load.js, FIELD_RULES);
-//   - SessionRecord: a session's snapshot (src/engine/run/sessions.js) in session.* events and
+//   - Roadmap, RoadmapStage, RoadmapItem: backlog/<project>.roadmap.json (packages/engine/domains/roadmap/roadmap.js);
+//   - Workflow, WorkflowStep: a loaded workflow YAML (packages/engine/engine/run/load.js, FIELD_RULES);
+//   - SessionRecord: a session's snapshot (packages/engine/engine/run/sessions.js) in session.* events and
 //     summary.sessions.
 
 /**
@@ -235,7 +235,7 @@
  * @property {string} note
  * @property {RoadmapItem[]} items
  * @property {true} [disabled]
- * @property {true} [waiting] the refactor stage waiting for the owner's OK (#435, src/domains/refactor/refactor-cadence.js)
+ * @property {true} [waiting] the refactor stage waiting for the owner's OK (#435, packages/engine/domains/refactor/refactor-cadence.js)
  * @property {RoadmapRelease} [release]
  */
 

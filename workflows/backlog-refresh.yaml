@@ -36,7 +36,7 @@ metadata:
   description: Reviews every open issue against the code as it is now - renamed files, drifted lines, tasks already done, obsolete or duplicated issues - applies the safe fixes and asks you before closing anything.
   tags: [issues, backlog, maintenance]
   category: plan
-  # never merges: as a roadmap stage it is done when its run succeeds (src/service/areas/roadmap.js)
+  # never merges: as a roadmap stage it is done when its run succeeds (packages/engine/service/areas/roadmap.js)
   merges: false
 
 # -----------------------------------------------------------------------------
@@ -75,7 +75,7 @@ inputs:
     label: "Issues"
     type: array
     default: []
-    # a roadmap stage fills it with its item's issue URLs (src/domains/backlog/backlog.js runInputs)
+    # a roadmap stage fills it with its item's issue URLs (packages/engine/domains/backlog/backlog.js runInputs)
     description: Optional, only these issues (numbers such as 129, 130, or their URLs). Empty = every open issue.
 
 # -----------------------------------------------------------------------------

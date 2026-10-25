@@ -36,7 +36,7 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   conversation; without a note it resumes. Logged as `log` `kind: idle_rotation`. Since #320 every
   bundled workflow with a persistent agent sets `fresh_after_idle: 55m` in `defaults:` (Claude's
   hour minus a margin); an agent's own value wins.
-- **The prompt cache's state** (#320, `src/domains/session/session-cache.js`, the same module as
+- **The prompt cache's state** (#320, `packages/engine/domains/session/session-cache.js`, the same module as
   `packages/shared/session-cache.js`): `cacheLifetimeMs(provider, { auth, tier })` is the one lifetime
   (Claude 1 h on a subscription, 5 min with `ANTHROPIC_API_KEY`, a tier the usage reports in
   `cache_creation.ephemeral_1h/5m_input_tokens` wins; Codex and Grok `null`, unknown); the Oracle's
@@ -101,7 +101,7 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   Events recorded before #308 have `usage` = the main conversation only and none of the new fields;
   readers (Analytics, the 3D view, the run report) read `usage` either way. `subagent_calls`
   (capabilities.md) is a different field: the sub-agent tool calls counted from the stream.
-- Idle agents (`src/engine/idle.js`, #46): an agent with no stream item for `idleWarnMs` (setting
+- Idle agents (`packages/engine/engine/idle.js`, #46): an agent with no stream item for `idleWarnMs` (setting
   `idleWarningMinutes`, default 5, 0 = off) while a tool call is open → one `log` warn
   `kind: agent_idle` per silence, with `step_id`, `agent`, `tool`, `command`, `idle_ms` (run log,
   run chat, supervisor timeline). Each turn is split into `active_ms` (the model) / `waiting_ms` (a

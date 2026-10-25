@@ -26,7 +26,7 @@ test('the mic button inserts a mocked transcript at the cursor and the field sho
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   const { code, out } = await new Promise((resolve, reject) => {
-    const child = spawn(electron, [path.join(root, 'test', 'fixtures', 'voice-check.js')], { cwd: root, env, windowsHide: true });
+    const child = spawn(electron, [path.join(root, 'packages', 'engine', 'test', 'fixtures', 'voice-check.js')], { cwd: root, env, windowsHide: true });
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { out += d; });

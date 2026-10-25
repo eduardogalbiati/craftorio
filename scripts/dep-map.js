@@ -1,6 +1,6 @@
 // Dependency map of src/ for reorganisation work (docs/reorganisation-study-2026-10.md): the
 // require() edges between areas (engine, service, shared, server, control, renderer, host, the loose files
-// of src/; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs, and
+// of a src/ tree; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs, and
 // which service channel files each renderer view calls (through `api.<method>(`). Read-only; prints
 // a report. `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
 
@@ -10,11 +10,12 @@ const fs = require('fs');
 const path = require('path');
 
 const { FOLDERS, PACKAGES } = require('./layers');
-const { resolvePackagePath, sourceFiles } = require('./source-tree');
+const { resolvePackagePath, sourceDirs, sourceFiles } = require('./source-tree');
 
 const ROOT = path.resolve(__dirname, '..');
-const SRC = path.join(ROOT, 'src');
-// the top-level folders of src/ (scripts/layers.js FOLDERS): anything else under src/ is a loose file
+// the first source folder (scripts/source-tree.js) holding `sub`, e.g. service/channels (packages/engine) or renderer/views (apps/desktop)
+const sourceDirWith = (sub) => sourceDirs(ROOT).map((d) => path.join(ROOT, d, sub)).find((p) => fs.existsSync(p));
+// the area folders (scripts/layers.js FOLDERS): anything else under a src/ tree is a loose file
 const AREA = new RegExp(`^src/(${Object.keys(FOLDERS).join('|')})/`);
 // a workspace's folders (scripts/layers.js PACKAGES): the whole package, or its area folders
 const PKG_AREA = new RegExp(`^(${Object.keys(PACKAGES).join('|')})/(?:(${Object.keys(FOLDERS).join('|')})/)?`);
@@ -71,7 +72,8 @@ function areaMatrix(all) {
 
 // The service's channel files, by the `method` each channel exposes on window.api.
 function channelFiles() {
-  const dir = path.join(SRC, 'service', 'channels');
+  const dir = sourceDirWith(path.join('service', 'channels'));
+  if (!dir) return {};
   const byMethod = {};
   for (const f of fs.readdirSync(dir)) {
     const text = fs.readFileSync(path.join(dir, f), 'utf8');
@@ -83,7 +85,8 @@ function channelFiles() {
 const apiCalls = (text) => new Set([...text.matchAll(/\bapi\.([A-Za-z0-9_]+)\s*\(/g)].map((m) => m[1]));
 
 function viewChannels(byMethod) {
-  const viewsDir = path.join(SRC, 'renderer', 'views');
+  const viewsDir = sourceDirWith(path.join('renderer', 'views'));
+  if (!viewsDir) return {};
   const result = {};
   for (const v of fs.readdirSync(viewsDir)) {
     const dir = path.join(viewsDir, v);
@@ -115,7 +118,7 @@ function report() {
   }
 
   const roots = files.filter((f) => area(f) === 'src-root').map(rel);
-  say(''); say(`## loose files of src/: ${roots.length}; clusters by name prefix (2 or more)`);
+  say(''); say(`## loose files (outside the area folders): ${roots.length}; clusters by name prefix (2 or more)`);
   const clusters = {};
   for (const r of roots) {
     const name = path.basename(r, '.js');
@@ -135,12 +138,12 @@ function report() {
   say(hostSide.map((r) => path.basename(r, '.js')).sort().join(' '));
 
   say(''); say('## engine/ requiring loose files (what an engine package would take along)');
-  const eng = [...new Set(all.filter(([a, b]) => area(a) === 'engine' && area(b) === 'src-root').map(([a, b]) => `${rel(a).replace('src/engine/', '')} -> ${path.basename(b)}`))];
+  const eng = [...new Set(all.filter(([a, b]) => area(a) === 'engine' && area(b) === 'src-root').map(([a, b]) => `${rel(a).replace('packages/engine/engine/', '')} -> ${path.basename(b)}`))];
   say(eng.join('\n'));
 
   const outside = all.filter(([a, b]) => area(a) === 'shared' && area(b) !== 'shared');
   say(''); say(`## shared/ requiring outside shared/: ${outside.length ? outside.map(([a, b]) => `${rel(a)} -> ${rel(b)}`).join(', ') : 'none'}`);
-  const svc = all.filter(([a, b]) => area(a) === 'service' && (area(b) === 'renderer' || rel(b) === 'src/host/main.js'));
+  const svc = all.filter(([a, b]) => area(a) === 'service' && (area(b) === 'renderer' || rel(b) === 'apps/desktop/host/main.js'));
   say(`## service/ requiring renderer/ or main.js: ${svc.length ? svc.length : 'none'}`);
 
   const byMethod = channelFiles();

@@ -33,7 +33,7 @@ function demoLocalMerge(ws, projectId) {
   }, null, 2));
 }
 
-// The project's release history (#260, src/domains/releases/releases.js): two shipped releases of closed issues, each
+// The project's release history (#260, packages/engine/domains/releases/releases.js): two shipped releases of closed issues, each
 // with its runs, cost, both suites' counts and notes (the last one fixed a regression before Ship);
 // the next release is what demoLocalMerge merged locally (#11). The Backlog shows #8 as Released.
 function demoReleases(ws, projectId) {
@@ -76,7 +76,7 @@ function demoReleases(ws, projectId) {
     '',
     '## The fixes',
     '',
-    '- **7b1e0c4** (src/engine/workflow.js, +6 −2): the loader read the YAML examples before #8 moved them. A regression of #7 by #8.',
+    '- **7b1e0c4** (packages/engine/engine/workflow.js, +6 −2): the loader read the YAML examples before #8 moved them. A regression of #7 by #8.',
     '',
     '## Before you ship',
     '',

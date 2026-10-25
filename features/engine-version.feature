@@ -6,7 +6,7 @@ Feature: Engine version check
 
   # Assumes the banner is data-testid="version-skew-banner", reading "This engine runs another
   # version (engine X, interface Y): reload to get its interface", with a "Reload" button (#339).
-  # The served engine is scripts/serve.js on a scratch workspace; its UI opens in an Electron window
+  # The served engine is packages/engine/bin/multiagent-engine.js on a scratch workspace; its UI opens in an Electron window
   # with no preload (features/support/served.js). "Another version" is a page route on /api/version.
   @issue-339
   Scenario: The desktop app shows no engine version banner

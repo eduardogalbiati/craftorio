@@ -1,7 +1,7 @@
 # The test → suite → test_failed → build → build_failed → evidence → verify_change steps the
 # development workflows share (#434). A workflow step `{ id, fragment: test-pipeline, ...keys }` gets
 # the body under its id here; the step's own keys (id, agent or type, ...) stay in the workflow and
-# win over the body's (src/engine/run/load.js, expandFragments). Bundled with the app: a workflow
+# win over the body's (packages/engine/engine/run/load.js, expandFragments). Bundled with the app: a workflow
 # copied to the workspace finds it in the app folder.
 
 steps:

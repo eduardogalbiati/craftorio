@@ -1,6 +1,6 @@
 // Steps of features/local-preview-confirm.feature (#481, SEC-22): Run App's confirmation at a gate
-// with `local_preview: true` (src/renderer/gate-panel.js runAppConfirmHtml) for a command the
-// repository declares (.multiagent/local-preview.yaml, src/domains/local/local-preview.js readRepoConfig). The run
+// with `local_preview: true` (apps/desktop/renderer/gate-panel.js runAppConfirmHtml) for a command the
+// repository declares (.multiagent/local-preview.yaml, packages/engine/domains/local/local-preview.js readRepoConfig). The run
 // itself reuses run.steps.js (Start panel, "Validated" mode, the gate card). Locators are roles and
 // data-testid only (skills/ui-conventions):
 //   run-gate                    the gate card; its Run App button is the button named "▶ Run App…" /
@@ -13,7 +13,7 @@
 //                               "workflow", its text naming the repository
 //   and its Cancel button (role button "Cancel").
 // A simulated run makes no worktree: its gates work in the demo project's folder (inputs.repo_path,
-// src/engine/run/gates.js), so the declaration is written there before the run starts.
+// packages/engine/engine/run/gates.js), so the declaration is written there before the run starts.
 
 const fs = require('fs');
 const path = require('path');

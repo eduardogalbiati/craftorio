@@ -1,5 +1,5 @@
 // Steps of features/agent-chat.feature (#274): the one chat shared by the Oracle's, the Product Owner's
-// and the Supervisor's drawers (src/renderer/agent-chat.js). The text box empties as soon as the owner
+// and the Supervisor's drawers (apps/desktop/renderer/agent-chat.js). The text box empties as soon as the owner
 // clicks Send / Ask and the message shows in the conversation at once, before the answer.
 // The shared component's markers (data-testid, new in #274), inside each agent's drawer:
 //   agent-chat-input     the text box the owner types in

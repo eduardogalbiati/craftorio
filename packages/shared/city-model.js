@@ -1,7 +1,7 @@
 // The deterministic core of the project city (#371), from the proof of concept poc/embed-city.js
 // (#370): a city plan and #356's facts (packages/shared/architecture-model.js buildModel) in, { model,
 // validation } out, with no file system, git, network, clock or randomness inside.
-// - The plan (CITY_PLAN_SCHEMA, checked with validateSchema of src/domains/workspace/json-schema.js, #338): zones
+// - The plan (CITY_PLAN_SCHEMA, checked with validateSchema of packages/engine/domains/workspace/json-schema.js, #338): zones
 //   (one of ZONE_KINDS each), districts with include/exclude globs (the app's glob rules,
 //   packages/shared/globs.js: no slash matches at any depth, a leading `/` anchors to the root), landmarks,
 //   ports, evidence and `ignore` (files not drawn). A drawn file is a facts row the plan does not
@@ -11,7 +11,7 @@
 //   the ROOT zone.
 // - Buildings: { path, district, lines, churn, complexity, worst, functions, lastChange };
 //   complexity, worst and functions are null unless a real tool measured them ("not measured").
-// - Edges from the sources the service reads at the facts' commit (src/domains/project/architecture-facts.js
+// - Edges from the sources the service reads at the facts' commit (packages/engine/domains/project/architecture-facts.js
 //   readCity): `imports` ([{ from, text }], the lines of JavaScript/TypeScript files that name a
 //   relative path) give file edges from relative require/import, `manifests` ({ path: Cargo.toml text }) give district edges from each
 //   dependency on a sibling crate; for any other language `edges` is "not read for <language>",

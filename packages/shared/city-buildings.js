@@ -1,7 +1,7 @@
 // The buildings of the project city v2 (#449, ported from poc/project-city-v2.html, #415): a laid-out
 // building of CityLayout (packages/shared/city-layout.js: path, w, d, h, lines, complexity, functions,
 // worst, quadrant, test) becomes an archetype and a list of parts on a few unit geometries, which the
-// 3D scene (src/renderer/city3d/) draws as one instanced mesh per geometry. Pure and deterministic:
+// 3D scene (apps/desktop/renderer/city3d/) draws as one instanced mesh per geometry. Pure and deterministic:
 // the shapes vary by a seed from the path (hashOf, rngOf), never Math.random, so a file keeps its
 // shape between loads and across machines, and a file's metrics changing changes only that file.
 // - the archetypes (archetypeOf): shed (tiny files), pavilion (tests), hall (big unmeasured data and

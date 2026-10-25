@@ -28,7 +28,7 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   `one_line(n)`. The engine stores `brief: { headline, body, recommendation: { answer, label,
   reason, source }, options, user_action? }` on the gate record and its `approval.requested` event,
   plus `approve` / `reject: { label, help }` on an Approve / Reject gate and `help` on choices
-  (src/engine/gate-summary.js). Without `summary:` (and on engine-made gates) the headline is the
+  (packages/engine/engine/gate-summary.js). Without `summary:` (and on engine-made gates) the headline is the
   first two sentences of the message; a summary that fails to render is logged and left out. The
   supervisor on call's `recommend` (one of the gate's answers), `recommendation` (one line) and
   `options` (up to 3) win over the workflow's `recommend:`; its full note stays under the message.
@@ -85,7 +85,7 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   Simulate with `mockSequences.permission_denials: { step: n }`.
 - `wait: { probe, target, output?, infra_output?, grace? }` on a single-agent `/loop` step (`loadWorkflow`
   validates it): when the step loops back to itself without a delegation or supervisor note,
-  `pollStep` runs the probe (`src/engine/probes.js`, `gh`/`glab`, no tokens) instead of the agent.
+  `pollStep` runs the probe (`packages/engine/engine/probes.js`, `gh`/`glab`, no tokens) instead of the agent.
   `pending`/`unchanged` (and `none` within `grace`, default 10m after the agent's last turn) →
   `loopWait` again (never counted as blocked); `passed` + `output` → the agent's last output with
   `output` over it, validated, then `finishStep` (goal + transitions, `step.finished` with `probe`,
@@ -98,7 +98,7 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   taken right after each agent turn (`afterAgentTurn`). Probe polls do not count as visits
   (mock sequences stay per agent visit). Events `step.probe`; `summary.probes`. The `probe`
   constructor option replaces the run's machine adapter's (tests); simulations use `MOCK_PROBES`
-  (src/engine/machine-actions.js) or
+  (packages/engine/engine/machine-actions.js) or
   `mockSequences.probes: { step: [states] }`.
 - How a run ends: a transition with `goto: end` may carry `status: success | failed | cancelled`
   (default success; also valid with `on_exhausted: end`; `loadWorkflow` rejects other values).
@@ -137,11 +137,11 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   untouched: no approval is resolved or rejected, it keeps waiting at the same gate with the same
   choices. The item's `status: 'parked'` (stored, with `parked: { at, gate }`) counts as finished,
   so the next stage starts without its change. When the owner answers the gate later the item takes
-  the run's outcome (`src/domains/roadmap/roadmap.js` `itemStatus`): done when it merged, else failed, still marked
+  the run's outcome (`packages/engine/domains/roadmap/roadmap.js` `itemStatus`): done when it merged, else failed, still marked
   `parked`, so it counts as finished and never sets `pausedBy`. Retry clears the mark; Undo of the
-  move puts the item back in its stage (`src/domains/roadmap/roadmap-undo.js`).
+  move puts the item back in its stage (`packages/engine/domains/roadmap/roadmap-undo.js`).
 - `ship: { tag, build? }` on a transition (#260, release.yaml's `ship` and `ship_failed` gates; both
-  templates): after the transition's `action` and `merge: local`, `shipRelease` (src/domains/releases/releases.js)
+  templates): after the transition's `action` and `merge: local`, `shipRelease` (packages/engine/domains/releases/releases.js)
   pushes the local base to origin (never forced; a rejected push throws) and tags that commit, then
   runs `build` when it renders non-empty (a shell command: the rule of `action:` applies, #469, see
   [worktrees-and-template-context.md](worktrees-and-template-context.md)). `loadWorkflow` only accepts it on a `human_approval` step
@@ -160,7 +160,7 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   counts it like an action.
 - Cut lines (#260, service): a roadmap stage with `release: { name }` holds every stage after it.
   `advance` returns `release: { stage, name }` once the stages up to the line are finished; the
-  service (`roadmapRelease`, src/service/areas/releases.js) starts release.yaml with the project's
+  service (`roadmapRelease`, packages/engine/service/areas/releases.js) starts release.yaml with the project's
   folder, base and the history since the last release, and records `runId` / `status` on the line
   (`takeRelease`: `running` → `shipped`, or `held` / `failed` through `holdRelease`, which pauses a
   running roadmap with `releaseHold`; Resume starts a new release run; a resumed release run, or
@@ -179,7 +179,7 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   runs recorded with `issue` load as `issues: [issue]` (`runs.readRun`, `resumeSpec`, the run chat).
   The Backlog fills the `issue` (first URL) and `issues` (every URL) inputs when a workflow declares them.
 - Backlog dispatch (service, not the engine): `dispatchQueue` starts the plain queue's items whenever a
-  slot is free; `dispatchRoadmaps` (src/domains/roadmap/roadmap.js `advance`) runs a started roadmap stage by stage,
+  slot is free; `dispatchRoadmaps` (packages/engine/domains/roadmap/roadmap.js `advance`) runs a started roadmap stage by stage,
   first after every `workflow.finished` (before the queue) and when a workspace opens. An item is done when
   its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
   and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`

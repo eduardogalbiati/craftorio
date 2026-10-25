@@ -8,9 +8,9 @@
 //   'remote' (pushed: a branch and a PR/MR) or 'none' (no worktree, or it never merges);
 // - current(): the renderer's default from state.settings and state.workflows (app.js globals);
 //   #486: the header project's own defaultWorkflow (state.projects) wins over Settings';
-// - firstBuild(set): a project's default without a given one (#486, src/domains/project/projects.js and the Overview);
+// - firstBuild(set): a project's default without a given one (#486, packages/engine/domains/project/projects.js and the Overview);
 // - projectFirst(list): the pickers' workflows with the header project's set first (#486).
-// Browser: window.DefaultWorkflow; Node: module.exports (src/domains/po/product-owner.js).
+// Browser: window.DefaultWorkflow; Node: module.exports (packages/engine/domains/po/product-owner.js).
 (function (root) {
   const LOCAL = 'software-development-local-hero.yaml';
   const REMOTE = 'software-development.yaml';

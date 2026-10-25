@@ -34,7 +34,7 @@ const append = (e2e, events) => {
   fs.writeFileSync(path.join(run.dir, 'events.jsonl'), `${lines.join('\n')}\n`);
 };
 
-// A session snapshot as the engine records it (src/engine/workflow.js snapshot) with #320's fields:
+// A session snapshot as the engine records it (packages/engine/engine/workflow.js snapshot) with #320's fields:
 // last_turn_at, context_tokens, mode, has_note, fresh_after_idle_ms
 const snapshot = (id, agent, step, fields) => ({
   id, agent, provider: 'claude', model: 'claude-opus-5-5', effort: null, parent_id: null, step_id: step,

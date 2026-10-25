@@ -1,7 +1,7 @@
 // Writes resources/THIRD_PARTY_LICENSES.txt (#482): the name, version, license and license text of
 // every npm library the packaged app ships, the production dependencies (app.asar) and, with their
 // own dependencies, the devDependencies scripts/build-3d.js bundles into generated/ (three, react).
-// scripts/package.js ships the file in the app's resources/ folder. Run it after a dependency change:
+// apps/desktop/scripts/package.js ships the file in the app's resources/ folder. Run it after a dependency change:
 //   npm run licenses
 // Exports collect and render for the tests; writes the file only when run directly.
 

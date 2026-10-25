@@ -8,7 +8,7 @@ Where a run's screenshots go (`evidence/<step>/round-<n>/`), the evidence index 
   `.modified.png` (the app with the run's change); a new screen has only `modified`, a removed one
   only `original`. The engine gives the folder as `evidence_dir` and in the command guide, and
   `evidence` is one of the `RUN_DIRS` (`--add-dir`).
-- `src/domains/evidence/evidence.js` keeps one index, `<run_dir>/evidence/manifest.json`: every image with `step`,
+- `packages/engine/domains/evidence/evidence.js` keeps one index, `<run_dir>/evidence/manifest.json`: every image with `step`,
   `round`, `commit` (captured), `issue`, `screen`, `state`, `side`, `caption` and `pair` (the other
   side, the same round first, else the newest earlier one), the run's `base` and `branch`, and the
   **final set** (`final`, images marked `final: true`): the round that captured last, i.e. the last

@@ -29,7 +29,7 @@ user-facing doc.
 - **Never start real runs in automated checks**: they run with `MULTIAGENT_SIMULATION_ONLY=1`
   (the engine refuses real runs, real providers and CLI terminals). Workflow agents already have
   it in their environment: run `npm test` / `node --test …` without a `VAR=` prefix. UI checks go through
-  `scripts/smoke.js` (scratch workspace), never a hand-written script that launches `src/host/main`.
+  `scripts/smoke.js` (scratch workspace), never a hand-written script that launches `apps/desktop/host/main`.
 - **Add, don't edit shared lists**: document a file in its header comment (the code map is built
   from it) or a topic doc, not here. Shared name lists: one item per line, sorted
   (`npm run lint:lists`).
@@ -39,6 +39,7 @@ user-facing doc.
 ```
 npm start                  # the app
 npm test                   # unit tests + a full mock run of software-development
+npm test -w packages/engine   # one workspace's tests
 npm run run -- --file ai-arena.yaml --mock --auto-approve --input project_path=C:/x --task "..."
 npm run serve -- --port 7300 [--host h] [--workspace dir]   # engine server + UI in a browser
 npm run build              # packaged app in build/ (npm run package → dist/)
@@ -58,6 +59,6 @@ npm run screenshot -- --view backlog --mode kanban --out <dir>   # one screen, s
 - [docs/agents/testing.md](docs/agents/testing.md): CI, machine-independent tests, mock provider, real CLIs. Read before writing tests.
 - [docs/agents/windows-gotchas.md](docs/agents/windows-gotchas.md): line endings, paths, node-pty, the exe, EBUSY. Read before scripted edits, terminals or packaging.
 - [docs/agents/environment.md](docs/agents/environment.md): Node/npm/Electron, CLIs, workspace layout. Read before installing or upgrading.
-- [docs/agents/renderer.md](docs/agents/renderer.md): the UI and how to check it. Read before changing `src/renderer/`.
+- [docs/agents/renderer.md](docs/agents/renderer.md): the UI and how to check it. Read before changing `apps/desktop/renderer/`.
 - [docs/agents/backlog.md](docs/agents/backlog.md): open ideas. Read when planning new work.
 - [seeds.md](docs/agents/seeds.md): writing an analysis seed.

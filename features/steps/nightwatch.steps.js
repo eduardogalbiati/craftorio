@@ -136,7 +136,7 @@ const regressions = (page) => page.getByTestId('nw-regression');
 const regressionOf = (page, step) => regressions(page).filter({ hasText: new RegExp(`^\\s*${escapeRe(step)}:`) });
 const morningCard = (page) => page.getByRole('button', { name: 'Open Night watch', exact: true });
 
-// The watch on for 8 hours, ended `hours` ago (oracle/night-log.jsonl, src/domains/night/night-watch.js nightsOf)
+// The watch on for 8 hours, ended `hours` ago (oracle/night-log.jsonl, packages/engine/domains/night/night-watch.js nightsOf)
 Given('the Night watch ended {int} hours ago', async ({ e2e }, hours) => {
   const end = Date.now() - hours * HOUR;
   const startedAt = new Date(end - 8 * HOUR).toISOString();

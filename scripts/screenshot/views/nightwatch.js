@@ -1,5 +1,5 @@
 // Screenshot seed of the Night watch (--view nightwatch, #172): two replayed nights from
-// src/domains/night/night-watch-demo.js (writeNights, also Home's morning summary); --mode self-healing (#278):
+// packages/engine/domains/night/night-watch-demo.js (writeNights, also Home's morning summary); --mode self-healing (#278):
 // Self-healing on since yesterday ("Self-healing is on" in place of the end time, its days in the
 // report), the switch itself a setting (Settings › Execution › Oracle).
 // #337 Limits tonight: the demo has no nightly budget (the turn-on form's warning: --click "#nw-switch"

@@ -1,4 +1,4 @@
-// multiagent-ctl (#342): the control channel's client (src/control/index.js), the Rust twin of
+// multiagent-ctl (#342): the control channel's client (packages/engine/control/index.js), the Rust twin of
 // scripts/ctl.js, shipped next to the app so an outside session needs neither Node nor a checkout.
 //   multiagent-ctl <channel> [json-argument] [--workspace <dir>]   calls the channel, prints its result
 //   multiagent-ctl --list [--workspace <dir>]                       the allowed channels, argument schemas
@@ -15,7 +15,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-/// The contract this client speaks: CONTROL_VERSION in src/control/index.js.
+/// The contract this client speaks: CONTROL_VERSION in packages/engine/control/index.js.
 const CONTROL_VERSION: &str = "1";
 
 const USAGE: &str = "Usage: multiagent-ctl <channel> [json-argument] [--workspace <dir>]\n       multiagent-ctl --list [--workspace <dir>]";
@@ -270,10 +270,10 @@ mod tests {
 
     #[test]
     fn the_contract_version_matches_the_apps() {
-        let js = include_str!("../../../src/control/index.js");
+        let js = include_str!("../../../packages/engine/control/index.js");
         assert!(
             js.contains(&format!("const CONTROL_VERSION = '{CONTROL_VERSION}';")),
-            "CONTROL_VERSION differs from src/control/index.js"
+            "CONTROL_VERSION differs from packages/engine/control/index.js"
         );
     }
 }

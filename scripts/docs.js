@@ -1,19 +1,19 @@
 // Generated docs: files built from small per-feature sources, so features add a file instead of
 // editing a shared table (fewer merge conflicts between parallel runs, issue #77).
 //   docs/agents/code-map.md  from the header comment at the top of each source file, plus one row
-//                            per screen folder (src/renderer/views/<view>/). Derived and
+//                            per screen folder (apps/desktop/renderer/views/<view>/). Derived and
 //                            gitignored (nobody reads it at runtime): rebuilt by `prepare`,
 //                            `prestart`, `pretest` and `prebuild`, so a pull never leaves it stale.
 //   docs/agents/test-map.md  (#219) the static code → tests map: for every source file, the test
 //                            files that import it directly or transitively (the affected tests'
-//                            import graph, src/engine/affected-tests.js testMap). Derived and
+//                            import graph, packages/engine/engine/affected-tests.js testMap). Derived and
 //                            gitignored like the code map; agents read it instead of guessing.
 //   docs/agents/channels.md  (#338) the channel reference: every request/reply channel of the app's
-//                            manifest (src/service/manifest.js) with its arguments and its result,
+//                            manifest (packages/engine/service/manifest.js) with its arguments and its result,
 //                            from each entry's `schema`. Derived and gitignored like the code map;
 //                            always this app's channels (the ones of the checkout docs.js runs from).
 //   docs/agents/engine/field-reference.md  (#352) the workflow YAML's field rules, one row per entry of
-//                            FIELD_RULES (src/engine/run/field-rules.js): field, applies to, type,
+//                            FIELD_RULES (packages/engine/engine/run/field-rules.js): field, applies to, type,
 //                            template, required, message. Derived and gitignored like the code map;
 //                            not an engine topic (left out of engine.md's index).
 //   README.md tables        between `<!-- generated:<name> -->` markers: the bundled skills (each
@@ -31,14 +31,14 @@
 //   docs/agents/engine.md    (#251) the index of docs/agents/engine/*.md, one topic per file: one
 //                            line per topic from its first heading and the line after it (its
 //                            summary line), in file-name order. Committed; a test fails when stale.
-//   src/renderer/index.html  the renderer's own stylesheets and scripts, between
+//   apps/desktop/renderer/index.html  the renderer's own stylesheets and scripts, between
 //                            `<!-- generated:styles -->` / `<!-- generated:scripts -->` markers
 //                            (#152): adding a screen or a module adds files, never a hand-edited
 //                            line. Committed (the page loads it as is). Order, per list: the pure
 //                            modules of packages/shared/ (scripts, `<relative path>/<file>`, #345; its subfolders
 //                            first, each folder's index.js after its other files, #351), then the files
 //                            whose header has `load: early`, then app.js (scripts), then the other
-//                            files of src/renderer/, then those of src/renderer/views/<view>/, each
+//                            files of apps/desktop/renderer/, then those of apps/desktop/renderer/views/<view>/, each
 //                            group sorted by path; `load: after <file> [<file>…]` in a header puts
 //                            a file after the ones it needs as it loads (same group or an earlier
 //                            one). A reason may follow in parentheses. Vendor files (node_modules)
@@ -54,8 +54,8 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const { testMap, testMapMarkdown } = require('../src/engine/affected-tests');
-const { fieldReference } = require('../src/engine/run/field-rules');
+const { testMap, testMapMarkdown } = require('@multiagent/engine/engine/affected-tests');
+const { fieldReference } = require('@multiagent/engine/engine/run/field-rules');
 const { sourceFiles, workspaces } = require('./source-tree');
 
 const ROOT = path.join(__dirname, '..');
@@ -63,20 +63,22 @@ const CODE_MAP = path.join('docs', 'agents', 'code-map.md');
 const TEST_MAP = path.join('docs', 'agents', 'test-map.md');
 const CHANNELS_REF = path.join('docs', 'agents', 'channels.md');
 const SUFFIXES = ['js', 'python', 'go', 'java', 'csharp', 'rust', 'gh', 'gl'];
-// The source files mapped one by one (scripts/source-tree.js: src/, the workspaces and scripts/; their .js
-// and .jsx files, recursively: .jsx are the run's 3D view's sources, src/renderer/run3d/, bundled by
+// The source files mapped one by one (scripts/source-tree.js: the workspaces and scripts/; their .js
+// and .jsx files, recursively: .jsx are the run's 3D view's sources, apps/desktop/renderer/run3d/, bundled by
 // scripts/build-3d.js).
 const listSources = (root) => sourceFiles(root, { scripts: true, match: /\.jsx?$/ });
 // Folders that are not part of the app: left out of the code → tests map (poc/: proofs of concept).
 const OUTSIDE = ['poc/'];
 // Folders described as a whole: no header comment to read from.
 const FOLDERS = [
-  ['src/domains/', 'The backend\'s domain modules (phase 1 of `docs/reorganisation-study-2026-10.md`), one folder per domain (agents, analytics, backlog, chat, cli, discovery, evidence, local, machine, night, oracle, po, project, refactor, releases, roadmap, run, seed, session, supervisor, usage, workflow, workspace): what the service and the engine require besides each other. A new module goes in the folder of the domain that uses it; its tests in `test/<domain>/`. Layers: `scripts/layers.js`.'],
-  ['src/host/', 'The Electron host (phase 1 of `docs/reorganisation-study-2026-10.md`): `main.js` (the entry `package.json` names), the preloads, the windows and their guards, the account sign-in, the external terminal and Keep awake. The service and the engine require nothing here (`scripts/layers.js`, area `desktop`).'],
-  ['src/renderer/', 'Plain HTML/CSS/JS UI, no bundler (index.html, style.css and one script per screen; moved screens in `views/<view>/`, registered with `registerView`). index.html\'s `<link>`/`<script>` lists are generated by `npm run docs` (order: `load:` header lines). See [renderer.md](renderer.md).'],
+  ['packages/engine/domains/', 'The backend\'s domain modules (phase 1 of `docs/reorganisation-study-2026-10.md`), one folder per domain (agents, analytics, backlog, chat, cli, discovery, evidence, local, machine, night, oracle, po, project, refactor, releases, roadmap, run, seed, session, supervisor, usage, workflow, workspace): what the service and the engine require besides each other. A new module goes in the folder of the domain that uses it; its tests in `test/<domain>/`. Layers: `scripts/layers.js`.'],
+  ['apps/desktop/', 'The workspace `@multiagent/desktop` (phase 2 of `docs/reorganisation-study-2026-10.md`): the Electron desktop app. `host/` (the main process the root `package.json` names, the preloads, the windows and their guards), `renderer/` (the UI, also served by the engine server), `assets/` (the icons), `scripts/package.js` (the packager, run from the root as `npm run build`); the native module `node-pty` is its dependency (decision 6). Its tests in `apps/desktop/test/`.'],
+  ['apps/desktop/host/', 'The Electron host (phase 1 of `docs/reorganisation-study-2026-10.md`): `main.js` (the entry `package.json` names), the preloads, the windows and their guards, the account sign-in, the external terminal and Keep awake. The service and the engine require nothing here (`scripts/layers.js`, area `desktop`).'],
+  ['apps/desktop/renderer/', 'Plain HTML/CSS/JS UI, no bundler (index.html, style.css and one script per screen; moved screens in `views/<view>/`, registered with `registerView`). index.html\'s `<link>`/`<script>` lists are generated by `npm run docs` (order: `load:` header lines). See [renderer.md](renderer.md).'],
+  ['packages/engine/', 'The workspace `@multiagent/engine` (phase 2 of `docs/reorganisation-study-2026-10.md`): the engine (`engine/`), the service (`service/`, its channels and areas), the HTTP/WebSocket server and the control channel (`server/`, `control/`), the domain modules (`domains/<name>/`, the account sign-in in `domains/account/`) and the `multiagent-engine` bin (`bin/`, today\'s `npm run serve`), each folder at the package root so the requires inside the package stay relative; required from the host and the scripts as `@multiagent/engine/<folder>/<file>`. Bundled defaults (workflows, skills, pipelines, seeds, fragments) come from the app root (`domains/workspace/app-root.js`), never from the package\'s folder. Its tests in `packages/engine/test/`. Layers: `scripts/layers.js`.'],
   ['packages/shared/', 'The workspace `@multiagent/shared` (phase 2 of `docs/reorganisation-study-2026-10.md`): pure modules both sides use (#345), each working with `require` (`@multiagent/shared/<file>`) and as a renderer `<script>` (a browser global), requiring nothing of the app and loading before the renderer\'s files; its tests in `packages/shared/test/`. The layers of the sources and their allowed directions: `scripts/layers.js`. See [renderer.md](renderer.md).'],
-  ['src/service/channels/', 'The service\'s channels, one file per area (see `src/service/manifest.js`).'],
-  ['native/', 'The cargo workspace of the native sidecars (#341), one crate per binary, shipped in `resources/bin/`: `multiagent-mcp`, the Rust twin of `src/domains/supervisor/supervisor-mcp.js` (started by `mcpCommand` when built). See [environment.md](environment.md).'],
+  ['packages/engine/service/channels/', 'The service\'s channels, one file per area (see `packages/engine/service/manifest.js`).'],
+  ['native/', 'The cargo workspace of the native sidecars (#341), one crate per binary, shipped in `resources/bin/`: `multiagent-mcp`, the Rust twin of `packages/engine/domains/supervisor/supervisor-mcp.js` (started by `mcpCommand` when built). See [environment.md](environment.md).'],
   ['workflows/*.yaml', 'The bundled workflows (seeded into `<workspace>/workflows/`). See [engine.md](engine.md).'],
   ['fragments/*.yaml', 'Step bodies the bundled workflows share (#434), included by a step\'s `fragment: <name>` and read from the app folder only. See [step-fragments.md](engine/step-fragments.md).'],
   ['skills/', 'The bundled skills, one folder each (`SKILL.md` + support files, seeded into `<workspace>/skills/`); the README table is generated from their frontmatter.'],
@@ -118,15 +120,15 @@ function headerOf(text) {
 }
 
 function codeMap(root = ROOT) {
-  const files = listSources(root).filter((f) => !f.startsWith('src/service/channels/'));
+  const files = listSources(root).filter((f) => !f.startsWith('packages/engine/service/channels/'));
   const rows = files.map((f) => `| \`${f}\` | ${cell(headerOf(read(root, f))) || '(no header comment)'} |`);
-  // One row per screen folder (src/renderer/views/<view>/), discovered: its files, from disk.
+  // One row per screen folder (apps/desktop/renderer/views/<view>/), discovered: its files, from disk.
   const viewsDir = path.join(root, RENDERER, 'views');
   const viewRows = fs.existsSync(viewsDir)
     ? fs.readdirSync(viewsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
       .map((v) => {
         const own = fs.readdirSync(path.join(viewsDir, v)).filter((f) => /\.(js|css)$/.test(f)).sort();
-        return `| \`src/renderer/views/${v}/\` | The ${v} screen's folder (registered with \`registerView\`): ${own.map((f) => `\`${f}\``).join(', ')}. |`;
+        return `| \`apps/desktop/renderer/views/${v}/\` | The ${v} screen's folder (registered with \`registerView\`): ${own.map((f) => `\`${f}\``).join(', ')}. |`;
       })
     : [];
   return [
@@ -139,27 +141,27 @@ function codeMap(root = ROOT) {
     '',
     '## Adding things without editing shared lists',
     '',
-    '- **A channel** (`window.api` method): add an entry to the area\'s file in `src/service/channels/`',
-    '  (or a new file there: files are discovered). `src/host/preload.js` and `src/renderer/api-http.js` build',
+    '- **A channel** (`window.api` method): add an entry to the area\'s file in `packages/engine/service/channels/`',
+    '  (or a new file there: files are discovered). `apps/desktop/host/preload.js` and `apps/desktop/renderer/api-http.js` build',
     '  `window.api` from the manifest at runtime; nothing else to edit. The entry carries its',
-    '  `schema: { params, result }` (JSON Schema, #338; shared ids and builders in `src/service/schemas.js`):',
+    '  `schema: { params, result }` (JSON Schema, #338; shared ids and builders in `packages/engine/service/schemas.js`):',
     '  the service refuses arguments that break `params` with a 400 before the channel runs, and the tests',
     '  check every result against `result`. A channel without one fails',
     '  `test/service/channel-schema-ratchet-338.test.js`. The reference of every channel is',
     '  [channels.md](channels.md) (generated, gitignored).',
-    '- **Service state or a helper behind a channel**: add it to its area\'s file in `src/service/areas/`',
-    '  (or a new file there: files are discovered, see `src/service/index.js`), never to `src/service/index.js`;',
+    '- **Service state or a helper behind a channel**: add it to its area\'s file in `packages/engine/service/areas/`',
+    '  (or a new file there: files are discovered, see `packages/engine/service/index.js`), never to `packages/engine/service/index.js`;',
     '  its tests go in `test/service/<area>.test.js` (see [testing.md](testing.md)).',
-    '- **A screen**: a folder `src/renderer/views/<view>/` (`<view>.js` calling `registerView`, `<view>.css`;',
+    '- **A screen**: a folder `apps/desktop/renderer/views/<view>/` (`<view>.js` calling `registerView`, `<view>.css`;',
     '  see [renderer.md](renderer.md)), a fragment `docs/screens/<view>.md` (`menu`, `order`, text) for',
     '  the README table, and its screenshot seed `scripts/screenshot/views/<view>.js` (its tabs, modes,',
     '  demo data and how it opens; found by the screenshot runner, which is never edited for a screen);',
     '  run `npm run docs`, which lists its files in `index.html` (never by hand).',
-    '- **A renderer module or stylesheet** (`src/renderer/*.js|css`): add the file and run `npm run docs`;',
+    '- **A renderer module or stylesheet** (`apps/desktop/renderer/*.js|css`): add the file and run `npm run docs`;',
     '  a `load: early` or `load: after <file>` line in its header when it needs others as it loads.',
     '- **Code both the UI and the backend use** (pure: no DOM, no fs, no Electron): a dual-load module in',
     '  `packages/shared/` (`module.exports` under Node, a `window` global as a `<script>`; copy',
-    '  `packages/shared/display-name.js`) and run `npm run docs`. The backend never requires `src/renderer/`.',
+    '  `packages/shared/display-name.js`) and run `npm run docs`. The backend never requires `apps/desktop/renderer/`.',
     '- **Something GitHub and GitLab do differently** (a `gh`/`glab` command, its JSON, a term such as',
     '  "PR #" / "MR !"): a member of both platform adapters, `packages/shared/platforms/github.js` and `gitlab.js`',
     '  (#351), called through the registry (`resolvePlatform` / `platformOrDefault` in `packages/shared/platforms/index.js`,',
@@ -187,7 +189,7 @@ function codeMap(root = ROOT) {
     '- **An engine topic** (implementer\'s notes on a workflow YAML feature): add to its file in',
     '  `docs/agents/engine/`, or add a file there (`# <Title>`, then a one-line summary); `npm run docs`',
     '  lists it in the [engine.md](engine.md) index (never edit the index by hand).',
-    '- **Something in the workspace index** (`<workspace>/index.db`, `src/domains/workspace/store.js`): append a migration to',
+    '- **Something in the workspace index** (`<workspace>/index.db`, `packages/engine/domains/workspace/store.js`): append a migration to',
     '  `MIGRATIONS` (never edit a shipped one: `PRAGMA user_version` counts them) and a helper next to its',
     '  table\'s; only the service writes (the engine emits). The files stay the source of truth: a cache',
     '  must rebuild from them. What lives in files vs the index, and why: [storage.md](storage.md).',
@@ -355,7 +357,7 @@ function engineIndex(root = ROOT) {
     '',
     '<!-- Generated by `npm run docs` from docs/agents/engine/*.md (each file\'s first heading and summary line): edit or add a topic file, not this index. -->',
     '',
-    'Read the topic you need before changing `src/engine/workflow.js` or a workflow YAML. The README',
+    'Read the topic you need before changing `packages/engine/engine/workflow.js` or a workflow YAML. The README',
     'documents the same features for users; these topics are the implementer\'s summary, one file each.',
     'Which field is valid where, its type and the loader\'s message: [the field reference](engine/field-reference.md)',
     '(generated from the loader\'s rule table, #352; gitignored like the code map).',
@@ -365,7 +367,7 @@ function engineIndex(root = ROOT) {
   ].join('\n');
 }
 
-const RENDERER = path.join('src', 'renderer');
+const RENDERER = path.join('apps', 'desktop', 'renderer');
 const INDEX_HTML = path.join(RENDERER, 'index.html');
 // The shared package's folder (path from root, with /): the workspace named @multiagent/shared
 // (scripts/source-tree.js), so index.html's <script> paths follow the package wherever it lives.
@@ -377,14 +379,14 @@ function sharedDir(root) {
 }
 const RENDERER_MAIN = 'app.js';
 
-// The `load:` line of a file's header: { early, after: [paths relative to src/renderer/] }.
+// The `load:` line of a file's header: { early, after: [paths relative to apps/desktop/renderer/] }.
 function loadRule(text, file) {
   const m = /^\s*load:\s*([^(\n]*?)\s*(?:\(.*\))?\s*$/m.exec(headerOf(text));
   if (!m) return { early: false, after: [] };
   const [kind, ...files] = m[1].split(/\s+/);
   if (kind === 'early' && !files.length) return { early: true, after: [] };
   if (kind === 'after' && files.length) return { early: false, after: files };
-  throw new Error(`src/renderer/${file}: unknown load rule "load: ${m[1]}" (use \`load: early\` or \`load: after <file> …\`).`);
+  throw new Error(`apps/desktop/renderer/${file}: unknown load rule "load: ${m[1]}" (use \`load: early\` or \`load: after <file> …\`).`);
 }
 
 // The renderer's own files with extension `ext` ('.js' or '.css'), in load order (see the header).
@@ -400,7 +402,7 @@ function rendererAssets(root, ext) {
   const all = [...filesIn('.'), ...views];
   const rules = new Map(all.map((f) => [f, loadRule(read(root, path.join(RENDERER, f)), f)]));
   for (const [f, rule] of rules) {
-    for (const dep of rule.after) if (!rules.has(dep)) throw new Error(`src/renderer/${f}: "load: after ${dep}" names no file of src/renderer/.`);
+    for (const dep of rule.after) if (!rules.has(dep)) throw new Error(`apps/desktop/renderer/${f}: "load: after ${dep}" names no file of apps/desktop/renderer/.`);
   }
   const groups = [
     all.filter((f) => rules.get(f).early),
@@ -414,7 +416,7 @@ function rendererAssets(root, ext) {
     const left = [...group];
     while (left.length) {
       const i = left.findIndex((f) => rules.get(f).after.every((dep) => placed.includes(dep)));
-      if (i < 0) throw new Error(`src/renderer: the load: after rules of ${left.join(', ')} name a later file or form a cycle.`);
+      if (i < 0) throw new Error(`apps/desktop/renderer: the load: after rules of ${left.join(', ')} name a later file or form a cycle.`);
       placed.push(...left.splice(i, 1));
     }
   }
@@ -444,7 +446,7 @@ const ASSET_SECTIONS = {
 // index.html with its generated stylesheet and script lists replaced (the markers stay).
 function renderIndexHtml(text, root = ROOT) {
   const sections = Object.fromEntries(Object.entries(ASSET_SECTIONS).map(([name, build]) => [name, () => build(root)]));
-  return renderSections(text, sections, 'src/renderer/index.html');
+  return renderSections(text, sections, 'apps/desktop/renderer/index.html');
 }
 
 // The channel reference (#338): the request/reply channels of this app's manifest, by area file, each
@@ -452,17 +454,17 @@ function renderIndexHtml(text, root = ROOT) {
 // result, as JSON Schema. The channel files are loaded with a stand-in ctx: an entry only reads ctx
 // when it is called, and without a workspace (`ws` null) their minute timers do nothing.
 function channelReference() {
-  const { CHANNELS_DIR } = require('../src/service/manifest');
+  const { CHANNELS_DIR } = require('@multiagent/engine/service/manifest');
   const stub = new Proxy(function stub() {}, { get: () => stub, apply: () => undefined });
   const ctx = new Proxy({}, { get: (target, key) => (key in target ? target[key] : key === 'ws' ? null : stub) });
   const json = (s) => (s === undefined ? '(none)' : `\`${JSON.stringify(s)}\``);
   const lines = [
     '# Channel reference',
     '',
-    '<!-- Generated by `npm run docs` from the manifest entries\' `schema` (src/service/channels/): edit the entry, not this file. -->',
+    '<!-- Generated by `npm run docs` from the manifest entries\' `schema` (packages/engine/service/channels/): edit the entry, not this file. -->',
     '',
     'Every request/reply channel the service answers (IPC `ipcRenderer.invoke`, `POST /api/<channel>`),',
-    'with its arguments and result as JSON Schema (#338; shared definitions: `src/service/schemas.js`).',
+    'with its arguments and result as JSON Schema (#338; shared definitions: `packages/engine/service/schemas.js`).',
     'A call whose arguments break the schema is refused with a 400 before the channel runs.',
     '',
   ];
@@ -498,7 +500,7 @@ function checkDocs(root = ROOT) {
   if (fs.existsSync(path.join(root, INDEX_HTML))) {
     const html = read(root, INDEX_HTML);
     try {
-      if (renderIndexHtml(html, root) !== html) problems.push('src/renderer/index.html\'s script and style lists are out of date: run `npm run docs` and commit it.');
+      if (renderIndexHtml(html, root) !== html) problems.push('apps/desktop/renderer/index.html\'s script and style lists are out of date: run `npm run docs` and commit it.');
     } catch (err) { problems.push(err.message); }
   }
   for (const f of missingHeaders(root)) problems.push(`${f} has no header comment (the code map is built from it).`);

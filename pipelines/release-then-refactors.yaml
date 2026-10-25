@@ -1,4 +1,4 @@
-# Saved pipeline (#135, #378, src/domains/workflow/pipelines.js): a release, then the refactor proposals of what it
+# Saved pipeline (#135, #378, packages/engine/domains/workflow/pipelines.js): a release, then the refactor proposals of what it
 # changed (since the tag before it), then the Product Owner places the filed refactor issues in the
 # roadmap. The release's gates and its Ship stay human: the next stage starts only after the release
 # run succeeded. The analysis is one real model call (the Architecture tab's estimate, about $0.50).

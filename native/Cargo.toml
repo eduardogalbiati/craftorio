@@ -1,5 +1,5 @@
 # The cargo workspace of the app's native sidecars (#341): small binaries that run outside the app's
-# process, shipped in resources/bin/ by scripts/package.js. One crate per binary.
+# process, shipped in resources/bin/ by apps/desktop/scripts/package.js. One crate per binary.
 #   multiagent-ctl: the control channel's client (#342, the Rust twin of scripts/ctl.js)
 #   multiagent-mcp: the supervisor's and the Oracle's stdio MCP server (the Rust twin of src/supervisor-mcp.js)
 #   multiagent-tail: the external live terminal's follower (#342, the Rust twin of src/session-tail.js)

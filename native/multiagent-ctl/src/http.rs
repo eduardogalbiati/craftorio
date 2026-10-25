@@ -1,4 +1,4 @@
-// The control endpoint (src/control/index.js): one request per connection with the bearer token. A
+// The control endpoint (packages/engine/control/index.js): one request per connection with the bearer token. A
 // minimal HTTP/1.1 client over std's TcpStream (plain http on 127.0.0.1 only), like multiagent-mcp's
 // bridge.rs, so the binary needs no HTTP library.
 

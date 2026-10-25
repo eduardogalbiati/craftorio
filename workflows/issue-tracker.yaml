@@ -33,12 +33,12 @@
 #
 # "Create and queue" (`create_assign`): the choice's `then` (#134) chains the run to a queue: when it
 # ends with success, the app syncs the project's Backlog and queues the created issues (the `issues`
-# output) for `assign_workflow` (src/service/areas/chain.js, chain-model queueBatches), as one run
+# output) for `assign_workflow` (packages/engine/service/areas/chain.js, chain-model queueBatches), as one run
 # when there are several and the analysis said `group`. Simulated runs
 # queue nothing. The Backlog's New issue button starts this workflow for the selected project.
 # Epics (#138): the analyzer names the existing epic the issue belongs to (`epic`). When the match is
 # `clear` and the project's "Auto-place new issues" option (project.autoEpic) is on, the app places
-# the created issues in it when the run ends (src/domains/backlog/epics.js filedToEpic, the service's
+# the created issues in it when the run ends (packages/engine/domains/backlog/epics.js filedToEpic, the service's
 # placeFiledInEpic). It never creates an epic: new epics are the Product Owner's proposals.
 # =============================================================================
 

@@ -84,10 +84,10 @@ Codex drops the user's MCP servers,
   **↗** button next to each opens the same thing in an external console window instead (Windows).
 - **Live terminal** follows a session as it runs: prompts, thinking, text, tool calls, results and
   usage. For the **orchestrator** it follows the whole run: steps, transitions, sessions,
-  approvals, actions and logs. It is read by the app itself (`src/domains/session/session-tail.js`), no child process.
+  approvals, actions and logs. It is read by the app itself (`packages/engine/domains/session/session-tail.js`), no child process.
 - **Open in CLI** runs the provider's interactive CLI resuming the same conversation in the
   session's folder (`claude --resume <id>`, `codex resume <id>`, `grok --resume <id>`) in a real
-  pseudoterminal (node-pty: ConPTY on Windows, forkpty on macOS/Linux; `src/domains/machine/terminals.js`). Only
+  pseudoterminal (node-pty: ConPTY on Windows, forkpty on macOS/Linux; `packages/engine/domains/machine/terminals.js`). Only
   between turns; whatever you send there becomes part of the agent's conversation for its next turn.
 - Keys: **Ctrl+C** copies when text is selected, otherwise interrupts; **Ctrl+V** / Shift+Insert
   paste; Ctrl+Shift+C always copies; right-click copies the selection or pastes. On macOS, Cmd

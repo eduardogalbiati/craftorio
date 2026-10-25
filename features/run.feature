@@ -170,7 +170,7 @@ Feature: Runs and gates
   # ---- #304: the affected suite of AI Development (local hero) --------------------------------------
   # The suite step runs with scope affected: the affected test files first, then (when they pass) the
   # whole suite once. The run "-sui00304" is seeded finished: its suite ran test/roadmap.test.js
-  # ("imports src/domains/roadmap/roadmap.js", log logs/suite-1.log), then the whole suite (logs/suite-1-full.log).
+  # ("imports packages/engine/domains/roadmap/roadmap.js", log logs/suite-1.log), then the whole suite (logs/suite-1-full.log).
   # "The run report" is read here as Analytics › Run (its Suite rounds table).
 
   @issue-304
@@ -181,7 +181,7 @@ Feature: Runs and gates
     And I search the runs for "sui00304"
     And I view the run "sui00304" from the list
     Then the "Suite" step card shows that the affected tests ran
-    And the "Suite" step card explains the selection with "imports src/domains/roadmap/roadmap.js"
+    And the "Suite" step card explains the selection with "imports packages/engine/domains/roadmap/roadmap.js"
     And the "Suite" step card links the log of the whole suite's run
 
   @issue-304
@@ -192,7 +192,7 @@ Feature: Runs and gates
     And I search the runs for "sui00304"
     And I open the run "sui00304" in Analytics from the list
     Then the run report's suite round shows that the affected tests ran
-    And the run report's suite round explains the selection with "imports src/domains/roadmap/roadmap.js"
+    And the run report's suite round explains the selection with "imports packages/engine/domains/roadmap/roadmap.js"
 
   # ---- #320: how each session's next turn starts (Claude's cache lives 1 hour) ---------------------
   # The runs "-wrm00320" and "-cld00320" are seeded stopped at the "Developer check" gate, their times

@@ -17,7 +17,7 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
   `workflow.started` and `summary.json`. A gate choice with `then:` (issue-tracker's `create_assign`:
   `{ action: queue, workflow: "{{ inputs.assign_workflow }}" }`) sets it when picked (`thenFromChoice`);
   the owner edits it with `setThen` (Run screen). Each change is a `run.then` event.
-- The service acts on it (`src/service/areas/chain.js`), never the engine: on `workflow.finished`
+- The service acts on it (`packages/engine/service/areas/chain.js`), never the engine: on `workflow.finished`
   with `success` (and, when the workflow declares `merged_commit`, a non-empty one; simulated runs are
   exempt) it starts the next run (`nextInputs`: the then's values, the mapped outputs, the previous
   run's path/branch/language/platform inputs; the produced issues linked), queues the produced issues

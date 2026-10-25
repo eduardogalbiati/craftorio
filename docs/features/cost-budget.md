@@ -5,7 +5,7 @@ order: 152
 <!-- section:engine -->
 ### Roadmap cost estimates and the spending budget
 
-**Estimates before running** (#206, `src/domains/usage/cost-estimate.js`). Each roadmap item shows "≈ $X" and each
+**Estimates before running** (#206, `packages/engine/domains/usage/cost-estimate.js`). Each roadmap item shows "≈ $X" and each
 stage "≈ $Y" (the sum of its items). The tooltip says how it was computed and from how many runs.
 An item's estimate comes from the last 30 successful real runs of its workflow in the project. Each
 past run's cost is split by step (its sessions' `step_id`) and divided by its complexity (the

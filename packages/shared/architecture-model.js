@@ -4,7 +4,7 @@
 // follows renames backwards (the creating commit is not churn, .git-blame-ignore-revs commits are
 // skipped); placeQuadrants splits rows at the medians of log1p(complexity) and log1p(commits) and
 // scores them by sqrt(u² + v²), u and v each axis's log1p divided by its maximum. buildModel takes
-// the sources the service reads at the default branch's commit (src/domains/project/architecture-facts.js) and
+// the sources the service reads at the default branch's commit (packages/engine/domains/project/architecture-facts.js) and
 // gives lines, churn, hotspots (lines × commits), co-change pairs, languages, exclusions (per
 // group), mass changes (> 25% of the files, kept unless includeMass is false), complexity per file
 // (total, worst function and function count, only from a real parser or tool; the code languages
@@ -29,7 +29,7 @@
   };
 
   // Display languages by extension (line counts, any file type: Markdown, CSS, YAML...); the
-  // languages a run's skills are picked for are src/engine/language-skills.js's, by skill suffix
+  // languages a run's skills are picked for are packages/engine/engine/language-skills.js's, by skill suffix
   const LANGUAGES = {
     '.c': 'C', '.h': 'C', '.cc': 'C++', '.cpp': 'C++', '.hpp': 'C++', '.cs': 'C#', '.css': 'CSS', '.go': 'Go',
     '.html': 'HTML', '.java': 'Java', '.js': 'JavaScript', '.cjs': 'JavaScript', '.mjs': 'JavaScript', '.jsx': 'JavaScript',

@@ -1,7 +1,7 @@
 // Electron main process of the Playwright E2E suite (#222): features/support/app.js launches
 // `electron features/support/electron-main.js` with Playwright's _electron, on a scratch workspace
 // it has already seeded. This file only sets what has to happen inside Electron, then loads the
-// real app (src/host/main.js):
+// real app (apps/desktop/host/main.js):
 // - the theme Electron reports (MULTIAGENT_E2E_THEME: light | dark), for the visual baselines;
 // - a fixed window content size (MULTIAGENT_E2E_SIZE, default 1400x900);
 // - the channels that would call a model (Product Owner, Oracle, supervisor chat, analysis) answer
@@ -11,7 +11,7 @@
 // - the main process's clock starts at MULTIAGENT_E2E_NOW (ms) when set: the visual scenarios
 //   render at a fixed instant (#362, features/support/fixed-clock.js);
 // - the locale is en-US, so the interface is English until a scenario chooses another (#329);
-// - the service's base-health area (src/service/areas/base-health.js) is kept in
+// - the service's base-health area (packages/engine/service/areas/base-health.js) is kept in
 //   global.multiagentE2E.baseHealth when the service loads it, so a step can start the base check a
 //   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527).
 
@@ -49,7 +49,7 @@ simulateChannels(ipcMain);
 
 // the base-health area as the service creates it (the service requires the area files by path: the
 // cached module's export is the factory it calls)
-const baseHealthArea = require.resolve(path.join(__dirname, '..', '..', 'src', 'service', 'areas', 'base-health'));
+const baseHealthArea = require.resolve(path.join(__dirname, '..', '..', 'packages', 'engine', 'service', 'areas', 'base-health'));
 const makeBaseHealth = require(baseHealthArea);
 require.cache[baseHealthArea].exports = (ctx) => {
   const area = makeBaseHealth(ctx);
@@ -57,4 +57,4 @@ require.cache[baseHealthArea].exports = (ctx) => {
   return area;
 };
 
-require(path.join(__dirname, '..', '..', 'src', 'host', 'main'));
+require(path.join(__dirname, '..', '..', 'apps', 'desktop', 'host', 'main'));

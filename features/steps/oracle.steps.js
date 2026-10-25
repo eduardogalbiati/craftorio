@@ -77,7 +77,7 @@ Then('the Oracle\'s title is readable, not covered by its header buttons', async
 
 // ---- #244 ------------------------------------------------------------------------------------------
 
-// a wake-up waits for its batch window (src/domains/oracle/oracle-wake.js BATCH_MS, 30 s) before it is posted
+// a wake-up waits for its batch window (packages/engine/domains/oracle/oracle-wake.js BATCH_MS, 30 s) before it is posted
 const WAKE_TIMEOUT = 90000;
 
 When('I untick the Oracle wake-up {string}', async ({ e2e }, label) => {
@@ -110,7 +110,7 @@ Then('the Oracle did not answer the run\'s wake-up with a model turn', async ({ 
   await expect(oraclePanel(e2e.window)).not.toContainText('Simulated Oracle');
 });
 
-// <workspace>/oracle/usage.jsonl: one line per turn, as src/domains/oracle/oracle.js recordUsage writes them, with the
+// <workspace>/oracle/usage.jsonl: one line per turn, as packages/engine/domains/oracle/oracle.js recordUsage writes them, with the
 // cost Claude reports for a resumed session (cumulative over the session)
 Given('the Oracle\'s usage log holds one session today reporting the cumulative costs {string}', async ({ e2e }, list) => {
   const costs = list.split(',').map((c) => Number(c.trim()));

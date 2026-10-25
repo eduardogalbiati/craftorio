@@ -15,7 +15,7 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const LITERAL = /['"]software-development\.yaml['"]/;
 const ALLOWED = new Set([
   path.join(__dirname, '..', 'default-workflow.js'), // the constant itself (REMOTE)
-  path.join(ROOT, 'src', 'domains', 'night', 'night-watch-demo.js'), // demo text: restoring one named file, not "the default"
+  path.join(ROOT, 'packages', 'engine', 'domains', 'night', 'night-watch-demo.js'), // demo text: restoring one named file, not "the default"
 ]);
 
 const jsFiles = (root) => sourceFiles(root).map((f) => path.join(root, ...f.split('/')));

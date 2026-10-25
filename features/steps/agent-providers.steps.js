@@ -202,7 +202,7 @@ Then('a notification says that {string} fell back from {string} to {string} beca
 // ---- a finished run that failed on the provider's usage limit (seeded) --------------------------------
 
 // A finished simulated ai-development-local-hero run of the demo project, days back, written as the
-// engine writes it today (src/engine/workflow.js): the developer's session opened on the given
+// engine writes it today (packages/engine/engine/workflow.js): the developer's session opened on the given
 // provider · model, its turn ended with the provider's message, no fallback was left (no
 // agent.fallback event), so the step threw and workflow.finished carries status failed and the
 // message. The run list reads the runs folder when the screen opens, so no reload is needed.

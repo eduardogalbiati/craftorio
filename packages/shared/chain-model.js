@@ -1,5 +1,5 @@
 // Workflow chaining (#134): what happens with a run's result when it finishes, its `then`. Pure (no
-// DOM, no files): the service (src/service/areas/chain.js) acts with it, the Start drawer, the
+// DOM, no files): the service (packages/engine/service/areas/chain.js) acts with it, the Start drawer, the
 // Backlog's Assign dialog and the roadmap item editor (chain-picker.js) build it, the run lists
 // draw its badges, and it loads in node for tests.
 //
@@ -9,7 +9,7 @@
 //   { action: 'queue', workflow: '<file>', inputs } the produced issues are queued (the Backlog's Assign)
 // A source is the name of one of the previous run's declared `outputs:`, or RUN_SOURCE (the previous
 // run itself, for a `type: run` input). Nothing (`action: 'none'`, or no then) is null.
-// A saved pipeline (#135, src/domains/workflow/pipelines.js) is the same chain, longer: a `workflow` then carries the
+// A saved pipeline (#135, packages/engine/domains/workflow/pipelines.js) is the same chain, longer: a `workflow` then carries the
 // rest in its own `then`, and each then of a pipeline its `pipeline: { id, file, name, stage, stages }`
 // (`stage`: the index of the stage it starts; `id`: the pipeline run's, its first run's id). The runs
 // it starts get it in `from.pipeline`.

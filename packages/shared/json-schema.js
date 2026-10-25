@@ -1,11 +1,11 @@
-// The one JSON Schema validator (#338): step outputs (src/engine/run/outputs.js), the channels'
-// arguments and results (src/service/contract.js) and the city plan (packages/shared/city-model.js, #371).
+// The one JSON Schema validator (#338): step outputs (packages/engine/engine/run/outputs.js), the channels'
+// arguments and results (packages/engine/service/contract.js) and the city plan (packages/shared/city-model.js, #371).
 // A small subset, the keywords the app uses: type (one or a list; 'null' included), enum, required,
 // properties, additionalProperties (false or a schema), items, minItems (#387), minLength/maxLength, pattern,
 // minimum/maximum, oneOf. A `title` names the value in a pattern's refusal ("runId: not a valid run
 // id"); other keywords (description, ...) are ignored. validateSchema(value, schema, path) returns
 // the errors as '<path>: <rule>' strings, empty when the value matches; an absent (undefined)
-// optional property is not checked. In packages/shared/ so the pure cores can use it; src/domains/workspace/json-schema.js
+// optional property is not checked. In packages/shared/ so the pure cores can use it; packages/engine/domains/workspace/json-schema.js
 // re-exports it for the root and the engine. Browser: window.JsonSchema; Node: module.exports.
 
 (function (root) {

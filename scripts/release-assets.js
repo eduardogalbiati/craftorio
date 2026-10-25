@@ -1,4 +1,4 @@
-// Release assets of a packaged app (scripts/package.js output), named with the OS and the architecture
+// Release assets of a packaged app (apps/desktop/scripts/package.js output), named with the OS and the architecture
 // and written to the current folder. The release jobs (deploy.yml, preview.yml) run it on each OS:
 //   node scripts/release-assets.js [--platform win32|darwin|linux] [--arch x64|arm64] [dist-folder]
 // - Windows: MultiagentOrchestrator-win32-<arch>.zip (the folder's content, Compress-Archive);
@@ -15,7 +15,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { parseArgs } = require('./package');
+const { parseArgs } = require('@multiagent/desktop/scripts/package');
 
 const root = path.join(__dirname, '..');
 const NAME = 'MultiagentOrchestrator';
@@ -57,8 +57,8 @@ function appImage(build, file, arch) {
   fs.cpSync(build, path.join(appDir, 'app'), { recursive: true, verbatimSymlinks: true });
   fs.writeFileSync(path.join(appDir, 'AppRun'), APP_RUN, { mode: 0o755 });
   fs.writeFileSync(path.join(appDir, 'multiagent-orchestrator.desktop'), DESKTOP);
-  fs.copyFileSync(path.join(root, 'assets', 'icon.png'), path.join(appDir, 'multiagent-orchestrator.png'));
-  fs.copyFileSync(path.join(root, 'assets', 'icon.png'), path.join(appDir, '.DirIcon'));
+  fs.copyFileSync(path.join(root, 'apps', 'desktop', 'assets', 'icon.png'), path.join(appDir, 'multiagent-orchestrator.png'));
+  fs.copyFileSync(path.join(root, 'apps', 'desktop', 'assets', 'icon.png'), path.join(appDir, '.DirIcon'));
   run(process.env.APPIMAGETOOL || 'appimagetool', [appDir, file], { env: { ...process.env, ARCH: APPIMAGE_ARCH[arch] } });
 }
 

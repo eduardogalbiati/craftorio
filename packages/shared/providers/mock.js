@@ -1,4 +1,4 @@
-// The simulated provider (#348): no CLI, the engine's runMock (src/engine/providers.js) answers each
+// The simulated provider (#348): no CLI, the engine's runMock (packages/engine/engine/providers.js) answers each
 // turn. Listed by the registry (index.js) so `mock` resolves like the CLIs.
 // Browser: window.ProviderMock; Node: module.exports.
 (function (root) {

@@ -10,21 +10,21 @@
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
-const { WorkflowRun } = require('../src/engine/workflow');
-const { Recorder } = require('../src/engine/recorder');
+const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
+const { Recorder } = require('@multiagent/engine/engine/recorder');
 const {
   readSettings,
   resolveWorkspace,
   setupWorkspace,
-} = require('../src/domains/workspace/workspace');
-const usage = require('../src/domains/usage/usage');
-const { resolveCommand } = require('../src/engine/providers');
+} = require('@multiagent/engine/domains/workspace/workspace');
+const usage = require('@multiagent/engine/domains/usage/usage');
+const { resolveCommand } = require('@multiagent/engine/engine/providers');
 const {
   BUNDLED_WORKFLOWS_DIR,
   resolveWorkflow,
   seedWorkflows,
-} = require('../src/domains/workflow/workflows');
-const { seedSkills } = require('../src/domains/agents/skills');
+} = require('@multiagent/engine/domains/workflow/workflows');
+const { seedSkills } = require('@multiagent/engine/domains/agents/skills');
 
 const root = path.join(__dirname, '..');
 
@@ -59,7 +59,7 @@ const wfFile = resolveWorkflow(args.file, [ws.workflows, BUNDLED_WORKFLOWS_DIR])
 if (wfFile.fallback) console.warn(`workflow ${args.file} is not in ${ws.workflows}; using the bundled copy ${wfFile.file}`);
 const settings = readSettings(ws);
 const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
-const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('../src/domains/local/local-usage').readLocalUsage() : null });
+const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('@multiagent/engine/domains/local/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
   file: wfFile.file,
   inputs: args.inputs,

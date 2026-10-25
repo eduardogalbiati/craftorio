@@ -1,5 +1,5 @@
 // Findings button (#361), the renderer's model: where the button shows, its shortcut, and what a
-// numbered pin resolves to (the element under it). The overlay is src/renderer/findings.js.
+// numbered pin resolves to (the element under it). The overlay is apps/desktop/renderer/findings.js.
 // - SHORTCUT, isShortcut(event): Ctrl+Shift+F opens the findings;
 // - buttonVisible({ isPackaged, settings, screenshot }): shown from source (npm start) or with
 //   Settings › General › "Findings button" on; never in a scripts/screenshot.js capture unless the
@@ -9,7 +9,7 @@
 //   the nearest winning, and the rounded box); a pin on empty space says so ({ empty: true });
 // - remember(list, entry, cap): appends to a ring buffer of the last `cap` entries (UI actions,
 //   service calls).
-// Browser: window.FindingsModel; Node: module.exports (src/service/areas/findings.js, the tests).
+// Browser: window.FindingsModel; Node: module.exports (packages/engine/service/areas/findings.js, the tests).
 (function (root) {
   const SHORTCUT = 'Ctrl+Shift+F';
   const ID_KEYS = ['run', 'step', 'stage', 'item', 'issue', 'session'];

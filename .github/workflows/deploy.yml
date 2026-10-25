@@ -73,7 +73,7 @@ jobs:
           sudo apt-get install -y xvfb
           curl -fsSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
           chmod +x "$RUNNER_TEMP/appimagetool"
-      # scripts/package.js builds the native sidecars (native/, #341) for this leg's target into resources/bin/
+      # apps/desktop/scripts/package.js builds the native sidecars (native/, #341) for this leg's target into resources/bin/
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -140,7 +140,7 @@ jobs:
           ls -l assets
           VERSION=$(node -p "require('./package.json').version")
           # N: the candidates (one rc tag per push) since the last stable tag plus this one, the app's
-          # rule (src/domains/releases/releases.js recordCandidate), whatever the number of commits the push carries
+          # rule (packages/engine/domains/releases/releases.js recordCandidate), whatever the number of commits the push carries
           STABLE=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-rc.*' HEAD 2>/dev/null || true)
           if [ -n "$STABLE" ]; then PRIOR=$(git tag --list 'v*-rc.*' --merged HEAD --no-merged "$STABLE" | wc -l); else PRIOR=$(git tag --list 'v*-rc.*' --merged HEAD | wc -l); fi
           N=$((PRIOR + 1))

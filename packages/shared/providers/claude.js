@@ -240,7 +240,7 @@
     configDirEnv: 'CLAUDE_CONFIG_DIR',
     costReported: true,
     installNote: 'then run `claude` once to log in',
-    // its conversations: <config>/projects/<project>/<id>.jsonl (src/domains/cli/cli-sessions.js, src/domains/local/local-usage.js)
+    // its conversations: <config>/projects/<project>/<id>.jsonl (packages/engine/domains/cli/cli-sessions.js, packages/engine/domains/local/local-usage.js)
     sessionsDir: 'projects',
     trust: { format: 'claude-json' },
     // the Sessions screen's interactive CLI

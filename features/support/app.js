@@ -1,13 +1,13 @@
 // The app under test for the Playwright E2E suite (#222). launchApp() seeds a fresh scratch
 // workspace with the demo data of scripts/screenshot.js (the project `demo-app`, its backlog, a
 // roadmap with Tonight's runs, a local merge, the dependency cache) and the three agents' usage
-// (src/domains/analytics/analytics-demo.js, #280), and launches the real Electron
+// (packages/engine/domains/analytics/analytics-demo.js, #280), and launches the real Electron
 // app on it with Playwright's _electron (features/support/electron-main.js), in simulation:
 // MULTIAGENT_SIMULATION_ONLY=1 (the engine refuses real runs, real providers and CLI terminals),
 // sign-in off, HOME/USERPROFILE/APPDATA inside the scratch folder (no CLI session or account of this
 // machine shows). Electron is never started as plain Node: ELECTRON_RUN_AS_NODE is removed.
 // A launch with slot: true (the visual lane, #365) takes the machine-wide screenshot slot (#199,
-// src/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
+// packages/engine/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
 // so a release run waits for other runs' captures) and frees it on close; the behaviour lane's
 // launches (slot: false) never wait for it. close() removes the scratch folder.
 // The app runs in English whatever the computer's language (#444): the demo workspace chooses
@@ -19,11 +19,11 @@ const os = require('os');
 const path = require('path');
 const { _electron: electron } = require('@playwright/test');
 const demo = require('../../scripts/screenshot');
-const machineSlot = require('../../src/engine/machine-slot');
+const machineSlot = require('@multiagent/engine/engine/machine-slot');
 const { shiftClock } = require('./fixed-clock');
 
 const root = path.join(__dirname, '..', '..');
-const src = (m) => require(path.join(root, 'src', m));
+const src = (m) => require(path.join(root, 'packages', 'engine', m));
 
 // The demo workspace: what every scenario starts from
 async function seedWorkspace(wsDir) {

@@ -38,7 +38,7 @@ Given('the app is open in a {int}x{int} window in the {word} theme', async ({ e2
   await e2e.open({ size: `${w}x${h}`, theme, now: VISUAL_NOW });
 });
 
-// Concurrent runs is off by default (src/domains/workspace/workspace.js): written into settings.json (as roadmap.steps.js
+// Concurrent runs is off by default (packages/engine/domains/workspace/workspace.js): written into settings.json (as roadmap.steps.js
 // does), then the page reloads so the renderer reads it; simulations hold no slot (countSimulations off)
 Given('concurrent runs are on', async ({ e2e }) => {
   const file = path.join(e2e.scratch, 'workspace', 'settings.json');

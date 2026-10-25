@@ -1,6 +1,6 @@
 // The layout of the project city (#373, the proof of concept's layout ported in #382): where each
 // zone, district, building and port of #371's city model (packages/shared/city-model.js buildCity → model)
-// stands on the ground, as plain numbers the 3D scene (src/renderer/city3d/) draws. Pure and
+// stands on the ground, as plain numbers the 3D scene (apps/desktop/renderer/city3d/) draws. Pure and
 // deterministic: no I/O, clock or randomness. Rects are { x, z, w, d } on the ground (x..x+w by
 // z..z+d); y is up; the camera's home view looks from the south-east (+x, +z).
 // The rules and their constants are poc/project-city.html's (phase 3, PR #379, the look the owner

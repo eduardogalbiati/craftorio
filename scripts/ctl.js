@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The control channel's client (#336, src/control/index.js): calls one channel of the running app and
+// The control channel's client (#336, packages/engine/control/index.js): calls one channel of the running app and
 // prints its result as JSON. Plain Node, no dependencies.
 //   node scripts/ctl.js <channel> [json-argument]
 //   node scripts/ctl.js roadmap:start '{"projectId":"my-app"}'

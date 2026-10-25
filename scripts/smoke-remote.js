@@ -1,16 +1,16 @@
 // Remote engine smoke check: the desktop app as a window onto an engine `npm run serve` runs
-// (Settings › Execution › Engine, src/host/engine-connection-window.js), end to end.
+// (Settings › Execution › Engine, apps/desktop/host/engine-connection-window.js), end to end.
 // Usage: npx electron scripts/smoke-remote.js <out-dir>
 //
 // Starts scripts/serve.js on 127.0.0.1 (a free port) with a scratch workspace, simulation only and
 // no account, writes a scratch user data folder whose engine connection points at it, then opens
-// the app (src/host/main): it must open no workspace of its own, show the engine's page (window.api over
+// the app (apps/desktop/host/main): it must open no workspace of its own, show the engine's page (window.api over
 // HTTP: a project created through it is the engine's), say "remote" in Settings › Execution ›
 // Engine, open the connection page from Change… (its Cancel closes it), and, once the engine stops,
 // replace its window with the connection page and the reason (its close button then reads Quit). Saves remote.png, connection.png and unreachable.png in
 // <out-dir>. Never calls a model: MULTIAGENT_SIMULATION_ONLY=1 (decideMode only uses an engine on
 // 127.0.0.1 under it) and the engine runs in simulation. Built like scripts/smoke.js: never a
-// hand-written script that launches src/host/main.
+// hand-written script that launches apps/desktop/host/main.
 
 const fs = require('fs');
 const os = require('os');
@@ -18,7 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { app, BrowserWindow } = require('electron');
-const { FILE } = require('../src/host/engine-connection');
+const { FILE } = require('@multiagent/desktop/host/engine-connection');
 
 process.env.MULTIAGENT_SIMULATION_ONLY = '1';
 const out = path.resolve(process.argv.slice(2).find((a) => !a.startsWith('-') && !a.endsWith('.js')) || 'smoke-remote');
@@ -28,7 +28,7 @@ const userData = path.join(scratch, 'user-data');
 for (const d of [appWorkspace, userData, path.join(scratch, 'engine-workspace'), path.join(scratch, 'home')]) fs.mkdirSync(d, { recursive: true });
 // the app's own workspace: remote mode must leave it empty (no lock, no index, no seeded workflows)
 process.env.MULTIAGENT_WORKSPACE = appWorkspace;
-// before the app is ready (its sessions live there); src/host/main is required once the engine listens
+// before the app is ready (its sessions live there); apps/desktop/host/main is required once the engine listens
 app.setPath('userData', userData);
 const token = crypto.randomBytes(24).toString('base64url');
 let engine = null;
@@ -51,7 +51,7 @@ function startEngine() {
     MULTIAGENT_USER_DATA: path.join(scratch, 'engine-user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
   };
   delete env.MULTIAGENT_WORKSPACE;
-  engine = spawn(process.execPath, [path.join(__dirname, 'serve.js'), '--port', '0', '--workspace', path.join(scratch, 'engine-workspace')], {
+  engine = spawn(process.execPath, [path.join(__dirname, '..', 'packages', 'engine', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(scratch, 'engine-workspace')], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -95,7 +95,7 @@ async function capture(win, name) {
 }
 
 async function checkRemoteWindow(origin) {
-  const remote = await waitForWindow((u) => u.startsWith(`${origin}/src/renderer/`), 'remote engine');
+  const remote = await waitForWindow((u) => u.startsWith(`${origin}/apps/desktop/renderer/`), 'remote engine');
   const js = (code) => remote.webContents.executeJavaScript(code);
   await waitFor(remote, 'window.api && document.querySelector("#view-settings")', 'the app page');
   const where = await js('({ platform: api.platform, engine: api.engineConnection, preload: typeof require })');
@@ -147,7 +147,7 @@ async function main() {
   fs.mkdirSync(out, { recursive: true });
   const origin = await startEngine();
   fs.writeFileSync(path.join(userData, FILE), JSON.stringify({ mode: 'remote', address: origin, token: { plain: token } }));
-  require('../src/host/main');
+  require('@multiagent/desktop/host/main');
   await app.whenReady();
   const remote = await checkRemoteWindow(origin);
   await checkConnectionPage(remote, origin);

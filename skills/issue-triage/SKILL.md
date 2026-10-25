@@ -15,7 +15,7 @@ reading.
 ## 1. Find the code involved
 
 - Search before describing (`grep`/`Grep`, `git grep`, the file index of the project): name the
-  files, functions and lines (`src/engine/gates.js:142, openGate()`) and today's behaviour, with
+  files, functions and lines (`packages/engine/engine/gates.js:142, openGate()`) and today's behaviour, with
   today's numbers when there are any ("~20 native checkboxes, only `.switch` styled").
 - When the project records runs (a `runs/` folder, logs), quote the run id, the error text, the
   time or the tokens of a real case. A small real timeline beats a paragraph.

@@ -65,7 +65,7 @@ const ARCH_COMMITS = [
 const finding = (kind, title, files, severity, evidence, refactor) => ({ kind, title, files, severity, evidence, refactor });
 const DUPLICATED = finding('duplicated-rule', 'Discount rule duplicated in the API and the export', [{ path: 'src/billing.js', lines: '1-3' }, { path: 'tools/export.py', lines: '1-2' }], 'medium', 'Both files apply 10% off above 100; they changed together in 4 of 4 commits.', 'Keep the rule in one module the export calls.');
 
-// The two saved reports (the steps' shape, src/domains/oracle/oracle-architecture.js saveReport) and six real runs since
+// The two saved reports (the steps' shape, packages/engine/domains/oracle/oracle-architecture.js saveReport) and six real runs since
 function demoArchitectureReports(ws, projectId, head) {
   const dir = path.join(ws.root, 'architecture', projectId);
   fs.mkdirSync(dir, { recursive: true });
@@ -126,13 +126,13 @@ function demoCityPlan(ws, projectId) {
 
 // #373: a bigger city: four folders of files of growing size, then a city plan with a landmark and a port
 const cityFile = (n) => `${Array.from({ length: n }, (_, i) => `function step${i}(x) {\n  return x > ${i} ? x - ${i} : x + ${i};\n}`).join('\n')}\nmodule.exports = {};\n`;
-const CITY_FOLDERS = { 'src/engine': 9, 'src/renderer/views': 12, 'docs/guides': 6, 'scripts/build': 4 };
+const CITY_FOLDERS = { 'packages/engine/engine': 9, 'apps/desktop/renderer/views': 12, 'docs/guides': 6, 'scripts/build': 4 };
 const CITY_COMMITS = [
   ...ARCH_COMMITS,
   ['2026-09-22', 'Grow the engine and the views', Object.fromEntries(Object.entries(CITY_FOLDERS).flatMap(([dir, n]) => Array.from({ length: n }, (_, i) => [
     `${dir}/${dir.startsWith('docs') ? `guide-${i}.md` : `part-${i}.js`}`, dir.startsWith('docs') ? `# Guide ${i}\n${'Text.\n'.repeat(4 + i * 3)}` : cityFile(2 + ((i * 7) % 11)),
   ])))],
-  ['2026-09-29', 'Tune the engine', { 'src/engine/part-0.js': cityFile(16), 'src/engine/part-3.js': cityFile(12), 'src/renderer/views/part-1.js': cityFile(14) }],
+  ['2026-09-29', 'Tune the engine', { 'packages/engine/engine/part-0.js': cityFile(16), 'packages/engine/engine/part-3.js': cityFile(12), 'apps/desktop/renderer/views/part-1.js': cityFile(14) }],
 ];
 const CITY_PLAN = {
   version: 1, project: 'demo-app', summary: 'Billing, its engine and views, with the export and the docs.',
@@ -144,8 +144,8 @@ const CITY_PLAN = {
   ],
   districts: [
     { id: 'billing', name: 'Billing', zone: 'core', include: ['src/billing.js', 'src/api.js'] },
-    { id: 'engine', name: 'Engine', zone: 'core', include: ['src/engine/**'] },
-    { id: 'views', name: 'Views', zone: 'ui', include: ['src/renderer/**'] },
+    { id: 'engine', name: 'Engine', zone: 'core', include: ['packages/engine/engine/**'] },
+    { id: 'views', name: 'Views', zone: 'ui', include: ['apps/desktop/renderer/**'] },
     { id: 'scripts', name: 'Scripts', zone: 'tooling', include: ['scripts/**', 'tools/**'] },
     { id: 'guides', name: 'Guides', zone: 'books', include: ['docs/**', 'README.md'] },
   ],
@@ -164,16 +164,16 @@ const demoCityAgents = (projectId) => ({
     {
       id: '20261013-100000-c1ty0001', workflow: 'software-development', colour: '#e4572e',
       agents: [
-        agentAt('s-dev-1', 'developer', 'implement', 'src/engine/part-3.js', 'change', 'claude', 'claude-opus-5-5'),
+        agentAt('s-dev-1', 'developer', 'implement', 'packages/engine/engine/part-3.js', 'change', 'claude', 'claude-opus-5-5'),
         agentAt('s-rev-1', 'reviewer', 'code_review', 'src/billing.js', 'read', 'codex', 'gpt-5.5'),
       ],
-      trail: ['src/billing.js', 'src/engine/part-0.js', 'src/engine/part-3.js'],
-      dirty: ['src/engine/part-3.js'],
+      trail: ['src/billing.js', 'packages/engine/engine/part-0.js', 'packages/engine/engine/part-3.js'],
+      dirty: ['packages/engine/engine/part-3.js'],
     },
     {
       id: '20261013-101500-c1ty0002', workflow: 'software-development', colour: '#4c9be8',
-      agents: [agentAt('s-dev-2', 'developer', 'implement', 'src/renderer/views/part-new.js', 'change', 'claude', 'claude-sonnet-5-5')],
-      trail: ['src/billing.js', 'src/renderer/views/part-1.js', 'src/renderer/views/part-new.js'],
+      agents: [agentAt('s-dev-2', 'developer', 'implement', 'apps/desktop/renderer/views/part-new.js', 'change', 'claude', 'claude-sonnet-5-5')],
+      trail: ['src/billing.js', 'apps/desktop/renderer/views/part-1.js', 'apps/desktop/renderer/views/part-new.js'],
       dirty: [],
     },
   ],
@@ -186,23 +186,23 @@ const demoCityAgents = (projectId) => ({
 // stage of two items that would both change src/billing.js (simulated data)
 const DEMO_IMPACT_ISSUE = {
   number: 412, title: 'Apply the loyalty discount to the invoice totals', runs: [],
-  body: 'The discount rule lives in `src/billing.js:42-58`; the totals come from src/engine/part-3.js.\n\n## Expected files\n\n- `src/billing.js`: the discount rule\n- `src/renderer/views/part-new.js` (new): the loyalty badge\n',
+  body: 'The discount rule lives in `src/billing.js:42-58`; the totals come from packages/engine/engine/part-3.js.\n\n## Expected files\n\n- `src/billing.js`: the discount rule\n- `apps/desktop/renderer/views/part-new.js` (new): the loyalty badge\n',
 };
-const DEMO_IMPACT_PO = [{ role: 'po', answer: { summary: 'One group.', groups: [{ issues: [412], workflow: 'software-development.yaml', reason: 'Billing rules.', files: ['src/billing.js', 'src/engine/part-0.js'] }], conflicts: [], enrich: [] } }];
+const DEMO_IMPACT_PO = [{ role: 'po', answer: { summary: 'One group.', groups: [{ issues: [412], workflow: 'software-development.yaml', reason: 'Billing rules.', files: ['src/billing.js', 'packages/engine/engine/part-0.js'] }], conflicts: [], enrich: [] } }];
 const DEMO_IMPACT_STAGE = {
   name: 'Billing fixes',
   items: [
-    { id: 'it-412', number: 412, title: 'Apply the loyalty discount', body: 'Change `src/billing.js` and `src/engine/part-0.js`.' },
+    { id: 'it-412', number: 412, title: 'Apply the loyalty discount', body: 'Change `src/billing.js` and `packages/engine/engine/part-0.js`.' },
     { id: 'it-413', number: 413, title: 'Round the export totals', body: 'Round in `src/billing.js`, document it in `docs/guides/guide-1.md`.' },
-    { id: 'it-414', number: 414, title: 'Faster invoice list', body: 'Paginate `src/renderer/views/part-1.js`.' },
+    { id: 'it-414', number: 414, title: 'Faster invoice list', body: 'Paginate `apps/desktop/renderer/views/part-1.js`.' },
   ],
 };
 
 // #376: release 1.1.2 after 1.1.1 (the city's head) on simulated data: a new view (#21), the engine
 // and billing changed by a few and many lines (#22), a guide removed and a script renamed (#23)
 const RELEASE_COMMITS = [
-  ['2026-10-06', 'Add the invoice view (#21)', { 'src/renderer/views/invoice.js': cityFile(9) }],
-  ['2026-10-07', 'Faster engine, partner prices (#22)', { 'src/engine/part-2.js': cityFile(14), 'src/engine/part-5.js': cityFile(6), 'src/billing.js': jsBody(220) }],
+  ['2026-10-06', 'Add the invoice view (#21)', { 'apps/desktop/renderer/views/invoice.js': cityFile(9) }],
+  ['2026-10-07', 'Faster engine, partner prices (#22)', { 'packages/engine/engine/part-2.js': cityFile(14), 'packages/engine/engine/part-5.js': cityFile(6), 'src/billing.js': jsBody(220) }],
 ];
 function demoReleaseCity(folder) {
   const git = (a, date) => execFileSync('git', ['-C', folder, '-c', 'user.name=Demo', '-c', 'user.email=demo@example.com', '-c', 'core.autocrlf=false', '-c', 'tag.gpgSign=false', ...a], { stdio: 'pipe', env: { ...process.env, ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) } });
@@ -283,7 +283,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'city-large') { // #382: this repository, with the POC's plan
     projects.updateProject(ws.projects, project.id, { folder: appDir });
     const plan = JSON.parse(fs.readFileSync(path.join(appDir, LARGE_PLAN), 'utf8'));
-    require('../../../src/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
+    require('@multiagent/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
     return;
   }
   const city = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage'].includes(args.mode);
@@ -293,7 +293,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
-  if (city) require('../../../src/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
+  if (city) require('@multiagent/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
   if (head && args.mode?.startsWith('seeds')) {
     const first = execFileSync('git', ['-C', project.folder, 'rev-list', '--max-parents=0', 'HEAD'], { encoding: 'utf8' }).trim().split('\n')[0];
     demoSeeds(ws, project, first);
@@ -304,8 +304,8 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
 // #357: the Refactor tab's proposals on the Architecture demo (the roadmap's #10 planned, #11 done),
 // the Product Owner's ranking and the cadence on with 6 of its runs counted ("next in 4 runs")
 function demoRefactor(ws, projectId) {
-  const runs = require('../../../src/domains/run/runs');
-  const cadence = require('../../../src/domains/refactor/refactor-cadence');
+  const runs = require('@multiagent/engine/domains/run/runs');
+  const cadence = require('@multiagent/engine/domains/refactor/refactor-cadence');
   const dir = path.join(ws.root, 'refactor', projectId);
   const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
   const arch = (id, f, extra) => ({ id, source: 'architecture', key: `demo:${id}`, reportId: 'demo-report-2', kind: f.kind, title: f.title, files: f.files, evidence: f.evidence, severity: f.severity, refactor: f.refactor, createdAt: at(20), status: 'proposed', ...extra });

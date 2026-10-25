@@ -1,9 +1,9 @@
-# The local merge of a composed development workflow (#487, src/domains/workflow/workflow-compose.js), adapted from
+# The local merge of a composed development workflow (#487, packages/engine/domains/workflow/workflow-compose.js), adapted from
 # software-development-local-hero: the change lands with `merge: local` (on the transition the
 # composition writes after verify_change or the owner's approval); a merge that fails goes to
 # resolve_merge (the developer rebases and resolves on the run's branch), and merge_blocked asks the
 # owner when that cannot go on. Nothing is pushed. A step `{ id, fragment: local-merge-pipeline }`
-# gets the body under its id; the step's own keys win (src/engine/run/load.js, expandFragments).
+# gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js, expandFragments).
 
 steps:
   resolve_merge:

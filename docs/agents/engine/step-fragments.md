@@ -5,7 +5,7 @@ Step bodies several workflows share, kept once in `fragments/<name>.yaml` and in
 - A fragment file is `steps: { <step id>: <body> }` (`fragments/test-pipeline.yaml`: test, suite,
   test_failed, build, build_failed, evidence, verify_change). A workflow step
   `{ id, fragment: <name>, ...keys }` becomes the body under its id, merged by `expandFragments`
-  (src/engine/run/load.js) before the checks: the step's own keys win over the body's and keep
+  (packages/engine/engine/run/load.js) before the checks: the step's own keys win over the body's and keep
   their place first in the step.
 - Put in the workflow what differs per workflow (`agent`, `type`, `display`, the suite's
   `command`/`scope`/`coverage`), and only there: a key in both places is a copy that can drift.
@@ -17,7 +17,7 @@ Step bodies several workflows share, kept once in `fragments/<name>.yaml` and in
 
 ## Composed workflows (#487)
 
-`src/domains/workflow/workflow-compose.js` builds a project's workflow set from its ways-of-working profile (the
+`packages/engine/domains/workflow/workflow-compose.js` builds a project's workflow set from its ways-of-working profile (the
 `ways-of-working` seed, [seeds.md](../seeds.md)) and the interview's answers, out of fragments only:
 `intake-pipeline` (write, review, file), `dev-pipeline` (develop, code_review, suite, verify_change,
 validate, verify_failed), then `local-merge-pipeline` (resolve_merge, merge_blocked: the
@@ -32,7 +32,7 @@ rigour always, the team, release and merge styles when the profile leaves them `
 named after a profile field (`PROFILE_FIELDS`: team, merge, release, ci, testCommand, checkCommand,
 languages) overrides the inferred value (`withOverrides`; the drawer's "Edit profile").
 `composeWorkflowSet` is pure (YAML texts and the `.multiagent/project.yaml` manifest);
-`workflows:compose` (`src/service/areas/workflow-interview.js`) writes them into the project's
+`workflows:compose` (`packages/engine/service/areas/workflow-interview.js`) writes them into the project's
 folder only with `write: true`, uncommitted, merging the manifest into the existing one
 (`mergeManifest`: composed entries replace those of the same name, other entries, `version` and
 `requires` are kept; a manifest with errors is refused). Every composed workflow loads with

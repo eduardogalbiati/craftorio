@@ -6,7 +6,7 @@
 // Never calls a real model: MULTIAGENT_SIMULATION_ONLY=1 makes the engine refuse real runs, the app
 // opens a fresh temporary workspace (never the user's) with Developer mode on, and the script fails
 // unless every session of the run was simulated. Write UI checks as scripts like this one, never as
-// a hand-written script that launches src/host/main directly.
+// a hand-written script that launches apps/desktop/host/main directly.
 //
 // --startup-budget (#389): the scratch workspace gets STARTUP_RUNS runs (indexed by an older
 // READ_VERSION, as after an update) and a CLI home of STARTUP_SESSIONS Claude Code transcripts. The
@@ -62,7 +62,7 @@ if (budget) {
     }
   });
 }
-require('../src/host/main');
+require('@multiagent/desktop/host/main');
 
 const out = process.argv.find((a) => a.endsWith('.png')) || path.join(__dirname, '..', 'runs', 'smoke.png');
 setTimeout(() => { console.error('smoke: timed out'); app.exit(1); }, budget ? 180000 : 90000);
@@ -100,8 +100,8 @@ function seedStartupWorkspace() {
   process.env.CLAUDE_CONFIG_DIR = home;
   process.env.CODEX_HOME = path.join(home, 'codex');
   const ws = { root: wsDir, runs: runsDir, backlog: path.join(wsDir, 'backlog'), index: path.join(wsDir, 'index.db') };
-  const { openStore } = require('../src/domains/workspace/store');
-  const runs = require('../src/domains/run/runs');
+  const { openStore } = require('@multiagent/engine/domains/workspace/store');
+  const runs = require('@multiagent/engine/domains/run/runs');
   const store = openStore(ws);
   runs.listRuns(runsDir);
   for (const [, row] of store.runEntries()) store.putRun(row.info, String(row.sig).replace(/\|[^|]*$/, '|an-older-reading'), null);

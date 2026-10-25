@@ -1,6 +1,6 @@
-# Saved pipeline (#135, src/domains/workflow/pipelines.js): the AI Arena writes the document with several models and
+# Saved pipeline (#135, packages/engine/domains/workflow/pipelines.js): the AI Arena writes the document with several models and
 # merges the best of them, then Writer & Reviewer polishes it against the goal. The Discovery board's
-# Shape column offers it on a card's document when the card enters the column (#259, src/domains/discovery/discovery.js
+# Shape column offers it on a card's document when the card enters the column (#259, packages/engine/domains/discovery/discovery.js
 # ON_ENTER: the card's title, document, acceptance criteria and text attachments are the task). Every
 # gate of both workflows waits for you, like any run's. The second stage polishes the Arena's
 # document free-form (a stage's fixed inputs cannot follow the card's type): the structure comes

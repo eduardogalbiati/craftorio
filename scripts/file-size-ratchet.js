@@ -22,13 +22,13 @@ const HOW_TO = 'docs/agents/testing.md ("File size ratchet")';
 
 // path (from the repository root, with /) -> its line count when listed; only lower it
 const EXCEPTIONS = {
-  'src/domains/discovery/discovery.js': 1164,
-  'src/domains/po/product-owner.js': 1732,
-  'src/renderer/views/arena/arena.js': 1048,
-  'src/renderer/views/backlog/backlog-po.js': 1102,
-  'src/renderer/views/backlog/backlog-roadmap.js': 2072,
-  'src/renderer/views/backlog/backlog.js': 1779,
-  'src/renderer/views/discovery/discovery.js': 1560,
+  'packages/engine/domains/discovery/discovery.js': 1164,
+  'packages/engine/domains/po/product-owner.js': 1732,
+  'apps/desktop/renderer/views/arena/arena.js': 1048,
+  'apps/desktop/renderer/views/backlog/backlog-po.js': 1102,
+  'apps/desktop/renderer/views/backlog/backlog-roadmap.js': 2072,
+  'apps/desktop/renderer/views/backlog/backlog.js': 1779,
+  'apps/desktop/renderer/views/discovery/discovery.js': 1560,
 };
 
 // Lines of a text as `wc -l` counts a file that ends with a newline, CRLF or LF alike.

@@ -1,6 +1,6 @@
 // Screenshot seed of Analytics (--view analytics, a tab of Home, #255): its tabs, 30 days of finished
 // runs with Claude, Codex and Grok sessions, and per tab: a git repository of three nights of merges
-// and a marker (performance, #159), from src/domains/analytics/analytics-demo.js one AI Development run in depth (run,
+// and a marker (performance, #159), from packages/engine/domains/analytics/analytics-demo.js one AI Development run in depth (run,
 // #228), 30 days of runs and nights (occupancy, #188) and the agents' turns (agents, #280).
 
 const fs = require('fs');
@@ -43,10 +43,10 @@ function demoPerformanceRuns(ws, folder, projectId) {
   const write = (file, text) => { fs.mkdirSync(path.dirname(path.join(folder, file)), { recursive: true }); fs.writeFileSync(path.join(folder, file), text); };
   const lines = (n, what) => Array.from({ length: n }, (_, i) => `${what} ${i + 1}`).join('\n') + '\n';
   git(['init', '-q', '-b', 'main']);
-  write('src/renderer/index.html', lines(320, '<div>line'));
+  write('apps/desktop/renderer/index.html', lines(320, '<div>line'));
   write('README.md', `# demo-app\n\n<!-- generated:skills -->\n${lines(40, '| skill')}<!-- /generated:skills -->\n`);
-  write('src/renderer/style.css', lines(900, '.rule'));
-  write('src/service/manifest.js', lines(120, '// channel'));
+  write('apps/desktop/renderer/style.css', lines(900, '.rule'));
+  write('packages/engine/service/manifest.js', lines(120, '// channel'));
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'Initial commit'], new Date(Date.now() - 20 * 864e5).toISOString());
   const initial = git(['rev-parse', 'HEAD']);
@@ -59,10 +59,10 @@ function demoPerformanceRuns(ws, folder, projectId) {
       const n = night * 4 + k;
       const start = new Date(day.getTime() + k * 25 * 6e4);
       const finish = new Date(start.getTime() + (95 + k * 20) * 6e4);
-      const shared = night < 2 ? ['src/renderer/index.html', 'README.md', ...(k % 2 ? ['src/renderer/style.css'] : [])] : (k === 0 ? ['src/renderer/style.css'] : []);
+      const shared = night < 2 ? ['apps/desktop/renderer/index.html', 'README.md', ...(k % 2 ? ['apps/desktop/renderer/style.css'] : [])] : (k === 0 ? ['apps/desktop/renderer/style.css'] : []);
       runs.push({
         n, start, finish, title: titles[n], pr: night === 1 && k === 3,
-        files: [...shared, `src/features/${titles[n].toLowerCase().replace(/[^a-z]+/g, '-')}.js`, ...(k === 1 ? ['src/service/manifest.js'] : [])],
+        files: [...shared, `src/features/${titles[n].toLowerCase().replace(/[^a-z]+/g, '-')}.js`, ...(k === 1 ? ['packages/engine/service/manifest.js'] : [])],
         conflict: night === 0 && k >= 2 ? 'resolve_merge' : night === 1 && k === 2 ? 'resolve_merge' : null,
         stage: `Stage ${night + 1}`,
       });
@@ -95,7 +95,7 @@ function demoPerformanceRuns(ws, folder, projectId) {
       ev(t + 1e3, 'worktree.ready', { dir: path.join(folder, '..', runId), repo: folder, base: 'main', ref: 'main', commit: r.base, reused: false }),
       ev(t + 2e3, 'step.started', { step_id: 'implement' }),
       ...(r.conflict ? [ev(r.finish - 30 * 6e4, 'log', { level: 'warn', message: `merge failed: ${conflictText} → resolve_merge` }), ev(r.finish - 29 * 6e4, 'step.started', { step_id: 'resolve_merge' })] : []),
-      ...(r.pr ? [ev(r.finish - 9e4, 'step.finished', { step_id: 'open_pr', output: { pr_number: 40 + r.n, pr_url: `https://github.com/demo/demo-app/pull/${40 + r.n}` } }), ev(r.finish - 6e4, 'action.executed', { command: `gh pr merge ${40 + r.n} --squash`, exit_code: 1, output: 'Pull request is not mergeable: the merge commit cannot be cleanly created (conflict in src/renderer/index.html).' }), ev(r.finish - 6e4 + 1, 'log', { level: 'error', message: 'gh pr merge failed: merge conflict in src/renderer/index.html' })] : []),
+      ...(r.pr ? [ev(r.finish - 9e4, 'step.finished', { step_id: 'open_pr', output: { pr_number: 40 + r.n, pr_url: `https://github.com/demo/demo-app/pull/${40 + r.n}` } }), ev(r.finish - 6e4, 'action.executed', { command: `gh pr merge ${40 + r.n} --squash`, exit_code: 1, output: 'Pull request is not mergeable: the merge commit cannot be cleanly created (conflict in apps/desktop/renderer/index.html).' }), ev(r.finish - 6e4 + 1, 'log', { level: 'error', message: 'gh pr merge failed: merge conflict in apps/desktop/renderer/index.html' })] : []),
       ev(r.finish, 'workflow.finished', { status: 'success' }),
     ]);
     const cost = +(r.conflict ? 4.2 + r.n * 0.1 : 2.1 + r.n * 0.15).toFixed(2);

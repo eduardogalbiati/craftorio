@@ -2,7 +2,7 @@
 // and labelled `archived`; the state chips put it under Archived, not Closed. An issue planned in
 // the roadmap (planned or running item) or with a run in progress cannot be archived. The retired
 // `deprioritized` label is only read, to offer archiving the issues that still carry it.
-// No DOM here: backlog.js draws the actions, src/domains/backlog/backlog.js applies the guard, a test feeds it issues.
+// No DOM here: backlog.js draws the actions, packages/engine/domains/backlog/backlog.js applies the guard, a test feeds it issues.
 // Browser: window.BacklogArchive; Node: module.exports.
 (function (root) {
   const ARCHIVED_LABEL = 'archived';

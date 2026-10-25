@@ -73,7 +73,7 @@ test('running test/screenshot-seeds-249.test.js never adds a file to scripts/scr
     const env = { ...process.env };
     delete env.NODE_TEST_CONTEXT;
     const status = await new Promise((resolve) => {
-      const child = spawn(process.execPath, ['--test', '--test-reporter=dot', path.join(__dirname, 'screenshot-seeds-249.test.js')], { cwd: ROOT, env, stdio: 'ignore', windowsHide: true });
+      const child = spawn(process.execPath, ['--test', '--test-reporter=dot', path.join(__dirname, '..', 'apps', 'desktop', 'test', 'screenshot-seeds-249.test.js')], { cwd: ROOT, env, stdio: 'ignore', windowsHide: true });
       const kill = setTimeout(() => child.kill(), 150000);
       child.on('exit', (code) => { clearTimeout(kill); resolve(code); });
     });

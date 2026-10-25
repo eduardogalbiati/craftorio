@@ -5,7 +5,7 @@
 // filter, and the cadence switch "Add a refactor to the roadmap every X runs" with its "next in N
 // runs" counter. Locators are roles and data-testid only (skills/ui-conventions).
 //
-// What the tab exposes (the renderer's contract for these steps, src/renderer/views/project/):
+// What the tab exposes (the renderer's contract for these steps, apps/desktop/renderer/views/project/):
 // - #project-panel-refactor holds the tab; data-testid="refactor-state-no-report" (a link or button
 //   naming the Architecture tab opens it), "refactor-state-empty", "refactor-prioritizing" (gone once
 //   the Product Owner answered), "refactor-state-error";

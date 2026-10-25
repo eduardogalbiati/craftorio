@@ -29,8 +29,8 @@ function demoConflictMap(ws, projectId) {
   const entry = (file, n, conflicts = 0, from = 0) => ({ file, runs: n, runIds: runIds.slice(from, from + n), lastRun: runIds[from], conflicts });
   const map = {
     source: 'runs', runs: runIds.length, runIds, builtAt: new Date().toISOString(),
-    files: [entry('src/renderer/app.js', 14, 3), entry('src/renderer/index.html', 13, 1), entry('src/service/index.js', 11), entry('README.md', 7, 0, 4), entry('src/engine/runner.js', 3, 0, 9)],
-    lines: [{ file: 'src/service/index.js', line: 12, text: "const { backlog, gates, notifications, projects, roadmap, runs, settings, usage, workflows } = require('./areas');", runs: 12, runIds: runIds.slice(0, 12) }],
+    files: [entry('apps/desktop/renderer/app.js', 14, 3), entry('apps/desktop/renderer/index.html', 13, 1), entry('packages/engine/service/index.js', 11), entry('README.md', 7, 0, 4), entry('packages/engine/engine/runner.js', 3, 0, 9)],
+    lines: [{ file: 'packages/engine/service/index.js', line: 12, text: "const { backlog, gates, notifications, projects, roadmap, runs, settings, usage, workflows } = require('./areas');", runs: 12, runIds: runIds.slice(0, 12) }],
   };
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.conflict-map.json`), JSON.stringify(map, null, 2));
 }
@@ -49,11 +49,11 @@ function demoPoConversation(ws, projectId, po = null) {
     '## Context', '', 'The run report (#12) exports Markdown only (`src/report.js:41`, `exportMarkdown`). The owner shares reports with people who do not read Markdown.', '',
     'Decision (owner): a PDF export next to the Markdown one, same layout.', '',
     '## Tasks', '', '- [ ] **Export as PDF** in the run report menu, next to Markdown', '- [ ] The PDF keeps the report layout (headings, tables, cost)', '- [ ] Tests: a mock run exports a PDF with the report title', '',
-    '## Triage', '', 'Impact 3 (sharing reports), complexity 2 (one renderer, estimate: `src/report.js`, `src/renderer/run.js`). Group with #12.', '',
+    '## Triage', '', 'Impact 3 (sharing reports), complexity 2 (one renderer, estimate: `src/report.js`, `apps/desktop/renderer/run.js`). Group with #12.', '',
     'Related: #12',
   ].join('\n');
   const big = DEMO_ISSUES.find((x) => x.number === 15);
-  const poSplit = require('../../../src/domains/po/po-split');
+  const poSplit = require('@multiagent/engine/domains/po/po-split');
   const split = poSplit.normalizeSplit(poSplit.proposeSplit(big, { complexity: 5 }), big, { complexity: 5 });
   // #242: a long title and a long task line with inline Markdown, so the card must fit the drawer
   split.title = `${split.title || big.title}: keep every run's worktree, branch and logs safe when the app closes, crashes or the workspace moves to another disk`;
@@ -78,12 +78,12 @@ function demoPoConversation(ws, projectId, po = null) {
       estimateUsd: 27.4,
       estimateMissing: 1,
       groups: [
-        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['src/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
-        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in src/server.', files: ['src/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
+        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['packages/engine/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
+        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in packages/engine/server.', files: ['packages/engine/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
           inputs: { mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
           costEstimate: { usd: 15.8, perPoint: 3.16, complexity: 5, runs: 12, estimated: false, basis: 'Median cost per step and complexity point of the last 12 successful runs of software-development-local-hero.yaml, × complexity 5 (test ×0.35, evidence ×0.5, developer_screenshots off).' },
           cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] } },
-        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['src/renderer/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
+        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['apps/desktop/renderer/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
       ],
       conflicts: [], enrich: [],
       // #124: the big issue split along its two areas; #138: #15 placed in an epic, a new one for the UI fixes
@@ -101,7 +101,7 @@ function demoPoConversation(ws, projectId, po = null) {
     { ts: at(150), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.09, calibration: 5, calibrationOverride: true, text: 'One validated run for #16; **#10** touches the same styles and could join it. #8 is closed: left out.', answer: {
       summary: 'One run.',
       groups: [
-        { name: 'Keyboard focus', issues: [16], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['src/renderer/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],
+        { name: 'Keyboard focus', issues: [16], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['apps/desktop/renderer/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],
           suggested: [{ issue: 10, reason: 'Same area (ui): the dialog and dock styles, one validated run.' }] },
       ],
       closed: [8],
@@ -177,7 +177,7 @@ function demoBacklogRefresh(ws, folder, projectId) {
   }
 }
 
-// #405: two tests known to fail on the base (src/domains/project/base-health.js store), one with its bug issue
+// #405: two tests known to fail on the base (packages/engine/domains/project/base-health.js store), one with its bug issue
 function demoBaseFailures(ws, projectId) {
   const dir = path.join(ws.backlog, 'base-health');
   const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();

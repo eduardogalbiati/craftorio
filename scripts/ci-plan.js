@@ -38,9 +38,9 @@ function isDocsFile(file) {
 // Platform-sensitive paths: a PR touching one of them also runs on macOS (paths, symlinks, terminals,
 // packaging, dependencies and CI itself).
 const MACOS_PATHS = [
-  'src/engine/worktree.js', 'src/engine/processes.js', 'src/domains/machine/terminals.js',
-  'test/worktree.test.js', 'test/processes.test.js', 'test/machine/terminals.test.js',
-  'scripts/package.js', 'scripts/ci-plan.js', 'package.json', 'package-lock.json', '.nvmrc',
+  'packages/engine/engine/worktree.js', 'packages/engine/engine/processes.js', 'packages/engine/domains/machine/terminals.js',
+  'packages/engine/test/worktree.test.js', 'packages/engine/test/processes.test.js', 'packages/engine/test/machine/terminals.test.js',
+  'apps/desktop/scripts/package.js', 'scripts/ci-plan.js', 'package.json', 'package-lock.json', '.nvmrc',
   '.github/workflows/', 'native/',
 ];
 const isMacosFile = (file) => MACOS_PATHS.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));
