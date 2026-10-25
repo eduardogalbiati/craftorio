@@ -57,6 +57,13 @@ Every page has the same four sections:
 - **Gaps**: what the factor asks that the app does not do, or does differently on purpose.
 - **References**: the sources, with the factor's own page first.
 
+## Sources
+
+[sources.md](sources.md) is the annotated reading list: everything the guide cites and what was
+read and set aside, grouped by theme (principles, pattern catalogues, repositories built for
+agents, skills), each with its date, a weight word (primary, practitioner, secondary) and a line on
+what it holds. Add a source there first, then cite it on a page.
+
 ## Beyond 12-Factor: the other pattern catalogues
 
 12-Factor Agents is a set of engineering principles, not a catalogue of architectures. For the
