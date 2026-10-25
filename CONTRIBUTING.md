@@ -92,13 +92,16 @@ Details: [`docs/agents/renderer.md`](docs/agents/renderer.md) ("Interface langua
 
 ## Releasing
 
-Merges to `main` publish nothing; the maintainer releases by hand:
+Releases are "rc + stable" (#489):
 
-1. Bump `version` in `package.json` (and `package-lock.json`, `npm version <x.y.z> --no-git-tag-version`)
-   in a pull request, and merge it.
-2. Tag the merge commit `vX.Y.Z` (the same version) and push the tag, or run the **Deploy** workflow
-   by hand (Actions › Deploy › Run workflow), which tags the commit `v<version>` itself.
-3. Deploy builds and smoke-tests every OS and publishes one GitHub Release with generated notes.
+1. Every push to `main` (or a run of the **Deploy** workflow by hand) builds and smoke-tests every OS
+   and publishes a **prerelease** `v<package.json version>-rc.N`, never marked latest.
+2. To ship a stable version, tag the rc's commit `vX.Y.Z` and push the tag (the app's Releases
+   screen does it with "Promote to stable"). Deploy renames that rc's release to the tag and marks it
+   latest, reusing its assets: nothing is rebuilt. A tag on a commit without an rc fails with the
+   reason.
+3. Bump `version` in `package.json` (`npm version <x.y.z> --no-git-tag-version`) when the next rcs
+   should carry the next version.
 
 There is no CHANGELOG file: the changes of each version are its notes on
 [GitHub Releases](https://github.com/eduardogalbiati/multiagent-orchestrator/releases).

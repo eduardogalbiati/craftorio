@@ -11,11 +11,20 @@
 // a simulated roadmap. `markReleasedIssues` marks the Backlog's issues a release shipped; the
 // discovery cards linked to them are marked in the card store when the release is recorded
 // (`markCards`; the store, src/discovery.js, comes with #256: a checkout without it has no card).
+// #489 "rc + stable": `listReleases` lists the release candidates since the last stable (one rc per
+// merge into main) with the suggested stable version; `holdCandidate` puts one on Hold;
+// `promoteRelease` tags a candidate's commit as the stable release (only the tag is pushed; nothing
+// in simulation); `releaseTrain` is the night's end (src/service/channels/nightwatch.js): the last
+// candidate is promoted, proposed or held (night.decideReleaseTrain).
 
 const fs = require('fs');
 const path = require('path');
+const { readStore: readBaseHealth } = require('../../engine/base-health-store');
+const simulation = require('../../engine/simulation');
 const { loadWorkflow } = require('../../engine/workflow');
 const backlog = require('../../backlog');
+const { clientError } = require('../common');
+const night = require('../../night-watch');
 const projects = require('../../projects');
 const releases = require('../../releases');
 const roadmaps = require('../../roadmap');
@@ -51,7 +60,12 @@ module.exports = (ctx) => {
     });
   }
 
-  // → { projectId, releases (newest first), next, line: the cut line waiting, run: the release run in progress }
+  // #489: the release candidates since the last stable, newest first
+  const candidatesOf = (history) => releases.candidatesSinceStable(history).reverse()
+    .map((c) => ({ tag: c.tag, commit: c.commit, date: c.date, runId: c.runId || null, issues: c.issues || [], held: !!c.held, stable: releases.stableVersion({ history, upTo: c.date }).version }));
+
+  // → { projectId, releases (newest first), next, line: the cut line waiting, run: the release run in progress,
+  //   candidates (#489, newest first), stable: { version, bump } suggested for a promotion }
   function listReleases({ projectId } = {}) {
     if (!projectId) return { projectId: null, releases: [], next: null, line: null, run: null };
     const { ws } = ctx;
@@ -67,7 +81,90 @@ module.exports = (ctx) => {
       next: nextOf(project, list),
       line: waitingLine(project.id),
       run: live ? { runId: live.runId, mock: !!live.mock, waiting: live.approvals.size > 0 } : null,
+      candidates: candidatesOf(history),
+      stable: releases.stableVersion({ history }),
     };
+  }
+
+  // #489: Hold on a release candidate (the night's train never promotes it), or off. A tag that is
+  // not a candidate is refused as the client's error (400).
+  function holdCandidate({ projectId, tag, held = true }) {
+    const id = projects.readProject(ctx.ws.projects, idOf(projectId)).id;
+    if (!(releases.readReleases(ctx.ws.releases, id).candidates || []).some((c) => c.tag === tag)) {
+      throw clientError(`There is no release candidate ${tag || '(no tag)'}: refresh the Releases screen.`);
+    }
+    releases.holdCandidate(ctx.ws.releases, id, tag, held !== false);
+    return listReleases({ projectId });
+  }
+
+  // #489: a push of the base (src/service/areas/local-push.js) is a release candidate: its tip, the
+  // version of the project's package.json, the run merged there last and the issues its commits
+  // close. A project without a package.json version records none. Returns the candidate or null.
+  function recordPushCandidate(projectId, { commits = [], issues = [] } = {}) {
+    const { ws } = ctx;
+    const project = projects.readProject(ws.projects, idOf(projectId));
+    let version = '';
+    try { version = String(JSON.parse(fs.readFileSync(path.join(project.folder, 'package.json'), 'utf8')).version || ''); } catch { return null; }
+    if (!version || !commits[0]?.sha) return null;
+    const shas = new Set(commits.map((c) => c.sha));
+    const run = projectRuns(project).find((r) => r.localMerge?.commit && shas.has(r.localMerge.commit));
+    const known = backlog.readBacklog(ws.backlog, project.id)?.issues || [];
+    const found = issues.map((n) => known.find((i) => i.number === n) || { number: n })
+      .map((i) => ({ number: i.number, ...(i.title ? { title: i.title } : {}), labels: i.labels || [] }));
+    return releases.recordCandidate(ws.releases, project.id, { commit: commits[0].sha, version, runId: run?.runId || null, issues: found });
+  }
+
+  // #489: the stable release from a release candidate's commit (or its tag), without a rebuild: the
+  // tag is pushed on that commit (deploy.yml promotes its GitHub release); nothing is tagged in
+  // simulation. A commit without a candidate or a version already released is refused with the
+  // reason, before anything is tagged: the client's error (400); a tag that fails stays a 500.
+  async function promoteRelease({ projectId, commit = '', tag = '', version = '' }) {
+    const { ws } = ctx;
+    const project = projects.readProject(ws.projects, idOf(projectId));
+    const sha = commit || (releases.readReleases(ws.releases, project.id).candidates || []).find((c) => c.tag === tag)?.commit || '';
+    let tagging = false;
+    const tagOn = simulation.simulationOnly() ? async () => {} : (o) => releases.tagRelease({ repo: project.folder, ...o });
+    const tagCommit = (o) => { tagging = true; return tagOn(o); };
+    let out;
+    try {
+      out = await releases.promoteRelease({ dir: ws.releases, projectId: project.id, commit: sha, version, tagCommit });
+    } catch (e) {
+      throw tagging ? e : clientError(e.message);
+    }
+    markCards(project.id, out.tag);
+    ctx.notify?.({ kind: 'run', event: 'succeeded', title: `Release ${out.tag} promoted`, body: `The release candidate ${out.rc} is the stable release ${out.tag}: its tag is on origin.`, target: { view: 'releases', projectId: project.id } }, { projectId: project.id });
+    return listReleases({ projectId });
+  }
+
+  // #489: the base check on a commit: 'green' | 'red' | null (not checked there), from the last
+  // check of this session, else the last green one recorded
+  function baseCheckOn(projectId, commit) {
+    const now = ctx.baseCheckState?.(projectId);
+    if (now?.commit && now.commit === commit && ['green', 'red'].includes(now.status)) return now.status;
+    return ctx.ws.root && readBaseHealth(ctx.ws.root, projectId).lastGreen?.commit === commit ? 'green' : null;
+  }
+
+  // #489: the release train at the night's end for a project: the last candidate is promoted (the
+  // promote-release permission), proposed to the owner or held (on Hold, a base check not green).
+  // → { action, reason, rc, tag? }
+  async function releaseTrain(projectId, { allowed = [] } = {}) {
+    const history = releases.readReleases(ctx.ws.releases, projectId);
+    const last = releases.candidatesSinceStable(history).at(-1) || null;
+    const decision = night.decideReleaseTrain({
+      mergesSinceStable: releases.mergesSinceStable(history), baseCheck: last ? baseCheckOn(projectId, last.commit) : null, allowed, held: !!last?.held,
+    });
+    if (decision.action === 'none') return { ...decision, rc: null };
+    if (decision.action === 'promote') {
+      try {
+        const out = await promoteRelease({ projectId, commit: last.commit });
+        return { ...decision, rc: last.tag, tag: out.releases?.[0]?.tag };
+      } catch (e) {
+        return { action: 'hold', reason: `The promotion of ${last.tag} failed: ${e.message}`, rc: last.tag };
+      }
+    }
+    const title = decision.action === 'propose' ? `Release ${last.tag} ready to promote` : `Release ${last.tag} held`;
+    ctx.notify?.({ kind: 'oracle', event: decision.action === 'propose' ? 'escalated' : 'blocked', title, body: decision.reason, target: { view: 'releases', projectId } }, { projectId });
+    return { ...decision, rc: last.tag };
   }
 
   // #290: a release's summary, written by its release run (the last of its runs) in its folder
@@ -304,10 +401,14 @@ module.exports = (ctx) => {
 
   return {
     afterRelease,
+    holdCandidate,
     isReleaseRun,
     listReleases,
     markReleasedIssues,
+    promoteRelease,
     readReleaseSummary,
+    recordPushCandidate,
+    releaseTrain,
     roadmapRelease,
     roadmapReleases,
     saveReleaseNotes,

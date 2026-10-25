@@ -180,3 +180,42 @@ Feature: Releases
     Then the cut line dialog is closed
     And the roadmap does not show the cut line "1.3.0"
     And the roadmap shows the cut line "1.2.9" right after stage 3
+
+  # #489: every merge into main becomes a release candidate vX.Y.Z-rc.N (with its run and its issues);
+  # the owner promotes one to stable, the stable version suggested from the issues' labels and
+  # editable, or holds one so the night train never promotes it. The candidates are seeded in the
+  # release history file of #260 (<workspace>/releases/<projectId>.json, a `candidates` list): see
+  # features/steps/releases-489.steps.js. The last stable release is 1.2.0; rc.2 adds an enhancement.
+
+  @issue-489
+  Scenario: Promoting the last release candidate suggests its stable version and makes it the latest stable release
+    Given the app is open
+    And the project has the release candidates "v1.3.0-rc.1" and "v1.3.0-rc.2" since the stable release "1.2.0"
+    When I open "Releases" in the sidebar
+    Then the Releases screen lists the candidates "v1.3.0-rc.2" and "v1.3.0-rc.1", newest first, each with its run and issues
+    When I click "Promote to stable" on the candidate "v1.3.0-rc.2"
+    Then the stable version suggested for the promotion is "1.3.0", and I can edit it
+    When I confirm the promotion
+    Then the candidate "v1.3.0-rc.2" shows as the stable release "1.3.0", marked latest
+
+  @issue-489
+  Scenario: Holding a release candidate marks it held, so the night train does not promote it
+    Given the app is open
+    And the project has the release candidates "v1.3.0-rc.1" and "v1.3.0-rc.2" since the stable release "1.2.0"
+    When I open "Releases" in the sidebar
+    And I click "Hold" on the candidate "v1.3.0-rc.2"
+    Then the candidate "v1.3.0-rc.2" is marked held
+    And the candidate "v1.3.0-rc.1" is not marked held
+
+  # The candidate's rc disappears outside the app (another window, a script) while the screen is open:
+  # its commit has no rc any more, so the promotion is refused with the reason and nothing is stable.
+  @issue-489
+  Scenario: Promoting a commit that no longer has a release candidate is refused with the reason
+    Given the app is open
+    And the project has the release candidates "v1.3.0-rc.1" and "v1.3.0-rc.2" since the stable release "1.2.0"
+    When I open "Releases" in the sidebar
+    And I click "Promote to stable" on the candidate "v1.3.0-rc.2"
+    And the release candidate "v1.3.0-rc.2" is removed outside the app
+    And I confirm the promotion
+    Then the promotion is refused with a reason saying the commit has no release candidate
+    And no release "1.3.0" is shown as stable
