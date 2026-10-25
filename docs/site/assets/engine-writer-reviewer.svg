@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 250" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+<rect width="960" height="250" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<rect x="60" y="80" width="130" height="56" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity=".8"/>
+<text x="125.0" y="104" text-anchor="middle" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">write</text>
+<text x="125.0" y="122" text-anchor="middle" fill="#c084fc" font-size="11">writer</text>
+<rect x="300" y="80" width="130" height="56" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity=".8"/>
+<text x="365.0" y="104" text-anchor="middle" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">review</text>
+<text x="365.0" y="122" text-anchor="middle" fill="#c084fc" font-size="11">reviewer</text>
+<rect x="540" y="80" width="130" height="56" rx="10" fill="#151820" stroke="#7c9cff" stroke-opacity=".8"/>
+<text x="605.0" y="104" text-anchor="middle" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">signoff</text>
+<text x="605.0" y="122" text-anchor="middle" fill="#7c9cff" font-size="11">supervisor</text>
+<rect x="780" y="80" width="130" height="56" rx="10" fill="#151820" stroke="#facc15" stroke-opacity=".8"/>
+<text x="845.0" y="104" text-anchor="middle" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">decide</text>
+<text x="845.0" y="122" text-anchor="middle" fill="#facc15" font-size="11">you</text>
+<rect x="300" y="180" width="130" height="56" rx="10" fill="#151820" stroke="#facc15" stroke-opacity=".8"/>
+<text x="365.0" y="204" text-anchor="middle" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">out_of_rounds</text>
+<text x="365.0" y="222" text-anchor="middle" fill="#facc15" font-size="11">you</text>
+<line x1="190" y1="100" x2="300" y2="100" stroke="#8a91a3" stroke-width="1.5" marker-end="url(#a-g)"/>
+<line x1="430" y1="100" x2="540" y2="100" stroke="#4ade80" stroke-width="1.5" marker-end="url(#a-ok)"/>
+<text x="485.0" y="93.0" text-anchor="middle" fill="#4ade80" font-size="10.5">score ≥ threshold</text>
+<line x1="670" y1="100" x2="780" y2="100" stroke="#8a91a3" stroke-width="1.5" marker-end="url(#a-g)"/>
+<path d="M 365 136 V 160 H 125 V 136" fill="none" stroke="#fb923c" stroke-width="1.5" marker-end="url(#a-warn)"/>
+<text x="245" y="155" text-anchor="middle" fill="#fb923c" font-size="10.5">below threshold · up to max_rounds</text>
+<line x1="400" y1="136" x2="400" y2="180" stroke="#f87171" stroke-width="1.5" marker-end="url(#a-bad)"/>
+<text x="400.0" y="151.0" text-anchor="middle" fill="#f87171" font-size="10.5">rounds used up</text>
+<path d="M 845 136 V 225 H 95 V 136" fill="none" stroke="#8a91a3" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a-g)"/>
+<text x="600" y="220" text-anchor="middle" fill="#8a91a3" font-size="10.5">revise (your instructions go into every next prompt)</text>
+<line x1="910" y1="108" x2="945" y2="108" stroke="#4ade80" stroke-width="1.5" marker-end="url(#a-ok)"/>
+<text x="927.5" y="101.0" text-anchor="middle" fill="#4ade80" font-size="10.5">accept</text>
+<text x="24" y="40" fill="#e6e8ee" font-size="14" font-weight="600">workflows/writer-reviewer.yaml</text>
+<text x="24" y="58" fill="#8a91a3" font-size="11.5">the engine decides by the reviewer's score; two steps are human gates (yellow)</text>
+</svg>
