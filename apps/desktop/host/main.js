@@ -83,12 +83,14 @@ if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData',
 //   heartbeat, packages/engine/domains/run/run-owner.js); a locked workspace is never opened read-write by a second copy.
 // Scratch copies (screenshots, Run locally, smoke checks, tests) have their own workspaces: unaffected.
 const APP_DIR = path.join(__dirname, '..', '..', '..');
+// true when the user data folder is a throwaway one (MULTIAGENT_USER_DATA, or a scratch one chosen below)
+let scratchUserData = !!process.env.MULTIAGENT_USER_DATA;
 if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
   const scratch = localPreview.worktreeAppScratch(APP_DIR);
   if (scratch) {
     process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
     process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-    if (!process.env.MULTIAGENT_USER_DATA) app.setPath('userData', scratch.userData);
+    if (!process.env.MULTIAGENT_USER_DATA) { app.setPath('userData', scratch.userData); scratchUserData = true; }
     console.log(`Started from a worktree of ${scratch.owner}: using the scratch workspace ${scratch.workspace} (simulations only).`);
   }
 }
@@ -98,14 +100,17 @@ if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
 if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE && process.env.MULTIAGENT_SIMULATION_ONLY === '1') {
   const scratch = workspace.simulationWorkspace();
   process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
-  if (!process.env.MULTIAGENT_USER_DATA) app.setPath('userData', scratch.userData);
+  if (!process.env.MULTIAGENT_USER_DATA) { app.setPath('userData', scratch.userData); scratchUserData = true; }
   console.log(`Simulation only: using the scratch workspace ${scratch.workspace}.`);
 }
-// A simulation never reaches the owner's keychain: on macOS, safeStorage (the account session, the
-// engine connection) asks for "Chromium Safe Storage" at every launch of a scratch copy (the smoke,
-// the screenshots, each E2E scenario), and the dialog blocks the run until it is dismissed. Chromium's
-// mock keychain answers in memory instead: a scratch copy's account.bin is throwaway anyway.
-if (!app.isPackaged && process.env.MULTIAGENT_SIMULATION_ONLY === '1') app.commandLine.appendSwitch('use-mock-keychain');
+// A simulation on a throwaway user data folder never reaches the owner's keychain: on macOS,
+// safeStorage (the account session, the engine connection) asks for "Chromium Safe Storage" at every
+// launch of a scratch copy (the smoke, the screenshots, each E2E scenario), and the dialog blocks the
+// run until it is dismissed. Chromium's mock keychain answers in memory instead: a scratch copy's
+// account.bin is throwaway anyway. Never on the owner's own user data (a dev launch with
+// MULTIAGENT_SIMULATION_ONLY and a workspace of its own but no MULTIAGENT_USER_DATA keeps the real
+// keychain, so its account.bin stays readable by the next normal launch), never in the packaged app.
+if (!app.isPackaged && process.env.MULTIAGENT_SIMULATION_ONLY === '1' && scratchUserData) app.commandLine.appendSwitch('use-mock-keychain');
 const secondCopy = !process.env.MULTIAGENT_WORKSPACE && !app.requestSingleInstanceLock();
 if (secondCopy) {
   const dir = workspace.resolveWorkspace().dir || os.tmpdir();
