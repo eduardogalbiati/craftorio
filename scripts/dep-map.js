@@ -2,8 +2,11 @@
 // require() edges between areas (engine, service, shared, server, control, renderer, host, the loose files
 // of a src/ tree; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs,
 // which service channel files each screen calls (through `api.<method>(`), by the front that holds the
-// screen (the UI kit's screens as `shell`, phase 3), and the channel files called from more than one
-// front (what phase 4's vertical slices have to place). Read-only; prints a report.
+// screen (the UI kit's screens as `shell`, phase 3), the channel files called from more than one
+// front (what phase 4's vertical slices have to place), and the script globals a front defines
+// (`window.X = …`, a top-level `function X(` or `const X =` of a classic script) that another layer
+// uses by name: the couplings the layering check cannot see, since the fronts reach each other through
+// the page, not through require. Read-only; prints a report.
 // `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
 
 'use strict';
@@ -138,6 +141,38 @@ function viewChannels(byMethod) {
   return { views: result, layerOf };
 }
 
+// The page scripts of each layer (the UI kit's and the fronts' root files and views/), with the globals
+// each defines (`window.X = …`, a top-level `function X(` or `const X =`) and the names it uses.
+function pageGlobals() {
+  const layers = [...(uiKit(ROOT) ? [{ id: 'shell', dir: uiKit(ROOT).dir }] : []), ...fronts(ROOT).map((f) => ({ id: f.id, dir: f.dir }))];
+  const filesOf = (dir) => {
+    const abs = path.join(ROOT, dir);
+    if (!fs.existsSync(abs)) return [];
+    const own = fs.readdirSync(abs).filter((f) => f.endsWith('.js')).map((f) => `${dir}/${f}`);
+    const views = viewsOf(ROOT, dir).flatMap((v) => fs.readdirSync(path.join(abs, 'views', v)).filter((f) => f.endsWith('.js')).map((f) => `${dir}/views/${v}/${f}`));
+    return [...own, ...views];
+  };
+  const defined = new Map(); // name -> the layer that defines it
+  const texts = [];
+  for (const layer of layers) {
+    for (const file of filesOf(layer.dir)) {
+      const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
+      texts.push({ layer: layer.id, text });
+      for (const m of text.matchAll(/^window\.([A-Za-z_$][\w$]*)\s*=/gm)) defined.set(m[1], layer.id);
+      for (const m of text.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) defined.set(m[1], layer.id);
+      for (const m of text.matchAll(/^const\s+([A-Za-z_$][\w$]*)\s*=/gm)) defined.set(m[1], layer.id);
+    }
+  }
+  const out = [];
+  for (const [name, from] of defined) {
+    if (from === 'shell') continue;
+    const re = new RegExp(`(?<![\\w$.])${name.split('$').join('\\$')}(?=\\s*[(.?])`);
+    const users = [...new Set(texts.filter((t) => t.layer !== from && re.test(t.text)).map((t) => t.layer))].sort();
+    if (users.length) out.push({ name, from, users });
+  }
+  return out.sort((a, b) => a.from.localeCompare(b.from) || a.name.localeCompare(b.name));
+}
+
 function report() {
   const files = sourceFiles(ROOT).map((f) => path.join(ROOT, f));
   const all = edges(files);
@@ -196,6 +231,12 @@ function report() {
   const crossing = Object.entries(byFront).filter(([k, s]) => !k.startsWith('?') && s.size > 1).sort();
   say(''); say(`## channel files called from more than one front: ${crossing.length}${crossing.length ? '' : ' (none)'}`);
   for (const [k, s] of crossing) say(k.padEnd(24), [...s].sort().join(' '));
+
+  // the page's globals a front defines that another layer uses; the shell's globals are the page's
+  // (every front may use them), so only a front's are listed
+  const globals = pageGlobals();
+  say(''); say(`## script globals a front defines that another layer uses (the fronts' couplings through the page): ${globals.length}${globals.length ? '' : ' (none)'}`);
+  for (const g of globals) say(`${g.name} [${g.from}]`.padEnd(40), `used by ${g.users.join(' ')}`);
 
   return { text: lines.join('\n'), edges: all.map(([a, b]) => [rel(a), rel(b)]) };
 }

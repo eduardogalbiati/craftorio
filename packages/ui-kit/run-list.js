@@ -555,8 +555,9 @@ function renderRunListsSoon() {
   if (runListsFrame) return;
   runListsFrame = requestAnimationFrame(() => {
     runListsFrame = 0;
-    if (workflowRunsVisible() && state.wr.runs) renderWorkflowRuns();
-    if (state.view === 'project' && state.pv?.runs) renderProjectView();
+    // the screens' own painters, when their front is shipped (#579)
+    if (typeof workflowRunsVisible === 'function' && workflowRunsVisible() && state.wr.runs) renderWorkflowRuns();
+    if (state.view === 'project' && state.pv?.runs) window.renderProjectView?.();
   });
 }
 // #320: the Next turn column's minutes left move on: the lists again (app.js, once a minute) while a run is expanded

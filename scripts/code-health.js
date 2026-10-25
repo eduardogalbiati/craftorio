@@ -29,6 +29,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { DIRS, listFiles } = require('./file-size-ratchet');
+const { areaOf } = require('./layers');
 const {
   byHotness,
   byScore,
@@ -337,7 +338,14 @@ function distribution(functions) {
   return { functions: values.length, median: percentile(values, 0.5), p90: percentile(values, 0.9), p99: percentile(values, 0.99), max: values[values.length - 1] ?? 0, over_limit: values.filter((v) => v > MAX_COMPLEXITY).length };
 }
 
-const AREAS = { renderer: (f) => f.file.startsWith('apps/desktop/renderer/'), backend: (f) => f.file.startsWith('src/') && !f.file.startsWith('apps/desktop/renderer/'), scripts: (f) => f.file.startsWith('scripts/') };
+// the report's buckets, by the file's layering area (scripts/layers.js areaOf): the UI (the kit, the fronts,
+// the apps' pages), the backend (the engine, the service, the domain modules, the server, the host), scripts/
+const UI_AREAS = /^(kit|front:|renderer)/;
+const AREAS = {
+  renderer: (f) => UI_AREAS.test(areaOf(f.file) || ''),
+  backend: (f) => { const a = areaOf(f.file); return !!a && !UI_AREAS.test(a) && a !== 'shared'; },
+  scripts: (f) => f.file.startsWith('scripts/'),
+};
 
 function functionReport(root, asJson) {
   const functions = measureFiles(root, sourceFiles(root));

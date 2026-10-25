@@ -37,16 +37,20 @@ const path = require('path');
 const { defineConfig } = require('@playwright/test');
 const { defineBddConfig } = require('playwright-bdd');
 const { e2eWorkers } = require('./scripts/e2e-workers');
+const { featureDirs, fronts } = require('./scripts/source-tree');
 
 // Phase 3 of docs/reorganisation-study-2026-10.md: the features live with their packages (the shell's
-// in features/ and packages/ui-kit/features/, a front's in fronts/<id>/features/), the steps next to
-// them (every steps folder is loaded whatever runs: the fronts share the shell's steps).
-// MULTIAGENT_E2E_FRONT=<id> (`node scripts/e2e.js --front <id>`, a front's `npm run test:e2e`) runs
-// that front's features only.
+// in features/ and the kit's features/, a front's in fronts/<id>/features/), the steps next to them
+// (every steps folder is loaded whatever runs: the fronts share the shell's steps). The folders are
+// scripts/source-tree.js's (featureDirs), never named here. MULTIAGENT_E2E_FRONT=<id>
+// (`node scripts/e2e.js --front <id>`, a front's `npm run test:e2e`) runs that front's features only.
 const FRONT = process.env.MULTIAGENT_E2E_FRONT;
+const allFeatureDirs = featureDirs(__dirname);
+const frontDir = FRONT && fronts(__dirname).find((f) => f.id === FRONT)?.dir;
+if (FRONT && !frontDir) throw new Error(`MULTIAGENT_E2E_FRONT names no front: ${FRONT} (fronts: ${fronts(__dirname).map((f) => f.id).join(', ')})`);
 const testDir = defineBddConfig({
-  features: FRONT ? `fronts/${FRONT}/features/**/*.feature` : ['features/**/*.feature', 'packages/ui-kit/features/**/*.feature', 'fronts/*/features/**/*.feature'],
-  steps: ['features/steps/**/*.js', 'packages/ui-kit/features/steps/**/*.js', 'fronts/*/features/steps/**/*.js'],
+  features: frontDir ? `${frontDir}/features/**/*.feature` : allFeatureDirs.map((d) => `${d}/**/*.feature`),
+  steps: allFeatureDirs.map((d) => `${d}/steps/**/*.js`),
   outputDir: '.features-gen',
 });
 

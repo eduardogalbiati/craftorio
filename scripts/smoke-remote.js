@@ -29,6 +29,7 @@ for (const d of [appWorkspace, userData, path.join(scratch, 'engine-workspace'),
 // the app's own workspace: remote mode must leave it empty (no lock, no index, no seeded workflows)
 process.env.MULTIAGENT_WORKSPACE = appWorkspace;
 // before the app is ready (its sessions live there); apps/desktop/host/main is required once the engine listens
+process.env.MULTIAGENT_USER_DATA = userData; // a throwaway user data folder (the host reads it, main.js)
 app.setPath('userData', userData);
 const token = crypto.randomBytes(24).toString('base64url');
 let engine = null;

@@ -2,7 +2,8 @@
 // `type="datetime-local"` input written in a renderer file is a bare native control. The app's
 // controls are select.js (Select.markup) and date-range.js (DateRange.fields); the files that had
 // bare controls when the guard came are BASELINE, each with its counts: a listed file may only
-// shrink, a file not listed may have none. Scans the .js and .html files under apps/desktop/renderer.
+// shrink, a file not listed may have none. Scans the .js and .html page files of every layer (the UI kit,
+// the fronts, the apps' page folders: scripts/source-tree.js pageFiles).
 // Checked by test/bare-controls-383.test.js; docs/agents/renderer.md ("UI conventions").
 //
 //   node scripts/bare-controls.js   report, exit 1 when a file has more than its baseline

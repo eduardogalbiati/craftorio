@@ -27,7 +27,9 @@ test('areaOf: folders, the desktop entry, the root utilities and the domain modu
   assert.equal(areaOf('apps/desktop/host/main.js'), 'desktop');
   assert.equal(areaOf('packages/engine/domains/machine/shell.js'), 'utility');
   assert.equal(areaOf('packages/engine/domains/backlog/backlog.js'), 'root');
-  assert.equal(areaOf('fronts/build/views/backlog/backlog.js'), 'renderer');
+  assert.equal(areaOf('fronts/build/views/backlog/backlog.js'), 'front:build'); // one area per front (#579)
+  assert.equal(areaOf('packages/ui-kit/app.js'), 'kit');
+  assert.equal(areaOf('apps/desktop/renderer/index.html'), 'renderer');
   assert.equal(areaOf('src/elsewhere/x.js'), null);
 });
 

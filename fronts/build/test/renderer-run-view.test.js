@@ -114,7 +114,7 @@ test('showRun: a past run this window is not tracking opens in Details, rebuilt 
 test('render(): calls renderRunScreen() only while state.view is "run"', () => {
   const render = /function render\(\) \{[\s\S]*?\n\}/.exec(src)[0];
   assert.match(render, /renderHeader\(\);/);
-  assert.match(render, /if \(state\.view === 'run'\) renderRunScreen\(\);/);
+  assert.match(render, /if \(state\.view === 'run'\) window\.renderRunScreen\?\.\(\);/, 'when the Run screen is shipped (#579)');
 });
 
 // #154: scheduling the Run screen's render used to be app.js's showView special-casing

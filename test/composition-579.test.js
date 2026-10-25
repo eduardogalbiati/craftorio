@@ -9,7 +9,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { composition, frontOf, fronts, uiKit, viewsOf } = require('../scripts/source-tree');
+const {
+  appPages,
+  composition,
+  featureDirs,
+  frontOf,
+  fronts,
+  pageDirs,
+  uiKit,
+  viewsOf,
+} = require('../scripts/source-tree');
 const { pageLayers, rendererAssets } = require('../scripts/docs');
 
 // A workspace root with the given files ({ 'path/from/root': content }); every folder under

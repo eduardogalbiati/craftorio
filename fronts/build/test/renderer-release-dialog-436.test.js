@@ -17,8 +17,8 @@
 // one `$('#id')` wires), else of its data-testid, with every attribute its markup carries.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/front-build/test/roadmap-status-helpers');
-const { loadApp } = require('./renderer-app-harness');
+const H = require('./roadmap-status-helpers');
+const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
 // releases:list: the history (newest first) plus, here, one release that has not shipped
 const shipped = (version, date, issues) => ({ version, tag: version, date, issues: Array.from({ length: issues }, (_, k) => ({ number: 100 + k, title: `Issue ${100 + k}` })), runs: [], cost: 1 });

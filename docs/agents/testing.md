@@ -263,7 +263,7 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
 - **No new exception by default**: adding a file to `EXCEPTIONS` needs the owner's ok written in
   its issue; code review checks it.
 - **How to split** a file near the cap, the usual ways: a screen into its view's folder
-  (`apps/desktop/renderer/views/<view>/`, one file per part, #154); the service into one file per area
+  (its front's `views/<view>/`, one file per part, #154); the service into one file per area
   (`packages/engine/service/areas/`, `packages/engine/service/channels/`, #155); the run into its modules
   (`packages/engine/engine/run/`, methods on `WorkflowRun.prototype`, #250). Each new file documents itself
   in its header comment (the code map is built from it).
@@ -519,9 +519,11 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   (`npm test`), `scripts/smoke.js` (which also uses a scratch temporary workspace and fails unless
   every session was `mock`), the CI workflows and the tests' `makeService`/server helpers. A test
   that drives a real provider type at a fake CLI (`fake-claude.js`) lifts it for its duration.
-  On macOS a simulation also runs with Chromium's mock keychain (`--use-mock-keychain`, set by
-  `apps/desktop/host/main.js` in a development checkout): safeStorage never asks for "Chromium Safe
-  Storage", a dialog that blocked the smoke, the screenshots and each E2E scenario until dismissed.
+  On macOS a simulation on a throwaway user data folder (`MULTIAGENT_USER_DATA`, which the smoke, the
+  screenshots and the E2E launches set) also runs with Chromium's mock keychain (`--use-mock-keychain`,
+  set by `apps/desktop/host/main.js` in a development checkout): safeStorage never asks for "Chromium
+  Safe Storage", a dialog that blocked those runs until dismissed; the owner's own user data keeps the
+  real keychain.
 - UI checks run through `scripts/smoke.js` (or a script built the same way), never through a
   hand-written script that launches `apps/desktop/host/main` directly. The remote engine (the app as a window onto
   `npm run serve`) has `scripts/smoke-remote.js <out-dir>`: a scratch server on 127.0.0.1, the app in
