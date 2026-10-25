@@ -135,15 +135,18 @@ function packagerOptions({ platform, arch, out }) {
     // resolves, next to packages/ and apps/ themselves, which the renderer's <script> paths reach)
     ignore: [
       /^\/(runs|dist|build|scripts|test|supabase|poc|native|resources|\.github|\.claude|\.test-output|\.features-gen)(\/|$)/,
-      // the 3D views' JSX sources (bundled into generated/): the run's in the UI kit, the city's in the analyser front
-      /^\/packages\/ui-kit\/run3d(\/|$)/,
-      /^\/(apps\/desktop\/renderer|fronts\/analyser)\/city3d(\/|$)/,
-      // phase 3: the fronts' and the kit's tests and Playwright features stay out too
-      /^\/(packages|apps|fronts)\/[^/]+\/(test|scripts|features)(\/|$)/,
+      // phase 3 (#579): what a workspace holds that is not the app, in the workspace itself and in its
+      // dereferenced copy under node_modules/@multiagent/: its tests and scripts, its Playwright
+      // features, its proofs of concept (the analyser's city layout POC and screenshots), the 3D views'
+      // JSX sources (run3d/ in the kit, city3d/ in the analyser; bundled into generated/)
+      /^\/(packages|apps|fronts|node_modules\/@multiagent)\/[^/]+\/(test|scripts|features|poc|run3d|city3d)(\/|$)/,
+      /^\/apps\/desktop\/renderer\/city3d(\/|$)/,
       // the engine package itself: the host requires @multiagent/engine, which the asar resolves to the
       // dereferenced copy under node_modules/; packages/shared stays (the renderer's <script> paths name it)
       /^\/packages\/engine(\/|$)/,
-      /^\/node_modules\/@multiagent\/[^/]+\/(test|scripts)(\/|$)/,
+      // the browser app (apps/web, and its copy): the engine serves it; a desktop app on a remote engine
+      // loads the page from the engine
+      /^\/(apps|node_modules\/@multiagent)\/web(\/|$)/,
     ],
     ...(platform === 'darwin' && {
       appBundleId: 'io.github.eduardogalbiati.multiagent-orchestrator',

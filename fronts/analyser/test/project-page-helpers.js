@@ -9,7 +9,7 @@
 //   its markup and the open screen's section (delegated listeners), then the document;
 // - tabsOf(markup): the role="tab" elements, with their label and aria-selected.
 // Exports functions only (never registers a test).
-const H = require('@multiagent/front-build/test/roadmap-status-helpers');
+const H = require('@multiagent/ui-kit/test/page-pieces');
 
 /** Every markup string the page holds now: what was written into an element or inserted, then the views' own markup. */
 function pageMarkup(app, { defs = true } = {}) {

@@ -263,7 +263,7 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
 - **No new exception by default**: adding a file to `EXCEPTIONS` needs the owner's ok written in
   its issue; code review checks it.
 - **How to split** a file near the cap, the usual ways: a screen into its view's folder
-  (`apps/desktop/renderer/views/<view>/`, one file per part, #154); the service into one file per area
+  (its front's `views/<view>/`, one file per part, #154); the service into one file per area
   (`packages/engine/service/areas/`, `packages/engine/service/channels/`, #155); the run into its modules
   (`packages/engine/engine/run/`, methods on `WorkflowRun.prototype`, #250). Each new file documents itself
   in its header comment (the code map is built from it).

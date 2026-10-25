@@ -166,7 +166,7 @@ function parseDecls(text) {
   }).filter((d) => d && d.prop);
 }
 
-// files: paths relative to apps/desktop/renderer ('style.css', 'views/run/run.css'), in the page's order
+// files: page-relative names ('style.css', 'views/run/run.css'), in the page's order, whichever layer holds them
 function styleSheet(files) {
   const rules = [];
   let order = 0;

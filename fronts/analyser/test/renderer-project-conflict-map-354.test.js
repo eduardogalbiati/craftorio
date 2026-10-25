@@ -18,7 +18,7 @@
 //   opens the project's page on its Conflict map tab.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/front-build/test/roadmap-status-helpers');
+const H = require('@multiagent/ui-kit/test/page-pieces');
 const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
 const { clickRendered, hasTestId, pageMarkup, region, tabsOf } = require('./project-page-helpers');
 
