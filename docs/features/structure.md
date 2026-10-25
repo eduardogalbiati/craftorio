@@ -30,3 +30,4 @@ skills/                  bundled skills (copied into <workspace>/skills)
 scripts/                 terminal runner, tests, build, UI smoke test and UI screenshots (screenshot.js)
 test/                    unit tests (node:test) and fixtures
 AGENTS.md, docs/agents/  context for coding agents working on this repository (short index, imported by CLAUDE.md, + topic docs)
+docs/12-factor-agents/   the engine read against 12-Factor Agents: one page per factor, what applies here and what is missing
