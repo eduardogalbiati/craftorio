@@ -22,13 +22,13 @@ const ROOT = path.join(__dirname, '..');
 const BIN = path.join(ROOT, 'node_modules', '.bin');
 const bin = (name) => path.join(BIN, process.platform === 'win32' ? `${name}.cmd` : name);
 
-/** { front, args }: the front id of `--front <id>` (null for all) and what goes to playwright test. */
+/** { front, args }: the front id of `--front <id>` (null for all, '' when the id is missing) and what goes to playwright test. */
 function parseArgs(argv) {
   const args = [];
   let front = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--') continue;
-    if (argv[i] === '--front') { front = argv[++i] || null; continue; }
+    if (argv[i] === '--front') { front = argv[++i] || ''; continue; }
     args.push(argv[i]);
   }
   return { front, args };
@@ -42,10 +42,10 @@ const run = (name, args, env) => new Promise((resolve) => {
 async function main(argv = process.argv.slice(2)) {
   const { front, args } = parseArgs(argv);
   const env = { ...process.env };
-  if (front) {
+  if (front !== null) {
     const known = fronts(ROOT).map((f) => f.id);
     if (!known.includes(front)) {
-      console.error(`e2e: unknown front "${front}" (fronts: ${known.join(', ') || 'none installed'})`);
+      console.error(front ? `e2e: unknown front "${front}" (fronts: ${known.join(', ') || 'none installed'})` : `e2e: --front needs a front id (fronts: ${known.join(', ') || 'none installed'})`);
       return 2;
     }
     env.MULTIAGENT_E2E_FRONT = front;

@@ -18,7 +18,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolvePackagePath, sourceFiles } = require('./source-tree');
+const {
+  fronts,
+  resolvePackagePath,
+  sourceFiles,
+  uiKit,
+} = require('./source-tree');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -50,25 +55,27 @@ const AREAS = {
   service: { may: ['service', 'root', 'engine', 'utility', 'shared'], what: 'the app\'s operations, no Electron and no transport (packages/engine/service/)' },
   desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron host (apps/desktop/host/: main.js, the preloads, the windows and their guards)' },
   server: { may: ['server', 'service', 'root', 'utility', 'shared'], what: 'the HTTP server and the control channel (packages/engine/server/, packages/engine/control/)' },
-  renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (packages/ui-kit/, fronts/<id>/, apps/<app>/renderer/)' },
+  kit: { may: ['kit', 'shared'], what: 'the UI kit (packages/ui-kit/): the shell, the run kernel and the controls every page starts from' },
+  renderer: { may: ['renderer', 'kit', 'shared'], what: 'an app\'s own page files (apps/<app>/renderer/: the desktop page, the browser\'s api-http.js)' },
 };
+// Phase 3: one area per front (`front:<id>`), which may require the kit and shared, never another
+// front, so the layering check tells a front reaching into another one apart (the fronts mostly reach
+// each other through script globals, which scripts/dep-map.js lists next to the channel crossings).
+for (const f of fronts(ROOT)) AREAS[`front:${f.id}`] = { may: [`front:${f.id}`, 'kit', 'shared'], what: `the ${f.id} front (${f.dir}/): its screens, their CSS and its Home card` };
 
 // The area folders (a workspace's folders, or src/'s before phase 2) and their area (domains: a domain module, or a utility when
 // ENGINE_ROOT_UTILITIES lists the file, see areaOf). scripts/dep-map.js reads this list too.
 const FOLDERS = { bin: 'server', control: 'server', domains: 'root', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
 // The workspaces (phases 2 and 3 of docs/reorganisation-study-2026-10.md) and their area: a whole package
-// (packages/shared; the UI kit, the fronts and the browser app are all `renderer`: page scripts that
-// may require only shared), or its folders by FOLDERS (packages/engine/<folder>/, apps/desktop/<folder>/).
+// (packages/shared; the UI kit is `kit` and each front its own `front:<id>`, both read from
+// scripts/source-tree.js so a new front needs no edit here), or its folders by FOLDERS
+// (packages/engine/<folder>/, apps/<app>/<folder>/: any app's renderer/ is the `renderer` area).
 const PACKAGES = {
   'apps/desktop': null,
-  'apps/web': 'renderer',
-  'fronts/ai': 'renderer',
-  'fronts/analyser': 'renderer',
-  'fronts/build': 'renderer',
-  'fronts/plan': 'renderer',
   'packages/engine': null,
   'packages/shared': 'shared',
-  'packages/ui-kit': 'renderer',
+  ...(uiKit(ROOT) ? { [uiKit(ROOT).dir]: 'kit' } : {}),
+  ...Object.fromEntries(fronts(ROOT).map((f) => [f.dir, `front:${f.id}`])),
 };
 
 // The area of a file (path from the repository root, with /), or null when no area holds it.
@@ -76,11 +83,14 @@ function areaOf(file) {
   const parts = file.split('/');
   const pkg = parts.length > 2 ? `${parts[0]}/${parts[1]}` : null;
   if (pkg && pkg in PACKAGES) {
-    if (PACKAGES[pkg]) return PACKAGES[pkg];
+    // a package's tests and features are not sources
+    if (PACKAGES[pkg]) return parts[2] === 'test' || parts[2] === 'features' ? null : PACKAGES[pkg];
     if (parts.length < 4 || parts[2] === 'test') return null;
     if (parts[2] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
     return FOLDERS[parts[2]] || null;
   }
+  // any other app (apps/web, phase 3): its page folder is the renderer area; nothing else there requires
+  if (parts[0] === 'apps' && parts.length > 3) return FOLDERS[parts[2]] === 'renderer' ? 'renderer' : null;
   if (parts[0] !== 'src' || parts.length < 2) return null;
   if (parts.length === 2 || parts[1] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
   return FOLDERS[parts[1]] || null;

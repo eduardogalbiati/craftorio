@@ -26,6 +26,11 @@
 //   viewsOf(root, dir)      the screen folders of a layer (`<dir>/views/<view>/`), sorted
 //   frontOf(root, view)     the front that holds the screen `view` (its views/<view>/ folder), the
 //                           UI kit for a shell screen, or null
+//   appPages(root)          the apps with a page folder: [{ app: 'apps/desktop', page: 'apps/desktop/renderer' }]
+//   pageDirs(root)          the folders holding page files, in load order: the kit, the fronts, the
+//                           apps' page folders
+//   featureDirs(root)       the folders holding Playwright features: the repository's `features`, the
+//                           kit's and each front's `features/` (playwright.config.js builds its globs from them)
 
 const fs = require('fs');
 const path = require('path');
@@ -137,6 +142,27 @@ function viewsOf(root, dir) {
   return fs.readdirSync(abs, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
 }
 
+// The apps with a page folder (`apps/<app>/renderer/`, where index.html lives), by path.
+function appPages(root) {
+  const appsDir = path.join(root, 'apps');
+  if (!fs.existsSync(appsDir)) return [];
+  return fs.readdirSync(appsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(appsDir, e.name, PAGE_DIR)))
+    .map((e) => ({ app: `apps/${e.name}`, page: `apps/${e.name}/${PAGE_DIR}` })).sort((a, b) => a.app.localeCompare(b.app));
+}
+
+// The folders that hold page files, in load order: the UI kit, every front, every app's page folder;
+// before phase 3's moves, the page folder alone.
+function pageDirs(root) {
+  const kit = uiKit(root);
+  return [...(kit ? [kit.dir] : []), ...fronts(root).map((f) => f.dir), ...appPages(root).map((a) => a.page)];
+}
+
+// The folders that hold Playwright features (the shell's at the root, a package's in its features/).
+function featureDirs(root) {
+  const kit = uiKit(root);
+  return ['features', ...(kit ? [`${kit.dir}/features`] : []), ...fronts(root).map((f) => `${f.dir}/features`)];
+}
+
 function frontOf(root, view) {
   const kit = uiKit(root);
   if (kit && viewsOf(root, kit.dir).includes(view)) return kit;
@@ -144,11 +170,14 @@ function frontOf(root, view) {
 }
 
 module.exports = {
+  appPages,
   composition,
+  featureDirs,
   frontOf,
   fronts,
   listFiles,
   packageOf,
+  pageDirs,
   resolvePackagePath,
   sourceDirs,
   sourceFiles,
