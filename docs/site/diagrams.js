@@ -4,9 +4,14 @@
 // diagram, drawn on the app's theme tokens. The view box is 820 wide, the content column's width,
 // so a diagram renders 1:1: text is 15–20px on the page. Few words per box, boxes stacked rather
 // than squeezed into one row. Add a diagram here, never an SVG by hand.
+// `wf-<name>.svg`, one per bundled workflow, is drawn from the YAML itself (workflows/, with the
+// fragments/ a step includes): its step groups as stages, the steps as chips coloured by type,
+// the transitions between stages as arrows, so the drawing follows the workflow when it changes.
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const yaml = require('js-yaml');
+const ROOT = path.resolve(__dirname, '..', '..');
 
 const OUT = path.join(__dirname, 'assets');
 const W = 820;
@@ -191,6 +196,111 @@ function writerReviewer() {
   s.write('engine-writer-reviewer.svg');
 }
 
+// ---------- wf-<name>: a bundled workflow's stages, steps and the transitions between stages ----------
+const NO_MODEL = new Set(['suite', 'check', 'test_ids', 'screenshots', 'project_map', 'refactor_proposals', 'release_version']);
+function stepKind(step, fragments) {
+  const body = step.fragment ? (fragments[step.fragment] || {})[step.id] || {} : {};
+  const type = step.type || body.type;
+  if (type === 'human_approval') return ['gate', C.yellow, 'you'];
+  if (type === 'workflow') return ['child', C.accent, 'child runs'];
+  if (type && NO_MODEL.has(type)) return ['machine', C.green, 'no agent'];
+  const agents = step.agents || body.agents;
+  const agent = step.agent || body.agent;
+  return ['agent', C.purple, agents ? `${agents.length} in parallel` : (agent || 'agent')];
+}
+function workflowGraph(file) {
+  const w = yaml.load(fs.readFileSync(path.join(ROOT, 'workflows', file), 'utf8'));
+  const fragments = {};
+  for (const st of w.steps) if (st.fragment && !fragments[st.fragment]) fragments[st.fragment] = yaml.load(fs.readFileSync(path.join(ROOT, 'fragments', `${st.fragment}.yaml`), 'utf8')).steps || {};
+  const byId = Object.fromEntries(w.steps.map((st) => [st.id, st]));
+  const stages = (w.groups || []).map((g) => ({ name: g.name, steps: g.steps.filter((id) => byId[id]) }));
+  const grouped = new Set(stages.flatMap((g) => g.steps));
+  const rest = w.steps.filter((st) => !grouped.has(st.id)).map((st) => st.id);
+  if (rest.length) stages.push({ name: 'Other steps', steps: rest });
+  const stageOf = {};
+  stages.forEach((g, i) => g.steps.forEach((id) => { stageOf[id] = i; }));
+  // transitions between stages: forward (i → j, j > i), back (j < i), and to end
+  const forward = new Map(), back = new Map(), toEnd = new Set();
+  for (const st of w.steps) {
+    const from = stageOf[st.id];
+    const body = st.fragment ? (fragments[st.fragment] || {})[st.id] || {} : {};
+    for (const t of st.transitions || body.transitions || []) {
+      if (typeof t.goto !== 'string') continue;
+      if (t.goto === 'end' || t.goto === 'fail') { toEnd.add(from); continue; }
+      const to = stageOf[t.goto];
+      if (to === undefined || to === from) continue;
+      const m = to > from ? forward : back, k = `${from}>${to}`;
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+  }
+  // layout: rows of chips
+  const x0 = 60, x1 = W - 60, chipH = 48, chipGap = 10, rowGap = 40, pad = 16, titleH = 34;
+  const charW = 8.2, size = 14;
+  const rows = stages.map((g) => {
+    const chips = g.steps.map((id) => {
+      const [kind, color, who] = stepKind(byId[id], fragments);
+      const label = who.length > 20 ? who.slice(0, 19) + '…' : who;
+      return { id, kind, color, who: label, w: Math.max(id.length * charW, label.length * 7) + 2 * pad };
+    });
+    let x = 0, line = 0;
+    for (const c of chips) {
+      if (x + c.w > x1 - x0 - 2 * pad && x > 0) { x = 0; line++; }
+      c.x = x; c.line = line; x += c.w + chipGap;
+    }
+    return { ...g, chips, h: titleH + (line + 1) * (chipH + chipGap) + pad - chipGap };
+  });
+  const H = 24 + rows.reduce((n, r) => n + r.h + rowGap, 0) - rowGap + 110;
+  const s = new Svg(H);
+  let y = 24;
+  const rowY = [];
+  rows.forEach((r, i) => {
+    rowY.push([y, y + r.h]);
+    s.rect(x0, y, x1 - x0, r.h, { r: 10 });
+    s.text(x0 + pad, y + 23, r.name.toUpperCase(), { fill: C.muted, size: 12.5, weight: 700, spacing: 1.2 });
+    if (toEnd.has(i)) s.text(x1 - pad, y + 23, '→ end', { fill: C.green, size: 13, weight: 700, anchor: 'end' });
+    for (const c of r.chips) {
+      const cx = x0 + pad + c.x, cy = y + titleH + c.line * (chipH + chipGap);
+      s.rect(cx, cy, c.w, chipH, { stroke: c.color, opacity: .8, r: 8, fill: '#1b1f29' });
+      s.text(cx + c.w / 2, cy + 20, c.id, { size, weight: 600, mono: true, anchor: 'middle' });
+      s.text(cx + c.w / 2, cy + 38, c.who, { fill: c.color, size: 12.5, anchor: 'middle' });
+    }
+    if (i < rows.length - 1) {
+      const n = forward.get(`${i}>${i + 1}`) || 0;
+      s.arrow(W / 2, y + r.h + 3, W / 2, y + r.h + rowGap - 3, { color: n ? C.muted : C.border });
+    }
+    y += r.h + rowGap;
+  });
+  // forward skips on the right, back edges on the left (one arc per pair, its count as a label)
+  let k = 0;
+  for (const [key, n] of forward) {
+    const [a, b] = key.split('>').map(Number);
+    if (b === a + 1) continue;
+    const x = x1 + 14 + (k++ % 3) * 14;
+    s.path(`M ${x1} ${rowY[a][1] - 16} H ${x} V ${rowY[b][0] + 16} H ${x1 + 3}`, { color: C.muted });
+  }
+  k = 0;
+  for (const [key, n] of back) {
+    const [a, b] = key.split('>').map(Number);
+    const x = x0 - 14 - (k++ % 3) * 14;
+    s.path(`M ${x0} ${rowY[a][0] + 16} H ${x} V ${rowY[b][1] - 16} H ${x0 - 3}`, { color: C.orange });
+    s.text(x - 4, (rowY[a][0] + rowY[b][1]) / 2 + 4, n > 1 ? `×${n}` : '', { fill: C.orange, size: 11.5, anchor: 'end' });
+  }
+  // legend
+  const ly = H - 56;
+  s.text(x0, ly, 'Stages top to bottom · a step is a chip:', { fill: C.muted, size: 13.5 });
+  const legend = [[C.purple, 'an agent'], [C.yellow, 'you (a gate)'], [C.green, 'no model'], [C.accent, 'child runs'], [C.orange, 'back to an earlier stage']];
+  let lx = x0;
+  for (const [c, t] of legend) {
+    s.parts.push(`<rect x="${lx}" y="${ly + 14}" width="12" height="12" rx="3" fill="${c}"/>`);
+    s.text(lx + 18, ly + 25, t, { fill: C.muted, size: 13 });
+    lx += 18 + t.length * 7 + 22;
+  }
+  s.text(x0, ly + 50, `${w.steps.length} steps · ${Object.keys(w.agents || {}).length} agents · gates: ${w.steps.filter((st) => st.type === 'human_approval').length}`, { fill: C.muted, size: 13 });
+  s.write(`wf-${file.replace(/\.yaml$/, '')}.svg`);
+}
+
 fs.mkdirSync(OUT, { recursive: true });
 repoMap(); architecture(); workflowAnatomy(); runLoop(); writerReviewer();
-console.log('5 diagrams → docs/site/assets/');
+const workflowFiles = fs.readdirSync(path.join(ROOT, 'workflows')).filter((f) => f.endsWith('.yaml')).sort();
+for (const f of workflowFiles) workflowGraph(f);
+console.log(`${5 + workflowFiles.length} diagrams → docs/site/assets/`);
