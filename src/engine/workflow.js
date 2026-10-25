@@ -31,9 +31,9 @@ const { writeResultSummary } = require('../domains/evidence/result-summary');
 const { stopProcessesIn } = require('./processes');
 const { sharedMemoryGuard } = require('./memory-guard');
 const machineActions = require('./machine-actions');
-const { StepTrail } = require('../shared/run-progress-model');
-const chain = require('../shared/chain-model');
-const Language = require('../shared/language');
+const { StepTrail } = require('@multiagent/shared/run-progress-model');
+const chain = require('@multiagent/shared/chain-model');
+const Language = require('@multiagent/shared/language');
 const { BUNDLED_SKILLS, methods: sessionsMethods } = require('./run/sessions');
 const { evalExpr, render, testsPlan } = require('./run/templates');
 const {
@@ -179,7 +179,7 @@ class WorkflowRun extends EventEmitter {
   //   for a `type: refactor_proposals` step's prioritize action (src/engine/run/refactor-proposals-steps.js);
   //   null = no Product Owner (a simulation needs none).
   // language (#327): () => the settings' language ({ agents, issues }) or null, called at each turn: every
-  //   turn's [Language] line and the output instruction follow it (src/shared/language.js); null = English.
+  //   turn's [Language] line and the output instruction follow it (packages/shared/language.js); null = English.
   constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
@@ -816,7 +816,7 @@ class WorkflowRun extends EventEmitter {
       // `ship:` (#260): the release the owner shipped ({ tag, base, commit, pushed, issues }; `simulated` in a simulation)
       ...(this.ctx.release ? { release: this.ctx.release } : {}),
       tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
-      // #277: a multi-result Claude turn records its highest total (src/shared/run-record.js upgrades older runs on read)
+      // #277: a multi-result Claude turn records its highest total (packages/shared/run-record.js upgrades older runs on read)
       turn_cost: 'max_result',
       context: this.contextSummary(),
       timing: this.timingSummary(),

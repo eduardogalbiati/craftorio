@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 const { loadApp, navEntries, text } = require('./renderer-app-harness');
 
 const R = path.join(__dirname, '..', 'src', 'renderer');
@@ -140,9 +140,9 @@ function loadRoadmap() {
   sandbox.window.showRun = () => {};
   vm.createContext(withI18n(sandbox));
   vm.runInContext(read('status-pill.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);

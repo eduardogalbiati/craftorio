@@ -19,7 +19,7 @@
 // Registers its dialog with registerView (view-registry.js, modals only: no screen, no menu entry); uses app.js globals ($, esc,
 // state, api, errMsg, confirmDialog, showToast, openDrawer, applyDeveloperMode, CATEGORIES),
 // start-drawer.js's loadCliStatus and command-hint.js's runSuggestedCommand / canRunCommands.
-// #329: every text comes from the catalog through t (src/shared/i18n.js, setup.* keys); the
+// #329: every text comes from the catalog through t (packages/shared/i18n.js, setup.* keys); the
 // Interface language select above the stepper opens on the interface language (the saved one, else
 // the computer's when it has a catalog, else English), saves settings.language.interface and redraws
 // the app in it (interface-language.js); the dialog repaints its texts on I18n.onChange.

@@ -141,6 +141,6 @@ test('the overlay applies the remembered theme before the scene loads, and remem
   assert.match(hud, /data-testid="run3d-theme"/);
   assert.match(hud, /aria-label=\{switchTheme\}/, 'the toggle has an accessible name');
   assert.match(hud, /title=\{switchTheme\}/, 'and a tooltip');
-  const I18n = require('../src/shared/i18n.js');
+  const I18n = require('@multiagent/shared/i18n.js');
   assert.equal(I18n.t('run3d.switch_theme', { theme: I18n.t('run3d.theme_dark') }), 'Switch to the dark theme');
 });

@@ -11,8 +11,8 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
-const en = require('../src/shared/i18n/en.json');
-const pt = require('../src/shared/i18n/pt-BR.json');
+const en = require('@multiagent/shared/i18n/en.json');
+const pt = require('@multiagent/shared/i18n/pt-BR.json');
 
 function jsFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

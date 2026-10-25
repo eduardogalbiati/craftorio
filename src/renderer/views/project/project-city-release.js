@@ -6,7 +6,7 @@
 // it changed on the release's own ramp by the lines changed (#438: CityRelease.releaseRamp), renamed
 // files on their old building with the rename sign (an accent marker labelled "renamed") and removed files
 // marked as ghosts (a ghost-coloured marker labelled "removed" on the base building: #373's overlay
-// API has highlights and markers, no outline mode), the rest grey (src/shared/city-release.js). A card (data-testid="city-release")
+// API has highlights and markers, no outline mode), the rest grey (packages/shared/city-release.js). A card (data-testid="city-release")
 // holds the header (headerMarkup: the counts by status, the "changed" chip with the four shades
 // (city-release-ramp), the "renamed" one with the sign (city-release-rename-sign), by district and zone,
 // the two-tag picker, the filter by issue through the commits that name it), the base's plan notes

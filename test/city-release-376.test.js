@@ -1,5 +1,5 @@
-// #376: a release on the project city (#373), src/shared/city-release.js. Pure (no fs, child_process,
-// Date.now, new Date(), Math.random, fetch), dual-loaded like src/shared/city-impact.js
+// #376: a release on the project city (#373), packages/shared/city-release.js. Pure (no fs, child_process,
+// Date.now, new Date(), Math.random, fetch), dual-loaded like packages/shared/city-impact.js
 // (module.exports in Node, window.CityRelease in the browser). No model call. Exports:
 // - parseNameStatus(text): text = the output of `git diff --name-status -M <from> <to>` (tab-separated
 //   lines, LF or CRLF) → [{ status, path, from? }] sorted by path: `A\tp` → 'added'; `M\tp` and `T\tp`
@@ -33,13 +33,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { buildModel } = require('../src/shared/architecture-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const root = path.join(__dirname, '..');
-const FILE = path.join(root, 'src', 'shared', 'city-release.js');
-const load = () => require('../src/shared/city-release.js');
-const loadLayout = () => require('../src/shared/city-layout.js');
-const loadModel = () => require('../src/shared/city-model.js');
+const FILE = path.join(root, 'packages', 'shared', 'city-release.js');
+const load = () => require('@multiagent/shared/city-release.js');
+const loadLayout = () => require('@multiagent/shared/city-layout.js');
+const loadModel = () => require('@multiagent/shared/city-model.js');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 // ---------- the module ----------
@@ -53,7 +53,7 @@ test('#376 city-release.js loads in Node and, in the browser, defines window.Cit
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-release.js']) {
-    vm.runInContext(fs.readFileSync(path.join(root, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(root, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   assert.equal(typeof sandbox.window.CityRelease?.releaseOverlay, 'function');
   assert.equal(typeof sandbox.window.CityRelease?.parseNameStatus, 'function');

@@ -7,11 +7,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
-const en = require('../src/shared/i18n/en.json');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const en = require('@multiagent/shared/i18n/en.json');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po.js'), 'utf8');
-const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
+const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
 
 // workflowFor/workflowSelect (#195: the workflow select next to Create + roadmap) are pure enough to
 // pull out of the source and run for real, the same way loadAppliedState does for groupState; the

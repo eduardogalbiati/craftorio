@@ -10,8 +10,9 @@
 const fs = require('fs');
 const path = require('path');
 
+const { sourceFiles } = require('./source-tree');
+
 const ROOT = path.join(__dirname, '..');
-const DIRS = ['src', 'scripts'];
 const MAX_INLINE = 3;
 const MAX_LINE = 100;
 // `module.exports = { … };` and `const { … } = require('…');` on one line
@@ -23,15 +24,6 @@ const sorted = (items) => [...items].sort((a, b) => nameOf(a).localeCompare(name
 // only plain names and `key: name` / `name: alias` items are rewritten (no calls or literals)
 const simple = (item) => /^[\w$]+(\s*:\s*[\w$.]+)?$/.test(item.trim());
 
-function listFiles(root, dir) {
-  const abs = path.join(root, dir);
-  if (!fs.existsSync(abs)) return [];
-  return fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => {
-    const rel = path.join(dir, e.name);
-    if (e.isDirectory()) return listFiles(root, rel);
-    return e.name.endsWith('.js') ? [rel] : [];
-  });
-}
 
 // { problems: [{ line, message }], fixed: text }
 function lintText(text) {
@@ -72,7 +64,7 @@ function lintText(text) {
 
 // [{ file, line, message, text, fixed }] for every list that breaks the rule under root (npm run check)
 function lintFiles(root = ROOT) {
-  return DIRS.flatMap((dir) => listFiles(root, dir)).sort().flatMap((rel) => {
+  return sourceFiles(root, { scripts: true }).flatMap((rel) => {
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const { problems, fixed } = lintText(text);
     const file = rel.split(path.sep).join('/');

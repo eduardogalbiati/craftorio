@@ -1,4 +1,4 @@
-// #382: the proof of concept's layout rules in src/shared/city-layout.js, as pure functions: the gap
+// #382: the proof of concept's layout rules in packages/shared/city-layout.js, as pure functions: the gap
 // around a building inside its cell (gapOf), the height scale (heightOf: √complexity, the lines at
 // the measured complexity per line when nothing measured the file, campus files lower), the ledges
 // (ledgesOf: a few, never one per floor), the weight on the ground (weightOf), and on a laid-out
@@ -7,9 +7,9 @@
 // this repository with the POC's plan.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildModel } = require('../src/shared/architecture-model');
-const { buildCity } = require('../src/shared/city-model');
-const L = require('../src/shared/city-layout');
+const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
+const L = require('@multiagent/shared/city-layout');
 
 const EPS = 1e-6;
 const hash = '11'.repeat(20);

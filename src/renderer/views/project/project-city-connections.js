@@ -1,7 +1,7 @@
 // The connections panel of the project city (#382), an overlay of the City view (project-city.js)
 // built on its API, so the city's own module does not grow. attach(city) adds a card to the city
 // (data-testid="city-connections") listing the files with the most connections (requires plus
-// required by, from the city's edges: src/shared/city-connections.js rank), the two counts, a
+// required by, from the city's edges: packages/shared/city-connections.js rank), the two counts, a
 // search, the top RANK_LIMIT shown. A click on a file flies to it and pins its connections: its
 // arcs stay drawn on the city (city.setPins), outgoing and incoming in their colours, until it is
 // clicked again; several files can be pinned at once; "Clear pins" removes them all. In a language

@@ -9,7 +9,7 @@
 // backlog-po.js's ask and cleared once sent). Hidden in Register an issue (no planning there).
 // The Cost chip (#po-cost-chip, #205) works the same way for the Cost step (costOverride).
 // Uses app.js globals (esc, errMsg) and window.ChatModels (chat-models.js).
-// load: after views/backlog/backlog.js (the drawer's markup; the slider, src/shared/po-calibration.js, loads first)
+// load: after views/backlog/backlog.js (the drawer's markup; the slider, packages/shared/po-calibration.js, loads first)
 /* global api, PoCalibration */
 (() => {
   const PRODUCT_OWNER = 'product-owner';

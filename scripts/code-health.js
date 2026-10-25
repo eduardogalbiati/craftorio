@@ -1,7 +1,7 @@
 // Code health (issue #344): measures every function under src/ and scripts/ with a real JS parser
 // (acorn, a pinned runtime dependency): its lines, cyclomatic complexity (1 + each `if`, `else if`,
 // ternary, `&&`, `||`, `??`, `case`, `catch` and loop), max nesting and parameter count. The
-// measure and the function names are the shared core's (src/shared/code-complexity.js, #385), so
+// measure and the function names are the shared core's (packages/shared/code-complexity.js, #385), so
 // the Architecture facts give the same numbers.
 // Two ratchets sit next to #334's line ratchet (scripts/file-size-ratchet.js):
 // - complexity: no function above MAX_COMPLEXITY; COMPLEXITY_EXCEPTIONS lists the ones above it
@@ -16,7 +16,7 @@
 // A function's churn is its file's. Files sit in four quadrants on log1p axes split at the medians
 // (Danger Zone, Cowboy Code, Fertile Ground, Healthy Closure) and rank by sqrt(u^2 + v^2), u and v
 // each axis's log1p divided by its maximum. The log parsing, the rename walk, the quadrants and the
-// score are the Architecture tab's pure core (src/shared/architecture-model.js, #356). Output
+// score are the Architecture tab's pure core (packages/shared/architecture-model.js, #356). Output
 // is deterministic: sorted JSON keys, dates from the commits; churn git cannot read (a shallow
 // clone, no repository) is `null` and named in `missing`, never 0. How to read it and how to split
 // a function: docs/agents/testing.md ("Code health"). Checked by test/code-health-344.test.js.
@@ -40,8 +40,8 @@ const {
   scoreRows,
   sortKeys,
   walkHistory,
-} = require('../src/shared/architecture-model');
-const { measureSource } = require('../src/shared/code-complexity');
+} = require('@multiagent/shared/architecture-model');
+const { measureSource } = require('@multiagent/shared/code-complexity');
 
 const ROOT = path.join(__dirname, '..');
 const MAX_COMPLEXITY = 25;
@@ -132,13 +132,13 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/service/areas/releases.js:settleRelease': 29,
   'src/service/areas/resume.js:keptWorkQuestion': 29,
   'src/service/areas/runs.js:startWorkflowRun': 41,
-  'src/shared/json-schema.js:validateSchema': 39,
-  'src/shared/providers/claude.js:parse': 49,
-  'src/shared/providers/codex.js:parse': 29,
-  'src/shared/providers/grok.js:parse': 35,
-  'src/shared/run-progress-model.js:estimateProgress': 34,
-  'src/shared/run-progress-model.js:progressGroups': 30,
-  'src/shared/run-progress-model.js:workflowStations': 28,
+  'packages/shared/json-schema.js:validateSchema': 39,
+  'packages/shared/providers/claude.js:parse': 49,
+  'packages/shared/providers/codex.js:parse': 29,
+  'packages/shared/providers/grok.js:parse': 35,
+  'packages/shared/run-progress-model.js:estimateProgress': 34,
+  'packages/shared/run-progress-model.js:progressGroups': 30,
+  'packages/shared/run-progress-model.js:workflowStations': 28,
 };
 
 // file -> its count of duplicated blocks when the rule came; only lower it
@@ -160,11 +160,11 @@ const DUPLICATION_BASELINE = {
 
 // ---------- the metric ----------
 
-// The measure is the shared core's (src/shared/code-complexity.js, #385), the Architecture facts' too
+// The measure is the shared core's (packages/shared/code-complexity.js, #385), the Architecture facts' too
 // [{ name, file, line, lines, complexity, nesting, params }] for every function of a source text.
 const analyzeSource = (code, file) => measureSource(code, { file });
 
-const sourceFiles = (root) => DIRS.flatMap((d) => listFiles(root, d)).sort();
+const sourceFiles = (root) => DIRS(root).flatMap((d) => listFiles(root, d)).sort();
 const readSource = (root, file) => fs.readFileSync(path.join(root, ...file.split('/')), 'utf8');
 const measureFiles = (root, files) => files.flatMap((file) => analyzeSource(readSource(root, file), file));
 

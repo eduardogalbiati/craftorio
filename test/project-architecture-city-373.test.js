@@ -11,9 +11,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
-const { buildModel } = require('../src/shared/architecture-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
@@ -39,7 +39,7 @@ function factsModel() {
 }
 
 function cityAnswer() {
-  const { buildCity } = require('../src/shared/city-model');
+  const { buildCity } = require('@multiagent/shared/city-model');
   return { state: 'ready', ...buildCity({ plan: null, facts: factsModel() }) };
 }
 
@@ -96,7 +96,7 @@ function loadWindow() {
   vm.createContext(sandbox);
   const run = (file) => vm.runInContext(fs.readFileSync(file, 'utf8'), sandbox, { filename: path.relative(ROOT, file) });
   for (const name of SHARED) {
-    const file = path.join(ROOT, 'src', 'shared', name);
+    const file = path.join(ROOT, 'packages', 'shared', name);
     if (fs.existsSync(file)) { try { run(file); } catch { /* a Node-only core: the tab does without it */ } }
   }
   for (const file of cityScripts()) run(file);

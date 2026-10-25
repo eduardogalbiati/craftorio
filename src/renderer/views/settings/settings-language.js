@@ -5,7 +5,7 @@
 // notes, decision logs, documents; "Same as the interface" by default, named with the language the
 // interface resolves to, "Same as the interface (Português (Brasil))", #424) and the "Issues" select
 // (issues, comments, PR/MR descriptions, commit messages; English by default). The languages come
-// from src/shared/language.js; a change saves the values as settings.language, every agent's next
+// from packages/shared/language.js; a change saves the values as settings.language, every agent's next
 // turn reads it ([Language] line), and an Interface change redraws the open windows at once
 // (interface-language.js).
 // window.LanguageSettings = { markup(settings), patch(settings, kind, value), render(el) }: settings.js

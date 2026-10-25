@@ -2,9 +2,9 @@
 // GitHub or GitLab repository, through gh / glab, read-only (list, view and label list only: the
 // commands are built here, never taken from the model). The repository and platform are the ones the
 // project's synced backlog uses (src/domains/backlog/backlog.js cliTarget), else the project's repository URL.
-// The commands come from the platform's adapter (src/shared/platforms/, #351; GitHub when unset).
+// The commands come from the platform's adapter (packages/shared/platforms/, #351; GitHub when unset).
 
-const { platformOrDefault } = require('../../shared/platforms');
+const { platformOrDefault } = require('@multiagent/shared/platforms');
 
 const ISSUE_STATES = ['all', 'closed', 'open'];
 const SEARCH_LIMIT = 30;

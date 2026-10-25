@@ -18,7 +18,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
 const R = path.join(__dirname, '..', 'src', 'renderer');
 const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
@@ -132,8 +132,8 @@ function loadDrawer({ projectId = 'demo' } = {}) {
   vm.runInContext(read('live-turn.js'), sandbox);
   // #274: the drawer's chat goes through the agents' shared component
   vm.runInContext(read('agent-chat.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'po-calibration.js'), sandbox);
-  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'po-calibration.js'), sandbox);
+  vm.runInContext(read('..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   vm.runInContext(read('agent-request.js'), sandbox);
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);

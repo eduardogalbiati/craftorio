@@ -4,11 +4,11 @@
 // ~/.codex; Claude's own config file is then <CLAUDE_CONFIG_DIR>/.claude.json instead of
 // ~/.claude.json. A caller that passes a home folder (the tests) gets that home's folders and the
 // variables are ignored. cliSessionDirs: the folder each CLI records its conversations in (its
-// adapter's sessionsDir under its config folder, src/shared/providers/), by CLI id.
+// adapter's sessionsDir under its config folder, packages/shared/providers/), by CLI id.
 
 const os = require('os');
 const path = require('path');
-const registry = require('../../shared/providers');
+const registry = require('@multiagent/shared/providers');
 
 function cliConfigDirs(home) {
   const env = home ? {} : process.env;

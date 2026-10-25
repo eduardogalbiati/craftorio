@@ -19,7 +19,7 @@ const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('../../engine/providers');
 const { simulationOnly } = require('../../engine/simulation');
 const TimeZone = require('../analytics/time-zone');
-const { DEFAULT_PLATFORM } = require('../../shared/platforms');
+const { DEFAULT_PLATFORM } = require('@multiagent/shared/platforms');
 
 const DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
@@ -255,9 +255,9 @@ const DEFAULT_SETTINGS = {
   // the owner's IANA time zone (#273, src/domains/analytics/time-zone.js): screens, day/week/month cuts, the agents'
   // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
   timeZone: null,
-  // the languages agents write in (#327, #328, src/shared/language.js): `agents` for chat replies, prose
+  // the languages agents write in (#327, #328, packages/shared/language.js): `agents` for chat replies, prose
   // and documents ('interface' = Same as the interface), `issues` for issues, PR/MR descriptions and
-  // commit messages; `interface` (#329, src/shared/i18n.js), the app's own language, is unset until
+  // commit messages; `interface` (#329, packages/shared/i18n.js), the app's own language, is unset until
   // chosen: the computer's language when it has a catalog, else English
   language: { agents: 'interface', issues: 'en' },
 };

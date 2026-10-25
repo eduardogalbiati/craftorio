@@ -1,5 +1,5 @@
-// Provider registry (#348): one adapter per CLI under src/shared/providers/ (claude, codex, grok,
-// mock) and a registry (src/shared/providers/index.js) that is the only place mapping the CLI names
+// Provider registry (#348): one adapter per CLI under packages/shared/providers/ (claude, codex, grok,
+// mock) and a registry (packages/shared/providers/index.js) that is the only place mapping the CLI names
 // ('claude') to the provider types ('claude-code'). The contract these tests hold:
 // - registry.list() → the adapters; registry.resolve(key) → the adapter for an id, a type, a CLI
 //   name or a model name, or null for an unknown key;
@@ -14,7 +14,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
-const registry = () => require('../src/shared/providers');
+const registry = () => require('@multiagent/shared/providers');
 const fixture = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
 const events = (text) => text.trim().split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
 const parseAll = (adapter, evs) => {
@@ -153,17 +153,17 @@ test('the run chat maps CLI names and models to the backend\'s provider types, w
   assert.notEqual(providerType('', 'gemini-2.5-pro'), 'gemini-cli');
 });
 
-// No provider literal outside src/shared/providers/: a provider type in quotes, or a CLI name
+// No provider literal outside packages/shared/providers/: a provider type in quotes, or a CLI name
 // compared with a provider/cli value. The YAML files, user-facing docs and tests are outside src/
 // and exempt. Listed exceptions may only shrink (none today).
 const EXCEPTIONS = [];
 const TYPE_LITERAL = /['"`](?:claude-code|codex-cli|grok-cli|gemini-cli)['"`]/;
 const CLI_COMPARE = /\b(?:provider|providerId|cli)\s*[!=]==?\s*['"`](?:claude|codex|grok)['"`]|['"`](?:claude|codex|grok)['"`]\s*[!=]==?\s*[\w.]*\b(?:provider|providerId|cli)\b/;
 
-test('no provider literal outside src/shared/providers/', () => {
+test('no provider literal outside packages/shared/providers/', () => {
   const files = execFileSync('git', ['ls-files', 'src'], { cwd: ROOT, encoding: 'utf8' }).split('\n').map((f) => f.trim()).filter(Boolean)
     .filter((f) => /\.(?:js|jsx|mjs|cjs|html)$/.test(f))
-    .filter((f) => !f.startsWith('src/shared/providers/') && !EXCEPTIONS.includes(f));
+    .filter((f) => !f.startsWith('packages/shared/providers/') && !EXCEPTIONS.includes(f));
   const offenders = [];
   for (const rel of files) {
     const lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').split(/\r?\n/);
@@ -175,13 +175,13 @@ test('no provider literal outside src/shared/providers/', () => {
 });
 
 test('the registry is where the provider literals live (the literal check guards a real place)', () => {
-  const dir = path.join(ROOT, 'src', 'shared', 'providers');
-  for (const f of ['index.js', 'claude.js', 'codex.js', 'grok.js', 'mock.js']) assert.ok(fs.existsSync(path.join(dir, f)), `src/shared/providers/${f} is missing`);
+  const dir = path.join(ROOT, 'packages', 'shared', 'providers');
+  for (const f of ['index.js', 'claude.js', 'codex.js', 'grok.js', 'mock.js']) assert.ok(fs.existsSync(path.join(dir, f)), `packages/shared/providers/${f} is missing`);
 });
 
 test('docs: engine/providers.md describes the registry and its adapters', () => {
   const doc = fs.readFileSync(path.join(ROOT, 'docs', 'agents', 'engine', 'providers.md'), 'utf8');
-  assert.match(doc, /src\/shared\/providers\//);
+  assert.match(doc, /packages\/shared\/providers\//);
   assert.match(doc, /providers\/index\.js/);
 });
 
@@ -192,6 +192,6 @@ test('code map: "A provider" says how to add one (one adapter file plus the regi
   assert.ok(start >= 0, 'the code map has no "A provider" entry');
   const next = map.indexOf('\n- ', start);
   const entry = map.slice(start, next === -1 ? undefined : next);
-  assert.match(entry, /src\/shared\/providers\//);
+  assert.match(entry, /packages\/shared\/providers\//);
   assert.match(entry, /index\.js/);
 });

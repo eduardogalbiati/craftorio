@@ -7,8 +7,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const PoCalibration = require('../src/shared/po-calibration');
-const { withI18n } = require('./i18n-sandbox');
+const PoCalibration = require('@multiagent/shared/po-calibration');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po-settings.js'), 'utf8');
 

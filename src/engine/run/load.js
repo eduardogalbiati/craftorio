@@ -20,8 +20,8 @@ const capabilities = require('../capabilities');
 const { PROBES } = require('../probes');
 const { validateWorkflowStep } = require('../workflow-step');
 const testPaths = require('../test-paths');
-const architectureReport = require('../../shared/architecture-report');
-const chain = require('../../shared/chain-model');
+const architectureReport = require('@multiagent/shared/architecture-report');
+const chain = require('@multiagent/shared/chain-model');
 const {
   render,
   SHELL_SAFE_FILTERS,

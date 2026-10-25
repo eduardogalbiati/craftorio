@@ -1,5 +1,5 @@
 // #327 acceptance tests (written before the code): the agent chats carry the same [Language] line as
-// a run's turns (src/shared/language.js languageLine), from the workspace settings, built like the
+// a run's turns (packages/shared/language.js languageLine), from the workspace settings, built like the
 // [Time] line (#273): the Oracle (src/domains/oracle/oracle.js, its turn context from settings()), the Product Owner
 // (src/domains/po/product-owner.js ask, option `language`), the Supervisor chat (src/domains/supervisor/supervisor-chat.js
 // questionText, 5th argument `language`) and the engine-side supervisor prompts (src/domains/supervisor/supervisor.js,
@@ -16,7 +16,7 @@ const productOwner = require('../src/domains/po/product-owner');
 const supervisor = require('../src/domains/supervisor/supervisor');
 const { questionText } = require('../src/domains/supervisor/supervisor-chat');
 
-const load = () => require('../src/shared/language');
+const load = () => require('@multiagent/shared/language');
 const PT = { agents: 'pt-BR', issues: 'en' };
 const count = (text, part) => text.split(part).length - 1;
 
@@ -80,7 +80,7 @@ test('#327 the Product Owner\'s turn without a language names English', async (t
 const onComputer = (locale) => require('../src/service/areas/interface-language')({ events: { on() {} }, host: { locale } }).applyInterfaceLanguage({});
 function computerIn(t, locale) {
   onComputer(locale);
-  t.after(() => { onComputer('en-US'); require('../src/shared/i18n').setLanguage('en'); });
+  t.after(() => { onComputer('en-US'); require('@multiagent/shared/i18n').setLanguage('en'); });
 }
 const PT_LINE = () => load().languageLine({ language: { agents: 'pt-BR', issues: 'en' } });
 
@@ -100,7 +100,7 @@ test('#424 the Product Owner\'s turn without a language, the computer in pt-BR: 
 });
 
 test('#424 the Oracle on a service whose host\'s locale is pt-BR, nothing set: the Portuguese [Language] line', async (t) => {
-  t.after(() => { onComputer('en-US'); require('../src/shared/i18n').setLanguage('en'); });
+  t.after(() => { onComputer('en-US'); require('@multiagent/shared/i18n').setLanguage('en'); });
   const { service, api } = makeService(t, { locale: 'pt-BR' });
   await api['oracle:ask']({ question: 'What is going on?', mock: true });
   const prompt = fs.readFileSync(path.join(service.workspace().oracle, 'session.md'), 'utf8');

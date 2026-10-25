@@ -41,7 +41,7 @@ async function bundle(t, file) {
   // main.jsx defines window.ProjectCityScene and reads the catalog's t at call time
   globalThis.window ||= {};
   globalThis.window.Run3DTheme ||= require('../src/renderer/run3d-theme.js'); // theme.js reads it (the app loads it first)
-  globalThis.t ||= require('../src/shared/i18n.js').t;
+  globalThis.t ||= require('@multiagent/shared/i18n.js').t;
   const m = new Module(path.join(CITY3D, `${file}.bundle.js`));
   m.require = (id) => (/^(react|react-dom|@react-three|postprocessing)(\/|$)/.test(id) ? stubFor(id) : require(id));
   m._compile(out.outputFiles[0].text, m.id);
@@ -69,13 +69,13 @@ const mountScene = (S, extra = {}) => S.mount({}, { layout: LAYOUT, paint: { col
 // ---------- the project city view (mini DOM) ----------
 
 const { createDom } = require('./mini-dom');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
 const hash = '11'.repeat(20);
 const FILES = [{ path: 'src/engine/run.js', lines: 100 }, { path: 'src/engine/queue.js', lines: 40 }, { path: 'docs/a.md', lines: 5 }];
 
 function facts() {
-  const { buildModel } = require('../src/shared/architecture-model');
+  const { buildModel } = require('@multiagent/shared/architecture-model');
   return buildModel({
     head: { commit: hash, date: '2026-01-05T12:00:00Z' }, branch: 'main', shallow: false, window: { since: null, until: null },
     files: FILES.map((f) => ({ ...f })), log: `\x01${hash} 2026-01-05T12:00:00Z\n\n${FILES.map((f) => `A\t${f.path}`).join('\n')}\n`,
@@ -85,7 +85,7 @@ function facts() {
 
 // webgl: a fake context, and a fake ProjectCityScene recording mount's options and update's patches
 function loadView({ webgl = false } = {}) {
-  const { buildCity } = require('../src/shared/city-model');
+  const { buildCity } = require('@multiagent/shared/city-model');
   const answer = { state: 'ok', ...buildCity({ plan: null, facts: facts() }) };
   const scene = { mounts: [], updates: [] };
   const sandbox = {
@@ -110,7 +110,7 @@ function loadView({ webgl = false } = {}) {
   withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox);
   }
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', f), 'utf8'), sandbox, { filename: f });
@@ -131,7 +131,7 @@ async function openView(opts) {
 }
 
 const pressed = (city, id) => q(city.el, id)?.getAttribute('aria-pressed') ?? 'missing';
-const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'i18n', `${lang}.json`), 'utf8'));
+const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'i18n', `${lang}.json`), 'utf8'));
 const LABELS = ['project_city.city_life', 'project_city.glow'];
 
 // ---------- store.js: the defaults and their memory ----------
@@ -225,7 +225,7 @@ test('#450 i18n: the switches\' labels exist in en.json and pt-BR.json, and the 
     assert.equal(typeof en[k] === 'string' && en[k].trim() !== '', true, `en.json ${k}`);
     assert.equal(typeof pt[k] === 'string' && pt[k].trim() !== '', true, `pt-BR.json ${k}`);
   }
-  const I18n = require('../src/shared/i18n.js');
+  const I18n = require('@multiagent/shared/i18n.js');
   const was = I18n.getLanguage();
   I18n.setLanguage('pt-BR');
   try {

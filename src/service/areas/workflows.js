@@ -21,12 +21,12 @@ const builder = require('../../domains/workflow/workflow-builder');
 const skills = require('../../domains/agents/skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../domains/seed/seed');
-const { mergeOf } = require('../../shared/default-workflow');
+const { mergeOf } = require('@multiagent/shared/default-workflow');
 const {
   MANIFEST_FILE,
   requiresProblem,
 } = require('../../domains/project/project-manifest');
-const compose = require('../../shared/workflow-compose');
+const compose = require('@multiagent/shared/workflow-compose');
 const { workflowRequirements } = require('../../domains/workflow/workflow-requirements');
 
 // #488: an import by url gives up after this long, and refuses a body larger than a workflow can be
@@ -281,7 +281,7 @@ module.exports = (ctx) => {
 
   // #488: a workflow written elsewhere (its text, or an https url), checked by the engine's loader and
   // the app's version (`requires`) before anything is written. preview: the summary the trust dialog
-  // shows (src/shared/workflow-compose.js), nothing written; else <workspace>/workflows/<name>.yaml as
+  // shows (packages/shared/workflow-compose.js), nothing written; else <workspace>/workflows/<name>.yaml as
   // custom, trusted (the owner confirmed the dialog, #474), never over an existing file without replace.
   // The preview returns the text's fingerprint; a confirmation that sends it back is refused when the
   // text it gets now differs (a url answering another text the second time), so the owner only ever

@@ -36,7 +36,7 @@ const {
 } = require('./external-terminal');
 const { pathKey } = require('../domains/machine/platform-paths');
 const { psQuote } = require('../domains/machine/shell');
-const I18n = require('../shared/i18n');
+const I18n = require('@multiagent/shared/i18n');
 const { t } = I18n;
 const workspace = require('../domains/workspace/workspace');
 const localPreview = require('../domains/local/local-preview');

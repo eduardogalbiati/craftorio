@@ -162,7 +162,7 @@ window.ProjectWorkflows = (() => {
     if (!input || !state.pv) return false;
     const workflows = selected($('#project-workflows'));
     const cur = bare(state.pv.project?.defaultWorkflow);
-    // the service's rule for a new project (src/shared/default-workflow.js)
+    // the service's rule for a new project (packages/shared/default-workflow.js)
     const defaultWorkflow = workflows.some((w) => w.name === cur) ? cur : DefaultWorkflow.firstBuild(workflows);
     save({ workflows, defaultWorkflow });
     return true;

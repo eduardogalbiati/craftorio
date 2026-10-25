@@ -18,13 +18,13 @@
 // patchWorkflow() writes those changes into the YAML, keeping everything else.
 // `effort: 'default'` leaves the effort out (the CLI's own default).
 // No engine and no Node (#488): a static page loads it after js-yaml's browser build (window.jsyaml),
-// the provider adapters (src/shared/providers) and src/domains/workflow/workflow-categories.js.
+// the provider adapters (packages/shared/providers) and src/domains/workflow/workflow-categories.js.
 // Browser: window.WorkflowBuilder; Node: module.exports.
 
 (function (root) {
   const node = typeof module === 'object' && module.exports;
   const yaml = node ? require('js-yaml') : root.jsyaml;
-  const registry = node ? require('../../shared/providers') : root.Providers;
+  const registry = node ? require('@multiagent/shared/providers') : root.Providers;
   const { WORKFLOW_CATEGORIES } = node ? require('./workflow-categories') : root.WorkflowCategories;
 
   // The workflow provider definitions the builder writes, by CLI id: each adapter's `definition`.

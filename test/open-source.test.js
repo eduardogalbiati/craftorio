@@ -234,8 +234,8 @@ test('#314: every CI step that records a commit status (ci-plan.js report) is sk
 
 // ---- #315: the account only counts users ----------------------------------------------------------
 
-test('#315: no source under src/ or scripts/ consults an account gate (assertCanRun): main, serve, service and its areas', () => {
-  const files = [...walk('src'), ...walk('scripts')].filter((f) => /\.(js|mjs|cjs)$/.test(f));
+test('#315: no source (src/, the workspaces, scripts/) consults an account gate (assertCanRun): main, serve, service and its areas', () => {
+  const files = require('../scripts/source-tree').sourceFiles(root, { scripts: true, match: /\.(js|mjs|cjs)$/ });
   const hits = files.filter((f) => /assertCanRun/.test(read(f)));
   assert.deepEqual(hits, []);
 });

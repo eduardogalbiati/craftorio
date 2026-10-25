@@ -6,7 +6,7 @@
 // Refreshed on workflow.started / workflow.finished and every minute (channel analytics:occupancy
 // with `summary: true`). Browser: window.OccupancyChip; Node: module.exports (chipModel, tested).
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const REFRESH_MS = 60e3;
 
   /** { text, level: green | amber | red, dot: pulse | grey, tooltip } of the last 24 h figures. */

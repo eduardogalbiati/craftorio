@@ -39,7 +39,7 @@
 // so the service's writers never interleave; `readRoadmapAt` gives back the stages a screen read, by
 // their `updatedAt`, for a save based on that read (src/domains/roadmap/roadmap-merge.js).
 // Rules and writes (#349): the rules (the states, what is finished, the current stage, which owner
-// action applies) are src/shared/roadmap-model.js, pure and shared with the screens; this module is
+// action applies) are packages/shared/roadmap-model.js, pure and shared with the screens; this module is
 // the only writer of a roadmap's `state`, `pausedBy`, `scope` and item statuses (other modules ask
 // it: `pauseRoadmap`, `finishRoadmap`).
 // Move on (#395): an item whose run waits at a human gate is parked (`itemAction` park, or the stage's
@@ -58,8 +58,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { itemIssues, withSyncedText } = require('../backlog/issues');
-const { normalizeThen } = require('../../shared/chain-model');
-const { isArchived } = require('../../shared/backlog-archive');
+const { normalizeThen } = require('@multiagent/shared/chain-model');
+const { isArchived } = require('@multiagent/shared/backlog-archive');
 const { dropWaitingSuffix } = require('../refactor/refactor-cadence');
 const {
   allowedActions,
@@ -69,10 +69,10 @@ const {
   ITEM_STATES,
   pendingRelease,
   STATES,
-} = require('../../shared/roadmap-model');
+} = require('@multiagent/shared/roadmap-model');
 const { writeJsonSafe } = require('../workspace/state-file');
 
-/** @typedef {import('../../shared/types').Roadmap} Roadmap */
+/** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
 /** @typedef {((runId: string) => any) | null} Alive `alive(runId)`: as for `runIsAlive` */
 
 // #205: a test-batch item tests the issues the items before it implemented
@@ -163,7 +163,7 @@ const runFailure = (runId, run) => `Run ${runId} ${run.status === 'success' ? 'f
 // failed (it ended otherwise, or it could not start), else as stored.
 // #395: a parked item stays parked while its run waits (or was interrupted, or paused); once its gate
 // is answered it takes the run's outcome: done when it merged, else failed, still marked `parked` so
-// it never holds its stage or pauses the roadmap (src/shared/roadmap-model.js isFinished).
+// it never holds its stage or pauses the roadmap (packages/shared/roadmap-model.js isFinished).
 function itemStatus(item, runOf) {
   if (item.status === 'parked') {
     const parked = item.parked || { at: null, gate: null };

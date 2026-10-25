@@ -12,12 +12,12 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
-const registry = () => require('../src/shared/providers');
+const registry = () => require('@multiagent/shared/providers');
 
-// the src/shared/providers/ scripts index.html loads, in its order
+// the packages/shared/providers/ scripts index.html loads, in its order
 function providerScripts() {
   const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
-  return [...html.matchAll(/<script src="\.\.\/shared\/providers\/([\w-]+\.js)"><\/script>/g)].map((m) => m[1]);
+  return [...html.matchAll(/<script src="\.\.\/\.\.\/packages\/shared\/providers\/([\w-]+\.js)"><\/script>/g)].map((m) => m[1]);
 }
 
 /** A browser-like sandbox with the provider scripts loaded (and robots.js when asked). */
@@ -26,7 +26,7 @@ function browser({ providers = true, robots = false } = {}) {
   vm.createContext(sandbox);
   if (providers) {
     for (const f of providerScripts()) {
-      vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'providers', f), 'utf8'), sandbox, { filename: f });
+      vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'providers', f), 'utf8'), sandbox, { filename: f });
     }
   }
   if (robots) vm.runInContext(fs.readFileSync(path.join(RENDERER, 'robots.js'), 'utf8'), sandbox, { filename: 'robots.js' });
@@ -51,7 +51,7 @@ test('index.html loads every adapter before the registry, and the registry befor
   for (const f of ['claude.js', 'codex.js', 'grok.js', 'mock.js']) assert.ok(scripts.includes(f), f);
   const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
-  const registryAt = at('../shared/providers/index.js');
+  const registryAt = at('../../packages/shared/providers/index.js');
   for (const reader of ['chat-models.js', 'robots.js', 'views/runchat/run-chat-model.js']) {
     assert.ok(at(reader) > registryAt, `${reader} loads before the provider registry`);
   }

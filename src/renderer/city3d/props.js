@@ -1,6 +1,6 @@
 // The project city's street life (#450, poc/project-city-v2.html propsOf, makeTraffic and the
 // crosswalks of build), pure: what the scene draws around the buildings, from a layout of
-// src/shared/city-layout.js (its avenues, avenueWidth, scale, zones' and districts' cells and plates).
+// packages/shared/city-layout.js (its avenues, avenueWidth, scale, zones' and districts' cells and plates).
 // - lawnsOf(layout): per district, the lawn strip in front of its buildings (the plate's free band on
 //   the south side, PLAZA of its depth at most, clear of the district's name strip).
 // - propsOf(layout): the trees (a trunk `cyl` and a crown `green`), the lamps (a `mast` and a `light`,
@@ -14,10 +14,10 @@
 // - lifeCount(layout, on): how many life props the scene shows (props, cars, lamp pools), 0 when
 //   City life is off (main.jsx stats().props).
 // - inset(rect, m), and the layout's STREET and SIDEWALK_AV (city-layout.js owns them): for scene.jsx too.
-// The same layout always gives the same city (seeded, src/shared/city-buildings.js rngOf); each list
+// The same layout always gives the same city (seeded, packages/shared/city-buildings.js rngOf); each list
 // is computed once per layout.
-import { rngOf } from '../../shared/city-buildings.js';
-import { SIDEWALK, SIDEWALK_AV, STREET } from '../../shared/city-layout.js';
+import { rngOf } from '@multiagent/shared/city-buildings.js';
+import { SIDEWALK, SIDEWALK_AV, STREET } from '@multiagent/shared/city-layout.js';
 
 // the slabs: the floor's top is y = 0; the sidewalk, the zone slab and the district plate stack on it
 export const SIDEWALK_TOP = 0.22, ZONE_TOP = 0.55, PLATE_TOP = 0.95;

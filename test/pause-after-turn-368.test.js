@@ -3,7 +3,7 @@
 // command, a stage with two runs, resume after a restart) are in test/slow/pause-after-turn-368.slow.test.js.
 //
 // The seam these tests pin down (the developer implements against it):
-// - src/shared/roadmap-model.js: ITEM_STATES gains 'paused' (an item whose run ended paused);
+// - packages/shared/roadmap-model.js: ITEM_STATES gains 'paused' (an item whose run ended paused);
 //   allowedActions on a paused item refuses retry, skip, edit and move, each with a reason that says
 //   it is paused; the roadmap's resume stays allowed.
 // - src/domains/roadmap/roadmap.js: withStatus reads an item whose run's status is 'paused' as 'paused' (error null,
@@ -12,7 +12,7 @@
 //   (state 'paused', pausedStage: stageId, pausedBy null, no "failed" in its message).
 // - src/domains/night/night-watch.js: NEVER_ALLOWED has { id: 'resume-paused' } (only the owner resumes a paused
 //   run), so savePermissions refuses it.
-// - src/shared/run-progress-model.js: pauseLabel(pause) is the line the run screens show, from the
+// - packages/shared/run-progress-model.js: pauseLabel(pause) is the line the run screens show, from the
 //   `pause` record of runs:active ({ state: 'pausing', step, agents?, command? }) or of a paused run
 //   ({ state: 'paused', step, next }).
 // - src/engine/worktree.js: cleanupWorktrees keeps the worktree of a run that ended paused.
@@ -22,10 +22,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const roadmapModel = require('../src/shared/roadmap-model');
+const roadmapModel = require('@multiagent/shared/roadmap-model');
 const roadmap = require('../src/domains/roadmap/roadmap');
 const night = require('../src/domains/night/night-watch');
-const runProgress = require('../src/shared/run-progress-model');
+const runProgress = require('@multiagent/shared/run-progress-model');
 const { prepareWorktree, cleanupWorktrees } = require('../src/engine/worktree');
 const { endedRun, fixture } = require('./worktree-helpers');
 

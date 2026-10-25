@@ -7,8 +7,12 @@
     "moduleResolution": "node10",
     "ignoreDeprecations": "6.0",
     "target": "es2023",
-    "lib": ["es2023"],
-    "types": ["node"],
+    "lib": [
+      "es2023"
+    ],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noImplicitAny": false,
     "noImplicitThis": false,
@@ -17,5 +21,14 @@
     "resolveJsonModule": true,
     "maxNodeModuleJsDepth": 0
   },
-  "include": ["src/**/*.js"]
+  "include": [
+    "src/**/*.js",
+    "packages/*/**/*.js",
+    "apps/*/**/*.js"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "packages/*/test/**",
+    "apps/*/test/**"
+  ]
 }

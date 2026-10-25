@@ -72,11 +72,11 @@ These come from [`AGENTS.md`](AGENTS.md), which holds the full list (`CLAUDE.md`
 
 ## Translations
 
-The interface text lives in `src/shared/i18n/`: `en.json` is the source, one file per translation
+The interface text lives in `packages/shared/i18n/`: `en.json` is the source, one file per translation
 (`pt-BR.json`). To fix a translation, edit its value; to add a language, copy `en.json` to
 `<code>.json` (a BCP 47 code, e.g. `es`, `fr`), translate the values (keep the keys and the
 `{name}` placeholders; a plural is an object of `Intl.PluralRules` forms: `one`, `other`...), add
-the code to `PAGE_LANGUAGES` in `src/shared/i18n.js`, and run
+the code to `PAGE_LANGUAGES` in `packages/shared/i18n.js`, and run
 `node --test test/i18n-329.test.js test/i18n-catalog-check-329.test.js`. A key you leave out shows
 the English text. Check the screens with `npm run screenshot -- --view settings --lang <code>`.
 Details: [`docs/agents/renderer.md`](docs/agents/renderer.md) ("Interface language").

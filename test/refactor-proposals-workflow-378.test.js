@@ -8,7 +8,7 @@
 // - inputs `project_path` (required), `since` (optional), `limit` (default 5) and `mode`
 //   (auto | validated, as workflows/issue-tracker.yaml names it);
 // - steps facts, analyze (an agent), propose, prioritize, gate (human_approval), file, in this order;
-// - outputs `issues` (what src/shared/chain-model.js producedIssues reads) and `report`.
+// - outputs `issues` (what packages/shared/chain-model.js producedIssues reads) and `report`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -72,7 +72,7 @@ test('release-then-refactors pipeline: a release, then refactor proposals since 
 });
 
 test('release-then-refactors pipeline: the refactor stage gets since from the release\'s previous_version and the release\'s folder as project_path', () => {
-  const chain = require('../src/shared/chain-model');
+  const chain = require('@multiagent/shared/chain-model');
   const p = loadPipeline(fs.readFileSync(PIPELINE, 'utf8'), 'release-then-refactors.yaml');
   const then = pipelines.pipelineThen(p, 1);
   assert.equal(then.workflow, 'refactor-proposals.yaml');

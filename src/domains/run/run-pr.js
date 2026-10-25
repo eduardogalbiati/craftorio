@@ -14,9 +14,9 @@ const path = require('path');
 const { ghPrState, glMrState, parseTarget } = require('../../engine/probes');
 const { resolveCommand } = require('../../engine/providers');
 const { execShim } = require('../machine/shell');
-const github = require('../../shared/platforms/github');
-const gitlab = require('../../shared/platforms/gitlab');
-const { resolvePlatform } = require('../../shared/platforms');
+const github = require('@multiagent/shared/platforms/github');
+const gitlab = require('@multiagent/shared/platforms/gitlab');
+const { resolvePlatform } = require('@multiagent/shared/platforms');
 
 // ---- the PR of a run ---------------------------------------------------------------------------
 // One step output → { number, url } or null.

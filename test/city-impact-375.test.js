@@ -1,5 +1,5 @@
-// #375: an issue's impact preview on the project city, src/shared/city-impact.js. Pure, dual-loaded
-// like src/shared/city-agents.js (module.exports in Node, window.CityImpact in the browser). No model
+// #375: an issue's impact preview on the project city, packages/shared/city-impact.js. Pure, dual-loaded
+// like packages/shared/city-agents.js (module.exports in Node, window.CityImpact in the browser). No model
 // call. Exports:
 // - citedPaths(body) → the sorted, de-duplicated repository-relative paths (forward slashes, a leading
 //   './' dropped) an issue body cites, in backticks or in plain text: `path:line` and `path:line:col`
@@ -41,13 +41,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { buildModel } = require('../src/shared/architecture-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const root = path.join(__dirname, '..');
-const FILE = path.join(root, 'src', 'shared', 'city-impact.js');
-const load = () => require('../src/shared/city-impact.js');
-const loadLayout = () => require('../src/shared/city-layout.js');
-const loadModel = () => require('../src/shared/city-model.js');
+const FILE = path.join(root, 'packages', 'shared', 'city-impact.js');
+const load = () => require('@multiagent/shared/city-impact.js');
+const loadLayout = () => require('@multiagent/shared/city-layout.js');
+const loadModel = () => require('@multiagent/shared/city-model.js');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 // ---------- the module ----------
@@ -353,7 +353,7 @@ test('#375 stageFootprint: one item, an item with no files, or a file listed twi
 
 test('#375 stageFootprint: the conflict red is the agents overlay\'s collision red (#374)', () => {
   const { CONFLICT_COLOUR } = load();
-  assert.equal(CONFLICT_COLOUR, require('../src/shared/city-agents.js').COLLISION_COLOUR);
+  assert.equal(CONFLICT_COLOUR, require('@multiagent/shared/city-agents.js').COLLISION_COLOUR);
 });
 
 test('#375 stageFootprint: works in the browser, loaded after city-agents.js', () => {
@@ -361,7 +361,7 @@ test('#375 stageFootprint: works in the browser, loaded after city-agents.js', (
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   for (const f of ['city-agents.js', 'city-impact.js']) {
-    vm.runInContext(fs.readFileSync(path.join(root, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(root, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   const out = plain(sandbox.window.CityImpact.stageFootprint([
     { id: 'it-b', files: ['src/y.js'] },

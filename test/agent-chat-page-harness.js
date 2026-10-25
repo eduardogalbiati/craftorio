@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createDom } = require('./mini-dom');
-const { FileXHR, setCurrentScript } = require('./page-i18n');
+const { FileXHR, setCurrentScript } = require('@multiagent/shared/test/page-i18n');
 // pageScripts / makeStorage are shared with the selector-keyed harness (requiring it also records
 // unhandled rejections a view leaves behind instead of failing the run)
 const { pageScripts, makeStorage, RENDERER } = require('./renderer-app-harness');

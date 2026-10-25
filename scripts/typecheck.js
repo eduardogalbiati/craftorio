@@ -1,6 +1,6 @@
 // Type checking ratchet (issue #346): TypeScript's checker on JavaScript with JSDoc types, file by
 // file. jsconfig.json keeps checkJs off; a file opts in with `// @ts-check` in its leading comments
-// and imports the shared shapes from src/shared/types.js. test/typecheck-346.test.js runs the
+// and imports the shared shapes from packages/shared/types.js. test/typecheck-346.test.js runs the
 // checker (so `npm test` runs it on every OS) and the ratchet:
 //   - CHECKED lists the files that opted in: a file that opted in is recorded here and can't opt out;
 //   - NEXT is the owner's list of files to check next: a file leaves it when it opts in.
@@ -10,11 +10,13 @@
 
 const fs = require('fs');
 const path = require('path');
+const { sourceFiles } = require('./source-tree');
 
 const ROOT = path.join(__dirname, '..');
 
 // files that opted in with // @ts-check (sorted, one per line)
 const CHECKED = [
+  'packages/shared/types.js',
   'src/domains/roadmap/roadmap.js',
   'src/domains/run/run-costs.js',
   'src/domains/usage/cost-estimate.js',
@@ -36,17 +38,16 @@ const CHECKED = [
   'src/engine/run/test-requests.js',
   'src/engine/run/transitions.js',
   'src/engine/run/turns.js',
-  'src/shared/types.js',
 ];
 
 // files the owner wants checked next (sorted, one per line); a file leaves this list when it opts in
 const NEXT = [
+  'packages/shared/roadmap-model.js',
+  'packages/shared/run-record.js',
   'src/domains/roadmap/live-roadmap.js',
   'src/domains/run/runs.js',
   'src/domains/usage/budget.js',
   'src/engine/workflow.js',
-  'src/shared/roadmap-model.js',
-  'src/shared/run-record.js',
 ];
 
 const TS_CHECK = /^\/\/\s*@ts-check\b/;
@@ -82,9 +83,9 @@ function optsIn(text) {
   return false;
 }
 
-// sorted 'src/...' paths of the files that carry // @ts-check
+// sorted source paths (scripts/source-tree.js) of the files that carry // @ts-check
 function findOptedIn({ root = ROOT } = {}) {
-  return listFiles(root, 'src')
+  return sourceFiles(root)
     .filter((rel) => optsIn(fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8')))
     .sort();
 }

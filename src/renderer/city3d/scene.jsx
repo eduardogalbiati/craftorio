@@ -1,5 +1,5 @@
 // The project city's scene (#373, bundled by scripts/build-3d.js), in React Three Fiber: it draws the
-// layout of src/shared/city-layout.js as it is given (main.jsx's store), with the look of the proof
+// layout of packages/shared/city-layout.js as it is given (main.jsx's store), with the look of the proof
 // of concept poc/project-city.html (#382: its geometry and constants, ported) over the run's 3D
 // lights, shadow and themes (theme.js).
 // - Ground: the water around the city (#450, rippling: geometry.js waterMaterial), the floor slab (a
@@ -15,7 +15,7 @@
 //   lights at LIFE_DIM, without rebuilding the city; on, a frame after another (unless the system asks
 //   for reduced motion), but none while the city is off screen (the store's `paused`, main.jsx). The
 //   Glow (the store's `glow`): the bloom pass, else the scene drawn as it is.
-// - Buildings (#449, poc/project-city-v2.html): each file is src/shared/city-buildings.js's archetype
+// - Buildings (#449, poc/project-city-v2.html): each file is packages/shared/city-buildings.js's archetype
 //   and parts (buildingsOf, once per layout), one InstancedMesh per part kind (KINDS, geometry.js
 //   partGeometries); the walls carry the windows (geometry.js windowMaterial: `aWin` lit by churn,
 //   `aStyle` the zone kind's facade, theme.js), each part coloured by its role from the building's
@@ -45,7 +45,7 @@ import { buildingBox, flatPlane, groundTexture, KINDS, labelTexture, mastBox, mi
 import { Glow, LIFE_DIM, noRaycast, Pools, Props, Sky, Traffic, useDisposable } from './life.jsx';
 import { crosswalksOf, inset, lawnsOf, PLATE_TOP, SIDEWALK_AV, SIDEWALK_TOP, STREET, ZONE_TOP } from './props.js';
 import { useStore } from './store.js';
-import { buildingOf, FLOOR_H, hashOf, WIN_PITCH } from '../../shared/city-buildings.js';
+import { buildingOf, FLOOR_H, hashOf, WIN_PITCH } from '@multiagent/shared/city-buildings.js';
 
 const Y0 = PLATE_TOP; // the buildings stand on the district plates (props.js has the slabs' tops)
 const QUAY = 6, SHORE = 170; // the floor past the ring road, the water past the floor (the POC's quay and shore)
@@ -216,7 +216,7 @@ export function buildingColours(layout, paint, { focus = null, hoverLit = null, 
 const ACCESSORY = new Set(['amber', 'cap', 'green', 'metal', 'warn']); // the roles a greyed building greys too
 const built = new WeakMap();
 
-/** The v2 building of every file of `layout` (src/shared/city-buildings.js buildingOf), once per layout: a complex is measured against its district's median footprint. */
+/** The v2 building of every file of `layout` (packages/shared/city-buildings.js buildingOf), once per layout: a complex is measured against its district's median footprint. */
 export function buildingsOf(layout) {
   if (!layout) return [];
   if (built.has(layout)) return built.get(layout);

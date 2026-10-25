@@ -6,7 +6,7 @@
 //   rcTag({ version, mergesSinceStable })      → 'vX.Y.Z-rc.N' (a leading "v" added when missing)
 //   mergesSinceStable(history)                 → the candidates dated after the last stable release
 //   issuesSinceStable(history)                 → the issues of those candidates, deduplicated, by number
-//   stableVersion({ history, version? })       → { version, bump }: src/shared/release-version.js's
+//   stableVersion({ history, version? })       → { version, bump }: packages/shared/release-version.js's
 //     suggestion over issuesSinceStable from the last stable (breaking major, enhancement minor, else
 //     patch); an explicit `version` (the owner's edit) wins
 //   holdCandidate(dir, projectId, tag, held = true)  sets / clears the candidate's `held`

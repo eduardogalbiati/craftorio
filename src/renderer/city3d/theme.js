@@ -5,7 +5,7 @@
 // the city's own, copied from poc/project-city.html THEMES: the dim of the buildings outside a
 // pinned file's connections, the lane dashes, the docks, halls, plinths and beacons, and per zone
 // kind a ground, a district plate and a label ink. The buildings' colours are
-// src/shared/city-layout.js colourBy (the same POC palette).
+// packages/shared/city-layout.js colourBy (the same POC palette).
 // The v2 buildings (#449, poc/project-city-v2.html THEMES and FACADES): the roof gardens, the night
 // (how much the lit windows glow: full in the dark theme, faint in the light one), and
 // `facade(kind)`, the zone kind's facade [column pitch (× WIN_PITCH), window width share, window

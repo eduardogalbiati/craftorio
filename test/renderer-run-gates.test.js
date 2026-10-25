@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const gateSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'gate-panel.js'), 'utf8');
@@ -30,7 +30,7 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
   assert.match(renderRunGates, /step: \$\{g\.step_id\}/);
   assert.match(renderRunGates, /data-answer="false">\$\{esc\(g\.reject\?\.label \|\| t\('run\.reject'\)\)\}/, 'the Reject button takes its label from the gate (#213), "Reject" by default');
   assert.match(renderRunGates, /data-answer="true">\$\{esc\(g\.approve\?\.label \|\| t\('common\.approve'\)\)\}/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
-  const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'i18n', 'en.json'), 'utf8'));
+  const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'i18n', 'en.json'), 'utf8'));
   assert.equal(en['run.reject'], 'Reject');
   assert.equal(en['common.approve'], 'Approve');
   assert.match(renderRunGates, /gateChoices\(g\)\.map/, 'a gate with choices offers them (plus save_to_issue, #125) instead of Approve/Reject');

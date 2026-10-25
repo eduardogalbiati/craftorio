@@ -85,7 +85,7 @@ test('--keep-awake takes off, idle, active or error; anything else is refused', 
   assert.throws(() => parseArgs(['--view', 'workflows', '--keep-awake', 'nope']), /--keep-awake takes off \| idle \| active \| error/);
 });
 
-// #329: --lang <code>, the interface language of the capture (a language with a catalog, src/shared/i18n/).
+// #329: --lang <code>, the interface language of the capture (a language with a catalog, packages/shared/i18n/).
 test('--lang takes a language with a catalog; an unknown one is refused', () => {
   assert.equal(parseArgs(['--view', 'settings', '--lang', 'pt-BR']).lang, 'pt-BR');
   assert.equal(parseArgs(['--view', 'settings', '--lang', 'en']).lang, 'en');

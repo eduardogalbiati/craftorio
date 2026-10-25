@@ -1,12 +1,12 @@
 // #329 acceptance tests (written before the code): the OS notifications (src/domains/workspace/notifications.js) are
-// written in the interface language (src/shared/i18n.js setLanguage, set by the main process); the
+// written in the interface language (packages/shared/i18n.js setLanguage, set by the main process); the
 // API is unchanged, and the user's content they quote (a run's title, a CLI's message) is not
 // translated. English stays what it is today.
 const test = require('node:test');
 const { afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
-const i18n = () => require('../../src/shared/i18n.js');
+const i18n = () => require('@multiagent/shared/i18n.js');
 const load = () => require('../../src/domains/workspace/notifications');
 
 afterEach(() => {

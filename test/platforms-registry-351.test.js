@@ -1,7 +1,7 @@
 // #351: the platform registry's lenient helpers (findPlatform, platformOrDefault, requestRef), the
 // short-id vocabulary accepted by the issue reads, and the adapters loaded as browser scripts in the
 // order index.html gives (the Backlog and Settings screens use window.Platforms).
-// Seams: src/shared/platforms (registry), src/domains/backlog/backlog.js fetchIssues, src/shared/backlog-archive.js
+// Seams: packages/shared/platforms (registry), src/domains/backlog/backlog.js fetchIssues, packages/shared/backlog-archive.js
 // archiveConfirmText, src/renderer/index.html's script list.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const registry = require('../src/shared/platforms');
+const registry = require('@multiagent/shared/platforms');
 
 test('findPlatform: trims and ignores case; unknown or empty names give null', () => {
   assert.equal(registry.findPlatform(' GitHub ')?.id, 'github');
@@ -35,7 +35,7 @@ test('requestRef: "PR #12" on GitHub, "MR !12" on GitLab, GitHub terms when unkn
 });
 
 test('archiveConfirmText: GitLab wording for GitLab, GitHub wording otherwise', () => {
-  const { archiveConfirmText } = require('../src/shared/backlog-archive');
+  const { archiveConfirmText } = require('@multiagent/shared/backlog-archive');
   assert.equal(archiveConfirmText([7], 'gitlab'), 'Close #7 on GitLab and label it archived?');
   assert.equal(archiveConfirmText([12, 13], 'github'), 'Close #12, #13 as not planned on GitHub and label them archived?');
   assert.equal(archiveConfirmText([3], 'bitbucket'), 'Close #3 as not planned on GitHub and label it archived?');
@@ -58,13 +58,13 @@ test('fetchIssues: the short ids gh / gl build the same CLI calls as github / gi
 
 test('index.html loads the adapters, then the registry, before every other shared script', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
-  const shared = [...html.matchAll(/<script src="\.\.\/shared\/([^"]+)"/g)].map((m) => m[1]);
+  const shared = [...html.matchAll(/<script src="\.\.\/\.\.\/packages\/shared\/([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(shared.slice(0, 3).sort(), ['platforms/github.js', 'platforms/gitlab.js', 'platforms/index.js'].sort());
   assert.equal(shared[2], 'platforms/index.js');
 });
 
 test('as browser scripts in that order, the adapters and the registry give window.Platforms', () => {
-  const dir = path.join(__dirname, '..', 'src', 'shared', 'platforms');
+  const dir = path.join(__dirname, '..', 'packages', 'shared', 'platforms');
   const window = {};
   const ctx = vm.createContext({ window });
   for (const f of ['github.js', 'gitlab.js', 'index.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });

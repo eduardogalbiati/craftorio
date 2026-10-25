@@ -93,7 +93,7 @@ A run's files keep the shape they were recorded in, forever: no migration rewrit
 `readRunRecord(runDir)` (`src/domains/run/run-record.js`) reads `summary.json` and `events.jsonl` and returns
 `{ summary, events }` in the **current shape** (summary null while the run has none);
 `readRunSummary(runDir)` returns the summary alone and reads the events only when it needs them.
-The upgrade itself, `upgradeRunRecord({ summary, events })` in `src/shared/run-record.js`, is pure
+The upgrade itself, `upgradeRunRecord({ summary, events })` in `packages/shared/run-record.js`, is pure
 (the record given is never changed), idempotent, and works on in-memory events too: the renderer
 (`app.js`) upgrades a past run's live events with it. Its `UPGRADES` list has one entry per change
 of a run's shape, in order: `single issue: issues`, `#233 stopped attempt`, `#233 per-turn cost`,
@@ -278,7 +278,7 @@ both removed by #285).
   index. Nothing is rewritten when the zone changes.
 - **The zone** is `settings.timeZone` (Settings › General › Time zone, an IANA name). Unset, it is
   the computer's: `readSettings` fills it in, `writeSettings` does not save it until one is chosen.
-- **One helper** cuts and formats: `src/shared/time-zone.js` (`window.TimeZone`; `src/domains/analytics/time-zone.js`
+- **One helper** cuts and formats: `packages/shared/time-zone.js` (`window.TimeZone`; `src/domains/analytics/time-zone.js`
   in the main process). Day keys, local midnights, weeks, months and visible times go through it.
 - **What follows the zone**: Analytics and Usage days and months, the agents' usage days, the
   Oracle's daily budget and its reset, the day budget (#206), the Product Owner's month, GitHub

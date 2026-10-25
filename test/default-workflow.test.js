@@ -3,7 +3,7 @@
 // src/service/areas/workflows.js to label each entry local/remote/none).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const DefaultWorkflow = require('../src/shared/default-workflow');
+const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 
 // ---- resolve(setting, files) --------------------------------------------------------------------
 

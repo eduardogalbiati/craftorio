@@ -3,7 +3,7 @@
 // when the roadmap has release cut lines (#260). Acceptance tests written before the code.
 //
 // backlog-roadmap.js in its sandbox (test/roadmap-status-helpers.js), BacklogRoadmap.html(data, rerender,
-// view) read as markup. The new module src/shared/roadmap-summary.js (window.RoadmapSummary, see
+// view) read as markup. The new module packages/shared/roadmap-summary.js (window.RoadmapSummary, see
 // test/roadmap-summary-421.test.js for its contract) is evaluated into the sandbox here once it exists;
 // the view reads it when it draws (as it reads RoadmapModel), not when it loads.
 //
@@ -16,7 +16,7 @@ const vm = require('vm');
 const H = require('./roadmap-status-helpers');
 
 const VIEW = { showAll: false, since: 'total' }; // Planned
-const SUMMARY = ['..', 'shared', 'roadmap-summary.js'];
+const SUMMARY = ['..', '..', 'packages', 'shared', 'roadmap-summary.js'];
 
 function load() {
   const out = H.loadRoadmap();

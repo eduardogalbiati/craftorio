@@ -1,9 +1,9 @@
 // #329 acceptance tests (written before the code): the interface's catalog and its pure helper.
 //
 // Contract:
-// - src/shared/i18n/en.json (the English source) and src/shared/i18n/pt-BR.json: flat objects, key →
+// - packages/shared/i18n/en.json (the English source) and packages/shared/i18n/pt-BR.json: flat objects, key →
 //   text, or key → { <Intl.PluralRules category>: text } for a plural ("one", "other", ...).
-// - src/shared/i18n.js, dual-load like src/shared/time-zone.js (module.exports in Node, window.I18n in
+// - packages/shared/i18n.js, dual-load like packages/shared/time-zone.js (module.exports in Node, window.I18n in
 //   the page), exports:
 //   t(key, params?, lang?) → string: `{name}` placeholders from params; a plural value picks its form
 //   with Intl.PluralRules(lang).select(params.count); a key missing in a language (or a language without
@@ -13,7 +13,7 @@
 //   has one, else 'en'; formatCost(usd, lang) (US$ with the language's separators), formatNumber(n, lang),
 //   formatPercent(ratio, lang).
 // - The interface choice is saved as settings.language.interface (next to #327's agents / issues), and
-//   "Same as the interface" of the AI agents (src/shared/language.js agentsLanguage) follows it.
+//   "Same as the interface" of the AI agents (packages/shared/language.js agentsLanguage) follows it.
 //
 // Keys these tests require in both catalogs (the only ones named here):
 //   common.cancel          en "Cancel"   pt-BR "Cancelar"
@@ -29,8 +29,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const CATALOGS = path.join(ROOT, 'src', 'shared', 'i18n');
-const load = () => require('../src/shared/i18n.js');
+const CATALOGS = path.join(ROOT, 'packages', 'shared', 'i18n');
+const load = () => require('@multiagent/shared/i18n.js');
 const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(CATALOGS, `${lang}.json`), 'utf8'));
 const spaces = (s) => String(s).replace(/ | /g, ' ');
 
@@ -167,7 +167,7 @@ test('#329 setLanguage / getLanguage: the current language is t\'s and the forma
 });
 
 test('#329 the AI agents\' "Same as the interface" follows settings.language.interface', () => {
-  const { agentsLanguage } = require('../src/shared/language');
+  const { agentsLanguage } = require('@multiagent/shared/language');
   assert.equal(agentsLanguage({ language: { agents: 'interface', interface: 'pt-BR' } }), 'pt-BR');
   assert.equal(agentsLanguage({ language: { agents: 'es', interface: 'pt-BR' } }), 'es');
 });
@@ -176,13 +176,13 @@ test('#329 i18n.js in the page: window.I18n, loaded by index.html before the scr
   const sandbox = { console };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'i18n.js'), 'utf8'), sandbox);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'i18n.js'), 'utf8'), sandbox);
   assert.ok(sandbox.I18n, 'window.I18n is defined');
   for (const fn of ['t', 'setLanguage', 'getLanguage', 'languages']) assert.equal(typeof sandbox.I18n[fn], 'function', fn);
   const html = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'index.html'), 'utf8');
-  const at = html.indexOf('<script src="../shared/i18n.js"></script>');
-  assert.ok(at >= 0, 'index.html loads ../shared/i18n.js');
-  for (const src of ['../shared/setup-model.js', '../shared/time-zone.js', 'setup.js', 'views/settings/settings.js']) {
+  const at = html.indexOf('<script src="../../packages/shared/i18n.js"></script>');
+  assert.ok(at >= 0, 'index.html loads ../../packages/shared/i18n.js');
+  for (const src of ['../../packages/shared/setup-model.js', '../../packages/shared/time-zone.js', 'setup.js', 'views/settings/settings.js']) {
     assert.ok(at < html.indexOf(`<script src="${src}"></script>`), `i18n.js loads before ${src}`);
   }
 });

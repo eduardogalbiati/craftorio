@@ -15,8 +15,8 @@
 
 const path = require('path');
 const yaml = require('js-yaml');
-const registry = require('../../shared/providers');
-const { PLATFORMS } = require('../../shared/platforms');
+const registry = require('@multiagent/shared/providers');
+const { PLATFORMS } = require('@multiagent/shared/platforms');
 const { MANIFEST_FILE } = require('../project/project-manifest');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);

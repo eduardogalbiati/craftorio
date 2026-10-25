@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const backlog = require('../backlog/backlog');
 const epics = require('../backlog/epics');
-const Language = require('../../shared/language');
+const Language = require('@multiagent/shared/language');
 
 const MAX_TASKS = 8;
 const MIN_CHILDREN = 2;

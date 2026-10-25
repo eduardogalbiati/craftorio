@@ -9,10 +9,10 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
-const { buildModel } = require('../src/shared/architecture-model');
-const { buildCity } = require('../src/shared/city-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
@@ -150,7 +150,7 @@ function loadWindow({ agents = () => ({ projectId: 'p1', runs: [], collisions: [
   vm.createContext(sandbox);
   const run = (file) => vm.runInContext(fs.readFileSync(file, 'utf8'), sandbox, { filename: path.relative(ROOT, file) });
   for (const name of SHARED) {
-    const file = path.join(ROOT, 'src', 'shared', name);
+    const file = path.join(ROOT, 'packages', 'shared', name);
     if (fs.existsSync(file)) { try { run(file); } catch { /* a Node-only core: the tab does without it */ } }
   }
   run(path.join(RENDERER, 'select.js'));

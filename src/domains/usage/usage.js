@@ -15,11 +15,11 @@ const path = require('path');
 const { installCommand } = require('../machine/install-commands');
 const { readRunSummary } = require('../run/run-record');
 const { runSummaries } = require('../run/runs');
-const registry = require('../../shared/providers');
+const registry = require('@multiagent/shared/providers');
 const { cacheWriteUsd } = require('../session/session-cache');
 const TimeZone = require('../analytics/time-zone');
 
-// The CLIs, from their adapters (src/shared/providers/). installCommand: what the Usage screen's play
+// The CLIs, from their adapters (packages/shared/providers/). installCommand: what the Usage screen's play
 // button runs (#147); installNote: what to do after it
 const PROVIDERS = registry.clis().map((a) => {
   const install = installCommand(a.id);

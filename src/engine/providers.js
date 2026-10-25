@@ -1,5 +1,5 @@
 // Runs one turn on a provider: spawns its CLI (or the simulation) and normalizes the events with the
-// adapter's stream parser. What differs per CLI lives in its adapter (src/shared/providers/, #348).
+// adapter's stream parser. What differs per CLI lives in its adapter (packages/shared/providers/, #348).
 //
 // Each turn = 1 headless process:
 //   claude -p --output-format stream-json ...   (prompt via stdin)
@@ -25,8 +25,8 @@ const { AGENT_ENV } = require('./capabilities');
 const { childEnv } = require('./child-env');
 const { runShim } = require('../domains/machine/shell');
 const { setBrewLookup } = require('../domains/machine/install-commands');
-const registry = require('../shared/providers');
-const { emptyUsage } = require('../shared/providers/usage');
+const registry = require('@multiagent/shared/providers');
+const { emptyUsage } = require('@multiagent/shared/providers/usage');
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -241,14 +241,14 @@ function killTree(child) {
 }
 
 // ---------------------------------------------------------------------------
-// Parsers: each CLI adapter's own (src/shared/providers/<id>.js `parse`), named here for the tests
+// Parsers: each CLI adapter's own (packages/shared/providers/<id>.js `parse`), named here for the tests
 // and the callers that read one turn's stream.
 // ---------------------------------------------------------------------------
 const parseClaude = registry.byId('claude').parse;
 const parseCodex = registry.byId('codex').parse;
 const parseGrok = registry.byId('grok').parse;
 
-// #233: the CLI session total a resumed Claude session continues from (src/shared/providers/claude.js).
+// #233: the CLI session total a resumed Claude session continues from (packages/shared/providers/claude.js).
 function seedClaudeTotal(sessionId, totalUsd) {
   registry.byId('claude').seedTotal(sessionId, totalUsd);
 }

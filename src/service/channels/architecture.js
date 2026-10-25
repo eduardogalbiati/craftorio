@@ -1,5 +1,5 @@
 // A project's Architecture tab (#356): the git facts of its repository (src/domains/project/architecture-facts.js,
-// numbers from the pure core src/shared/architecture-model.js), the Oracle's analysis on demand
+// numbers from the pure core packages/shared/architecture-model.js), the Oracle's analysis on demand
 // (src/domains/oracle/oracle-architecture.js: one turn in the Oracle's daily budget, simulated under mock or
 // MULTIAGENT_SIMULATION_ONLY; one analysis at a time, a second call is refused), the saved reports
 // (<workspace>/architecture/<project id>/, the latest with its findings marked new or gone, the
@@ -10,14 +10,14 @@
 // says where each sent finding went (`sentTo`: its issue and stage).
 // The project city (#371): architecture:city is the facts grouped by the saved city plan (folder
 // districts without one) with its edges and validation (src/domains/project/architecture-facts.js readCity, core
-// src/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
+// packages/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
 // it, keeping the one it replaces. Neither starts a model call.
 // The project map (#372): architecture:city also says whether to advise "Refresh the map"
 // (CityModel.refreshSignal: never without a saved plan) and names the project map run in progress;
 // the tab starts that workflow itself (run:start, workflows/project-map.yaml), only on a click.
 // The agents on the city (#374): architecture:agents reads the project's runs in progress (any app
 // process): each agent session's last file, the run's trail of changed files and its uncommitted
-// files (git, in the run's worktree), and the files two runs change (src/shared/city-agents.js); with
+// files (git, in the run's worktree), and the files two runs change (packages/shared/city-agents.js); with
 // a runId, also every file touch of that run of the project ("Replay on the map"). It never starts
 // a run, answers a gate or calls a model.
 // An issue's impact preview (#375): architecture:impact gives the City view's impact overlay the
@@ -44,13 +44,13 @@ const { isWaitingStage } = require('../../domains/refactor/refactor-cadence');
 const simulation = require('../../engine/simulation');
 const { localChanges } = require('../../engine/test-paths');
 const { readEvents } = require('../../domains/supervisor/supervisor');
-const cityAgents = require('../../shared/city-agents');
-const { recordHitRate } = require('../../shared/city-impact');
+const cityAgents = require('@multiagent/shared/city-agents');
+const { recordHitRate } = require('@multiagent/shared/city-impact');
 const { validateSchema } = require('../../domains/workspace/json-schema');
 const {
   CITY_PLAN_SCHEMA,
   refreshSignal,
-} = require('../../shared/city-model');
+} = require('@multiagent/shared/city-model');
 const { clientError, requireId } = require('../common');
 const {
   ANY,

@@ -1,4 +1,4 @@
-// Service area: the interface language (#329, src/shared/i18n.js) of what the service writes for
+// Service area: the interface language (#329, packages/shared/i18n.js) of what the service writes for
 // the user, the OS notifications' text (src/domains/workspace/notifications.js). Settings › General › Language ›
 // Interface (settings.language.interface), else the computer's language (host.locale, Electron's
 // app.getLocale()) when it has a catalog, else English. Applied when a workspace opens and on each
@@ -6,8 +6,8 @@
 // interface" default for an unset interface: the computer's language, as the screens resolve it (#424).
 
 const workspace = require('../../domains/workspace/workspace');
-const I18n = require('../../shared/i18n');
-const Language = require('../../shared/language');
+const I18n = require('@multiagent/shared/i18n');
+const Language = require('@multiagent/shared/language');
 
 module.exports = (ctx) => {
   function applyInterfaceLanguage(settings) {

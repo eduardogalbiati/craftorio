@@ -25,7 +25,7 @@ process.env.MULTIAGENT_SIMULATION_ONLY = '1';
 process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.2';
 const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-ws-'));
 process.env.MULTIAGENT_WORKSPACE = wsDir; // scratch workspace, no workspace dialog
-// --lang <code> (#329): the interface language (a code of src/shared/i18n/), English by default
+// --lang <code> (#329): the interface language (a code of packages/shared/i18n/), English by default
 // whatever the computer's language, so the checks keep their English selectors
 const langAt = process.argv.indexOf('--lang');
 const lang = (langAt >= 0 && process.argv[langAt + 1]) || 'en';

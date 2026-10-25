@@ -87,7 +87,7 @@ not used. Measured on this repo (first request of a Claude agent, Haiku, "reply 
 tokens with the user's setup → 22.0k isolated with the developer's capabilities**.
 
 **Which account a CLI runs on (#312)**: each adapter names the variable of its config folder
-(`configDirEnv` in `src/shared/providers/<id>.js`: Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME`, Grok
+(`configDirEnv` in `packages/shared/providers/<id>.js`: Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME`, Grok
 none, always `~/.grok`); `src/domains/cli/cli-config-dirs.js` reads it from there. A session on one of Settings'
 accounts gets `{ <configDirEnv>: <folder> }` (`accountEnv` in `src/engine/providers.js`) added to the
 CLI process environment by `runCli`, after the agents' variables. It is never part of
@@ -197,10 +197,10 @@ that is the only form the allowlist accepts (no PowerShell tool, full or 8.3 pat
 `&&` chains, body files: use `--body`; a pipe into an allowed utility such as `| head` is fine). Inside runs the engine refreshes PATH, so bare `gh` works.
 
 The app's own calls (the Backlog sync, issues, labels, PRs/MRs, epics, the Oracle's read tools, the
-probes and the PR states) are built by the **platform adapters** (#351): `src/shared/platforms/github.js`
+probes and the PR states) are built by the **platform adapters** (#351): `packages/shared/platforms/github.js`
 and `gitlab.js` hold each platform's identity (id `github`/`gitlab`, short id `gh`/`gl`, CLI, label),
 its request terms ("PR #" / "MR !"), a `{ cli, args }` builder per operation, the parsers of each
-command's JSON and the URL parsers. `src/shared/platforms/index.js` resolves either vocabulary
+command's JSON and the URL parsers. `packages/shared/platforms/index.js` resolves either vocabulary
 (`resolvePlatform('gh') === resolvePlatform('github')`; the workflow input `git_platform` and the
 skill suffixes `-gh`/`-gl` use the short id). Code outside the adapters asks the adapter instead of
 branching on the platform: `test/platform-literals-351.test.js` fails on a `'github'`/`'gitlab'`/

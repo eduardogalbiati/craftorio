@@ -4,7 +4,7 @@
 // legend, cards, controls, the connections panel) is that classic script's; the bundle draws the
 // city and reports what the pointer is on.
 //   ProjectCityScene.mount(element, { layout, paint, markers, tests, pins, theme, cityLife, glow, relationsOf, onHover, onPick }) → handle
-//   - layout: src/shared/city-layout.js layoutCity; paint: { colours: [hex], greyed: [bool] } per
+//   - layout: packages/shared/city-layout.js layoutCity; paint: { colours: [hex], greyed: [bool] } per
 //     building (colourBy, then applyOverlay); markers: applyOverlay's; tests: draw the test files;
 //     pins: the file paths whose connections stay drawn (#382, the connections panel); theme: 'dark'
 //     | 'light' (run3d-theme.js); cityLife, glow (#450, both on by default): the street life (trees,

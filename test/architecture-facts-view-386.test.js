@@ -1,5 +1,5 @@
 // #386 acceptance: the pure functions behind the Architecture tab's Facts view for a human reader
-// (src/shared/architecture-facts-view.js, UMD: module.exports in Node, window.ArchitectureFactsView
+// (packages/shared/architecture-facts-view.js, UMD: module.exports in Node, window.ArchitectureFactsView
 // in the browser): a finding's 0-100 danger score from its severity and its target's Danger Zone
 // score (and the formula shown in a tooltip), the findings ranked, counted and filtered, the
 // languages as GitHub shows them (Linguist colours, one decimal, "Other" under 0.5%), the one-line
@@ -8,9 +8,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('../src/shared/architecture-facts-view.js');
+const load = () => require('@multiagent/shared/architecture-facts-view.js');
 
-// the Danger Zone of src/shared/architecture-model.js: [{ file, score }], score = √(u² + v²) in 0..√2
+// the Danger Zone of packages/shared/architecture-model.js: [{ file, score }], score = √(u² + v²) in 0..√2
 const DZ = [
   { file: 'src/billing.js', score: 1.4142 },
   { file: 'src/rates.js', score: 1.2 },

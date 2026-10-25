@@ -4,11 +4,11 @@
 // (`agents: [...]`) grouped. No DOM here: runchat.js renders it, a test feeds it engine events.
 // Browser: window.RunChatModel; Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('../../../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // A session's provider is the workflow's provider key (claude, codex, grok) or its type; in a
   // simulation it is "mock", so the model name tells which CLI it stands for (the provider registry,
-  // src/shared/providers/, resolves both).
-  const registry = typeof module === 'object' && module.exports ? require('../../../shared/providers') : root.Providers;
+  // packages/shared/providers/, resolves both).
+  const registry = typeof module === 'object' && module.exports ? require('@multiagent/shared/providers') : root.Providers;
   // the CLI adapter named by an id, a type or a CLI name (a model name is not a provider), else null
   const cliNamed = (key) => {
     const a = registry.resolve(key);
@@ -49,7 +49,7 @@
     return { prose: prose.trim(), json, decisions };
   }
 
-  const displayName = typeof module === 'object' && module.exports ? require('../../../shared/display-name.js').displayName : root.displayName;
+  const displayName = typeof module === 'object' && module.exports ? require('@multiagent/shared/display-name.js').displayName : root.displayName;
   // what the run chat shows about a session's agent (the hover card): recorded in the events,
   // so a replayed run shows what was actually used
   // simulates (#262): a simulated session's workflow provider (provider is `mock`)

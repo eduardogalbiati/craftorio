@@ -1,8 +1,8 @@
 // #424 acceptance tests (written before the code): "Same as the interface" (settings.language.agents
 // unset or 'interface') resolves to the language the interface resolves to, I18n.resolveLanguage(
-// settings.language.interface, <the computer's language>) (src/shared/i18n.js): the saved interface
+// settings.language.interface, <the computer's language>) (packages/shared/i18n.js): the saved interface
 // language, else the computer's when it has a catalog (en, pt-BR), else English. Today agentsLanguage
-// (src/shared/language.js) gives English while the interface is unset.
+// (packages/shared/language.js) gives English while the interface is unset.
 // The computer's language reaches the service as host.locale; the service area
 // src/service/areas/interface-language.js applies the interface language from it. These tests go
 // through that seam (the area with a host whose locale is set, or the whole service from
@@ -12,8 +12,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeService } = require('./service/helpers');
 
-const load = () => require('../src/shared/language');
-const I18n = () => require('../src/shared/i18n');
+const load = () => require('@multiagent/shared/language');
+const I18n = () => require('@multiagent/shared/i18n');
 const area = (locale) => require('../src/service/areas/interface-language')({ events: { on() {} }, host: { locale } });
 // the computer's language is `locale`, nothing saved for the interface
 const onComputer = (locale, settings = {}) => area(locale).applyInterfaceLanguage(settings);

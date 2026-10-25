@@ -1,7 +1,7 @@
 // #346: type checking with checkJs and JSDoc types, file by file, with a ratchet. `typescript` is a
 // dev dependency; jsconfig.json keeps checkJs off and files opt in with `// @ts-check`;
 // `npm run typecheck` runs `tsc --noEmit -p jsconfig.json`. The core shapes are JSDoc typedefs in
-// src/shared/types.js. The ratchet: every opted-in file passes the checker (this test, so `npm test`
+// packages/shared/types.js. The ratchet: every opted-in file passes the checker (this test, so `npm test`
 // runs it on every OS), CHECKED records the files that opted in (one can't opt out), NEXT is the
 // owner's list of files to check next and shrinks as they opt in.
 // Seam: scripts/typecheck.js { CHECKED, NEXT, findOptedIn, checkRatchet, typecheck }:
@@ -44,7 +44,7 @@ function project(t, files) {
   return dir;
 }
 
-const TYPES = posix(path.join(root, 'src', 'shared', 'types.js'));
+const TYPES = posix(path.join(root, 'packages', 'shared', 'types.js'));
 const CORE_TYPES = ['RunSummary', 'RunEvent', 'RoadmapItem', 'RoadmapStage', 'Roadmap', 'Workflow', 'WorkflowStep', 'SessionRecord'];
 
 test('#346 typescript is a dev dependency and `npm run typecheck` runs tsc --noEmit -p jsconfig.json', () => {
@@ -153,9 +153,9 @@ test('#346 a file listed in both CHECKED and NEXT that dropped // @ts-check is r
   assert.deepEqual(found(checkRatchet({ root: dir, checked: ['src/both.js'], next: ['src/both.js'] })), [{ file: 'src/both.js', kind: 'opted-out' }]);
 });
 
-test('#346 src/shared/types.js defines the core shapes as JSDoc typedefs another checked file can import', async (t) => {
+test('#346 packages/shared/types.js defines the core shapes as JSDoc typedefs another checked file can import', async (t) => {
   const { typecheck } = load();
-  const text = read('src/shared/types.js');
+  const text = read('packages/shared/types.js');
   for (const name of CORE_TYPES) assert.match(text, new RegExp(`@typedef\\s*\\{[\\s\\S]*?\\}\\s*${name}\\b|@typedef\\s+${name}\\b`), `@typedef ${name}`);
   const uses = CORE_TYPES.map((name) => `/** @param {import('${TYPES}').${name}} x */\nfunction use${name}(x) { return x; }`).join('\n');
   const dir = project(t, {
@@ -177,7 +177,7 @@ test('#346 RunEvent is a union by `type`: an event with an unknown type is a typ
 test('#346 docs/agents/testing.md says how to opt a file in, where the types live and how the ratchet works', () => {
   const doc = read('docs/agents/testing.md');
   assert.match(doc, /\/\/ @ts-check/);
-  assert.match(doc, /src\/shared\/types\.js/);
+  assert.match(doc, /packages\/shared\/types\.js/);
   assert.match(doc, /npm run typecheck/);
   assert.match(doc, /scripts\/typecheck\.js/);
   assert.match(doc, /\bNEXT\b/);

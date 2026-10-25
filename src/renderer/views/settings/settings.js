@@ -6,7 +6,7 @@
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js). #329: its markup is
-// settings-markup.js, every text from the catalog through t (src/shared/i18n.js, settings.* keys).
+// settings-markup.js, every text from the catalog through t (packages/shared/i18n.js, settings.* keys).
 
 function showSettingsTab(tab) {
   document.querySelectorAll('.settings-tab').forEach((b) => b.classList.toggle('active', b.dataset.stab === tab));

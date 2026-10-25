@@ -4,9 +4,9 @@
 // suite rounds, gate waits and the slowest tool calls, from the run's summary.json and events.jsonl; and its comparison with the other real successful runs of
 // the same workflow (median and p25-p75 per figure). Pure: the service (analytics:run in
 // src/service/areas/insights.js) reads the run record (src/domains/run/run-record.js) and caches the figures;
-// a record of an older shape is upgraded first (#350, src/shared/run-record.js).
+// a record of an older shape is upgraded first (#350, packages/shared/run-record.js).
 
-const { upgradeRunRecord } = require('../../shared/run-record');
+const { upgradeRunRecord } = require('@multiagent/shared/run-record');
 
 const MIN_RUNS = 3;
 const HISTORY = 30;

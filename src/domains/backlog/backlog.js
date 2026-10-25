@@ -22,7 +22,7 @@
 // issues, refreshed by each sync (`refreshQueuedCopies`) and read again right before a run starts
 // (`freshIssues`, with the cache as a recorded fallback when the platform cannot be read).
 // Archive (#238): `archiveIssues` closes issues as not planned with the `archived` label (guards:
-// src/shared/backlog-archive.js), `restoreIssues` reopens them.
+// packages/shared/backlog-archive.js), `restoreIssues` reopens them.
 // The platform CLI helpers and the issue copies live in src/domains/backlog/issues.js (re-exported here, #345).
 // Screen: src/renderer/views/backlog/backlog.js; channels: src/service/channels/backlog.js.
 
@@ -54,8 +54,8 @@ const { refreshCopies } = require('../roadmap/roadmap');
 const { writeJsonSafe } = require('../workspace/state-file');
 const { storeFor } = require('../workspace/store');
 const TimeZone = require('../analytics/time-zone');
-const { ARCHIVED_LABEL, archiveBlockReason } = require('../../shared/backlog-archive');
-const { LIVE_ITEM_STATES } = require('../../shared/roadmap-model');
+const { ARCHIVED_LABEL, archiveBlockReason } = require('@multiagent/shared/backlog-archive');
+const { LIVE_ITEM_STATES } = require('@multiagent/shared/roadmap-model');
 
 // the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
 const ENRICH_WORKFLOW = 'writer-reviewer';

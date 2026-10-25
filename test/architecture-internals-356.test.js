@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const core = require('../src/shared/architecture-model');
+const core = require('@multiagent/shared/architecture-model');
 const { parseLizard } = require('../src/domains/project/architecture-facts');
 const proposals = require('../src/domains/refactor/refactor-proposals');
 const arch = require('../src/domains/oracle/oracle-architecture');
@@ -30,7 +30,7 @@ test('#356 globRe: a hostile pattern does not backtrack (runs of * collapse, too
 // the cap allows, against a long path that does not match. Run in a child process with a deadline,
 // so a catastrophic backtrack fails the test instead of hanging the file.
 test('#356 globRe: 8 single-star wildcards against a 200-character path that does not match return fast', () => {
-  const modulePath = JSON.stringify(path.join(__dirname, '..', 'src', 'shared', 'architecture-model.js'));
+  const modulePath = JSON.stringify(path.join(__dirname, '..', 'packages', 'shared', 'architecture-model.js'));
   const script = [
     `const core = require(${modulePath});`,
     "const pattern = '*a'.repeat(8);",
@@ -49,7 +49,7 @@ test('#356 globRe: 8 single-star wildcards against a 200-character path that doe
 });
 
 test('#356 globMatcher: the glob rules of globToRegExp without a RegExp (worked examples and the TESTS_PATHS defaults)', () => {
-  const { globMatcher, globToRegExp, TESTS_PATHS } = require('../src/shared/globs');
+  const { globMatcher, globToRegExp, TESTS_PATHS } = require('@multiagent/shared/globs');
   assert.equal(globMatcher('*.lock').test('a/b/yarn.lock'), true);
   assert.equal(globMatcher('*.lock').test('a/b/yarn.locks'), false);
   assert.equal(globMatcher('src/*.js').test('src/a/b.js'), false);

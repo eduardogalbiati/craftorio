@@ -3,7 +3,7 @@
 // one mock agent turn then a human gate that only the TEST answers, as the owner).
 //
 // Assumed interface (the developer implements it; names chosen to match the existing code):
-// - src/shared/roadmap-model.js: ITEM_STATES gains 'parked' (persisted), isFinished counts it as finished
+// - packages/shared/roadmap-model.js: ITEM_STATES gains 'parked' (persisted), isFinished counts it as finished
 //   (so stageProgress and currentStage do too). ACTIONS gains 'park' (the item's "Move on") and
 //   'parkStage' (the stage menu's "Move on from this stage"); allowedActions answers both as
 //   { allowed, reason }. An item at a human gate is the view's `status: 'running'` with `waiting: true`.
@@ -30,7 +30,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const model = () => require('../../src/shared/roadmap-model');
+const model = () => require('@multiagent/shared/roadmap-model');
 const roadmaps = () => require('../../src/domains/roadmap/roadmap');
 const night = () => require('../../src/domains/night/night-watch');
 

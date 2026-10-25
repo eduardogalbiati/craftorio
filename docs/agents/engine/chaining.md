@@ -11,7 +11,7 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
   The visual builder flags `outputs` (it would drop it on save): such a workflow is edited as YAML.
 - Bundled contracts: issue-tracker `issues`; writer-reviewer `document`, `issue`; ai-arena `document`;
   software-development(-local-hero) `branch`, `merged_commit`, `issues`, `pr_url`; run-retrospective `findings`.
-- `WorkflowRun` options `then` (what follows, `src/shared/chain-model.js normalizeThen`: `{ action:
+- `WorkflowRun` options `then` (what follows, `packages/shared/chain-model.js normalizeThen`: `{ action:
   'workflow', workflow, map: { <next input>: <output name> | '@run' }, inputs }`, `{ action:
   'product_owner' }`, `{ action: 'queue', workflow, inputs }`) and `from: { run_id, workflow }`, both in
   `workflow.started` and `summary.json`. A gate choice with `then:` (issue-tracker's `create_assign`:

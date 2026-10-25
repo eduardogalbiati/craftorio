@@ -12,7 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const registry = require('../../shared/providers');
+const registry = require('@multiagent/shared/providers');
 const { claudeAccount, claudeSignedIn } = require('./claude-auth');
 const { signInCommands } = require('../machine/install-commands');
 const { psQuote, shQuote } = require('../machine/shell');

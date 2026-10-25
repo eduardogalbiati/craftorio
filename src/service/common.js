@@ -11,7 +11,7 @@ const {
 } = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
 const { execShim } = require('../domains/machine/shell');
-const registry = require('../shared/providers');
+const registry = require('@multiagent/shared/providers');
 const sessionCache = require('../domains/session/session-cache');
 const usage = require('../domains/usage/usage');
 const workflows = require('../domains/workflow/workflows');

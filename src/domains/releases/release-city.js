@@ -1,7 +1,7 @@
 // A release on the project city (#376), the git side, read-only (no checkout): the base city at the
 // previous release (src/domains/project/architecture-facts.js readCity with `ref`: the tree and the facts at that
 // tag, with the current plan's rules), what changed (`git diff --name-status -M` through the pure
-// core src/shared/city-release.js, the lines from `--numstat`), and the release's commits with the
+// core packages/shared/city-release.js, the lines from `--numstat`), and the release's commits with the
 // issues they name (the issue filter). Tags in semver order (src/domains/releases/releases.js releaseSemver /
 // compareSemver) for the two-tag picker. A project without tags compares any two commits. Never
 // throws: a folder that is not a repository is 'not-git', a ref git does not know 'unknown-ref'.
@@ -20,7 +20,7 @@ const {
 const {
   issuesOf,
   parseNameStatus,
-} = require('../../shared/city-release');
+} = require('@multiagent/shared/city-release');
 
 const GIT_TIMEOUT_MS = 120e3;
 const MAX_BUFFER = 1 << 28;

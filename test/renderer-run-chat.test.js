@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { providerType } = require('../src/renderer/views/runchat/run-chat-model.js');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'runchat', 'runchat.js'), 'utf8');
 
@@ -144,7 +144,7 @@ test('turnHtml: a message on the right gets the rc-right class', () => {
 
 // turnHtml's activity block (#160): a sub-agent entry gets its own class, a tag for its type and
 // its description (not the raw tool input); an ordinary tool keeps the plain rendering. Its summary
-// comes from the catalog (#330: t() of src/shared/i18n.js, in the language I18n is set to).
+// comes from the catalog (#330: t() of packages/shared/i18n.js, in the language I18n is set to).
 function activityExtras(activity) {
   const block = /const tools = it\.activity\.filter[\s\S]*?\n    \}\n/.exec(src)[0];
   assert.ok(block, 'activity block not found in runchat.js: the source moved');
@@ -175,7 +175,7 @@ test('turnHtml activity: a failed sub-agent call still gets the err class alongs
 });
 
 test('#330 turnHtml activity: the summary counts tool calls and sub-agents in the interface language', (t) => {
-  const I18n = require('../src/shared/i18n.js');
+  const I18n = require('@multiagent/shared/i18n.js');
   t.after(() => I18n.setLanguage('en'));
   const calls = [
     { kind: 'tool', name: 'Task', input: '{}', subagent: { type: 'Explore', description: 'Map it' } },

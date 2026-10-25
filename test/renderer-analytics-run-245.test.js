@@ -7,8 +7,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox.js');
-const { displayName } = require('../src/shared/display-name.js');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { displayName } = require('@multiagent/shared/display-name.js');
 
 const FILE = path.join(__dirname, '..', 'src', 'renderer', 'views', 'analytics', 'analytics-run.js');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

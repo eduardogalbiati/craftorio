@@ -4,7 +4,7 @@
 // is a switch of Explore, off by default, never on a release's city) reads nothing until the header's
 // Live switch puts the city in the live mode (project-city-modes.js); while live, it polls architecture:agents: the project's runs in
 // progress, each agent session's last file, each run's trail of changed files and its uncommitted
-// files (src/shared/city-agents.js places them on the layout). On the city: a layer
+// files (packages/shared/city-agents.js places them on the layout). On the city: a layer
 // (ProjectCity.overlay) lights each run's trail in the run's colour and the files two runs change in
 // red, with a pin in the run's colour on each building an agent is on and on each crane. On the card:
 // one entry per agent ("<agent> · <step>", its robot as the run lists draw it, robotAvatar of

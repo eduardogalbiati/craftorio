@@ -533,7 +533,7 @@ function applyRunEvent(v, ev) {
 }
 
 // #350: a run recorded before per-turn costs (#233) is read through the run record's upgrade
-// (src/shared/run-record.js), as the services read past runs: the events so far, upgraded, end with
+// (packages/shared/run-record.js), as the services read past runs: the events so far, upgraded, end with
 // this one (a turn's own cost, its session's corrected snapshot) and what it stands for (an old
 // `attempt N/M failed` log line: the stopped attempt after it)
 const upgradedTail = (v, ev) => (v.run?.costPerTurn ? [ev]

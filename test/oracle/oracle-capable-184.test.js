@@ -235,7 +235,7 @@ test('memory drawer: the Memory panel has an Import action that calls importOrac
   assert.match(src, /importOracleMemory/);
   // #330: the button's text comes from the catalog
   assert.match(src, />\s*\$\{t\('oracle\.import'\)\}/);
-  const en = JSON.parse(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'i18n', 'en.json'), 'utf8'));
+  const en = JSON.parse(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'i18n', 'en.json'), 'utf8'));
   assert.equal(en['oracle.import'], 'Import');
 });
 

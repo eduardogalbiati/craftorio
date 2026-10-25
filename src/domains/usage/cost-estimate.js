@@ -202,7 +202,7 @@ function actualTime(item, runById) {
  * (`actualMinutes`, `actualTopStep`) of each item with a run. A stage's estimate sums its items' costs
  * and takes its longest item's minutes (`missing`: items with no estimate yet); its `actualUsd` sums
  * its items' real costs, its `actualMinutes` is its longest item's.
- * @param {import('../../shared/types').Roadmap} roadmap
+ * @param {import('@multiagent/shared/types').Roadmap} roadmap
  * @param {any[] | null | undefined} runs
  * @param {{ issues?: any[], prices?: object }} [options]
  */

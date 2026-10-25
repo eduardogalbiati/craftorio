@@ -15,7 +15,7 @@
 
 const os = require('os');
 // the shared module itself (not ./time-zone): the engine requires this file (scripts/layers.js utility)
-const TimeZone = require('../../shared/time-zone');
+const TimeZone = require('@multiagent/shared/time-zone');
 
 const GIB = 1024 ** 3;
 const DAY_MS = 864e5;

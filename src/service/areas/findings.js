@@ -3,7 +3,7 @@
 // arguments or its answer) and the app's version and commit. Channels: channels/findings.js.
 const { execFileSync } = require('child_process');
 const path = require('path');
-const { remember } = require('../../shared/findings-model');
+const { remember } = require('@multiagent/shared/findings-model');
 
 const MAX_CALLS = 50;
 const APP_DIR = path.join(__dirname, '..', '..', '..');

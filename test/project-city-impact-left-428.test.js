@@ -6,7 +6,7 @@
 //     thing inside it; it keeps its Close; its CSS is no longer centred (no left: 50% / translateX(-50%))
 //     and it still scrolls when long;
 //   - the Arcs note (project-city-edges) is gone with its catalog keys project_city_notes.arcs and
-//     project_city_notes.hovering_those_files_draws_no_arc, in every language of src/shared/i18n/;
+//     project_city_notes.hovering_those_files_draws_no_arc, in every language of packages/shared/i18n/;
 //   - a stage with no building changed by two items: its data-testid="city-impact-conflicts" is one
 //     muted line (a class with "muted", not the classes of the red box, only "No building is changed
 //     by two items."); the red box stays for real conflicts;
@@ -18,10 +18,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
-const { buildModel } = require('../src/shared/architecture-model');
-const { buildCity } = require('../src/shared/city-model');
+const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..');
 const DIR = path.join(ROOT, 'src', 'renderer', 'views', 'project');
@@ -63,7 +63,7 @@ function load({ agents = NO_RUN } = {}) {
   withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js', 'city-impact.js', 'roadmap-model.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   for (const f of ['project-city-modes.js', 'project-city-panels.js', 'project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-city-impact.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sandbox, { filename: f });
@@ -136,7 +136,7 @@ test('#428 the card\'s CSS is no longer centred over the city and it still scrol
 });
 
 test('#428 the Arcs note\'s catalog keys are gone from every language', () => {
-  const dir = path.join(ROOT, 'src', 'shared', 'i18n');
+  const dir = path.join(ROOT, 'packages', 'shared', 'i18n');
   const left = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).flatMap((f) => {
     const cat = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
     return ['project_city_notes.arcs', 'project_city_notes.hovering_those_files_draws_no_arc'].filter((k) => k in cat).map((k) => `${f} ${k}`);

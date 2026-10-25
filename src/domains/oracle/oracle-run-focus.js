@@ -15,8 +15,8 @@
 //   or minutes regressed against its baseline of the same class (src/domains/run/step-regressions.js).
 // Pure, no model: the caller reads summary.json, events.jsonl, the suite logs and the test files.
 
-const { CHANGE_TOOLS } = require('../../shared/city-agents');
-const { upgradeRunRecord } = require('../../shared/run-record');
+const { CHANGE_TOOLS } = require('@multiagent/shared/city-agents');
+const { upgradeRunRecord } = require('@multiagent/shared/run-record');
 const { cacheLifetimeMs, cacheTier } = require('../session/session-cache');
 const { REGRESSION_DEFAULTS, regressionLine, stepRegressions } = require('../run/step-regressions');
 

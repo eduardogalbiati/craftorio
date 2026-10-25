@@ -26,7 +26,7 @@ const os = require('os');
 const path = require('path');
 const yaml = require('js-yaml');
 const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
-const { displayName } = require('../src/shared/display-name.js');
+const { displayName } = require('@multiagent/shared/display-name.js');
 const runs = require('../src/domains/run/runs');
 
 const WORKFLOWS = path.join(__dirname, '..', 'workflows');

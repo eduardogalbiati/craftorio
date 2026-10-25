@@ -26,7 +26,7 @@ validate, verify_failed), then `local-merge-pipeline` (resolve_merge, merge_bloc
 (milestone, per-merge, train, rc-stable). The workflow keeps only what differs per project: the
 transitions, the suite's `command` (the profile's test command), the agents with the project's
 language skills, test command and check command in their prompts, the CLI's provider definition
-from the registry (`src/shared/providers`), and no `ship:` (a repository workflow cannot ship).
+from the registry (`packages/shared/providers`), and no `ship:` (a repository workflow cannot ship).
 `openQuestions(profile)` lists what the interview asks: validation, budget, screenshots and review
 rigour always, the team, release and merge styles when the profile leaves them `null`. An answer
 named after a profile field (`PROFILE_FIELDS`: team, merge, release, ci, testCommand, checkCommand,

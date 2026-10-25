@@ -12,7 +12,7 @@ const vm = require('vm');
 // #329: the markup lives in settings-markup.js, its texts in the catalog (the sandboxes get t)
 const { settingsSource, t } = require('./settings-source-329');
 const settingsSrc = settingsSource();
-const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
+const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
 
 function makeEl() {
   const classes = new Set();

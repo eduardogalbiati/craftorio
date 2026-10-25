@@ -1,4 +1,5 @@
-// File size ratchet (issue #334): every .js file under src/ and scripts/ has at most MAX_LINES lines.
+// File size ratchet (issue #334): every source .js file (scripts/source-tree.js: src/, the workspaces,
+// scripts/) has at most MAX_LINES lines.
 // The files above it when the rule came are EXCEPTIONS, each with its line count when it was
 // listed: a listed file may only shrink. It fails when it grows past its count, and when it drops
 // to MAX_LINES or fewer (or is gone) until it leaves the list; a lower count may replace the
@@ -11,8 +12,11 @@
 const fs = require('fs');
 const path = require('path');
 
+const { sourceDirs } = require('./source-tree');
+
 const ROOT = path.join(__dirname, '..');
-const DIRS = ['src', 'scripts'];
+// the folders scanned (sourceDirs of the root, then scripts/)
+const DIRS = (root) => [...sourceDirs(root), 'scripts'];
 const MAX_LINES = 1000;
 const HOW_TO = 'docs/agents/testing.md ("File size ratchet")';
 
@@ -39,7 +43,8 @@ function listFiles(root, dir, match = /\.js$/) {
   const abs = path.join(root, dir);
   if (!fs.existsSync(abs)) return [];
   return fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => {
-    if (e.name === 'node_modules') return [];
+    // a workspace's test/ folder holds tests, not sources (scripts/source-tree.js)
+    if (e.name === 'node_modules' || (e.name === 'test' && dir !== 'scripts' && dir.includes('/'))) return [];
     const rel = `${dir}/${e.name}`;
     if (e.isDirectory()) return listFiles(root, rel, match);
     return match.test(e.name) ? [rel] : [];
@@ -52,7 +57,7 @@ const fmt = (n) => n.toLocaleString('en-US');
 function checkFileSizes({ root = ROOT, exceptions = EXCEPTIONS } = {}) {
   const problems = [];
   const seen = new Set();
-  for (const file of DIRS.flatMap((d) => listFiles(root, d)).sort()) {
+  for (const file of DIRS(root).flatMap((d) => listFiles(root, d)).sort()) {
     const lines = countLines(fs.readFileSync(path.join(root, ...file.split('/')), 'utf8'));
     const listed = Object.hasOwn(exceptions, file) ? exceptions[file] : null;
     if (listed !== null) seen.add(file);

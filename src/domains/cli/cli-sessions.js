@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs, cliSessionDirs } = require('./cli-config-dirs');
-const registry = require('../../shared/providers');
+const registry = require('@multiagent/shared/providers');
 
 const HEAD_BYTES = 512 * 1024;
 const TAIL_BYTES = 256 * 1024;
@@ -24,7 +24,7 @@ const TITLE_MAX = 120;
 const cache = new Map(); // file -> { key, session }
 
 // The interactive CLIs: what the Sessions screen can start or reopen (from their adapters,
-// src/shared/providers/: models, efforts, newArgs, interactiveResumeArgs, modelsCache).
+// packages/shared/providers/: models, efforts, newArgs, interactiveResumeArgs, modelsCache).
 const CLI_PROVIDERS = Object.fromEntries(registry.clis().map((a) => [a.id, {
   name: a.label, command: a.cli, models: a.models, efforts: a.efforts,
   newArgs: a.newArgs, resumeArgs: a.interactiveResumeArgs, modelsCache: a.modelsCache || null,

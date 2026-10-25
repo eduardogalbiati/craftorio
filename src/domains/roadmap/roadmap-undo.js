@@ -16,7 +16,7 @@
 // (src/service/channels/roadmap.js) and src/domains/roadmap/roadmap-history.js.
 
 const { testsLater } = require('./roadmap');
-const { isFinished } = require('../../shared/roadmap-model');
+const { isFinished } = require('@multiagent/shared/roadmap-model');
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);

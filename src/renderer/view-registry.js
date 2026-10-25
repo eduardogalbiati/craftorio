@@ -13,7 +13,7 @@
 // of `markup`: that screen places it in its own section.
 // `mount()` runs once, right after the markup is in place; `show()` each time showView opens it.
 // #329 the interface language: `markup` may be a function (drawn again when the language changes,
-// redrawMarkup); the menu's texts come from the catalog (src/shared/i18n.js) by key, `nav.<id>`
+// redrawMarkup); the menu's texts come from the catalog (packages/shared/i18n.js) by key, `nav.<id>`
 // (`nav.<id>.<tab>` for a tab, `nav.<id>.title` for the hover text, `nav.group.<id>` for a group's
 // title), else the entry's own text, so the views keep their English `nav`; relabelNav repaints them.
 const viewRegistry = new Map();

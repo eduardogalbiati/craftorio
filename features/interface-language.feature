@@ -4,7 +4,7 @@ Feature: Every screen in the interface language
   not only the sidebar and Settings, and a change re-renders what is open, without a restart.
 
   # The steps name a label by its English text and read its expected text in the chosen language
-  # from the app's catalogs (src/shared/i18n/en.json and pt-BR.json), so they do not depend on the
+  # from the app's catalogs (packages/shared/i18n/en.json and pt-BR.json), so they do not depend on the
   # Portuguese wording. Portuguese sidebar entries already in the catalog: Settings → "Configurações",
   # Runs → "Execuções"; Backlog stays "Backlog". Assumes the demo workspace's failed run "-old00233"
   # (features/workflow-runs.feature).

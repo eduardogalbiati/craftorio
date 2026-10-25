@@ -8,14 +8,14 @@ const path = require('path');
 const vm = require('vm');
 const { makeService } = require('./service/helpers');
 const { createDom } = require('./mini-dom');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
 const ROOT = path.join(__dirname, '..');
 const hash = '22'.repeat(20);
 const FILES = [{ path: 'src/engine/run.js', lines: 100 }, { path: 'docs/a.md', lines: 5 }];
 
 function facts() {
-  const { buildModel } = require('../src/shared/architecture-model');
+  const { buildModel } = require('@multiagent/shared/architecture-model');
   return buildModel({
     head: { commit: hash, date: '2026-01-05T12:00:00Z' }, branch: 'main', shallow: false, window: { since: null, until: null },
     files: FILES.map((f) => ({ ...f })), log: `\x01${hash} 2026-01-05T12:00:00Z\n\n${FILES.map((f) => `A\t${f.path}`).join('\n')}\n`,
@@ -24,7 +24,7 @@ function facts() {
 }
 
 async function openCity(settings) {
-  const { buildCity } = require('../src/shared/city-model');
+  const { buildCity } = require('@multiagent/shared/city-model');
   const answer = { state: 'ok', ...buildCity({ plan: null, facts: facts() }) };
   const mounts = [];
   const noop = () => {};
@@ -49,7 +49,7 @@ async function openCity(settings) {
   withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox);
   }
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', f), 'utf8'), sandbox, { filename: f });

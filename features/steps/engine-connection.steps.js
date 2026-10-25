@@ -16,7 +16,7 @@ const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
 
 const LOAD_TIMEOUT = 30000;
-// the token hint's claim (connection.token_hint in src/shared/i18n/en.json)
+// the token hint's claim (connection.token_hint in packages/shared/i18n/en.json)
 const KEPT_ENCRYPTED = /Kept encrypted/i;
 
 const pageRoot = (win) => win.getByTestId('engine-connection');

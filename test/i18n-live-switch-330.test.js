@@ -4,13 +4,13 @@
 // does not run again (its listeners and timers are not registered twice) and what the screen drew since
 // stays. view-registry.js and interface-language.js run in a sandbox over a small DOM that parses the
 // markup and walks it (the page harness, test/renderer-app-harness.js, has no tree walker); the labels
-// are the Backlog's tabs and the Oracle dock's, read from the catalog (src/shared/i18n.js).
+// are the Backlog's tabs and the Oracle dock's, read from the catalog (packages/shared/i18n.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const I18n = require('../src/shared/i18n.js');
+const I18n = require('@multiagent/shared/i18n.js');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
 const VOID = new Set(['input', 'br', 'img', 'hr', 'meta', 'link']);

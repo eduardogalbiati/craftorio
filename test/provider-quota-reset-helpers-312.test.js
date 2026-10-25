@@ -1,11 +1,11 @@
-// src/shared/providers/quota-reset.js (#312): the reset-time rules the adapters' quotaReset share,
+// packages/shared/providers/quota-reset.js (#312): the reset-time rules the adapters' quotaReset share,
 // and src/domains/cli/provider-accounts.js's login command quoting and Codex probe. Local time throughout.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { nextClockTime, nextDay } = require('../src/shared/providers/quota-reset');
+const { nextClockTime, nextDay } = require('@multiagent/shared/providers/quota-reset');
 const { accountLoginCommand, accountStatus } = require('../src/domains/cli/provider-accounts');
 
 const local = (y, m, d, h = 0, min = 0) => new Date(y, m - 1, d, h, min, 0, 0).getTime();
@@ -24,7 +24,7 @@ test('#312 nextDay: a day read on that very day is its end, not the same day a y
 });
 
 test('#312 the Codex adapter reads "try again at Oct 26th" on Oct 26 as that day', () => {
-  const codex = require('../src/shared/providers').resolve('codex');
+  const codex = require('@multiagent/shared/providers').resolve('codex');
   const at = codex.quotaReset("You've hit your usage limit. … or try again at Oct 26th.", local(2026, 10, 26, 8));
   assert.equal(new Date(at).getFullYear(), 2026);
   assert.equal(at, local(2026, 10, 26, 23, 59));

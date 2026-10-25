@@ -1,7 +1,7 @@
 // #329 the untranslated-text check (a permanent guard, written before the code). It fails when:
-// (a) code uses a key missing from src/shared/i18n/en.json: every `t('a.key')` / `I18n.t('a.key')` with a
+// (a) code uses a key missing from packages/shared/i18n/en.json: every `t('a.key')` / `I18n.t('a.key')` with a
 //     literal dotted first argument in src/ (.js, .jsx; node_modules and vendor folders left out);
-// (b) a catalog of src/shared/i18n/ has keys en.json does not (the message lists them), a plural has no
+// (b) a catalog of packages/shared/i18n/ has keys en.json does not (the message lists them), a plural has no
 //     `other` form, or a translation's {placeholders} differ from the English ones;
 // (c) a file already moved to the catalog (MOVED_FILES) shows visible text outside t() in its HTML
 //     templates: a text node `>Some words<` or a literal title= / placeholder= / aria-label= / alt=
@@ -14,8 +14,8 @@ const path = require('path');
 const { report, sourceFiles, untranslated } = require('./untranslated-text');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = path.join(ROOT, 'src');
-const CATALOGS = path.join(SRC, 'shared', 'i18n');
+const { sourceFiles: allSources } = require('../scripts/source-tree');
+const CATALOGS = path.join(ROOT, 'packages', 'shared', 'i18n');
 
 // The files whose visible text lives in the catalog (a folder: every .js in it). #330 grows this list.
 const MOVED_FILES = [
@@ -33,7 +33,7 @@ const KEY_CALL = /(?:\bI18n\.t|(?<![\w$.])t)\(\s*(['"`])([a-z][\w-]*(?:\.[\w-]+)
 
 function usedKeys() {
   const used = new Map(); // key → first 'file:line'
-  for (const file of sourceFiles(SRC)) {
+  for (const file of allSources(ROOT).map((f) => path.join(ROOT, ...f.split('/')))) {
     const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
     lines.forEach((line, i) => {
       for (const m of line.matchAll(KEY_CALL)) if (!used.has(m[2])) used.set(m[2], `${rel(file)}:${i + 1}`);

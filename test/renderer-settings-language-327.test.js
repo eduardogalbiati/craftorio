@@ -4,7 +4,7 @@
 // - markup: the group's HTML, with an "AI agents" select (data-testid settings-language-agents:
 //   "Same as the interface" (value "interface", the default) then every language) and an "Issues"
 //   select (data-testid settings-language-issues: every language, English by default), options from
-//   src/shared/language.js LANGUAGES, the saved values selected;
+//   packages/shared/language.js LANGUAGES, the saved values selected;
 // - patch: what Save sends to settings:set, both values together ({ language: { agents, issues } }).
 // Run in a vm sandbox with the real Select (src/renderer/select.js) and Language modules; compared as
 // strings. settings.js mounts it in General next to Time zone, and index.html loads both scripts.
@@ -17,11 +17,11 @@ const vm = require('vm');
 const renderer = path.join(__dirname, '..', 'src', 'renderer');
 const read = (...p) => fs.readFileSync(path.join(...p), 'utf8');
 
-// #329: the page's window.I18n (src/shared/i18n.js; its Node instance here, with the catalogs) and a
+// #329: the page's window.I18n (packages/shared/i18n.js; its Node instance here, with the catalogs) and a
 // bare `t` alias, when the module exists
 function i18nGlobals() {
   try {
-    const I18n = require('../src/shared/i18n.js');
+    const I18n = require('@multiagent/shared/i18n.js');
     return { I18n, t: (...a) => I18n.t(...a) };
   } catch { return {}; }
 }
@@ -38,7 +38,7 @@ function loadView({ settings = {} } = {}) {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(read(renderer, 'select.js'), sandbox);
-  vm.runInContext(read(__dirname, '..', 'src', 'shared', 'language.js'), sandbox);
+  vm.runInContext(read(__dirname, '..', 'packages', 'shared', 'language.js'), sandbox);
   vm.runInContext(read(renderer, 'views', 'settings', 'settings-language.js'), sandbox);
   assert.ok(sandbox.LanguageSettings, 'window.LanguageSettings is defined');
   return sandbox;
@@ -94,7 +94,7 @@ test('#327 settings.js mounts the Language group in General, and index.html load
   const settingsSrc = read(renderer, 'views', 'settings', 'settings.js');
   assert.match(settingsSrc, /LanguageSettings/);
   const html = read(renderer, 'index.html');
-  assert.match(html, /<script src="\.\.\/shared\/language\.js"><\/script>/);
+  assert.match(html, /<script src="\.\.\/\.\.\/packages\/shared\/language\.js"><\/script>/);
   assert.match(html, /<script src="views\/settings\/settings-language\.js"><\/script>/);
   assert.ok(html.indexOf('views/settings/settings-language.js') < html.indexOf('views/settings/settings.js'), 'loaded before settings.js');
 });
@@ -105,7 +105,7 @@ test('#327 settings.js mounts the Language group in General, and index.html load
 // page runs in (I18n.getLanguage(): the computer's when it has a catalog, else English). A change saves
 // settings.language.interface with the other two values. Settings' markup (every script of
 // views/settings/, in index.html's order) is drawn with I18n.t: in pt-BR the General tab reads "Geral".
-const loadI18n = () => require('../src/shared/i18n.js');
+const loadI18n = () => require('@multiagent/shared/i18n.js');
 
 function settingsMarkup(lang) {
   const I18n = loadI18n();

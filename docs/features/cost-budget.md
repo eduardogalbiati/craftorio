@@ -23,7 +23,7 @@ estimate ("so far" while it runs). The Product Owner's plan answers show the pla
 Codex reports no cost, so its sessions are priced from tokens × the model prices of Usage, and the
 estimate is marked estimated.
 
-**The roadmap's summary** (#421, `src/shared/roadmap-summary.js`). The roadmap bar shows "Planned
+**The roadmap's summary** (#421, `packages/shared/roadmap-summary.js`). The roadmap bar shows "Planned
 ≈ $X · ≈ T (n items, m stages)" for what is left: the items of the enabled stages that are not
 finished, a running item for its estimate minus what its run has spent and elapsed (never below
 zero). Disabled stages, done and skipped items are left out. Stages run one after another and a stage

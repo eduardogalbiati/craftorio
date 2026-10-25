@@ -7,17 +7,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { withI18n } = require('./i18n-sandbox');
+const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
-const read = (...p) => fs.readFileSync(path.join(__dirname, '..', 'src', ...p), 'utf8');
+const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 function load({ termAction } = {}) {
   const sandbox = { esc, termButtons: () => '<button data-term="live">Live terminal</button>', termAction };
   sandbox.window = sandbox;
   vm.createContext(withI18n(sandbox));
-  vm.runInContext(read('shared', 'roadmap-model.js'), sandbox);
-  vm.runInContext(read('renderer', 'views', 'backlog', 'backlog-live.js'), sandbox);
+  vm.runInContext(read('packages', 'shared', 'roadmap-model.js'), sandbox);
+  vm.runInContext(read('src', 'renderer', 'views', 'backlog', 'backlog-live.js'), sandbox);
   return sandbox.window.BacklogLive;
 }
 

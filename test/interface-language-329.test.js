@@ -3,7 +3,7 @@
 // remembers it for the next first paint, paints index.html's static data-i18n hooks and, only when the
 // language changed, redraws the window (menu labels, screens, shell, then I18n.notify()). A pushed
 // 'settings:changed' applies the new settings in every window.
-// Evaluated in a vm sandbox with a small fake document and a fresh copy of src/shared/i18n.js.
+// Evaluated in a vm sandbox with a small fake document and a fresh copy of packages/shared/i18n.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -11,7 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'interface-language.js'), 'utf8');
-const I18N_PATH = require.resolve('../src/shared/i18n.js');
+const I18N_PATH = require.resolve('@multiagent/shared/i18n.js');
 
 /** A fresh i18n instance (its language and listeners are module state). */
 function freshI18n() {

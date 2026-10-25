@@ -1,7 +1,7 @@
 /* global api */
 // The interface language (#329): applies Settings › General › Language › Interface to the window and
 // redraws it at once, without a restart (like the time zone's TimeZone.notify()). The catalog and
-// t() are src/shared/i18n.js; this file only holds the re-render wiring, out of app.js.
+// t() are packages/shared/i18n.js; this file only holds the re-render wiring, out of app.js.
 // window.InterfaceLanguage.apply(settings): resolves the language (settings.language.interface, else
 // the computer's when it has a catalog, else English), remembers it for the next first paint
 // (localStorage 'interfaceLanguage', read by i18n.js), paints index.html's static hooks

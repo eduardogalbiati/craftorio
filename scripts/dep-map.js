@@ -1,6 +1,6 @@
 // Dependency map of src/ for reorganisation work (docs/reorganisation-study-2026-10.md): the
 // require() edges between areas (engine, service, shared, server, control, renderer, host, the loose files
-// of src/), the clusters the loose files form by name, which of them the engine side needs, and
+// of src/; a workspace's folders count by the same names, scripts/source-tree.js), the clusters the loose files form by name, which of them the engine side needs, and
 // which service channel files each renderer view calls (through `api.<method>(`). Read-only; prints
 // a report. `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
 
@@ -9,31 +9,34 @@
 const fs = require('fs');
 const path = require('path');
 
-const { FOLDERS } = require('./layers');
+const { FOLDERS, PACKAGES } = require('./layers');
+const { resolvePackagePath, sourceFiles } = require('./source-tree');
 
 const ROOT = path.resolve(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
 // the top-level folders of src/ (scripts/layers.js FOLDERS): anything else under src/ is a loose file
 const AREA = new RegExp(`^src/(${Object.keys(FOLDERS).join('|')})/`);
-
-function walk(dir, out = []) {
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) walk(p, out);
-    else if (p.endsWith('.js')) out.push(p);
-  }
-  return out;
-}
+// a workspace's folders (scripts/layers.js PACKAGES): the whole package, or its area folders
+const PKG_AREA = new RegExp(`^(${Object.keys(PACKAGES).join('|')})/(?:(${Object.keys(FOLDERS).join('|')})/)?`);
 
 const rel = (p) => path.relative(ROOT, p).replace(/\\/g, '/');
 
-// The area a file belongs to: a top-level folder of src/, or `src-root` for the loose files.
+// The area a file belongs to: a top-level folder of src/, a workspace's folder (`shared`,
+// `engine`…: the same names), or `src-root` for the loose files.
 function area(file) {
-  const m = rel(file).match(AREA);
-  return m ? m[1] : 'src-root';
+  const r = rel(file);
+  const m = r.match(AREA);
+  if (m) return m[1];
+  const p = r.match(PKG_AREA);
+  if (p) return PACKAGES[p[1]] || p[2] || p[1];
+  return 'src-root';
 }
 
 function resolveRequire(from, spec) {
+  if (!spec.startsWith('.')) {
+    const pkgPath = resolvePackagePath(ROOT, spec);
+    return pkgPath ? resolveRequire(path.join(ROOT, 'x.js'), `./${pkgPath}`) : null;
+  }
   let target = path.resolve(path.dirname(from), spec);
   if (!target.endsWith('.js')) {
     if (fs.existsSync(`${target}.js`)) target += '.js';
@@ -46,7 +49,7 @@ function edges(files) {
   const out = [];
   for (const f of files) {
     const text = fs.readFileSync(f, 'utf8');
-    for (const m of text.matchAll(/require\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g)) {
+    for (const m of text.matchAll(/require\(\s*['"]((?:\.{1,2}\/|@)[^'"]+)['"]\s*\)/g)) {
       const t = resolveRequire(f, m[1]);
       if (t) out.push([f, t]);
     }
@@ -100,7 +103,7 @@ function viewChannels(byMethod) {
 }
 
 function report() {
-  const files = walk(SRC);
+  const files = sourceFiles(ROOT).map((f) => path.join(ROOT, f));
   const all = edges(files);
   const lines = [];
   const say = (...a) => lines.push(a.join(' '));

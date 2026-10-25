@@ -1,5 +1,5 @@
 // #328 acceptance tests (written before the code): the issues language (settings.language.issues).
-// The structure the app writes itself in an issue comes from src/shared/language.js issueHeadings in
+// The structure the app writes itself in an issue comes from packages/shared/language.js issueHeadings in
 // that language: the Product Owner's simulated draft (ask, option `language: { issues }`), its
 // filing (createBody through fileDraft: a translated "Related:" line is recognised), the PO split
 // (po-split fileSplit, option `issuesLanguage`), Discovery's issues (discovery-commit issueBody,
@@ -17,7 +17,7 @@ const discoveryCommit = require('../src/domains/discovery/discovery-commit');
 const findings = require('../src/domains/evidence/findings');
 const epics = require('../src/domains/backlog/epics');
 
-const load = () => require('../src/shared/language');
+const load = () => require('@multiagent/shared/language');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'language-issues-'));

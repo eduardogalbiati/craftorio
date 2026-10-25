@@ -17,7 +17,7 @@
 // Browser: window.Run3DModel; Node: module.exports.
 (function (root) {
   // names as people read them (display-name.js, #245): the YAML's display names when the workflow has them, else the slug made readable
-  const displayName = typeof module === 'object' && module.exports ? require('../shared/display-name.js').displayName : root.displayName;
+  const displayName = typeof module === 'object' && module.exports ? require('@multiagent/shared/display-name.js').displayName : root.displayName;
   const baseOf = (id) => String(id || '').split(':')[0]; // "develop:context_limit" → "develop"
   const subOf = (id) => String(id || '').split(':')[1] || null;
   const isSupervisor = (agent, stepId) => /^_?supervisor$/.test(agent || '') || subOf(stepId) === 'supervisor';

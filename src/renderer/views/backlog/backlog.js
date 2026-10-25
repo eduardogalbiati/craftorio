@@ -48,7 +48,7 @@
 // closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
 (() => {
-  // The platform adapters (src/shared/platforms/, #351; platformOf: GitHub's when unknown) plus Bitbucket (soon = no sync yet), as in src/domains/backlog/issues.js.
+  // The platform adapters (packages/shared/platforms/, #351; platformOf: GitHub's when unknown) plus Bitbucket (soon = no sync yet), as in src/domains/backlog/issues.js.
   const { DEFAULT_PLATFORM, platformOrDefault: platformOf, requestRef } = window.Platforms;
   const PLATFORMS = { ...Object.fromEntries(window.Platforms.PLATFORMS.map((p) => [p.id, { label: p.label }])), bitbucket: { label: 'Bitbucket', soon: true } };
   window.BACKLOG_PLATFORMS = PLATFORMS;

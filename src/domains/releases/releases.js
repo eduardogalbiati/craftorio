@@ -22,7 +22,7 @@
 // (`rcTag`, N = `mergesSinceStable`). The stable release is a candidate promoted without a rebuild
 // (`promoteRelease`): its commit is tagged vX.Y.Z (.github/workflows/deploy.yml then turns the rc's
 // GitHub release into the latest one) and recorded with `rc`, the issues since the last stable
-// (`issuesSinceStable`) and the version src/shared/release-version.js suggests (`stableVersion`).
+// (`issuesSinceStable`) and the version packages/shared/release-version.js suggests (`stableVersion`).
 // A held candidate (`holdCandidate`) is never promoted by the night's train (src/domains/night/night-watch.js).
 
 const fs = require('fs');
@@ -33,7 +33,7 @@ const {
   repoRoot,
 } = require('../../engine/worktree');
 const { defaultBase, pushBase } = require('../local/local-push');
-const { suggestVersion } = require('../../shared/release-version');
+const { suggestVersion } = require('@multiagent/shared/release-version');
 const { writeJsonSafe } = require('../workspace/state-file');
 
 const PUSH_TIMEOUT_MS = 120e3;
@@ -119,7 +119,7 @@ const rcTag = ({ version, mergesSinceStable: n }) => `v${String(version || '').t
 
 /**
  * #489: the stable version of a promotion: the owner's `version` when given, else
- * src/shared/release-version.js's suggestion over the issues since the last stable release (up to
+ * packages/shared/release-version.js's suggestion over the issues since the last stable release (up to
  * the candidate dated `upTo`, the one promoted).
  * @returns {{ version: string, bump: string|null }}
  */

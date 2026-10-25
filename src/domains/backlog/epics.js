@@ -25,7 +25,7 @@ const {
   repoLabels,
   runCommand,
 } = require('./issues');
-const Language = require('../../shared/language');
+const Language = require('@multiagent/shared/language');
 
 const EPIC_LABEL = 'epic';
 const SCOPE = 'epic::';
@@ -49,7 +49,7 @@ function apiTarget(platform, repo) {
   return { path: parsed.path, host: parsed.host, hostArgs: platformOf(platform).apiHostArgs(parsed) };
 }
 
-// The adapter of an epic-capable platform (src/shared/platforms/), or an error.
+// The adapter of an epic-capable platform (packages/shared/platforms/), or an error.
 function platformOf(platform) {
   const p = adapterOf(platform);
   if (!p) throw new Error('Epics need GitHub or GitLab.');
@@ -152,7 +152,7 @@ async function readEpics({ platform, repo, issues, exec = execCli }) {
 // The command as shown in a preview (long texts replaced).
 const display = (cli, args, text) => `${cli} ${args.map((a) => (text && a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a)).join(' ')}`;
 
-// A new epic's body line in the issues language (#328), per platform (src/shared/language.js).
+// A new epic's body line in the issues language (#328), per platform (packages/shared/language.js).
 const epicBodyLine = (p, issuesLanguage) => Language.issueHeadings(issuesLanguage).epic[p.id];
 
 /**
