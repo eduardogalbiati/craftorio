@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+<rect width="960" height="540" rx="12" fill="#0e1014"/>
+<text x="24" y="56.0" fill="#7c9cff" font-size="11" font-weight="700" letter-spacing="1.2">WHAT YOU RUN</text>
+<rect x="170" y="24" width="378" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="170" y="24" width="3" height="54" rx="1.5" fill="#7c9cff"/>
+<text x="184" y="46" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">apps/desktop</text>
+<text x="184" y="65" fill="#8a91a3" font-size="11.5">the Electron app</text>
+<rect x="558" y="24" width="378" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="558" y="24" width="3" height="54" rx="1.5" fill="#7c9cff"/>
+<text x="572" y="46" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">apps/web</text>
+<text x="572" y="65" fill="#8a91a3" font-size="11.5">the same UI in a browser</text>
+<text x="24" y="142.0" fill="#c084fc" font-size="11" font-weight="700" letter-spacing="1.2">THE UI</text>
+<rect x="170" y="110" width="378" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="170" y="110" width="3" height="54" rx="1.5" fill="#c084fc"/>
+<text x="184" y="132" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">packages/ui-kit</text>
+<text x="184" y="151" fill="#8a91a3" font-size="11.5">shell, controls, Home, Settings</text>
+<rect x="558" y="110" width="378" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="558" y="110" width="3" height="54" rx="1.5" fill="#c084fc"/>
+<text x="572" y="132" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">fronts/&lt;id&gt;</text>
+<text x="572" y="151" fill="#8a91a3" font-size="11.5">one folder per screen family</text>
+<text x="24" y="228.0" fill="#4ade80" font-size="11" font-weight="700" letter-spacing="1.2">THE ENGINE</text>
+<rect x="170" y="196" width="249" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="170" y="196" width="3" height="54" rx="1.5" fill="#4ade80"/>
+<text x="184" y="218" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">packages/engine</text>
+<text x="184" y="237" fill="#8a91a3" font-size="11.5">runs the YAML graph, service, server</text>
+<rect x="429" y="196" width="249" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="429" y="196" width="3" height="54" rx="1.5" fill="#4ade80"/>
+<text x="443" y="218" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">packages/shared</text>
+<text x="443" y="237" fill="#8a91a3" font-size="11.5">code both sides use</text>
+<rect x="687" y="196" width="249" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="687" y="196" width="3" height="54" rx="1.5" fill="#4ade80"/>
+<text x="701" y="218" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">native</text>
+<text x="701" y="237" fill="#8a91a3" font-size="11.5">Rust sidecars</text>
+<text x="24" y="314.0" fill="#fb923c" font-size="11" font-weight="700" letter-spacing="1.2">WHAT AGENTS RUN</text>
+<rect x="170" y="282" width="145" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="170" y="282" width="3" height="54" rx="1.5" fill="#fb923c"/>
+<text x="184" y="304" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">workflows</text>
+<text x="184" y="323" fill="#8a91a3" font-size="11.5">the YAML workflows</text>
+<rect x="325" y="282" width="145" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="325" y="282" width="3" height="54" rx="1.5" fill="#fb923c"/>
+<text x="339" y="304" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">fragments</text>
+<text x="339" y="323" fill="#8a91a3" font-size="11.5">reusable step groups</text>
+<rect x="480" y="282" width="145" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="480" y="282" width="3" height="54" rx="1.5" fill="#fb923c"/>
+<text x="494" y="304" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">pipelines</text>
+<text x="494" y="323" fill="#8a91a3" font-size="11.5">workflow chains</text>
+<rect x="636" y="282" width="145" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="636" y="282" width="3" height="54" rx="1.5" fill="#fb923c"/>
+<text x="650" y="304" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">skills</text>
+<text x="650" y="323" fill="#8a91a3" font-size="11.5">instructions per capability</text>
+<rect x="791" y="282" width="145" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="791" y="282" width="3" height="54" rx="1.5" fill="#fb923c"/>
+<text x="805" y="304" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">seeds</text>
+<text x="805" y="323" fill="#8a91a3" font-size="11.5">analysis seeds</text>
+<text x="24" y="400.0" fill="#8a91a3" font-size="11" font-weight="700" letter-spacing="1.2">TOOLING</text>
+<rect x="170" y="368" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="170" y="368" width="3" height="54" rx="1.5" fill="#8a91a3"/>
+<text x="184" y="390" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">scripts</text>
+<text x="184" y="409" fill="#8a91a3" font-size="11.5">run, test, build, docs</text>
+<rect x="364" y="368" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="364" y="368" width="3" height="54" rx="1.5" fill="#8a91a3"/>
+<text x="378" y="390" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">test</text>
+<text x="378" y="409" fill="#8a91a3" font-size="11.5">unit tests</text>
+<rect x="558" y="368" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="558" y="368" width="3" height="54" rx="1.5" fill="#8a91a3"/>
+<text x="572" y="390" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">features</text>
+<text x="572" y="409" fill="#8a91a3" font-size="11.5">E2E (Playwright)</text>
+<rect x="752" y="368" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="752" y="368" width="3" height="54" rx="1.5" fill="#8a91a3"/>
+<text x="766" y="390" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">.github</text>
+<text x="766" y="409" fill="#8a91a3" font-size="11.5">CI and deploy</text>
+<text x="24" y="486.0" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1.2">DOCS</text>
+<rect x="170" y="454" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="170" y="454" width="3" height="54" rx="1.5" fill="#7dd3fc"/>
+<text x="184" y="476" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">README.md</text>
+<text x="184" y="495" fill="#8a91a3" font-size="11.5">user docs</text>
+<rect x="364" y="454" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="364" y="454" width="3" height="54" rx="1.5" fill="#7dd3fc"/>
+<text x="378" y="476" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">docs/agents</text>
+<text x="378" y="495" fill="#8a91a3" font-size="11.5">for coding agents</text>
+<rect x="558" y="454" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="558" y="454" width="3" height="54" rx="1.5" fill="#7dd3fc"/>
+<text x="572" y="476" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">docs/site</text>
+<text x="572" y="495" fill="#8a91a3" font-size="11.5">this site</text>
+<rect x="752" y="454" width="184" height="54" rx="8" fill="#151820" stroke="#262b37"/>
+<rect x="752" y="454" width="3" height="54" rx="1.5" fill="#7dd3fc"/>
+<text x="766" y="476" fill="#e6e8ee" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace" font-size="12.5" font-weight="600">poc</text>
+<text x="766" y="495" fill="#8a91a3" font-size="11.5">proofs of concept</text>
+</svg>
