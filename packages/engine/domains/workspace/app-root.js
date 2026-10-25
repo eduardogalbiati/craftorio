@@ -4,7 +4,8 @@
 // docs/reorganisation-study-2026-10.md), so a module's __dirname no longer says where the app is: in a
 // checkout the package sits under packages/, and in the packaged app its copy under node_modules/
 // (@electron/packager dereferences the workspace link). appRoot() walks up from this file to the first
-// package.json that declares `workspaces` (the repository's, or resources/app's in the asar).
+// package.json that is the app's: it declares `workspaces` (the repository's) or a `multiagent` section
+// (the packager strips `workspaces` from the shipped package.json, resources/app's, and keeps `multiagent`).
 // MULTIAGENT_APP_ROOT names it explicitly (another layout, an engine installed from npm). Bundled
 // defaults come from here, never from a package's own folder; user data never from either (AGENTS.md).
 //
@@ -24,7 +25,7 @@ function findRoot(from) {
     if (fs.existsSync(file)) {
       try {
         const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-        if (pkg.workspaces) return dir;
+        if (pkg.workspaces || pkg.multiagent) return dir;
       } catch { /* not the manifest we want */ }
     }
     const parent = path.dirname(dir);
@@ -37,7 +38,7 @@ function appRoot() {
   if (cached) return cached;
   const env = process.env.MULTIAGENT_APP_ROOT;
   cached = env ? path.resolve(env) : findRoot(__dirname);
-  if (!cached) throw new Error(`The app root was not found above ${__dirname}: no package.json with "workspaces" (set MULTIAGENT_APP_ROOT).`);
+  if (!cached) throw new Error(`The app root was not found above ${__dirname}: no package.json with "workspaces" or a "multiagent" section (set MULTIAGENT_APP_ROOT).`);
   return cached;
 }
 
