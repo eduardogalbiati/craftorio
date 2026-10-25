@@ -10,10 +10,11 @@ const fs = require('fs');
 const path = require('path');
 
 const { FOLDERS, PACKAGES } = require('./layers');
-const { resolvePackagePath, sourceFiles } = require('./source-tree');
+const { resolvePackagePath, sourceDirs, sourceFiles } = require('./source-tree');
 
 const ROOT = path.resolve(__dirname, '..');
-const SRC = path.join(ROOT, 'src');
+// the first source folder (scripts/source-tree.js) holding `sub`, e.g. service/channels (packages/engine) or renderer/views (apps/desktop)
+const sourceDirWith = (sub) => sourceDirs(ROOT).map((d) => path.join(ROOT, d, sub)).find((p) => fs.existsSync(p));
 // the top-level folders of src/ (scripts/layers.js FOLDERS): anything else under src/ is a loose file
 const AREA = new RegExp(`^src/(${Object.keys(FOLDERS).join('|')})/`);
 // a workspace's folders (scripts/layers.js PACKAGES): the whole package, or its area folders
@@ -71,7 +72,8 @@ function areaMatrix(all) {
 
 // The service's channel files, by the `method` each channel exposes on window.api.
 function channelFiles() {
-  const dir = path.join(SRC, 'service', 'channels');
+  const dir = sourceDirWith(path.join('service', 'channels'));
+  if (!dir) return {};
   const byMethod = {};
   for (const f of fs.readdirSync(dir)) {
     const text = fs.readFileSync(path.join(dir, f), 'utf8');
@@ -83,7 +85,8 @@ function channelFiles() {
 const apiCalls = (text) => new Set([...text.matchAll(/\bapi\.([A-Za-z0-9_]+)\s*\(/g)].map((m) => m[1]));
 
 function viewChannels(byMethod) {
-  const viewsDir = path.join(SRC, 'renderer', 'views');
+  const viewsDir = sourceDirWith(path.join('renderer', 'views'));
+  if (!viewsDir) return {};
   const result = {};
   for (const v of fs.readdirSync(viewsDir)) {
     const dir = path.join(viewsDir, v);

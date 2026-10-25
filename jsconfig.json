@@ -22,7 +22,6 @@
     "maxNodeModuleJsDepth": 0
   },
   "include": [
-    "src/**/*.js",
     "packages/*/**/*.js",
     "apps/*/**/*.js"
   ],

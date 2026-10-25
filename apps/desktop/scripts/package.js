@@ -137,6 +137,9 @@ function packagerOptions({ platform, arch, out }) {
       /^\/(runs|dist|build|scripts|test|supabase|poc|native|resources|\.github|\.claude|\.test-output|\.features-gen)(\/|$)/,
       /^\/apps\/desktop\/renderer\/(run3d|city3d)(\/|$)/,
       /^\/(packages|apps)\/[^/]+\/(test|scripts)(\/|$)/,
+      // the engine package itself: the host requires @multiagent/engine, which the asar resolves to the
+      // dereferenced copy under node_modules/; packages/shared stays (the renderer's <script> paths name it)
+      /^\/packages\/engine(\/|$)/,
       /^\/node_modules\/@multiagent\/[^/]+\/(test|scripts)(\/|$)/,
     ],
     ...(platform === 'darwin' && {

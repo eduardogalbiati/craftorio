@@ -141,7 +141,7 @@ test('steps assert through role and test-id locators, and every test id they use
   assert.ok(ids.length >= 5, `at least 5 stable test ids used by the steps (got ${ids.length})`);
   const renderer = walk(path.join('apps', 'desktop', 'renderer'), ['.js', '.html']).map((f) => read(f)).join('\n');
   assert.match(renderer, /data-testid/, 'the renderer has data-testid attributes');
-  const missing = missingTestIds(root).map((m) => m.id);
+  const missing = missingTestIds(root, { renderer: path.join('apps', 'desktop', 'renderer') }).map((m) => m.id); // this app's renderer (the default is a project's src/renderer)
   assert.deepEqual(missing, [], 'each test id the steps use is defined in apps/desktop/renderer');
 });
 

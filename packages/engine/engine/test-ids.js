@@ -5,13 +5,13 @@
 //   - a used id is the static string of `getByTestId('…')` / `getByTestId("…")` in a step file;
 //     dynamic ids (template strings, variables) are skipped;
 //   - an id is defined when the renderer's source text contains it (a plain substring check).
-// Folders are repository-relative: steps default to features/steps, the renderer to apps/desktop/renderer.
+// Folders are repository-relative: steps default to features/steps, the renderer to src/renderer.
 
 const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_STEPS = 'features/steps';
-const DEFAULT_RENDERER = 'apps/desktop/renderer';
+const DEFAULT_RENDERER = 'src/renderer';
 const STEP_EXTS = ['.js', '.cjs', '.mjs', '.ts'];
 const RENDERER_EXTS = ['.cjs', '.html', '.js', '.jsx', '.mjs', '.svelte', '.ts', '.tsx', '.vue'];
 const SKIPPED_DIRS = new Set(['.git', 'node_modules']);

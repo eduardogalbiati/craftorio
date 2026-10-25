@@ -79,9 +79,9 @@ test('ai-development-local-hero (#151): a change with screens to capture takes i
   assert.equal(firstGoto(develop, developScope({ screenshots: [SCREEN] })), 'developer_screenshots');
 });
 
-test('ai-development-local-hero (#151): a change to apps/desktop/renderer/ takes its screenshots after develop even when the developer listed no screen', () => {
+test('ai-development-local-hero (#151): a change to src/renderer/ takes its screenshots after develop even when the developer listed no screen', () => {
   const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
-  assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['apps/desktop/renderer/views/runs/runs.js'] })), 'developer_screenshots');
+  assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['src/renderer/views/runs/runs.js'] })), 'developer_screenshots');
 });
 
 test('ai-development-local-hero (#151): a change with no UI skips the screenshots and goes straight to the review', () => {
