@@ -187,6 +187,7 @@ function layout({ title, active, main, side, lang, file }) {
 }
 
 // ---------- write ----------
+require(path.join(SRC, 'diagrams.js')); // the SVGs in docs/site/assets/
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 for (const f of ['style.css', 'site.js']) fs.copyFileSync(path.join(SRC, f), path.join(outDir, f));
