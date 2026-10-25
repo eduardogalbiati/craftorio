@@ -13,7 +13,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
-const { loadApp, text } = require('./renderer-app-harness');
+const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
 const QUEUE_ERROR = 'Run run-7 failed: 2 tests failed';
 const issue = (number) => ({

@@ -11,7 +11,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
-const { loadApp, text } = require('./renderer-app-harness');
+const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
 const candidate = (tag, commit, runId, number, title) => ({ tag, commit, date: '2026-10-13T10:00:00.000Z', runId, issues: [{ number, title }], held: false });
 const DATA = {

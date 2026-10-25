@@ -1,6 +1,6 @@
 // #236: no native `title` tooltips on the Roadmap's run progress (apps/desktop/renderer/views/backlog/
 // backlog-roadmap.js: the ring .rm-ring, the current step .rm-progress-text, the steps popover
-// .rm-steps with its chips .rm-chip) nor on the progress strip's agent cards (apps/desktop/renderer/run-list.js:
+// .rm-steps with its chips .rm-chip) nor on the progress strip's agent cards (packages/ui-kit/run-list.js:
 // .rp-av / .rp-card, .rp-state, .rp-more, .rp-skip): the run summary the ring's tooltip held moves into
 // the popover, the "Open the run at <step>" hint into an aria-label.
 // backlog-roadmap.js is loaded whole like test/renderer-backlog-roadmap-view.test.js, but with the
@@ -11,12 +11,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const AgentColors = require('../renderer/agent-colors.js');
+const AgentColors = require('@multiagent/ui-kit/agent-colors.js');
 
-const R = path.join(__dirname, '..', 'renderer');
-const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
+const read = (...p) => fs.readFileSync(pageFileOf(p.join('/')), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const text = (html) => String(html).replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ');
 const titles = (html) => String(html).match(/\stitle="[^"]*"/g) || [];
@@ -94,7 +95,7 @@ function loadRoadmap() {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
-  if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
+  if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }

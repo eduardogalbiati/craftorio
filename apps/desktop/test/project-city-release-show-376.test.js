@@ -18,14 +18,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { buildModel } = require('@multiagent/shared/architecture-model');
 const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const DIR = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'project');
+const DIR = pageFileOf('views/project');
 const hash = '76'.repeat(20);
 const FILES = [
   { path: 'src/engine/run.js', lines: 100 }, { path: 'src/engine/queue.js', lines: 40 },
@@ -79,7 +81,7 @@ function load({ release = async () => RELEASE(), capture = async () => 'data:ima
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   // The app's select builder, so the pickers are built as in the app (#383).
-  vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps', 'desktop', 'renderer', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'ui-kit', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
   // #440/#441: the modes' and the panels' helpers, when they have their own files
   const optional = ['project-city-modes.js', 'project-city-panels.js'].filter((f) => fs.existsSync(path.join(DIR, f)));
   for (const f of [...optional, 'project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {

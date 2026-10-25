@@ -1,5 +1,5 @@
 // #340 internals: packages/engine/engine/language-skills.js (which languages a run's changed files need, the
-// skill names expanded per language) and the multi-value control of apps/desktop/renderer/workflow-inputs.js
+// skill names expanded per language) and the multi-value control of packages/ui-kit/workflow-inputs.js
 // (a `multiple: true` enum: one toggle per value, the value comma-separated).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -11,7 +11,7 @@ const {
   splitValues,
 } = require('@multiagent/engine/engine/language-skills');
 const { render } = require('@multiagent/engine/engine/run/templates');
-const wi = require('../renderer/workflow-inputs');
+const wi = require('@multiagent/ui-kit/workflow-inputs');
 
 test('splitValues: trims, drops empty and repeated items, keeps the order', () => {
   assert.deepEqual(splitValues('rust, js,,rust'), ['rust', 'js']);

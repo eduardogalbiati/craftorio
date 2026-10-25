@@ -24,6 +24,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pageDirs, pageFile, pageFiles } = require('../../../scripts/source-tree');
+const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
+// a page file by its page-relative name, wherever its layer is (phase 3 of the reorganisation study)
+const page = (rel) => pageFile(PAGE_ROOT, rel);
+void pageDirs; void pageFiles; void page;
 const { report, sourceFiles, untranslated, untranslatedHtml } = require('./untranslated-text');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -43,12 +48,12 @@ const I18n = () => require(path.join(SHARED, 'i18n.js'));
 
 // ---- (a) no visible text outside t() ------------------------------------------------------------
 test('#330 (a) every .js file under apps/desktop/renderer shows no visible text outside t()', () => {
-  const files = sourceFiles(RENDERER);
+  const files = pageFiles(ROOT).map((f) => path.join(ROOT, f.file));
   const names = files.map(rel);
-  for (const must of ['apps/desktop/renderer/views/backlog/backlog.js', 'apps/desktop/renderer/views/dashboard/dashboard.js', 'apps/desktop/renderer/agents-window.js', 'apps/desktop/renderer/run-list.js', 'apps/desktop/renderer/run-badges.js', 'apps/desktop/renderer/agent-chat.js', 'apps/desktop/renderer/artifacts-panel.js', 'apps/desktop/renderer/setup.js']) {
+  for (const must of ['apps/desktop/renderer/views/backlog/backlog.js', 'packages/ui-kit/views/dashboard/dashboard.js', 'packages/ui-kit/agents-window.js', 'packages/ui-kit/run-list.js', 'packages/ui-kit/run-badges.js', 'packages/ui-kit/agent-chat.js', 'packages/ui-kit/artifacts-panel.js', 'packages/ui-kit/setup.js']) {
     assert.ok(names.includes(must), `the check scans ${must}`);
   }
-  assert.ok(names.some((n) => n.startsWith('apps/desktop/renderer/views/settings/')), 'the check scans views/settings/');
+  assert.ok(names.some((n) => n.startsWith('packages/ui-kit/views/settings/')), 'the check scans views/settings/');
   const found = files.flatMap((f) => untranslated(fs.readFileSync(f, 'utf8'), rel(f)));
   assert.deepEqual(found, [], report(found));
 });
@@ -214,7 +219,7 @@ function englishOnlyTexts() {
 
 /** Opens one view of the real page in `lang`; returns every text the page shows (strings only). */
 async function render(lang, view, { api = {}, storage = {}, after } = {}) {
-  const { loadApp } = require('./renderer-app-harness');
+  const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
   const app = loadApp({
     storage: { interfaceLanguage: lang, ...storage },
     api: { getSettings: async () => ({ lastProject: 'p1', language: { interface: lang } }), ...api },

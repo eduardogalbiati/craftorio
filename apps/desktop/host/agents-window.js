@@ -1,6 +1,6 @@
 // The Agents window (#263): a second BrowserWindow with the conversational agents (the Oracle, the
 // Product Owner, the Supervisor) in their own window, laid out with a rail on the left
-// (apps/desktop/renderer/agents-window.js on the app's page, `?window=agents&agent=<id>`). Pure of Electron:
+// (packages/ui-kit/agents-window.js on the app's page, `?window=agents&agent=<id>`). Pure of Electron:
 // createAgentsWindow({ BrowserWindow, statePath, dirname, page?, devTools?, screen? }) →
 // { open({ agent }), current(), setAgent(id) }. One window at a time (a second open focuses it and
 // switches it to the asked agent); its bounds and the last agent shown are remembered in `statePath`

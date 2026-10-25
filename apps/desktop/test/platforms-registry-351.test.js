@@ -7,6 +7,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
 const registry = require('@multiagent/shared/platforms');
@@ -57,7 +59,7 @@ test('fetchIssues: the short ids gh / gl build the same CLI calls as github / gi
 });
 
 test('index.html loads the adapters, then the registry, before every other shared script', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
+  const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
   const shared = [...html.matchAll(/<script src="\.\.\/\.\.\/\.\.\/packages\/shared\/([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(shared.slice(0, 3).sort(), ['platforms/github.js', 'platforms/gitlab.js', 'platforms/index.js'].sort());
   assert.equal(shared[2], 'platforms/index.js');

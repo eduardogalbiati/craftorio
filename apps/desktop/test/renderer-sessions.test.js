@@ -7,9 +7,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'sessions', 'sessions.js'), 'utf8');
+const src = fs.readFileSync(pageFileOf('views/sessions/sessions.js'), 'utf8');
 
 test('itemHtml: every item shows a pencil and a trash can, not only a resumed CLI session', () => {
   // the Open terminals loop: rename/close are passed for every tab, unconditionally (no `t.kind === 'cli-resume' ? ... : null` gate)

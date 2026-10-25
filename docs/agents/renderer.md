@@ -1,6 +1,6 @@
 # Renderer (UI)
 
-Read this before changing anything in `apps/desktop/renderer/`.
+Read this before changing anything in the UI: the UI kit (`packages/ui-kit/`), a front (`fronts/<id>/`) or an app's page folder (`apps/<app>/renderer/`).
 
 - Plain HTML/CSS/JS, no bundler. Libraries loaded with `<script src="../../node_modules/...">`
   (UMD): xterm, addon-fit, marked, DOMPurify. Sandboxed: no Node, only `window.api` (`apps/desktop/host/preload.js`,
@@ -316,7 +316,7 @@ Read this before changing anything in `apps/desktop/renderer/`.
   opened by the 3D button beside Chat (Run screen `#run-mode-3d`, run chat `#rc-3d`): the run's
   recorded events, then its live `run:event`s, into a pure `Run3DModel` (Node-tested); "Open the
   gate" closes it and calls `showRun` (it never answers a gate). The scene is the one exception to
-  "no bundler": React + React Three Fiber + three in `apps/desktop/renderer/run3d/*.jsx`, bundled by
+  "no bundler": React + React Three Fiber + three in `packages/ui-kit/run3d/*.jsx`, bundled by
   `scripts/build-3d.js` into `generated/run3d-scene.js` (gitignored, rebuilt by prepare / prestart /
   prebuild, packed into the app) and loaded with a `<script src>` on the first click: run
   `npm run build:3d` after changing a `.jsx`. The same script builds the **project city** (#373):

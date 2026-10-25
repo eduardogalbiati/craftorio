@@ -1,6 +1,6 @@
 // apps/desktop/renderer/views/backlog/backlog-roadmap.js: what the Roadmap tab shows (#215, #216, #217).
 // Loaded whole into a vm sandbox like test/renderer-backlog-roadmap.test.js, with the real
-// WorkflowInputs (#116, its inputPills, #216) and Estimates (apps/desktop/renderer/estimates.js, #215) modules.
+// WorkflowInputs (#116, its inputPills, #216) and Estimates (packages/ui-kit/estimates.js, #215) modules.
 // The seam is BacklogRoadmap.html(data, rerender, view): `view` is the Backlog's filter shared by the
 // Board and Roadmap tabs ({ epic, showAll }); without it the Roadmap shows the open work only (#217).
 // - #217: finished stages hidden by default ("N finished stages hidden"), a stage's done items folded
@@ -13,11 +13,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const R = path.join(__dirname, '..', 'renderer');
-const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
+const read = (...p) => fs.readFileSync(pageFileOf(p.join('/')), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function loadRoadmap({ listWorkflows } = {}) {
@@ -60,7 +61,7 @@ function loadRoadmap({ listWorkflows } = {}) {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   // #215's shared estimate rules; missing before the change (the tests then fail on their assertions)
-  if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
+  if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }

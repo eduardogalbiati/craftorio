@@ -45,7 +45,7 @@ function demoPerformanceRuns(ws, folder, projectId) {
   git(['init', '-q', '-b', 'main']);
   write('apps/desktop/renderer/index.html', lines(320, '<div>line'));
   write('README.md', `# demo-app\n\n<!-- generated:skills -->\n${lines(40, '| skill')}<!-- /generated:skills -->\n`);
-  write('apps/desktop/renderer/style.css', lines(900, '.rule'));
+  write('packages/ui-kit/style.css', lines(900, '.rule'));
   write('packages/engine/service/manifest.js', lines(120, '// channel'));
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'Initial commit'], new Date(Date.now() - 20 * 864e5).toISOString());
@@ -59,7 +59,7 @@ function demoPerformanceRuns(ws, folder, projectId) {
       const n = night * 4 + k;
       const start = new Date(day.getTime() + k * 25 * 6e4);
       const finish = new Date(start.getTime() + (95 + k * 20) * 6e4);
-      const shared = night < 2 ? ['apps/desktop/renderer/index.html', 'README.md', ...(k % 2 ? ['apps/desktop/renderer/style.css'] : [])] : (k === 0 ? ['apps/desktop/renderer/style.css'] : []);
+      const shared = night < 2 ? ['apps/desktop/renderer/index.html', 'README.md', ...(k % 2 ? ['packages/ui-kit/style.css'] : [])] : (k === 0 ? ['packages/ui-kit/style.css'] : []);
       runs.push({
         n, start, finish, title: titles[n], pr: night === 1 && k === 3,
         files: [...shared, `src/features/${titles[n].toLowerCase().replace(/[^a-z]+/g, '-')}.js`, ...(k === 1 ? ['packages/engine/service/manifest.js'] : [])],

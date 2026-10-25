@@ -8,15 +8,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const RENDERER = path.join(ROOT, 'apps', 'desktop', 'renderer');
 const registry = () => require('@multiagent/shared/providers');
 
 // the packages/shared/providers/ scripts index.html loads, in its order
 function providerScripts() {
-  const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
+  const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
   return [...html.matchAll(/<script src="\.\.\/\.\.\/\.\.\/packages\/shared\/providers\/([\w-]+\.js)"><\/script>/g)].map((m) => m[1]);
 }
 
@@ -29,7 +30,7 @@ function browser({ providers = true, robots = false } = {}) {
       vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'providers', f), 'utf8'), sandbox, { filename: f });
     }
   }
-  if (robots) vm.runInContext(fs.readFileSync(path.join(RENDERER, 'robots.js'), 'utf8'), sandbox, { filename: 'robots.js' });
+  if (robots) vm.runInContext(fs.readFileSync(pageFileOf('robots.js'), 'utf8'), sandbox, { filename: 'robots.js' });
   return sandbox.window;
 }
 
@@ -49,8 +50,9 @@ test('index.html loads every adapter before the registry, and the registry befor
   const scripts = providerScripts();
   assert.equal(scripts[scripts.length - 1], 'index.js');
   for (const f of ['claude.js', 'codex.js', 'grok.js', 'mock.js']) assert.ok(scripts.includes(f), f);
-  const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
-  const at = (src) => html.indexOf(`<script src="${src}"></script>`);
+  const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
+  // by the tail of the tag: the UI kit's and the fronts' scripts carry their package's path prefix (phase 3)
+  const at = (src) => html.search(new RegExp(`<script src="(?:[^"]*/)?${src.replace(/[.*+?^\$\{}()|[\]\\]/g, '\\$&')}"></script>`));
   const registryAt = at('../../../packages/shared/providers/index.js');
   for (const reader of ['chat-models.js', 'robots.js', 'views/runchat/run-chat-model.js']) {
     assert.ok(at(reader) > registryAt, `${reader} loads before the provider registry`);
@@ -141,7 +143,7 @@ test('trustFolder: an unknown provider or the simulated one is not trusted and w
 });
 
 test('3D view: every "·" separator in the HUD has a space on both sides (agent list: "Claude Code · Opus 5.5")', () => {
-  const hud = fs.readFileSync(path.join(RENDERER, 'run3d', 'hud.jsx'), 'utf8');
+  const hud = fs.readFileSync(pageFileOf('run3d/hud.jsx'), 'utf8');
   const bad = hud.split(/\r?\n/).map((line, i) => [i + 1, line]).filter(([, line]) => /\S·|·[^\s]/.test(line.replace(/\{\s*'·'\s*\}/g, '')))
     .map(([n, line]) => `hud.jsx:${n}: ${line.trim().slice(0, 160)}`);
   assert.deepEqual(bad, []);

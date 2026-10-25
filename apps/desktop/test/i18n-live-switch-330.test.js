@@ -1,5 +1,5 @@
 // #330 a live language switch (Settings › Language › Interface, InterfaceLanguage.apply) puts the open
-// screens in the new language without a reload: apps/desktop/renderer/view-registry.js repaints a view's markup
+// screens in the new language without a reload: packages/ui-kit/view-registry.js repaints a view's markup
 // and a markup a mount drew elsewhere (ViewRegistry.draw: the Oracle dock on Home) in place, so mount()
 // does not run again (its listeners and timers are not registered twice) and what the screen drew since
 // stays. view-registry.js and interface-language.js run in a sandbox over a small DOM that parses the
@@ -9,10 +9,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pageDirs, pageFile, pageFiles } = require('../../../scripts/source-tree');
+const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
+// a page file by its page-relative name, wherever its layer is (phase 3 of the reorganisation study)
+const page = (rel) => pageFile(PAGE_ROOT, rel);
+void pageDirs; void pageFiles; void page;
 const vm = require('vm');
 const I18n = require('@multiagent/shared/i18n.js');
 
-const RENDERER = path.join(__dirname, '..', 'renderer');
 const VOID = new Set(['input', 'br', 'img', 'hr', 'meta', 'link']);
 
 // ---- a small DOM: elements and text nodes, parsed from markup, walked in document order -----------
@@ -137,7 +141,7 @@ function loadPage() {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   for (const file of ['view-registry.js', 'interface-language.js']) {
-    vm.runInContext(fs.readFileSync(path.join(RENDERER, file), 'utf8'), sandbox, { filename: file });
+    vm.runInContext(fs.readFileSync(page(file), 'utf8'), sandbox, { filename: file });
   }
   sandbox.InterfaceLanguage.apply({ language: { interface: 'en' } });
   return { sandbox, document };
@@ -223,7 +227,7 @@ test('#330 a live switch repaints a markup a mount drew elsewhere with ViewRegis
 
 test('#330 the real page booted in English shows the Backlog\'s tabs in pt-BR after InterfaceLanguage.apply, without a reload', async (t) => {
   t.after(() => I18n.setLanguage('en'));
-  const { loadApp } = require('./renderer-app-harness');
+  const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
   // without a tree walker every screen is drawn and mounted again: Settings' mount reads data the fake
   // api does not give (voice, tools), so its scripts are left out of this page
   const app = loadApp({

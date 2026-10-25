@@ -18,7 +18,7 @@ const path = require('path');
 const { parseClaude, parseGrok } = require('@multiagent/engine/engine/providers');
 const { runFigures } = require('@multiagent/engine/domains/run/run-analysis');
 const { runReport } = require('@multiagent/engine/domains/supervisor/supervisor');
-const M = require('../renderer/run3d-model');
+const M = require('@multiagent/ui-kit/run3d-model');
 
 const newSid = () => `sess-308-${crypto.randomUUID()}`;
 const apiUsage = (input, output, cacheRead, cacheWrite) => ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheWrite });

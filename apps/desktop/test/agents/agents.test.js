@@ -402,7 +402,7 @@ test('editing a workflow file on disk is reflected in the next listAgents', (t) 
 });
 
 test('the emblems and eyes match the ones the robots can draw', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'robots.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'packages', 'ui-kit', 'robots.js'), 'utf8');
   const block = (name) => src.slice(src.indexOf(`const ${name} = {`), src.indexOf('};', src.indexOf(`const ${name} = {`)));
   const keys = (name) => [...block(name).matchAll(/^\s{4}(\w+)[:(]/gm)].map((m) => m[1]);
   assert.deepEqual(keys('ICONS'), agents.EMBLEMS.filter((e) => e !== 'none'));

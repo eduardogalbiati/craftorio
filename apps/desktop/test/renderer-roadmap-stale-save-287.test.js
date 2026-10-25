@@ -15,7 +15,8 @@ const path = require('path');
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const read = (...p) => fs.readFileSync(path.join(__dirname, '..', 'renderer', ...p), 'utf8');
+// a module by its page-relative name, whichever layer holds it; a shared module by its path from the page folder
+const read = (...p) => fs.readFileSync(p[0].startsWith('..') ? path.join(__dirname, '..', 'renderer', ...p) : require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), p.join('/')), 'utf8');
 const roadmapSrc = read('views', 'backlog', 'backlog-roadmap.js');
 const backlogSrc = read('views', 'backlog', 'backlog.js');
 const MODULES = ['status-pill.js', 'estimates.js', '../../../packages/shared/run-progress-model.js', '../../../packages/shared/default-workflow.js', '../../../packages/shared/roadmap-model.js', 'workflow-inputs.js'].map((f) => read(f));

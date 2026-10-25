@@ -11,6 +11,8 @@ const SHOW_ALL = { showAll: true, since: 'total' }; // #268: All, whatever the i
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
@@ -21,13 +23,13 @@ function tmp(t) {
   return dir;
 }
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog-roadmap.js'), 'utf8');
-const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workflow-inputs.js'), 'utf8');
+const src = fs.readFileSync(pageFileOf('views/backlog/backlog-roadmap.js'), 'utf8');
+const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'workflow-inputs.js'), 'utf8');
 const runProgressSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'run-progress-model.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
 const roadmapModelSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), 'utf8');
-const statusPillSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'status-pill.js'), 'utf8');
-const estimatesSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'estimates.js'), 'utf8');
+const statusPillSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'status-pill.js'), 'utf8');
+const estimatesSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'estimates.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // `choiceDialog`: #195's push confirmation (checkPushes); `showRunCalls`/`scheduleRenderCalls`: #194's
@@ -312,7 +314,7 @@ test('onClick [data-rm-edit] then html: an enum input renders pills with human l
 });
 
 test('the Edit form\'s inputs grid (#116) is a one-field-per-row block in backlog.css, not the auto-fill columns of .rm-form-grid, so pills and help text keep their own row width', () => {
-  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog.css'), 'utf8');
+  const css = fs.readFileSync(pageFileOf('views/backlog/backlog.css'), 'utf8');
   assert.match(css, /\.rm-form-grid\.wi-grid \{[^}]*display: block/);
 });
 
@@ -894,7 +896,7 @@ test('onClick [data-rm-ring]: toggles that run\'s steps open and re-renders, wit
 // ---- #193: no horizontal scroll (the roadmap's grids never widen past the window) ------------------
 
 test('backlog.css (#193): the roadmap\'s grids use a minmax(0, 1fr) track (not the default auto track sized by the longest line), so a long reason cannot widen the page', () => {
-  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog.css'), 'utf8');
+  const css = fs.readFileSync(pageFileOf('views/backlog/backlog.css'), 'utf8');
   assert.match(css, /\.rm \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(css, /\.rm-stage \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(css, /\.rm-items \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);
@@ -902,7 +904,7 @@ test('backlog.css (#193): the roadmap\'s grids use a minmax(0, 1fr) track (not t
 });
 
 test('backlog.css (#193): a long reason, note, error and input badge wrap or are abbreviated instead of stretching the card', () => {
-  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'backlog', 'backlog.css'), 'utf8');
+  const css = fs.readFileSync(pageFileOf('views/backlog/backlog.css'), 'utf8');
   assert.match(css, /\.rm-error \{ overflow-wrap: anywhere; \}/);
   assert.match(css, /\.rm-note-text \{ margin: 0; overflow-wrap: anywhere; \}/);
   assert.match(css, /\.rm-reason\[open\] > summary \{ white-space: normal; overflow-wrap: anywhere; \}/);

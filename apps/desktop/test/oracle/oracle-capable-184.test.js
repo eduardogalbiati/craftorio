@@ -13,6 +13,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..', '..'), rel);
 const { execFileSync } = require('child_process');
 const { createService, BUNDLED_SKILLS_DIR } = require('@multiagent/engine/service');
 const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
@@ -232,7 +234,7 @@ test('memory Import: entries pasted from a Claude Code memory index join the mem
 });
 
 test('memory drawer: the Memory panel has an Import action that calls importOracleMemory', () => {
-  const src = fs.readFileSync(path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'oracle', 'oracle.js'), 'utf8');
+  const src = fs.readFileSync(pageFileOf('views/oracle/oracle.js'), 'utf8');
   assert.match(src, /importOracleMemory/);
   // #330: the button's text comes from the catalog
   assert.match(src, />\s*\$\{t\('oracle\.import'\)\}/);

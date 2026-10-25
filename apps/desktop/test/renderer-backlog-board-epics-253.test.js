@@ -8,7 +8,7 @@
 // the whole page by test/renderer-app-harness.js) fed a synced backlog through the fake api.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('./renderer-app-harness');
+const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
 
 const issue = (number, extra = {}) => ({
   number, title: `Issue ${number}`, state: 'open', column: 'todo', labels: [], assignees: [], author: 'eduardo', body: '',

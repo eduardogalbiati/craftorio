@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const speech = require('@multiagent/engine/domains/chat/speech');
 const { installCommand } = require('@multiagent/engine/domains/machine/install-commands');
-const { encodeWav } = require('../../renderer/voice.js');
+const { encodeWav } = require('@multiagent/ui-kit/voice.js');
 
 const FAKE_CLI = process.platform === 'win32'
   ? path.join(__dirname, '..', '..', '..', '..', 'packages', 'engine', 'test', 'fixtures', 'fake-whisper.cmd')

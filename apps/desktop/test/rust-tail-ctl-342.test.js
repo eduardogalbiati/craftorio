@@ -11,7 +11,7 @@
 //   with [...args, runDir, sessionId].
 // - packages/engine/control/index.js: createControlChannel({ service, ctlPath }); its status carries `ctlPath` (main.js
 //   passes nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }); without it, the dev path).
-//   Settings › Execution (renderControlChannel in apps/desktop/renderer/views/settings/settings.js) shows it.
+//   Settings › Execution (renderControlChannel in packages/ui-kit/views/settings/settings.js) shows it.
 // - apps/desktop/scripts/package.js: buildNative builds and stages the three binaries; app.asar unpacks only node-pty.
 // - the files: native/ crates, THIRD_PARTY_NOTICES.md, the control-channel feature fragment,
 //   docs/agents/environment.md, README.md.
@@ -175,13 +175,13 @@ test('#342 control channel status: carries the multiagent-ctl path it is given, 
 
 // renderControlChannel pulled out of settings.js into a vm sandbox, as test/renderer-settings.test.js does.
 function renderedControlChannel(state) {
-  const src = read('apps/desktop/renderer/views/settings/settings.js');
+  const src = read('packages/ui-kit/views/settings/settings.js');
   const els = new Map();
   const makeEl = () => ({ innerHTML: '', textContent: '', title: '', className: '', value: '', classList: { toggle() {}, add() {}, remove() {}, contains: () => false } });
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
   const sandbox = {
     $, esc: (s) => String(s ?? ''), errMsg: (e) => String(e?.message || e),
-    t: require('./settings-source-329').t, // #329: the row's texts come from the catalog
+    t: require('@multiagent/ui-kit/test/settings-source-329').t, // #329: the row's texts come from the catalog
     document: { querySelector: () => ({ disabled: false }) },
     api: { platform: 'win32', controlChannelState: async () => state },
   };

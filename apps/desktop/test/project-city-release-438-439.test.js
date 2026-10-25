@@ -23,14 +23,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('./mini-dom');
+const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
 const { buildModel } = require('@multiagent/shared/architecture-model');
 const { buildCity } = require('@multiagent/shared/city-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const DIR = path.join(ROOT, 'apps', 'desktop', 'renderer', 'views', 'project');
+const DIR = pageFileOf('views/project');
 const RAMP = ['#f6d58e', '#f2a541', '#e8743b', '#d9480f'];
 const ORANGE = '#f2a541';
 const hash = '43'.repeat(20);
@@ -96,7 +98,7 @@ function load({ release = async () => RELEASE(), today = async () => ({ state: '
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js', 'city-impact.js', 'city-release.js', 'roadmap-model.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
-  vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps', 'desktop', 'renderer', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'ui-kit', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
   const optional = ['project-city-modes.js', 'project-city-panels.js'].filter((f) => fs.existsSync(path.join(DIR, f)));
   for (const f of [...optional, 'project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sandbox, { filename: f });

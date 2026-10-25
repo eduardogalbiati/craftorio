@@ -48,11 +48,13 @@ function sharedDir(root) {
   try { return `${path.relative(root, path.dirname(require.resolve('@multiagent/shared/package.json'))).split(path.sep).join('/')}/`; } catch { return 'packages/shared/'; }
 }
 // never served, inside an allowed folder: a package's tests and manifest
-const NOT_SERVED = /(^|\/)(test|node_modules)\/|(^|\/)package\.json$/;
+const NOT_SERVED = /(^|\/)(test|features|node_modules)\/|(^|\/)package\.json$/;
 // the only folders served as static files (relative to the root): the UI, the shared package's pure
-// modules index.html loads with a relative path (#345, scripts/docs.js), generated/ (the 3D views,
-// scripts/build-3d.js) and the few libraries the page loads
-const STATIC_DIRS = ['generated/', 'node_modules/@xterm/xterm/', 'node_modules/@xterm/addon-fit/', 'node_modules/marked/', 'node_modules/dompurify/'];
+// modules index.html loads with a relative path (#345, scripts/docs.js), the UI kit and the fronts
+// (phase 3 of docs/reorganisation-study-2026-10.md: the page's scripts and stylesheets, which the
+// page also names with relative paths), generated/ (the 3D views, scripts/build-3d.js) and the few
+// libraries the page loads; a package's test/, features/ and node_modules/ never (NOT_SERVED)
+const STATIC_DIRS = ['packages/ui-kit/', 'fronts/', 'generated/', 'node_modules/@xterm/xterm/', 'node_modules/@xterm/addon-fit/', 'node_modules/marked/', 'node_modules/dompurify/'];
 const staticDirs = (root, ui) => [ui, sharedDir(root), ...STATIC_DIRS];
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',

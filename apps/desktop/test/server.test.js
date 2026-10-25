@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const http = require('http');
 const WebSocket = require('ws');
 const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
@@ -164,7 +166,7 @@ test('a browser opening ?token= gets a cookie and the UI', async (t) => {
 test('serves only the UI folders: no source, no other packages, no traversal', async (t) => {
   const { base } = await start(t);
   const get = (p) => request(base, { path: p, headers: bearer }).then((r) => r.status);
-  assert.equal(await get('/apps/desktop/renderer/app.js'), 200);
+  assert.equal(await get('/packages/ui-kit/app.js'), 200);
   assert.equal(await get('/apps/desktop/host/main.js'), 404);
   assert.equal(await get('/packages/engine/domains/account/auth-config.js'), 404);
   assert.equal(await get('/package.json'), 404);
@@ -266,7 +268,7 @@ function loadPreloadApi(manifest) {
 // a small vm sandbox with just enough of those to build window.api from a stubbed manifest fetch.
 function loadApiHttpApi(manifest) {
   const vm = require('vm');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'api-http.js'), 'utf8');
+  const src = fs.readFileSync(pageFileOf('api-http.js'), 'utf8');
   function FakeXHR() {}
   FakeXHR.prototype.open = function open() {};
   FakeXHR.prototype.send = function send() { this.status = 200; this.responseText = JSON.stringify({ result: manifest }); };

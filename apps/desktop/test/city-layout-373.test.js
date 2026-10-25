@@ -37,7 +37,7 @@ const FILES = [
   { path: 'packages/engine/engine/small.js', lines: 20 },
   { path: 'packages/engine/engine/tall.js', lines: 60 },
   { path: 'packages/engine/engine/flat.js', lines: 60 },
-  { path: 'apps/desktop/renderer/app.js', lines: 60 },
+  { path: 'packages/ui-kit/app.js', lines: 60 },
   { path: 'apps/desktop/renderer/views/board.js', lines: 25 },
   { path: 'apps/desktop/renderer/views/kanban.js', lines: 25 },
   { path: 'apps/desktop/renderer/views/list.js', lines: 25 },

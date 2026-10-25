@@ -20,7 +20,7 @@
 // - The run chat's header has the same tablist (Chat selected).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('./renderer-app-harness');
+const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
 const H = require('./roadmap-status-helpers');
 
 const cls = (e) => String(e.attrs.class || '').split(/\s+/).filter(Boolean);

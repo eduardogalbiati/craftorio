@@ -1,5 +1,5 @@
 // #466 (e): a file dropped anywhere on the app's page never navigates the window to it.
-// CONTRACT (acceptance tests written before the code): apps/desktop/renderer/app.js registers document-level
+// CONTRACT (acceptance tests written before the code): packages/ui-kit/app.js registers document-level
 //   (or window-level) 'dragover' and 'drop' listeners: dragover is always prevented, a drop carrying
 //   a file or a link (Files, text/uri-list) is prevented, plain text still drops into a text box
 //   (review 1); the drop zones of the views keep their own handlers. Loaded through test/renderer-app-harness.js
@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 async function page() {
-  const { loadApp } = require('./renderer-app-harness');
+  const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
   const app = loadApp();
   await app.boot();
   return app;

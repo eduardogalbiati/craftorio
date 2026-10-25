@@ -16,7 +16,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
-const { loadApp } = require('./renderer-app-harness');
+const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
 const { clickRendered, region } = require('./project-page-helpers');
 
 const WORKFLOWS = [

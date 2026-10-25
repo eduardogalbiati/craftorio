@@ -8,11 +8,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const H = require('./city-modes-harness');
 
 const { STAGE, REPLAY, settle, q } = H;
-const CMAP = path.join(__dirname, '..', 'renderer', 'views', 'project', 'project-conflict-map.js');
+const CMAP = pageFileOf('views/project/project-conflict-map.js');
 
 // a run in progress on the stage's files, with a collision (its Conflict map link)
 const BUSY = () => ({

@@ -127,13 +127,13 @@ test('ai-development-local-hero (#151): the evidence step collects evidence but 
   assert.doesNotMatch(evidence.prompt, /ui_findings/, 'the prompt asks for no UI verdict');
 });
 
-test('ai-development-local-hero (#151): the design-system skill holds the app\'s tokens from apps/desktop/renderer/style.css, apart from ui-conventions', () => {
+test('ai-development-local-hero (#151): the design-system skill holds the app\'s tokens from packages/ui-kit/style.css, apart from ui-conventions', () => {
   const skillPath = path.join(__dirname, '..', '..', '..', 'skills', 'design-system', 'SKILL.md');
   assert.ok(fs.existsSync(skillPath), 'skills/design-system/SKILL.md exists');
   const skill = fs.readFileSync(skillPath, 'utf8');
   assert.match(skill, /^---\r?\nname: design-system\r?\n/);
-  assert.match(skill, /apps\/desktop\/renderer\/style\.css/, 'it names where the tokens come from');
-  const css = fsRead('apps', 'desktop', 'renderer', 'style.css');
+  assert.match(skill, /packages\/ui-kit\/style\.css/, 'it names where the tokens come from');
+  const css = fsRead('packages', 'ui-kit', 'style.css');
   for (const token of ['--bg', '--panel', '--border', '--text', '--muted', '--accent', '--radius']) {
     assert.ok(css.includes(`${token}:`), `${token} is a style.css token`);
     assert.ok(skill.includes(token), `the skill lists ${token}`);

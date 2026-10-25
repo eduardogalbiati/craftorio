@@ -19,6 +19,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const H = require('./roadmap-status-helpers');
 const runProgress = require('@multiagent/shared/run-progress-model');
 
@@ -103,10 +105,9 @@ test('#391 stage menu: the stage\'s pause reads "Pause after current step"; its 
 // #412: the pause button left the header for the Run screen's tab row (views/run/run.js, or
 // run-controls.js when it draws it); test/renderer-run-tabs-410.test.js checks where it shows
 test('#391 Run screen: the run\'s pause button reads "Pause after current step"', () => {
-  const renderer = path.join(__dirname, '..', 'renderer');
   // the markup takes its text from the catalog (#330): read it with the English values in place
-  const en = JSON.parse(fs.readFileSync(path.join(renderer, '..', '..', '..', 'packages', 'shared', 'i18n', 'en.json'), 'utf8'));
-  const html = ['index.html', 'views/run/run.js', 'run-controls.js'].map((f) => fs.readFileSync(path.join(renderer, ...f.split('/')), 'utf8')).join('\n')
+  const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n', 'en.json'), 'utf8'));
+  const html = ['index.html', 'views/run/run.js', 'run-controls.js'].map((f) => fs.readFileSync(pageFileOf(f), 'utf8')).join('\n')
     .replace(/\$\{t\('([\w.]+)'\)\}/g, (m, k) => (k in en ? en[k] : m));
   const btn = H.findEl(html, (e) => e.name === 'button' && (e.attrs.id === 'btn-pause' || e.attrs['data-testid'] === 'run-pause'));
   assert.ok(btn, 'the run\'s pause button (#btn-pause or data-testid="run-pause") is on the Run screen');

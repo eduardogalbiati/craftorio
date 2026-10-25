@@ -54,7 +54,8 @@ function missingTestIds(root, { steps = DEFAULT_STEPS, renderer = DEFAULT_RENDER
     }
   }
   if (!used.size) return [];
-  const source = listFiles(root, renderer, RENDERER_EXTS).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  // `renderer`: one folder, or a list of folders (this app's page is spread over its UI kit and its fronts)
+  const source = [].concat(renderer).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
   return [...used].filter(([id]) => !source.includes(id)).map(([id, files]) => ({ id, files }));
 }
 

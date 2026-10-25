@@ -238,7 +238,7 @@ const hash = (n) => String(n).padStart(2, '0').repeat(20);
 const FILES = [
   { path: 'README.md', lines: 4 }, { path: 'docs/a.md', lines: 5 }, { path: 'package.json', lines: 12 },
   { path: 'src/engine/big.js', lines: 400 }, { path: 'src/engine/small.js', lines: 20 },
-  { path: 'apps/desktop/renderer/app.js', lines: 60 }, { path: 'apps/desktop/renderer/views/board.js', lines: 25 },
+  { path: 'packages/ui-kit/app.js', lines: 60 }, { path: 'apps/desktop/renderer/views/board.js', lines: 25 },
   { path: 'apps/desktop/renderer/views/list.js', lines: 25 },
 ];
 const facts = () => buildModel({
@@ -267,7 +267,7 @@ const AGENTS = {
   runs: [
     {
       id: 'run-1', colour: '#e4572e',
-      agents: [agent('s-dev', 'developer', 'implement', 'src/engine/big.js', 'change', 5), agent('s-rev', 'reviewer', 'code_review', 'apps/desktop/renderer/app.js', 'read', 6)],
+      agents: [agent('s-dev', 'developer', 'implement', 'src/engine/big.js', 'change', 5), agent('s-rev', 'reviewer', 'code_review', 'packages/ui-kit/app.js', 'read', 6)],
       trail: ['src/engine/small.js', 'src/engine/big.js'],
       dirty: ['src/engine/big.js', 'nowhere/gone.js'],
     },
@@ -291,7 +291,7 @@ test('#374 placeAgents: a changing agent stands on the roof of its building, a r
   assert.ok(Math.abs(of['s-dev'].y - big.h) < EPS, `robot at y ${of['s-dev'].y}, roof at ${big.h}`);
   assert.ok(inside(of['s-dev'], big), `robot ${of['s-dev'].x},${of['s-dev'].z} on the roof's footprint`);
   assert.equal(of['s-rev'].at, 'door');
-  assert.equal(of['s-rev'].path, 'apps/desktop/renderer/app.js');
+  assert.equal(of['s-rev'].path, 'packages/ui-kit/app.js');
   assert.equal(of['s-rev'].y, 0);
 });
 

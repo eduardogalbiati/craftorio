@@ -8,10 +8,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
-const runSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'run', 'run.js'), 'utf8');
+const runSrc = fs.readFileSync(pageFileOf('views/run/run.js'), 'utf8');
 
 // renders the summary of run `run` → { ids, click(id) → its promise, shown: the showRelease calls }
 function renderSummary(run, { releases = async () => ({ releases: [] }), cityRelease = true } = {}) {

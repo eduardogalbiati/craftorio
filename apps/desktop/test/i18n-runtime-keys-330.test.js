@@ -1,16 +1,20 @@
 // #330 catalog keys built at runtime (t(`live_turn.listing_${what}`)): test/i18n-catalog-check-329.test.js
 // only finds literal keys, so a key a screen builds from a value is checked here, in English and pt-BR:
 // - every template key family in apps/desktop/renderer has at least one entry in en.json;
-// - the families whose values are known (the live turn's gh/glab and git labels, apps/desktop/renderer/live-turn.js
+// - the families whose values are known (the live turn's gh/glab and git labels, packages/ui-kit/live-turn.js
 //   commandLabel; the Arena's dropped-out rows, views/arena/arena.js; the conflict map's recommendation
 //   badges, views/project/project-conflict-map.js REC_LABEL) have an entry for each value.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pageDirs, pageFile, pageFiles } = require('../../../scripts/source-tree');
+const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
+// a page file by its page-relative name, wherever its layer is (phase 3 of the reorganisation study)
+const page = (rel) => pageFile(PAGE_ROOT, rel);
+void pageDirs; void pageFiles; void page;
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const RENDERER = path.join(ROOT, 'apps', 'desktop', 'renderer');
 const en = require('@multiagent/shared/i18n/en.json');
 const pt = require('@multiagent/shared/i18n/pt-BR.json');
 
@@ -25,7 +29,7 @@ function jsFiles(dir) {
 test('#330 every key a renderer file builds with t(`<prefix>${…}`) has catalog entries under its prefix', () => {
   const keys = Object.keys(en);
   const missing = [];
-  for (const file of jsFiles(RENDERER)) {
+  for (const file of pageFiles(ROOT).map((f) => path.join(ROOT, f.file))) {
     const src = fs.readFileSync(file, 'utf8');
     for (const m of src.matchAll(/(?:\bI18n\.t|(?<![\w$.])t)\(\s*`([a-z][\w.-]*)\$\{/g)) {
       const prefix = m[1];
@@ -61,7 +65,7 @@ test('#330 the live turn\'s, the Arena\'s and the conflict map\'s runtime keys e
 });
 
 test('#330 the conflict map\'s recommendation badges use exactly the rec_ keys of the catalog', () => {
-  const src = fs.readFileSync(path.join(RENDERER, 'views', 'project', 'project-conflict-map.js'), 'utf8');
+  const src = fs.readFileSync(page('views/project/project-conflict-map.js'), 'utf8');
   const table = /const REC_LABEL = \{([^}]*)\}/.exec(src);
   assert.ok(table, 'REC_LABEL not found in project-conflict-map.js: the source moved');
   const labels = [...table[1].matchAll(/'(rec_\w+)'/g)].map((m) => m[1]).sort();

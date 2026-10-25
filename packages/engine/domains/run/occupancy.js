@@ -1,7 +1,7 @@
 // The 24/7 meter (#188): how much of the time at least one real run is active, why the rest was idle,
 // and what the active time costs. Pure and local (no model call, no network): the service
 // (packages/engine/service/areas/occupancy.js) feeds it the runs' events, the app's heartbeat log and the Night
-// watch's nights; Analytics' 24/7 tab and the top bar chip (apps/desktop/renderer/occupancy-chip.js) show it.
+// watch's nights; Analytics' 24/7 tab and the top bar chip (packages/ui-kit/occupancy-chip.js) show it.
 // The interval logic (active = run time minus gate waits) is packages/engine/domains/night/night-watch.js's activeIntervals, so
 // the Night watch and this meter agree inside a night.
 //

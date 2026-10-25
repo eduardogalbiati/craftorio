@@ -282,7 +282,7 @@ test('#226 nothing but the gates is served on the mobile port (no API, no app UI
   const auth = { Authorization: `Bearer ${token}` };
   const probes = [
     ['GET', '/api/manifest'], ['POST', '/api/runs:active'], ['GET', '/api/runs'], ['POST', '/api/term:open'],
-    ['GET', '/index.html'], ['GET', '/apps/desktop/renderer/index.html'], ['GET', '/apps/desktop/renderer/app.js'], ['GET', '/ws'],
+    ['GET', '/index.html'], ['GET', '/apps/desktop/renderer/index.html'], ['GET', '/packages/ui-kit/app.js'], ['GET', '/ws'],
     ['GET', '/terminals'], ['GET', '/files/package.json'], ['GET', '/package.json'], ['GET', '/%2e%2e/package.json'],
     ['GET', '/node_modules/marked/lib/marked.umd.js'], ['GET', '/runs'],
   ];

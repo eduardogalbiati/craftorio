@@ -29,7 +29,7 @@ function demoConflictMap(ws, projectId) {
   const entry = (file, n, conflicts = 0, from = 0) => ({ file, runs: n, runIds: runIds.slice(from, from + n), lastRun: runIds[from], conflicts });
   const map = {
     source: 'runs', runs: runIds.length, runIds, builtAt: new Date().toISOString(),
-    files: [entry('apps/desktop/renderer/app.js', 14, 3), entry('apps/desktop/renderer/index.html', 13, 1), entry('packages/engine/service/index.js', 11), entry('README.md', 7, 0, 4), entry('packages/engine/engine/runner.js', 3, 0, 9)],
+    files: [entry('packages/ui-kit/app.js', 14, 3), entry('apps/desktop/renderer/index.html', 13, 1), entry('packages/engine/service/index.js', 11), entry('README.md', 7, 0, 4), entry('packages/engine/engine/runner.js', 3, 0, 9)],
     lines: [{ file: 'packages/engine/service/index.js', line: 12, text: "const { backlog, gates, notifications, projects, roadmap, runs, settings, usage, workflows } = require('./areas');", runs: 12, runIds: runIds.slice(0, 12) }],
   };
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.conflict-map.json`), JSON.stringify(map, null, 2));
@@ -83,7 +83,7 @@ function demoPoConversation(ws, projectId, po = null) {
           inputs: { mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
           costEstimate: { usd: 15.8, perPoint: 3.16, complexity: 5, runs: 12, estimated: false, basis: 'Median cost per step and complexity point of the last 12 successful runs of software-development-local-hero.yaml, × complexity 5 (test ×0.35, evidence ×0.5, developer_screenshots off).' },
           cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] } },
-        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['apps/desktop/renderer/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
+        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['packages/ui-kit/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
       ],
       conflicts: [], enrich: [],
       // #124: the big issue split along its two areas; #138: #15 placed in an epic, a new one for the UI fixes
@@ -101,7 +101,7 @@ function demoPoConversation(ws, projectId, po = null) {
     { ts: at(150), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.09, calibration: 5, calibrationOverride: true, text: 'One validated run for #16; **#10** touches the same styles and could join it. #8 is closed: left out.', answer: {
       summary: 'One run.',
       groups: [
-        { name: 'Keyboard focus', issues: [16], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['apps/desktop/renderer/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],
+        { name: 'Keyboard focus', issues: [16], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['packages/ui-kit/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],
           suggested: [{ issue: 10, reason: 'Same area (ui): the dialog and dock styles, one validated run.' }] },
       ],
       closed: [8],

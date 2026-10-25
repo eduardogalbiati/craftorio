@@ -182,7 +182,7 @@ const backlogData = (queue) => ({
 });
 
 async function backlogPage(lang, data) {
-  const { loadApp } = require('../renderer-app-harness');
+  const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
   const app = loadApp({
     storage: { interfaceLanguage: lang, 'multiagent.backlogProject': PROJECT, 'multiagent.currentProject': PROJECT },
     api: {

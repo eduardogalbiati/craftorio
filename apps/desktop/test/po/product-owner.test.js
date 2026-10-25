@@ -1010,8 +1010,8 @@ const BIG_BODY = [
   '- [ ] Adjust packages/engine/engine/index.js',
   '- [ ] Update apps/desktop/renderer/backlog.js UI',
   '- [ ] Add apps/desktop/renderer/kanban.js view',
-  '- [ ] Fix apps/desktop/renderer/style.css',
-  '- [ ] Update apps/desktop/renderer/app.js',
+  '- [ ] Fix packages/ui-kit/style.css',
+  '- [ ] Update packages/ui-kit/app.js',
   '- [ ] Adjust apps/desktop/renderer/index.html',
   '- [ ] Polish apps/desktop/renderer/icons.js',
 ].join('\n');

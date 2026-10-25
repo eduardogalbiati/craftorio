@@ -5,7 +5,7 @@
 // - The renderer scripts are evaluated whole in vm sandboxes, as in
 //   test/renderer-roadmap-tooltips.test.js and test/renderer-display-names-245.test.js, with the real
 //   RunProgress, WorkflowInputs, Estimates, displayName and run-list.js chips.
-// - apps/desktop/renderer/status-pill.js (#266, new) is evaluated into each sandbox when it exists, so the
+// - packages/ui-kit/status-pill.js (#266, new) is evaluated into each sandbox when it exists, so the
 //   test files load before it does and fail test by test; loadStatusPill() requires it in Node.
 // - A fixed clock: each sandbox's Date is replaced by one whose `now` the test sets (setNow), for
 //   both Date.now() and `new Date()` without arguments.
@@ -17,12 +17,15 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const AgentColors = require('../renderer/agent-colors.js');
+const AgentColors = require('@multiagent/ui-kit/agent-colors.js');
 const { displayName } = require('@multiagent/shared/display-name.js');
 
-const R = path.join(__dirname, '..', 'renderer');
-const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
-const exists = (...p) => fs.existsSync(path.join(R, ...p));
+// the page's files by their page-relative names, whichever layer holds them (the UI kit's robots.js,
+// a front's views/backlog/…: scripts/source-tree.js pageFile, phase 3 of the reorganisation study)
+const { pageFile } = require('../../../scripts/source-tree');
+const ROOT = path.join(__dirname, '..', '..', '..');
+const read = (...p) => fs.readFileSync(pageFile(ROOT, p.join('/')), 'utf8');
+const exists = (...p) => !!pageFile(ROOT, p.join('/'));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const decode = (s) => String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 const agentLabel = (slug, names) => displayName(slug, names);
@@ -51,7 +54,7 @@ function installClock(sandbox, now = NOW) {
 
 // ---- the new shared helper (#266) -------------------------------------------------------------
 function loadStatusPill() {
-  const file = path.join(R, 'status-pill.js');
+  const file = pageFile(ROOT, 'status-pill.js');
   delete require.cache[require.resolve(file)];
   return require(file); // throws while the module does not exist: the test fails on its own
 }
@@ -357,7 +360,7 @@ const run = (extra = {}) => ({ status: 'running', mock: false, startedAt: null, 
 const roadmapOf = (stages, extra = {}) => ({ roadmap: { state: 'running', stages, ...extra }, issues: [] });
 
 module.exports = {
-  R, read, exists, esc, decode, displayName, agentLabel,
+  read, exists, esc, decode, displayName, agentLabel,
   NOW, MIN, HOUR, DAY, iso, settle,
   installClock, loadStatusPill, loadRunList, loadRoadmap, loadRunLink,
   elements, findEl, findAll, visibleText, textNodes, dropWhere, fakeEl, clickOn, matches, makeCtx,

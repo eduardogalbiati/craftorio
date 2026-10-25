@@ -13,7 +13,7 @@ const path = require('path');
 const { appRoot } = require('./app-root');
 
 // the folders of the app root that hold sources (those that exist)
-const appSourceDirs = () => ['src', 'packages', 'apps'].map((d) => path.join(appRoot(), d)).filter((d) => fs.existsSync(d));
+const appSourceDirs = () => ['src', 'packages', 'fronts', 'apps'].map((d) => path.join(appRoot(), d)).filter((d) => fs.existsSync(d));
 const SKIPPED = new Set(['node_modules', 'test']);
 
 // The source files under `dir`, as sorted paths relative to it ('/' separators); test/ and node_modules/ left out.

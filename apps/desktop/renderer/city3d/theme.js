@@ -1,6 +1,6 @@
 // The project city's scene colours (#373, the proof of concept's in #382), in the run's two 3D
 // themes: what the run's floor has (sky, floor, pad, lane, wall cap, shadow, lights, accent, ink,
-// mast, the state colours) comes from apps/desktop/renderer/run3d-theme.js (window.Run3DTheme, loaded by
+// mast, the state colours) comes from packages/ui-kit/run3d-theme.js (window.Run3DTheme, loaded by
 // the app before this bundle), so the city and the run's floor read as one product; the rest is
 // the city's own, copied from poc/project-city.html THEMES: the dim of the buildings outside a
 // pinned file's connections, the lane dashes, the docks, halls, plinths and beacons, and per zone

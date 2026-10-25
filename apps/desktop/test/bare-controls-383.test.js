@@ -61,7 +61,8 @@ test('#383 BASELINE lists renderer files with whole counts, totals no higher tha
   const { BASELINE } = load();
   const keys = Object.keys(BASELINE);
   assert.equal(keys.length > 0, true);
-  assert.deepEqual(keys.filter((k) => !k.startsWith('apps/desktop/renderer/') || k.includes('\\')), [], 'repo-relative forward-slash paths under apps/desktop/renderer');
+  // the page's layers (phase 3 of the reorganisation study): the UI kit, a front, the app's page folder
+  assert.deepEqual(keys.filter((k) => !/^(packages\/ui-kit|fronts\/[^/]+|apps\/[^/]+\/renderer)\//.test(k) || k.includes('\\')), [], 'repo-relative forward-slash paths under a page layer');
   const total = { select: 0, date: 0, datetime: 0 };
   for (const k of keys) {
     for (const kind of Object.keys(total)) {

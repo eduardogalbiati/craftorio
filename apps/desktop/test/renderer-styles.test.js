@@ -5,16 +5,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pageDirs, pageFile, pageFiles } = require('../../../scripts/source-tree');
+const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
+// a page file by its page-relative name, wherever its layer is (phase 3 of the reorganisation study)
+const page = (rel) => pageFile(PAGE_ROOT, rel);
+void pageDirs; void pageFiles; void page;
 
-const dir = path.join(__dirname, '..', 'renderer');
-// Top-level stylesheets and each screen's own CSS in views/<view>/<view>.css (#78).
-function cssFiles(base, sub = '') {
-  return fs.readdirSync(path.join(base, sub), { withFileTypes: true }).flatMap((e) => {
-    if (e.isDirectory()) return cssFiles(base, path.join(sub, e.name));
-    return e.name.endsWith('.css') ? [path.join(sub, e.name)] : [];
-  });
-}
-const sheets = cssFiles(dir).map((f) => ({ file: f, css: fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') }));
+// The kit's stylesheets and each screen's own CSS in views/<view>/<view>.css (#78), whichever package holds them.
+const sheets = pageFiles(PAGE_ROOT, { match: /\.css$/ }).map((f) => ({ file: f.rel, css: fs.readFileSync(path.join(PAGE_ROOT, f.file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') }));
 const style = sheets.find((s) => s.file === 'style.css').css;
 const root = /:root\s*\{([^}]*)\}/.exec(style)[1];
 

@@ -5,11 +5,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { providerType } = require('../renderer/views/runchat/run-chat-model.js');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'runchat', 'runchat.js'), 'utf8');
+const src = fs.readFileSync(pageFileOf('views/runchat/runchat.js'), 'utf8');
 
 function loadHelpers() {
   const isSupervisor = /const isSupervisor = [^\n]+/.exec(src)[0];
@@ -75,7 +77,7 @@ test('robot(): without a saved look, draws the provider\'s robot as before', () 
 function loadColoredRobot(looks = {}) {
   const block = /const isSupervisor = [\s\S]*?\n  function robot\(who, st = 'idle', opts = \{\}\) \{[\s\S]*?\n  \}/.exec(src)?.[0];
   assert.ok(block, 'the avatar helpers (isSupervisor … robot) not found in runchat.js: the source moved');
-  const AgentColors = require('../renderer/agent-colors.js');
+  const AgentColors = require('@multiagent/ui-kit/agent-colors.js');
   const yaml = require('js-yaml');
   const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml'), 'utf8'));
   const sandbox = {

@@ -1,4 +1,4 @@
-// Images pasted into the AI prompt fields (#130, packages/engine/domains/chat/pasted-images.js, apps/desktop/renderer/paste-image.js).
+// Images pasted into the AI prompt fields (#130, packages/engine/domains/chat/pasted-images.js, packages/ui-kit/paste-image.js).
 // A service channel rather than a desktop one, so the browser UI (npm run serve) pastes the same way:
 // the renderer reads the image from the paste event and sends it as base64. Both channels only write
 // or delete inside <workspace>/attachments/pending/.

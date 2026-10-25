@@ -19,11 +19,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 const { displayName } = require('@multiagent/shared/display-name.js');
 
-const FILE = path.join(__dirname, '..', 'renderer', 'views', 'analytics', 'analytics-agents.js');
+const FILE = pageFileOf('views/analytics/analytics-agents.js');
 const RANGE = { from: '2026-09-01', to: '2026-09-30' };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // usage-widget.js's helpers, as the app has them
@@ -159,7 +161,7 @@ test('#280 Agents tab: registered in window.AnalyticsTabs after 24/7, and it rea
 });
 
 test('#280 Agents tab: index.html loads analytics-agents.js before analytics.js', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
+  const html = fs.readFileSync(pageFileOf('index.html'), 'utf8');
   const tab = html.indexOf('views/analytics/analytics-agents.js');
   assert.ok(tab >= 0, 'the script is in index.html');
   assert.ok(tab < html.indexOf('views/analytics/analytics.js'), 'before analytics.js');

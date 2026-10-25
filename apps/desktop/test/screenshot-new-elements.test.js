@@ -13,7 +13,7 @@
 //     (then "; <e> errors: …" for real errors).
 // A selector missing on both sides, a crash of the original side or a failure on the modified side
 // stays an error.
-// Artifacts panel (apps/desktop/renderer/artifacts-panel.js, extras.capture = that output): such a screen
+// Artifacts panel (packages/ui-kit/artifacts-panel.js, extras.capture = that output): such a screen
 // shows its modified image alone, labelled "new element", with no error line and no original slot.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -21,7 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { captureScreenshots } = require('@multiagent/engine/engine/screenshot-step');
-const { fakeRoot, loadPanel, waitTick } = require('./artifacts-panel-helpers');
+const { fakeRoot, loadPanel, waitTick } = require('@multiagent/ui-kit/test/artifacts-panel-helpers');
 
 function tmpDir(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

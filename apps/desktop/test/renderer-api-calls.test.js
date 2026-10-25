@@ -7,9 +7,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pageDirs, pageFile, pageFiles } = require('../../../scripts/source-tree');
+const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
+// a page file by its page-relative name, wherever its layer is (phase 3 of the reorganisation study)
+const page = (rel) => pageFile(PAGE_ROOT, rel);
+void pageDirs; void pageFiles; void page;
 const { createService } = require('@multiagent/engine/service');
 
-const RENDERER = path.join(__dirname, '..', 'renderer');
 
 function jsFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
@@ -31,7 +35,7 @@ test('no renderer call wraps the only parameter of a channel in an object named 
   const found = [];
   // api.method({ name: …  /  api.method?.({ name, …  /  api.method({ name })
   const CALL = /\bapi\.([A-Za-z_$][\w$]*)(?:\?\.)?\(\s*\{\s*([A-Za-z_$][\w$]*)\s*(?=[:,}])/g;
-  for (const file of jsFiles(RENDERER)) {
+  for (const file of pageFiles(PAGE_ROOT).map((f) => path.join(PAGE_ROOT, f.file))) {
     const text = fs.readFileSync(file, 'utf8');
     for (const m of text.matchAll(CALL)) {
       if (single.get(m[1]) === m[2]) {

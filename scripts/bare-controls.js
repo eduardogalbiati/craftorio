@@ -10,9 +10,9 @@
 const fs = require('fs');
 const path = require('path');
 const { listFiles: walk } = require('./file-size-ratchet');
+const { pageDirs } = require('./source-tree');
 
 const ROOT = path.join(__dirname, '..');
-const DIR = 'apps/desktop/renderer';
 const KINDS = {
   date: { re: /type=(["'])date\1/g, label: 'type="date" input' },
   datetime: { re: /type=(["'])datetime-local\1/g, label: 'type="datetime-local" input' },
@@ -21,14 +21,14 @@ const KINDS = {
 
 // path (from the repository root, with /) -> its counts when listed; only lower them
 const BASELINE = {
-  'apps/desktop/renderer/agent-overrides.js': { select: 2 },
-  'apps/desktop/renderer/chain-picker.js': { select: 4 },
-  'apps/desktop/renderer/date-range.js': { date: 1 },
-  'apps/desktop/renderer/diff-viewer.js': { select: 1 },
-  'apps/desktop/renderer/gate-panel.js': { select: 1 },
+  'packages/ui-kit/agent-overrides.js': { select: 2 },
+  'packages/ui-kit/chain-picker.js': { select: 4 },
+  'packages/ui-kit/date-range.js': { date: 1 },
+  'packages/ui-kit/diff-viewer.js': { select: 1 },
+  'packages/ui-kit/gate-panel.js': { select: 1 },
   'apps/desktop/renderer/index.html': { select: 4 },
-  'apps/desktop/renderer/resume-dialog.js': { select: 1 },
-  'apps/desktop/renderer/select.js': { select: 1 },
+  'packages/ui-kit/resume-dialog.js': { select: 1 },
+  'packages/ui-kit/select.js': { select: 1 },
   'apps/desktop/renderer/views/analytics/analytics-agents.js': { select: 1 },
   'apps/desktop/renderer/views/analytics/analytics-run.js': { select: 1 },
   'apps/desktop/renderer/views/arena/arena.js': { select: 5 },
@@ -47,10 +47,10 @@ const BASELINE = {
   'apps/desktop/renderer/views/project/project-city-agents.js': { select: 1 },
   'apps/desktop/renderer/views/project/project-city.js': { select: 1 },
   'apps/desktop/renderer/views/sessions/sessions.js': { select: 2 },
-  'apps/desktop/renderer/views/settings/settings-markup.js': { select: 6 },
+  'packages/ui-kit/views/settings/settings-markup.js': { select: 6 },
   'apps/desktop/renderer/views/workflows/builder.js': { select: 4 },
   'apps/desktop/renderer/views/workflows/workflows.js': { select: 3 },
-  'apps/desktop/renderer/workflow-inputs.js': { select: 1 },
+  'packages/ui-kit/workflow-inputs.js': { select: 1 },
 };
 
 function countBareControls(src) {
@@ -60,12 +60,14 @@ function countBareControls(src) {
   return out;
 }
 
-const listFiles = (root, dir) => walk(root, dir, /\.(js|html)$/);
+// the .js and .html files of every page layer (the UI kit, the fronts, the apps' page folders:
+// scripts/source-tree.js pageDirs; a scratch tree without manifests has its apps/<app>/renderer/ only)
+const listFiles = (root) => pageDirs(root).flatMap((dir) => walk(root, dir, /\.(js|html)$/));
 
 // [{ file, kind, count, allowed, message }], sorted by file.
 function checkBareControls({ root = ROOT, baseline = BASELINE } = {}) {
   const problems = [];
-  for (const file of listFiles(root, DIR).sort()) {
+  for (const file of listFiles(root).sort()) {
     const counts = countBareControls(fs.readFileSync(path.join(root, ...file.split('/')), 'utf8'));
     const listed = Object.hasOwn(baseline, file) ? baseline[file] : {};
     for (const [kind, { label }] of Object.entries(KINDS)) {

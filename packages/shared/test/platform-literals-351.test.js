@@ -18,7 +18,7 @@ const EXCEPTIONS = {
   'packages/shared/setup-model.js': 1, // the CLIs the setup describes
   'packages/engine/domains/usage/actions-usage.js': 2, // the GitHub Actions billing API: a GitHub-only feature run with the gh CLI
   'packages/engine/domains/workspace/workspace.js': 1, // the gh credential helper for github.com clones
-  'apps/desktop/renderer/setup.js': 1, // the CLIs the setup checks
+  'packages/ui-kit/setup.js': 1, // the CLIs the setup checks
   'packages/engine/service/areas/settings.js': 1, // the CLIs the settings check
 };
 

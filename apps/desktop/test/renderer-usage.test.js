@@ -1,5 +1,5 @@
 // apps/desktop/renderer/views/usage/usage.js: providerCard's and actionsCard's install/scope hint (#147),
-// each with a play button next to it (commandHint, apps/desktop/renderer/command-hint.js) when there is a
+// each with a play button next to it (commandHint, packages/ui-kit/command-hint.js) when there is a
 // command to run. Pulled out of the source and run in a vm sandbox against stand-ins for the
 // app-wide helpers it is not about (esc, fmtTok/fmtUsd, meterHtml, STATUS_TEXT, orchestratorSplit,
 // planBlock), the way test/renderer-kept-work-dialog.test.js checks app.js's dialogs; commandHint
@@ -8,10 +8,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 
-const usageSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', 'usage', 'usage.js'), 'utf8');
+const usageSrc = fs.readFileSync(pageFileOf('views/usage/usage.js'), 'utf8');
 
 function loadUsageMarkup() {
   const sandbox = {

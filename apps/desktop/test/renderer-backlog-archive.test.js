@@ -23,11 +23,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+// a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
+const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const en = require('@multiagent/shared/i18n/en.json');
 
-const VIEW = path.join(__dirname, '..', 'renderer', 'views', 'backlog');
+const VIEW = pageFileOf('views/backlog');
 const src = fs.readFileSync(path.join(VIEW, 'backlog.js'), 'utf8');
-const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
+const indexHtml = fs.readFileSync(pageFileOf('index.html'), 'utf8');
 
 function loadArchive() {
   // moved to packages/shared/ with the other pure modules both sides use (#345)

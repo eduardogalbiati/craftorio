@@ -45,7 +45,7 @@ Feature: Every screen in the interface language
     Then the screen's "Sync, New issue…" buttons read in "English"
     And the screen's "Board, Epics" tabs read in "English"
 
-  # #423: the agent chats' live turn (apps/desktop/renderer/live-turn.js) follows the interface language. Slow
+  # #423: the agent chats' live turn (packages/ui-kit/live-turn.js) follows the interface language. Slow
   # simulated turns (#368) keep the simulated Product Owner's turn live (thinking, then three steps of
   # about 2.5 s) while its activity line, step count and Stop button are read; the expected texts are
   # the catalogs' live_turn.* entries (features/steps/interface-language.steps.js). The Product Owner's
@@ -67,7 +67,7 @@ Feature: Every screen in the interface language
   # (features/support/app.js, features/support/browser-main.js), whatever the computer's language:
   # on a computer in Portuguese the scenarios that read English text or compare screenshots failed.
   # The scenarios above that want Portuguese choose it in Settings. "The page is shown in" reads the
-  # page's language (the html lang attribute the renderer sets, apps/desktop/renderer/interface-language.js,
+  # page's language (the html lang attribute the renderer sets, packages/ui-kit/interface-language.js,
   # apps/desktop/renderer/connection/connection.js); "the browser's language" is navigator.language.
   @issue-444
   Scenario: The app under test opens in English whatever the computer's language

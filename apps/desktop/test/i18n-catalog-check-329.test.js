@@ -19,8 +19,8 @@ const CATALOGS = path.join(ROOT, 'packages', 'shared', 'i18n');
 
 // The files whose visible text lives in the catalog (a folder: every .js in it). #330 grows this list.
 const MOVED_FILES = [
-  'apps/desktop/renderer/setup.js',
-  'apps/desktop/renderer/views/settings/',
+  'packages/ui-kit/setup.js',
+  'packages/ui-kit/views/settings/',
 ];
 
 const PLURAL_CATEGORIES = ['zero', 'one', 'two', 'few', 'many', 'other'];
