@@ -1,7 +1,7 @@
 // #244 acceptance tests (written before the code): the Oracle's accurate per-turn cost, code-only
 // wake notices, short fresh sessions seeded from oracle/state.md, and the queue behind a wake-up.
 // Seams: spentOn / usageRuns (packages/engine/domains/oracle/oracle.js), createOracle's ask / wake / state / history, and
-// createWake (packages/engine/domains/oracle/oracle-wake.js) wired to oracle.wake the way packages/engine/service/channels/oracle.js does
+// createWake (packages/engine/domains/oracle/oracle-wake.js) wired to oracle.wake the way packages/engine/service/areas/oracle.js does
 // (onWake gets { lines, runIds, kinds }). Everything is simulated (mock: true): "no model call" is
 // observed as no provider session started (state().sessionId stays null) and no simulated answer.
 // Time is the only thing mocked (node:test's Date mock) for the idle-session rule (55 min).
@@ -43,7 +43,7 @@ function makeOracle(dir, { settings = {} } = {}) {
   });
 }
 
-// the service's wiring of the wake-ups (packages/engine/service/channels/oracle.js), simulated
+// the service's wiring of the wake-ups (packages/engine/service/areas/oracle.js), simulated
 function wire(t, o, dir) {
   const events = new EventEmitter();
   const wake = createWake({ events, settings: () => ({}), file: () => path.join(dir, 'wake.json'), onWake: (batch) => o.wake({ ...batch, mock: true }), batchMs: 60e3 });

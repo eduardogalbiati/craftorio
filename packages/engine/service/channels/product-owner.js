@@ -218,7 +218,7 @@ module.exports = (ctx) => {
     sent(out, id);
     return answer(out);
   };
-  // the Oracle's request_agent sends here (packages/engine/service/channels/oracle.js)
+  // the Oracle's request_agent sends here (packages/engine/service/areas/oracle.js)
   ctx.productOwnerRequest = request;
 
   return [
