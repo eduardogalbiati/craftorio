@@ -41,10 +41,14 @@ const PKG = appPackage();
 // The UI folder served (relative to the app root, with a trailing /): the root package.json's
 // `multiagent.ui` (the desktop app's renderer until phase 3's apps/web), else src/renderer/.
 const uiDir = (pkg = PKG) => `${String(pkg.multiagent?.ui || 'src/renderer').replace(/\/+$/, '')}/`;
-// the shared package's folder, relative to root (the workspace @multiagent/shared, wherever it lives)
+// the shared package's folder, relative to root: the workspace under root (what index.html's relative
+// <script> paths name, scripts/docs.js), else wherever @multiagent/shared resolves from here
 function sharedDir(root) {
+  if (fs.existsSync(path.join(root, 'packages', 'shared', 'package.json'))) return 'packages/shared/';
   try { return `${path.relative(root, path.dirname(require.resolve('@multiagent/shared/package.json'))).split(path.sep).join('/')}/`; } catch { return 'packages/shared/'; }
 }
+// never served, inside an allowed folder: a package's tests and manifest
+const NOT_SERVED = /(^|\/)(test|node_modules)\/|(^|\/)package\.json$/;
 // the only folders served as static files (relative to the root): the UI, the shared package's pure
 // modules index.html loads with a relative path (#345, scripts/docs.js), generated/ (the 3D views,
 // scripts/build-3d.js) and the few libraries the page loads
@@ -199,7 +203,7 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
     if (/[\\\0]/.test(rel)) throw new HttpError(404, 'Not found.');
     rel = path.posix.normalize(rel).replace(/^\/+/, '');
     const dir = served.find((d) => rel.startsWith(d));
-    if (!dir) throw new HttpError(404, 'Not found.');
+    if (!dir || NOT_SERVED.test(rel.slice(dir.length))) throw new HttpError(404, 'Not found.');
     const file = path.resolve(root, ...rel.split('/'));
     // and the resolved file must still be inside the allowed folder
     if (!file.startsWith(path.resolve(root, ...dir.split('/').filter(Boolean)) + path.sep)) throw new HttpError(404, 'Not found.');
