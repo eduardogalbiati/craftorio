@@ -1,18 +1,18 @@
 // #263: the Agents window's links open in the main window. The main process relays
 // `agents-window:navigate` (sent from the window's page, manifest: navigateMainWindow) to the main
 // window as `main-window:navigate` after bringing it to the front. The relay lives inline in
-// src/main.js (not in an Electron-free module), so this reads its source like
+// src/host/main.js (not in an Electron-free module), so this reads its source like
 // test/clipboard-api.test.js does: the handler is sliced out and its steps asserted in order.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+const mainSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'host', 'main.js'), 'utf8');
 const relay = () => {
   // through the sender guard (#467: ipc = guardIpc(ipcMain, ...)) or directly
   const m = mainSrc.match(/\b(?:ipc|ipcMain)\.on\('agents-window:navigate'[\s\S]*?\n\s*\}\);/);
-  assert.ok(m, 'src/main.js listens to agents-window:navigate with ipc.on / ipcMain.on');
+  assert.ok(m, 'src/host/main.js listens to agents-window:navigate with ipc.on / ipcMain.on');
   return m[0];
 };
 

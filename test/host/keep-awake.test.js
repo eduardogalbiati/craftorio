@@ -1,9 +1,9 @@
 // Keep awake (#162): the rule that decides there is work to stay awake for (workToDo), the switch's
 // status line (keepAwakeLabel) and the blocker's owner (createKeepAwake), all pure of Electron (a
-// fake powerSaveBlocker stands in for the real one, held by src/main.js).
+// fake powerSaveBlocker stands in for the real one, held by src/host/main.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { BLOCKER_TYPE, createKeepAwake, keepAwakeLabel, workToDo } = require('../src/keep-awake');
+const { BLOCKER_TYPE, createKeepAwake, keepAwakeLabel, workToDo } = require('../../src/host/keep-awake');
 
 // ---- workToDo -----------------------------------------------------------------------------------
 

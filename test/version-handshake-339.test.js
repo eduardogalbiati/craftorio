@@ -21,7 +21,7 @@
 //
 // 4. A service channel `app:version` (method `appVersion`, no argument) whose schema.result is an
 //    object requiring `app` and `contract` (strings). It answers exactly what GET /api/version
-//    answers, so the desktop app gets the same over IPC (src/main.js serves every service channel).
+//    answers, so the desktop app gets the same over IPC (src/host/main.js serves every service channel).
 //
 // 5. src/renderer/api-http.js, on every WebSocket open (the first connection and each
 //    reconnection), reads `GET /api/version` (fetch or XMLHttpRequest) and compares its `contract`

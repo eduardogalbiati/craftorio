@@ -1,8 +1,8 @@
 /* global api */
 // Settings › Execution › Engine: where this window's engine runs (api.engineConnection, from
-// src/preload.js or src/renderer/api-http.js). The desktop app on this computer's engine and the
+// src/host/preload.js or src/renderer/api-http.js). The desktop app on this computer's engine and the
 // desktop app showing a remote engine both offer Change…, which opens the app's connection page
-// (src/engine-connection-window.js: this computer or a remote engine, address and token, Test
+// (src/host/engine-connection-window.js: this computer or a remote engine, address and token, Test
 // connection); a plain browser on `npm run serve` only says which engine serves it. Its texts are
 // settings.engine.* keys of the catalog (#329), drawn again when the interface language changes.
 // window.EngineSettings = { where(), markup(where), render(el) }: settings.js draws it into #set-engine;

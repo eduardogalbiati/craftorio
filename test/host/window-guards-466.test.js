@@ -1,6 +1,6 @@
 // #466: no window of the app navigates away from the app's page or attaches a webview.
 // CONTRACT (acceptance tests written before the code):
-//   NEW module src/window-guards.js exports guardWindow(webContents, { openExternal }).
+//   NEW module src/host/window-guards.js exports guardWindow(webContents, { openExternal }).
 //   It registers on `webContents` (an EventEmitter-like: `.on(name, fn)` and `setWindowOpenHandler(fn)`):
 //   - 'will-navigate' (event, url): ALWAYS event.preventDefault(), for any URL (file:, about:,
 //     javascript:, http(s)); an http(s) URL goes to openExternal(url) once; any other never does.
@@ -13,11 +13,11 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('events');
 
 // resolved inside each test: the module does not exist until the change lands
-const load = () => require('../src/window-guards.js');
+const load = () => require('../../src/host/window-guards.js');
 
 function guarded() {
   const { guardWindow } = load();
-  assert.equal(typeof guardWindow, 'function', 'src/window-guards.js exports guardWindow (#466)');
+  assert.equal(typeof guardWindow, 'function', 'src/host/window-guards.js exports guardWindow (#466)');
   const wc = new EventEmitter();
   wc.setWindowOpenHandler = function (fn) { this.openHandler = fn; };
   const opened = [];

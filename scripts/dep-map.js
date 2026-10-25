@@ -1,5 +1,5 @@
 // Dependency map of src/ for reorganisation work (docs/reorganisation-study-2026-10.md): the
-// require() edges between areas (engine, service, shared, server, control, renderer, the loose files
+// require() edges between areas (engine, service, shared, server, control, renderer, host, the loose files
 // of src/), the clusters the loose files form by name, which of them the engine side needs, and
 // which service channel files each renderer view calls (through `api.<method>(`). Read-only; prints
 // a report. `node scripts/dep-map.js [--json <file>]` writes the raw edges too.
@@ -25,7 +25,7 @@ const rel = (p) => path.relative(ROOT, p).replace(/\\/g, '/');
 
 // The area a file belongs to: a top-level folder of src/, or `src-root` for the loose files.
 function area(file) {
-  const m = rel(file).match(/^src\/(engine|service|shared|server|control|renderer)\//);
+  const m = rel(file).match(/^src\/(engine|service|shared|server|control|renderer|host)\//);
   return m ? m[1] : 'src-root';
 }
 
@@ -133,7 +133,7 @@ function report() {
 
   const outside = all.filter(([a, b]) => area(a) === 'shared' && area(b) !== 'shared');
   say(''); say(`## shared/ requiring outside shared/: ${outside.length ? outside.map(([a, b]) => `${rel(a)} -> ${rel(b)}`).join(', ') : 'none'}`);
-  const svc = all.filter(([a, b]) => area(a) === 'service' && (area(b) === 'renderer' || rel(b) === 'src/main.js'));
+  const svc = all.filter(([a, b]) => area(a) === 'service' && (area(b) === 'renderer' || rel(b) === 'src/host/main.js'));
   say(`## service/ requiring renderer/ or main.js: ${svc.length ? svc.length : 'none'}`);
 
   const byMethod = channelFiles();

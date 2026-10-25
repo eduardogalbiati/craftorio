@@ -1,6 +1,6 @@
 // #477 (SEC-12): Artifacts › Open never runs a program an agent wrote.
 // CONTRACT (acceptance tests written before the code):
-//   NEW module src/open-guard.js exports checkOpenable(filePath, { platform, stat }) →
+//   NEW module src/host/open-guard.js exports checkOpenable(filePath, { platform, stat }) →
 //     { ok: true }                      a file the OS may open with its default app
 //     { ok: false, reason: string }     refused, with a reason (non-empty) the caller answers with
 //   - refused by extension, case-insensitive: .exe .cmd .bat .ps1 .vbs .js .jar .app .sh .command
@@ -23,8 +23,8 @@ const { withI18n } = require('./i18n-sandbox.js');
 
 // resolved inside each test: the module does not exist until the change lands
 const load = () => {
-  const m = require('../src/open-guard.js');
-  assert.equal(typeof m.checkOpenable, 'function', 'src/open-guard.js exports checkOpenable (#477)');
+  const m = require('../src/host/open-guard.js');
+  assert.equal(typeof m.checkOpenable, 'function', 'src/host/open-guard.js exports checkOpenable (#477)');
   return m;
 };
 

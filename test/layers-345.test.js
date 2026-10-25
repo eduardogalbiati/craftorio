@@ -211,7 +211,7 @@ test('#345 the allowed directions pass: shared, engine, root, service, desktop, 
     'src/engine/zz-e.js': "// require('../renderer/zz-r') in a comment is not a require\nconst s = require('../shared/zz-s1');\nmodule.exports = { s };\n",
     'src/zz-domain.js': "const e = require('./engine/zz-e');\nfunction later() { return require('./shared/zz-s2'); }\nmodule.exports = { e, later };\n",
     'src/service/zz-svc.js': "const d = require('../zz-domain');\nconst e = require('../engine/zz-e');\nconst s = require('../shared/zz-s1');\nmodule.exports = { d, e, s };\n",
-    'src/main.js': "const svc = require('./service/zz-svc');\nmodule.exports = { svc };\n",
+    'src/host/main.js': "const svc = require('../service/zz-svc');\nmodule.exports = { svc };\n",
     'src/server/zz-srv.js': "const svc = require('../service/zz-svc');\nmodule.exports = { svc };\n",
     'src/renderer/zz-r.js': "(function () { const s = typeof require === 'function' ? require('../shared/zz-s2') : null; return s; })();\n",
   });

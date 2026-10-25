@@ -18,7 +18,7 @@
 // areas both define is refused. A new feature adds or edits an area file, not this one.
 // Pure helpers the areas share: src/service/common.js.
 //
-// Today src/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +
+// Today src/host/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +
 // WebSocket so the engine runs on a server and the UI connects to it.
 //
 // What depends on the machine the engine runs on comes from `host`:
@@ -30,7 +30,7 @@
 //                    returns { number, url }, instead of gh/glab, in a simulation too (tests, UI checks)
 //   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
 //   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
-//   relaunch()       optional; restarts the app (src/main.js); without it the app never updates itself
+//   relaunch()       optional; restarts the app (src/host/main.js); without it the app never updates itself
 //   cliHome          optional; the folder the CLIs' config folders (.claude, .codex, .grok) are read under
 //                    (#408, src/cli-config-dirs.js); the user's home (and CLAUDE_CONFIG_DIR/CODEX_HOME) without it
 
@@ -98,7 +98,7 @@ function createService({ host }) {
   };
   const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
   const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(checked(e, arg))]));
-  // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included
+  // what window.api is built from (src/host/preload.js, src/renderer/api-http.js), desktop and account included
   const manifest = declarations([...entries, ...DESKTOP, ...authChannels(null)]);
   // its contract (#339), which app:version answers
   ctx.contract = contractHash(manifest);

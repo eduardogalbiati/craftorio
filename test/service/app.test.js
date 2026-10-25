@@ -11,7 +11,7 @@ test('app:codeVersion reports this process\'s own version, unchanged right after
   assert.equal(v.disk, v.running);
 });
 
-// #162: Keep awake (src/main.js) re-checks whether it should hold the blocker whenever a setting
+// #162: Keep awake (src/host/main.js) re-checks whether it should hold the blocker whenever a setting
 // changes, from this event rather than from the settings:set call itself.
 test('settings:set emits settings:changed with the new settings', (t) => {
   const { service, api } = makeService(t);

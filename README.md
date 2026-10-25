@@ -276,7 +276,7 @@ shown and never blocks anything; an offline start with a stored session stays si
 - **Retention and deletion**: the account row is kept until you ask for it to be deleted. Open an
   issue or write to the maintainer from the account's email, and the row (and its sign-in identity)
   is deleted; nothing else about you is kept.
-- **Forks**: the Supabase URL and publishable key are built into `src/auth-config.js`, so a fork that
+- **Forks**: the Supabase URL and publishable key are built into `src/host/auth-config.js`, so a fork that
   ships its own build must use its own Supabase project (replace both constants and apply
   `supabase/migrations/`), or it reports its users to this project.
 
@@ -2457,8 +2457,8 @@ Notes:
 
 <!-- generated:structure -->
 ```
-src/main.js              Electron main process + IPC
-src/preload.js           safe API exposed to the renderer
+src/host/main.js              Electron main process + IPC
+src/host/preload.js           safe API exposed to the renderer
 src/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 src/projects.js          projects: CRUD and folder/repository setup
 src/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue

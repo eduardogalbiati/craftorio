@@ -1,11 +1,11 @@
 // #467: the IPC handlers answer only the app's own page, in a window's top frame.
 // CONTRACT (acceptance tests written before the code):
-//   NEW module src/ipc-guard.js exports guardIpc(ipcMain, { appPage, log }) →
+//   NEW module src/host/ipc-guard.js exports guardIpc(ipcMain, { appPage, log }) →
 //   { handle(channel, fn), on(channel, fn) }, registering on ipcMain (ipcMain.handle(channel, listener)
 //   / ipcMain.on(channel, listener)) a listener (event, arg) that calls fn(arg) (and, for handle,
 //   returns its result) only when the sender is trusted:
 //     event.senderFrame === event.sender.mainFrame (the top frame, not a subframe) AND
-//     isAppPage(event.senderFrame.url, appPage) (src/permissions.js; a query string is fine: the
+//     isAppPage(event.senderFrame.url, appPage) (src/host/permissions.js; a query string is fine: the
 //     Agents window loads index.html?window=agents&agent=<id>).
 //   A refused call: fn never runs, log(...) is called exactly once; a `handle` listener rejects or
 //   throws; an `on` listener does nothing and never throws. A null senderFrame is refused, no crash.
@@ -18,7 +18,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 
 // resolved inside each test: the module does not exist until the change lands
-const load = () => require('../src/ipc-guard.js');
+const load = () => require('../../src/host/ipc-guard.js');
 
 const APP_PAGE = path.join(os.tmpdir(), 'app', 'renderer', 'index.html');
 const APP_URL = pathToFileURL(APP_PAGE).href;
@@ -26,7 +26,7 @@ const FOREIGN_URL = pathToFileURL(path.join(os.tmpdir(), 'x.html')).href;
 
 function setup() {
   const { guardIpc } = load();
-  assert.equal(typeof guardIpc, 'function', 'src/ipc-guard.js exports guardIpc (#467)');
+  assert.equal(typeof guardIpc, 'function', 'src/host/ipc-guard.js exports guardIpc (#467)');
   const handles = new Map();
   const ons = new Map();
   const ipcMain = {

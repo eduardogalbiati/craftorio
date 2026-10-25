@@ -1,6 +1,6 @@
 // Steps of features/narrow-panels.feature: text stays inside its card in narrow panels (#443) and
 // status pills stay on one line with short Portuguese labels (#437), at the main window's minimum
-// size (src/main.js minWidth / minHeight), in English or Portuguese (Brasil).
+// size (src/host/main.js minWidth / minHeight), in English or Portuguese (Brasil).
 // The interface language is written into the scratch workspace's settings.json (language.interface,
 // src/workspace.js) and the page reloads, so a scenario starts in that language; the steps that
 // navigate read their labels from the app's catalogs (src/shared/i18n/<lang>.json) in the language
@@ -22,7 +22,7 @@ const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
 
 const LOAD_TIMEOUT = 30000;
-// the main window's minWidth / minHeight (src/main.js), as arena.steps.js
+// the main window's minWidth / minHeight (src/host/main.js), as arena.steps.js
 const MIN_SIZE = '1100x700';
 const LANGUAGES = { English: 'en', 'Português (Brasil)': 'pt-BR' };
 const I18N_DIR = path.join(__dirname, '..', '..', 'src', 'shared', 'i18n');

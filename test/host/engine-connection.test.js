@@ -1,4 +1,4 @@
-// The engine connection's pure rules (src/engine-connection.js): the address typed, the per-machine
+// The engine connection's pure rules (src/host/engine-connection.js): the address typed, the per-machine
 // setting and its encrypted token, the mode decided at start, the connection test (an injected
 // fetch), the remote window's navigation and permission rules, the server's addresses
 // (`npm run serve -- --host tailscale`), and the browser client's side (src/renderer/api-http.js).
@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const conn = require('../src/engine-connection');
+const conn = require('../../src/host/engine-connection');
 
 const tmpFile = (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-connection-'));
@@ -326,7 +326,7 @@ test('--host tailscale listens on the Tailscale address only; other hosts are ke
 
 // api-http.js in a vm sandbox with the given user agent and manifest; window.open is recorded
 function loadApiHttp({ userAgent = '', manifest = [], language = null } = {}) {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'api-http.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'api-http.js'), 'utf8');
   function FakeXHR() {}
   FakeXHR.prototype.open = function open() {};
   FakeXHR.prototype.send = function send() { this.status = 200; this.responseText = JSON.stringify({ result: manifest }); };
@@ -346,17 +346,17 @@ function loadApiHttp({ userAgent = '', manifest = [], language = null } = {}) {
 }
 
 const DESKTOP_MANIFEST = () => {
-  const { DESKTOP, declarations } = require('../src/service/manifest');
+  const { DESKTOP, declarations } = require('../../src/service/manifest');
   return declarations(DESKTOP);
 };
 
 test('engine:openConnection is a desktop channel the preload exposes as openEngineConnection', () => {
-  const entry = require('../src/service/manifest').DESKTOP.find((e) => e.channel === 'engine:openConnection');
+  const entry = require('../../src/service/manifest').DESKTOP.find((e) => e.channel === 'engine:openConnection');
   assert.equal(entry.method, 'openEngineConnection');
   assert.ok(entry.desktop);
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'host', 'main.js'), 'utf8');
   // through the sender guard (#467: ipc = guardIpc(ipcMain, ...)) or directly
-  assert.match(main, /\b(?:ipc|ipcMain)\.handle\('engine:openConnection'/, 'src/main.js answers it');
+  assert.match(main, /\b(?:ipc|ipcMain)\.handle\('engine:openConnection'/, 'src/host/main.js answers it');
 });
 
 test('in the desktop app showing a remote engine, the page knows it and opens the connection page through its path', async () => {
@@ -384,13 +384,13 @@ test('#329 the engine\'s page sends its interface language along to the connecti
 
 // ---- the interface language (#329): Settings › Execution › Engine and the connection page ----------
 
-const I18N_DIR = path.join(__dirname, '..', 'src', 'shared', 'i18n');
+const I18N_DIR = path.join(__dirname, '..', '..', 'src', 'shared', 'i18n');
 const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${lang}.json`), 'utf8'));
 
 // settings-engine.js in a vm sandbox, its t the catalog's in `lang`
 function engineSettingsMarkup(lang, engineConnection, canChange = true) {
-  const I18n = require('../src/shared/i18n');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'settings', 'settings-engine.js'), 'utf8');
+  const I18n = require('../../src/shared/i18n');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'views', 'settings', 'settings-engine.js'), 'utf8');
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   const api = { platform: engineConnection.mode === 'local' ? 'win32' : 'browser', engineConnection, ...(canChange && { openEngineConnection: async () => true }) };
   const sandbox = { window: {}, api, esc, errMsg: (e) => e.message, t: (key, params) => I18n.t(key, params, lang) };
@@ -418,7 +418,7 @@ test('#329 Settings › Execution › Engine speaks the interface language', () 
 });
 
 test('#329 every text key of the connection page is in both catalogs', () => {
-  const dir = path.join(__dirname, '..', 'src', 'renderer', 'connection');
+  const dir = path.join(__dirname, '..', '..', 'src', 'renderer', 'connection');
   const html = fs.readFileSync(path.join(dir, 'connection.html'), 'utf8');
   const js = fs.readFileSync(path.join(dir, 'connection.js'), 'utf8');
   const keys = new Set([

@@ -12,7 +12,7 @@ const { app, BrowserWindow } = require('electron');
 const [width, height] = String(process.env.MULTIAGENT_E2E_SIZE || '1400x900').split('x').map(Number);
 const show = process.env.MULTIAGENT_E2E_SHOW === '1';
 
-// the profile in the scratch folder, as src/main.js does: with HOME/APPDATA redirected to an empty
+// the profile in the scratch folder, as src/host/main.js does: with HOME/APPDATA redirected to an empty
 // scratch folder and no userData set, Electron crashed at launch (0x80000003)
 if (process.env.MULTIAGENT_USER_DATA) app.setPath('userData', process.env.MULTIAGENT_USER_DATA);
 

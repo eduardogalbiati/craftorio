@@ -1,5 +1,5 @@
 // #139: Electron 44 removed clipboard.writeImage / writeBuffer / readImage / readBuffer. The
-// IPC handlers in src/main.js are the only place this process touches the clipboard module (the
+// IPC handlers in src/host/main.js are the only place this process touches the clipboard module (the
 // renderer is sandboxed); a test stubbing `clipboard` would never notice a removed method, which
 // is exactly how this bug reached the packaged app. This test reads the installed Electron's own
 // type definitions instead, so it fails again the day a used method is removed or renamed.
@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'host', 'main.js'), 'utf8');
 const dts = fs.readFileSync(path.join(__dirname, '..', 'node_modules', 'electron', 'electron.d.ts'), 'utf8');
 
 function interfaceMembers(name) {
@@ -17,33 +17,33 @@ function interfaceMembers(name) {
 }
 
 const CLIPBOARD_METHODS = interfaceMembers('Clipboard');
-// Removed in Electron 44 (the error this issue reports); must never come back into src/main.js.
+// Removed in Electron 44 (the error this issue reports); must never come back into src/host/main.js.
 const REMOVED_METHODS = ['writeImage', 'readImage', 'writeBuffer', 'readBuffer', 'writeBookmark', 'readBookmark', 'writeRTF', 'readRTF', 'writeHTML', 'readHTML'];
 
 test('electron.d.ts still declares the Clipboard methods this app relies on (fails first if Electron removes one)', () => {
   for (const m of ['read', 'readText', 'write', 'writeText', 'has', 'clear']) assert.ok(CLIPBOARD_METHODS.includes(m), `Clipboard.${m} is no longer declared`);
 });
 
-test('src/main.js only calls clipboard methods that exist on the installed Electron\'s Clipboard', () => {
+test('src/host/main.js only calls clipboard methods that exist on the installed Electron\'s Clipboard', () => {
   const used = new Set([...mainSrc.matchAll(/\bclipboard\.([a-zA-Z]+)\(/g)].map((m) => m[1]));
   assert.ok(used.size > 0, 'the clipboard IPC handlers moved or were renamed: nothing to check');
   for (const method of used) assert.ok(CLIPBOARD_METHODS.includes(method), `clipboard.${method} is not in electron.d.ts's Clipboard interface (removed in this Electron version?)`);
 });
 
-test('src/main.js never calls a clipboard method Electron 44 removed', () => {
+test('src/host/main.js never calls a clipboard method Electron 44 removed', () => {
   for (const method of REMOVED_METHODS) assert.doesNotMatch(mainSrc, new RegExp(`\\bclipboard\\.${method}\\(`), `clipboard.${method} was removed in Electron 44 (#139)`);
 });
 
 test('electron.d.ts still exports the ClipboardItem class the image/file handlers construct', () => {
   assert.match(dts, /class ClipboardItem \{/);
-  assert.match(mainSrc, /\bClipboardItem\b/, 'src/main.js no longer imports ClipboardItem from electron');
+  assert.match(mainSrc, /\bClipboardItem\b/, 'src/host/main.js no longer imports ClipboardItem from electron');
 });
 
 // the handlers register through the IPC sender guard (#467: ipc = guardIpc(ipcMain, ...)) or directly
 const HANDLE = String.raw`\b(?:ipc|ipcMain)\.handle`;
 const handlerOf = (channel) => {
   const m = mainSrc.match(new RegExp(`${HANDLE}\\('${channel}'[\\s\\S]*?\\n\\}\\);`));
-  assert.ok(m, `src/main.js answers ${channel}`);
+  assert.ok(m, `src/host/main.js answers ${channel}`);
   return m[0];
 };
 

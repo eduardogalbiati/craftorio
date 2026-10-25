@@ -520,16 +520,16 @@ test('a question from another live app process is refused, naming its pid and ho
 
 // ---- the renderer calls these channels with one object, through the real manifest (#187) --------
 // Before the fix, every oracle channel with input declared positional params (e.g.
-// params: ['actionId', 'mock']), so the client-side payload() builder (src/preload.js,
+// params: ['actionId', 'mock']), so the client-side payload() builder (src/host/preload.js,
 // src/renderer/api-http.js), given the renderer's single object (api.oracleAct({ actionId, mock })),
 // wrapped it again into { actionId: { actionId, mock }, mock: undefined }: act() then saw an object,
 // String()'d into "[object Object]", and "This action is not in the conversation." `service.api`
 // alone (used elsewhere in this file) calls the channel's fn directly and never exercises that
-// wrapping; building window.api from the real manifest the way src/preload.js does (stubbing
+// wrapping; building window.api from the real manifest the way src/host/preload.js does (stubbing
 // 'electron' only) and dispatching into the real service is what actually re-creates the bug's path.
 function loadPreloadApi(manifest, dispatch) {
   const electronPath = require.resolve('electron');
-  const preloadPath = require.resolve('../src/preload.js');
+  const preloadPath = require.resolve('../src/host/preload.js');
   let exposed = null;
   require.cache[electronPath] = {
     id: electronPath, filename: electronPath, loaded: true,

@@ -326,7 +326,7 @@ function renderArtifactViewer() {
   const meta = { ...(findArtifactMeta(d.path) || {}), ...d };
   const name = meta.name || d.path.split(/[\\/]/).pop();
   // a kind the index does not know (an agent's summary.cmd) is never opened with its default
-  // program, only shown in its folder (#477; main.js refuses programs too, src/open-guard.js)
+  // program, only shown in its folder (#477; main.js refuses programs too, src/host/open-guard.js)
   const openable = meta.kind !== 'other';
   const missing = meta.exists === false ? 'disabled' : '';
   bar.classList.remove('hidden');

@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { createAuth, fileStorage } = require('../src/auth');
+const { createAuth, fileStorage } = require('../../src/host/auth');
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
@@ -116,8 +116,8 @@ test('sign-in can be cancelled, and disabled providers are refused', async () =>
 
 // ---- #315: free and open source: the account only counts users -------------------------------------
 
-test('#315: src/auth.js no longer exports the run gate nor the trial (assertCanRun, entitlementView, TRIAL_ENDED)', () => {
-  const auth = require('../src/auth');
+test('#315: src/host/auth.js no longer exports the run gate nor the trial (assertCanRun, entitlementView, TRIAL_ENDED)', () => {
+  const auth = require('../../src/host/auth');
   for (const name of ['assertCanRun', 'entitlementView', 'TRIAL_ENDED']) assert.equal(name in auth, false, name);
   const instance = makeAuth(fakeSupabase()).auth;
   assert.equal('assertCanRun' in instance, false, 'createAuth() has no assertCanRun');
@@ -140,7 +140,7 @@ test('#315: a start with a session touches the account once, with the app versio
   assert.equal(t.length, 1);
   const args = t[0][2] || {};
   assert.equal(args.platform, process.platform);
-  const pkgVersion = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
+  const pkgVersion = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')).version;
   assert.ok([APP_VERSION, pkgVersion].includes(args.app_version), `app_version: ${args.app_version}`);
 });
 

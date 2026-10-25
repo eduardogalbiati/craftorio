@@ -155,12 +155,12 @@ function demoMissingClis(appDir, on) {
   };
 }
 
-// --keep-awake active | error: what main answers (built by the app tree's src/keep-awake.js, absent
+// --keep-awake active | error: what main answers (built by the app tree's src/host/keep-awake.js, absent
 // at an older --ref); off and idle are the real state from the setting.
 function demoKeepAwake(appDir, which) {
   if (which !== 'active' && which !== 'error') return null;
   let ka;
-  try { ka = require(path.join(appDir, 'src', 'keep-awake')); } catch { return null; }
+  try { ka = require(path.join(appDir, 'src', 'host', 'keep-awake')); } catch { return null; }
   const work = ka.workToDo({ runs: [{ waiting: false }, { waiting: true }], roadmaps: [{ projectId: 'demo-app', state: 'running', stage: 3, of: 6 }] });
   const s = which === 'active'
     ? { available: true, enabled: true, holding: true, work, error: null }

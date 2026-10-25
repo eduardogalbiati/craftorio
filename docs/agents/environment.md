@@ -12,7 +12,7 @@ the workspace folder.
   `readText`, `write` and `writeText`, all but `clear` returning promises. `writeImage`,
   `writeBuffer`, `readImage` and `readBuffer` are gone: write an image as
   `clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()]) })])` and await it
-  (`src/main.js`, #139). Raw OS formats use `electron application/osclipboard;format="<name>"`.
+  (`src/host/main.js`, #139). Raw OS formats use `electron application/osclipboard;format="<name>"`.
 - Rust (#341): **stable** through `rustup` (cargo 1.99 here; the workspace needs 1.85+ for edition
   2024), with the **MSVC** build tools on Windows (Visual Studio Build Tools, "Desktop development
   with C++"; `rustup` installs the `x86_64-pc-windows-msvc` toolchain). The cargo workspace is
@@ -63,7 +63,7 @@ the workspace folder.
   `scripts/release-assets.js` turns a build into the release files (Windows zip, macOS zip made with
   `ditto`, Linux `.tar.gz` and AppImage through `appimagetool`), and `scripts/smoke-package.js`
   starts a packaged app in simulation on a scratch workspace and waits for it to quit by itself
-  (`MULTIAGENT_SMOKE_FILE`, honoured only with `MULTIAGENT_SIMULATION_ONLY=1`, `src/main.js`).
+  (`MULTIAGENT_SMOKE_FILE`, honoured only with `MULTIAGENT_SIMULATION_ONLY=1`, `src/host/main.js`).
 - **Release jobs**: `deploy.yml` (a `vX.Y.Z` tag or a manual dispatch) runs one build job per target on `windows-latest`
   (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and `ubuntu-latest`
   (linux x64: `npm rebuild node-pty` against Electron's headers, AppImage + tar.gz, smoke under
@@ -118,7 +118,7 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   case-insensitive on Windows and macOS, case-sensitive on Linux. Never compare paths with an
   inline `process.platform === 'win32' ? toLowerCase()`; use the helper (store, runs, artifacts,
   permissions, worktrees, deps cache, process lists, `path:open`).
-- **External terminal (↗)**: `src/external-terminal.js`. Windows `cmd.exe start ... cmd /k`;
+- **External terminal (↗)**: `src/host/external-terminal.js`. Windows `cmd.exe start ... cmd /k`;
   macOS Terminal.app through `osascript` (the app's environment is exported in the command line,
   Terminal.app does not inherit it); Linux the first installed of `$TERMINAL`,
   `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xterm`. None found: the preload's
@@ -138,9 +138,9 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
 
 - The setting is per machine: `<userData>/engine-connection.json` (`{ mode, address, token }`, the
   token `{ encrypted }` with `safeStorage`, `{ plain }` without OS encryption), never in the
-  workspace. Rules in `src/engine-connection.js` (pure), windows in `src/engine-connection-window.js`,
-  the page in `src/renderer/connection/` with its own preload (`src/engine-connection-preload.js`).
-- `src/main.js` decides at `whenReady` (`decideMode`): remote mode creates no workspace, lock,
+  workspace. Rules in `src/host/engine-connection.js` (pure), windows in `src/host/engine-connection-window.js`,
+  the page in `src/renderer/connection/` with its own preload (`src/host/engine-connection-preload.js`).
+- `src/host/main.js` decides at `whenReady` (`decideMode`): remote mode creates no workspace, lock,
   account, keep-awake, control channel or cleanup timer; the service is constructed but never gets a
   workspace. `MULTIAGENT_ENGINE=local` forces local; under `MULTIAGENT_SIMULATION_ONLY=1` a remote
   engine is used only on 127.0.0.1 (a check never drives an engine that can start real runs).

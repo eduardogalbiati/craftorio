@@ -198,7 +198,7 @@ const DEFAULT_SETTINGS = {
   // Main stays green (#405, src/base-health.js): what a red test on the base files: 'off', 'issue'
   // (a bug issue only) or 'fix' (the issue and a fix item at the front of the roadmap)
   baseCheck: { onRed: 'fix' },
-  // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
+  // Keep awake (#162, src/host/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
   // Control channel (#336, src/control): outside sessions drive this app through a loopback endpoint
   controlChannel: false,

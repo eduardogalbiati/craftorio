@@ -12,7 +12,7 @@ shown and never blocks anything; an offline start with a stored session stays si
 - **Retention and deletion**: the account row is kept until you ask for it to be deleted. Open an
   issue or write to the maintainer from the account's email, and the row (and its sign-in identity)
   is deleted; nothing else about you is kept.
-- **Forks**: the Supabase URL and publishable key are built into `src/auth-config.js`, so a fork that
+- **Forks**: the Supabase URL and publishable key are built into `src/host/auth-config.js`, so a fork that
   ships its own build must use its own Supabase project (replace both constants and apply
   `supabase/migrations/`), or it reports its users to this project.
 

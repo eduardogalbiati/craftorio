@@ -3,9 +3,9 @@
 Read this before changing anything in `src/renderer/`.
 
 - Plain HTML/CSS/JS, no bundler. Libraries loaded with `<script src="../../node_modules/...">`
-  (UMD): xterm, addon-fit, marked, DOMPurify. Sandboxed: no Node, only `window.api` (`src/preload.js`,
+  (UMD): xterm, addon-fit, marked, DOMPurify. Sandboxed: no Node, only `window.api` (`src/host/preload.js`,
   or `api-http.js` over the engine server; a test keeps their method lists equal).
-- **The window never navigates** (#466, `src/window-guards.js` on the main, Agents and connection
+- **The window never navigates** (#466, `src/host/window-guards.js` on the main, Agents and connection
   windows): every `will-navigate` is prevented (http(s) goes to the browser), `window.open` is
   denied, no webview attaches (a page's own `location.reload` too: the desktop restarts through
   `app:relaunch`), and `app.js` prevents `dragover`, and `drop` of files or links, at the document so
@@ -17,7 +17,7 @@ Read this before changing anything in `src/renderer/`.
   `select`, `style` and the `action`/`formaction` attributes. The only control markdown keeps is a
   task list's disabled checkbox: marked emits a `data-md-task` marker and `markdownHtml` draws the
   checkbox after sanitizing. Any other control the UI needs is built by the screen's own code.
-- **IPC contract** (#467, `src/ipc-guard.js`): every channel `src/main.js` registers answers only
+- **IPC contract** (#467, `src/host/ipc-guard.js`): every channel `src/host/main.js` registers answers only
   the app's page (`isAppPage`, the Agents window's `?window=agents` included) in a window's top
   frame; another page or a subframe gets an error (an `on` channel: nothing, `sendSync` gets null)
   and one `[ipc]` line in the main log. Register a new channel with `ipc.handle` / `ipc.on`, never
@@ -398,7 +398,7 @@ Artifacts links (`openArtifactsAt`) and other absolute paths into copy-on-click 
 ## The Agents window (#263)
 
 The Oracle, the Product Owner and the Supervisor can open in their own window, beside the app:
-`src/agents-window.js` (main process, pure of Electron: `createAgentsWindow({ BrowserWindow,
+`src/host/agents-window.js` (main process, pure of Electron: `createAgentsWindow({ BrowserWindow,
 statePath, dirname })` → `open({ agent })`, `current()`, `setAgent(id)`) creates one
 `BrowserWindow` with the main window's preload and isolation, loading the app's page with
 `?window=agents&agent=<id>`; its bounds and the last agent live in `<workspace>/agents-window.json`.

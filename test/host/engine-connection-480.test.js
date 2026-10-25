@@ -1,5 +1,5 @@
-// #480 (SEC-15): the desktop app's window onto a remote engine (src/engine-connection.js rules,
-// src/engine-connection-window.js windows) never sends the token in clear to an arbitrary host.
+// #480 (SEC-15): the desktop app's window onto a remote engine (src/host/engine-connection.js rules,
+// src/host/engine-connection-window.js windows) never sends the token in clear to an arbitrary host.
 // CONTRACT (acceptance tests written before the code):
 //   - A plain http:// engine address is allowed only when its host is loopback (127.0.0.1,
 //     localhost, ::1) or Tailscale (100.64.0.0/10, a *.ts.net name); https:// is always allowed.
@@ -24,8 +24,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
-const conn = require('../src/engine-connection');
-const { createEngineConnection } = require('../src/engine-connection-window');
+const conn = require('../../src/host/engine-connection');
+const { createEngineConnection } = require('../../src/host/engine-connection-window');
 
 const TOKEN = 'tok-0123456789abcdef';
 
@@ -121,7 +121,7 @@ function setup({ mode = 'remote', saved = { mode: 'remote', address: 'http://127
   const main = mode === 'local' ? new e.BrowserWindow({ main: true }) : null;
   const c = createEngineConnection({
     ...e,
-    dirname: path.join('app', 'src'),
+    dirname: path.join('app', 'src', 'host'),
     store,
     version: { app: '9.9.9', contract: 'abc123' },
     mode,

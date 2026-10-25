@@ -1,5 +1,5 @@
 // #284 Disable a roadmap stage: what the review of the first round added (the developer's own tests).
-// - src/keep-awake.js keepAwakeLabel / workToDo: the disabled stages are said apart in the status
+// - src/host/keep-awake.js keepAwakeLabel / workToDo: the disabled stages are said apart in the status
 //   line ("roadmap stage 3/6 (1 disabled)"); a roadmap without one reads as before.
 // - src/roadmap.js saveStages / restoreStages: a stage with a running item is not disabled by any
 //   writer (the screen's Disable is off then); enabling it, or keeping it disabled, still saves.
@@ -10,7 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { keepAwakeLabel, workToDo } = require('../src/keep-awake');
+const { keepAwakeLabel, workToDo } = require('../src/host/keep-awake');
 const roadmaps = require('../src/roadmap');
 
 function tmp(t) {

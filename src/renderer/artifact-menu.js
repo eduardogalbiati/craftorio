@@ -6,7 +6,7 @@
 //   itself, to paste in the file explorer or a chat; desktop only) and Copy path;
 // - an open image (each side of a before/after pair too): Copy image and Copy path.
 // The main process only copies a run's artifacts (clipboard:writeImage / clipboard:writeFile in
-// src/main.js); the browser UI copies images and text through the web Clipboard API.
+// src/host/main.js); the browser UI copies images and text through the web Clipboard API.
 // A toast says "Copied" or why it failed; the menu closes on Esc, a click outside, scroll or blur.
 // Uses app.js's helpers (api, esc, errMsg, showToast).
 (() => {

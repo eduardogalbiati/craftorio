@@ -7,7 +7,7 @@
 // (a JSON file in the workspace, { bounds, agent }; a missing or corrupt file means the defaults and
 // the OS's placement; with `screen`, bounds on a display that is gone are dropped). The window loads
 // with the main window's preload and isolation (the same window.api and service channels) and, like
-// it, never navigates (src/window-guards.js, #466). Closing it never stops an agent's turn: the
+// it, never navigates (src/host/window-guards.js, #466). Closing it never stops an agent's turn: the
 // service runs the turns, the window only shows them.
 const fs = require('fs');
 const path = require('path');
@@ -93,7 +93,7 @@ function createAgentsWindow({ BrowserWindow, statePath, dirname, page = null, de
     opened.on('close', () => { try { writeState({ bounds: opened.getBounds(), agent }); } catch { /* the window is gone */ } });
     opened.on('closed', () => { if (win === opened) win = null; });
     setAgent(id);
-    opened.loadFile(page || path.join(dirname, 'renderer', 'index.html'), { query: { window: 'agents', agent: id } });
+    opened.loadFile(page || path.join(dirname, '..', 'renderer', 'index.html'), { query: { window: 'agents', agent: id } });
     return opened;
   }
 

@@ -45,7 +45,7 @@ test('settings: voice input defaults (whisper-cli, small, pt), kept by an unrela
   assert.equal(s.voiceLanguage, 'pt');
 });
 
-// #162: Keep awake (src/keep-awake.js) is off by default, and an unrelated patch keeps it as is.
+// #162: Keep awake (src/host/keep-awake.js) is off by default, and an unrelated patch keeps it as is.
 test('settings: keep awake is off by default, kept by an unrelated patch', (t) => {
   const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });
   assert.equal(DEFAULT_SETTINGS.keepAwake, false);

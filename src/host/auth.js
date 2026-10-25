@@ -1,4 +1,4 @@
-// Account sign-in (Supabase Auth with OAuth providers). No Electron here: src/main.js passes an
+// Account sign-in (Supabase Auth with OAuth providers). No Electron here: src/host/main.js passes an
 // encrypted storage and a way to open the system browser. The app is free: the account gates
 // nothing, it only counts the people using the app (#315).
 //
@@ -77,7 +77,7 @@ const userView = (u) => u && {
 function createAuth({
   url, key, required = true, providers = ['google'], storage, openExternal,
   createClient = (...a) => require('@supabase/supabase-js').createClient(...a),
-  now = Date.now, port = CALLBACK_PORT, appVersion = require('../package.json').version,
+  now = Date.now, port = CALLBACK_PORT, appVersion = require('../../package.json').version,
 }) {
   const configured = !!(url && key);
   const listeners = new Set();
