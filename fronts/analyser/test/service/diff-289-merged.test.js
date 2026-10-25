@@ -1,4 +1,4 @@
-// #289: run:diff (packages/engine/service/areas/diff.js) for a run merged locally whose branch the engine then
+// #289: run:diff (fronts/analyser/engine/areas/diff.js) for a run merged locally whose branch the engine then
 // deleted (worktree.merged with the merge commit, then worktree.removed with branch_deleted): the
 // commits still come from the repository, read from the merge commit (a fast-forward: the commit
 // itself; a true merge: its second parent) down to the base commit the run started from; only when
@@ -10,7 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const diffArea = require('../../service/areas/diff');
+const diffArea = require('../../engine/areas/diff');
 
 function makeDiffCtx(t) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-diffctx-289m-'));

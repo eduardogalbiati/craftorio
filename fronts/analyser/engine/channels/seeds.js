@@ -5,19 +5,19 @@
 // MULTIAGENT_SIMULATION_ONLY; one run per project and seed at a time, shared with the Ways of working
 // interview: packages/engine/service/seed-runs.js); the history and one result
 // (<workspace>/architecture/<project id>/seeds/<seed id>/<stamp>/); the tool command recorded in the
-// project's settings (seedTools); and "Make it a tool" (packages/engine/domains/seed/seed-tool-issue.js: an issue in the
+// project's settings (seedTools); and "Make it a tool" (fronts/analyser/engine/domains/seed-tool-issue.js: an issue in the
 // project's tracker, a preview in simulation). Nothing here crosses a human gate or writes to the project.
 
-const arch = require('../../domains/oracle/oracle-architecture');
-const backlog = require('../../domains/backlog/backlog');
-const projects = require('../../domains/project/projects');
-const seeds = require('../../domains/seed/seeds');
-const oracleSeeds = require('../../domains/oracle/oracle-seeds');
-const seedRuns = require('../seed-runs');
-const toolIssue = require('../../domains/seed/seed-tool-issue');
-const workspace = require('../../domains/workspace/workspace');
-const simulation = require('../../engine/simulation');
-const { clientError, requireId } = require('../common');
+const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
+const backlog = require('@multiagent/engine/domains/backlog/backlog');
+const projects = require('@multiagent/engine/domains/project/projects');
+const seeds = require('@multiagent/engine/domains/seed/seeds');
+const oracleSeeds = require('@multiagent/engine/domains/oracle/oracle-seeds');
+const seedRuns = require('@multiagent/engine/service/seed-runs');
+const toolIssue = require('../domains/seed-tool-issue');
+const workspace = require('@multiagent/engine/domains/workspace/workspace');
+const simulation = require('@multiagent/engine/engine/simulation');
+const { clientError, requireId } = require('@multiagent/engine/service/common');
 const {
   args,
   BOOL,
@@ -29,7 +29,7 @@ const {
   PROJECT_ID,
   shape,
   STRING,
-} = require('../schemas');
+} = require('@multiagent/engine/service/schemas');
 
 const SEED_ID = { type: 'string', minLength: 1, maxLength: 200, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$', title: 'seed id', description: 'An analysis seed id (seeds/<seedId>/seed.md).' };
 const RUN_DATE = { type: 'string', minLength: 1, maxLength: 80, pattern: '^[A-Za-z0-9._-]+$', title: 'seed run date', description: 'A seed run\'s folder (its stamp).' };

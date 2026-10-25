@@ -6,14 +6,14 @@
 // Backlog, the roadmap); the tool's command, once it exists, is recorded in the project's settings
 // (seeds:setTool) and replaces the Oracle turn (packages/engine/domains/oracle/oracle-seeds.js). The `analysis-tool` label is
 // created through the platform adapter when the tracker lacks it (GitLab creates it itself). In
-// simulation it files nothing: a preview of the title and body. Service: packages/engine/service/channels/seeds.js.
+// simulation it files nothing: a preview of the title and body. Service: fronts/analyser/engine/channels/seeds.js.
 
 'use strict';
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const issues = require('../backlog/issues');
+const issues = require('@multiagent/engine/domains/backlog/issues');
 
 const LABEL = 'analysis-tool';
 const LABEL_COLOR = '5319e7';

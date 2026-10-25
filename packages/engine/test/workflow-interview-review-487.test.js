@@ -15,7 +15,7 @@ const { setupWorkspace } = require('../domains/workspace/workspace');
 const projects = require('../domains/project/projects');
 const seeds = require('../domains/seed/seeds');
 const workflowInterview = require('../service/areas/workflow-interview');
-const seedChannels = require('../service/channels/seeds');
+const seedChannels = require('@multiagent/front-analyser/engine/channels/seeds');
 
 const SOLO_PROFILE = { team: 'solo', merge: 'local', release: 'milestone', testCommand: 'npm test', ci: 'github-actions', languages: ['javascript'] };
 const SOLO_EVIDENCE = { team: { numbers: { authors: 1, commits: 12 }, commits: ['a1b2c3d'] } };
