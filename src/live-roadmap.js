@@ -15,7 +15,7 @@
 // costUsd }], the last 24 h, for the budget). Screen: backlog-roadmap.js (the switch box) and
 // backlog.js (the banner).
 
-const { itemIssues } = require('./backlog');
+const { itemIssues } = require('./domains/backlog/backlog');
 const roadmaps = require('./roadmap');
 const {
   itemRuns,

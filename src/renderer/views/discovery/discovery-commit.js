@@ -1,5 +1,5 @@
 /* global api */
-// Discovery › the commitment point (#258, src/discovery-commit.js), drawn for the Discovery board
+// Discovery › the commitment point (#258, src/domains/discovery/discovery-commit.js), drawn for the Discovery board
 // (views/discovery/discovery.js) as window.DiscoveryCommit:
 // - a Ready card's panel offers "Commit to the backlog" (actionHtml): enabled from 85% clarity,
 //   disabled under it with why (the panel's Clarity section lists the gaps and offers Grill me);
@@ -16,7 +16,7 @@
 //   "Move to…": it never returns to the board.
 // Uses app.js globals ($, esc, state, errMsg, openModal, closeModal), StatusPill and DefaultWorkflow.
 (() => {
-  const BAR = 85; // the commit bar (src/discovery-commit.js COMMIT_BAR)
+  const BAR = 85; // the commit bar (src/domains/discovery/discovery-commit.js COMMIT_BAR)
   const COUNTS = [['todo', 'to do'], ['running', 'running'], ['local', 'merged locally'], ['done', 'done']];
   const MAX_ISSUES = 8;
 

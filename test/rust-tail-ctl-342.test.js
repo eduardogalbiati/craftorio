@@ -1,11 +1,11 @@
 // Acceptance tests for #342 (the session tail and the control client as Rust binaries, so the packaged
 // app needs no system Node): everything but the binaries' own behaviour (test/session-tail-342.test.js
 // and test/ctl-342.test.js run those). Seams, loaded inside each test (they do not exist before the change):
-// - src/native-bin.js: nativeBinaryPath(name, { isPackaged, resourcesPath, platform }) where a native
+// - src/domains/machine/native-bin.js: nativeBinaryPath(name, { isPackaged, resourcesPath, platform }) where a native
 //   sidecar (multiagent-mcp, multiagent-tail, multiagent-ctl) lives: packaged resources/bin/<name>[.exe],
 //   dev cargo's output under native/; never PATH. mcpBinaryPath (src/supervisor-bridge.js) agrees with it.
-// - src/native-bin.js: tailCommand(isPackaged, resolveCommand, { binary }) → { command, args, env }, the
-//   twin of mcpCommand: the binary when it exists (args []), else src/session-tail.js under node (dev:
+// - src/domains/machine/native-bin.js: tailCommand(isPackaged, resolveCommand, { binary }) → { command, args, env }, the
+//   twin of mcpCommand: the binary when it exists (args []), else src/domains/session/session-tail.js under node (dev:
 //   process.execPath; packaged: resolveCommand('node'), throwing /Node\.js on the PATH/ without it).
 //   terminalSpec(runId, sessionId, 'live') (src/service/areas/sessions.js) starts tailCommand's command
 //   with [...args, runDir, sessionId].
@@ -29,7 +29,7 @@ const root = path.join(__dirname, '..');
 const abs = (p) => path.join(root, p);
 const exists = (p) => fs.existsSync(abs(p));
 const read = (p) => fs.readFileSync(abs(p), 'utf8');
-const nativeBin = () => require('../src/native-bin');
+const nativeBin = () => require('../src/domains/machine/native-bin');
 const exe = (name, platform = process.platform) => (platform === 'win32' ? `${name}.exe` : name);
 
 const BINARIES = ['multiagent-ctl', 'multiagent-mcp', 'multiagent-tail'];
@@ -62,7 +62,7 @@ function missingBinary(t, name) {
 
 test('#342 nativeBinaryPath: packaged, every sidecar is in resources/bin, with .exe on Windows only', () => {
   const { nativeBinaryPath } = nativeBin();
-  assert.equal(typeof nativeBinaryPath, 'function', 'src/native-bin.js exports nativeBinaryPath');
+  assert.equal(typeof nativeBinaryPath, 'function', 'src/domains/machine/native-bin.js exports nativeBinaryPath');
   const res = path.join(path.sep, 'apps', 'Multiagent', 'resources');
   for (const name of BINARIES) {
     for (const platform of ['win32', 'darwin', 'linux']) {

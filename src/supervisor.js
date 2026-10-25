@@ -413,7 +413,7 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
   const images = storeAttachments(attachments, path.join(runDir, 'supervisor', 'attachments'));
-  const { resolveSkill, skillPrompt } = require('./skills');
+  const { resolveSkill, skillPrompt } = require('./domains/agents/skills');
   const cfg = supervisorConfig(runDir, workflowsDir);
   const skill = resolveSkill(skillsDirs, 'run-supervisor');
   const schema = ANALYSIS_SCHEMA;
@@ -494,7 +494,7 @@ async function analyzeSessions({ report, from, to, scope, question, reportsDir, 
   const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
   const images = storeAttachments(attachments, path.join(reportsDir, 'attachments'));
-  const { resolveSkill, skillPrompt } = require('./skills');
+  const { resolveSkill, skillPrompt } = require('./domains/agents/skills');
   const skill = resolveSkill(skillsDirs, 'run-supervisor');
   const schema = SESSIONS_REPORT_SCHEMA;
   const prompt = [

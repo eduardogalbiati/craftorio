@@ -79,7 +79,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   issue" and the epic body line (one place: `src/shared/language.js`). JSON keys and enum values,
   paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled
   workflows and skills, logs and tests stay English. Grill me's questions come from the clarity
-  rubric (`src/clarity.js`, no model call): app text, so they follow the interface language (#329),
+  rubric (`src/domains/discovery/clarity.js`, no model call): app text, so they follow the interface language (#329),
   not this setting. Why: an owner who works in another language
   read English summaries and documents, and a repository's issues are not always in the owner's
   chat language; the output contract keeps the keys in English so #94 does not come back.

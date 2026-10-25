@@ -8,7 +8,7 @@
 //   an older file that has it still reads without error.
 // - The roadmap card (src/renderer/views/backlog/backlog-roadmap.js) never draws the switch, even
 //   when api.appUpdateState says the update applies.
-// - The Oracle's tool descriptions (src/oracle-tools.js) and skills/oracle/SKILL.md no longer mention
+// - The Oracle's tool descriptions (src/domains/oracle/oracle-tools.js) and skills/oracle/SKILL.md no longer mention
 //   updateAfter or "Update the app after this".
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -74,7 +74,7 @@ test('#285 roadmap card: never draws "Update the app after this", even when the 
 // ---- the Oracle ------------------------------------------------------------------------------------------------
 
 test('#285 Oracle tools: no tool description mentions updateAfter', () => {
-  const { oracleTools } = require('../src/oracle-tools');
+  const { oracleTools } = require('../src/domains/oracle/oracle-tools');
   const text = oracleTools({}).map((x) => `${x.description || ''} ${JSON.stringify(x.inputSchema || {})}`).join('\n');
   assert.equal(/updateAfter/.test(text), false);
 });

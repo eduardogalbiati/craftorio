@@ -1,7 +1,7 @@
 // #351: the platform registry's lenient helpers (findPlatform, platformOrDefault, requestRef), the
 // short-id vocabulary accepted by the issue reads, and the adapters loaded as browser scripts in the
 // order index.html gives (the Backlog and Settings screens use window.Platforms).
-// Seams: src/shared/platforms (registry), src/backlog.js fetchIssues, src/shared/backlog-archive.js
+// Seams: src/shared/platforms (registry), src/domains/backlog/backlog.js fetchIssues, src/shared/backlog-archive.js
 // archiveConfirmText, src/renderer/index.html's script list.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -47,7 +47,7 @@ function recorder() {
 }
 
 test('fetchIssues: the short ids gh / gl build the same CLI calls as github / gitlab', async () => {
-  const { fetchIssues } = require('../src/backlog');
+  const { fetchIssues } = require('../src/domains/backlog/backlog');
   const gh = recorder();
   await fetchIssues({ platform: 'gh', repo: 'https://github.com/o/r', exec: gh.exec });
   assert.deepEqual(gh.calls, ['gh issue list --repo o/r --state all --limit 300 --json number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);

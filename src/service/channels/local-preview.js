@@ -24,7 +24,7 @@ const {
 } = require('../schemas');
 
 const AT_GATE = args({ runId: RUN_ID, approvalId: nullable(GATE_ID) }, ['runId']);
-// a one-off or saved command config ({ command, install, url, ... }), checked by src/local-preview.js
+// a one-off or saved command config ({ command, install, url, ... }), checked by src/domains/local/local-preview.js
 const CONFIG = nullable(OBJECT);
 
 module.exports = (ctx) => [

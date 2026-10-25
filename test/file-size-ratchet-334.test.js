@@ -55,7 +55,7 @@ test('#334 the exceptions list starts at the files over 1,000 lines, each with a
     'src/renderer/views/backlog/backlog.js': 1779,
     'src/product-owner.js': 1732,
     'src/renderer/views/discovery/discovery.js': 1560,
-    'src/discovery.js': 1164,
+    'src/domains/discovery/discovery.js': 1164,
     'src/renderer/views/backlog/backlog-po.js': 1102,
     'src/renderer/views/arena/arena.js': 1048,
   };

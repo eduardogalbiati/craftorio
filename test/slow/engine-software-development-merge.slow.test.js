@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { loadWorkflow } = require('../../src/engine/workflow');
-const evidence = require('../../src/evidence');
+const evidence = require('../../src/domains/evidence/evidence');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 const { root, runSoftwareDevelopment, GROUP } = require('../engine-helpers');

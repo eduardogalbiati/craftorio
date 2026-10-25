@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { loadWorkflow, render, validateSchema } = require('../src/engine/workflow');
-const { resolveSkill, skillPrompt } = require('../src/skills');
+const { resolveSkill, skillPrompt } = require('../src/domains/agents/skills');
 
 const ROOT = path.join(__dirname, '..');
 const WORKFLOW = path.join(ROOT, 'workflows', 'ai-development-local-hero.yaml');
@@ -19,7 +19,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const codeReview = () => loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'code_review');
 // the effective output schema of one agent of a fan-out step (the ui_reviewer's differs from the reviewer's)
 const schemaFor = (step, agent) => require('../src/engine/workflow').stepOutputSchema(step, agent);
-const checks = () => require('../src/ui-review-checks');
+const checks = () => require('../src/domains/evidence/ui-review-checks');
 
 const CHECKLIST = [
   /5-second/i,

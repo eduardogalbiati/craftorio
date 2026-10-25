@@ -1,7 +1,7 @@
 // A refactor proposal filed as an issue (#357 "File as issue", shared with the Refactor proposals
 // workflow, #378): the issue's text as the issue-writing skill lays it out (context, target, tasks,
 // acceptance criteria, the Refactor workflow named), the `refactor` label (created first when the
-// platform reads labels, as src/epics.js does for `epic`; GitLab creates it on filing) and the
+// platform reads labels, as src/domains/backlog/epics.js does for `epic`; GitLab creates it on filing) and the
 // gh/glab command of the synced repository. issueDraft builds it without running anything (the
 // preview, and every simulation); createIssue runs it, records the issue on the proposal and syncs
 // the backlog. Used by src/service/channels/refactor.js and src/refactor-proposals-run.js.
@@ -10,9 +10,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const backlog = require('./backlog');
+const backlog = require('./domains/backlog/backlog');
 const proposals = require('./refactor-proposals');
-const { adapterOf, cliTarget } = require('./issues');
+const { adapterOf, cliTarget } = require('./domains/backlog/issues');
 const { filesOf } = require('./refactor-cadence');
 
 const LABEL = 'refactor';
@@ -38,7 +38,7 @@ const issueTitle = (x) => `Refactor: ${x.title || x.improvement || x.target}`.sl
 
 /**
  * What filing proposal `proposal` runs, without running it: { platform, repo, title, body, file,
- * command }. `data`: the project's synced backlog (src/backlog.js readBacklog). Throws when the
+ * command }. `data`: the project's synced backlog (src/domains/backlog/backlog.js readBacklog). Throws when the
  * platform refuses the command (a client's mistake).
  */
 function issueDraft({ root, project, proposal, data, now = new Date() }) {

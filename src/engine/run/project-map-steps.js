@@ -9,7 +9,7 @@
 //   refresh keeps the saved plan's ids and names); output { ok, problems, plan, report, ... },
 //   written to project-map/plan.json and validation.md;
 // - save: the plan the `from` step validated, saved as architecture:savePlan saves it;
-// - analyze (#381): the Oracle's architecture analysis of the project (src/oracle-architecture.js,
+// - analyze (#381): the Oracle's architecture analysis of the project (src/domains/oracle/oracle-architecture.js,
 //   saved as architecture:analyze saves it), the one model call of the workflow besides the
 //   cartographer's: the Oracle comes from the run's `architectureOracle` option (the service's
 //   Oracle and its agent; a simulation writes the simulated report, a real run without it fails);

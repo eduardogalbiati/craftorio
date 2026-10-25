@@ -1,4 +1,4 @@
-// #278 Self-healing: the new detectors and the per-day metrics (src/night-watch.js). Pure functions over
+// #278 Self-healing: the new detectors and the per-day metrics (src/domains/night/night-watch.js). Pure functions over
 // run events and the Oracle's night log: no service, no model call.
 // Acceptance tests written before the code. The API they pin down (the developer implements it):
 //   - INCIDENT_KINDS gains 'cost-gap', 'environment', 'repeat' (memory exists since #276); its keys
@@ -26,7 +26,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const nw = () => require('../src/night-watch');
+const nw = () => require('../src/domains/night/night-watch');
 
 const T0 = Date.parse('2026-10-04T10:00:00.000Z');
 const at = (min) => new Date(T0 + min * 60e3).toISOString();

@@ -18,7 +18,7 @@ const {
 const capabilities = require('../../engine/capabilities');
 const workflows = require('../../workflows');
 const builder = require('../../workflow-builder');
-const skills = require('../../skills');
+const skills = require('../../domains/agents/skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../seed');
 const { mergeOf } = require('../../shared/default-workflow');
@@ -34,7 +34,7 @@ const IMPORT_TIMEOUT_MS = 30000;
 const IMPORT_MAX_BYTES = 1024 * 1024;
 
 // #474: a workflow not bundled with the app is code; the owner confirms it once per file, remembered
-// by the fingerprint of its text (like Run App's local preview confirmation, src/local-preview.js)
+// by the fingerprint of its text (like Run App's local preview confirmation, src/domains/local/local-preview.js)
 const fingerprint = (text) => crypto.createHash('sha256').update(String(text)).digest('hex').slice(0, 16);
 const trustKey = (file) => `workflows/${file}`;
 

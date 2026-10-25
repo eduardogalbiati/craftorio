@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseSkill } = require('../src/skills');
+const { parseSkill } = require('../src/domains/agents/skills');
 const { validateSchema } = require('../src/json-schema');
 
 const load = () => require('../src/seeds');

@@ -2,7 +2,7 @@
 // test/fixtures/platform-wire-351.json was recorded before the change: for every operation and
 // platform (test/platform-wire-351-cases.js), the exact CLI calls built with the injected exec and the
 // objects the parsers return on recorded CLI outputs. The same snapshot must hold after.
-// Seams: the public functions of src/backlog.js, src/epics.js, src/oracle-platform.js, src/run-pr.js,
+// Seams: the public functions of src/domains/backlog/backlog.js, src/domains/backlog/epics.js, src/domains/oracle/oracle-platform.js, src/run-pr.js,
 // src/engine/probes.js and src/shared/backlog-archive.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');

@@ -1,5 +1,5 @@
 // A repository's workflows manifest (#485): `.multiagent/project.yaml`, committed by the project's
-// owner next to `.multiagent/local-preview.yaml` (src/local-preview.js). It lists the workflows the
+// owner next to `.multiagent/local-preview.yaml` (src/domains/local/local-preview.js). It lists the workflows the
 // project is worked on with: `{ name }` for a bundled or workspace workflow, `{ name, file:
 // workflows/<x>.yaml }` for the repository's own copy under `.multiagent/workflows/`, each with an
 // optional `category` (intake, solo, team, release, or a bundled one) and `description`; `version`

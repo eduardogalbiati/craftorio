@@ -1,20 +1,20 @@
 // Service area: the Settings screen's environment details: path, version and authentication of
 // each CLI the workflows call (claude, codex, grok, gh, glab, git), and how to install a missing one
-// (src/install-commands.js) or sign in (#319). Claude Code's sign-in is read from its credentials
-// (src/claude-auth.js), never by running it; a failed probe returns its last output lines (`output`).
+// (src/domains/machine/install-commands.js) or sign in (#319). Claude Code's sign-in is read from its credentials
+// (src/domains/cli/claude-auth.js), never by running it; a failed probe returns its last output lines (`output`).
 // accountStatus (#312): a provider account's folder, signed in or not, with its login command.
 
 const { resolveCommandAsync } = require('../../engine/providers');
 const {
   claudeAccount,
   claudeSignedIn,
-} = require('../../claude-auth');
+} = require('../../domains/cli/claude-auth');
 const {
   installCommand,
   installHint,
   signInCommands,
-} = require('../../install-commands');
-const providerAccounts = require('../../provider-accounts');
+} = require('../../domains/machine/install-commands');
+const providerAccounts = require('../../domains/cli/provider-accounts');
 const { runTool } = require('../common');
 
 const lastLines = (text, n = 4) => String(text || '').split(/\r?\n/).filter((l) => l.trim()).slice(-n).join('\n') || null;
@@ -61,7 +61,7 @@ module.exports = () => {
     return r ? (await runTool(r.file, tool.auth, env)).ok : null;
   }
 
-  // #312: a provider account's folder: signed in or not, and its login command (src/provider-accounts.js)
+  // #312: a provider account's folder: signed in or not, and its login command (src/domains/cli/provider-accounts.js)
   async function accountStatus({ provider, dir } = {}) {
     const status = await providerAccounts.accountStatus({ provider, dir, probe: probeAccount });
     return { ...status, loginCommand: providerAccounts.accountLoginCommand(provider, dir) };

@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const actions = require('../src/oracle-actions');
-const agentInbox = require('../src/agent-inbox');
-const night = require('../src/night-watch');
+const actions = require('../src/domains/oracle/oracle-actions');
+const agentInbox = require('../src/domains/agents/agent-inbox');
+const night = require('../src/domains/night/night-watch');
 const notifier = require('../src/notifications');
 
 function tmpDir(t) {

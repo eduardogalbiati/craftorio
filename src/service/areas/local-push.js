@@ -1,4 +1,4 @@
-// Service area: local merges not pushed (software-development-local-hero, src/local-push.js). The
+// Service area: local merges not pushed (software-development-local-hero, src/domains/local/local-push.js). The
 // base a project's local runs merge into, what it has that origin has not (cached for the Backlog
 // and the sidebar badge), Push / Update and push, auto-push after a run's `merge: local`, and a
 // push conflict handed to a run of the local workflow. A push records a release candidate (#489).
@@ -6,8 +6,8 @@
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const projects = require('../../projects');
-const backlog = require('../../backlog');
-const localPush = require('../../local-push');
+const backlog = require('../../domains/backlog/backlog');
+const localPush = require('../../domains/local/local-push');
 const runs = require('../../runs');
 const notifier = require('../../notifications');
 

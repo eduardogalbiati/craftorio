@@ -194,7 +194,7 @@ const CITY_PLAN = {
 async function seedGitProject(e2e, name, { withReport = false, findings = null, planFolders = null, withPlan = false } = {}) {
   const workspace = require(path.join(root, 'src', 'workspace'));
   const projects = require(path.join(root, 'src', 'projects'));
-  const arch = require(path.join(root, 'src', 'oracle-architecture'));
+  const arch = require(path.join(root, 'src', 'domains', 'oracle', 'oracle-architecture'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const folder = path.join(e2e.scratch, 'repos', name);
   const head = seedRepo(folder);
@@ -561,7 +561,7 @@ async function addCitingIssue(e2e, name, title, files) {
 
 // an open issue of the project's synced backlog with this body (the app reloads to read it)
 async function addIssue(e2e, name, title, body) {
-  const { taskProgress } = require(path.join(root, 'src', 'backlog'));
+  const { taskProgress } = require(path.join(root, 'src', 'domains', 'backlog', 'backlog'));
   const project = projectOf(e2e, name);
   const file = path.join(backlogDir(e2e), `${project.id}.json`);
   const repo = repoOf(name);

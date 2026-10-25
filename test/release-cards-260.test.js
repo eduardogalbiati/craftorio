@@ -1,6 +1,6 @@
 // Releases (#260), back to discovery: shipping marks the discovery cards linked to one of the
 // release's issues Released in the card store (`releaseCards`, src/releases.js). The store here is
-// an in-memory one with the card API of src/discovery.js (#256): `listCards(dir, projectId)` and
+// an in-memory one with the card API of src/domains/discovery/discovery.js (#256): `listCards(dir, projectId)` and
 // `updateCard(dir, projectId, id, fields)`, which merges `links` into the card's.
 const test = require('node:test');
 const assert = require('node:assert/strict');

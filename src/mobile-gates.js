@@ -27,7 +27,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { continueText } = require('./session-cache');
+const { continueText } = require('./domains/session/session-cache');
 const { displayName } = require('./shared/display-name');
 
 const LINK_TTL_MS = 30 * 60e3;

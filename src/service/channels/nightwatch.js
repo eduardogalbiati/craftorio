@@ -1,14 +1,14 @@
 // Night watch screen (#172): the switch's state, the owner's permissions, the Oracle's night log and
-// the nights' metrics (src/night-watch.js), and the morning summary. While the watch is on it also
+// the nights' metrics (src/domains/night/night-watch.js), and the morning summary. While the watch is on it also
 // detects the anomalies (oracle.detected): from the run events (a failed, interrupted, stalled or
 // limit-paused run; a human gate is escalated, never answered) and once a minute from the roadmap
 // files (paused, dispatch idle with items left, nothing left) and the runs in progress (no progress
-// event for T_stall, night-watch.js STALL_MS: stalled). When a watch ends (src/oracle.js
+// event for T_stall, night-watch.js STALL_MS: stalled). When a watch ends (src/domains/oracle/oracle.js
 // onNightEnd → `nightwatch:ended`) the morning summary goes out as a notification.
 // Screen: src/renderer/views/nightwatch/; the switch itself is the Oracle's (oracle:nightWatch).
 // Self-healing (#278, settings.oracle.selfHealing): the watch is then active day and night
 // (oracle-actions.watchState). Its switch is a setting: `settings:changed` writes the oracle.watch entry
-// (selfHealing: true) when it turns on or off. The detectors of src/night-watch.js (detectSelfHealing:
+// (selfHealing: true) when it turns on or off. The detectors of src/domains/night/night-watch.js (detectSelfHealing:
 // memory, cost-gap, environment, repeat) run in code over a small per-run buffer of the events they
 // read; a finding is logged once per run and kind (oracle.detected with its evidence) and wakes the
 // Oracle with that evidence (ctx.oracleFindings, batched; in the wake-ups' scope only:
@@ -22,7 +22,7 @@
 // Move on (#395): with the skip permission, a roadmap run waiting at a human gate for
 // settings.oracle.parkAfterMinutes while nothing else of its roadmap runs is parked (parkAtGates,
 // oracle.parked, a notification naming the gate); the gate stays the owner's.
-// Limits tonight (#337, src/night-limits.js): `nightwatch:limits` sets them for the Night watch in force
+// Limits tonight (#337, src/domains/night/night-limits.js): `nightwatch:limits` sets them for the Night watch in force
 // (never under Self-healing alone); the morning summary lists the runs that went past a day limit.
 // Release train (#489): at the night's end each project's last release candidate is promoted, proposed
 // or held (ctx.releaseTrain, src/service/areas/releases.js), logged as oracle.action / oracle.escalated.
@@ -31,11 +31,11 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const backlog = require('../../backlog');
-const actions = require('../../oracle-actions');
-const night = require('../../night-watch');
-const nightLimits = require('../../night-limits');
-const demo = require('../../night-watch-demo');
+const backlog = require('../../domains/backlog/backlog');
+const actions = require('../../domains/oracle/oracle-actions');
+const night = require('../../domains/night/night-watch');
+const nightLimits = require('../../domains/night/night-limits');
+const demo = require('../../domains/night/night-watch-demo');
 const notifier = require('../../notifications');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
@@ -57,7 +57,7 @@ const {
 // the screen's state (see nightwatch:state below) and the report of the nights
 const STATE = shape({ watch: OBJECT, permissions: OBJECT, runs: OBJECT }, ['watch', 'permissions']);
 const REPORT = shape({ nights: listOf(OBJECT) }, ['nights']);
-// #337: tonight's limits, one of the documented alternatives (src/night-limits.js checks the values)
+// #337: tonight's limits, one of the documented alternatives (src/domains/night/night-limits.js checks the values)
 const LIMITS = oneOf(
   { type: 'object', required: ['multiplier'], properties: { multiplier: NUMBER } },
   { type: 'object', required: ['values'], properties: { values: OBJECT } },
@@ -553,7 +553,7 @@ module.exports = (ctx) => {
     // #337: tonight's limits { multiplier } (1.5, 2 or 3) or { values: { context, cost, duration, turns, budget } } → state
     // (refused without a Night watch with an end time: Self-healing never expands limits)
     { channel: 'nightwatch:limits', method: 'setNightWatchLimits', params: 'limits', schema: { params: LIMITS, result: STATE }, fn: (limits) => setLimits(requireObject(limits, 'limits')) },
-    // simulated mode: replays two demo nights into the workspace (src/night-watch-demo.js) → report
+    // simulated mode: replays two demo nights into the workspace (src/domains/night/night-watch-demo.js) → report
     {
       channel: 'nightwatch:replay',
       method: 'replayNightWatch',

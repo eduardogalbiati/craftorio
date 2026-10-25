@@ -102,6 +102,6 @@ test('#312 cliConfigDirs follows CODEX_HOME when it is set', (t) => {
   const saved = process.env.CODEX_HOME;
   t.after(() => { if (saved === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = saved; });
   process.env.CODEX_HOME = 'C:/accounts/codex-home-312';
-  const { cliConfigDirs } = require('../src/cli-config-dirs');
+  const { cliConfigDirs } = require('../src/domains/cli/cli-config-dirs');
   assert.equal(cliConfigDirs().codex, 'C:/accounts/codex-home-312');
 });

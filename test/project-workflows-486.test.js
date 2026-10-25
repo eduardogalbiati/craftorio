@@ -10,7 +10,7 @@
 //       credentials (a private repository): message says it "will be read after cloning".
 //     target: { folder } (read from the folder) or { url } (a remote repository, read before cloning:
 //     the provider's contents API through `exec(cli, args)` (gh api / glab api; same signature as
-//     src/issues.js execCli: resolves with stdout), or an unauthenticated raw read with `fetch(url)`
+//     src/domains/backlog/issues.js execCli: resolves with stdout), or an unauthenticated raw read with `fetch(url)`
 //     for a public repository). `exec` and `fetch` are the only boundaries stubbed here.
 //   Channel projects:manifest: one object argument, { url } or { folder } -> the same result; a
 //     missing or non-object argument is refused (as #485's repository channels).

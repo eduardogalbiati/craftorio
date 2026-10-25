@@ -100,7 +100,7 @@ test('chat:cancel(\'po\', projectId) stops a po:ask turn in flight: the answer i
   service.events.on('chat:progress', (ev) => events.push(ev));
 
   // the turn's AbortController is wired synchronously, before productOwner.ask's first real wait
-  // (src/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
+  // (src/domains/chat/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
   const asking = api['po:ask']({ projectId: p.id, question: 'Analyze the backlog', mock: true, mode: 'plan', attachments: [], issues: [] });
   assert.equal(await api['chat:cancel']({ chat: 'po', key: p.id }), true);
 

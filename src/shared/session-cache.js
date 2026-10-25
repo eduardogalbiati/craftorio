@@ -1,7 +1,7 @@
 // An agent session's prompt cache (#320): how long it lives per provider and what the session's
 // next turn will re-read. One pure module for the engine (session snapshots), the service
 // (sessionView), the Oracle (its warm sessions, #244) and the screens (the session table's "Next
-// turn" column, the gate card's Continue line). src/session-cache.js re-exports it for Node.
+// turn" column, the gate card's Continue line). src/domains/session/session-cache.js re-exports it for Node.
 // Next turn kinds: 'fresh' (from the handoff note), 'warm' (cache read until `until`), 'cold' (its
 // whole context written again, since `since`), 'resume' (a lifetime nobody measured: Codex, Grok),
 // 'new' (no turn yet, or ephemeral); null for a closed session.

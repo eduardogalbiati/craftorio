@@ -1,5 +1,5 @@
 // Analysis seeds (#360): prompt-defined analyses, adapted from Kent Beck's ToolSeeds (MIT), that the
-// Oracle runs read-only on any project (src/oracle-seeds.js). One folder per seed,
+// Oracle runs read-only on any project (src/domains/oracle/oracle-seeds.js). One folder per seed,
 // <workspace>/seeds/<id>/seed.md: YAML front matter (name = the folder, a one-line summary, what it
 // needs, what it produces, a cost hint; SEED_SCHEMA) and a Markdown body with a VERIFY section that
 // ends with a "tell me" list to report back. The bundled seeds (seeds/ in the app) are seeded into the
@@ -12,7 +12,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { copyDir, seedBundle } = require('./seed');
-const { parseSkill } = require('./skills');
+const { parseSkill } = require('./domains/agents/skills');
 const { validateSchema } = require('./json-schema');
 
 const BUNDLED_SEEDS_DIR = path.join(__dirname, '..', 'seeds');

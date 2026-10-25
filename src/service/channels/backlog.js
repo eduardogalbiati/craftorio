@@ -3,8 +3,8 @@
 // saving a Write & Review document back to its issue, archiving and restoring issues (#238).
 
 const path = require('path');
-const backlog = require('../../backlog');
-const refreshes = require('../../backlog-refresh');
+const backlog = require('../../domains/backlog/backlog');
+const refreshes = require('../../domains/backlog/backlog-refresh');
 const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
 const runs = require('../../runs');
@@ -54,7 +54,7 @@ module.exports = (ctx) => {
   };
   return [
     { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], schema: { params: ON_PROJECT, result: BACKLOG }, fn: ({ projectId }) => current(projectId) },
-    // #491: the Roadmap's live reloads read only what changes while runs go (src/backlog.js backlogState)
+    // #491: the Roadmap's live reloads read only what changes while runs go (src/domains/backlog/backlog.js backlogState)
     {
       channel: 'backlog:state',
       method: 'getBacklogState',
@@ -65,7 +65,7 @@ module.exports = (ctx) => {
       },
       fn: ({ projectId }) => backlog.backlogState(current(projectId)),
     },
-    // the Backlog Refresh banner's "Dismiss for today" (#161, src/backlog-refresh.js)
+    // the Backlog Refresh banner's "Dismiss for today" (#161, src/domains/backlog/backlog-refresh.js)
     {
       channel: 'backlog:dismiss-refresh',
       method: 'dismissBacklogRefresh',

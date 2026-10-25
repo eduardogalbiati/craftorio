@@ -158,7 +158,7 @@ async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand
   const fs = require('fs');
   const { render } = require('./engine/run/templates');
   const { runTurn } = require('./engine/providers');
-  const { resolveSkill, skillPrompt } = require('./skills');
+  const { resolveSkill, skillPrompt } = require('./domains/agents/skills');
   const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');
   const { PROVIDERS } = require('./workflow-builder');
   const provider = PROVIDERS.claude;

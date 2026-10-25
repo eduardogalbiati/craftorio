@@ -28,7 +28,7 @@ function writeJsonSafe(file, data, { validate } = {}) {
 
 /**
  * Writes a text or binary file whole or not at all (temp file + rename), without a .bak: the
- * discovery store's card files (#256, src/discovery.js).
+ * discovery store's card files (#256, src/domains/discovery/discovery.js).
  * @param {string} file
  * @param {string | Buffer} content
  */

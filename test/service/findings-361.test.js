@@ -7,7 +7,7 @@
 //   settings:set and read back by settings:get.
 // - app:info adds isPackaged: the host's isPackaged (a boolean), so the renderer can apply
 //   FindingsModel.buttonVisible (src/renderer/findings-model.js).
-// - findings:save { image, marked, marks, note, context } → { id, dir, status: 'saved' }: src/findings.js
+// - findings:save { image, marked, marks, note, context } → { id, dir, status: 'saved' }: src/domains/evidence/findings.js
 //   saveFinding on the service's workspace (<workspace>/findings/<id>/); the service may add the main
 //   process's own context (log, channel calls) before saving.
 // - findings:list → [{ id, dir, at, note, status }], newest first (Settings › General › Findings).

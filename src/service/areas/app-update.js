@@ -8,12 +8,12 @@
 
 const path = require('path');
 const appUpdate = require('../../app-update');
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const { resolveCommand } = require('../../engine/providers');
 const notifier = require('../../notifications');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
-const { runShim } = require('../../shell');
+const { runShim } = require('../../domains/machine/shell');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 

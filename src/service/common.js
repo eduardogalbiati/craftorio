@@ -10,9 +10,9 @@ const {
   withCliPath,
 } = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
-const { execShim } = require('../shell');
+const { execShim } = require('../domains/machine/shell');
 const registry = require('../shared/providers');
-const sessionCache = require('../session-cache');
+const sessionCache = require('../domains/session/session-cache');
 const usage = require('../usage');
 const workflows = require('../workflows');
 const { workerClient } = require('../worker-client');
@@ -29,9 +29,9 @@ const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
 const num = (v) => (v === '' || v == null || !Number.isFinite(+v) || +v <= 0 ? null : +v);
 
 // Details for the Settings screen: path, version and (gh) authentication of each CLI. Started from
-// a worker thread (#389, src/tool-worker.js): starting a CLI can block the starting thread for
+// a worker thread (#389, src/domains/machine/tool-worker.js): starting a CLI can block the starting thread for
 // seconds on Windows; here, if the worker cannot start.
-const toolWorker = workerClient(path.join(SRC, 'tool-worker.js'));
+const toolWorker = workerClient(path.join(SRC, 'domains', 'machine', 'tool-worker.js'));
 function runTool(file, args, env = {}) {
   const opts = { windowsHide: true, timeout: 15000, env: { ...process.env, ...env } };
   const here = () => new Promise((resolve) => {
@@ -61,7 +61,7 @@ function sessionView(x, live) {
     ...((live ? x.fallbackFrom : x.fallback_from) ? { fallbackFrom: live ? x.fallbackFrom : x.fallback_from } : {}),
     // #312: the name of the provider account the session runs on
     ...(x.account ? { account: x.account } : {}),
-    // #320: the prompt-cache state of a snapshot and its next turn now (src/session-cache.js)
+    // #320: the prompt-cache state of a snapshot and its next turn now (src/domains/session/session-cache.js)
     ...(live ? {} : cacheView(x)),
   };
 }

@@ -2,7 +2,7 @@
 // awake for: the runs in progress (waiting at a gate or not), the started roadmaps with their
 // current stage, and the items of the Backlog queues that are not paused. Read by src/host/main.js.
 
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const roadmaps = require('../../roadmap');
 
 module.exports = (ctx) => {

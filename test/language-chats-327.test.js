@@ -1,6 +1,6 @@
 // #327 acceptance tests (written before the code): the agent chats carry the same [Language] line as
 // a run's turns (src/shared/language.js languageLine), from the workspace settings, built like the
-// [Time] line (#273): the Oracle (src/oracle.js, its turn context from settings()), the Product Owner
+// [Time] line (#273): the Oracle (src/domains/oracle/oracle.js, its turn context from settings()), the Product Owner
 // (src/product-owner.js ask, option `language`), the Supervisor chat (src/supervisor-chat.js
 // questionText, 5th argument `language`) and the engine-side supervisor prompts (src/supervisor.js,
 // field `language`), which no longer pin English when the agents write Português.

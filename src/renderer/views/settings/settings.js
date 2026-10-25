@@ -180,7 +180,7 @@ async function saveFallbackSettings() {
 }
 
 // Settings › Execution › Concurrent runs (settings.concurrentRuns) and the machine profile (#367,
-// settings.machineProfile, src/machine-profile.js through settings:machineProfile): the maximum and
+// settings.machineProfile, src/domains/machine/machine-profile.js through settings:machineProfile): the maximum and
 // the test workers per run follow this machine in auto; a value typed here makes them manual.
 async function renderConcurrency() {
   const c = state.settings.concurrentRuns || {};
@@ -347,7 +347,7 @@ async function saveBudgetSettings() {
   renderBudgetSettings();
 }
 
-// Settings › Execution › Oracle (settings.oracle, read by src/oracle.js): both fields are saved
+// Settings › Execution › Oracle (settings.oracle, read by src/domains/oracle/oracle.js): both fields are saved
 // together, since setSettings replaces the whole object.
 function renderOracleSettings() {
   const o = state.settings.oracle || {};
@@ -446,7 +446,7 @@ async function renderAppUpdate(fresh = true) {
   $('#set-app-update').onchange = (e) => save({ appUpdate: !!e.target.checked });
 }
 
-// The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved
+// The Oracle's wake-ups (#123, src/domains/oracle/oracle-wake.js): which runs wake it and on which events, saved
 // with the rest of settings.oracle. The kinds (oracle-wake.js WAKE_KINDS), in display order.
 const ORACLE_WAKE_KINDS = [
   ['gate', () => t('settings.wake.gate')],
@@ -476,7 +476,7 @@ async function saveOracleWake() {
   renderOracleWake();
 }
 
-// Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/speech.js).
+// Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/domains/chat/speech.js).
 const VOICE_LANGUAGES = ['auto', 'de', 'en', 'es', 'fr', 'it', 'pt'];
 async function renderVoice(st) {
   try {

@@ -1,4 +1,4 @@
-// Service area: embedded terminals (xterm.js in the UI + node-pty here, src/terminals.js). Opens a
+// Service area: embedded terminals (xterm.js in the UI + node-pty here, src/domains/machine/terminals.js). Opens a
 // session's live log or CLI, a Sessions screen CLI, a shell in a workspace or project folder, a
 // suggested command (an install command, #147), a gate's diff and the supervisor's chat; 'term:data' / 'term:exit' go out on `events`, and a CLI
 // that stops to wait for the user becomes a notification.
@@ -11,20 +11,20 @@ const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
 const Language = require('../../shared/language');
 const registry = require('../../shared/providers');
-const skills = require('../../skills');
+const skills = require('../../domains/agents/skills');
 const supervisor = require('../../supervisor');
 const notifier = require('../../notifications');
-const { Terminals } = require('../../terminals');
+const { Terminals } = require('../../domains/machine/terminals');
 const workspace = require('../../workspace');
 const { SCOPE_HINT } = require('../../actions-usage');
 const {
   followFile,
   followSession,
-} = require('../../session-tail');
+} = require('../../domains/session/session-tail');
 const {
   installCommands,
   signInCommands,
-} = require('../../install-commands');
+} = require('../../domains/machine/install-commands');
 const {
   BUNDLED_SKILLS_DIR,
   cliEnv,
@@ -127,7 +127,7 @@ module.exports = (ctx) => {
     }
     const spec = ctx.terminalSpec(runId, sessionId, kind === 'cli' ? 'cli' : 'live');
     if (kind !== 'cli') {
-      // live: follow the log in this process (see src/terminals.js for why not a child process)
+      // live: follow the log in this process (see src/domains/machine/terminals.js for why not a child process)
       const [, runDir, id] = spec.args;
       return terminals.openVirtual({ title: spec.title, start: (write) => followSession(runDir, id, write) });
     }

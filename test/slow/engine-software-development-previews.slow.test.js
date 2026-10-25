@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const evidence = require('../../src/evidence');
+const evidence = require('../../src/domains/evidence/evidence');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 const { runSoftwareDevelopment } = require('../engine-helpers');

@@ -97,7 +97,7 @@ test('ai-development-local-hero (#304): the suite step runs with scope affected,
 // ------------------------------------------------------------------ skill and docs
 
 test('ai-development-local-hero (#301, #304): the code-mapping skill describes the map: per issue, line numbers, tests per file, a run-tests block, a size cap', () => {
-  const skills = require('../src/skills');
+  const skills = require('../src/domains/agents/skills');
   const ids = skills.listSkills(path.join(ROOT, 'skills')).map((s) => s.id);
   assert.ok(ids.includes('code-mapping'), 'the skill library lists code-mapping');
   const text = read('skills', 'code-mapping', 'SKILL.md');

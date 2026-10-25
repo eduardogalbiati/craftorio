@@ -1,5 +1,5 @@
 // One worker thread per module file that answers requests off the main process (#389): the local
-// usage scan (src/local-usage-worker.js) and the CLI probes (src/tool-worker.js). The worker is
+// usage scan (src/domains/local/local-usage-worker.js) and the CLI probes (src/domains/machine/tool-worker.js). The worker is
 // started on the first request and kept for the next ones; it never keeps the process alive while
 // no request waits. Protocol: the request goes as { id, ...message }, the worker answers
 // { id, result } or { id, error } (rejected with `answered: true`, unlike a worker that failed to

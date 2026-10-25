@@ -3,7 +3,7 @@
 // vocabulary: `github` or `gh`); the GitLab twin (./gitlab.js) has the same members.
 // - identity: id, short (workflow input `git_platform`, skill suffix `-gh`), cli, label, host;
 // - request: the terms of a pull request ("PR #12"); epics, readsLabels, closeReason, actionsQuota:
-//   what the platform offers (epics are issues whose sub-issues are their members, src/epics.js);
+//   what the platform offers (epics are issues whose sub-issues are their members, src/domains/backlog/epics.js);
 // - cliTarget / apiHostArgs / issuesUrl / issueUrl: a repository ({ host, path }) as the CLI and links want it;
 //   fileCommand / rawFileUrl: one file of its default branch, through the CLI or a public raw read;
 // - *Command: the { cli, args } of each operation (issues, labels, pull requests, epics, the Oracle, probes);
@@ -35,7 +35,7 @@
     // GitHub Actions minutes can run out (src/engine/probes.js withQuota)
     actionsQuota: true,
 
-    // ---- a repository ({ host, path }: src/issues.js parseRepoUrl)
+    // ---- a repository ({ host, path }: src/domains/backlog/issues.js parseRepoUrl)
     cliTarget: ({ host, path }) => (host === OWN_HOST ? path : `${host}/${path}`),
     apiHostArgs: ({ host }) => (host === OWN_HOST ? [] : ['--hostname', host]),
     issuesUrl: ({ host, path }) => `https://${host}/${path}/issues/`,
@@ -52,7 +52,7 @@
     issueCloseCommand: (target, n) => cmd(['issue', 'close', n, '--repo', target, '--reason', github.closeReason]),
     issueReopenCommand: (target, n) => cmd(['issue', 'reopen', n, '--repo', target]),
     issueLabelCommand: ({ target, n, label, add }) => cmd(['issue', 'edit', n, '--repo', target, add ? '--add-label' : '--remove-label', label]),
-    // `gh issue list|view --json` → the app's issue (src/issues.js adds `tasks`)
+    // `gh issue list|view --json` → the app's issue (src/domains/backlog/issues.js adds `tasks`)
     parseIssue: (i) => ({
       number: i.number,
       title: i.title,
@@ -83,7 +83,7 @@
     requestViewCommand: (t, fields) => cmd(['pr', 'view', String(t.id), '--repo', `${t.host}/${t.repo}`, '--json', fields]),
     runViewCommand: (t) => cmd(['run', 'view', String(t.id), '--repo', `${t.host}/${t.repo}`, '--json', 'status,conclusion,url,name']),
 
-    // ---- epics (api: { path, hostArgs }, src/epics.js apiTarget)
+    // ---- epics (api: { path, hostArgs }, src/domains/backlog/epics.js apiTarget)
     typedEpicsCommand: (api) => cmd(['api', ...api.hostArgs, '--paginate', `repos/${api.path}/issues?state=all&per_page=100`, '--jq', TYPED_EPICS]),
     parseTypedEpics: (out) => new Set(String(out || '').split(/\s+/).filter((s) => /^\d+$/.test(s)).map(Number)),
     subIssuesCommand: (api, n) => cmd(['api', ...api.hostArgs, `repos/${api.path}/issues/${Number(n)}/sub_issues?per_page=100`]),
@@ -97,7 +97,7 @@
     issueIdCommand: (api, n) => cmd(['api', ...api.hostArgs, `repos/${api.path}/issues/${n}`, '--jq', '.id']),
     addSubIssueCommand: (api, epic, id) => cmd(['api', ...api.hostArgs, '--method', 'POST', `repos/${api.path}/issues/${epic}/sub_issues`, '-F', `sub_issue_id=${id}`, '-F', 'replace_parent=true']),
 
-    // ---- the Oracle's read tools (src/oracle-platform.js)
+    // ---- the Oracle's read tools (src/domains/oracle/oracle-platform.js)
     searchCommand: ({ target, query, state, limit }) => cmd(['issue', 'list', '--repo', target, ...(query ? ['--search', query] : []), '--state', state, '--limit', String(limit), '--json', 'number,title,state,labels,url,updatedAt']),
     viewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--json', 'number,title,state,body,labels,url,comments']),
     labelsCommand: (target, limit) => cmd(['label', 'list', '--repo', target, '--limit', String(limit), '--json', 'name,description']),

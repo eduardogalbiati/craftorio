@@ -9,7 +9,7 @@
 //   found so far and the offset are kept), then walks and stats its folder again;
 // - the cache lives in the service's index (src/store.js, table run_artifacts, which also records
 //   each project copy's path → run for artifactRunIds), or in memory without one (scripts, tests).
-// Each entry carries its category (src/artifact-categories.js, #225); internal files (owner.json,
+// Each entry carries its category (src/domains/evidence/artifact-categories.js, #225); internal files (owner.json,
 // locks) are not listed, and the run's result.md comes first.
 // runsOfArtifact finds the runs a path can belong to (its run folder, or the runs that recorded it as
 // a project copy) so opening one artifact checks one run's list, not every run's.
@@ -17,8 +17,8 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
-const { categoryOf } = require('./artifact-categories');
-const { pathKey } = require('./platform-paths');
+const { categoryOf } = require('./domains/evidence/artifact-categories');
+const { pathKey } = require('./domains/machine/platform-paths');
 const { storeFor } = require('./store');
 
 const INTERNAL = new Set(['events.jsonl', 'meta.json', 'summary.json']);

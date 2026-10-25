@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { fileName, parseArgs, recordShot, usage, VIEWS } = require('../scripts/screenshot');
-const evidence = require('../src/evidence');
+const evidence = require('../src/domains/evidence/evidence');
 
 const root = path.join(__dirname, '..');
 

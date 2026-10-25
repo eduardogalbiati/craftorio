@@ -89,7 +89,7 @@ test('#347 the code-review skill states every rule the review fixtures need', ()
 });
 
 test('#347 the reuse section of context-economy reaches the developer only, not the reviewer or the test writer', () => {
-  const { resolveSkill, skillPrompt } = require('../src/skills');
+  const { resolveSkill, skillPrompt } = require('../src/domains/agents/skills');
   const ce = resolveSkill([path.join(ROOT, 'skills')], 'context-economy');
   const reuse = /name what you reused/i;
   assert.match(skillPrompt(ce, 'developer'), reuse);

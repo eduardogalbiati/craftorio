@@ -29,18 +29,18 @@ const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
 const workflows = require('../../workflows');
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const roadmaps = require('../../roadmap');
-const agents = require('../../agents');
+const agents = require('../../domains/agents/agents');
 const usage = require('../../usage');
-const sessionCache = require('../../session-cache');
+const sessionCache = require('../../domains/session/session-cache');
 const actionsUsage = require('../../actions-usage');
 const runs = require('../../runs');
 const runOwner = require('../../run-owner');
 const runPr = require('../../run-pr');
 const notifier = require('../../notifications');
-const nightLimits = require('../../night-limits');
-const machineProfile = require('../../machine-profile');
+const nightLimits = require('../../domains/night/night-limits');
+const machineProfile = require('../../domains/machine/machine-profile');
 const { num } = require('../common');
 
 // how often a child run waiting for a slot of Settings › Execution checks again (#175)
@@ -181,7 +181,7 @@ module.exports = (ctx) => {
     const interrupted = list.filter((info) => info?.runId && runs.readRun(ws.runs, path.basename(String(info.runId)))?.status === 'interrupted');
     const notices = interrupted.map((info) => notifier.interruptedNotice(info));
     notices.forEach((n) => ctx.notify(n));
-    // the Oracle's wake-ups (#123, src/oracle-wake.js)
+    // the Oracle's wake-ups (#123, src/domains/oracle/oracle-wake.js)
     interrupted.forEach((info) => events.emit('run:interrupted', info));
     return notices[0] || null;
   }

@@ -25,7 +25,7 @@ const rel = (p) => path.relative(ROOT, p).replace(/\\/g, '/');
 
 // The area a file belongs to: a top-level folder of src/, or `src-root` for the loose files.
 function area(file) {
-  const m = rel(file).match(/^src\/(engine|service|shared|server|control|renderer|host)\//);
+  const m = rel(file).match(/^src\/(engine|service|shared|server|control|renderer|host|domains)\//);
   return m ? m[1] : 'src-root';
 }
 

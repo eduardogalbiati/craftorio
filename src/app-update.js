@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const night = require('./night-watch');
+const night = require('./domains/night/night-watch');
 const roadmapModel = require('./roadmap');
 
 const AFTER_MS = 2 * 60 * 1000;

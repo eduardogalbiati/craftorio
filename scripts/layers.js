@@ -1,7 +1,8 @@
 // Layering rules (issue #345): the areas of src/ and the directions they may require each other.
 // From the bottom: shared (src/shared/, pure dual-load modules) requires nothing of the app; the
-// low-level root utilities (ENGINE_ROOT_UTILITIES) only shared; the engine those two; the root domain
-// modules the engine too; the service all of these; the desktop entry and the server what is below
+// low-level utilities (ENGINE_ROOT_UTILITIES) only shared; the engine those two; the domain modules
+// (src/domains/<name>/, phase 1 of docs/reorganisation-study-2026-10.md; a loose file at the root of
+// src/ counts as one too) the engine too; the service all of these; the desktop entry and the server what is below
 // them; the renderer only shared, and nothing else requires it. The desktop entry is src/host/ (phase 1
 // of docs/reorganisation-study-2026-10.md): the Electron host, required by nothing else.
 // Every relative `require` of every .js file under src/ is read, lazy ones (inside a function)
@@ -18,30 +19,30 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
-// The low-level root utilities the engine may require: files of the root of src/ that require
-// nothing but each other and src/shared/ (area `utility`). A root file that needs more is a domain module.
+// The low-level utilities the engine may require: domain files that require nothing but each other
+// and src/shared/ (area `utility`). A domain file that needs more is a domain module (area `root`).
 const ENGINE_ROOT_UTILITIES = [
-  'src/app-sessions.js',
-  'src/coverage-summary.js',
-  'src/evidence.js',
-  'src/install-commands.js',
+  'src/domains/session/app-sessions.js',
+  'src/domains/evidence/coverage-summary.js',
+  'src/domains/evidence/evidence.js',
+  'src/domains/machine/install-commands.js',
   'src/json-schema.js',
-  'src/local-preview.js',
-  'src/machine-profile.js',
-  'src/platform-paths.js',
-  'src/result-summary.js',
+  'src/domains/local/local-preview.js',
+  'src/domains/machine/machine-profile.js',
+  'src/domains/machine/platform-paths.js',
+  'src/domains/evidence/result-summary.js',
   'src/run-owner.js',
-  'src/session-cache.js',
-  'src/shell.js',
+  'src/domains/session/session-cache.js',
+  'src/domains/machine/shell.js',
   'src/state-file.js',
 ];
 
 // area -> the areas it may require (its own included) and what it holds. A file's area: areaOf.
 const AREAS = {
   shared: { may: ['shared'], what: 'pure modules both sides use (dual-load: require and a renderer <script>)' },
-  utility: { may: ['utility', 'shared'], what: 'the low-level root files of ENGINE_ROOT_UTILITIES' },
+  utility: { may: ['utility', 'shared'], what: 'the low-level files of ENGINE_ROOT_UTILITIES' },
   engine: { may: ['engine', 'utility', 'shared'], what: 'the workflow engine (src/engine/)' },
-  root: { may: ['root', 'engine', 'utility', 'shared'], what: 'the domain modules at the root of src/' },
+  root: { may: ['root', 'engine', 'utility', 'shared'], what: 'the domain modules (src/domains/<name>/, and any loose file at the root of src/)' },
   service: { may: ['service', 'root', 'engine', 'utility', 'shared'], what: 'the app\'s operations, no Electron and no transport (src/service/)' },
   desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron host (src/host/: main.js, the preloads, the windows and their guards)' },
   server: { may: ['server', 'service', 'root', 'utility', 'shared'], what: 'the HTTP server and the control channel (src/server/, src/control/)' },
@@ -54,7 +55,7 @@ const FOLDERS = { control: 'server', engine: 'engine', host: 'desktop', renderer
 function areaOf(file) {
   const parts = file.split('/');
   if (parts[0] !== 'src' || parts.length < 2) return null;
-  if (parts.length === 2) return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
+  if (parts.length === 2 || (parts[1] === 'domains' && parts.length === 4)) return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
   return FOLDERS[parts[1]] || null;
 }
 
@@ -62,18 +63,18 @@ function areaOf(file) {
 // direction moves the shared code down instead (docs/agents/code-map.md, "Where a new module goes").
 const EXCEPTIONS = [
   { from: 'src/engine/machine-actions.js', to: 'src/releases.js', reason: 'the real machine adapter (#353) writes the release version (writeReleaseVersion) and pushes and tags the local base for a transition\'s `ship: { tag }` (shipRelease)' },
-  { from: 'src/engine/run/costs.js', to: 'src/night-limits.js', reason: 'the night\'s cost and run limits (#337) are checked at each turn; night-limits.js also reads the night watch\'s log and the run loader' },
+  { from: 'src/engine/run/costs.js', to: 'src/domains/night/night-limits.js', reason: 'the night\'s cost and run limits (#337) are checked at each turn; night-limits.js also reads the night watch\'s log and the run loader' },
   { from: 'src/engine/run/costs.js', to: 'src/usage.js', reason: 'the cost limits read the usage ledger of earlier runs (usage.js reads the runs list)' },
   { from: 'src/engine/run/machine-steps.js', to: 'src/release-city.js', reason: 'the release_version step names the release\'s previous tag (#378, release.yaml\'s previous_version) as the Release city tab does (previousTag)' },
   { from: 'src/engine/run/machine-steps.js', to: 'src/releases.js', reason: 'the release_version step tells a semver release name from another (releaseSemver) to pick its previous tag (#378)' },
-  { from: 'src/engine/run/project-map-steps.js', to: 'src/project-map.js', reason: 'the project map\'s machine steps (#372) read the project\'s city with its git facts (src/architecture-facts.js readCity) and save its plan in the workspace (src/oracle-architecture.js writePlan), as the Architecture tab\'s channels do' },
+  { from: 'src/engine/run/project-map-steps.js', to: 'src/project-map.js', reason: 'the project map\'s machine steps (#372) read the project\'s city with its git facts (src/architecture-facts.js readCity) and save its plan in the workspace (src/domains/oracle/oracle-architecture.js writePlan), as the Architecture tab\'s channels do' },
   { from: 'src/engine/run/refactor-proposals-steps.js', to: 'src/refactor-proposals-run.js', reason: 'the Refactor proposals workflow\'s machine steps (#378) read the architecture facts and write the Refactor tab\'s proposals, ranking and issues in the workspace, as the Refactor tab\'s channels do' },
-  { from: 'src/engine/run/sessions.js', to: 'src/skills.js', reason: 'a turn\'s prompt resolves its skills in the workspace and the project (skills.js reads the projects)' },
+  { from: 'src/engine/run/sessions.js', to: 'src/domains/agents/skills.js', reason: 'a turn\'s prompt resolves its skills in the workspace and the project (skills.js reads the projects)' },
   { from: 'src/engine/run/sessions.js', to: 'src/usage.js', reason: 'totalTokens of the usage module counts a session\'s tokens' },
-  { from: 'src/engine/run/setup.js', to: 'src/skills.js', reason: 'a run leaves out the agents\' skills that no longer exist (resolveSkill)' },
+  { from: 'src/engine/run/setup.js', to: 'src/domains/agents/skills.js', reason: 'a run leaves out the agents\' skills that no longer exist (resolveSkill)' },
   { from: 'src/engine/run/supervision.js', to: 'src/supervisor.js', reason: 'the engine calls the AI supervisor when a step fails; supervisor.js uses the engine\'s providers' },
   { from: 'src/engine/run/turns.js', to: 'src/usage.js', reason: 'sessionCost of the usage module prices each turn' },
-  { from: 'src/engine/workflow.js', to: 'src/skills.js', reason: 'the templates\' skill_dir(name) resolves a skill\'s folder (workspace first, then bundled)' },
+  { from: 'src/engine/workflow.js', to: 'src/domains/agents/skills.js', reason: 'the templates\' skill_dir(name) resolves a skill\'s folder (workspace first, then bundled)' },
   { from: 'src/engine/worktree.js', to: 'src/workspace.js', reason: 'a lazy read of the workspace\'s git credentials (gitAuthArgs) for the worktree\'s git commands' },
 ];
 

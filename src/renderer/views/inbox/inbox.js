@@ -1,12 +1,12 @@
 /* global api */
 // Inbox screen (#256, Plan & Design › Inbox): the raw ideas of the header's project, kept as private
-// discovery cards in the workspace (src/discovery.js, the discovery: channels), never on the git
+// discovery cards in the workspace (src/domains/discovery/discovery.js, the discovery: channels), never on the git
 // platform. A quick capture box (title + text; pasted, dropped or picked files; voice on the text,
 // voice.js) creates an `idea` card; the list shows the Inbox cards newest first with author, age and
 // attachment count; a card opens next to the list with its document (Edit: Save / Cancel), its
 // attachments and its thread, and the triage actions: Accept (to Discovery › Triage), Merge into…
 // another card, Discard (archived with a reason). Enter captures, Esc closes the open card.
-// Import… (#322, src/discovery-import.js) opens a panel that takes a .md/.txt file (chosen or
+// Import… (#322, src/domains/discovery/discovery-import.js) opens a panel that takes a .md/.txt file (chosen or
 // dropped on it) or pasted text and previews the items the document is cut into (one per top-level
 // heading or list item; its `- [ ]` lines its criteria): title (Rename: Save / Cancel), first lines,
 // number of criteria, the clarity score the card gets, a duplicate of an open card or open synced

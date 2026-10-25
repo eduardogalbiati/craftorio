@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const skills = require('../src/skills');
+const skills = require('../src/domains/agents/skills');
 const { loadWorkflow, WorkflowRun } = require('../src/engine/workflow');
 
 const root = path.join(__dirname, '..');

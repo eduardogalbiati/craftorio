@@ -1,12 +1,12 @@
 // #283 A malformed night log (a watch whose off entry is older than its on entry: the inverted span
 // the #278 tests logged in the first minute of a UTC day, or a clock moved back) does not break the
 // Night watch: nightwatch:report and nightwatch:morning (src/service/channels/nightwatch.js) and
-// night.nightMetrics / selfHealingDays (src/night-watch.js) answer without throwing.
+// night.nightMetrics / selfHealingDays (src/domains/night/night-watch.js) answer without throwing.
 // The service runs with MULTIAGENT_SIMULATION_ONLY=1; no model is asked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const night = require('../../src/night-watch');
+const night = require('../../src/domains/night/night-watch');
 const { makeService } = require('./helpers');
 const { dayStart, iso } = require('./day-span');
 

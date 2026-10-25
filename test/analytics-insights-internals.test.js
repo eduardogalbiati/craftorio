@@ -1,5 +1,5 @@
 // Internals of #188 / #228 the acceptance tests do not reach: the per-calibration split
-// (repo-performance byCalibration), the app's heartbeat log (src/app-sessions.js) and the index's
+// (repo-performance byCalibration), the app's heartbeat log (src/domains/session/app-sessions.js) and the index's
 // run_figures cache (src/store.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { byCalibration } = require('../src/repo-performance');
-const { beat, GAP_MS, readAppSessions } = require('../src/app-sessions');
+const { beat, GAP_MS, readAppSessions } = require('../src/domains/session/app-sessions');
 
 test('byCalibration: a run takes the calibration of the latest plan before it that planned one of its issues', () => {
   const answers = [

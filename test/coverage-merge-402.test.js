@@ -1,9 +1,9 @@
 // #402: scripts/test.js runs the unit files and the slow files as two node --test processes, each
-// with its own coverage table; parseNodeCoverage (src/coverage-summary.js) merges them: each number
+// with its own coverage table; parseNodeCoverage (src/domains/evidence/coverage-summary.js) merges them: each number
 // is the better of the tables', the uncovered lines from the best-covered one.
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseNodeCoverage } = require('../src/coverage-summary');
+const { parseNodeCoverage } = require('../src/domains/evidence/coverage-summary');
 
 const table = (runsJs, other, all) => [
   'ℹ start of coverage report',

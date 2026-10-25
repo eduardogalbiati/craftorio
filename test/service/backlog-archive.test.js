@@ -3,7 +3,7 @@
 //   { channel: 'backlog:archive', method: 'archiveIssues', params: ['projectId', 'numbers'] }
 //   { channel: 'backlog:restore', method: 'restoreIssues', params: ['projectId', 'numbers'] }
 // Both answer { results: [{ number, ok, error? }], backlog } (backlog: the Backlog after the change).
-// The guards (src/backlog.js archiveIssues, fed the issues with their roadmap and run links) are
+// The guards (src/domains/backlog/backlog.js archiveIssues, fed the issues with their roadmap and run links) are
 // checked per issue before anything is sent: an issue planned in the roadmap is refused with
 // "Planned in stage <n>: remove it from the roadmap first". The CLI commands themselves are covered with
 // a stubbed gh/glab in test/backlog-archive-238.test.js; here only refused issues are sent, so no

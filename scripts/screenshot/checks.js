@@ -1,13 +1,13 @@
 // The deterministic checks of a captured screen (#387), run by scripts/screenshot.js right after the
 // capture, in the same window state: axe-core's `color-contrast` and `target-size` rules
-// (src/ui-review-checks.js AXE_RULES) and the markup of the visible native controls (<select>, date
+// (src/domains/evidence/ui-review-checks.js AXE_RULES) and the markup of the visible native controls (<select>, date
 // and datetime-local fields, each as its bare start tag). Written next to the PNG as
 // `<name>.<side>.checks.json` ({ axe: { violations }, html }); src/engine/screenshot-step.js turns
 // both sides into the ui_reviewer's `axe_findings`. A check that cannot run writes its `error`
 // instead: the capture never fails because of it.
 
 const fs = require('fs');
-const { AXE_RULES, checksPath } = require('../../src/ui-review-checks');
+const { AXE_RULES, checksPath } = require('../../src/domains/evidence/ui-review-checks');
 
 // the page script: axe on the document, then the visible native controls' start tags
 const pageScript = (axeSource) => `(async () => {

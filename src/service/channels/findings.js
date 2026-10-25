@@ -1,4 +1,4 @@
-// Findings (#361, src/findings.js): the Findings button's channels.
+// Findings (#361, src/domains/evidence/findings.js): the Findings button's channels.
 // findings:save { image, marked, marks, note, context } → { id, dir, status: 'saved' }: the renderer's
 // context plus what the service knows (the last channel calls, the main log, the app's version and
 // commit), saved to <workspace>/findings/<id>/.
@@ -9,8 +9,8 @@
 // finding's folder; a real one first publishes the marked image on the project's pr-screenshots
 // branch (skills/pr-screenshots/publish.js publishFiles) so the issue shows it.
 const path = require('path');
-const backlog = require('../../backlog');
-const findings = require('../../findings');
+const backlog = require('../../domains/backlog/backlog');
+const findings = require('../../domains/evidence/findings');
 const Language = require('../../shared/language');
 const mainLog = require('../../main-log');
 const productOwner = require('../../product-owner');

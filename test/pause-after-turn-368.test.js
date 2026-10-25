@@ -10,7 +10,7 @@
 //   never 'failed'); advance never pauses the roadmap on a paused item (no pausedBy) and never starts
 //   it again; pauseStage(dir, projectId, stageId) pauses the roadmap at that stage
 //   (state 'paused', pausedStage: stageId, pausedBy null, no "failed" in its message).
-// - src/night-watch.js: NEVER_ALLOWED has { id: 'resume-paused' } (only the owner resumes a paused
+// - src/domains/night/night-watch.js: NEVER_ALLOWED has { id: 'resume-paused' } (only the owner resumes a paused
 //   run), so savePermissions refuses it.
 // - src/shared/run-progress-model.js: pauseLabel(pause) is the line the run screens show, from the
 //   `pause` record of runs:active ({ state: 'pausing', step, agents?, command? }) or of a paused run
@@ -24,7 +24,7 @@ const os = require('os');
 const path = require('path');
 const roadmapModel = require('../src/shared/roadmap-model');
 const roadmap = require('../src/roadmap');
-const night = require('../src/night-watch');
+const night = require('../src/domains/night/night-watch');
 const runProgress = require('../src/shared/run-progress-model');
 const { prepareWorktree, cleanupWorktrees } = require('../src/engine/worktree');
 const { endedRun, fixture } = require('./worktree-helpers');

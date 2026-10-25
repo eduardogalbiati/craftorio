@@ -3,7 +3,7 @@
 // again to stop; hold it to talk and release to stop; Ctrl+Shift+M toggles it in the focused
 // field, Escape discards a recording. The audio is recorded here (MediaRecorder), converted to a
 // 16 kHz mono WAV (OfflineAudioContext, no ffmpeg) and transcribed by the service
-// ('audio:transcribe', src/speech.js). The transcript is inserted at the cursor for review, never
+// ('audio:transcribe', src/domains/chat/speech.js). The transcript is inserted at the cursor for review, never
 // sent. While it is transcribed the field shows a "Transcribing…" badge (class voice-transcribing,
 // aria-busy) and stays editable. Fields rendered later (gate cards, chats) get their button from a MutationObserver.
 // Pure helpers (encodeWav, insertText, formatElapsed) are exported for the tests; the DOM part

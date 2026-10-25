@@ -28,8 +28,8 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
-const { samePath: platformSamePath } = require('../platform-paths');
-const { runShim } = require('../shell');
+const { samePath: platformSamePath } = require('../domains/machine/platform-paths');
+const { runShim } = require('../domains/machine/shell');
 
 // First match wins (npm uses npm-shrinkwrap.json over package-lock.json)
 const MANAGERS = [

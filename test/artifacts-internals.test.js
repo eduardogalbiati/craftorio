@@ -7,8 +7,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { coverageCommand, saveCoverage } = require('../src/engine/suite-step');
-const evidence = require('../src/evidence');
-const { renderResultSummary } = require('../src/result-summary');
+const evidence = require('../src/domains/evidence/evidence');
+const { renderResultSummary } = require('../src/domains/evidence/result-summary');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'art-int-'));

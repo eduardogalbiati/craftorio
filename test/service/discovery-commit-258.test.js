@@ -1,6 +1,6 @@
 // #258 Commit a discovery card to the backlog, through the service: the discovery:commit channel
 // (window.api commitDiscoveryCard) refuses a card under the 85% bar; discovery:board lists the
-// committed cards with their delivery (src/discovery-commit.js cardDelivery); backlog:get marks the
+// committed cards with their delivery (src/domains/discovery/discovery-commit.js cardDelivery); backlog:get marks the
 // issues filed from a discovery card with `discoveryCard: { id, title }` (the Backlog's badge).
 // The simulation is on: a successful filing is tested at the store level
 // (test/discovery-commit-258.test.js); here the card is committed with a stubbed gh before the
@@ -10,10 +10,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const discovery = require('../../src/discovery');
+const discovery = require('../../src/domains/discovery/discovery');
 const { makeService } = require('./helpers');
 
-const load = () => require('../../src/discovery-commit');
+const load = () => require('../../src/domains/discovery/discovery-commit');
 const REPO = 'https://github.com/o/r';
 
 const backlogIssue = (number, state) => ({ number, title: `Issue ${number}`, state, url: `${REPO}/issues/${number}`, body: '', labels: [], assignees: [], tasks: { done: 0, total: 0 } });

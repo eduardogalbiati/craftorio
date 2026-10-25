@@ -28,16 +28,16 @@
 //   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
 //   fileIssue(draft) optional; files a refactor issue (#435, src/refactor-issues.js issueDraft) and
 //                    returns { number, url }, instead of gh/glab, in a simulation too (tests, UI checks)
-//   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
+//   userDataDir      optional; the app's user data folder, where speech models live (src/domains/chat/speech.js)
 //   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
 //   relaunch()       optional; restarts the app (src/host/main.js); without it the app never updates itself
 //   cliHome          optional; the folder the CLIs' config folders (.claude, .codex, .grok) are read under
-//                    (#408, src/cli-config-dirs.js); the user's home (and CLAUDE_CONFIG_DIR/CODEX_HOME) without it
+//                    (#408, src/domains/cli/cli-config-dirs.js); the user's home (and CLAUDE_CONFIG_DIR/CODEX_HOME) without it
 
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
-const pastedImages = require('../pasted-images');
+const pastedImages = require('../domains/chat/pasted-images');
 const projects = require('../projects');
 const { createCodeVersion } = require('../code-version');
 const {

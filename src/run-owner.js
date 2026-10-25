@@ -3,12 +3,12 @@
 // summary.json is "running" (maybe in another app process) while its owner is alive, and only
 // "interrupted" once the owner is gone (dead pid on this host, or a stale heartbeat).
 // Also the workspace lock (<workspace>/.lock, same shape): one app process per workspace, and
-// hold() for other one-process records (the Oracle's owner.json, src/oracle.js).
+// hold() for other one-process records (the Oracle's owner.json, src/domains/oracle/oracle.js).
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { keepBeating } = require('./app-sessions');
+const { keepBeating } = require('./domains/session/app-sessions');
 
 const HEARTBEAT_MS = 5000;
 // a heartbeat older than this means the owner is gone (a suspended laptop catches up on wake)

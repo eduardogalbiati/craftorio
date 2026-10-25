@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const discovery = require('../../src/discovery');
+const discovery = require('../../src/domains/discovery/discovery');
 const { makeService } = require('./helpers');
 
 const REPO = 'https://github.com/o/r';

@@ -1,7 +1,7 @@
 // The Product Owner's Speed ↔ Quality calibration (#189): five steps, 1 (Speed) to 5 (Quality), each
 // mapped to the planning parameters the Product Owner follows (parallel runs per stage, the max
 // complexity of a group, the mode of UI issues, where an issue is placed, review rounds). Saved in
-// agents/product-owner.json (`calibration`, src/agents.js); the prompt states the step and its
+// agents/product-owner.json (`calibration`, src/domains/agents/agents.js); the prompt states the step and its
 // parameters (src/product-owner.js promptRules), the simulated answer follows `maxRuns` and
 // `maxComplexity`, and the screens draw the same slider (sliderHtml: Agents › Product Owner, the
 // Product Owner drawer's settings panel, views/backlog/backlog-po-settings.js). A question may ask

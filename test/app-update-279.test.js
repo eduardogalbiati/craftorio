@@ -20,7 +20,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const night = require('../src/night-watch');
+const night = require('../src/domains/night/night-watch');
 const roadmapModel = require('../src/roadmap');
 
 const load = () => require('../src/app-update');

@@ -1,6 +1,6 @@
-// #389 acceptance: the local-usage scan (src/local-usage.js) runs off the main thread and is incremental.
+// #389 acceptance: the local-usage scan (src/domains/local/local-usage.js) runs off the main thread and is incremental.
 //
-// The contract these tests assume (new export of src/local-usage.js, required inside each test):
+// The contract these tests assume (new export of src/domains/local/local-usage.js, required inside each test):
 //
 //   readLocalUsageAsync({ home }) -> Promise<{ records, sessions, plans, found, sources, scan }>
 //     - same result shape as the sync readLocalUsage({ home }) (records, sessions, plans.codex,
@@ -61,8 +61,8 @@ function seedHome(t, { files, messages }) {
 const claudeCount = (r) => r.records.filter((x) => x.provider === 'claude').length;
 
 test('readLocalUsageAsync scans many transcripts without stalling the calling thread over 200 ms (#389)', async (t) => {
-  const { readLocalUsageAsync } = require('../src/local-usage');
-  assert.equal(typeof readLocalUsageAsync, 'function', 'src/local-usage.js exports readLocalUsageAsync');
+  const { readLocalUsageAsync } = require('../src/domains/local/local-usage');
+  assert.equal(typeof readLocalUsageAsync, 'function', 'src/domains/local/local-usage.js exports readLocalUsageAsync');
   // about 60,000 lines to parse: seconds of synchronous work on the main thread before #389
   const { home } = seedHome(t, { files: 200, messages: 150 });
 
@@ -89,8 +89,8 @@ test('readLocalUsageAsync scans many transcripts without stalling the calling th
 });
 
 test('readLocalUsageAsync parses nothing again when no transcript changed (#389)', async (t) => {
-  const { readLocalUsageAsync } = require('../src/local-usage');
-  assert.equal(typeof readLocalUsageAsync, 'function', 'src/local-usage.js exports readLocalUsageAsync');
+  const { readLocalUsageAsync } = require('../src/domains/local/local-usage');
+  assert.equal(typeof readLocalUsageAsync, 'function', 'src/domains/local/local-usage.js exports readLocalUsageAsync');
   const { home } = seedHome(t, { files: 5, messages: 20 });
 
   const first = await readLocalUsageAsync({ home });
@@ -107,8 +107,8 @@ test('readLocalUsageAsync parses nothing again when no transcript changed (#389)
 });
 
 test('readLocalUsageAsync parses only the bytes appended to a transcript since the last scan (#389)', async (t) => {
-  const { readLocalUsageAsync } = require('../src/local-usage');
-  assert.equal(typeof readLocalUsageAsync, 'function', 'src/local-usage.js exports readLocalUsageAsync');
+  const { readLocalUsageAsync } = require('../src/domains/local/local-usage');
+  assert.equal(typeof readLocalUsageAsync, 'function', 'src/domains/local/local-usage.js exports readLocalUsageAsync');
   const { home, claudeDir } = seedHome(t, { files: 3, messages: 200 });
   const grown = path.join(claudeDir, 's1.jsonl');
 

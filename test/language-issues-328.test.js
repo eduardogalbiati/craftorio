@@ -13,9 +13,9 @@ const os = require('os');
 const path = require('path');
 const productOwner = require('../src/product-owner');
 const poSplit = require('../src/po-split');
-const discoveryCommit = require('../src/discovery-commit');
-const findings = require('../src/findings');
-const epics = require('../src/epics');
+const discoveryCommit = require('../src/domains/discovery/discovery-commit');
+const findings = require('../src/domains/evidence/findings');
+const epics = require('../src/domains/backlog/epics');
 
 const load = () => require('../src/shared/language');
 

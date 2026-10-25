@@ -14,7 +14,7 @@
 // to them Released (`markReleased`, pure). The Backlog applies it to its issues on every read, from
 // the history; the cards are marked in the discovery card store when the release is recorded
 // (`releaseCards`: `links.release` of each card whose `links.issues` holds a shipped issue; the
-// store is src/discovery.js of #256, handed in by the service).
+// store is src/domains/discovery/discovery.js of #256, handed in by the service).
 // Service: src/service/areas/releases.js; channels: src/service/channels/releases.js; screen:
 // src/renderer/views/releases/releases.js.
 // #489 "rc + stable": every merge into main is a release candidate, recorded in the history's
@@ -23,7 +23,7 @@
 // (`promoteRelease`): its commit is tagged vX.Y.Z (.github/workflows/deploy.yml then turns the rc's
 // GitHub release into the latest one) and recorded with `rc`, the issues since the last stable
 // (`issuesSinceStable`) and the version src/shared/release-version.js suggests (`stableVersion`).
-// A held candidate (`holdCandidate`) is never promoted by the night's train (src/night-watch.js).
+// A held candidate (`holdCandidate`) is never promoted by the night's train (src/domains/night/night-watch.js).
 
 const fs = require('fs');
 const path = require('path');
@@ -32,7 +32,7 @@ const {
   identityArgs,
   repoRoot,
 } = require('./engine/worktree');
-const { defaultBase, pushBase } = require('./local-push');
+const { defaultBase, pushBase } = require('./domains/local/local-push');
 const { suggestVersion } = require('./shared/release-version');
 const { writeJsonSafe } = require('./state-file');
 
@@ -229,7 +229,7 @@ function markReleased({ issues = [], cards = [] } = {}, { version, issues: numbe
 /**
  * Marks the discovery cards linked to one of the release's issues Released in the card store:
  * their `links.release` becomes the version. A card already released keeps its first release.
- * @param {{ listCards: Function, updateCard: Function }} store the discovery card store (src/discovery.js, #256)
+ * @param {{ listCards: Function, updateCard: Function }} store the discovery card store (src/domains/discovery/discovery.js, #256)
  * @param {string} dir the workspace's discovery folder
  * @param {{ version: string, issues: number[] }} release
  * @returns {string[]} the ids of the cards marked

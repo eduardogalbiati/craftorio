@@ -19,7 +19,7 @@ const path = require('path');
 const capabilities = require('../capabilities');
 const checkStep = require('../check-step');
 const { childEnv } = require('../child-env');
-const evidence = require('../../evidence');
+const evidence = require('../../domains/evidence/evidence');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
 const { changedFiles, selectionLines } = require('../affected-tests');
@@ -84,7 +84,7 @@ function lastWholeRound(outputs) {
 }
 
 const methods = {
-  // Rebuilds <run_dir>/evidence/manifest.json after a step (#146, src/evidence.js): a new image
+  // Rebuilds <run_dir>/evidence/manifest.json after a step (#146, src/domains/evidence/evidence.js): a new image
   // gets the worktree's commit (modified) or the base's (original); a step output's `screenshots:
   // [{ path, caption }]` (a file of the step's round folder, or a path under the run folder) gives
   // the captions. Nothing to do while the run has no evidence folder.

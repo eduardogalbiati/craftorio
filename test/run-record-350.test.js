@@ -25,10 +25,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { runFigures } = require('../src/run-analysis');
-const { analyzeRun } = require('../src/oracle-run-analysis');
+const { analyzeRun } = require('../src/domains/oracle/oracle-run-analysis');
 const runs = require('../src/runs');
 const { actualCost, actualTime, stepMinutes } = require('../src/cost-estimate');
-const { computeAnalytics } = require('../src/analytics');
+const { computeAnalytics } = require('../src/domains/analytics/analytics');
 const fx = require('./run-record-fixtures-350');
 const GOLDEN = require('./fixtures/run-record-golden-350.json');
 

@@ -156,7 +156,7 @@ test('preview: selecting a markdown artifact renders it through markdownHtml', a
   assert.match(body.innerHTML, /<article class="md"><md># Handoff\n\nDone\.<\/md><\/article>/);
 });
 
-// A manifest (#146, src/evidence.js, as returned by src/service/index.js's runEvidence) with one
+// A manifest (#146, src/domains/evidence/evidence.js, as returned by src/service/index.js's runEvidence) with one
 // final original/modified pair for issue #146.
 function evidenceFixture() {
   const modified = '/r/evidence/evidence/round-1/146-login-default.modified.png';
@@ -300,7 +300,7 @@ test('extras: an empty changes list without changesReported (a real run with no 
 // with that step's own round, original/modified side by side, older rounds in History.
 
 // A manifest with two rounds of the same step ("developer"): round 1 has a full pair, round 2 (the
-// latest) recaptured only the modified side (its original capture failed). buildManifest (src/evidence.js)
+// latest) recaptured only the modified side (its original capture failed). buildManifest (src/domains/evidence/evidence.js)
 // still points round 2's modified image at round 1's original as its `pair` (the newest earlier one
 // available) — the stale pairing the gate itself must ignore.
 function developerRoundsFixture() {

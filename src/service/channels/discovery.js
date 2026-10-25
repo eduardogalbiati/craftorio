@@ -1,4 +1,4 @@
-// Discovery cards (#256, src/discovery.js): the card API of the Inbox screen (views/inbox/) and of
+// Discovery cards (#256, src/domains/discovery/discovery.js): the card API of the Inbox screen (views/inbox/) and of
 // the Discovery board (#257, views/discovery/: the board, its WIP limits, a card's place in its
 // column, the document's versions, a run's result coming back; #166: the clarity bar, the override
 // into Ready, the ready forecast and the Grill me interview), and the
@@ -6,7 +6,7 @@
 // discovery folder (layout().discovery), private to the workspace; the store refuses a project id,
 // a card id or an attachment name that is a path. The author of a card, a move or a note is the
 // person at this machine (the OS user name).
-// The commitment point (#258, src/discovery-commit.js): discovery:commit-proposal asks the Product
+// The commitment point (#258, src/domains/discovery/discovery-commit.js): discovery:commit-proposal asks the Product
 // Owner how a Ready card splits into issues, discovery:commit files the split the owner confirmed
 // on the project's synced repository and commits the card; the board lists the committed cards
 // with their delivery (`committed`). Under MULTIAGENT_SIMULATION_ONLY the proposal is the
@@ -16,15 +16,15 @@
 // Column automations (#259, src/service/areas/discovery-automations.js): discovery:move answers with
 // what the column's on_enter proposes or started, discovery:set-automation sets a column's mode and
 // discovery:run-automation starts a proposed one; the result comes back to the card by itself.
-// Backlog import (#322, src/discovery-import.js): discovery:import-split and discovery:import-edit
+// Backlog import (#322, src/domains/discovery/discovery-import.js): discovery:import-split and discovery:import-edit
 // preview a document's items (nothing written), discovery:import writes the confirmed ones as cards.
 
 const os = require('os');
 const path = require('path');
-const backlog = require('../../backlog');
-const commits = require('../../discovery-commit');
-const imports = require('../../discovery-import');
-const discovery = require('../../discovery');
+const backlog = require('../../domains/backlog/backlog');
+const commits = require('../../domains/discovery/discovery-commit');
+const imports = require('../../domains/discovery/discovery-import');
+const discovery = require('../../domains/discovery/discovery');
 const Language = require('../../shared/language');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
@@ -130,7 +130,7 @@ module.exports = (ctx) => {
       schema: { params: onProject({ title: STRING, text: nullable(STRING), type: nullable(STRING), from: nullable(STRING) }), result: CARD },
       fn: ({ projectId, title, text, type, from }) => discovery.createCard(dir(), projectId, { title, text, type: type || 'idea', author: owner(), from: from || undefined }),
     },
-    // import (#322, src/discovery-import.js): a document's text (`name`: its file, or none when pasted)
+    // import (#322, src/domains/discovery/discovery-import.js): a document's text (`name`: its file, or none when pasted)
     // cut into items, previewed (clarity, duplicates of open cards and open synced issues); nothing written
     {
       channel: 'discovery:import-split',

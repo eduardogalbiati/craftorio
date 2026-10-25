@@ -15,7 +15,7 @@
 // `window.api` is exposed through contextBridge (src/host/preload.js): its methods cannot be
 // monkey-patched from the page, so the real audio:transcribe channel runs, against the fake CLI,
 // whose behaviour (delay, text, failure) is chosen per scenario via env vars the main process
-// (this file) sets before each one, read by src/speech.js's execFile call.
+// (this file) sets before each one, read by src/domains/chat/speech.js's execFile call.
 // See scripts/smoke.js (the pattern this follows) and test/voice-ui.test.js (the runner, gated by
 // MULTIAGENT_UI_TESTS=1 like test/screenshot.test.js).
 // Usage: npx electron test/fixtures/voice-check.js

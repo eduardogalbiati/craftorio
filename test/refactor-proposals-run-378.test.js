@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const arch = require('../src/oracle-architecture');
+const arch = require('../src/domains/oracle/oracle-architecture');
 const proposals = require('../src/refactor-proposals');
 const priority = require('../src/refactor-priority');
 const { layout } = require('../src/workspace');
@@ -31,7 +31,7 @@ const finding = (title, paths, kind = 'oversized-unit') => ({
 });
 const report = (findings) => ({ summary: 'Two hot spots.', areas: [{ area: 'src', verdict: 'Too coupled' }], findings });
 
-// the synced backlog (src/backlog.js readBacklog's cache: <backlog>/<project>.json)
+// the synced backlog (src/domains/backlog/backlog.js readBacklog's cache: <backlog>/<project>.json)
 function writeBacklog(stores, issues) {
   fs.writeFileSync(path.join(stores.backlog, `${PROJECT}.json`), JSON.stringify({ platform: 'github', repo: 'o/r', syncedAt: '2026-10-15T00:00:00.000Z', issues }));
 }

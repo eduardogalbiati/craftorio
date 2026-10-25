@@ -15,13 +15,13 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 - `runs/po-<project>-<stamp>/`: a Product Owner issue thread (#117: `conversation.jsonl`,
   `analysis/`, `attachments/`, `filed/`), not a run; it has no `events.jsonl` or `summary.json`,
   so run listings skip it.
-- `oracle/` (#122, `src/oracle.js`): the Oracle's conversation `messages.jsonl` (kept across
+- `oracle/` (#122, `src/domains/oracle/oracle.js`): the Oracle's conversation `messages.jsonl` (kept across
   resets), `state.json` (provider session, context size, compaction due), `memory.md` (saved only
   by the owner), `session.md` (the current session's opening prompt), `handoffs/<stamp>-<reason>.md`,
   `usage.jsonl` (one line per real answer; added to Usage and the monthly budgets as one
   summary-like run per day, `usageRuns`) and `owner.json` (the one app process that answers, a
   run-owner heartbeat). Written by the service, never by the model.
-- The three conversational agents' usage (#280, `src/agents-usage.js`): every real turn appends one line
+- The three conversational agents' usage (#280, `src/domains/agents/agents-usage.js`): every real turn appends one line
   (a simulated turn records nothing; nothing is ever rewritten) to `oracle/usage.jsonl` (the Oracle),
   `backlog/product-owner.usage.jsonl` (the Product Owner, every project; Clear keeps it) or
   `supervisor/usage.jsonl` (the Supervisor chat; Clear keeps it). Fields: `ts`, `agent` (`oracle`,
@@ -42,7 +42,7 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `lastSeen`); Revoke removes the entry. `phone-gates/secret`: the key that signs the gate links,
   created once, so a link keeps working across restarts until it expires. Pairing codes live in
   memory only: a restart voids them.
-- `discovery/<project id>/` (#256, `src/discovery.js`): the discovery cards, private to the
+- `discovery/<project id>/` (#256, `src/domains/discovery/discovery.js`): the discovery cards, private to the
   workspace (`discovery/.gitignore` ignores everything; never committed, never sent to the git
   platform). `board.json` (columns `{ id, title, wip }`, the card order per column),
   `cards/<card id>/` (`<yyyymmdd>-<4 hex>`) with `card.json` (id, title, type `idea | prd | rfc | bug |
@@ -60,7 +60,7 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `attachments/` (any file up to 50 MB, original names, a taken name gets a `-2` suffix, the same
   content is stored once) and `conversation.jsonl` (the thread, appended). `archive/<card id>/`: a
   discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`.
-  A committed card (#258, `src/discovery-commit.js`): `card.column = 'committed'` (no board column,
+  A committed card (#258, `src/domains/discovery/discovery-commit.js`): `card.column = 'committed'` (no board column,
   in no `order`; `moveCard` and `mergeCard` refuse it, `restoreCard` keeps it committed, and it is
   kept as it was committed: `updateCard` only takes `links.release`, a new document, attachment,
   restored version, run result or Grill me interview is refused; its thread still takes notes),
@@ -118,8 +118,8 @@ When a change alters what a run records (a field renamed, a cost counted another
 
 GitHub/GitLab own the issues; everything local is a read-only replica, and issue changes are
 never made locally nor flow back from local data to the platform. Only the explicit, previewed
-owner actions write to the platform (Save to issue, create, close, epics: `src/backlog.js`,
-`src/po-split.js`, `src/epics.js`).
+owner actions write to the platform (Save to issue, create, close, epics: `src/domains/backlog/backlog.js`,
+`src/po-split.js`, `src/domains/backlog/epics.js`).
 
 - `backlog/<project>.json`: the sync cache (`syncedAt`, every issue with its PRs/MRs and epic),
   rewritten by each sync (`syncBacklog`); a save to an issue re-reads that one issue into it.
@@ -254,8 +254,8 @@ Files only, in `<workspace>/oracle/` (no index.db table): `night-watch.json` (th
 defaults) and `night-log.jsonl`, appended by the service, never by the model: `oracle.watch`
 (on, end time moved, off), `oracle.detected` (`src/service/channels/nightwatch.js`, from run events
 and a one-minute roadmap check), `oracle.action` / `oracle.blocked` / `oracle.escalated` /
-`oracle.undone` (`src/oracle.js`). The nights are the `oracle.watch` windows; every metric
-(`src/night-watch.js` `nightMetrics`) is recomputed on read from that log, the runs'
+`oracle.undone` (`src/domains/oracle/oracle.js`). The nights are the `oracle.watch` windows; every metric
+(`src/domains/night/night-watch.js` `nightMetrics`) is recomputed on read from that log, the runs'
 `events.jsonl` (start, end, status, cost, progress events, gates) and the Oracle's `usage.jsonl`.
 Lines unblocked come from `git diff --shortstat` of a run's local merge commit.
 Self-healing (#278): the switch is `settings.oracle.selfHealing` (settings.json);
@@ -278,7 +278,7 @@ both removed by #285).
   index. Nothing is rewritten when the zone changes.
 - **The zone** is `settings.timeZone` (Settings › General › Time zone, an IANA name). Unset, it is
   the computer's: `readSettings` fills it in, `writeSettings` does not save it until one is chosen.
-- **One helper** cuts and formats: `src/shared/time-zone.js` (`window.TimeZone`; `src/time-zone.js`
+- **One helper** cuts and formats: `src/shared/time-zone.js` (`window.TimeZone`; `src/domains/analytics/time-zone.js`
   in the main process). Day keys, local midnights, weeks, months and visible times go through it.
 - **What follows the zone**: Analytics and Usage days and months, the agents' usage days, the
   Oracle's daily budget and its reset, the day budget (#206), the Product Owner's month, GitHub
@@ -294,7 +294,7 @@ both removed by #285).
 - **Only the service opens it** (`openIndex` in `src/service/areas/index-db.js`, on `setWorkspace`; closed in
   `shutdown`). The engine emits, the service writes (`indexEvent`, `notify`). The renderer and the
   browser UI use channels (`src/service/channels/storage.js`), never the file.
-- `storeFor(dir)` lets `src/runs.js` and `src/backlog.js` use the open store and fall back to the
+- `storeFor(dir)` lets `src/runs.js` and `src/domains/backlog/backlog.js` use the open store and fall back to the
   plain files without one (`scripts/run.js`, unit tests, `node:sqlite` unavailable). Keep both paths.
 - Every queue change goes through `updateQueue` (one `BEGIN IMMEDIATE` transaction). The dispatcher
   uses `claimQueued` (pick + claim atomically) and `releaseQueued` when a start fails; a claim expires

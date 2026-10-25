@@ -11,7 +11,7 @@
 
 const runs = require('../../runs');
 const projects = require('../../projects');
-const backlog = require('../../backlog');
+const backlog = require('../../domains/backlog/backlog');
 const roadmaps = require('../../roadmap');
 const { artifactIndex } = require('../../run-artifacts');
 const { cliReason, sessionView } = require('../common');

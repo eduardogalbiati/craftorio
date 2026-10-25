@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Stands in for `whisper-cli` in speech.test.js: writes a transcript to '<base>.txt' (the file
-// src/speech.js reads after running the CLI), matching the '-of <base>' argument it was started
+// src/domains/chat/speech.js reads after running the CLI), matching the '-of <base>' argument it was started
 // with. Never transcribes anything for real.
 // FAKE_WHISPER_TEXT: the transcript to write (default 'hello world').
 // FAKE_WHISPER_LOG: when set, the full argv is written there as JSON (so a test can check the
-// flags src/speech.js built, e.g. '-l').
+// flags src/domains/chat/speech.js built, e.g. '-l').
 // FAKE_WHISPER_FAIL: when set, exits with an error instead of transcribing anything.
 // FAKE_WHISPER_DELAY_MS: when set, waits that long before writing the transcript (or failing), to
 // simulate a slow model (#131: the field's transcribing state while this runs).

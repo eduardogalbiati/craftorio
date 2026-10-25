@@ -3,7 +3,7 @@
 // rules, so a workflow that declares nothing still records no well-known secret. Also redacts the
 // `env` values of a spawn's `--mcp-config` JSON (`redactMcpConfig`) and the output of a
 // environment dump tool call (`isEnvDump`, `redactEnvDump`). The one list of token shapes:
-// src/findings.js scrubs finding bundles with `redactBaseline` too.
+// src/domains/evidence/findings.js scrubs finding bundles with `redactBaseline` too.
 
 'use strict';
 

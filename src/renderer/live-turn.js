@@ -5,7 +5,7 @@
 // timer and a Stop button; the last steps stay listed under it, collapsible ("6 steps"); the answer's
 // prose shows as it is written (Markdown; the trailing ```json block never shows). States: starting,
 // working, writing, stopping, then done, failed or stopped; a turn with no item for STALE_MS says
-// "Still working: last step 1 min ago". Fed by the service's chat:progress events (src/chat-progress.js:
+// "Still working: last step 1 min ago". Fed by the service's chat:progress events (src/domains/chat/chat-progress.js:
 // { chat, key, turnId, phase, items, status }). The structured answer (cards) comes from the final
 // message as before: the view drops the live turn when the ask returns.
 // Pure state (create, apply, view, stepLabel, visibleText, duration) and the markup (html, which uses

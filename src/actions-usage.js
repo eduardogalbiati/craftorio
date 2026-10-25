@@ -7,8 +7,8 @@
 // Source: `gh api users/<login>/settings/billing/usage`, which needs the `user` scope
 // (`gh auth refresh -s user`). Without it the monitor is simply unavailable.
 
-const { execCli } = require('./backlog');
-const TimeZone = require('./time-zone');
+const { execCli } = require('./domains/backlog/backlog');
+const TimeZone = require('./domains/analytics/time-zone');
 const { WARN_AT } = require('./usage');
 
 const DEFAULT_INCLUDED_MINUTES = 2000;

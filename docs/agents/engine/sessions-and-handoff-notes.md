@@ -36,7 +36,7 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   conversation; without a note it resumes. Logged as `log` `kind: idle_rotation`. Since #320 every
   bundled workflow with a persistent agent sets `fresh_after_idle: 55m` in `defaults:` (Claude's
   hour minus a margin); an agent's own value wins.
-- **The prompt cache's state** (#320, `src/session-cache.js`, the same module as
+- **The prompt cache's state** (#320, `src/domains/session/session-cache.js`, the same module as
   `src/shared/session-cache.js`): `cacheLifetimeMs(provider, { auth, tier })` is the one lifetime
   (Claude 1 h on a subscription, 5 min with `ANTHROPIC_API_KEY`, a tier the usage reports in
   `cache_creation.ephemeral_1h/5m_input_tokens` wins; Codex and Grok `null`, unknown); the Oracle's

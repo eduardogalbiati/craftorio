@@ -227,7 +227,7 @@ test('#372 project-map workflow: the cartographer follows the project-map skill'
 });
 
 test('#372 project-map workflow: the cartographer is listed on the Agents screen, read-only', (t) => {
-  const agents = require('../src/agents');
+  const agents = require('../src/domains/agents/agents');
   const workflowsDir = tmp(t, 'workflows-372-');
   for (const f of fs.readdirSync(path.join(root, 'workflows')).filter((x) => /\.ya?ml$/i.test(x))) {
     fs.copyFileSync(path.join(root, 'workflows', f), path.join(workflowsDir, f));
@@ -243,7 +243,7 @@ test('#372 project-map workflow: the cartographer is listed on the Agents screen
 // ---------- the skill ----------
 
 test('#372 skill project-map is bundled with a valid frontmatter, and is not a -<suffix> family', () => {
-  const skills = require('../src/skills');
+  const skills = require('../src/domains/agents/skills');
   const ids = skills.listSkills(path.join(root, 'skills')).map((s) => s.id);
   assert.ok(ids.includes('project-map'), 'skills/project-map/SKILL.md');
   assert.deepEqual(ids.filter((id) => id.startsWith('project-map-')), [], 'one skill for every language');
@@ -253,7 +253,7 @@ test('#372 skill project-map is bundled with a valid frontmatter, and is not a -
 });
 
 test('#372 skill project-map is seeded into a new workspace', (t) => {
-  const skills = require('../src/skills');
+  const skills = require('../src/domains/agents/skills');
   const dest = path.join(tmp(t, 'skills-372-'), 'skills');
   const seeded = skills.seedSkills(path.join(root, 'skills'), dest);
   assert.ok(seeded.includes('project-map'), 'seeded');

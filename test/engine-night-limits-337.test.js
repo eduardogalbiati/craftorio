@@ -2,7 +2,7 @@
 // WorkflowRun built and never started; its checks are called the way a run calls them before a turn.
 // The API these tests pin down (the developer implements it):
 //   - WorkflowRun option `nightLimits`: () => tonight's settings ({ multiplier } | { values }) or null,
-//     called at EACH check (never once at start): the service passes src/night-limits.js tonightLimits.
+//     called at EACH check (never once at start): the service passes src/domains/night/night-limits.js tonightLimits.
 //   - run.effectiveLimits() → { context, cost, duration, turns }: the limits in force now
 //     (night-limits.js effectiveLimits over the workflow's own limits after their templates and the
 //     #262 model lift, tonight's settings and the highest limits this run was granted so far).

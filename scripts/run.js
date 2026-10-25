@@ -16,7 +16,7 @@ const { resolveWorkspace, setupWorkspace, readSettings } = require('../src/works
 const usage = require('../src/usage');
 const { resolveCommand } = require('../src/engine/providers');
 const { BUNDLED_WORKFLOWS_DIR, seedWorkflows, resolveWorkflow } = require('../src/workflows');
-const { seedSkills } = require('../src/skills');
+const { seedSkills } = require('../src/domains/agents/skills');
 
 const root = path.join(__dirname, '..');
 
@@ -51,7 +51,7 @@ const wfFile = resolveWorkflow(args.file, [ws.workflows, BUNDLED_WORKFLOWS_DIR])
 if (wfFile.fallback) console.warn(`workflow ${args.file} is not in ${ws.workflows}; using the bundled copy ${wfFile.file}`);
 const settings = readSettings(ws);
 const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
-const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('../src/local-usage').readLocalUsage() : null });
+const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('../src/domains/local/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
   file: wfFile.file,
   inputs: args.inputs,

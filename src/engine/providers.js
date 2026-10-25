@@ -23,8 +23,8 @@ const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
 const { childEnv } = require('./child-env');
-const { runShim } = require('../shell');
-const { setBrewLookup } = require('../install-commands');
+const { runShim } = require('../domains/machine/shell');
+const { setBrewLookup } = require('../domains/machine/install-commands');
 const registry = require('../shared/providers');
 const { emptyUsage } = require('../shared/providers/usage');
 
@@ -194,7 +194,7 @@ function withCliPath(env, platform = process.platform) {
 }
 const suffixedName = (cmd) => (n) => n.toLowerCase().startsWith(`${cmd}-`) && /-windows-[a-z]+\.exe$/i.test(n);
 
-// Whether Homebrew is installed (#398), for src/install-commands.js's brew commands: macOS only, so
+// Whether Homebrew is installed (#398), for src/domains/machine/install-commands.js's brew commands: macOS only, so
 // no PATH lookup elsewhere. Also install-commands' lookup for a call without `brew` (#401).
 const homebrewInstalled = (platform = process.platform) => platform === 'darwin' && !!resolveCommand('brew');
 setBrewLookup(() => homebrewInstalled());

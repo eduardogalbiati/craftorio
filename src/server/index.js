@@ -34,7 +34,7 @@ const {
   PUSHED_EVENTS,
 } = require('../service/manifest');
 const { contractHash } = require('../service/contract');
-const { tokenCheck } = require('../token-check');
+const { tokenCheck } = require('../domains/cli/token-check');
 const PKG = require('../../package.json');
 
 const ROOT = path.join(__dirname, '..', '..');

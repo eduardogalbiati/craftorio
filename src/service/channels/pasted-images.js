@@ -1,9 +1,9 @@
-// Images pasted into the AI prompt fields (#130, src/pasted-images.js, src/renderer/paste-image.js).
+// Images pasted into the AI prompt fields (#130, src/domains/chat/pasted-images.js, src/renderer/paste-image.js).
 // A service channel rather than a desktop one, so the browser UI (npm run serve) pastes the same way:
 // the renderer reads the image from the paste event and sends it as base64. Both channels only write
 // or delete inside <workspace>/attachments/pending/.
 
-const pastedImages = require('../../pasted-images');
+const pastedImages = require('../../domains/chat/pasted-images');
 const {
   args,
   BOOL,

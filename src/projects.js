@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execGit, repoNameFromUrl } = require('./workspace');
-const { cleanConfig } = require('./local-preview');
+const { cleanConfig } = require('./domains/local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow
 const { firstBuild } = require('./shared/default-workflow');
 
@@ -165,7 +165,7 @@ async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) 
     if (!fs.existsSync(file)) return null;
     return entries(fs.readFileSync(file, 'utf8'));
   }
-  const issues = require('./issues');
+  const issues = require('./domains/backlog/issues');
   const parsed = issues.parseRepoUrl(target?.url);
   if (!parsed) return null;
   const platform = issues.platformOfHost(parsed.host);

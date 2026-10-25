@@ -130,7 +130,7 @@ test('requirements: a provider of the simulated or an unknown type needs no CLI;
 });
 
 test('trustFolder: an unknown provider or the simulated one is not trusted and writes nothing', (t) => {
-  const { trustFolder } = require('../src/cli-trust');
+  const { trustFolder } = require('../src/domains/cli/cli-trust');
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'trust-348-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const dir = path.join(home, 'project');

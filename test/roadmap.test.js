@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const roadmaps = require('../src/roadmap');
-const { itemIssues } = require('../src/backlog');
+const { itemIssues } = require('../src/domains/backlog/backlog');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));

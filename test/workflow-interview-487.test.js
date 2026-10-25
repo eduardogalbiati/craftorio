@@ -4,7 +4,7 @@
 // Spec (the interface these tests assume):
 //   require('../src/service/areas/workflow-interview')(ctx) -> {
 //     workflowInterview({ projectId }) -> Promise<{ profile, evidence, questions }>: runs the
-//       ways-of-working seed on the project (src/oracle-seeds.js runSeed, one Oracle turn through
+//       ways-of-working seed on the project (src/domains/oracle/oracle-seeds.js runSeed, one Oracle turn through
 //       ctx.oracleService() -> { oneTurn, budgetRefusal }, the boundary stubbed here; the seed read
 //       from ctx.ws.seeds) and answers the seed's model.profile / model.evidence with
 //       src/workflow-compose.js openQuestions(profile) as `questions`.
@@ -68,7 +68,7 @@ function gitRepo(t) {
   return { dir, git };
 }
 
-// a fake { oneTurn, budgetRefusal } of src/oracle.js answering the seed's page and model
+// a fake { oneTurn, budgetRefusal } of src/domains/oracle/oracle.js answering the seed's page and model
 function fakeOracle(profile, evidence) {
   const turns = [];
   const text = `\`\`\`json\n${JSON.stringify({ html: '<h1>Ways of working</h1>', model: { profile, evidence }, report: '- solo' })}\n\`\`\`\n`;

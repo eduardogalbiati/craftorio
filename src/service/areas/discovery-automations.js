@@ -1,4 +1,4 @@
-// Service area: the Discovery board's column automations (#259, src/discovery.js ON_ENTER). A card
+// Service area: the Discovery board's column automations (#259, src/domains/discovery/discovery.js ON_ENTER). A card
 // moved into a column whose `on_enter` is in 'ask' mode gets a proposal (the pipeline or workflow
 // with its cost estimate from past runs, #215); 'on' starts it at once; the owner's Run
 // (discovery:run-automation) starts a proposed one. The run is a saved pipeline (areas/pipelines.js:
@@ -22,7 +22,7 @@ const path = require('path');
 const { childRunCost, loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
 const chainModel = require('../../shared/chain-model');
-const discovery = require('../../discovery');
+const discovery = require('../../domains/discovery/discovery');
 const projects = require('../../projects');
 const runs = require('../../runs');
 

@@ -38,7 +38,7 @@
 # queue nothing. The Backlog's New issue button starts this workflow for the selected project.
 # Epics (#138): the analyzer names the existing epic the issue belongs to (`epic`). When the match is
 # `clear` and the project's "Auto-place new issues" option (project.autoEpic) is on, the app places
-# the created issues in it when the run ends (src/epics.js filedToEpic, the service's
+# the created issues in it when the run ends (src/domains/backlog/epics.js filedToEpic, the service's
 # placeFiledInEpic). It never creates an epic: new epics are the Product Owner's proposals.
 # =============================================================================
 

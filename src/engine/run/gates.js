@@ -83,7 +83,7 @@ const methods = {
   // non-empty one is appended to the run-wide `feedback` list the next prompts can include.
   // A choice with `feedback_required: true` is refused without a text (resolveApproval returns false).
   // `local_preview: true` on the step offers Run locally (the service runs the worktree, see
-  // src/local-preview.js); it never answers the gate. `diff_base: <ref>` offers Show the diff (the
+  // src/domains/local/local-preview.js); it never answers the gate. `diff_base: <ref>` offers Show the diff (the
   // worktree's changes since that ref, in an embedded terminal).
   // diagnosis: the supervisor on call could not solve the problem of an escalation gate
   // ({ explanation, recommendation, user_action, note }): it goes under the message and in `supervisor`.

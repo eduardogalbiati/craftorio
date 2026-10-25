@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { taskProgress } = require('../src/issues');
+const { taskProgress } = require('../src/domains/backlog/issues');
 
 const load = () => require('../src/shared/language');
 const PT = { language: { agents: 'pt-BR' } };

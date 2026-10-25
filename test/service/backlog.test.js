@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const backlog = require('../../src/backlog');
+const backlog = require('../../src/domains/backlog/backlog');
 const { ISSUE_WORKFLOW, gitRepo, makeService, until, untilTrue, watchRuns } = require('./helpers');
 
 test('backlog: with simulation only, a real assignment is refused and nothing is queued', async (t) => {

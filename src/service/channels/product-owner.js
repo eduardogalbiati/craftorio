@@ -24,8 +24,8 @@
 // a request waiting for the owner's click is a card in the drawer, run or dropped by po:requestAct.
 
 const path = require('path');
-const agents = require('../../agents');
-const backlog = require('../../backlog');
+const agents = require('../../domains/agents/agents');
+const backlog = require('../../domains/backlog/backlog');
 const DefaultWorkflow = require('../../shared/default-workflow');
 const Language = require('../../shared/language');
 const notifier = require('../../notifications');

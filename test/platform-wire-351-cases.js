@@ -50,9 +50,9 @@ function recorder(routes = []) {
 const timeless = (v) => JSON.parse(JSON.stringify(v ?? null).replace(/\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z/g, '<time>'));
 const sorted = (set) => [...set].sort((a, b) => a - b);
 
-const backlog = () => require('../src/backlog');
-const epics = () => require('../src/epics');
-const oracle = () => require('../src/oracle-platform');
+const backlog = () => require('../src/domains/backlog/backlog');
+const epics = () => require('../src/domains/backlog/epics');
+const oracle = () => require('../src/domains/oracle/oracle-platform');
 const runPr = () => require('../src/run-pr');
 const probes = () => require('../src/engine/probes');
 const archive = () => require('../src/shared/backlog-archive');

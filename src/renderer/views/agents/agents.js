@@ -9,7 +9,7 @@
 // look was never customised is drawn as the run draws it (#297): its provider's robot painted in its
 // role colour (window.AgentColors, agent-colors.js).
 // Registers itself with registerView (view-registry.js), with the agent editor dialog.
-// Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
+// Storage and validation are in src/domains/agents/agents.js. Uses app.js globals ($, esc, state, openModal,
 // closeModal, confirmDialog, errMsg, dateOf, showToast, showWorkflowDefinition) and window.Robots (robots.js).
 // load: after robots.js (the agents' robots; the Product Owner's slider, src/shared/po-calibration.js, loads first)
 /* global api, Robots, PoCalibration */
@@ -17,9 +17,9 @@
   const SUPERVISOR = 'supervisor';
   const PRODUCT_OWNER = 'product-owner';
   const ORACLE = 'oracle';
-  // Must match DEFAULT_APPEARANCE in src/agents.js (the supervisor's own look).
+  // Must match DEFAULT_APPEARANCE in src/domains/agents/agents.js (the supervisor's own look).
   const DEFAULT_LOOK = { body: '#7C5CFF', shell: '#F4F4F6', visor: '#15161A', glow: '#C9B8FF', eyes: 'dots', emblem: 'none' };
-  // Must match PRODUCT_OWNER_APPEARANCE and ORACLE_APPEARANCE in src/agents.js.
+  // Must match PRODUCT_OWNER_APPEARANCE and ORACLE_APPEARANCE in src/domains/agents/agents.js.
   const BUILT_IN_LOOKS = {
     [PRODUCT_OWNER]: { body: '#0F9F8F', shell: '#F4F4F6', visor: '#15161A', glow: '#9FF5E6', eyes: 'arcs', emblem: 'clipboard' },
     [ORACLE]: { body: '#1E3A8A', shell: '#F4F4F6', visor: '#15161A', glow: '#FCD34D', eyes: 'slits', emblem: 'eye' },

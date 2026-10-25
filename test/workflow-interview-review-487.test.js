@@ -46,7 +46,7 @@ function gitRepo(t) {
   return { dir, git };
 }
 
-// a fake Oracle (src/oracle.js oneTurn) answering the seed's page and model; `gate` holds the answer
+// a fake Oracle (src/domains/oracle/oracle.js oneTurn) answering the seed's page and model; `gate` holds the answer
 function fakeOracle({ gate = null } = {}) {
   const turns = [];
   const text = `\`\`\`json\n${JSON.stringify({ html: '<h1>Ways of working</h1>', model: { profile: SOLO_PROFILE, evidence: SOLO_EVIDENCE }, report: '- solo' })}\n\`\`\`\n`;

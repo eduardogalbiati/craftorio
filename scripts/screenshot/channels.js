@@ -143,7 +143,7 @@ function demoRunDiffFile(file) {
 function demoMissingClis(appDir, on) {
   if (!on) return null;
   let ic = null;
-  try { ic = require(path.join(appDir, 'src', 'install-commands')); } catch { /* older ref */ }
+  try { ic = require(path.join(appDir, 'src', 'domains', 'machine', 'install-commands')); } catch { /* older ref */ }
   const ids = ['claude', 'gh', 'glab', 'grok'];
   return {
     'usage:actions': () => ({ error: 'GitHub billing usage needs the gh "user" scope', hint: 'gh auth refresh -s user', includedMinutes: 2000 }),

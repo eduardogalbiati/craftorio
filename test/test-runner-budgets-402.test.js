@@ -146,7 +146,7 @@ test('#402 at concurrency 1 the unit files and the slow files run as two groups,
 
 test('#402 with coverage the unit and slow groups each print a coverage table, and the merged summary sees the files of both', { timeout: 150000 }, (t) => {
   const g = twoGroups(t);
-  const { parseNodeCoverage } = require('../src/coverage-summary');
+  const { parseNodeCoverage } = require('../src/domains/evidence/coverage-summary');
   const r = runRunner(g.files, { ...g.env, MULTIAGENT_TEST_CONCURRENCY: '2' }, ['--experimental-test-coverage']);
   assert.equal(r.error?.code, undefined);
   assert.equal(r.status, 0, r.stdout.slice(-2000));

@@ -1,20 +1,20 @@
-// The Oracle (#122, src/oracle.js): the app-wide master agent's persistent conversation, its memory,
-// its state (busy, paused by budget, owning process) and its read-only tools (src/oracle-tools.js,
+// The Oracle (#122, src/domains/oracle/oracle.js): the app-wide master agent's persistent conversation, its memory,
+// its state (busy, paused by budget, owning process) and its read-only tools (src/domains/oracle/oracle-tools.js,
 // served over its own bridge). One Oracle per workspace root. `mock` (the drawer's developer mode)
 // and MULTIAGENT_SIMULATION_ONLY answer from the simulated Oracle: no model call, no cost.
 // Its spend counts in the monthly budgets with the runs' and the Product Owner's.
 // Part 2 (#123):
-// - wake-ups: the service's run events (src/oracle-wake.js) wake it in batches; a run of this
+// - wake-ups: the service's run events (src/domains/oracle/oracle-wake.js) wake it in batches; a run of this
 //   workspace seen in progress in another app process wakes it too (checked every minute). A
 //   simulated batch (every run in it simulated, or simulation only) gets the simulated Oracle.
-// - actions: its cards (src/oracle-actions.js) run here with the app's own functions, only from
+// - actions: its cards (src/domains/oracle/oracle-actions.js) run here with the app's own functions, only from
 //   oracle:act (the owner's "Do it") or under the Night watch. Under MULTIAGENT_SIMULATION_ONLY the
 //   actions that reach outside the workspace (issues, git commits, stopping processes) only preview.
 //   Every backup is a copy in <oracle dir>/backups/ (Undo puts it back).
 // - delegation: the Product Owner (a plan, an issue draft), the supervisor (a run diagnosis) and a
 //   read-only analyzer (a run's tool calls and costs, no model); only the answer and its cost come
 //   back, recorded in the chat. #184: the checker runs a test command on a scratch checkout of a
-//   branch (src/oracle-check.js, no model); a long one is a check.run card.
+//   branch (src/domains/oracle/oracle-check.js, no model); a long one is a check.run card.
 // - oracle:changed is pushed when a message is added (a wake-up, a card, a result).
 // - inboxes (#240): ctx.performAction runs an action's code for the owners' inboxes (po:request,
 //   supervisor:request); a request the Oracle sent gets a short line in its chat (requested()).
@@ -28,15 +28,15 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const actions = require('../../oracle-actions');
-const agentInbox = require('../../agent-inbox');
-const agents = require('../../agents');
-const backlog = require('../../backlog');
+const actions = require('../../domains/oracle/oracle-actions');
+const agentInbox = require('../../domains/agents/agent-inbox');
+const agents = require('../../domains/agents/agents');
+const backlog = require('../../domains/backlog/backlog');
 const merge = require('../../roadmap-merge');
-const night = require('../../night-watch');
+const night = require('../../domains/night/night-watch');
 const notifier = require('../../notifications');
-const oracle = require('../../oracle');
-const oracleCheck = require('../../oracle-check');
+const oracle = require('../../domains/oracle/oracle');
+const oracleCheck = require('../../domains/oracle/oracle-check');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
@@ -46,8 +46,8 @@ const supervisor = require('../../supervisor');
 const usage = require('../../usage');
 const workspace = require('../../workspace');
 const { createBridge, mcpCommand } = require('../../supervisor-bridge');
-const { createWake } = require('../../oracle-wake');
-const { oracleTools } = require('../../oracle-tools');
+const { createWake } = require('../../domains/oracle/oracle-wake');
+const { oracleTools } = require('../../domains/oracle/oracle-tools');
 const { resolveCommand } = require('../../engine/providers');
 const { stopProcessesIn } = require('../../engine/processes');
 const { requireObject } = require('../common');
@@ -121,7 +121,7 @@ module.exports = (ctx) => {
   };
   const preview = (what) => ({ ok: true, preview: true, text: `Simulation only: nothing was changed. The app would ${what}.` });
 
-  // #184: a check on a scratch checkout of a project's branch (src/oracle-check.js), in the Oracle's folder
+  // #184: a check on a scratch checkout of a project's branch (src/domains/oracle/oracle-check.js), in the Oracle's folder
   const check = ({ projectId, branch, command }, timeoutMs) => {
     const p = projects.readProject(ctx.ws.projects, pid(projectId));
     if (!p?.folder) throw new Error(`Unknown project: ${projectId}`);
@@ -638,7 +638,7 @@ module.exports = (ctx) => {
       channel: 'oracle:propose',
       method: 'oracleProposeAction',
       params: 'opts',
-      // params: the card kind's own (src/oracle-actions.js checks them per kind)
+      // params: the card kind's own (src/domains/oracle/oracle-actions.js checks them per kind)
       schema: { params: args({ kind: STRING, params: ANY, why: ANY, requestedBy: nullable(STRING) }, ['kind']), result: OBJECT },
       fn: async (arg) => {
         const input = requireObject(arg, 'options');

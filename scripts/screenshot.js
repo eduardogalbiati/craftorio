@@ -15,7 +15,7 @@
 //                      "[data-testid=supervisor-fab]"; a folded menu group: --click ".nav-group[data-group=workflows]
 //                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
 //                      header button; Home shows its docked panel; nightwatch (#172): two
-//                      replayed nights, src/night-watch-demo.js, also Home's morning
+//                      replayed nights, src/domains/night/night-watch-demo.js, also Home's morning
 //                      summary; its turn-on form: --click "#nw-switch", the permissions' Save /
 //                      Cancel: --click ".nw-perm-check[data-perm=skip]")
 //   --oracle <state>   the Oracle's demo state (#171), on any view: empty | conversation | answering |
@@ -122,7 +122,7 @@
 //   --side <s>         original | modified: saves <name>.<side>.png, the two images of a pair
 //                      (default original with --ref, modified with --caption, else no suffix)
 //   --caption <text>   records this shot with its caption and commit in <run_dir>/evidence/manifest.json
-//                      (src/evidence.js): needs --out <run_dir>/evidence/<step>/round-<n>
+//                      (src/domains/evidence/evidence.js): needs --out <run_dir>/evidence/<step>/round-<n>
 //   --wait <ms>        extra time before the capture (default 1500; run: 20000)
 //   --timeout <ms>     hard limit: the app exits with code 1 after it (default 90000)
 //
@@ -151,7 +151,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
-const evidence = require('../src/evidence');
+const evidence = require('../src/domains/evidence/evidence');
 const I18n = require('../src/shared/i18n');
 const machineSlot = require('../src/engine/machine-slot');
 const {
@@ -427,7 +427,7 @@ function main() {
       language: { ...workspace.DEFAULT_SETTINGS.language, interface: args.lang || 'en' },
     });
     fs.mkdirSync(ws.backlog, { recursive: true });
-    fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
+    fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('domains/backlog/backlog').taskProgress), null, 2));
     // the view's demo data (its seed module), then the finished run it lists
     if (view.seed) await view.seed({ appDir, args, project, projects, src, workspace, ws });
     const run = view.run ? recordRun(project) : null;

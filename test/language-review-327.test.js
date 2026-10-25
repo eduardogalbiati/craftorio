@@ -15,7 +15,7 @@ const providers = require('../src/engine/providers');
 const supervisor = require('../src/supervisor');
 const { createWatches } = require('../src/supervisor-watch');
 const { prioritize } = require('../src/refactor-priority');
-const epics = require('../src/epics');
+const epics = require('../src/domains/backlog/epics');
 const Language = require('../src/shared/language');
 
 const SKILLS = path.join(__dirname, '..', 'skills');

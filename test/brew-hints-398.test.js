@@ -1,7 +1,7 @@
 // #398 (acceptance tests, written before the code): on macOS the screens that show install hints
 // (the first-run Setup and Settings › Agents & CLIs through the settings area's envDetails,
-// Settings › General › Voice input through src/speech.js status) offer a brew command only when
-// `brew` resolves, and otherwise all show the same Homebrew-free hint as src/install-commands.js.
+// Settings › General › Voice input through src/domains/chat/speech.js status) offer a brew command only when
+// `brew` resolves, and otherwise all show the same Homebrew-free hint as src/domains/machine/install-commands.js.
 //
 // Each case runs in its own Node process with the platform faked ('darwin'), an isolated home and a
 // PATH of scratch folders, so Homebrew's presence is decided by the test (a fake `brew` on PATH or
@@ -28,8 +28,8 @@ function screens(dir, PATH) {
   const script = `
     Object.defineProperty(process, 'platform', { value: 'darwin' });
     const { resolveCommand } = require(${JSON.stringify(path.join(SRC, 'engine', 'providers.js'))});
-    const speech = require(${JSON.stringify(path.join(SRC, 'speech.js'))});
-    const ic = require(${JSON.stringify(path.join(SRC, 'install-commands.js'))});
+    const speech = require(${JSON.stringify(path.join(SRC, 'domains', 'chat', 'speech.js'))});
+    const ic = require(${JSON.stringify(path.join(SRC, 'domains', 'machine', 'install-commands.js'))});
     const settings = require(${JSON.stringify(path.join(SRC, 'service', 'areas', 'settings.js'))});
     const brew = !!resolveCommand('brew');
     const voice = speech.status({}, ${JSON.stringify(path.join(dir, 'data'))});

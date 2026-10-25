@@ -3,7 +3,7 @@
 // files, the notification center and the gate history excepted. What the engine emits is written
 // to it here: the run's row and its pending gates.
 
-const { releaseUsageIndex } = require('../../local-usage');
+const { releaseUsageIndex } = require('../../domains/local/local-usage');
 const runs = require('../../runs');
 const { openStore } = require('../../store');
 

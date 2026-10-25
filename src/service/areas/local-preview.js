@@ -1,11 +1,11 @@
-// Service area: Run locally at a gate (Run App, #70 #108 #115 #119, src/local-preview.js). One
+// Service area: Run locally at a gate (Run App, #70 #108 #115 #119, src/domains/local/local-preview.js). One
 // preview per run, in the run's worktree, in an embedded terminal; stopped when the gate is
 // answered or the run ends. It never answers the gate.
 
 const fs = require('fs');
 const path = require('path');
 const projects = require('../../projects');
-const localPreview = require('../../local-preview');
+const localPreview = require('../../domains/local/local-preview');
 const { cliEnv } = require('../common');
 const { isUnder } = require('../../engine/worktree');
 

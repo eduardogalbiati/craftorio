@@ -1,6 +1,6 @@
 // Analysis seeds on a project's Architecture tab (#360): the workspace's seeds (src/seeds.js) with
 // each one's last run, its recorded tool and the commits since (seeds:list); the cost estimate
-// (free with a tool; else the mean of the seed's last real runs); a run (src/oracle-seeds.js: one
+// (free with a tool; else the mean of the seed's last real runs); a run (src/domains/oracle/oracle-seeds.js: one
 // Oracle turn read-only in its daily budget, or the project's tool, simulated under mock or
 // MULTIAGENT_SIMULATION_ONLY; one run per project and seed at a time, shared with the Ways of working
 // interview: src/service/seed-runs.js); the history and one result
@@ -8,11 +8,11 @@
 // project's settings (seedTools); and "Make it a tool" (src/seed-tool-issue.js: an issue in the
 // project's tracker, a preview in simulation). Nothing here crosses a human gate or writes to the project.
 
-const arch = require('../../oracle-architecture');
-const backlog = require('../../backlog');
+const arch = require('../../domains/oracle/oracle-architecture');
+const backlog = require('../../domains/backlog/backlog');
 const projects = require('../../projects');
 const seeds = require('../../seeds');
-const oracleSeeds = require('../../oracle-seeds');
+const oracleSeeds = require('../../domains/oracle/oracle-seeds');
 const seedRuns = require('../seed-runs');
 const toolIssue = require('../../seed-tool-issue');
 const workspace = require('../../workspace');

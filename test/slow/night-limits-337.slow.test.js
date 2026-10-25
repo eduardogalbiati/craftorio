@@ -2,7 +2,7 @@
 // time is on, the owner expands every limit ×2 (window.api setNightWatchLimits), and a mock run of a
 // workflow whose max_total_context is 40M reads past 40M without pausing at a context_limit gate. By
 // day the same run pauses before its third turn (the control). The morning report lists the run as
-// past a day limit (summary.limits, src/night-limits.js pastDayLimits).
+// past a day limit (summary.limits, src/domains/night/night-limits.js pastDayLimits).
 // The model is the boundary: each mock turn reports 20M more tokens of cache read (wrapping
 // src/engine/providers.js runTurn, which the engine calls through the module).
 const test = require('node:test');
@@ -11,8 +11,8 @@ const fs = require('fs');
 const path = require('path');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
-const actions = require('../../src/oracle-actions');
-const night = require('../../src/night-watch');
+const actions = require('../../src/domains/oracle/oracle-actions');
+const night = require('../../src/domains/night/night-watch');
 const providers = require('../../src/engine/providers');
 const { makeService } = require('../service/helpers');
 

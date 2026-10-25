@@ -65,7 +65,7 @@ const ARCH_COMMITS = [
 const finding = (kind, title, files, severity, evidence, refactor) => ({ kind, title, files, severity, evidence, refactor });
 const DUPLICATED = finding('duplicated-rule', 'Discount rule duplicated in the API and the export', [{ path: 'src/billing.js', lines: '1-3' }, { path: 'tools/export.py', lines: '1-2' }], 'medium', 'Both files apply 10% off above 100; they changed together in 4 of 4 commits.', 'Keep the rule in one module the export calls.');
 
-// The two saved reports (the steps' shape, src/oracle-architecture.js saveReport) and six real runs since
+// The two saved reports (the steps' shape, src/domains/oracle/oracle-architecture.js saveReport) and six real runs since
 function demoArchitectureReports(ws, projectId, head) {
   const dir = path.join(ws.root, 'architecture', projectId);
   fs.mkdirSync(dir, { recursive: true });
@@ -283,7 +283,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'city-large') { // #382: this repository, with the POC's plan
     projects.updateProject(ws.projects, project.id, { folder: appDir });
     const plan = JSON.parse(fs.readFileSync(path.join(appDir, LARGE_PLAN), 'utf8'));
-    require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
+    require('../../../src/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
     return;
   }
   const city = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage'].includes(args.mode);
@@ -293,7 +293,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
-  if (city) require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
+  if (city) require('../../../src/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
   if (head && args.mode?.startsWith('seeds')) {
     const first = execFileSync('git', ['-C', project.folder, 'rev-list', '--max-parents=0', 'HEAD'], { encoding: 'utf8' }).trim().split('\n')[0];
     demoSeeds(ws, project, first);

@@ -19,7 +19,7 @@ const { trailOf } = require('./shared/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
-const { pathKey } = require('./platform-paths');
+const { pathKey } = require('./domains/machine/platform-paths');
 const {
   artifactEntry,
   kindOf,

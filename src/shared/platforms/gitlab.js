@@ -3,7 +3,7 @@
 // vocabulary: `gitlab` or `gl`). GitLab paths may have subgroups (g/sub/project); a self-hosted
 // server is named by URL in --repo and by --hostname in `glab api`. Epics: a group epic when the
 // project's issues carry one (paid tiers), otherwise an issue labelled epic whose members carry the
-// scoped label epic::<slug> (src/epics.js).
+// scoped label epic::<slug> (src/domains/backlog/epics.js).
 // Browser: window.PlatformGitLab; Node: module.exports.
 (function (root) {
   const OWN_HOST = 'gitlab.com';
@@ -24,7 +24,7 @@
     closeReason: null,
     actionsQuota: false,
 
-    // ---- a repository ({ host, path }: src/issues.js parseRepoUrl)
+    // ---- a repository ({ host, path }: src/domains/backlog/issues.js parseRepoUrl)
     cliTarget: ({ host, path }) => (host === OWN_HOST ? path : `https://${host}/${path}`),
     apiHostArgs: ({ host }) => (host === OWN_HOST ? [] : ['--hostname', host]),
     issuesUrl: ({ host, path }) => `https://${host}/${path}/-/issues/`,
@@ -42,7 +42,7 @@
     issueReopenCommand: (target, n) => cmd(['issue', 'reopen', n, '--repo', target]),
     // a scoped label (epic::x) replaces the issue's other label of the same scope
     issueLabelCommand: ({ target, n, label, add }) => cmd(['issue', 'update', n, '--repo', target, add ? '--label' : '--unlabel', label]),
-    // `glab issue list|view --output json` → the app's issue (src/issues.js adds `tasks`)
+    // `glab issue list|view --output json` → the app's issue (src/domains/backlog/issues.js adds `tasks`)
     parseIssue: (i) => ({
       number: i.iid,
       title: i.title,
@@ -54,7 +54,7 @@
       body: i.description || '',
       createdAt: i.created_at,
       updatedAt: i.updated_at,
-      // a group epic (GitLab paid tiers): read by src/epics.js, not kept in the cache
+      // a group epic (GitLab paid tiers): read by src/domains/backlog/epics.js, not kept in the cache
       ...(i.epic?.iid ? { groupEpic: { iid: i.epic.iid, title: i.epic.title || null, groupId: i.epic.group_id ?? null, url: i.epic.web_url || i.epic.url || null } } : {}),
     }),
 
@@ -74,12 +74,12 @@
     requestViewCommand: (t) => cmd(['mr', 'view', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--output', 'json']),
     runViewCommand: (t) => cmd(['api', `projects/${encodeURIComponent(t.repo)}/pipelines/${t.id}`, '--hostname', t.host]),
 
-    // ---- epics (api: { path, hostArgs }, src/epics.js apiTarget)
+    // ---- epics (api: { path, hostArgs }, src/domains/backlog/epics.js apiTarget)
     groupEpicCreateCommand: (api, groupId, title, body) => cmd(['api', ...api.hostArgs, '--method', 'POST', `groups/${groupId}/epics`, '-f', `title=${title}`, '-f', `description=${body}`]),
     projectIssueCommand: (api, n) => cmd(['api', ...api.hostArgs, `projects/${encodeURIComponent(api.path)}/issues/${n}`]),
     groupEpicAddIssueCommand: (api, groupId, iid, id) => cmd(['api', ...api.hostArgs, '--method', 'POST', `groups/${groupId}/epics/${iid}/issues/${id}`]),
 
-    // ---- the Oracle's read tools (src/oracle-platform.js)
+    // ---- the Oracle's read tools (src/domains/oracle/oracle-platform.js)
     searchCommand: ({ target, query, state, limit }) => cmd(['issue', 'list', '--repo', target, ...(query ? ['--search', query] : []), ...(state === 'open' ? [] : [`--${state}`]), '--per-page', String(limit), '--output', 'json']),
     viewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--output', 'json']),
     labelsCommand: (target, limit) => cmd(['label', 'list', '--repo', target, '--per-page', String(limit), '--output', 'json']),

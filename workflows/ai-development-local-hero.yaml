@@ -1427,7 +1427,7 @@ steps:
               convention: { type: string }
               screenshot: { type: string }
               blocking:   { type: boolean }
-              # a deterministic check's finding (#387, src/ui-review-checks.js): its rule (axe's
+              # a deterministic check's finding (#387, src/domains/evidence/ui-review-checks.js): its rule (axe's
               # id or native-control), where it came from (axe, markup), and a baseline (the
               # original side has it too: a ratchet, never blocking)
               rule:       { type: string }

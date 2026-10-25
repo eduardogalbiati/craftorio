@@ -346,7 +346,7 @@ const runAppCommandHtml = (c) => `${c.install ? `<code>${esc(c.install)}</code> 
 // Run App's one-click confirmation (#115), a popover over the gate (never above its choices): a
 // declared command (the repository's .multiagent/local-preview.yaml or the workflow's) the owner has
 // not confirmed for this project yet, or changed since; or one detected from the worktree
-// (localPreview:info → suggestConfig in src/local-preview.js), saved as the project's Local preview
+// (localPreview:info → suggestConfig in src/domains/local/local-preview.js), saved as the project's Local preview
 // on Run. A monorepo's apps: the owner picks one (stored as cwd). Everything that will run is shown
 // in full, the env variables too, and a command the repository declares is marked (#481, SEC-22):
 // a branch can change it, so it is never confirmed blind.

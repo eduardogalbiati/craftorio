@@ -34,12 +34,12 @@ const {
   NO_TERMINAL,
   terminalLaunch,
 } = require('./external-terminal');
-const { pathKey } = require('../platform-paths');
-const { psQuote } = require('../shell');
+const { pathKey } = require('../domains/machine/platform-paths');
+const { psQuote } = require('../domains/machine/shell');
 const I18n = require('../shared/i18n');
 const { t } = I18n;
 const workspace = require('../workspace');
-const localPreview = require('../local-preview');
+const localPreview = require('../domains/local/local-preview');
 const runOwner = require('../run-owner');
 const { allowPermission } = require('./permissions');
 const { guardIpc } = require('./ipc-guard');
@@ -47,7 +47,7 @@ const { guardWindow } = require('./window-guards');
 const { checkOpenable } = require('./open-guard');
 const { createService } = require('../service');
 const { createControlChannel } = require('../control');
-const { nativeBinaryPath } = require('../native-bin');
+const { nativeBinaryPath } = require('../domains/machine/native-bin');
 const {
   authChannels,
   PUSHED_EVENTS,
@@ -69,7 +69,7 @@ if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s
   app.exit(1);
 }
 
-// A copy started by Run locally at a gate (src/local-preview.js) keeps its own user data folder,
+// A copy started by Run locally at a gate (src/domains/local/local-preview.js) keeps its own user data folder,
 // so it never shares the owner's sign-in or window state
 if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData', path.resolve(process.env.MULTIAGENT_USER_DATA));
 
@@ -148,7 +148,7 @@ const service = createService({
     // #329: the interface language until one is chosen (areas/interface-language.js)
     get locale() { return app.getLocale(); }, // read once the app is ready
     userDataDir: app.getPath('userData'),
-    // #318: the microphone permission asked on macOS before recording (src/mic-permission.js)
+    // #318: the microphone permission asked on macOS before recording (src/domains/chat/mic-permission.js)
     systemPreferences,
     // #279: Self-healing applies merged fixes to this app folder, then restarts it
     appDir: app.getAppPath(),

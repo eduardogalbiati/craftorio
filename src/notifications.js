@@ -136,7 +136,7 @@ function productOwnerNotice({ project = {}, message = {} } = {}) {
 }
 
 // The notice for an action the Oracle took without asking, under the Night watch (#123):
-// { title, body, ok } from src/oracle.js.
+// { title, body, ok } from src/domains/oracle/oracle.js.
 function oracleNotice({ title, body, ok = true } = {}) {
   return {
     kind: 'oracle', event: ok ? 'acted' : 'failed',
@@ -147,7 +147,7 @@ function oracleNotice({ title, body, ok = true } = {}) {
 }
 
 // The morning summary when a Night watch ends (#172): { ran, did, waits, safety, alarm } from
-// src/night-watch.js morningSummary; opens the Night watch screen.
+// src/domains/night/night-watch.js morningSummary; opens the Night watch screen.
 function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
   return {
     kind: 'oracle', event: alarm ? 'night-alarm' : 'night-summary',

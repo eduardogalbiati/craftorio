@@ -17,7 +17,7 @@
 
 const path = require('path');
 const { PLATFORM_CLIS } = require('./child-env');
-const { workerEnv } = require('../machine-profile');
+const { workerEnv } = require('../domains/machine/machine-profile');
 const { machineSlotDir } = require('./machine-slot');
 const registry = require('../shared/providers');
 
@@ -63,7 +63,7 @@ const WRITE_UTILITIES = [
 // `VAR=value` prefix; a prefix that still appears is allowed in front of an allowed command.
 const AGENT_ENV = { MULTIAGENT_SIMULATION_ONLY: '1' };
 // Folders of the run every agent with commands may write to (created by the engine, given to
-// Claude Code with --add-dir): evidence screenshots (evidence/<step>/round-<n>, #146, src/evidence.js),
+// Claude Code with --add-dir): evidence screenshots (evidence/<step>/round-<n>, #146, src/domains/evidence/evidence.js),
 // logs of long commands, the run's scratch workspace (#120), the run's temp folder (#414).
 const RUN_DIRS = [
   'evidence',
@@ -93,7 +93,7 @@ const DEPS_DENIED_COMMANDS = [
 // With it, MULTIAGENT_LOCKS_DIR keeps the machine-wide slots' folder (#455, machineSlotDir, computed
 // here before TMP moves): an agent's whole `npm test` and its captures wait for other runs'.
 // workers: { testWorkers } of the machine profile (#367): the test workers per run, passed to the
-// test runners as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS (src/machine-profile.js workerEnv).
+// test runners as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS (src/domains/machine/machine-profile.js workerEnv).
 function agentEnv(scratch = null, workers = null) {
   const env = { ...AGENT_ENV, ...(workers?.testWorkers ? workerEnv(workers) : {}) };
   if (!scratch) return env;

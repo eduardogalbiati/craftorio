@@ -3,7 +3,7 @@
 // Win+Shift+S screenshot, an image copied in a browser) in a field of voice.js's VOICE_FIELDS adds
 // it as an attachment of that field: a chip row under it (48 px thumbnail, image-1.png · 240 KB,
 // × to remove; a click on the thumbnail opens ImageViewer). The image is saved at once into the
-// workspace's staging folder through the service (clipboard:saveImage, src/pasted-images.js), so
+// workspace's staging folder through the service (clipboard:saveImage, src/domains/chat/pasted-images.js), so
 // the browser UI works the same; while it is saved the chip shows a spinner, a refused one is a red
 // chip with the reason and the field keeps its text. A clipboard that holds text pastes the text as
 // usual, even when it also holds an image (a copy from Office). Pasting never sends anything: the

@@ -11,10 +11,10 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { readAppSessions } = require('../../app-sessions');
+const { readAppSessions } = require('../../domains/session/app-sessions');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
-const night = require('../../night-watch');
+const night = require('../../domains/night/night-watch');
 const occupancy = require('../../occupancy');
 const poCalibration = require('../../shared/po-calibration');
 const productOwner = require('../../product-owner');
@@ -28,7 +28,7 @@ const runAnalysisLib = require('../../run-analysis');
 const { readRunRecord } = require('../../run-record');
 const runs = require('../../runs');
 const supervisor = require('../../supervisor');
-const TimeZone = require('../../time-zone');
+const TimeZone = require('../../domains/analytics/time-zone');
 const workspace = require('../../workspace');
 const { BUNDLED_SKILLS_DIR } = require('../common');
 
