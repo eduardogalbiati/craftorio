@@ -38,3 +38,9 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
   Design & Plan, AI; Settings as the shell): measurements, target layout, phased plan and the
   owner's open decisions in [docs/reorganisation-study-2026-10.md](../reorganisation-study-2026-10.md);
   `scripts/dep-map.js` re-measures.
+- A step registry the fronts contribute (phase 4 of the reorganisation, #590): the engine's machine
+  steps call four domain modules that a front's screens also read (`supervisor`, `release-city`,
+  `project-map`, `refactor-proposals-run`), so they stay in the engine kernel and a bundled workflow
+  runs on any engine whatever fronts it ships. The day a front ships a workflow of its own, its
+  `engine/` could register the steps that workflow needs (`fronts.md`, "What stays in the engine
+  kernel"), and a one-front engine would refuse a workflow whose steps no served front provides.
