@@ -50,15 +50,26 @@ const AREAS = {
   service: { may: ['service', 'root', 'engine', 'utility', 'shared'], what: 'the app\'s operations, no Electron and no transport (packages/engine/service/)' },
   desktop: { may: ['desktop', 'server', 'service', 'root', 'engine', 'utility', 'shared'], what: 'the Electron host (apps/desktop/host/: main.js, the preloads, the windows and their guards)' },
   server: { may: ['server', 'service', 'root', 'utility', 'shared'], what: 'the HTTP server and the control channel (packages/engine/server/, packages/engine/control/)' },
-  renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (apps/desktop/renderer/)' },
+  renderer: { may: ['renderer', 'shared'], what: 'the UI, loaded in the browser too (packages/ui-kit/, fronts/<id>/, apps/<app>/renderer/)' },
 };
 
 // The area folders (a workspace's folders, or src/'s before phase 2) and their area (domains: a domain module, or a utility when
 // ENGINE_ROOT_UTILITIES lists the file, see areaOf). scripts/dep-map.js reads this list too.
 const FOLDERS = { bin: 'server', control: 'server', domains: 'root', engine: 'engine', host: 'desktop', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
-// The workspaces (phase 2 of docs/reorganisation-study-2026-10.md) and their area: a whole package
-// (packages/shared), or its folders by FOLDERS (packages/engine/<folder>/, apps/desktop/<folder>/).
-const PACKAGES = { 'apps/desktop': null, 'packages/engine': null, 'packages/shared': 'shared' };
+// The workspaces (phases 2 and 3 of docs/reorganisation-study-2026-10.md) and their area: a whole package
+// (packages/shared; the UI kit, the fronts and the browser app are all `renderer`: page scripts that
+// may require only shared), or its folders by FOLDERS (packages/engine/<folder>/, apps/desktop/<folder>/).
+const PACKAGES = {
+  'apps/desktop': null,
+  'apps/web': 'renderer',
+  'fronts/ai': 'renderer',
+  'fronts/analyser': 'renderer',
+  'fronts/build': 'renderer',
+  'fronts/plan': 'renderer',
+  'packages/engine': null,
+  'packages/shared': 'shared',
+  'packages/ui-kit': 'renderer',
+};
 
 // The area of a file (path from the repository root, with /), or null when no area holds it.
 function areaOf(file) {

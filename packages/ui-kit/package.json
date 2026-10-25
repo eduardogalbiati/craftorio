@@ -1,0 +1,11 @@
+{
+  "name": "@multiagent/ui-kit",
+  "version": "1.3.0",
+  "private": true,
+  "description": "The UI kit every composition starts from: the app shell, the run kernel and the controls of the renderer, plus the shell's screens (Home, Settings); plain scripts a page loads, no bundler.",
+  "license": "MIT",
+  "author": "Eduardo Galbiati",
+  "scripts": {
+    "test": "node ../../scripts/test.js --workspace ."
+  }
+}

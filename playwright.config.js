@@ -5,8 +5,9 @@
 // with _electron on a fresh simulated workspace (MULTIAGENT_SIMULATION_ONLY=1, demo data, never as
 // plain Node: ELECTRON_RUN_AS_NODE removed).
 //
-//   npm run test:e2e                         the whole suite
+//   npm run test:e2e                         the whole suite (scripts/e2e.js: bddgen, then playwright test)
 //   npm run test:e2e -- --grep @smoke        the critical journeys (a few minutes)
+//   npm run test:e2e -w fronts/analyser      one front's features (phase 3 of the reorganisation study)
 //   npm run test:e2e:update -- --grep @visual   rewrite the visual baselines (on purpose only)
 //
 // Two lanes (#365), two Playwright projects:
@@ -37,9 +38,15 @@ const { defineConfig } = require('@playwright/test');
 const { defineBddConfig } = require('playwright-bdd');
 const { e2eWorkers } = require('./scripts/e2e-workers');
 
+// Phase 3 of docs/reorganisation-study-2026-10.md: the features live with their packages (the shell's
+// in features/ and packages/ui-kit/features/, a front's in fronts/<id>/features/), the steps next to
+// them (every steps folder is loaded whatever runs: the fronts share the shell's steps).
+// MULTIAGENT_E2E_FRONT=<id> (`node scripts/e2e.js --front <id>`, a front's `npm run test:e2e`) runs
+// that front's features only.
+const FRONT = process.env.MULTIAGENT_E2E_FRONT;
 const testDir = defineBddConfig({
-  features: 'features/**/*.feature',
-  steps: 'features/steps/**/*.js',
+  features: FRONT ? `fronts/${FRONT}/features/**/*.feature` : ['features/**/*.feature', 'packages/ui-kit/features/**/*.feature', 'fronts/*/features/**/*.feature'],
+  steps: ['features/steps/**/*.js', 'packages/ui-kit/features/steps/**/*.js', 'fronts/*/features/steps/**/*.js'],
   outputDir: '.features-gen',
 });
 

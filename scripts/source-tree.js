@@ -1,9 +1,11 @@
-// The source tree of the repository, as the layout-bound tooling sees it (phase 2 of
-// docs/reorganisation-study-2026-10.md): the npm workspaces (`packages/*`, `apps/*`, from the root
-// package.json), the folders their sources live in, and the files of each. Everything that scans
-// "every source file" (the code map, the ratchets, the layering check, the list linter, the
-// literal checks in the tests) asks this module instead of naming `src/` itself, so a new workspace
-// is learnt here once. Tests (`<workspace>/test/`) and node_modules are never sources.
+// The source tree of the repository, as the layout-bound tooling sees it (phases 2 and 3 of
+// docs/reorganisation-study-2026-10.md): the npm workspaces (`packages/*`, `fronts/*`, `apps/*`, from
+// the root package.json), the folders their sources live in, the files of each, and the UI's
+// composition (the UI kit, the fronts and the apps that list them). Everything that scans "every
+// source file" (the code map, the ratchets, the layering check, the list linter, the literal checks
+// in the tests) asks this module instead of naming `src/` itself, so a new workspace is learnt here
+// once; everything that lays out a page (`scripts/docs.js`, the smoke and screenshot runners) asks it
+// which fronts an app ships.
 //
 //   workspaces(root)        [{ dir: 'packages/shared', name: '@multiagent/shared' }, …], from the
 //                           root package.json's `workspaces` globs (one level: `packages/*`)
@@ -14,6 +16,16 @@
 //   packageOf(root, file)   the workspace a path belongs to, or null (the root)
 //   resolvePackagePath(root, spec)  '@multiagent/shared/i18n' → 'packages/shared/i18n' (no extension
 //                           resolution), or null when `spec` names no workspace
+//   uiKit(root)             the UI kit workspace (`@multiagent/ui-kit`, packages/ui-kit), or null
+//   fronts(root)            the front workspaces, [{ id: 'build', dir: 'fronts/build', name }], by id
+//   composition(root, app)  what the app `app` ('apps/desktop') ships: { app, page: 'apps/desktop/renderer',
+//                           fronts: [{ id, dir, name }] } from `<app>/composition.js` (`fronts`, in
+//                           order; a front it names that is not installed is an error; without the
+//                           file, every installed front). The page is `<app>/renderer/`, where
+//                           index.html lives
+//   viewsOf(root, dir)      the screen folders of a layer (`<dir>/views/<view>/`), sorted
+//   frontOf(root, view)     the front that holds the screen `view` (its views/<view>/ folder), the
+//                           UI kit for a shell screen, or null
 
 const fs = require('fs');
 const path = require('path');
@@ -44,7 +56,7 @@ function workspaces(root) {
 }
 
 // the workspace folders a checkout may hold even without manifests (a test's temporary tree)
-const WORKSPACE_PARENTS = ['apps', 'packages'];
+const WORKSPACE_PARENTS = ['apps', 'fronts', 'packages'];
 
 function sourceDirs(root) {
   const dirs = new Set(fs.existsSync(path.join(root, 'src')) ? ['src'] : []);
@@ -85,11 +97,62 @@ function resolvePackagePath(root, spec) {
   return spec === w.name ? w.dir : `${w.dir}${spec.slice(w.name.length)}`;
 }
 
+// ---- phase 3: the UI kit, the fronts and the compositions ----------------------------------------
+const UI_KIT = '@multiagent/ui-kit';
+// the folder of the fronts (`fronts/<id>`, decision 7 of 2026-10-24): a front's id is its folder name
+const FRONTS_DIR = 'fronts';
+// an app's page folder: where its index.html and its own page files live
+const PAGE_DIR = 'renderer';
+
+function uiKit(root) {
+  return workspaces(root).find((w) => w.name === UI_KIT) || null;
+}
+
+function fronts(root) {
+  return workspaces(root).filter((w) => w.dir.startsWith(`${FRONTS_DIR}/`)).map((w) => ({ id: w.dir.slice(FRONTS_DIR.length + 1), ...w }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function composition(root, app) {
+  const appDir = posix(app).replace(/\/+$/, '');
+  const file = path.join(root, appDir, 'composition.js');
+  const installed = fronts(root);
+  let ids = installed.map((f) => f.id);
+  if (fs.existsSync(file)) {
+    const def = require(file);
+    if (!Array.isArray(def.fronts) || def.fronts.some((id) => typeof id !== 'string')) throw new Error(`${appDir}/composition.js: \`fronts\` must be a list of front ids.`);
+    ids = def.fronts;
+  }
+  const list = ids.map((id) => {
+    const front = installed.find((f) => f.id === id);
+    if (!front) throw new Error(`${appDir}/composition.js names the front "${id}", which has no workspace ${FRONTS_DIR}/${id}/ (a package.json with a name).`);
+    return front;
+  });
+  return { app: appDir, page: `${appDir}/${PAGE_DIR}`, fronts: list };
+}
+
+function viewsOf(root, dir) {
+  const abs = path.join(root, dir, 'views');
+  if (!fs.existsSync(abs)) return [];
+  return fs.readdirSync(abs, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+}
+
+function frontOf(root, view) {
+  const kit = uiKit(root);
+  if (kit && viewsOf(root, kit.dir).includes(view)) return kit;
+  return fronts(root).find((f) => viewsOf(root, f.dir).includes(view)) || null;
+}
+
 module.exports = {
+  composition,
+  frontOf,
+  fronts,
   listFiles,
   packageOf,
   resolvePackagePath,
   sourceDirs,
   sourceFiles,
+  uiKit,
+  viewsOf,
   workspaces,
 };
