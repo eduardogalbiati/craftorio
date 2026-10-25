@@ -66,7 +66,7 @@
     "playwright-bdd": "^9.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "three": "^0.169.0",
+    "three": "^0.186.1",
     "typescript": "^6.0.3"
   },
   "allowScripts": {
