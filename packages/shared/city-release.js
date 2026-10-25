@@ -1,7 +1,7 @@
 // A release on the project city (#376): the city as it was at the previous release, in grey, with
 // what the release added, changed, renamed or removed in colour. No model call. Pure and
 // deterministic: no I/O, clock or randomness (packages/engine/domains/releases/release-city.js reads git in the main process; the
-// City view's release overlay, apps/desktop/renderer/views/project/project-city-release.js, draws it).
+// City view's release overlay, fronts/analyser/views/project/project-city-release.js, draws it).
 // - parseNameStatus(text) → [{ status, path, from? }] sorted by path, from `git diff --name-status -M`:
 //   A → added, M/T → changed, D → removed, R → renamed (from the old path), C → added (the copy).
 // - ADDED_COLOUR, CHANGE_RAMP (light to strong), rampColour(lines, maxLines) → a ramp colour.

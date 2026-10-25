@@ -24,22 +24,22 @@
   <link rel="stylesheet" href="../../../packages/ui-kit/workflow-inputs.css" />
   <link rel="stylesheet" href="../../../packages/ui-kit/views/dashboard/dashboard.css" />
   <link rel="stylesheet" href="../../../packages/ui-kit/views/settings/settings.css" />
-  <link rel="stylesheet" href="project-city.css" />
+  <link rel="stylesheet" href="../../../fronts/analyser/views/analytics/analytics-insights.css" />
+  <link rel="stylesheet" href="../../../fronts/analyser/views/analytics/analytics.css" />
+  <link rel="stylesheet" href="../../../fronts/analyser/views/project/project-city-agents.css" />
+  <link rel="stylesheet" href="../../../fronts/analyser/views/project/project-city-impact.css" />
+  <link rel="stylesheet" href="../../../fronts/analyser/views/project/project-city-release.css" />
+  <link rel="stylesheet" href="../../../fronts/analyser/views/project/project-city.css" />
+  <link rel="stylesheet" href="../../../fronts/analyser/views/project/project.css" />
+  <link rel="stylesheet" href="../../../fronts/plan/views/arena/arena.css" />
+  <link rel="stylesheet" href="../../../fronts/plan/views/discovery/discovery.css" />
+  <link rel="stylesheet" href="../../../fronts/plan/views/duo/duo.css" />
+  <link rel="stylesheet" href="../../../fronts/plan/views/inbox/inbox.css" />
   <link rel="stylesheet" href="views/agents/agents.css" />
-  <link rel="stylesheet" href="views/analytics/analytics-insights.css" />
-  <link rel="stylesheet" href="views/analytics/analytics.css" />
-  <link rel="stylesheet" href="views/arena/arena.css" />
   <link rel="stylesheet" href="views/artifacts/artifacts.css" />
   <link rel="stylesheet" href="views/backlog/backlog.css" />
-  <link rel="stylesheet" href="views/discovery/discovery.css" />
-  <link rel="stylesheet" href="views/duo/duo.css" />
-  <link rel="stylesheet" href="views/inbox/inbox.css" />
   <link rel="stylesheet" href="views/nightwatch/nightwatch.css" />
   <link rel="stylesheet" href="views/oracle/oracle.css" />
-  <link rel="stylesheet" href="views/project/project-city-agents.css" />
-  <link rel="stylesheet" href="views/project/project-city-impact.css" />
-  <link rel="stylesheet" href="views/project/project-city-release.css" />
-  <link rel="stylesheet" href="views/project/project.css" />
   <link rel="stylesheet" href="views/releases/releases.css" />
   <link rel="stylesheet" href="views/run/run.css" />
   <link rel="stylesheet" href="views/runchat/runchat.css" />
@@ -419,13 +419,34 @@
   <script src="../../../packages/ui-kit/views/settings/settings-markup.js"></script>
   <script src="../../../packages/ui-kit/views/settings/settings-phone.js"></script>
   <script src="../../../packages/ui-kit/views/settings/settings.js"></script>
+  <script src="../../../fronts/analyser/views/analytics/analytics-agents.js"></script>
+  <script src="../../../fronts/analyser/views/analytics/analytics-occupancy.js"></script>
+  <script src="../../../fronts/analyser/views/analytics/analytics-run.js"></script>
+  <script src="../../../fronts/analyser/views/analytics/analytics.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-architecture.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-agents.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-cards.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-connections.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-impact.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-modal.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-modes.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-notes.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-panels.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city-release.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-city.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-conflict-map.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-refactor.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-seeds.js"></script>
+  <script src="../../../fronts/analyser/views/project/project-ways-of-working.js"></script>
+  <script src="../../../fronts/analyser/views/project/project.js"></script>
+  <script src="../../../fronts/plan/views/arena/arena-shuffle.js"></script>
+  <script src="../../../fronts/plan/views/arena/arena.js"></script>
+  <script src="../../../fronts/plan/views/discovery/discovery-commit.js"></script>
+  <script src="../../../fronts/plan/views/discovery/discovery.js"></script>
+  <script src="../../../fronts/plan/views/duo/duo-issue.js"></script>
+  <script src="../../../fronts/plan/views/duo/duo.js"></script>
+  <script src="../../../fronts/plan/views/inbox/inbox.js"></script>
   <script src="views/agents/agents.js"></script>
-  <script src="views/analytics/analytics-agents.js"></script>
-  <script src="views/analytics/analytics-occupancy.js"></script>
-  <script src="views/analytics/analytics-run.js"></script>
-  <script src="views/analytics/analytics.js"></script>
-  <script src="views/arena/arena-shuffle.js"></script>
-  <script src="views/arena/arena.js"></script>
   <script src="views/artifacts/artifacts.js"></script>
   <script src="views/backlog/backlog-epics.js"></script>
   <script src="views/backlog/backlog-labels.js"></script>
@@ -436,30 +457,9 @@
   <script src="views/backlog/backlog.js"></script>
   <script src="views/backlog/backlog-po-settings.js"></script>
   <script src="views/backlog/backlog-po.js"></script>
-  <script src="views/discovery/discovery-commit.js"></script>
-  <script src="views/discovery/discovery.js"></script>
-  <script src="views/duo/duo-issue.js"></script>
-  <script src="views/duo/duo.js"></script>
-  <script src="views/inbox/inbox.js"></script>
   <script src="views/nightwatch/nightwatch.js"></script>
   <script src="views/oracle/oracle-chat-model.js"></script>
   <script src="views/oracle/oracle.js"></script>
-  <script src="views/project/project-architecture.js"></script>
-  <script src="views/project/project-city-agents.js"></script>
-  <script src="views/project/project-city-cards.js"></script>
-  <script src="views/project/project-city-connections.js"></script>
-  <script src="views/project/project-city-impact.js"></script>
-  <script src="views/project/project-city-modal.js"></script>
-  <script src="views/project/project-city-modes.js"></script>
-  <script src="views/project/project-city-notes.js"></script>
-  <script src="views/project/project-city-panels.js"></script>
-  <script src="views/project/project-city-release.js"></script>
-  <script src="views/project/project-city.js"></script>
-  <script src="views/project/project-conflict-map.js"></script>
-  <script src="views/project/project-refactor.js"></script>
-  <script src="views/project/project-seeds.js"></script>
-  <script src="views/project/project-ways-of-working.js"></script>
-  <script src="views/project/project.js"></script>
   <script src="views/projects/project-workflows.js"></script>
   <script src="views/projects/projects.js"></script>
   <script src="views/releases/releases.js"></script>

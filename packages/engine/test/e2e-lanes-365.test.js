@@ -16,8 +16,12 @@ const loadConfig = () => require('../../../playwright.config.js');
 // as the text Playwright's grep sees: the title path followed by the tags.
 function scenarios() {
   const out = [];
-  for (const file of fs.readdirSync(path.join(ROOT, 'features')).filter((f) => f.endsWith('.feature'))) {
-    const lines = read(path.join('features', file)).split(/\r?\n/);
+  // the shell's features and each package's (phase 3 of the reorganisation study: fronts/<id>/features/,
+  // packages/ui-kit/features/), as playwright.config.js lists them
+  const dirs = ['features', 'packages/ui-kit/features', ...fs.readdirSync(path.join(ROOT, 'fronts')).map((id) => `fronts/${id}/features`)]
+    .filter((d) => fs.existsSync(path.join(ROOT, ...d.split('/'))));
+  for (const file of dirs.flatMap((d) => fs.readdirSync(path.join(ROOT, ...d.split('/'))).filter((f) => f.endsWith('.feature')).map((f) => `${d}/${f}`))) {
+    const lines = read(path.join(...file.split('/'))).split(/\r?\n/);
     let featureTags = [];
     let pending = [];
     let feature = '';

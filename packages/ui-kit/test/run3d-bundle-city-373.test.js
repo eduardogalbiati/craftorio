@@ -1,6 +1,6 @@
 // #373: the project city is drawn with three / React Three Fiber like the run's 3D view, built by
 // scripts/build-3d.js into a generated script (no CDN) that the Architecture tab loads on first use.
-// The build gains a city entry (a source under apps/desktop/renderer/ whose path names the city) and its
+// The build gains a city entry (a source under fronts/analyser/ whose path names the city) and its
 // output, a generated/*city*.js script defining a window.*City* global; the run's bundle stays.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -24,7 +24,7 @@ const rendererScripts = () => pageFiles(ROOT).map((f) => path.join(ROOT, f.file)
 
 test('#373 build-3d declares a city entry and a generated city script', () => {
   const text = exportedStrings(load()).replace(/\\\\/g, '/');
-  assert.match(text, /apps\/desktop\/renderer\/[^"]*city[^"]*\.jsx?"/i, `a city entry among ${text}`);
+  assert.match(text, /fronts\/analyser\/[^"]*city[^"]*\.jsx?"/i, `a city entry among ${text}`);
   assert.match(text, /generated\/[^"/]*city[^"/]*\.js"/i, `a generated city script among ${text}`);
 });
 

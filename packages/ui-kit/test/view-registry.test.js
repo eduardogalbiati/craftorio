@@ -253,3 +253,27 @@ test('#329 the menu label comes from the catalog key nav.<id>, else the entry\'s
   assert.equal(label('settings'), 'Configurações');
   assert.equal(label('usage'), 'Usage', 'a view without a catalog key keeps its English label');
 });
+
+// Phase 3 of the reorganisation study (#579): Home is the UI kit's and Analytics the analyser front's, so
+// Home registers first and draws an empty `#view-analytics` placeholder; the panel registered later
+// takes the placeholder's place.
+test('a `panel` with a `section` registered after its section drew an empty placeholder replaces the placeholder', () => {
+  const dom = makeFakeDom();
+  const placeholder = { children: [], drawn: [], removed: false, insertAdjacentHTML(_pos, markup) { this.drawn.push(markup); }, remove() { this.removed = true; } };
+  dom.document.getElementById = (id) => (id === 'view-analytics' ? placeholder : null);
+  const registerView = load(dom);
+  registerView({ id: 'analytics', section: 'dashboard', menu: 'dashboard', panel: () => '<div id="view-analytics" class="hidden">panel</div>' });
+  assert.deepEqual(placeholder.drawn, ['<div id="view-analytics" class="hidden">panel</div>']);
+  assert.equal(placeholder.removed, true);
+  assert.deepEqual(dom.mainContent.html, [], 'a panel is never added to the content as a section of its own');
+});
+
+test('a `panel` whose section already holds it (the placeholder has children) is left alone', () => {
+  const dom = makeFakeDom();
+  const drawn = { children: [{}], drawn: [], removed: false, insertAdjacentHTML(_pos, markup) { this.drawn.push(markup); }, remove() { this.removed = true; } };
+  dom.document.getElementById = () => drawn;
+  const registerView = load(dom);
+  registerView({ id: 'analytics', section: 'dashboard', panel: () => '<div id="view-analytics"></div>' });
+  assert.deepEqual(drawn.drawn, []);
+  assert.equal(drawn.removed, false);
+});

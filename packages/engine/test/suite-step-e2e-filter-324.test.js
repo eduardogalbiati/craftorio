@@ -18,16 +18,16 @@ const tmp = (t) => {
 };
 
 test('filteredCommand passes feature files to `npm run test:e2e` after -- (#324)', () => {
-  assert.equal(filteredCommand('npm run test:e2e', ['features/discovery.feature']), 'npm run test:e2e -- features/discovery.feature');
+  assert.equal(filteredCommand('npm run test:e2e', ['fronts/plan/features/discovery.feature']), 'npm run test:e2e -- fronts/plan/features/discovery.feature');
   assert.equal(filteredCommand('npm run test:e2e', ['features/a.feature', 'features/b.feature']), 'npm run test:e2e -- features/a.feature features/b.feature');
 });
 
 test('filteredCommand filters `pnpm run e2e` and `yarn e2e` to the feature files (#324)', () => {
   for (const command of ['pnpm run e2e', 'yarn e2e', 'yarn run e2e']) {
-    const out = filteredCommand(command, ['features/discovery.feature']);
+    const out = filteredCommand(command, ['fronts/plan/features/discovery.feature']);
     assert.equal(typeof out, 'string', `${command} can be filtered`);
     assert.ok(out.startsWith(command), `${out} starts with the command`);
-    assert.ok(out.endsWith(' features/discovery.feature'), `${out} ends with the feature file`);
+    assert.ok(out.endsWith(' fronts/plan/features/discovery.feature'), `${out} ends with the feature file`);
   }
 });
 
@@ -50,10 +50,10 @@ test('runSuite with feature files and `npm run test:e2e` runs only those files (
     fs.appendFileSync(logFile, 'ℹ pass 2\nℹ fail 0\n');
     return { code: 0, timedOut: false, error: null };
   };
-  const files = ['features/discovery.feature', 'features/backlog.feature'];
-  const selection = { mode: 'affected', files, reasons: { 'features/discovery.feature': 'failed in round 1', 'features/backlog.feature': 'failed in round 1' }, why: 'failed in round 1' };
+  const files = ['fronts/plan/features/discovery.feature', 'features/backlog.feature'];
+  const selection = { mode: 'affected', files, reasons: { 'fronts/plan/features/discovery.feature': 'failed in round 1', 'features/backlog.feature': 'failed in round 1' }, why: 'failed in round 1' };
   const out = await runSuite({ command: 'npm run test:e2e', cwd, runDir, round: 2, run, files, selection, logName: 'e2e-2' });
   assert.equal(out.scope, 'files');
-  assert.deepEqual(seen, ['npm run test:e2e -- features/discovery.feature features/backlog.feature']);
+  assert.deepEqual(seen, ['npm run test:e2e -- fronts/plan/features/discovery.feature features/backlog.feature']);
   assert.equal(out.status, 'pass');
 });

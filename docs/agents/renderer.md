@@ -320,7 +320,7 @@ Read this before changing anything in the UI: the UI kit (`packages/ui-kit/`), a
   `scripts/build-3d.js` into `generated/run3d-scene.js` (gitignored, rebuilt by prepare / prestart /
   prebuild, packed into the app) and loaded with a `<script src>` on the first click: run
   `npm run build:3d` after changing a `.jsx`. The same script builds the **project city** (#373):
-  `apps/desktop/renderer/city3d/*` → `generated/project-city.js` (`window.ProjectCityScene`), loaded by the
+  `fronts/analyser/city3d/*` → `generated/project-city.js` (`window.ProjectCityScene`), loaded by the
   Architecture tab's City view (`views/project/project-city.js`, whose HUD is plain DOM with the
   `r3d-*` classes, placed by `project-city.css`; its notes, cards and connections panel in their own
   files next to it). Its layout is pure (`packages/shared/city-layout.js`, Node-tested) and, like the

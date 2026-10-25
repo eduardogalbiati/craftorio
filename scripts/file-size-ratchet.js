@@ -24,11 +24,11 @@ const HOW_TO = 'docs/agents/testing.md ("File size ratchet")';
 const EXCEPTIONS = {
   'packages/engine/domains/discovery/discovery.js': 1164,
   'packages/engine/domains/po/product-owner.js': 1732,
-  'apps/desktop/renderer/views/arena/arena.js': 1048,
+  'fronts/plan/views/arena/arena.js': 1048,
   'apps/desktop/renderer/views/backlog/backlog-po.js': 1102,
   'apps/desktop/renderer/views/backlog/backlog-roadmap.js': 2072,
   'apps/desktop/renderer/views/backlog/backlog.js': 1779,
-  'apps/desktop/renderer/views/discovery/discovery.js': 1560,
+  'fronts/plan/views/discovery/discovery.js': 1560,
 };
 
 // Lines of a text as `wc -l` counts a file that ends with a newline, CRLF or LF alike.
@@ -43,8 +43,8 @@ function listFiles(root, dir, match = /\.js$/) {
   const abs = path.join(root, dir);
   if (!fs.existsSync(abs)) return [];
   return fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => {
-    // a workspace's test/ folder holds tests, not sources (scripts/source-tree.js)
-    if (e.name === 'node_modules' || (e.name === 'test' && dir !== 'scripts' && dir.includes('/'))) return [];
+    // a workspace's test/ and features/ folders hold tests, not sources (scripts/source-tree.js)
+    if (e.name === 'node_modules' || ((e.name === 'test' || e.name === 'features') && dir !== 'scripts' && dir.includes('/'))) return [];
     const rel = `${dir}/${e.name}`;
     if (e.isDirectory()) return listFiles(root, rel, match);
     return match.test(e.name) ? [rel] : [];

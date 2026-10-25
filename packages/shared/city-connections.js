@@ -1,5 +1,5 @@
 // The most connected files of the project city (#382): the ranking behind the City view's
-// connections panel (apps/desktop/renderer/views/project/project-city-connections.js), from the layout's
+// connections panel (fronts/analyser/views/project/project-city-connections.js), from the layout's
 // file edges (packages/shared/city-layout.js layoutCity → edges, #371's model). Pure and deterministic.
 // - rank(layout, { limit, query }) → [{ path, requires, requiredBy, total }]: every drawn file with
 //   at least one edge, its outgoing (requires) and incoming (required by) counts, the most connected

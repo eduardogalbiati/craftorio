@@ -10,7 +10,9 @@
 // `section`: the screen is drawn in another screen's section (the Roadmap, in the Backlog's);
 // `menu`: the entry lit on a screen that has none (a project's page lights Settings).
 // `panel` (#255): the markup of a screen that is a tab of another one (Analytics, in Home), instead
-// of `markup`: that screen places it in its own section.
+// of `markup`: that screen places it in its own section, or draws an empty `#view-<id>` placeholder
+// when the panel's screen registers later (a front's screen loads after the shell's, phase 3), which
+// the panel then takes the place of.
 // `mount()` runs once, right after the markup is in place; `show()` each time showView opens it.
 // #329 the interface language: `markup` may be a function (drawn again when the language changes,
 // redrawMarkup); the menu's texts come from the catalog (packages/shared/i18n.js) by key, `nav.<id>`
@@ -127,9 +129,19 @@ function drawInto(container, source, def) {
 }
 
 function registerView(def) {
-  const { id, nav, markup, modals } = def;
+  const { id, nav, markup, modals, panel, section } = def;
   if (markup) drawInto(document.querySelector('main.content'), markup, def);
   if (modals) drawInto(document.body, modals);
+  // #255 a panel of another screen's section (Analytics in Home) registered after that screen drew
+  // its placeholder `#view-<id>` (phase 3: a front's screen loads after the shell's): the panel
+  // takes the placeholder's place, so the order the layers load in does not matter
+  if (panel && section) {
+    const placeholder = document.getElementById?.(`view-${id}`);
+    if (placeholder && !placeholder.children?.length && typeof placeholder.insertAdjacentHTML === 'function') {
+      placeholder.insertAdjacentHTML('afterend', markupOf(panel));
+      placeholder.remove();
+    }
+  }
   for (const entry of [].concat(nav || [])) {
     const menu = document.querySelector('nav.sidebar .sidebar-menu'); // #411 the sidebar's scrolling part
     const group = entry.group && window.NavGroups.GROUPS.find((g) => g.id === entry.group);

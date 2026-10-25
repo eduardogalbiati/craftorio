@@ -17,7 +17,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
 const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, region } = require('./project-page-helpers');
+const { clickRendered, region } = require('@multiagent/front-analyser/test/project-page-helpers');
 
 const WORKFLOWS = [
   { file: 'software-development-local-hero.yaml', name: 'software-development-local-hero', category: 'build', origin: 'bundled', inputs: { task: {} } },

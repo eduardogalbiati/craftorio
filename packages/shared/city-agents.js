@@ -1,7 +1,7 @@
 // The agents at work on the project city (#374): what each agent of a run touches, from the run's
 // events, and where it stands on #373's layout (packages/shared/city-layout.js). Pure and deterministic:
 // no I/O, clock or randomness. The service's architecture:agents reads the runs in progress with it,
-// the City view's agents overlay (apps/desktop/renderer/views/project/project-city-agents.js) places them.
+// the City view's agents overlay (fronts/analyser/views/project/project-city-agents.js) places them.
 // - relativePath(file, worktree): the repository-relative path (forward slashes) of a tool's file,
 //   the run's worktree prefix dropped (Windows: any drive case, any slash; POSIX), or null outside it.
 // - touchOf(item): a session.stream tool_call naming a file → { tool, kind: 'change'|'read', file };

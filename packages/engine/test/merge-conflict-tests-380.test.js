@@ -278,8 +278,8 @@ const LONG = ' It needs a few changes in the module, described here in enough wo
 const SHARED_FEATURE = {
   projectId: 'demo',
   issues: [
-    { number: 1, state: 'open', title: 'Show the plan in Architecture', labels: [{ name: 'area:architecture' }], body: `Add scenarios to features/architecture.feature for the plan view.${LONG}` },
-    { number: 2, state: 'open', title: 'Filter the Architecture tab', labels: [{ name: 'area:filters' }], body: `Add scenarios to features/architecture.feature for the filter.${LONG}` },
+    { number: 1, state: 'open', title: 'Show the plan in Architecture', labels: [{ name: 'area:architecture' }], body: `Add scenarios to fronts/analyser/features/architecture.feature for the plan view.${LONG}` },
+    { number: 2, state: 'open', title: 'Filter the Architecture tab', labels: [{ name: 'area:filters' }], body: `Add scenarios to fronts/analyser/features/architecture.feature for the filter.${LONG}` },
   ],
 };
 const SPEED = 1; // every group of a stage runs at once
@@ -288,7 +288,7 @@ test('placement: two groups of one stage adding scenarios to the same feature fi
   const answer = productOwner.mockAnswer({ data: SHARED_FEATURE, calibration: SPEED });
   const conflict = (answer.conflicts || []).find((c) => [...c.issues].sort().join(',') === '1,2');
   assert.ok(conflict, 'a conflict between #1 and #2');
-  assert.ok(conflict.files.includes('features/architecture.feature'), `files: ${conflict.files}`);
+  assert.ok(conflict.files.includes('fronts/analyser/features/architecture.feature'), `files: ${conflict.files}`);
 });
 
 test('the backlog-product-owner skill flags items of one stage that add scenarios to the same feature file', () => {

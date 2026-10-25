@@ -3,7 +3,7 @@
 // feature file both add scenarios to (#380), go to different stages; each move is a conflict naming
 // the shared files.
 
-// a feature file (Gherkin scenarios) named in an issue's text, e.g. features/architecture.feature
+// a feature file (Gherkin scenarios) named in an issue's text, e.g. fronts/analyser/features/architecture.feature
 const FEATURE_FILE = /(?:[\w.-]+\/)*[\w.-]+\.feature\b/g;
 
 const textOf = (i) => `${i?.title || ''}\n${i?.body || ''}`;

@@ -92,5 +92,5 @@ test('#297: the Analytics Agents tab still sizes its robot at 44px, with the cla
   const rules = cssFiles(ANALYTICS_DIR).flatMap((f) => rulesOf(fs.readFileSync(f, 'utf8')));
   const sized = rules.filter((r) => /(^|[;\s])width\s*:\s*44px/.test(r.body)
     && r.selectors.some((s) => !/\bsvg\b/.test(s) && classes.some((c) => hasClass(s.trim().split(/\s*[>+~]\s*|\s+/).pop(), c))));
-  assert.ok(sized.length, `a rule in apps/desktop/renderer/views/analytics/*.css sizing .${classes.join('/.')} at width: 44px`);
+  assert.ok(sized.length, `a rule in fronts/analyser/views/analytics/*.css sizing .${classes.join('/.')} at width: 44px`);
 });
