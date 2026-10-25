@@ -15,7 +15,7 @@ const {
   CONFIRM_KINDS,
   createSupervisorChat,
 } = require('@multiagent/engine/domains/supervisor/supervisor-chat');
-const { createWatches } = require('@multiagent/engine/domains/supervisor/supervisor-watch');
+const { createWatches } = require('../domains/supervisor-watch');
 const {
   requireId,
   requireObject,

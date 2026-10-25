@@ -1,7 +1,7 @@
 // #327 / #328 review round: the turns the acceptance tests did not reach.
 // - the Supervisor's run analysis (supervisor.analyzeRun, option `language`);
-// - the Supervisor's watch (supervisor-watch createWatches, option `language()` read at each turn):
-//   the [Language] line on the first and on a resumed turn, and a change applies from the next turn;
+// - the Supervisor's watch: in the build front's test (fronts/build/test/language-review-watch-327.test.js,
+//   phase 4: supervisor-watch is the build front's domain);
 // - the Product Owner's refactor ranking (refactor-priority prioritize, option `language`);
 // - a new epic's body with the platform aliases 'gh' / 'gl' (epics applyEpic, `issuesLanguage`).
 // No CLI is started: the providers' runTurn is stubbed (the system boundary).
@@ -10,10 +10,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { EventEmitter } = require('events');
 const providers = require('../engine/providers');
 const supervisor = require('../domains/supervisor/supervisor');
-const { createWatches } = require('../domains/supervisor/supervisor-watch');
 const { prioritize } = require('../domains/refactor/refactor-priority');
 const epics = require('../domains/backlog/epics');
 const Language = require('@multiagent/shared/language');
@@ -64,51 +62,6 @@ test('#327 the Supervisor\'s run analysis with agents in pt-BR carries the [Lang
 test('#327 the Supervisor\'s run analysis without a language still writes in English', async (t) => {
   const prompt = await analysisPrompt(t, null);
   assert.match(prompt, /in English \(the app's language\)/);
-});
-
-// ---- the Supervisor's watch ---------------------------------------------------------------------
-
-async function until(cond) {
-  const deadline = Date.now() + 10000;
-  while (!cond()) {
-    if (Date.now() > deadline) throw new Error('timed out waiting for the watch');
-    await new Promise((r) => setTimeout(r, 10));
-  }
-}
-
-function watchOf(t, language) {
-  const runDir = mockRunDir(t);
-  const prompts = stubTurns(t, () => ({ text: 'All good.', providerSessionId: 'watch-1', costUsd: 0 }));
-  const watches = createWatches({
-    events: new EventEmitter(), liveRun: () => ({ mock: true, runDir, wf: { metadata: { name: 'W' } } }), runFolder: () => runDir,
-    workflowDirs: () => WORKFLOWS, skillsDirs: () => [SKILLS], resolveCommand: () => 'x', batchMs: 60000, language,
-  });
-  t.after(() => watches.stop('r1'));
-  return { watches, prompts };
-}
-
-test('#327 the Supervisor\'s watch carries the [Language] line on its first and on a resumed turn', async (t) => {
-  const { watches, prompts } = watchOf(t, () => PT);
-  watches.start('r1');
-  await until(() => prompts.length === 1 && !watches.state('r1').busy);
-  watches.ask('r1', 'Is it fine?');
-  await until(() => prompts.length === 2);
-  const line = Language.languageLine({ language: PT });
-  assert.equal(count(prompts[0], line), 1, 'first turn');
-  assert.equal(count(prompts[1], line), 1, 'resumed turn');
-  assert.equal(count(prompts[1], '[Language]'), 1);
-});
-
-test('#327 the Supervisor\'s watch reads the setting at each turn: a change applies from the next one', async (t) => {
-  let language = null;
-  const { watches, prompts } = watchOf(t, () => language);
-  watches.start('r1');
-  await until(() => prompts.length === 1 && !watches.state('r1').busy);
-  language = PT;
-  watches.ask('r1', 'Is it fine?');
-  await until(() => prompts.length === 2);
-  assert.equal(prompts[0].includes(Language.languageLine({})), true, 'unset: the English line');
-  assert.equal(prompts[1].includes(Language.languageLine({ language: PT })), true, 'after the change');
 });
 
 // ---- the Product Owner's refactor ranking -------------------------------------------------------
