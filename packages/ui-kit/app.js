@@ -159,7 +159,7 @@ async function openPastRun(runId) {
   if (v?.past && !v.events.length) {
     state.runs.delete(runId);
     if (state.runId === runId) state.runId = liveRuns()[0]?.run.id || null;
-    showRunInList(runId);
+    window.showRunInList?.(runId);
   }
   scheduleRender();
 }
@@ -225,7 +225,9 @@ async function init() {
   api.onWatch(onWatch);
   initNotifications();
   initTerminalDock();
-  initFullTextPopover();
+  // the screens' hooks the shell drives (here, in onEvent, render, renderTicking) are the fronts'
+  // globals: a composition may leave their front out (#579), so each is called when it exists
+  window.initFullTextPopover?.();
   setInterval(renderTicking, 1000);
   setInterval(tickRunLists, 60e3); // #320: the run lists' Next turn minutes (run-list.js)
   const askSlowReads = deferSlowReads(10000); // #389: once Home is drawn (usage-widget.js)
@@ -396,7 +398,7 @@ function applyDeveloperMode() {
     box.checked = devMode();
     box.dispatchEvent(new Event('change'));
   }
-  if (state.view === 'artifacts') renderArtifactList(); // simulated runs are listed only in developer mode
+  if (state.view === 'artifacts') window.renderArtifactList?.(); // simulated runs are listed only in developer mode
 }
 
 function openModal(sel) { $(sel).classList.remove('hidden'); }
@@ -463,7 +465,7 @@ function openGateOf(runId) {
   selectRun(runId, { open: false });
   if (state.runView === 'chat' && window.openRunChat) { window.openRunChat({ runId, workflow: v.run?.workflow, running: isRunLive(runId) }); return; }
   showView('run');
-  focusRunGate();
+  window.focusRunGate?.();
 }
 window.openGateOf = openGateOf;
 
@@ -693,9 +695,9 @@ function runEventEffects(v, ev, effects) {
     if (fx.loadUsageThrottled) loadUsageThrottled();
     if (fx.renderRunLists) renderRunListsSoon();
   }
-  if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
+  if (PROJECT_REFRESH_EVENTS.has(ev.type)) { window.loadProjectRunsThrottled?.(); window.loadWorkflowRunsThrottled?.(); }
   if (RUN_ROW_EVENTS.has(ev.type)) refreshRunRow(ev.run_id);
-  if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
+  if (ev.type === 'workflow.finished' || ev.type === 'file.saved') window.loadArtifactsThrottled?.();
   if (ARTIFACT_EVENTS.has(ev.type)) window.ArtifactsPanel?.refreshRun(ev.run_id);
   if (ev.type.startsWith('local_preview.')) paintGateApps();
   // the service re-checks the project's commits not pushed right after a local merge
@@ -841,12 +843,12 @@ function scheduleRender() {
 
 function render() {
   renderHeader();
-  if (state.view === 'run') renderRunScreen();
+  if (state.view === 'run') window.renderRunScreen?.();
 }
 
 function renderTicking() {
   if (liveRuns().length) renderHeader();
-  if (state.run?.status === 'running' && state.view === 'run') renderSessions();
+  if (state.run?.status === 'running' && state.view === 'run') window.renderSessions?.();
 }
 
 function totals(sessions = state.sessions) {

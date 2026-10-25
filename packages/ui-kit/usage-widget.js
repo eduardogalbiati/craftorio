@@ -107,7 +107,7 @@ function renderUsageAll() {
   renderScopeToggles();
   renderUsageWidget();
   if (!$('#usage-pop').classList.contains('hidden')) renderUsagePopover();
-  if (state.view === 'usage') renderUsage();
+  if (state.view === 'usage') window.renderUsage?.(); // the Usage screen's, when its front is shipped (#579)
   if (state.view === 'dashboard') paintHome(); // Home's "Cost today"
 }
 
