@@ -34,3 +34,7 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
 - Untested production files (#306): the follow-ups (one issue each, not filed yet) and the map's
   blind spot for the service loader are listed in [testing.md](testing.md), "Production files no
   test reaches".
+- Reorganisation into an engine package and modular fronts (Project Analyser, Code & Build,
+  Design & Plan, AI; Settings as the shell): measurements, target layout, phased plan and the
+  owner's open decisions in [docs/reorganisation-study-2026-10.md](../reorganisation-study-2026-10.md);
+  `scripts/dep-map.js` re-measures.
