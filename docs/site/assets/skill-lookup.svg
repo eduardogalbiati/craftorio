@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 330" width="820" height="330" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="330" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<rect x="24" y="24" width="300" height="132" rx="10" fill="#151820" stroke="#4ade80" stroke-opacity="0.7"/>
+<text x="42" y="56" fill="#4ade80" font-size="19" font-weight="700" text-anchor="start">&lt;workspace&gt;/skills/&lt;name&gt;</text>
+<text x="42" y="80" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">yours: edited copies are kept</text>
+<text x="42" y="105" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">SKILL.md</text>
+<text x="42" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">rules/python.md …</text>
+<rect x="24" y="170" width="300" height="132" rx="10" fill="#151820" stroke="#8a91a3" stroke-opacity="0.7"/>
+<text x="42" y="202" fill="#8a91a3" font-size="19" font-weight="700" text-anchor="start">app skills/&lt;name&gt;</text>
+<text x="42" y="226" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">bundled; copied here on startup</text>
+<text x="42" y="251" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">updated when untouched</text>
+<text x="42" y="276" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">deleted ones stay deleted</text>
+<text x="174" y="156" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="middle">looked up first ↑</text>
+<line x1="330" y1="90" x2="420" y2="90" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="426" y="24" width="370" height="182" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity="0.7"/>
+<text x="444" y="56" fill="#c084fc" font-size="19" font-weight="700" text-anchor="start">into the prompt</text>
+<text x="444" y="80" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">SKILL.md inline, support files by absolute path</text>
+<text x="444" y="105" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">agents.&lt;a&gt;.skills → system prompt</text>
+<text x="444" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">                    (1st turn)</text>
+<text x="444" y="155" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">steps[].skills    → the step prompt</text>
+<text x="444" y="180" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">uses: […]         → loaded first, once</text>
+<text x="426" y="228" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">The CLI may read the skill folder (Claude: --add-dir).</text>
+<text x="426" y="250" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">Names can be templates: "{{ inputs.document_skill }}".</text>
+<text x="426" y="272" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">Empty name: no skill, the prompt alone.</text>
+</svg>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 470" width="820" height="470" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="470" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<rect x="24" y="24" width="352" height="307" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity="0.7"/>
+<text x="42" y="56" fill="#c084fc" font-size="19" font-weight="700" text-anchor="start">agents.developer</text>
+<text x="42" y="80" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">the YAML</text>
+<text x="42" y="105" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">provider: claude   model: …</text>
+<text x="42" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">effort: high   session: persistent</text>
+<text x="42" y="155" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">skills: [unit-test-writer-js]</text>
+<text x="42" y="180" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">capabilities:</text>
+<text x="42" y="205" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  tools: [read, edit, write,</text>
+<text x="42" y="230" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">          bash:git, bash:npm]</text>
+<text x="42" y="255" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  web: false   subagents: false</text>
+<text x="42" y="280" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">system_prompt: | …</text>
+<text x="42" y="305" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">working_dir: {{ inputs.project_path }}</text>
+<line x1="382" y1="180" x2="432" y2="180" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<text x="404" y="168" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="middle">every turn</text>
+<rect x="438" y="24" width="358" height="307" rx="10" fill="#151820" stroke="#fb923c" stroke-opacity="0.7"/>
+<text x="456" y="56" fill="#fb923c" font-size="19" font-weight="700" text-anchor="start">one headless process</text>
+<text x="456" y="80" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">built by the engine for this CLI</text>
+<text x="456" y="105" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">claude -p --output-format stream-json</text>
+<text x="456" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  --model … --effort high</text>
+<text x="456" y="155" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  --tools Read,Edit,Write,Bash</text>
+<text x="456" y="180" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  --allowedTools "Bash(git:*)"</text>
+<text x="456" y="205" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">                 "Bash(npm:*)"</text>
+<text x="456" y="230" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  --permission-mode acceptEdits</text>
+<text x="456" y="255" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  --setting-sources "" --no-chrome</text>
+<text x="456" y="280" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  --strict-mcp-config …</text>
+<text x="456" y="305" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  --resume &lt;session&gt;   (2nd turn on)</text>
+<text x="438" y="340" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">stdin: the prompt of this turn</text>
+<text x="438" y="362" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">stdout: a JSON stream the engine parses</text>
+<text x="438" y="384" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">env: only what the child needs (never the app’s)</text>
+<text x="24" y="430" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">Codex: codex exec --json -s workspace-write …   Grok: grok --prompt-file … --tools read_file,…</text>
+<text x="24" y="452" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">Same YAML, three command lines: the adapter of each CLI (packages/shared/providers/) builds its own.</text>
+</svg>

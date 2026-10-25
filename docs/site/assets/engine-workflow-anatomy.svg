@@ -10,7 +10,7 @@
 <text x="436" y="56" fill="#c084fc" font-size="19" font-weight="700" text-anchor="start">agents</text>
 <text x="436" y="80" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">who works, with which CLI and rules</text>
 <text x="436" y="105" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">writer: provider, model, session,</text>
-<text x="436" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  skills, capabilities, system_prompt</text>
+<text x="436" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  skills, capabilities, system_prompt</text>
 <rect x="24" y="172" width="772" height="132" rx="10" fill="#151820" stroke="#8a91a3" stroke-opacity="0.7"/>
 <text x="42" y="204" fill="#8a91a3" font-size="19" font-weight="700" text-anchor="start">providers · defaults · orchestrator</text>
 <text x="42" y="228" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">how each CLI is called, the limits, the supervisor</text>
@@ -20,9 +20,9 @@
 <text x="42" y="352" fill="#7c9cff" font-size="19" font-weight="700" text-anchor="start">steps</text>
 <text x="42" y="376" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">the graph: who runs, what is asked, what must be answered, where to go next</text>
 <text x="42" y="401" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">- id: review    agent: reviewer</text>
-<text x="42" y="426" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  prompt: | … {{ steps.write.output.document }} …</text>
-<text x="42" y="451" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  output_schema: { score, summary, notes }</text>
-<text x="42" y="476" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  transitions:</text>
-<text x="42" y="501" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">    - { when: "output.score &gt;= inputs.threshold", goto: signoff }</text>
-<text x="42" y="526" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">    - { when: "true", goto: write, loop: { max_iterations: 4 } }</text>
+<text x="42" y="426" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  prompt: | … {{ steps.write.output.document }} …</text>
+<text x="42" y="451" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  output_schema: { score, summary, notes }</text>
+<text x="42" y="476" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  transitions:</text>
+<text x="42" y="501" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">    - { when: "output.score &gt;= inputs.threshold", goto: signoff }</text>
+<text x="42" y="526" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">    - { when: "true", goto: write, loop: { max_iterations: 4 } }</text>
 </svg>

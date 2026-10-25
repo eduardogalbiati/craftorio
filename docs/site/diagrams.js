@@ -19,7 +19,8 @@ const C = { bg: '#0e1014', panel: '#151820', border: '#262b37', text: '#e6e8ee',
   green: '#4ade80', yellow: '#facc15', red: '#f87171', purple: '#c084fc', orange: '#fb923c', info: '#7dd3fc' };
 const SANS = 'Segoe UI, system-ui, sans-serif';
 const MONO = 'Cascadia Code, Consolas, SF Mono, Menlo, monospace';
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// leading spaces become no-break spaces: SVG text collapses them, and the boxes show indented code
+const esc = (s) => String(s).replace(/^ +/, (m) => '\u00a0'.repeat(m.length)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const MARKERS = { [C.muted]: 'g', [C.green]: 'ok', [C.orange]: 'warn', [C.red]: 'bad', [C.accent]: 'acc' };
 
 class Svg {
@@ -299,8 +300,166 @@ function workflowGraph(file) {
   s.write(`wf-${file.replace(/\.yaml$/, '')}.svg`);
 }
 
+// ---------- agent-anatomy: what an agent declares, and the one process the engine starts ----------
+function agentAnatomy() {
+  const s = new Svg(470);
+  const left = 24, lw = 352;
+  let y = 24;
+  y += s.box(left, y, lw, C.purple, 'agents.developer', 'the YAML', [
+    'provider: claude   model: …',
+    'effort: high   session: persistent',
+    'skills: [unit-test-writer-js]',
+    'capabilities:',
+    '  tools: [read, edit, write,',
+    '          bash:git, bash:npm]',
+    '  web: false   subagents: false',
+    'system_prompt: | …',
+    'working_dir: {{ inputs.project_path }}']) + 0;
+  // arrow to the right
+  s.arrow(left + lw + 6, 180, 432, 180);
+  s.text(404, 168, 'every turn', { fill: C.muted, size: 13, anchor: 'middle' });
+  const rx = 438, rw = W - rx - 24;
+  s.box(rx, 24, rw, C.orange, 'one headless process', 'built by the engine for this CLI', [
+    'claude -p --output-format stream-json',
+    '  --model … --effort high',
+    '  --tools Read,Edit,Write,Bash',
+    '  --allowedTools "Bash(git:*)"',
+    '                 "Bash(npm:*)"',
+    '  --permission-mode acceptEdits',
+    '  --setting-sources "" --no-chrome',
+    '  --strict-mcp-config …',
+    '  --resume <session>   (2nd turn on)']);
+  s.text(rx, 340, 'stdin: the prompt of this turn', { fill: C.muted, size: 14.5 });
+  s.text(rx, 362, 'stdout: a JSON stream the engine parses', { fill: C.muted, size: 14.5 });
+  s.text(rx, 384, 'env: only what the child needs (never the app’s)', { fill: C.muted, size: 14.5 });
+  s.text(24, 430, 'Codex: codex exec --json -s workspace-write …   Grok: grok --prompt-file … --tools read_file,…', { fill: C.muted, size: 14, mono: true });
+  s.text(24, 452, 'Same YAML, three command lines: the adapter of each CLI (packages/shared/providers/) builds its own.', { fill: C.muted, size: 14 });
+  s.write('agent-anatomy.svg');
+}
+
+// ---------- capabilities-per-cli: what each CLI can enforce ----------
+function capabilitiesPerCli() {
+  const rows = [
+    ['tools: read / edit / write', 'ok', 'ok', 'part', '--tools + acceptEdits · read-only or workspace-write sandbox · read-only tool sets only'],
+    ['bash:git, bash:npm (which commands)', 'ok', 'no', 'no', 'Bash(git:*) allow rules · the sandbox limits writes, not commands · not restricted'],
+    ['web: false', 'ok', 'ok', 'ok', 'WebSearch/WebFetch not offered · web_search disabled · --disable-web-search'],
+    ['subagents: false', 'ok', 'na', 'ok', 'Agent/Task not offered · Codex has none · --no-subagents'],
+    ['mcp: [names]', 'ok', 'ok', 'no', '--mcp-config, declared servers only · declared servers only · not passed'],
+    ['isolation (no user setup)', 'ok', 'ok', 'no', 'no settings, plugins, hooks, memory · plugins, apps, memories off · user MCP, skills, memory still load'],
+    ['max_requests (budget per turn)', 'ok', 'no', 'no', '--max-turns n · runs to its end · runs to its end'],
+  ];
+  const cols = [['Claude Code', 336], ['Codex CLI', 426], ['Grok Build', 516]];
+  const top = 60, rh = 50;
+  const s = new Svg(top + rows.length * rh + 90);
+  s.text(24, 36, 'Declared in the YAML', { fill: C.muted, size: 13, weight: 700, spacing: 1 });
+  for (const [name, x] of cols) s.text(x, 36, name, { fill: C.muted, size: 13, weight: 700, anchor: 'middle', spacing: 1 });
+  const mark = { ok: [C.green, '●', 'enforced'], part: [C.yellow, '◐', 'partly'], no: [C.red, '○', 'not enforceable'], na: [C.muted, '–', 'n/a'] };
+  rows.forEach(([cap, a, b, c, how], i) => {
+    const y = top + i * rh;
+    if (i % 2 === 0) s.parts.push(`<rect x="12" y="${y - 8}" width="${W - 24}" height="${rh}" rx="8" fill="${C.panel}"/>`);
+    s.text(24, y + 16, cap, { size: 14.5, mono: true });
+    [a, b, c].forEach((m, j) => s.text(cols[j][1], y + 18, mark[m][1], { fill: mark[m][0], size: 18, anchor: 'middle' }));
+    s.text(566, y + 8, how.split(' · ')[0], { fill: C.muted, size: 11.5 });
+    s.text(566, y + 22, how.split(' · ')[1], { fill: C.muted, size: 11.5 });
+    s.text(566, y + 36, how.split(' · ')[2], { fill: C.muted, size: 11.5 });
+  });
+  const ly = top + rows.length * rh + 20;
+  let lx = 24;
+  for (const k of ['ok', 'part', 'no', 'na']) {
+    s.text(lx, ly, mark[k][1], { fill: mark[k][0], size: 16 });
+    s.text(lx + 18, ly, mark[k][2], { fill: C.muted, size: 13.5 });
+    lx += 18 + mark[k][2].length * 7.5 + 26;
+  }
+  s.text(24, ly + 30, 'Context economy, not a security boundary: only Codex’s sandbox is enforced by the OS.', { fill: C.muted, size: 14 });
+  s.text(24, ly + 52, 'What a CLI cannot enforce is written to the run log, once per agent.', { fill: C.muted, size: 14 });
+  s.write('capabilities-per-cli.svg');
+}
+
+// ---------- turn-prompt: what the engine puts in front of the model, in order ----------
+function turnPrompt() {
+  const parts = [
+    ['system prompt + the agent’s skills', 'first turn of a session only', C.purple],
+    ['handoff note', 'a fresh session of an agent that already has one', C.info],
+    ['[Language] line', 'the agents and issues languages from Settings', C.muted],
+    ['the step’s prompt', 'a template over inputs, outputs and feedback, plus the step’s skills', C.accent],
+    ['attached images', 'a gate’s or an instruction’s images, this step only', C.muted],
+    ['output instruction', 'answer as JSON matching output_schema; end with a ```handoff block', C.green],
+  ];
+  const bh = 58, gap = 14, bw = 520;
+  const s = new Svg(24 + parts.length * (bh + gap) + 60);
+  parts.forEach(([t, sub, c], i) => {
+    const y = 24 + i * (bh + gap);
+    s.rect(24, y, bw, bh, { stroke: c, opacity: .7 });
+    s.text(40, y + 25, t, { fill: c, size: 16, weight: 700 });
+    s.text(40, y + 46, sub, { fill: C.muted, size: 13.5 });
+  });
+  const ry = 24 + parts.length * (bh + gap) - gap;
+  s.text(570, 60, 'The answer comes back', { size: 15.5, weight: 600 });
+  s.text(570, 84, 'as a stream the engine parses:', { fill: C.muted, size: 14.5 });
+  s.text(570, 106, 'tokens, cost, tool calls, text.', { fill: C.muted, size: 14.5 });
+  s.text(570, 160, 'The handoff block is cut out', { size: 15.5, weight: 600 });
+  s.text(570, 184, 'and saved to handoffs/; outputs', { fill: C.muted, size: 14.5 });
+  s.text(570, 206, 'and templates never see it.', { fill: C.muted, size: 14.5 });
+  s.text(570, 260, 'A wrong answer', { size: 15.5, weight: 600 });
+  s.text(570, 284, 'is asked again (schema retry),', { fill: C.muted, size: 14.5 });
+  s.text(570, 306, 'then the supervisor is called.', { fill: C.muted, size: 14.5 });
+  s.text(24, ry + 36, 'Only the first two change with the session; the step prompt is what the YAML wrote.', { fill: C.muted, size: 14 });
+  s.write('turn-prompt.svg');
+}
+
+// ---------- skill-families: <capability>-<suffix>, one per suffix in every family ----------
+function skillFamilies() {
+  const langs = ['js', 'python', 'go', 'java', 'csharp', 'rust'], plats = ['gh', 'gl'];
+  const langFam = [['unit-test-writer', 'testing-principles'], ['e2e-test-writer', 'e2e-scenarios'], ['build-audit', 'dependency-audit-policy']];
+  const platFam = [['ci-pipeline', null], ['deploy', null], ['issue-creator', 'issue-writing'], ['pr-babysitter', null], ['backlog-refresh', 'backlog-refresh'], ['pr-screenshots', 'pr-screenshots']];
+  const rh = 40, x0 = 24, nameW = 170, usesW = 200, cell = 68;
+  const s = new Svg(24 + 30 + (langFam.length + platFam.length) * rh + 26 + 100);
+  let y = 24;
+  const header = (cols) => {
+    s.text(x0, y + 14, 'FAMILY', { fill: C.muted, size: 12, weight: 700, spacing: 1.2 });
+    s.text(x0 + nameW, y + 14, 'SHARED (uses:)', { fill: C.muted, size: 12, weight: 700, spacing: 1.2 });
+    cols.forEach((c, i) => s.text(x0 + nameW + usesW + i * cell + cell / 2, y + 14, c, { fill: C.info, size: 14, weight: 700, mono: true, anchor: 'middle' }));
+    y += 26;
+  };
+  const row = ([fam, shared], cols) => {
+    s.parts.push(`<rect x="12" y="${y - 6}" width="${W - 24}" height="${rh - 4}" rx="8" fill="${C.panel}"/>`);
+    s.text(x0, y + 18, fam + '-…', { size: 14.5, weight: 600, mono: true });
+    s.text(x0 + nameW, y + 18, shared || '–', { fill: shared ? C.text : C.muted, size: 13.5, mono: true });
+    cols.forEach((c, i) => {
+      const x = x0 + nameW + usesW + i * cell;
+      s.parts.push(`<rect x="${x + 10}" y="${y + 3}" width="${cell - 20}" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>`);
+      s.text(x + cell / 2, y + 18, c, { fill: C.accent, size: 12.5, mono: true, anchor: 'middle' });
+    });
+    y += rh;
+  };
+  header(langs); langFam.forEach((f) => row(f, langs));
+  y += 14; header(plats); platFam.forEach((f) => row(f, plats));
+  s.text(x0, y + 30, 'A workflow asks for "unit-test-writer-{{ inputs.language }}": the family decides, the suffix follows the project.', { fill: C.muted, size: 14 });
+  s.text(x0, y + 54, 'A test enforces one skill per suffix in every family; what a family shares is a suffix-less skill loaded first.', { fill: C.muted, size: 14 });
+  s.write('skill-families.svg');
+}
+
+// ---------- skill-lookup: where a skill comes from and where it goes ----------
+function skillLookup() {
+  const s = new Svg(330);
+  s.box(24, 24, 300, C.green, '<workspace>/skills/<name>', 'yours: edited copies are kept', ['SKILL.md', 'rules/python.md …']);
+  s.box(24, 170, 300, C.muted, 'app skills/<name>', 'bundled; copied here on startup', ['updated when untouched', 'deleted ones stay deleted']);
+  s.text(174, 156, 'looked up first ↑', { fill: C.muted, size: 13, anchor: 'middle' });
+  s.arrow(330, 90, 420, 90);
+  s.box(426, 24, W - 450, C.purple, 'into the prompt', 'SKILL.md inline, support files by absolute path', [
+    'agents.<a>.skills → system prompt',
+    '                    (1st turn)',
+    'steps[].skills    → the step prompt',
+    'uses: […]         → loaded first, once']);
+  s.text(426, 228, 'The CLI may read the skill folder (Claude: --add-dir).', { fill: C.muted, size: 14 });
+  s.text(426, 250, 'Names can be templates: "{{ inputs.document_skill }}".', { fill: C.muted, size: 14 });
+  s.text(426, 272, 'Empty name: no skill, the prompt alone.', { fill: C.muted, size: 14 });
+  s.write('skill-lookup.svg');
+}
+
 fs.mkdirSync(OUT, { recursive: true });
 repoMap(); architecture(); workflowAnatomy(); runLoop(); writerReviewer();
+agentAnatomy(); capabilitiesPerCli(); turnPrompt(); skillFamilies(); skillLookup();
 const workflowFiles = fs.readdirSync(path.join(ROOT, 'workflows')).filter((f) => f.endsWith('.yaml')).sort();
 for (const f of workflowFiles) workflowGraph(f);
-console.log(`${5 + workflowFiles.length} diagrams → docs/site/assets/`);
+console.log(`${10 + workflowFiles.length} diagrams → docs/site/assets/`);

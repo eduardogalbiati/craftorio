@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 516" width="820" height="516" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="516" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<rect x="24" y="24" width="520" height="58" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity="0.7"/>
+<text x="40" y="49" fill="#c084fc" font-size="16" font-weight="700" text-anchor="start">system prompt + the agent’s skills</text>
+<text x="40" y="70" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">first turn of a session only</text>
+<rect x="24" y="96" width="520" height="58" rx="10" fill="#151820" stroke="#7dd3fc" stroke-opacity="0.7"/>
+<text x="40" y="121" fill="#7dd3fc" font-size="16" font-weight="700" text-anchor="start">handoff note</text>
+<text x="40" y="142" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">a fresh session of an agent that already has one</text>
+<rect x="24" y="168" width="520" height="58" rx="10" fill="#151820" stroke="#8a91a3" stroke-opacity="0.7"/>
+<text x="40" y="193" fill="#8a91a3" font-size="16" font-weight="700" text-anchor="start">[Language] line</text>
+<text x="40" y="214" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">the agents and issues languages from Settings</text>
+<rect x="24" y="240" width="520" height="58" rx="10" fill="#151820" stroke="#7c9cff" stroke-opacity="0.7"/>
+<text x="40" y="265" fill="#7c9cff" font-size="16" font-weight="700" text-anchor="start">the step’s prompt</text>
+<text x="40" y="286" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">a template over inputs, outputs and feedback, plus the step’s skills</text>
+<rect x="24" y="312" width="520" height="58" rx="10" fill="#151820" stroke="#8a91a3" stroke-opacity="0.7"/>
+<text x="40" y="337" fill="#8a91a3" font-size="16" font-weight="700" text-anchor="start">attached images</text>
+<text x="40" y="358" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">a gate’s or an instruction’s images, this step only</text>
+<rect x="24" y="384" width="520" height="58" rx="10" fill="#151820" stroke="#4ade80" stroke-opacity="0.7"/>
+<text x="40" y="409" fill="#4ade80" font-size="16" font-weight="700" text-anchor="start">output instruction</text>
+<text x="40" y="430" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">answer as JSON matching output_schema; end with a ```handoff block</text>
+<text x="570" y="60" fill="#e6e8ee" font-size="15.5" font-weight="600" text-anchor="start">The answer comes back</text>
+<text x="570" y="84" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">as a stream the engine parses:</text>
+<text x="570" y="106" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">tokens, cost, tool calls, text.</text>
+<text x="570" y="160" fill="#e6e8ee" font-size="15.5" font-weight="600" text-anchor="start">The handoff block is cut out</text>
+<text x="570" y="184" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">and saved to handoffs/; outputs</text>
+<text x="570" y="206" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">and templates never see it.</text>
+<text x="570" y="260" fill="#e6e8ee" font-size="15.5" font-weight="600" text-anchor="start">A wrong answer</text>
+<text x="570" y="284" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">is asked again (schema retry),</text>
+<text x="570" y="306" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">then the supervisor is called.</text>
+<text x="24" y="478" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">Only the first two change with the session; the step prompt is what the YAML wrote.</text>
+</svg>
