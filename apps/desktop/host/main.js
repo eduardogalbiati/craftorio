@@ -130,8 +130,11 @@ let win = null;
 const devEnv = app.isPackaged ? {} : process.env;
 const authOff = devEnv.MULTIAGENT_AUTH === 'off';
 let auth = null;
-function createAccount() {
-  if (!safeStorage.isEncryptionAvailable()) {
+async function createAccount() {
+  // the async check: the sync isEncryptionAvailable is deprecated on Electron 45 (#578); read once,
+  // since fileStorage encrypts and decrypts synchronously
+  const encrypted = await safeStorage.isAsyncEncryptionAvailable();
+  if (!encrypted) {
     console.warn('account: this computer offers no encryption (safeStorage): the account session in account.bin is stored as plain text.');
   }
   auth = createAuth({
@@ -141,8 +144,8 @@ function createAccount() {
     // development builds without a Supabase project run without sign-in; the packaged app never does
     required: app.isPackaged || (!!(authConfig.url || devEnv.MULTIAGENT_SUPABASE_URL) && !authOff),
     storage: fileStorage(path.join(app.getPath('userData'), 'account.bin'), {
-      encrypt: (s) => (safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8')),
-      decrypt: (b) => (safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8')),
+      encrypt: (s) => (encrypted ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8')),
+      decrypt: (b) => (encrypted ? safeStorage.decryptString(b) : b.toString('utf8')),
     }),
     openExternal: (url) => shell.openExternal(url),
     appVersion: app.getVersion(),
@@ -564,7 +567,7 @@ app.whenReady().then(async () => {
     return connection.startRemote(engine);
   }
   if (engine.reason) console.log(`Engine: this computer (${engine.reason}).`);
-  createAccount();
+  await createAccount();
   const found = await ensureWorkspace();
   const ws = found && await claimWorkspace(found);
   if (!ws) return app.quit();
