@@ -133,13 +133,17 @@ function demoReleaseRun(ws, projectId, state) {
   }
   const file = path.join(ws.backlog, `${projectId}.roadmap.json`);
   const roadmap = JSON.parse(fs.readFileSync(file, 'utf8'));
+  // the v0.10 release: its entry (#555, { kind: 'release' }) or, in an older roadmap, its stage's cut line
+  const status = { checking: 'running', waiting: 'running' }[state] || state;
+  const entry = roadmap.stages.find((s) => s.kind === 'release' && s.name === 'v0.10');
   const line = roadmap.stages.find((s) => s.release?.name === 'v0.10');
-  if (line) line.release = { name: 'v0.10', status: { checking: 'running', waiting: 'running' }[state] || state, runId };
+  if (entry) Object.assign(entry, { status, runId });
+  else if (line) line.release = { name: 'v0.10', status, runId };
   fs.writeFileSync(file, JSON.stringify(roadmap, null, 2));
   if (state !== 'shipped') return;
   const history = path.join(ws.root, 'releases', `${projectId}.json`);
   const h = JSON.parse(fs.readFileSync(history, 'utf8'));
-  const done = roadmap.stages.flatMap((s) => s.items).filter((x) => x.status === 'done' && x.runId);
+  const done = roadmap.stages.flatMap((s) => s.items || []).filter((x) => x.status === 'done' && x.runId);
   h.releases.push({
     version: 'v0.10', tag: 'v0.10', date: new Date(start + 50 * 6e4).toISOString(), commit: '69a8158e2d4c6b8a0f1e3d5c7b9a1f3e5d7c9b0a', base: 'main',
     issues: done.map((x) => ({ number: x.number, title: x.title })), runs: [...done.map((x) => x.runId), '20260120-221500-demo0099', runId], cost: 41.37,

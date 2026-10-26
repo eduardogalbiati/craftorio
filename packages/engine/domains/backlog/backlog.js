@@ -809,9 +809,12 @@ function backlogState(data) {
   if (!data) return null;
   const r = data.roadmap || {};
   const runOf = (x) => {
-    if (!x.run || !LIVE_ITEM_STATES.has(x.status)) return {};
+    if (!LIVE_ITEM_STATES.has(x.status)) return {};
+    // #615: a live run's cost so far, so the card's cost meter follows it without a full read
+    const cost = typeof x.actualUsd === 'number' ? { actualUsd: x.actualUsd } : {};
+    if (!x.run) return cost;
     const { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } = x.run;
-    return { run: { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } };
+    return { ...cost, run: { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } };
   };
   const item = (x) => ({
     id: x.id, status: x.status || null, runId: x.runId || null, runs: x.runs || [], waiting: !!x.waiting,

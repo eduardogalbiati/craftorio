@@ -50,7 +50,7 @@ module.exports = (ctx) => {
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
     // #291: the releases the Roadmap draws (its release blocks and Releases filter)
-    const releases = ctx.roadmapReleases(project, live);
+    const releases = ctx.roadmapReleases(project, live, roadmap);
     // #150: the saved conflict map, shown beside the Roadmap (null until a plan or a merge builds it)
     const conflictMap = ctx.savedConflictMap(data.projectId);
     // #405: the tests known to fail on the base (the Roadmap's "N known failures on the base" line)

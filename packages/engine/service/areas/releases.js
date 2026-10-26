@@ -203,8 +203,9 @@ module.exports = (ctx) => {
   // holding the next release's runs. `list`: the project's runs with their live state (the Backlog's).
   // → { releases: [{ version, status, runId, mock, runs, date, tag, commit, issues, cost, tests,
   //   startedAt, durationMs, runCost, stations, station }] }, or { error, releases: [] } when the
-  //   history cannot be read
-  function roadmapReleases(project, list) {
+  //   history cannot be read. `roadmap` (the roadmap's view, with its estimates): its planned release
+  //   entries come last, { version, status: 'planned', runs: [], estimate } (#555)
+  function roadmapReleases(project, list, roadmap) {
     const { ws } = ctx;
     if (!project) return { releases: [] };
     const error = releases.historyError(ws.releases, project.id);
@@ -229,7 +230,10 @@ module.exports = (ctx) => {
       const status = run.status === 'running' ? (waiting ? 'waiting' : 'checking') : STATUS[run.status] || 'failed';
       pending.push(withRun({ version, status, runs: next.runs.map((r) => r.runId), issues: next.issues, cost: next.cost }, run));
     }
-    return { releases: [...shipped, ...pending] };
+    // #555: the release entries of the roadmap not started yet, each with its run's estimate (its planned card)
+    const planned = (roadmap?.stages || []).filter((s) => isRelease(s) && !s.runId && s.status !== 'shipped' && s.name && !versions.has(s.name))
+      .map((s) => ({ version: s.name, status: 'planned', runs: [], estimate: s.estimate || null }));
+    return { releases: [...shipped, ...pending, ...planned] };
   }
 
   function saveReleaseNotes({ projectId, notes }) {

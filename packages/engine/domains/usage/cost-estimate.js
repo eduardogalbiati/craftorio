@@ -211,7 +211,9 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
   return {
     ...roadmap,
     stages: roadmap.stages.map((s) => {
-      const items = s.items.map((x) => {
+      // #421 #555: a release entry whose run has not started yet: that run's estimate (its planned card, the Roadmap's By release)
+      if (s.kind === 'release') return s.runId ? s : { ...s, estimate: estimateItem({ workflow: RELEASE_WORKFLOW }, runs, { prices, complexity: 1 }) };
+      const items = (s.items || []).map((x) => {
         const estimate = estimateItem(x, runs, { issues, prices });
         const actualUsd = actualCost(x, runById);
         const time = actualTime(x, runById);

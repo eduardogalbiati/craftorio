@@ -158,8 +158,10 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   `release.shipped`; `summary.release` = `{ tag, base, commit, pushed, issues }`. A simulation pushes
   nothing (`action.executed` skipped, `summary.release.simulated`); `mockSequences.action_errors`
   counts it like an action.
-- Cut lines (#260, service): a roadmap stage with `release: { name }` holds every stage after it.
-  `advance` returns `release: { stage, name }` once the stages up to the line are finished; the
+- Cut lines (#260, service): a release entry of the roadmap (#555, `{ kind: 'release', id, name }`
+  between two stages; an older stage's `release: { name }` is read as one right after it) holds every
+  stage after it. `advance` returns `release: { stage, name }` (`stage`: the entry's id) once the
+  enabled stages before it are finished; the
   service (`roadmapRelease`, packages/engine/service/areas/releases.js) starts release.yaml with the project's
   folder, base and the history since the last release, and records `runId` / `status` on the line
   (`takeRelease`: `running` → `shipped`, or `held` / `failed` through `holdRelease`, which pauses a
