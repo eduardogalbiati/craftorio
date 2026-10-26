@@ -22,14 +22,14 @@ built the way it is. It complements [`docs/agents/`](../agents/) (the implemente
 | 2 | [Own your prompts](factor-02-own-your-prompts.md) | covered, one known limit | workflow YAML, `skills/`, handoff instructions; the CLI's own system prompt is not ours |
 | 3 | [Own your context window](factor-03-own-your-context-window.md) | covered | session modes, handoff notes, `max_total_context`, summarised test results |
 | 4 | [Tools are structured outputs](factor-04-tools-are-structured-outputs.md) | covered | `output_schema`, schema retry, transitions on output fields |
-| 5 | [Unify execution state and business state](factor-05-unify-execution-and-business-state.md) | partial | files are the source of truth; the live run state is in memory |
-| 6 | [Launch, pause, resume with simple APIs](factor-06-launch-pause-resume.md) | covered, one gap | `runs:resume`, `run:pause`; a crash needs the owner to resume |
+| 5 | [Unify execution state and business state](factor-05-unify-execution-and-business-state.md) | partial | files are the source of truth; a restart runs on them (#607), a running run keeps its state in memory |
+| 6 | [Launch, pause, resume with simple APIs](factor-06-launch-pause-resume.md) | covered | `runs:resume`, `run:pause`; a crash continues by itself at the next start (#607) |
 | 7 | [Contact humans with tool calls](factor-07-contact-humans-with-tool-calls.md) | partial, by decision | human gates are workflow steps; an agent cannot ask mid-turn |
 | 8 | [Own your control flow](factor-08-own-your-control-flow.md) | covered | the engine, transitions, `max_visits`, `on_exhausted`, probes |
 | 9 | [Compact errors into the context window](factor-09-compact-errors.md) | covered | previous-attempt summary, schema errors, `action_error`, stall detection |
 | 10 | [Small, focused agents](factor-10-small-focused-agents.md) | covered | one role per agent, skills per step, read-only agents, child workflows |
 | 11 | [Trigger from anywhere](factor-11-trigger-from-anywhere.md) | partial | app, CLI, browser, phone, roadmap, chaining; no inbound platform events |
-| 12 | [Make your agent a stateless reducer](factor-12-stateless-reducer.md) | gap | the run advances inside a long-lived object; its resume state is a pure function of `events.jsonl` (#606), not used by the engine yet (#566) |
+| 12 | [Make your agent a stateless reducer](factor-12-stateless-reducer.md) | covered | the run state is a pure function of `events.jsonl` (#606); a restart continues live runs from it, in their own folder (#607); a per-step reducer is a follow-up |
 | 13 | [Pre-fetch all the context you might need](factor-13-prefetch-context.md) (bonus) | covered | template filters, `wait:` probes, project map, dependency cache |
 
 Status words: **covered** = the factor is a working rule of the code, with tests; **partial** = the
@@ -40,8 +40,8 @@ intent is there but a case is left open; **gap** = not done, with a proposal on 
 The three gaps worth acting on, in order of value, each an issue under the epic on agentic
 adherence, #565 (see the pages for the reasoning):
 
-1. Factor 12, #566: rebuild a run's state from its event log, so a crash resumes the same run at
-   the last finished turn without the owner.
+1. Factor 12, #566: done (#606, #607): a crash continues the same run at the last finished turn
+   without the owner.
 2. Factor 7, #567: let an agent ask for a human as a structured output that the engine turns into
    a gate.
 3. Factor 11, #568: start runs from platform events (an issue label, a pull request comment).

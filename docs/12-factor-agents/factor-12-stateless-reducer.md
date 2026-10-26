@@ -23,31 +23,29 @@ restarted, moved or replayed; a reducer can. ([factor 12](https://github.com/hum
 - **The resume state is a function of the log** (#606). `runStateFromEvents(events, summary)`
   (`packages/engine/engine/run/resume.js`) is pure and gives the step to run next, the visits,
   `vars` (recorded as `step.transition.set`), the sessions, the handoff notes and the open gate; a
-  replay of each bundled workflow's mock run gives the state the in-memory run held. The engine does
-  not use it yet (start-up recovery: #566).
+  replay of each bundled workflow's mock run gives the state the in-memory run held.
+- **A restart continues live runs by itself** (#607). At start-up the service reduces the log of
+  each run the app died in (`recoveryStateFromEvents`, the same function plus each step's output,
+  each session's last snapshot and the turn the crash cut) and continues it in its own folder with
+  its own id at its last finished turn, with no dialog: the gate it waited at asks again, the cut
+  turn is recorded as a stopped attempt and its agent's next turn gets `<previous_attempt>`. A run
+  another live app owns is never taken over (#112). See `docs/agents/engine/resume.md`.
 
 ## Gaps
 
-This is the one factor the app does not follow, and the gap behind factors 5 and 6.
-
-- **The run runs in an object.** `WorkflowRun` holds the current step, `vars`, visit counters, the
-  open gate, the live turns and the `pausing` flag in memory for the whole run. The events are a
-  faithful record of what it did, but the engine never derives its next move from them. A crash
-  leaves the run `interrupted`; the owner picks a step in the Resume dialog; the resumed run is a new
-  one (factor 6).
-- **What a reducer would change.** If the engine rebuilt the run state from `events.jsonl` before
-  each step (the step to run, its visit count, `vars`, the sessions to continue, the gate to reopen),
-  then: a restart of the app would continue every live run at its last finished turn with no
-  dialog; a run could move to another machine with its folder; a test could replay a real run's
-  events against a new engine version; the resume-from-step dialog would become "truncate the log
-  here and continue". The pieces exist: the pure `upgradeRunRecord` shows the style, the pause
-  logic already knows that a turn is the unit nothing cuts, and `seedResume` already maps recorded
-  facts to engine state.
+- **The state is read back at start-up only.** `WorkflowRun` still holds the current step, `vars`,
+  visit counters, the open gate and the live turns in memory while it runs; the log is reduced once,
+  when a restart recovers the run. A per-step reducer (the engine derives each next move from the
+  log) would also let a run move to another machine with its folder and turn the resume-from-step
+  dialog into "truncate the log here and continue". It is a follow-up: the recovery gives the
+  owner-facing gain (no lost night) with the smaller change.
+- **What the recovery does not rebuild.** The `max_visits` loop counters and the step timing start
+  from zero in the recovered process; a mock run's simulated answers count from the first again.
 - **What stays as it is.** A turn in progress is still lost on a crash: the CLI session is the
-  provider's, and the engine cannot replay half a turn. The reducer resumes at the last `step.finished`
-  or `turn.finished` event, which is what the pause does today.
+  provider's, and the engine cannot replay half a turn. It is reported, not hidden: a stopped
+  attempt with what its stream reported, and the files and commits on the branch for the next turn.
 
-Tracked as #566 under the epic #565; the highest-value gap in this guide, because the Night watch runs unattended and a sleeping laptop should not cost a night's work.
+Covered by #607 (recovery at start-up), after #606 (the state from the log), under the epic #565.
 
 ## References
 

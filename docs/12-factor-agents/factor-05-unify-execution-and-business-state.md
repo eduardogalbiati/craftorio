@@ -31,10 +31,10 @@ debugging, easier resume. ([factor 5](https://github.com/humanlayer/12-factor-ag
 
 - **The live run state is in memory.** While a run is going, its current step, its `vars`, the
   visit counters, the open gate and the `pausing` flag live in the `WorkflowRun` object
-  (`src/engine/run/`). The events record what happened, and `summary.json` is written at the end, but
-  the engine does not read its own state back from them. This is the same gap as factor 12, seen
-  from the storage side: the run folder tells the story, but it is not what the engine runs on
-  (#566).
+  (`packages/engine/engine/run/`). The events record what happened, and `summary.json` is written at
+  the end; the engine reads its state back from the events only when a restart recovers a run the
+  app died in (#607, factor 12), not before each step. The run folder is what a restarted engine
+  runs on; a running one keeps its own copy in memory.
 - **Two time scales for the summary.** `summary.json` exists only when the run ends; a reader of a
   live run (the runs list, a resume dialog) rebuilds what it needs from the events. That works, but
   it is a second code path for the same facts.

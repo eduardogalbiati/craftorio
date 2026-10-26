@@ -87,6 +87,14 @@ What each run, queue, gate and notification file holds, and how old runs upgrade
 - **Run vars** (#606): a `step.transition` whose transition has `set:` carries `set`, the values
   it gave `vars` (rendered), so `runStateFromEvents` (engine/resume.md) rebuilds `vars` from the log.
   A new optional field: older runs simply have none (no `UPGRADES` entry).
+- **What the log must carry for a recovery** (#607, engine/resume.md): a run the app died in is
+  continued from `events.jsonl` alone, so every fact the engine holds between two turns is an event:
+  each `step.finished` output and visit, `step.transition.set`, each session's snapshot on its
+  `session.*` events (turns, tokens, cost, provider session id), `approval.requested`/`resolved`, the
+  handoff notes, and each turn's `session.message_sent` and `session.stream` items (the cut turn's
+  tool calls and usage). A recovered run appends to the same log: `run.recovered` (a new event type,
+  no `UPGRADES` entry) and, for the cut turn, `session.attempt_stopped`. `owner.json` passes to the
+  process that recovered it. A new piece of run state that is not in an event cannot be recovered.
 - Never make the database the only copy of something a run produced.
 
 ### Old runs: the run record upgrades them on read (#350)

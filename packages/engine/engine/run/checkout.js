@@ -61,7 +61,8 @@ const methods = {
       this.logRepoCommands(repo);
       return;
     }
-    const prev = this.resume?.worktree;
+    // #607: a recovered run continues in its own worktree (same id, same folder and branch)
+    const prev = this.resume?.worktree || this.recovered?.worktree;
     const dir = prev?.dir || path.join(this.worktreesDir, this.runId);
     const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log, remote });
     if (!info) {

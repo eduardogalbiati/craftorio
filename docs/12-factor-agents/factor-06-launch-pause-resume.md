@@ -32,11 +32,13 @@ the state is saved, and an event later brings it back. ([factor 6](https://githu
 
 ## Gaps
 
-- **A crash is not a pause.** If the app dies mid-turn (the machine sleeps, the process is killed),
-  the run owner's heartbeat goes stale (`src/domains/run/run-owner.js`, 30 s) and the run is marked
-  `interrupted`; its gates are closed as `interrupted` at startup. Resuming is the owner's action
-  (#288 made it reachable from the run chat), and the turn that was in progress is lost. The factor
-  wants the run to come back by itself at the last finished turn; that needs factor 12 (#566).
+- **A crash comes back by itself, the cut turn does not.** If the app dies mid-run (the machine
+  sleeps, the process is killed), the run owner's heartbeat goes stale (`packages/engine/domains/run/run-owner.js`,
+  30 s); at the next start the app continues the run in its own folder with its own id at its last
+  finished turn, with no dialog, and its gate asks again (#607, factor 12). The turn that was in
+  progress is lost: it is recorded as a stopped attempt and the agent's next turn gets
+  `<previous_attempt>`. A real run under simulation-only and a child run still need the owner's
+  Resume (#288).
 - **Resume is a new run.** A resumed run gets a new id and seeds itself from the old one. Analytics
   and the runs list link them, but a run's story is spread over two folders. Acceptable today;
   a reducer over one event log would make it one.

@@ -34,7 +34,10 @@ module.exports = (ctx) => {
     seedDefaults();
     // the OS notifications follow its interface language (#329, areas/interface-language.js)
     ctx.applyInterfaceLanguage?.();
-    ctx.openIndex();
+    // #607: the runs the app died in, taken over now (areas/recover.js), started below; the index
+    // leaves their gates out of its "interrupted" notices
+    const recovering = ctx.claimLiveRuns();
+    ctx.openIndex({ recovering: recovering.map((r) => r.runId) });
     // the Backlog screen follows the backlog/ files live (#204, areas/backlog-watch.js)
     ctx.watchBacklog();
     // the phone gates page (#226, areas/phone-gates.js), when the owner turned it on
@@ -46,9 +49,11 @@ module.exports = (ctx) => {
     // after an app update's restart (#279, areas/app-update.js): the roadmaps it paused run again,
     // before the dispatch below starts their stage
     ctx.appUpdateAfterRestart();
-    // a started roadmap continues where it was: its runs that ended meanwhile settle their stage
-    // (an interrupted one pauses it), the next stage starts when the current one is over
-    setTimeout(() => ctx.dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)), 0);
+    // the recovered runs continue first (they hold their slots again, #607); then a started roadmap
+    // continues where it was: its runs that ended meanwhile settle their stage (an interrupted one
+    // pauses it), the next stage starts when the current one is over
+    setTimeout(() => ctx.recoverLiveRuns(recovering)
+      .then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e)), 0);
     return ws;
   }
 

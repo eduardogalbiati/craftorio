@@ -94,6 +94,11 @@ function newRunId() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+// #607: a recovered run keeps its own id; any other run gets a new one
+function runIdFor(recover) {
+  return recover?.runId || newRunId();
+}
+
 // The run's machine actions (#353): the given ones, else real() or simulated() by `mock`; one that does
 // not match `mock` is refused (a real run never simulates, nor the reverse).
 function runMachine(machine, mock, sequences) {
@@ -181,7 +186,9 @@ class WorkflowRun extends EventEmitter {
   //   null = no Product Owner (a simulation needs none).
   // language (#327): () => the settings' language ({ agents, issues }) or null, called at each turn: every
   //   turn's [Language] line and the output instruction follow it (packages/shared/language.js); null = English.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
+  // recover (#607): { runId, events, worktree } a run the app died in, continued in its own folder with
+  //   its own id at its last finished turn (packages/engine/engine/run/resume.js seedRecovery); not a resume
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -193,7 +200,7 @@ class WorkflowRun extends EventEmitter {
     this.mockSequences = mockSequences || null;
     this.machine = runMachine(machine, this.mock, this.mockSequences);
     this.notices = notices || [];
-    this.runId = newRunId();
+    this.runId = runIdFor(recover);
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
@@ -266,7 +273,7 @@ class WorkflowRun extends EventEmitter {
     this.dropDisabledAgents();
     // #286: an effort the CLI never gets goes to the run's log at start, never silent
     for (const message of silentEfforts(this.wf)) this.notices.push({ level: 'warn', message });
-    this.pickPersonas(personas || [], resume?.personas);
+    this.pickPersonas(personas || [], (resume || recover)?.personas);
     this.ctx = {
       inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId, run_dir: this.runDir, runs_dir: runsDir, workflows_dir: path.dirname(path.resolve(file)),
       agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model }])),
@@ -325,6 +332,7 @@ class WorkflowRun extends EventEmitter {
     this.seq = 0;
     this.nSession = 0;
     this.nApproval = 0;
+    this.seedRecovery(recover);
     this.status = 'pending';
   }
 
@@ -363,11 +371,12 @@ class WorkflowRun extends EventEmitter {
     return s;
   }
 
-  async start() {
-    this.startedAt = Date.now();
-    this.status = 'running';
-    this.storeInputAttachments();
+  // The run's workflow.started and the files it stores at start. #607: a recovered run keeps its own
+  // (its attachments are stored already; startRecovered records `run.recovered` instead).
+  recordStart() {
+    if (!this.recovered) this.storeInputAttachments();
     if (this.resumeImages?.length) this.gateImages = this.copyAttachments(this.resumeImages, `${this.resume.fromStep}-instruction`);
+    if (this.recovered) return;
     this.emitEvent('workflow.started', {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       issues: this.issues || undefined,
@@ -391,13 +400,22 @@ class WorkflowRun extends EventEmitter {
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
       groups: this.wf.groups,
     });
+  }
+
+  async start() {
+    // #607: a recovered run keeps its start
+    this.startedAt = this.recovered?.startedAt || Date.now();
+    this.status = 'running';
+    this.recordStart();
     for (const n of this.notices) this.emitEvent('log', { level: n.level || 'info', message: n.message });
     this.orchestrator = this.openSession({
       agent: 'orchestrator', provider: 'engine', model: 'engine (deterministic)', parentId: null, stepId: null,
     });
     this.setStatus(this.orchestrator, 'active');
+    if (this.recovered) this.startRecovered();
 
-    let current = this.resume?.fromStep || this.wf.steps[0].id;
+    // a recovered run that had nothing left to run ends where it was
+    let current = this.recovered ? this.recovered.nextStep || 'end' : this.resume?.fromStep || this.wf.steps[0].id;
     let guard = 0;
     let status = 'success';
     let error = null;
@@ -692,6 +710,11 @@ class WorkflowRun extends EventEmitter {
     if (st.supervisorNote) {
       prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
       if (!step.agents) st.supervisorNote = null;
+    }
+    // #607: this agent's turn of the step was cut by the app's crash: what it did, as a retry gets it
+    if (st.lostTurn?.agent === agentName) {
+      prompt += `\n\n---\n${st.lostTurn.note}`;
+      st.lostTurn = null;
     }
     if (this.restoredWorkNote) {
       prompt += `\n\n---\n${this.restoredWorkNote}`;

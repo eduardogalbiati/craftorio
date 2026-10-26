@@ -164,21 +164,38 @@ module.exports = (ctx) => {
   // The runs in progress are written down until they end: still there at the next start = they
   // died with the app. The file holds a list (one object in older versions).
   const marked = new Map(); // run id -> { runId, workflow, project, mock }
-  function markActiveRun(runId, info) {
-    if (info) marked.set(runId, info); else marked.delete(runId);
+  // #607: the marks found at start-up (keepInterruptedMarks), kept in the file next to the live runs'
+  // until their run ends here (a recovered one) or notifyInterruptedRun reports them
+  let leftMarks = [];
+  function writeMarks() {
+    const list = [...marked.values(), ...leftMarks.filter((m) => !marked.has(m.runId))];
     try {
-      if (marked.size) fs.writeFileSync(ctx.ws.activeRun, JSON.stringify([...marked.values()]));
+      if (list.length) fs.writeFileSync(ctx.ws.activeRun, JSON.stringify(list));
       else fs.rmSync(ctx.ws.activeRun, { force: true });
     } catch (e) { console.error('active run marker:', e.message); }
   }
-  // Notifies each run the app had in progress when it last closed; returns the first notice.
+  function markActiveRun(runId, info) {
+    if (info) marked.set(runId, info);
+    else {
+      marked.delete(runId);
+      leftMarks = leftMarks.filter((m) => m.runId !== runId);
+    }
+    writeMarks();
+  }
+  const keepInterruptedMarks = (list, { replace = false } = {}) => {
+    leftMarks = [...(replace ? [] : leftMarks), ...list];
+    writeMarks();
+  };
+  // Notifies each run the app had in progress when it last closed; returns the first notice. A run
+  // this process runs (recovered at start-up, #607) is not one of them.
   function notifyInterruptedRun() {
     const { ws } = ctx;
-    if (!ws || isRunning()) return null;
+    if (!ws) return null;
     let list = null;
     try { list = [].concat(JSON.parse(fs.readFileSync(ws.activeRun, 'utf8'))); } catch { return null; }
-    fs.rmSync(ws.activeRun, { force: true });
-    const interrupted = list.filter((info) => info?.runId && runs.readRun(ws.runs, path.basename(String(info.runId)))?.status === 'interrupted');
+    leftMarks = [];
+    writeMarks();
+    const interrupted = list.filter((info) => info?.runId && !active.has(String(info.runId)) && runs.readRun(ws.runs, path.basename(String(info.runId)))?.status === 'interrupted');
     const notices = interrupted.map((info) => notifier.interruptedNotice(info));
     notices.forEach((n) => ctx.notify(n));
     // the Oracle's wake-ups (#123, packages/engine/domains/oracle/oracle-wake.js)
@@ -371,23 +388,31 @@ module.exports = (ctx) => {
   // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun);
   // every run also gets Settings' fallback chains per provider and limits per model (settingsFallbacks)
   // workspaceWorkflow: the workspace's `file` even when the project's repository declares one (#485)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, fromQueue = false, workspaceWorkflow = false }) {
-    // simulation-only (automated checks): a real run is refused, never turned into a simulation
-    if (!mock) simulation.refuseReal('a real run');
-    // the same issues never get a second live run, from this app or another one (#112): resume that run instead
-    const twin = resume ? null : liveRunForIssues(issues);
+  // A new run's issues already in work (#112) refuse it, naming the run that holds them (err.runId).
+  function refuseDuplicateWork(issues, allowKeptWork) {
+    // the same issues never get a second live run, from this app or another one: resume that run instead
+    const twin = liveRunForIssues(issues);
     if (twin) {
       const err = new Error(`${twin.issues.map((i) => `#${i.number}`).join(', ')} already has a live run, ${twin.runId}${twin.runningElsewhere ? ' (in another app window)' : ''}: open or resume that run instead of starting the same work twice.`);
       err.runId = twin.runId;
       throw err;
     }
-    // automation (queue, roadmap) cannot ask: it stops and names the run that holds the same work (#112)
-    const kept = resume || allowKeptWork ? null : ctx.keptWorkForIssues(issues);
+    // automation (queue, roadmap) cannot ask: it stops and names the run that holds the same work
+    const kept = allowKeptWork ? null : ctx.keptWorkForIssues(issues);
     if (kept) {
       const err = new Error(`${kept.title}. ${kept.text} Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.`);
       err.runId = kept.runId;
       throw err;
     }
+  }
+
+  // recover (#607, areas/recover.js): { runId, events, worktree, personas, owner } a run the app died in,
+  // continued in its own folder with its own id; `owner` is its owner.json, already taken over
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, recover = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, fromQueue = false, workspaceWorkflow = false }) {
+    // simulation-only (automated checks): a real run is refused, never turned into a simulation
+    if (!mock) simulation.refuseReal('a real run');
+    // a resumed run continues that work, a recovered run (#607) is that run
+    if (!resume && !recover) refuseDuplicateWork(issues, allowKeptWork);
     const { ws } = ctx;
     // #276: the memory guard's settings for this real run; a new one waits while memory is low
     // (a child run starts inside its parent's run, which already passed the check)
@@ -446,7 +471,7 @@ module.exports = (ctx) => {
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         ignoreInstallScripts: installScriptsOff(project, fromUrl, notices),
-        budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
+        budget, prices: settings.prices, projectId, issues, resume, recover, attachments, mockSequences: mock ? mockSequences : null, then, from,
         agentOverrides, ownerCopy: wfFile.ownerCopy,fallbacks: settingsFallbacks(settings), models: settings.models || {},
         accounts: settingsAccounts(settings), accountCooldownMs: settingsAccountCooldownMs(settings),
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
@@ -480,7 +505,7 @@ module.exports = (ctx) => {
       budgetAt.set(run.runId, baselineAt);
       active.set(run.runId, run);
       // runs/<id>/owner.json with a heartbeat (#112): another app process sees the run as running, not interrupted
-      run.owner = runOwner.claimRun(run.runDir);
+      run.owner = recover?.owner || runOwner.claimRun(run.runDir);
     } finally {
       reserved.delete(slot);
     }
@@ -492,7 +517,9 @@ module.exports = (ctx) => {
       get title() { return ctx.liveTitle(run).title; },
     };
     // a resumed run shows the PR of the run it resumes until one of its steps reports one
-    run.pr = resume?.runId ? runs.runPr(ws.runs, resume.runId) : null;
+    // (a recovered run, its own)
+    const prOf = recover?.runId || resume?.runId;
+    run.pr = prOf ? runs.runPr(ws.runs, prOf) : null;
     run.on('event', (ev) => {
       try { recorder.write(ev); } catch (e) { console.error('recorder:', e); }
       ctx.indexEvent(run, ev);
@@ -513,7 +540,7 @@ module.exports = (ctx) => {
       } catch (e) { console.error('base health:', e.message); }
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
-      if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
+      if (ev.type === 'workflow.started' || ev.type === 'run.recovered') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
       if (ev.type === 'workflow.finished' && onFinished) {
         try { onFinished(ev); } catch (e) { console.error('run finished:', e.message); }
@@ -651,6 +678,7 @@ module.exports = (ctx) => {
     activeRuns,
     cleanupRunWorktrees,
     isRunning,
+    keepInterruptedMarks,
     liveRun,
     liveRunForIssues,
     memoryHold,

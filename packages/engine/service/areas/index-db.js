@@ -3,7 +3,9 @@
 // files, the notification center and the gate history excepted. What the engine emits is written
 // to it here: the run's row and its pending gates.
 
+const path = require('path');
 const { releaseUsageIndex } = require('../../domains/local/local-usage');
+const runOwner = require('../../domains/run/run-owner');
 const runs = require('../../domains/run/runs');
 const { openStore } = require('../../domains/workspace/store');
 
@@ -16,13 +18,19 @@ module.exports = (ctx) => {
   let store = null;
   let storeError = null;
 
-  function openIndex() {
+  // recovering: the ids of the runs the start-up recovers (#607): their old gate closes too (the run
+  // asks it again under a new id), without an "interrupted" notice
+  function openIndex({ recovering = [] } = {}) {
     closeIndex();
     storeError = null;
     try { store = openStore(ctx.ws); } catch (e) { storeError = e.message; console.error('index.db:', e.message); return; }
-    // gates still open from the last time are of runs that did not survive: interrupted, never phantom gates
+    // gates still open from the last time are of runs that did not survive: interrupted, never phantom
+    // gates; a run another live process runs (#112) keeps its own
     try {
-      for (const g of store.interruptGates([...ctx.active.keys()])) {
+      const elsewhere = store.gates({ state: 'open', limit: 1000 }).map((g) => g.runId)
+        .filter((id) => runOwner.runOwnedElsewhere(path.join(ctx.ws.runs, path.basename(String(id)))));
+      for (const g of store.interruptGates([...ctx.active.keys(), ...elsewhere])) {
+        if (recovering.includes(g.runId)) continue;
         ctx.notify({
           kind: 'run', event: 'gate_interrupted', title: `Gate interrupted: ${g.stepId || g.approvalId}`,
           body: `${g.headline || g.message ? `${String(g.headline || g.message).slice(0, 180)}\n` : ''}The app closed while run ${g.runId} waited here. Resume it from the run screen.`,
