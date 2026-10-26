@@ -10,8 +10,9 @@
 //   - lines: the lines (numbered at HEAD) that more than one run changed: each run's `git -U0` hunks,
 //     carried to HEAD through `git diff <commit> HEAD`;
 //   - no finished real run with commits (a new project): the last commits of the branch, one commit
-//     counting as one run (`source: 'git'`); its lines carried to HEAD through the newer commits' own
-//     hunks of the window's one `git log -p` (#526: no git process per commit).
+//     counting as one run (`source: 'git'`); its lines carried to HEAD through the newer diffs of HEAD's
+//     first-parent chain, one `git log -p` (#526: no git process per commit); only a commit of a merged
+//     branch (off that chain) is carried by its own `git diff <commit> HEAD`.
 // Saved per project in <workspace>/backlog/<projectId>.conflict-map.json: loadConflictMap builds it
 // when the file is missing, updateConflictMap rebuilds it after a run merges. The Product Owner's turn
 // (#526) never waits for a whole build: it reads the saved map or waits BUILD_WAIT_MS at most for a build
@@ -112,18 +113,22 @@ async function hubLines(repo, changes, files) {
   const head = String(await git(['rev-parse', 'HEAD'], repo) || '').trim();
   await pool([...bySha], async ([sha, list]) => {
     const names = [...new Set(list.map((c) => c.file))];
-    const later = sha === head ? [] : parsePatch(await git(['diff', '-U0', '--no-renames', '--no-color', sha, 'HEAD', '--', ...names], repo) || '', sha);
-    // a file deleted since has no "+++ b/" side: the HEAD check below leaves it out
-    const toHead = new Map(later.filter((p) => p.file).map((p) => [p.file, p.hunks]));
+    const toHead = sha === head ? new Map() : await diffToHead(repo, sha, names);
     const exists = new Set(await Promise.all(names.map(async (f) => ((await git(['cat-file', '-e', `HEAD:${f}`], repo)) != null ? f : null))));
-    for (const ch of list) {
-      if (!exists.has(ch.file)) continue;
-      for (const h of ch.hunks) {
-        for (let n = h.c; n < h.c + h.d; n++) addLine(byLine, ch.file, carry(n, toHead.get(ch.file) || []), ch.unit);
-      }
-    }
+    for (const ch of list) if (exists.has(ch.file)) addHunks(byLine, ch, (n) => carry(n, toHead.get(ch.file) || []));
   });
   return hubsOf(repo, byLine);
+}
+
+// `git diff -U0 <sha> HEAD` of `names` → file → hunks; a file deleted since has no "+++ b/" side
+async function diffToHead(repo, sha, names) {
+  const later = parsePatch(await git(['diff', '-U0', '--no-renames', '--no-color', sha, 'HEAD', '--', ...names], repo) || '', sha);
+  return new Map(later.filter((p) => p.file).map((p) => [p.file, p.hunks]));
+}
+
+// every new-side line of `ch`'s hunks, numbered at HEAD by `toHead`
+function addHunks(byLine, ch, toHead) {
+  for (const h of ch.hunks) for (let n = h.c; n < h.c + h.d; n++) addLine(byLine, ch.file, toHead(n), ch.unit);
 }
 
 function addLine(byLine, file, at, unit) {
@@ -145,32 +150,44 @@ async function hubsOf(repo, byLine) {
 }
 
 /**
- * hubLines for the git fallback (#526): each commit's lines carried to HEAD through the hunks of the same
- * file in the window's newer commits (`unitIds` newest first), so no `git diff <sha> HEAD` per commit; one
- * `git ls-tree` for the files still at HEAD.
+ * The newest commits of HEAD's first-parent chain that changed `files`, with their diff of them (a
+ * merge's against its first parent), newest first (#526): together, the diff of each to HEAD. → { chain:
+ * [{ sha, file, hunks }], at: sha → index of its first entry }.
  */
-async function windowHubLines(repo, changes, unitIds, files) {
-  const order = new Map(unitIds.map((id, n) => [id, n]));
+async function firstParentChain(repo, files) {
+  const chain = parsePatch(await git(['log', '-n', String(GIT_COMMITS), '-p', '-U0', '--first-parent', '--diff-merges=first-parent', '--no-renames', '--no-color', '--format=%x1e%H', 'HEAD', '--', ...files], repo) || '');
+  const at = new Map();
+  chain.forEach((p, k) => { if (!at.has(p.sha)) at.set(p.sha, k); });
+  return { chain, at };
+}
+
+/**
+ * hubLines for the git fallback (#526): a commit of HEAD's first-parent chain has its lines carried to
+ * HEAD through the chain's newer diffs of the same file (a merge's against its first parent), so no
+ * `git diff <sha> HEAD` for it; a commit of a merged branch (its hunks in other coordinates) keeps its own
+ * diff to HEAD. One `git ls-tree` for the files still at HEAD.
+ */
+async function windowHubLines(repo, changes, files) {
   const byFile = new Map();
   for (const ch of changes) if (ch.file && files.has(ch.file)) byFile.set(ch.file, [...(byFile.get(ch.file) || []), ch]);
   const byLine = new Map();
   if (!byFile.size) return [];
   const listed = await git(['ls-tree', '-r', '--name-only', 'HEAD', '--', ...byFile.keys()], repo);
   const atHead = new Set(String(listed || '').split('\n').map((l) => l.trim()).filter(Boolean));
+  const { chain, at } = await firstParentChain(repo, [...byFile.keys()]);
+  const lateral = new Map();
   for (const [file, list] of byFile) {
     if (!atHead.has(file)) continue;
-    const newestFirst = [...list].sort((a, b) => order.get(a.unit) - order.get(b.unit));
-    newestFirst.forEach((ch, k) => {
-      const later = newestFirst.slice(0, k).reverse();
-      for (const h of ch.hunks) {
-        for (let n = h.c; n < h.c + h.d; n++) {
-          let at = n;
-          for (const next of later) if (at != null) at = carry(at, next.hunks);
-          addLine(byLine, file, at, ch.unit);
-        }
-      }
-    });
+    for (const ch of list) {
+      if (!at.has(ch.sha)) { lateral.set(ch.sha, [...(lateral.get(ch.sha) || []), ch]); continue; }
+      const later = chain.slice(0, at.get(ch.sha)).filter((p) => p.file === file).reverse();
+      addHunks(byLine, ch, (n) => later.reduce((line, next) => (line == null ? null : carry(line, next.hunks)), n));
+    }
   }
+  await pool([...lateral], async ([sha, list]) => {
+    const toHead = await diffToHead(repo, sha, [...new Set(list.map((c) => c.file))]);
+    for (const ch of list) addHunks(byLine, ch, (n) => carry(n, toHead.get(ch.file) || []));
+  });
   return hubsOf(repo, byLine);
 }
 
@@ -231,7 +248,7 @@ async function fromGit(repo) {
     // the path-limited log reaches past the window: keep only the window's commits
     for (const p of parsePatch(patch || '')) if (byUnit.has(p.sha)) changes.push({ unit: p.sha, ...p });
   }
-  return { source: 'git', runs: unitIds.length, runIds: unitIds, files, lines: linesOf(await windowHubLines(repo, changes, unitIds, shared), unitIds) };
+  return { source: 'git', runs: unitIds.length, runIds: unitIds, files, lines: linesOf(await windowHubLines(repo, changes, shared), unitIds) };
 }
 
 /**
