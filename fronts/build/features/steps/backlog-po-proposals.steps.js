@@ -17,13 +17,11 @@ const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
 
 const poDrawer = (page) => page.getByRole('complementary', { name: 'Product Owner', exact: true });
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// a title as a whole word, case kept (the new epic's title is short: "Ui")
-const word = (s) => new RegExp(`(^|\\W)${escapeRe(s)}(\\W|$)`);
-
 const splitCard = (page, title) => poDrawer(page).getByTestId('po-split-card').filter({ hasText: title }).first();
+// the card holds an element whose whole text is the title: a text match on the card would run the
+// title into the next element ("UiNew epic", the new epic's title is short: "Ui")
 const epicCard = (page, title, action) => poDrawer(page).getByTestId('po-epic-card')
-  .filter({ hasText: word(title) })
+  .filter({ has: page.getByText(title, { exact: true }) })
   .filter({ has: page.getByRole('button', { name: action, exact: true }) })
   .first();
 const button = (card, name) => card.getByRole('button', { name, exact: true });
