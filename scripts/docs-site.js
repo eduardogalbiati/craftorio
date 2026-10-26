@@ -12,7 +12,8 @@
 // Pages are ordered by file name (`010-project-structure.md`); the same file name in every language
 // is the same page, so the language switch keeps the reader on it. English is the source: a page
 // missing in another language is shown in English with a notice. Images live in docs/site/assets/
-// and are referenced as `../assets/<file>` (the folder is copied as is). `##` and `###` headings
+// and are referenced as `../assets/<file>` (the folder is copied as is); screenshots are JPEGs
+// in assets/screens/ (1400px wide, quality 75, from `npm run screenshot`) and open at full size. `##` and `###` headings
 // make the right-hand list. In-site links are `<file>.html`; other relative links point at GitHub.
 // A `{.class}` paragraph right after a table gives the table that class (`{.map}`: a tight
 // name | purpose table).
@@ -116,7 +117,10 @@ function render(page, lang) {
     },
     image({ href, text, title }) {
       const caption = title ? `<figcaption>${escapeHtml(title)}</figcaption>` : '';
-      return `<figure><img src="${href}" alt="${escapeHtml(text || '')}" loading="lazy">${caption}</figure>`;
+      const img = `<img src="${href}" alt="${escapeHtml(text || '')}" loading="lazy">`;
+      // a screenshot opens at full size; a diagram is already at its size
+      const body = /\.(png|jpe?g|webp)$/i.test(href) ? `<a class="shot" href="${href}" target="_blank" rel="noopener">${img}</a>` : img;
+      return `<figure>${body}${caption}</figure>`;
     },
     code({ text, lang: fenceLang }) {
       const cls = fenceLang ? ` class="language-${fenceLang}"` : '';
