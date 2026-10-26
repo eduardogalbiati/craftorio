@@ -81,6 +81,7 @@ const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const discoveryCommit = require('../discovery/discovery-commit');
 const epics = require('../backlog/epics');
 const poCalibration = require('@multiagent/shared/po-calibration');
+const RoadmapModel = require('@multiagent/shared/roadmap-model');
 const poSplit = require('./po-split');
 const { separateSharedFiles } = require('./po-hot-files');
 const { mockSteps, partialText } = require('../chat/chat-progress');
@@ -654,7 +655,8 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     `## Runs in progress\n${activeRuns.map((r) => `- ${r.runId} ${r.workflow || ''} ${r.status}${r.waiting || r.gates?.length ? ' (waiting at a gate)' : ''}${r.issues?.length ? ` issues ${r.issues.map((i) => `#${i.number ?? i}`).join(', ')}` : ''}`).join('\n') || '(none)'}`,
     `## Merged locally, not pushed\n${local && !local.error ? `${local.ahead || 0} commits ahead${local.issues?.length ? `, issues ${local.issues.map((n) => `#${n}`).join(', ')}` : ''}` : '(unknown or none)'}`,
     `## Epics (id: title · members · open/closed)\n${epicList.map((e) => `- ${e.id}: ${e.title}${e.state === 'open' ? '' : ' (closed)'} · ${e.members.map((n) => `#${n}`).join(', ') || 'no members'} · ${e.progress?.open ?? 0} open, ${e.progress?.closed ?? 0} closed`).join('\n') || '(none)'}${data?.epicsError ? `\n(${data.epicsError})` : ''}`,
-    `## Roadmap\n${stages.map((s, n) => `- stage ${n + 1}${s.name ? ` ${s.name}` : ''}: ${s.items.map((x) => `${(x.issues || []).map((i) => `#${i.number ?? i}`).join(' + ')} ${x.status}`).join('; ')}`).join('\n') || '(empty)'}`,
+    // #555: a release entry is a line of its own; the stages keep their numbers (the issues' `roadmap stage`, roadmap.move)
+    `## Roadmap\n${stages.map((s, n) => (RoadmapModel.isRelease(s) ? `- release ${s.name}${s.status ? ` (${s.status})` : ''}` : `- stage ${RoadmapModel.stageNumber(data.roadmap, n)}${s.name ? ` ${s.name}` : ''}: ${s.items.map((x) => `${(x.issues || []).map((i) => `#${i.number ?? i}`).join(' + ')} ${x.status}`).join('; ')}`)).join('\n') || '(empty)'}`,
     `## Finished runs (newest first; agent time without gate waits)\n${history.map((h) => `- ${h.runId} ${h.workflow || ''} ${h.status} · issues ${h.issues.map((n) => `#${n}`).join(', ') || '-'} · complexity ${h.complexity ?? '?'} · ${h.agentMinutes} min · $${h.costUsd.toFixed(2)} · ${Math.round(h.tokens / 1e3)}k tokens${h.conflicts.count ? ` · ${h.conflicts.count} merge conflict(s)${h.conflicts.files.length ? ` in ${h.conflicts.files.join(', ')}` : ''}` : ''}`).join('\n') || '(none)'}`,
     // the conflict map (#150): parallel runs that edit the same file conflict when they merge
     ...[conflictMapSection(conflictMap)].filter(Boolean),

@@ -63,9 +63,12 @@ function clashes(item, files, hubs) {
   return hubs.size > 0 && own.some((f) => hubs.has(f)) && [...files].some((f) => hubs.has(f));
 }
 
+// an entry no item goes to: a disabled stage (#284) or a release entry (#555, it keeps no items)
+const notForItems = (s) => !!s.disabled || RoadmapModel.isRelease(s);
+
 /**
  * The 0-based stage the refactor goes to (stages.length: a new stage at the end): after the last stage
- * it clashes with, never in a stage already finished nor in a disabled one (#284).
+ * it clashes with, never in a stage already finished, a disabled one (#284) nor a release entry (#555).
  */
 function placeRefactor({ roadmap, files, conflictMap = null }) {
   const mine = new Set((files || []).map(pathOf).filter(Boolean));
@@ -75,7 +78,7 @@ function placeRefactor({ roadmap, files, conflictMap = null }) {
   stages.forEach((s, n) => { if ((s.items || []).some((x) => clashes(x, mine, hubs))) last = n; });
   const open = stages.findIndex((s) => (s.items || []).some((x) => !RoadmapModel.isFinished(x)));
   let stage = Math.max(last + 1, open < 0 ? stages.length : open);
-  while (stage < stages.length && stages[stage].disabled) stage++;
+  while (stage < stages.length && notForItems(stages[stage])) stage++;
   return { stage };
 }
 
@@ -85,7 +88,7 @@ function placeRunNow({ roadmap, files, conflictMap = null }) {
   const now = RoadmapModel.currentStage(roadmap || { stages: [] });
   let { stage } = placeRefactor({ roadmap, files, conflictMap });
   if (now >= 0) stage = Math.max(stage, now + 1);
-  while (stage < stages.length && stages[stage].disabled) stage++;
+  while (stage < stages.length && notForItems(stages[stage])) stage++;
   return { stage };
 }
 

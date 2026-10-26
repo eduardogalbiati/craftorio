@@ -8,8 +8,11 @@
 // backlog-archive.js, and the Backlog's window.BacklogActions (views/backlog/backlog.js).
 (function () {
   const list = (v) => (Array.isArray(v) ? v : []);
-  // the roadmap's items, each with its stage's number (1-based) and name
-  const items = (own) => list(own.backlog?.roadmap?.stages).flatMap((s, n) => list(s.items).map((x) => ({ ...x, stage: n + 1, stageName: s.name || t('dashboard.stage_n', { n: n + 1 }) })));
+  // the roadmap's items, each with its stage's number (1-based, #555: the release entries not counted) and name
+  const items = (own) => list(own.backlog?.roadmap?.stages).flatMap((s, n) => {
+    const number = RoadmapModel.stageNumber(own.backlog.roadmap, n);
+    return list(s.items).map((x) => ({ ...x, stage: number, stageName: s.name || t('dashboard.stage_n', { n: number }) }));
+  });
   // "#21 Refund a failed payment" (+ how many more), else the item's workflow
   function itemTitle(x) {
     const issues = list(x.issues);
@@ -76,11 +79,13 @@
     today(own) {
       const stages = list(own.backlog?.roadmap?.stages);
       const next = RoadmapModel.currentStage({ stages });
-      const nextName = next < 0 ? '' : stages[next].name || t('dashboard.stage_n', { n: next + 1 });
+      // #555: the stage numbers count the stages only, not the release entries between them
+      const number = RoadmapModel.stageNumber({ stages }, next);
+      const nextName = next < 0 ? '' : stages[next].name || t('dashboard.stage_n', { n: number });
       return [{
         order: 60,
         label: t('dashboard.next_roadmap_stage'),
-        value: nextName ? `<button type="button" class="link-btn home-next" data-home-roadmap="${next + 1}" title="${esc(t('dashboard.stage_value_of_length_nextname_open', { value: next + 1, length: stages.length, nextName }))}">${esc(nextName)}</button>` : '—',
+        value: nextName ? `<button type="button" class="link-btn home-next" data-home-roadmap="${number}" title="${esc(t('dashboard.stage_value_of_length_nextname_open', { value: number, length: RoadmapModel.stageCount({ stages }), nextName }))}">${esc(nextName)}</button>` : '—',
         title: nextName ? t('dashboard.the_first_stage_with_work_left') : t('dashboard.no_roadmap_stage_with_work_left'),
       }];
     },

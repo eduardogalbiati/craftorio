@@ -69,6 +69,7 @@ const {
   atGate,
   currentStage,
   isFinished,
+  isLockedRelease,
   isRelease,
   ITEM_STATES,
   pendingRelease,
@@ -339,9 +340,8 @@ function assertUnique(stages) {
 // one). What the release run did to it (status, runId, when it shipped) comes from the same entry
 // already in the roadmap, never from the edit: an edit cannot mark a release shipped, a renamed one
 // is a new release, and a running or shipped one keeps its name (cleanStages keeps its place too).
-const LOCKED_RELEASE = new Set(['running', 'shipped']);
 function cleanRelease(raw, old) {
-  if (old && LOCKED_RELEASE.has(old.status)) return { ...old };
+  if (isLockedRelease(old)) return { ...old };
   const name = String(raw?.name || '').trim();
   if (!name) return null;
   return old?.name === name ? { ...old, name } : releaseEntry({ name }, String(raw?.id || '') || newId('release'));
@@ -351,7 +351,7 @@ function cleanRelease(raw, old) {
 // (or release) they followed, at the start when they led; one an edit left out comes back
 function keepLockedReleases(out, previous) {
   const before = previous?.stages || [];
-  const locked = before.filter((s) => isRelease(s) && LOCKED_RELEASE.has(s.status));
+  const locked = before.filter((s) => isRelease(s) && isLockedRelease(s));
   if (!locked.length) return out;
   const ids = new Set(locked.map((s) => s.id));
   const kept = new Map(out.filter((s) => ids.has(s.id)).map((s) => [s.id, s]));

@@ -47,6 +47,15 @@
   const isRelease = (entry) => !!entry && entry.kind === 'release';
   /** #555: the number "Stage N" of the stage at index `s` of the list (the release entries before it do not count). */
   const stageNumber = (roadmap, s) => stagesOf(roadmap).slice(0, s + 1).filter((x) => !isRelease(x)).length;
+  /** #555: how many stages the roadmap has (its release entries not counted). */
+  const stageCount = (roadmap) => stagesOf(roadmap).filter((x) => !isRelease(x)).length;
+  /** #555: a release (an entry, or a stage's cut line) that cannot be moved nor renamed: its run started or it shipped. */
+  const isLockedRelease = (entry) => !!entry && (entry.status === 'running' || entry.status === 'shipped');
+  /** #215 #615: a stage's real cost, its items' `actualUsd` summed (cents), or null when none of them ran. */
+  function stageActualUsd(items) {
+    const ran = (items || []).map((x) => x.actualUsd).filter((usd) => typeof usd === 'number');
+    return ran.length ? Math.round(ran.reduce((a, usd) => a + usd, 0) * 100) / 100 : null;
+  }
   /**
    * #555: a list whose stages carry their cut line (`release`, as written before #555 and as the
    * Roadmap screen saves it): each becomes a release entry right after its stage, every release entry
@@ -400,6 +409,7 @@
     highlight,
     inRange,
     isFinished,
+    isLockedRelease,
     isOpen,
     isRelease,
     itemIssues,
@@ -415,6 +425,8 @@
     releaseView,
     runningStage,
     scopedStage,
+    stageActualUsd,
+    stageCount,
     stageNumber,
     stageProgress,
     unfinishedItems,

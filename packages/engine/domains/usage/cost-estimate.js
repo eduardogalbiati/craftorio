@@ -18,6 +18,7 @@
 // cost of a finished item next to it) and by its budget cap (packages/engine/domains/usage/budget.js).
 
 const path = require('path');
+const { stageActualUsd } = require('@multiagent/shared/roadmap-model');
 const { complexityOf } = require('../roadmap/live-roadmap');
 const { sessionCost } = require('./usage');
 
@@ -226,7 +227,7 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
       });
       const known = items.map((x) => x.estimate).filter((e) => e != null);
       const timed = known.map((e) => e.minutes).filter((m) => m != null);
-      const ran = items.map((x) => x.actualUsd).filter((usd) => usd != null);
+      const actualUsd = stageActualUsd(items);
       return {
         ...s,
         items,
@@ -239,8 +240,8 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
           missing: items.length - known.length,
           runs: Math.max(...known.map((e) => e.runs)),
         } : null,
-        ...(ran.length ? {
-          actualUsd: round(ran.reduce((a, usd) => a + usd, 0)),
+        ...(actualUsd != null ? {
+          actualUsd,
           actualMinutes: Math.max(0, ...items.map((x) => x.actualMinutes || 0)),
         } : {}),
       };

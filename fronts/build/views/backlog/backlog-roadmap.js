@@ -749,7 +749,7 @@
     const rel = stage.release;
     if (!rel?.name) return '';
     const [tone, label, help] = RELEASE_STATE[rel.status] || ['', '', 'The stages below wait until this release shipped'];
-    const locked = rel.status === 'running' || rel.status === 'shipped';
+    const locked = RoadmapModel.isLockedRelease(rel);
     const move = (dir, glyph, key) => `<button class="link-btn small" type="button" data-rm-release="${dir}" aria-label="${esc(t(key, { name: rel.name }))}" title="${esc(t(key, { name: rel.name }))}">${glyph}</button>`;
     const moves = locked || where || lead >= 0 ? '' : (s > 0 ? move('up', '↑', 'backlog_roadmap.move_the_release_up') : '') + (s < count - 1 ? move('down', '↓', 'backlog_roadmap.move_the_release_down') : '');
     return `

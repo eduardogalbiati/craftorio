@@ -17,7 +17,13 @@
 // (packages/engine/service/channels/roadmap.js) and packages/engine/domains/roadmap/roadmap-history.js.
 
 const { testsLater } = require('./roadmap');
-const { isFinished, isRelease } = require('@multiagent/shared/roadmap-model');
+const {
+  isFinished,
+  isLockedRelease,
+  isRelease,
+  releaseEntries,
+  stageNumber,
+} = require('@multiagent/shared/roadmap-model');
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -28,7 +34,7 @@ const stagesById = (stages) => new Map((stages || []).map((s) => [s.id, s]));
 const content = (x) => { const { status, runId, runs, error, ...rest } = x; return rest; };
 const untouchable = (x) => x.status === 'running' || x.status === 'done';
 const notStarted = (x) => x.status === 'planned' && !x.runId;
-const stageLabel = (stages, n) => `stage ${n + 1}${stages[n].name ? ` "${stages[n].name}"` : ''}`;
+const stageLabel = (stages, n) => `stage ${stageNumber({ stages }, n)}${stages[n].name ? ` "${stages[n].name}"` : ''}`;
 
 /** What an edit changed: { label, at, before, after } (copies of the stages, JSON-safe). */
 function recordEdit(beforeStages, afterStages, label) {
@@ -37,8 +43,10 @@ function recordEdit(beforeStages, afterStages, label) {
 
 /** The stages with the edit taken back: { ok: true, stages }, or { ok: false, reason } (nothing changes). */
 function undoEdit(currentStages, edit) {
-  const before = edit?.before || [];
-  const after = Array.isArray(edit?.after) ? edit.after : null;
+  // #555: an edit (or a version) kept before #555 has its cut lines on the stages: as release entries,
+  // with the ids the migration of a read gives them
+  const before = releaseEntries(edit?.before || [], { migrate: true });
+  const after = Array.isArray(edit?.after) ? releaseEntries(edit.after, { migrate: true }) : null;
   const current = clone(currentStages) || [];
   const [was, then, now] = [itemsOf(before), itemsOf(after), itemsOf(current)];
   const [thenStages, nowStages] = [stagesById(after), stagesById(current)];
@@ -72,8 +80,8 @@ function undoEdit(currentStages, edit) {
     const edited = thenStages.get(old.id);
     for (const k of ['name', 'note', 'disabled']) {
       if (after && edited && same(old[k], edited[k])) continue;
-      // #555: a running or shipped release is not the edit's to rename (roadmap.js LOCKED_RELEASE; held and failed ones are)
-      if (isRelease(rest) && ['running', 'shipped'].includes(rest.status)) continue;
+      // #555: a running or shipped release is not the edit's to rename (held and failed ones are)
+      if (isRelease(rest) && isLockedRelease(rest)) continue;
       if (old[k] === undefined) delete rest[k]; else rest[k] = clone(old[k]);
     }
     return rest;

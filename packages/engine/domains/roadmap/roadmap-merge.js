@@ -17,6 +17,7 @@ const path = require('path');
 const {
   isRelease,
   releaseEntries,
+  stageNumber,
 } = require('@multiagent/shared/roadmap-model');
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
@@ -25,7 +26,7 @@ const numbers = (x) => (x?.issues?.length ? x.issues : x?.number ? [x] : []).map
 const itemLabel = (x) => numbers(x).map((n) => `#${n}`).join(' + ') || 'an item';
 const stageLabel = (stages, s) => {
   const n = stages.findIndex((x) => x.id === s.id);
-  return `stage ${n + 1}${s.name ? ` "${s.name}"` : ''}`;
+  return `stage ${stageNumber({ stages }, n)}${s.name ? ` "${s.name}"` : ''}`;
 };
 const upper = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const refuse = (why) => ({ ok: false, reason: `${upper(why)} Nothing was saved.` });

@@ -85,8 +85,7 @@
             return { ...x, status, runId, runs, waiting, ...(actualUsd != null ? { actualUsd } : {}), ...(run ? { run: { ...x.run, ...run } } : {}) };
           });
           // #615: a live run's new cost moves the stage's total (its items' actualUsd summed)
-          const costs = merged.map((x) => x.actualUsd).filter((v) => typeof v === 'number');
-          const actualUsd = costs.length ? costs.reduce((a, v) => a + v, 0) : s.actualUsd;
+          const actualUsd = window.RoadmapModel.stageActualUsd(merged) ?? s.actualUsd;
           return { ...s, pause: pauses.get(s.id) || undefined, items: merged, ...(actualUsd != null ? { actualUsd } : {}) };
         }),
       },

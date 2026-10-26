@@ -4,7 +4,7 @@
 
 const backlog = require('../../domains/backlog/backlog');
 const roadmaps = require('../../domains/roadmap/roadmap');
-const { isRelease, stageNumber } = require('@multiagent/shared/roadmap-model');
+const { stageCount, stageNumber } = require('@multiagent/shared/roadmap-model');
 
 module.exports = (ctx) => {
   function pendingWork() {
@@ -16,7 +16,7 @@ module.exports = (ctx) => {
       // #284: the disabled stages are counted apart ("roadmap stage 3/6 (1 disabled)"), never as the current one
       const disabled = r.stages.filter((s) => s.disabled).length;
       // #555: the release entries between the stages are not counted
-      return { projectId, state: r.state, stage: stageNumber(r, roadmaps.currentStage(r)), of: r.stages.filter((s) => !isRelease(s)).length, ...(disabled ? { disabled } : {}) };
+      return { projectId, state: r.state, stage: stageNumber(r, roadmaps.currentStage(r)), of: stageCount(r), ...(disabled ? { disabled } : {}) };
     });
     const queued = backlog.queuedProjects(ws.backlog).map((projectId) => backlog.readQueue(ws.backlog, projectId))
       .filter((q) => !q.paused).reduce((n, q) => n + q.items.length, 0);

@@ -38,7 +38,7 @@ const usage = require('../../domains/usage/usage');
 const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
 const { isArchived } = require('@multiagent/shared/backlog-archive');
-const { isRelease } = require('@multiagent/shared/roadmap-model');
+const { isRelease, stageCount } = require('@multiagent/shared/roadmap-model');
 const { requireObject } = require('../common');
 const {
   ANY,
@@ -162,14 +162,14 @@ module.exports = (ctx) => {
       const { roadmap, dropped } = roadmaps.propose(ctx.ws.backlog, id, [{ items }], { issues, alive: ctx.runAlive });
       const added = numbers.filter((n) => !dropped.includes(n));
       if (!added.length) throw new Error(`${refs(numbers)} ${numbers.length > 1 ? 'are' : 'is'} already planned in the roadmap: nothing was added.`);
-      return { text: `${added.map((n) => `#${n} ${issues.find((i) => i.number === n).title}`).join('; ')}: added to the roadmap in stage ${roadmap.stages.filter((s) => !isRelease(s)).length} (${workflow})${dropped.length ? `; ${refs(dropped)} already planned` : ''}.` };
+      return { text: `${added.map((n) => `#${n} ${issues.find((i) => i.number === n).title}`).join('; ')}: added to the roadmap in stage ${stageCount(roadmap)} (${workflow})${dropped.length ? `; ${refs(dropped)} already planned` : ''}.` };
     },
     // the Roadmap's drag of a planned item to another stage ({ itemId, stage: its number, 1-based; one past the last adds a stage })
     // #555: the number counts the stages only, not the release entries between them
     'roadmap.move': (p, { mock }) => {
       const read = roadmaps.readRoadmap(ctx.ws.backlog, p.projectId);
       const stages = read.stages || [];
-      const count = stages.filter((s) => !isRelease(s)).length;
+      const count = stageCount(read);
       const item = stages.flatMap((s) => s.items || []).find((x) => x.id === String(p.itemId || ''));
       if (!item) throw new Error(`Roadmap item ${p.itemId} does not exist.`);
       if (item.status !== 'planned') throw new Error(`Roadmap item ${p.itemId} is ${item.status}: only a planned item moves.`);
