@@ -57,11 +57,85 @@ test('#588 missingTestIds: on this repository, the root and every front\'s step 
   assert.deepEqual(missingTestIds(ROOT, { steps, renderer }).map((m) => m.id), []);
 });
 
+test('#588 missingTestIds: overlapping step folders read each step file once', (t) => {
+  const { missingTestIds, stepFiles } = load();
+  const root = tempDir(t, 'testid-588-');
+  write(root, 'features/steps/a.steps.js', "page.getByTestId('absent-id');\n");
+  write(root, 'src/renderer/index.html', '<main></main>\n');
+  const steps = ['features', 'features/steps', 'features/steps/'];
+  assert.deepEqual(stepFiles(root, { steps }), ['features/steps/a.steps.js']);
+  assert.deepEqual(missingTestIds(root, { steps }), [{ id: 'absent-id', files: ['features/steps/a.steps.js'] }]);
+});
+
+test('#588 missingTestIds: a step definition inside a UI folder does not define the ids it uses', (t) => {
+  const { missingTestIds } = load();
+  const root = tempDir(t, 'testid-588-');
+  write(root, 'fronts/build/features/steps/run.steps.js', "page.getByTestId('only-in-steps'); page.getByTestId('run-card');\n");
+  write(root, 'fronts/build/views/run.js', 'html`<div data-testid="run-card"></div>`;\n');
+  assert.deepEqual(ids(missingTestIds(root, { steps: 'fronts/build/features/steps', renderer: 'fronts' })), [{ id: 'only-in-steps', files: ['fronts/build/features/steps/run.steps.js'] }]);
+});
+
+// ---- the ui_files filter of the workflows' conditions ----------------------------------------------
+
+test('#588 ui_files: the changed files under the UI folders, one folder or a list, slashes normalised, src/renderer by default', () => {
+  const { render } = require('@multiagent/engine/engine/run/templates');
+  const under = (files, folders) => Number(render('{{ files | ui_files(folders) | length }}', { files, folders }));
+  assert.equal(under(['fronts/build/views/run.js'], ['packages/ui-kit/', 'fronts/']), 1);
+  assert.equal(under(['fronts\\build\\views\\run.js', 'packages/ui-kit/app.js', 'docs/x.md'], ['packages/ui-kit', 'fronts']), 2);
+  assert.equal(under(['packages/ui-kit/style.css'], 'packages/ui-kit/'), 1, 'one folder as a string');
+  assert.equal(under('packages/ui-kit/style.css', ['packages/ui-kit']), 1, 'one file as a string');
+  assert.equal(under(['src/renderer-old/x.js', 'lib/src/renderer.js'], ['src/renderer/']), 0, 'a sibling folder or a file of the same name is not under it');
+  assert.equal(under(['src/renderer/views/a.js'], null), 1, 'no folders: src/renderer');
+  assert.equal(under(['fronts/build/views/run.js'], null), 0);
+  assert.equal(under(null, ['fronts']), 0, 'no files changed');
+  assert.equal(under([], []), 0);
+});
+
+// ---- the inputs as a form sends them -------------------------------------------------------------
+
+test('#588 inputs: the folders typed in a form (comma or one per line) reach the run as lists; without them, the defaults', (t) => {
+  const runsDir = tempDir(t, 'testid-588-runs-');
+  const newRun = (inputs) => new WorkflowRun({ file: WORKFLOW, inputs: { task: 't', repo_path: ROOT, ...inputs }, mock: true, runsDir });
+  const typed = newRun({ ui_folders: 'packages/ui-kit/, fronts/\napps/web/renderer/', steps_folders: 'features/steps\nfronts/build/features/steps\n' }).inputs;
+  assert.deepEqual(typed.ui_folders, ['packages/ui-kit/', 'fronts/', 'apps/web/renderer/']);
+  assert.deepEqual(typed.steps_folders, ['features/steps', 'fronts/build/features/steps']);
+  const none = newRun({}).inputs;
+  assert.deepEqual(none.ui_folders, ['src/renderer/']);
+  assert.deepEqual(none.steps_folders, ['features/steps']);
+});
+
+test('#588 inputs: the Start form shows a list default as text that comes back as the same list', (t) => {
+  const WorkflowInputs = require('../../../packages/ui-kit/workflow-inputs');
+  const defs = { ui_folders: { label: 'UI folders', type: 'array', default: ['packages/ui-kit/', 'fronts/'] } };
+  const html = WorkflowInputs.formHtml(defs, { values: {} });
+  const value = (html.match(/data-wi-input="ui_folders"[^>]*?(?:value="([^"]*)"|>([^<]*)<\/textarea>)/) || []).slice(1).find((v) => v !== undefined);
+  assert.ok(value !== undefined, 'the field is drawn with its default');
+  const read = WorkflowInputs.read({ querySelectorAll: (sel) => (sel === '[data-wi-input]' ? [{ dataset: { wiInput: 'ui_folders' }, type: 'text', value }] : []) });
+  const runsDir = tempDir(t, 'testid-588-runs-');
+  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 't', repo_path: ROOT, ...read }, mock: true, runsDir });
+  assert.deepEqual(run.inputs.ui_folders, ['packages/ui-kit/', 'fronts/']);
+});
+
+// a plain test_ids step whose fields name several folders with commas
+test('#588 run: a test_ids step reads comma-separated step and UI folders', { timeout: 60000 }, async (t) => {
+  const repo = commitRepo(t, frontsLayout);
+  const step = { id: 'testid_check', type: 'test_ids', steps: 'features/steps, fronts/build/features/steps', renderer: 'packages/ui-kit, fronts ,apps/web/renderer' };
+  const { finished, output } = await runStep(t, repo, step, {}, {});
+  assert.equal(finished.status, 'success', finished.error);
+  assert.deepEqual(output.steps, ['features/steps', 'fronts/build/features/steps']);
+  assert.deepEqual(output.renderer, ['packages/ui-kit', 'fronts', 'apps/web/renderer']);
+  assert.deepEqual(ids(output.missing), [{ id: 'really-absent', files: ['fronts/build/features/steps/run.steps.js'] }]);
+  assert.match(output.message, /packages\/ui-kit, fronts, apps\/web\/renderer/, 'the message names every UI folder');
+});
+
 // the bundled workflow's testid_check step alone (its own fields, its inputs), run on `repo`
 async function runHeroCheck(t, repo, inputs) {
   const hero = loadWorkflow(WORKFLOW);
   const check = hero.steps.find((s) => s.id === 'testid_check');
   const declared = Object.fromEntries(['ui_folders', 'steps_folders'].filter((k) => hero.inputs[k]).map((k) => [k, hero.inputs[k]]));
+  return runStep(t, repo, check, declared, inputs);
+}
+async function runStep(t, repo, check, declared, inputs) {
   const dir = tempDir(t, 'testid-588-wf-');
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, JSON.stringify({
