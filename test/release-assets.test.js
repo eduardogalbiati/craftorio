@@ -4,7 +4,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const yaml = require('js-yaml');
 const { assetNames } = require('../scripts/release-assets');
 
@@ -24,15 +26,59 @@ test('release assets: every deploy.yml build uploads exactly the files the scrip
   }
 });
 
-test('#557 release assets: the publish job writes SHA256SUMS and its signature into assets/, published with the packages', () => {
+// #557: the publish job's SHA256SUMS step, run with bash (as on the runner: `bash -e`) on fake assets
+const SHA_ABC = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';     // sha256("abc")
+const SHA_EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';   // sha256("")
+function runSumsStep(t, files) {
   const wf = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/deploy.yml'), 'utf8'));
-  const steps = wf.jobs.publish.steps;
-  const at = (re) => steps.findIndex((s) => re.test(s.run || ''));
-  const sums = steps[at(/sha256sum/)].run;
-  assert.match(sums, /cd assets\n/, 'the sums name the files without the assets/ prefix');
-  assert.match(sums, /\nmv [^\n]* SHA256SUMS\n/, 'written outside assets/ first: SHA256SUMS never sums itself');
-  assert.match(steps[at(/cosign sign-blob/)].run, /--bundle assets\/SHA256SUMS\.sigstore\.json assets\/SHA256SUMS$/);
-  assert.ok(at(/gh release create "\$RC" assets\/\*/) > at(/cosign sign-blob/), 'assets/* (packages, sums, signature) published after the signature');
+  const step = wf.jobs.publish.steps.find((s) => /sha256sum/.test(s.run || ''));
+  assert.ok(step, 'the publish job has a sha256sum step');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'sums-557-'));
+  const runnerTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-557-'));
+  t.after(() => { fs.rmSync(work, { recursive: true, force: true }); fs.rmSync(runnerTemp, { recursive: true, force: true }); });
+  fs.mkdirSync(path.join(work, 'assets'));
+  for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(work, 'assets', name), body);
+  const r = spawnSync('bash', ['-e', '-c', step.run], { cwd: work, env: { ...process.env, RUNNER_TEMP: runnerTemp }, encoding: 'utf8' });
+  if (r.error) { t.skip(`bash unavailable: ${r.error.code}`); return null; }
+  const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
+  const notes = fs.readdirSync(runnerTemp).map((f) => read(path.join(runnerTemp, f))).filter((s) => s !== null).join('\n');
+  return { status: r.status, stderr: r.stderr, sums: read(path.join(work, 'assets', 'SHA256SUMS')), notes };
+}
+
+test('#557 release assets: SHA256SUMS has one "<hash>  <file name>" line per package and nothing else', (t) => {
+  const out = runSumsStep(t, { 'MultiagentOrchestrator-win32-x64.zip': 'abc', 'MultiagentOrchestrator-linux-x64.tar.gz': '' });
+  if (!out) return;
+  assert.equal(out.status, 0, out.stderr);
+  // "<hash>  <name>" on the Ubuntu runner; Git Bash on Windows writes binary mode "<hash> *<name>",
+  // which `sha256sum -c` reads the same
+  const lines = out.sums.trim().split('\n').map((l) => l.replace(/\r$/, '').replace(/^([0-9a-f]{64}) \*/, '$1  ')).sort();
+  assert.deepEqual(lines, [
+    `${SHA_ABC}  MultiagentOrchestrator-win32-x64.zip`,
+    `${SHA_EMPTY}  MultiagentOrchestrator-linux-x64.tar.gz`,
+  ]);
+});
+
+test('#557 release assets: the release notes list each package with its SHA-256', (t) => {
+  const out = runSumsStep(t, { 'MultiagentOrchestrator-win32-x64.zip': 'abc', 'MultiagentOrchestrator-linux-x64.tar.gz': '' });
+  if (!out) return;
+  assert.equal(out.status, 0, out.stderr);
+  const row = (name) => out.notes.split('\n').find((l) => l.includes(name)) || '';
+  assert.equal(row('MultiagentOrchestrator-win32-x64.zip').includes(SHA_ABC), true, 'win32 zip row has its hash');
+  assert.equal(row('MultiagentOrchestrator-linux-x64.tar.gz').includes(SHA_EMPTY), true, 'linux tar.gz row has its hash');
+  assert.equal(row('SHA256SUMS  ').length, 0, 'SHA256SUMS itself is not listed as an asset');
+});
+
+test('#557 release assets: no package to sum fails the step, so nothing is published', (t) => {
+  const out = runSumsStep(t, {});
+  if (!out) return;
+  assert.notEqual(out.status, 0);
+});
+
+test('#557 release assets: the publish job only runs on main, the ref the documented cosign identity names', () => {
+  const wf = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/deploy.yml'), 'utf8'));
+  assert.match(String(wf.jobs.publish.if || ''), /github\.ref\s*==\s*'refs\/heads\/main'/);
+  const doc = fs.readFileSync(path.join(root, 'docs', 'readme', '020-install.md'), 'utf8');
+  assert.equal(doc.includes('.github/workflows/deploy.yml@refs/heads/main'), true, 'the docs expect deploy.yml@refs/heads/main');
 });
 
 // preview.yml's targets job keeps its own list of builds (inline JSON in a shell variable).
