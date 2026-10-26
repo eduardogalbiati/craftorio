@@ -260,7 +260,58 @@ test('an edit under packages/engine/engine/ without engine.md read counts as eng
   assert.deepEqual(model.skipped_by_topic, { 'docs/agents/engine.md': 1 });
 });
 
-test('the CLI warns on stderr when --since is not a date', (t) => {
+// #572: the folders that carry a nested AGENTS.md map to its topic doc. s1 edited scripts/ without
+// windows-gotchas.md; s2 edited packages/engine/test/ (testing.md, not engine.md) and a file of
+// packages/engine/ outside engine/ (engine.md); s3 read windows-gotchas.md before editing scripts/.
+function areasFixture(t) {
+  const base = tmp(t, 'docs-usage-572-');
+  const root = path.join(base, 'repo');
+  for (const doc of ['AGENTS.md', 'docs/agents/engine.md', 'docs/agents/testing.md', 'docs/agents/windows-gotchas.md']) {
+    write(path.join(root, doc), `# ${doc}\n`);
+  }
+  const workspace = path.join(base, 'ws');
+  const D = '2026-10-20';
+  const wt = 'C:/w/worktrees/run-s';
+  writeRun(path.join(workspace, 'runs'), 'run-s', [
+    wfStarted(D, PROJECT),
+    opened(D, 's1', 'developer', 'develop', wt),
+    edit(D, 2, 's1', `${wt}/scripts/docs.js`),
+    opened(D, 's2', 'test_writer', 'test', wt),
+    edit(D, 4, 's2', `${wt}/packages/engine/test/x.test.js`),
+    edit(D, 5, 's2', `${wt}/packages/engine/domains/run/run-record.js`),
+    opened(D, 's3', 'developer', 'develop', wt),
+    read(D, 7, 's3', `${wt}/docs/agents/windows-gotchas.md`),
+    edit(D, 8, 's3', `${wt}/scripts/ci-plan.js`),
+    wfFinished(D),
+  ], {
+    run_id: 'run-s', workflow: 'AI Development', project_id: PROJECT, status: 'success', started_at: at(D), finished_at: at(D, 50),
+    mock: false, cost_accounting: 'per_turn', worktree: { dir: wt, work_dir: wt },
+    sessions: [{ id: 's1', agent: 'developer' }, { id: 's2', agent: 'test_writer' }, { id: 's3', agent: 'developer' }],
+  });
+  return { root, workspace };
+}
+
+test('an edit under scripts/ without windows-gotchas.md read counts as that doc skipped (#572)', async (t) => {
+  const { docsUsage } = load();
+  const { root, workspace } = areasFixture(t);
+  const { model } = await docsUsage({ workspace, root, project: PROJECT, since: SINCE });
+  assert.deepEqual(sessionOf(model, 'run-s', 's1').topics_skipped, ['docs/agents/windows-gotchas.md']);
+  assert.deepEqual(sessionOf(model, 'run-s', 's3').topics_skipped, []);
+});
+
+test('packages/engine/test/ counts as testing.md, the rest of packages/engine/ as engine.md (#572)', async (t) => {
+  const { docsUsage } = load();
+  const { root, workspace } = areasFixture(t);
+  const { model } = await docsUsage({ workspace, root, project: PROJECT, since: SINCE });
+  assert.deepEqual(sessionOf(model, 'run-s', 's2').topics_skipped, ['docs/agents/engine.md', 'docs/agents/testing.md']);
+  assert.deepEqual(model.skipped_by_topic, {
+    'docs/agents/engine.md': 1,
+    'docs/agents/testing.md': 1,
+    'docs/agents/windows-gotchas.md': 1,
+  });
+});
+
+test('the CLI warns on stderr when --since is not a date',(t) => {
   const { root, workspace } = fixture(t);
   const r = spawnSync(process.execPath, [SCRIPT, '--workspace', workspace, '--root', root, '--project', PROJECT, '--since', '10/01/2026', '--json'], { encoding: 'utf8' });
   assert.equal(r.status, 0);

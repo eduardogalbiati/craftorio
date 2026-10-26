@@ -124,7 +124,8 @@ test('the size check lists a topic or subtopic file over 200 lines, never a gene
   });
   runMain([], tmp); // writes the indexes and the generated files (code-map.md, test-map.md, channels.md) too
 
-  const { output } = runMain(['--check'], tmp);
+  const { code, output } = runMain(['--check'], tmp);
+  assert.equal(code, 0, 'the size rule is a warning until every long doc is split (decisions.md): it never fails --check');
   assert.match(output, /zz-long-topic\.md/, 'a top-level topic over the limit is listed');
   assert.match(output, /b-long-subtopic\.md/, 'a subtopic over the limit is listed');
   assert.doesNotMatch(output, /a-short\.md/);
@@ -166,7 +167,18 @@ test('the split indexes are up to date (npm run docs --check reports none of the
   assert.deepEqual(stale, []);
 });
 
-test('engine/agents-and-steps.md is split: no engine topic file of that name over 200 lines', () => {
+// The warning list, pinned: a doc that grows past the limit shows up here, not only in --check's
+// output; split it (or record why) instead of adding it to the list.
+test('the docs over 200 lines are only the three not split yet', () => {
+  const { oversizedDocs } = load();
+  assert.deepEqual(oversizedDocs(root).map((d) => d.file).sort(), [
+    'docs/agents/capabilities.md',
+    'docs/agents/decisions.md',
+    'docs/agents/engine/gates-and-run-end.md',
+  ]);
+});
+
+test('engine/agents-and-steps.md is split:no engine topic file of that name over 200 lines', () => {
   const file = path.join(AGENTS_DOCS, 'engine', 'agents-and-steps.md');
   if (!fs.existsSync(file)) return;
   const n = lineCount(read(file));
