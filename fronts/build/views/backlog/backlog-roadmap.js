@@ -1017,6 +1017,13 @@
     }
   }
 
+  // The highlight: a stage run on its own (#141) is current; else (#552) the running stage, the first open one (never a disabled one, #284) then next
+  function highlightOf(r) {
+    const [scoped, first] = [scopedStage(r), RoadmapModel.currentStage(r)];
+    const running = scoped >= 0 ? -1 : RoadmapModel.runningStage(r);
+    return scoped >= 0 ? { scoped, current: scoped, next: -1 } : running < 0 ? { scoped, current: first, next: -1 } : { scoped, current: running, next: first !== running ? first : -1 };
+  }
+
   /**
    * The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender`
    * redraws once the workflows are loaded. `view` (#217, #268): what backlog.js remembers, { epic,
@@ -1036,15 +1043,7 @@
     if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
-    // a stage run on its own (#141) is the one in progress; the others keep their planned look
-    const scoped = scopedStage(r);
-    // #284: a disabled stage is skipped (RoadmapModel.currentStage): never the current one, counted apart
-    // #552: the stage whose run is in progress is the current one; the first open stage, when it is
-    // another one, is the next (currentStage still decides what the automation starts)
-    const first = RoadmapModel.currentStage(r);
-    const running = scoped >= 0 ? -1 : RoadmapModel.runningStage(r);
-    const current = scoped >= 0 ? scoped : running >= 0 ? running : first;
-    const next = running >= 0 && first !== running ? first : -1;
+    const { scoped, current, next } = highlightOf(r);
     const offStages = r.stages.filter((s) => s.disabled);
     const offOpen = offStages.filter(RoadmapModel.hasUnfinished);
     const acts = may(r);

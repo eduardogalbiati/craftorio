@@ -95,6 +95,14 @@ function undoEdit(currentStages, edit) {
     if (items.length || (isRelease(cur) && !addedRelease(cur))) stages.push({ ...cur, items });
   }
 
+  const twice = plannedTwice(stages, changed);
+  if (twice) return { ok: false, reason: twice };
+  if (same(stages, current)) return { ok: false, reason: 'Nothing to put back: what this edit changed is no longer in the roadmap.' };
+  return { ok: true, stages };
+}
+
+/** Why the undone stages would plan an issue twice (an item brought back or changed is one of the two), or null. */
+function plannedTwice(stages, changed) {
   // an issue belongs to one unfinished item (packages/engine/domains/roadmap/roadmap.js assertUnique)
   const open = (x) => !isFinished(x) && !testsLater(x);
   for (const [n, stage] of stages.entries()) {
@@ -105,13 +113,12 @@ function undoEdit(currentStages, edit) {
           const twice = issuesOf(x).find((i) => issuesOf(y).some((j) => j.number === i.number));
           if (!twice) continue;
           const at = changed.has(x.id) ? m : n;
-          return { ok: false, reason: `Issue #${twice.number} is planned in another item now (${stageLabel(stages, at)}): putting this back would plan it twice. Remove it there first.` };
+          return `Issue #${twice.number} is planned in another item now (${stageLabel(stages, at)}): putting this back would plan it twice. Remove it there first.`;
         }
       }
     }
   }
-  if (same(stages, current)) return { ok: false, reason: 'Nothing to put back: what this edit changed is no longer in the roadmap.' };
-  return { ok: true, stages };
+  return null;
 }
 
 module.exports = {

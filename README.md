@@ -812,7 +812,15 @@ It starts from Code & Build › Releases, or when a roadmap reaches a **cut line
 on a stage of the Roadmap draws one after it, with the release's name, and the stages after the
 line wait until that release shipped (a held or failed release pauses the roadmap there; a release
 run of that name started from the Releases screen is the line's too). Roadmaps without cut lines
-run as before. Shipping records the release (version, date, issues, runs, cost, test results,
+run as before. A release is an item of the roadmap of its own (#555), not a field of the stage
+before it: `{ kind: 'release', id, name, status?, runId?, shippedAt? }` between two stages of
+`roadmap.stages`. Disabling, emptying, moving or removing a stage leaves it in place, and a
+disabled stage before it is skipped without holding it. The owner adds, drags, renames and removes
+it like a stage, each edit in the roadmap's history (Undo); a running or shipped release cannot be
+moved nor renamed. Right after its dashed line the Roadmap draws its card in every state, a planned
+one included: Planned, the stages it closes and the release run's estimate. An older roadmap's
+`release` on a stage is read as a release entry right after that stage, with its status, run and
+shipped date. Shipping records the release (version, date, issues, runs, cost, test results,
 notes) in `<workspace>/releases/<project>.json` and marks its issues **Released** on the Backlog.
 The discovery cards linked to one of those issues (`links.issues`) are marked Released too: their
 `links.release` becomes the release's version, and a card keeps the first release that shipped it.

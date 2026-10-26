@@ -236,7 +236,10 @@
  * @property {RoadmapItem[]} items
  * @property {true} [disabled]
  * @property {true} [waiting] the refactor stage waiting for the owner's OK (#435, packages/engine/domains/refactor/refactor-cadence.js)
- * @property {RoadmapRelease} [release]
+ * @property {RoadmapRelease} [release] a cut line of the old shape, read as a release entry on load (#555)
+ * @property {'release'} [kind] a release entry of the roadmap (no items), between two stages (#555)
+ * @property {string} [status] a release entry's status: running, held, failed, shipped (#555)
+ * @property {string} [runId] a release entry's run (#555)
  */
 
 /**
