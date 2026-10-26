@@ -10,9 +10,8 @@
 //   - lines: the lines (numbered at HEAD) that more than one run changed: each run's `git -U0` hunks,
 //     carried to HEAD through `git diff <commit> HEAD`;
 //   - no finished real run with commits (a new project): the last commits of the branch, one commit
-//     counting as one run (`source: 'git'`); its lines carried to HEAD through the newer diffs of HEAD's
-//     first-parent chain, one `git log -p` (#526: no git process per commit); only a commit of a merged
-//     branch (off that chain) is carried by its own `git diff <commit> HEAD`.
+//     counting as one run (`source: 'git'`); its lines carried to HEAD the same way, every commit's
+//     diff to HEAD from one `git diff-tree --stdin` (#526: no git process per commit).
 // Saved per project in <workspace>/backlog/<projectId>.conflict-map.json: loadConflictMap builds it
 // when the file is missing, updateConflictMap rebuilds it after a run merges. The Product Owner's turn
 // (#526) never waits for a whole build: it reads the saved map or waits BUILD_WAIT_MS at most for a build
@@ -42,11 +41,12 @@ const HOT_WINDOW = 20;
 const HOT_SHARE = 0.5;
 const LINE_FIX = 'Split this line into one item per line, sorted, so each run adds its own line instead of editing this one (a shared list or import).';
 
-// null without a process once the clone is gone (#526: a background build outlives the turn)
-function git(args, cwd) {
+// null without a process once the clone is gone (#526: a background build outlives the turn); `input` its stdin
+function git(args, cwd, input = null) {
   return new Promise((resolve) => {
     if (!isRepo(cwd)) return resolve(null);
-    execFile('git', ['-c', 'core.quotepath=false', ...args], { cwd, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }, (err, out) => resolve(err ? null : String(out)));
+    const child = execFile('git', ['-c', 'core.quotepath=false', ...args], { cwd, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }, (err, out) => resolve(err ? null : String(out)));
+    if (input != null) child.stdin.on('error', () => {}).end(input);
   });
 }
 
@@ -150,44 +150,33 @@ async function hubsOf(repo, byLine) {
 }
 
 /**
- * The newest commits of HEAD's first-parent chain that changed `files`, with their diff of them (a
- * merge's against its first parent), newest first (#526): together, the diff of each to HEAD. → { chain:
- * [{ sha, file, hunks }], at: sha → index of its first entry }.
+ * The `git diff -U0 <sha> HEAD` of `files` for every one of `shas` in one `git diff-tree --stdin` (#526:
+ * no git process per commit). A line `<sha> <head>` reads as a commit and its parent, so -R turns the diff
+ * back to <sha> → HEAD (both prefixes b/, the side parsePatch reads); the sha is echoed before its diff.
+ * → sha → file → hunks.
  */
-async function firstParentChain(repo, files) {
-  const chain = parsePatch(await git(['log', '-n', String(GIT_COMMITS), '-p', '-U0', '--first-parent', '--diff-merges=first-parent', '--no-renames', '--no-color', '--format=%x1e%H', 'HEAD', '--', ...files], repo) || '');
-  const at = new Map();
-  chain.forEach((p, k) => { if (!at.has(p.sha)) at.set(p.sha, k); });
-  return { chain, at };
+async function diffsToHead(repo, shas, files) {
+  const head = String(await git(['rev-parse', 'HEAD'], repo) || '').trim();
+  const out = await git(['diff-tree', '--stdin', '-R', '--src-prefix=b/', '--dst-prefix=b/', '-p', '-U0', '--no-renames', '--no-color', '--', ...files], repo, shas.map((sha) => `${sha} ${head}\n`).join(''));
+  const records = String(out || '').replace(/^([0-9a-f]{40}|[0-9a-f]{64})\r?$/gm, '\x1e$1');
+  const bySha = new Map(shas.map((sha) => [sha, new Map()]));
+  for (const p of parsePatch(records)) if (p.file && bySha.has(p.sha)) bySha.get(p.sha).set(p.file, p.hunks);
+  return bySha;
 }
 
 /**
- * hubLines for the git fallback (#526): a commit of HEAD's first-parent chain has its lines carried to
- * HEAD through the chain's newer diffs of the same file (a merge's against its first parent), so no
- * `git diff <sha> HEAD` for it; a commit of a merged branch (its hunks in other coordinates) keeps its own
- * diff to HEAD. One `git ls-tree` for the files still at HEAD.
+ * hubLines for the git fallback (#526): the same lines, each commit carried by its diff to HEAD, but all
+ * the diffs from one `git diff-tree --stdin` and one `git ls-tree` for the files still at HEAD.
  */
 async function windowHubLines(repo, changes, files) {
-  const byFile = new Map();
-  for (const ch of changes) if (ch.file && files.has(ch.file)) byFile.set(ch.file, [...(byFile.get(ch.file) || []), ch]);
-  const byLine = new Map();
-  if (!byFile.size) return [];
-  const listed = await git(['ls-tree', '-r', '--name-only', 'HEAD', '--', ...byFile.keys()], repo);
+  const kept = changes.filter((ch) => ch.file && files.has(ch.file));
+  if (!kept.length) return [];
+  const names = [...new Set(kept.map((ch) => ch.file))];
+  const listed = await git(['ls-tree', '-r', '--name-only', 'HEAD', '--', ...names], repo);
   const atHead = new Set(String(listed || '').split('\n').map((l) => l.trim()).filter(Boolean));
-  const { chain, at } = await firstParentChain(repo, [...byFile.keys()]);
-  const lateral = new Map();
-  for (const [file, list] of byFile) {
-    if (!atHead.has(file)) continue;
-    for (const ch of list) {
-      if (!at.has(ch.sha)) { lateral.set(ch.sha, [...(lateral.get(ch.sha) || []), ch]); continue; }
-      const later = chain.slice(0, at.get(ch.sha)).filter((p) => p.file === file).reverse();
-      addHunks(byLine, ch, (n) => later.reduce((line, next) => (line == null ? null : carry(line, next.hunks)), n));
-    }
-  }
-  await pool([...lateral], async ([sha, list]) => {
-    const toHead = await diffToHead(repo, sha, [...new Set(list.map((c) => c.file))]);
-    for (const ch of list) addHunks(byLine, ch, (n) => carry(n, toHead.get(ch.file) || []));
-  });
+  const toHead = await diffsToHead(repo, [...new Set(kept.map((ch) => ch.sha))], names);
+  const byLine = new Map();
+  for (const ch of kept) if (atHead.has(ch.file)) addHunks(byLine, ch, (n) => carry(n, toHead.get(ch.sha)?.get(ch.file) || []));
   return hubsOf(repo, byLine);
 }
 
