@@ -21,6 +21,7 @@ const path = require('path');
 const baseHealth = require('../../domains/project/base-health');
 const backlog = require('../../domains/backlog/backlog');
 const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const { isRelease } = require('@multiagent/shared/roadmap-model');
 const projects = require('../../domains/project/projects');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const workspace = require('../../domains/workspace/workspace');
@@ -73,7 +74,7 @@ module.exports = (ctx) => {
 
   // A release run holds the base: the roadmap's release running, or a release run of the project at work
   function releaseHoldsBase(projectId) {
-    if (roadmaps.readRoadmap(ctx.ws.backlog, projectId).stages.some((s) => s.release?.status === 'running')) return true;
+    if (roadmaps.readRoadmap(ctx.ws.backlog, projectId).stages.some((s) => isRelease(s) && s.status === 'running')) return true; // #555: a release entry
     return [...(ctx.active?.values?.() || [])].some((r) => r.projectId === projectId && ctx.isReleaseRun(r));
   }
 

@@ -24,9 +24,10 @@ async function roadmapAtLine(t, name, runId, summary) {
       { name: 'Two', items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] },
     ],
   });
-  const stage = roadmaps.readRoadmap(ws.backlog, p.id).stages[0];
+  // #555: the cut line is read as a release entry right after its stage (stages[1]; stage Two is stages[2])
+  const [stage, line] = roadmaps.readRoadmap(ws.backlog, p.id).stages;
   roadmaps.updateRoadmap(ws.backlog, p.id, (r) => ({ ...r, stages: r.stages.map((s) => (s.id === stage.id ? { ...s, items: s.items.map((x) => ({ ...x, status: 'done' })) } : s)) }));
-  roadmaps.setRelease(ws.backlog, p.id, stage.id, { status: 'running', runId });
+  roadmaps.setRelease(ws.backlog, p.id, line.id, { status: 'running', runId });
   fs.mkdirSync(path.join(ws.runs, runId), { recursive: true });
   fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({
     run_id: runId, workflow: 'Release', project_id: p.id, mock: false, inputs: { version: 'v1.0' }, sessions: [],
@@ -87,7 +88,7 @@ test('a cut line whose release run shipped is recorded once in the history and l
   });
   await api['roadmap:start']({ projectId: p.id, simulated: true });
   await until(() => api['runs:active']().some((r) => hasIssue(r, 2)));
-  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[0].release.status, 'shipped');
+  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[1].status, 'shipped');
   const { releases } = api['releases:list']({ projectId: p.id });
   assert.equal(releases.length, 1);
   const [release] = releases;
@@ -110,16 +111,16 @@ test('a cut line whose release run was held pauses the roadmap; Resume checks th
   const paused = api['roadmap:get']({ projectId: p.id });
   assert.equal(paused.state, 'paused');
   assert.match(paused.error, /v1\.0 was not shipped \(on hold\)/);
-  assert.equal(paused.stages[0].release.status, 'held');
-  assert.equal(paused.stages[1].items[0].status, 'planned');
+  assert.equal(paused.stages[1].status, 'held');
+  assert.equal(paused.stages[2].items[0].status, 'planned');
   assert.equal(api['runs:active']().length, 0, 'nothing starts behind the line');
   assert.deepEqual(api['releases:list']({ projectId: p.id }).releases, [], 'nothing is recorded');
 
   await api['roadmap:start']({ projectId: p.id, simulated: true });
   await until(() => api['runs:active']().some((r) => r.file === 'release.yaml'));
   const again = api['roadmap:get']({ projectId: p.id });
-  assert.equal(again.stages[0].release.status, 'running');
-  assert.notEqual(again.stages[0].release.runId, '20260301-100000-rel00002');
+  assert.equal(again.stages[1].status, 'running');
+  assert.notEqual(again.stages[1].runId, '20260301-100000-rel00002');
   assert.equal(api['runs:active']().some((r) => hasIssue(r, 2)), false);
   // the project folder has no test:e2e script: the release run skips the E2E suite
   const release = api['runs:active']().find((r) => r.file === 'release.yaml');
@@ -130,12 +131,12 @@ test('a cut line whose release run was held pauses the roadmap; Resume checks th
 test('a release run of the cut line\'s name started from the Releases screen takes the line and the paused roadmap waits for it (#260)', async (t) => {
   const { api, p } = await roadmapAtLine(t, 'release-by-hand', '20260301-100000-rel00003', { status: 'failed' });
   await api['roadmap:start']({ projectId: p.id, simulated: true });
-  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[0].release.status, 'failed');
+  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[1].status, 'failed');
   assert.equal(api['roadmap:get']({ projectId: p.id }).state, 'paused');
 
   const started = await api['releases:start']({ projectId: p.id, version: 'v1.0', simulated: true });
   const roadmap = api['roadmap:get']({ projectId: p.id });
-  assert.deepEqual([roadmap.stages[0].release.status, roadmap.stages[0].release.runId], ['running', started.runId]);
+  assert.deepEqual([roadmap.stages[1].status, roadmap.stages[1].runId], ['running', started.runId]);
   assert.equal(roadmap.state, 'running');
   assert.equal(roadmap.error, null);
   assert.equal(api['releases:list']({ projectId: p.id }).run.runId, started.runId);

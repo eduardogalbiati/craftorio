@@ -61,9 +61,10 @@ async function roadmapAtLine(t, name, runId, summary) {
       { name: 'Two', items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] },
     ],
   });
-  const stage = roadmaps.readRoadmap(ws.backlog, p.id).stages[0];
+  // #555: the cut line is read as a release entry right after its stage
+  const [stage, line] = roadmaps.readRoadmap(ws.backlog, p.id).stages;
   roadmaps.updateRoadmap(ws.backlog, p.id, (r) => ({ ...r, stages: r.stages.map((s) => (s.id === stage.id ? { ...s, items: s.items.map((x) => ({ ...x, status: 'done' })) } : s)) }));
-  roadmaps.setRelease(ws.backlog, p.id, stage.id, { status: 'running', runId });
+  roadmaps.setRelease(ws.backlog, p.id, line.id, { status: 'running', runId });
   fs.mkdirSync(path.join(ws.runs, runId), { recursive: true });
   fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({
     run_id: runId, workflow: 'Release', project_id: p.id, mock: false, inputs: { version: 'v1.0' }, sessions: [],
@@ -99,7 +100,7 @@ test('a simulated release run marks no discovery card (#260)', async (t) => {
   const { api, p } = await roadmapAtLine(t, 'release-cards-mock', '20260301-100000-relcard2', { mock: true });
   store.impl = memoryStore(p.id, cardsOf());
   await api['roadmap:start']({ projectId: p.id, simulated: true });
-  await until(() => api['roadmap:get']({ projectId: p.id }).stages[0].release.status !== 'running');
+  await until(() => api['roadmap:get']({ projectId: p.id }).stages[1].status !== 'running');
   assert.deepEqual(store.impl.writes, []);
   assert.equal(store.impl.cards.find((c) => c.id === 'c-linked').links.release, null);
 });
@@ -110,7 +111,7 @@ test('a card store that cannot write never keeps the shipped release from being 
   t.mock.method(console, 'error', () => {});
   await api['roadmap:start']({ projectId: p.id, simulated: true });
   await until(() => api['runs:active']().some((r) => hasIssue(r, 2)));
-  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[0].release.status, 'shipped');
+  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[1].status, 'shipped');
   const { releases } = api['releases:list']({ projectId: p.id });
   assert.deepEqual(releases.map((r) => [r.version, r.status]), [['v1.0', 'shipped']]);
   assert.equal(store.impl.cards.find((c) => c.id === 'c-linked').links.release, null);

@@ -295,12 +295,12 @@ module.exports = (ctx) => {
     try { return JSON.parse(fs.readFileSync(path.join(ctx.ws.runs, path.basename(String(runId)), 'summary.json'), 'utf8')); } catch { return null; }
   };
 
-  // A cut line's release run ended without shipping: the line is held (Hold) or failed and a running
-  // roadmap pauses there, once (the owner is told).
-  function holdLine(projectId, stage, outcome, runId) {
+  // A release entry's run ended without shipping (#555: `line` is the entry): the entry is held (Hold)
+  // or failed and a running roadmap pauses there, once (the owner is told).
+  function holdLine(projectId, line, outcome, runId) {
     const was = roadmaps.readRoadmap(ctx.ws.backlog, projectId).state;
-    const message = `Release ${stage.release.name} was not shipped (${outcome === 'held' ? 'on hold' : `its run ${runId} failed`}): the stages after its cut line wait. Resume the run from its Ship gate, or press Resume here to check the release again.`;
-    roadmaps.holdRelease(ctx.ws.backlog, projectId, stage.id, outcome, message);
+    const message = `Release ${line.name} was not shipped (${outcome === 'held' ? 'on hold' : `its run ${runId} failed`}): the stages after its cut line wait. Resume the run from its Ship gate, or press Resume here to check the release again.`;
+    roadmaps.holdRelease(ctx.ws.backlog, projectId, line.id, outcome, message);
     if (was === 'running') ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: message.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
   }
 
@@ -329,7 +329,7 @@ module.exports = (ctx) => {
     // that failed after the push and the tag); a simulated one only when its run succeeded
     const shipped = summary.release && (summary.release.commit || summary.status === 'success') ? summary.release : null;
     const outcome = shipped ? 'shipped' : summary.status === 'cancelled' ? 'held' : 'failed';
-    const stage = roadmaps.readRoadmap(ws.backlog, projectId).stages.find((s) => s.release?.runId === runId);
+    const line = roadmaps.readRoadmap(ws.backlog, projectId).stages.find((s) => isRelease(s) && s.runId === runId);
     const history = releases.readReleases(ws.releases, projectId);
     if (shipped && !summary.mock && !history.releases.some((r) => r.tag === shipped.tag)) {
       const project = projects.readProject(ws.projects, projectId);
@@ -338,7 +338,7 @@ module.exports = (ctx) => {
       const titles = new Map((backlog.readBacklog(ws.backlog, projectId)?.issues || []).map((i) => [i.number, i.title]));
       const issues = new Map(next.issues.map((i) => [i.number, i]));
       for (const n of shipped.issues || []) if (!issues.has(n)) issues.set(n, { number: n, title: titles.get(n) || '' });
-      const version = stage?.release.name || String(summary.inputs?.version || '').trim() || shipped.tag;
+      const version = line?.name || String(summary.inputs?.version || '').trim() || shipped.tag;
       releases.recordRelease(ws.releases, projectId, {
         version, tag: shipped.tag, date: summary.finished_at || new Date().toISOString(), commit: shipped.commit, base: shipped.base,
         issues: [...issues.values()].sort((a, b) => a.number - b.number),
@@ -350,10 +350,10 @@ module.exports = (ctx) => {
       });
     }
     if (shipped && !summary.mock) markCards(projectId, shipped.tag);
-    if (shipped && stage && stage.release.status !== 'shipped') {
-      roadmaps.setRelease(ws.backlog, projectId, stage.id, { status: 'shipped', shippedAt: summary.finished_at || new Date().toISOString() });
-    } else if (!shipped && stage?.release.status === 'running') {
-      holdLine(projectId, stage, outcome, runId);
+    if (shipped && line && line.status !== 'shipped') {
+      roadmaps.setRelease(ws.backlog, projectId, line.id, { status: 'shipped', shippedAt: summary.finished_at || new Date().toISOString() });
+    } else if (!shipped && line?.status === 'running') {
+      holdLine(projectId, line, outcome, runId);
     }
     return outcome;
   }
@@ -374,16 +374,16 @@ module.exports = (ctx) => {
   // at the line (its end usually did already: `afterRelease`; here for a run that ended while the
   // app was closed, or died without a summary); a line already held or failed means the owner
   // pressed Resume: the release is checked again. → true when the roadmap changed (dispatch again).
-  async function roadmapRelease(projectId, roadmap, { stage: stageId, name }) {
+  async function roadmapRelease(projectId, roadmap, { id, name }) {
     const { ws } = ctx;
-    const stage = roadmaps.findStage(roadmap, stageId);
-    const line = stage?.release;
-    if (!line) return false;
+    // #555: `id` is the release entry's
+    const line = roadmaps.findStage(roadmap, id);
+    if (!isRelease(line)) return false;
     if (line.runId && (ctx.active.has(line.runId) || ctx.runAlive(line.runId))) return false;
     if (line.runId && line.status === 'running') {
       const outcome = settleRelease(projectId, line.runId);
       if (outcome === 'shipped') return true;
-      if (!outcome) holdLine(projectId, stage, 'failed', line.runId);
+      if (!outcome) holdLine(projectId, line, 'failed', line.runId);
       return false;
     }
     const mock = !!roadmap.simulated;

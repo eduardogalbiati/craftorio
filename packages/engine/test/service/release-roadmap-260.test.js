@@ -27,7 +27,8 @@ test('roadmap: a cut line starts the release run and the next stage waits for it
       { name: 'Stage two', items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] },
     ],
   });
-  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[0].release?.name, 'v1.0', 'the cut line is saved with the roadmap');
+  // #555: a stage's `release` is read as a release entry right after it
+  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[1]?.name, 'v1.0', 'the cut line is saved with the roadmap');
   await api['roadmap:start']({ projectId: p.id, simulated: true });
 
   await until(() => api['runs:active']().some((r) => hasIssue(r, 1)));
@@ -45,6 +46,6 @@ test('roadmap: a cut line starts the release run and the next stage waits for it
   await new Promise((r) => setTimeout(r, 500));
   assert.equal(api['runs:active']().some((r) => hasIssue(r, 2)), false);
   const roadmap = api['roadmap:get']({ projectId: p.id });
-  assert.equal(roadmap.stages[1].items[0].status, 'planned');
+  assert.equal(roadmap.stages[2].items[0].status, 'planned');
   assert.notEqual(roadmap.state, 'done');
 });

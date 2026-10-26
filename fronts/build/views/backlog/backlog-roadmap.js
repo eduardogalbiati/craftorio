@@ -1,41 +1,29 @@
 // The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (packages/engine/domains/roadmap/roadmap.js), each stage started
 // when the previous one has finished and merged; the bar names the base's known failures (#405, packages/engine/domains/project/base-health.js). The item card reads in three bands (#282). 1: its
-// issues' titles (what leads: a list, one line per issue, linked, #110; under it "4 issues ·
-// complexity 9", the total of their `complexity:n` labels) | cost and time (one line each: the
-// estimate, or the real value against it with a verdict and a bar; the time of a run at work is its
-// live timer) | the status block (the ring with the percent, the StatusPill and the step, the fix
-// round in full; a pill alone without a run: Planned, Skipped, "Failed to start" with the error when
-// the start was refused before any run, #266; then Retry / Skip, or move and Remove). 2: the Workflow
-// band: the workflow's name with "Open run →" (the run chip) or Edit, the mode toggle with its icons
-// (saved at once on planned and failed items, locked while the item runs), the push badge (#195),
-// Simulated, the chain and the other inputs; and the pipeline, the workflow's stations always
-// visible (RunProgress.pipeline: done, at work with the agent's name, sent back, not reached, the
-// Validated mode's "Your check" gate; a station opens the run there). 3: the Product Owner's reason
-// (#105), then the error line and the Edit form. The other inputs are edited in an
-// Edit form built from the workflow's input definitions (api.listWorkflows, loaded once) by
-// WorkflowInputs (workflow-inputs.js, #116: human labels, pills, switches, show_if), with Save / Cancel. The plan is edited too:
-// stages and items up/down or by drag, an issue dragged from one item to another, items removed, a
-// stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear;
-// Retry / Skip on a failed item. A stage's head has its number, its name and its state (its estimate
-// only with more than one item); its actions are in its ⋮ menu (#282; the keyboard opens it, the
-// arrows move in it, Esc closes it): Disable / Enable (#284: a disabled stage is skipped while the
-// roadmap runs; still listed, dimmed, with a "Disabled" badge, counted apart in the bar), Run this
-// stage (#141: only its items, then the roadmap pauses; out of order after a confirmation; off, with
-// the reason, while the roadmap runs or on a disabled stage), Release here, Run earlier / later, the note. A Product Owner proposal (#105, JSON) is added or replaces the
-// roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of
-// stages (api.saveRoadmap); the service keeps each item's runs by id.
-// #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written
-// elsewhere since, the service applies only this edit, or refuses it (`conflict`): the screen shows
-// the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or,
-// when its item is gone, those values show in the "Not saved" box (`lost`, roadmap-save-conflict).
-// `changedElsewhere` words what changed for the open form's notice (backlog.js staleNotice).
-// "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics,
-// each with its stage and the epic's items done.
-// Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it
-// on otherwise asks to start the roadmap) and the last refill; `liveBanner` is the banner backlog.js
-// shows on top of every view while it is on.
-// When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the
-// ChainPicker (chain-picker.js), mounted by mountChain once backlog.js drew the form.
+// issues' titles (what leads: a list, one line per issue, linked, #110; under it "4 issues · complexity 9", the total of their `complexity:n` labels) | cost and time
+// (one line each: the estimate, or the real value against it with a verdict and a bar; the time of a run at work is its live timer; the cost of a run at work
+// follows the live channel's backlog:state, #615) | the status block (the ring with the percent, the StatusPill and the step, the fix round in full; a pill alone
+// without a run: Planned, Skipped, "Failed to start" with the error when the start was refused before any run, #266; then Retry / Skip, or move and Remove).
+// 2: the Workflow band: the workflow's name with "Open run →" (the run chip) or Edit, the mode toggle with its icons (saved at once on planned and failed items,
+// locked while the item runs), the push badge (#195), Simulated, the chain and the other inputs; and the pipeline, the workflow's stations always visible
+// (RunProgress.pipeline: done, at work with the agent's name, sent back, not reached, the Validated mode's "Your check" gate; a merged run's Merge station is
+// done, its title the merged commit, #614; a station opens the run there). 3: the Product Owner's reason (#105), then the error line and the Edit form. The
+// other inputs are edited in an Edit form built from the workflow's input definitions (api.listWorkflows, loaded once) by WorkflowInputs (workflow-inputs.js,
+// #116: human labels, pills, switches, show_if), with Save / Cancel. The plan is edited too: stages and items up/down or by drag, an issue dragged from one
+// item to another, items removed, a stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear;
+// Retry / Skip on a failed item. A stage's head has its number, its name and its state (its estimate only with more than one item); its actions are in its ⋮
+// menu (#282; the keyboard opens it, the arrows move in it, Esc closes it): Disable / Enable (#284: a disabled stage is skipped while the roadmap runs; still
+// listed, dimmed, with a "Disabled" badge, counted apart in the bar), Run this stage (#141: only its items, then the roadmap pauses; out of order after a
+// confirmation; off, with the reason, while the roadmap runs or on a disabled stage), Release here, Run earlier / later, the note. A Product Owner proposal
+// (#105, JSON) is added or replaces the roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of stages
+// (api.saveRoadmap); the service keeps each item's runs by id.
+// #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written elsewhere since, the service applies only this edit, or
+// refuses it (`conflict`): the screen shows the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or, when its item is
+// gone, those values show in the "Not saved" box (`lost`, roadmap-save-conflict). `changedElsewhere` words what changed for the open form's notice
+// (backlog.js staleNotice). "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics, each with its stage and the
+// epic's items done. Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it on otherwise asks to start the
+// roadmap) and the last refill; `liveBanner` is the banner backlog.js shows on top of every view while it is on.
+// When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the ChainPicker (chain-picker.js), mounted by mountChain.
 // Cost (#205, #206): each item shows its estimate ("≈ $X", tooltip: how and from how many runs; "no
 // estimate yet" without history), its real cost once it has a run, and the Product Owner's Cost step
 // (a badge: the tests, screenshots and grouping it chose); a stage of several items its estimate. A roadmap the
@@ -47,50 +35,39 @@
 // A finished stage shows its real total against its estimate the same way. The bar sums them up (#421,
 // roadmap-summary.js): "Planned ≈ $X · ≈ T" left, "+ n without estimate", "Spent $Y", "By release" (test ids: roadmap-summary-by-release, its list roadmap-summary-releases, one roadmap-summary-release-row per cut line).
 // Inputs (#216): the item's inputs as WorkflowInputs.inputPills ("Unit tests: Run existing").
-// What it shows (#217, #268): html()'s `view` ({ epic, showAll, since }, remembered by backlog.js). The
-// Planned | All switch: Planned (showAll off) is the open work, every item but the done and skipped
-// ones, a stage with nothing left hidden, and only the latest release (#425); All is every item and release. The date range (`since`: last 24 hours
-// by default … Total) filters by an item's last activity (added, its run's start, its run's end): in
-// Planned the open items show whatever their date and the range picks the finished items folded
-// under a stage's green "+n done" chip (#267: a click unfolds that stage only, remembered per stage
-// id while it has something to fold); in All it filters every item. The header counts "N of M items
-// · last 24 hours"; the epic keeps only its items. Stage numbers and edits use the real indexes.
-// Pages (#268): about 15 stages (60 items) at a time, from a little before the current stage; a
-// "Loading…" row loads the next page when it comes near the screen (mounted), "earlier stages" the
-// page above; a change of the view goes back to the first page, a re-read of the file keeps them.
-// An item with a run (#194) has a progress ring in its status block: the estimated % (RunProgress.
-// estimateProgress over the item's `run` from the service: its trail and its workflow's typical step
-// times), the current step or group, the gate / failure / done states; hovering or clicking the
-// ring shows the run's summary (estimate, elapsed and time left, now, gate, run id; #236: the ring
-// and the step text carry no native title over the app's popover). The run's steps are the pipeline
-// of the Workflow band (#282), no longer in that popover.
-// The run's timer (#272, in the time line since #282): "23:41", gate waits left out, frozen at the
-// end; tick() moves it every second, green within the item's time estimate, amber up to 130% of it,
-// red beyond. A run sent back to a step it had done (a fix round) keeps the progress it had earned
-// and says "Round 2 · fix round after Code review" under the step: the same run, not a new one.
-// A refused start (#196: kept work, the item that paused the roadmap, an error without a run) offers
-// Retry / Skip like a failed run; the bar's "Show the item" scrolls to the item that paused it.
-// Start, Resume and Run this stage list the items whose workflow pushes while the default development
-// workflow (#195, DefaultWorkflow) merges locally: switch them to the default, or start anyway.
-// Cut lines (#260): "Release here" in a stage's ⋮ menu asks for the release's name (the #cut-line-modal
-// dialog of backlog.js) and draws a cut line after the stage (`stage.release`, saved with the stages):
-// its name, the state of its release run (in progress, on hold, failed, shipped) with a link to the
-// run, Rename and Remove while no run is going. The stages below wait until the release shipped; a
-// finished stage hidden by the open-work filter still shows its line while it waits, and so does
-// the view grouped by epic (the waiting lines lead it, each with its stage). Planned: the latest only (#425).
-// The bar (#269): the roadmap's state is a dot before its title (blue and pulsing while running, amber
-// paused, red paused by a failure, grey planned, green done; the readable state in its tooltip and
-// aria-label), then the counts, Start / Resume, Pause (amber, with its icon), Stop (red, with its icon,
-// after a confirmation) and a ⋮ menu built from MENU (Clear, Restore an earlier version…; the keyboard
-// opens it, the arrows move in it, Esc closes it). The filters (the epic, Planned | All, the date range,
-// Group by epic) sit on a filter row above the bar. A pause by an item's failure is the page's error
-// alert (#270, alerts(): Retry / Skip, Show the item); other pause notes (the budget cap, a stage run
-// on its own that ended, a release on hold) stay in the bar.
-// Ask the Oracle (#271): a card whose item failed, was interrupted or stopped, or could not start has
-// "Ask the Oracle about this failure" beside Retry / Skip (the gate button's code, gate-oracle.js).
-// Undo (#281): removing, moving or dragging an item, a stage or an issue, renaming a stage, removing a
-// cut line, Clear and Replace show a toast with Undo (app.js showToast's action; api.undoRoadmap puts
-// back what the edit changed); "Restore an earlier version…" lists the versions kept before each edit.
+// What it shows (#217, #268): html()'s `view` ({ epic, showAll, since }, remembered by backlog.js). The Planned | All switch: Planned (showAll off) is the
+// open work, every item but the done and skipped ones, a stage with nothing left hidden, and only the latest release (#425); All is every item and release.
+// The date range (`since`: last 24 hours by default … Total) filters by an item's last activity (added, its run's start, its run's end): in Planned the open
+// items show whatever their date and the range picks the finished items folded under a stage's green "+n done" chip (#267: a click unfolds that stage only,
+// remembered per stage id while it has something to fold); in All it filters every item. The header counts "N of M items · last 24 hours"; the epic keeps
+// only its items. Stage numbers and edits use the real indexes.
+// Pages (#268): about 15 stages (60 items) at a time, from a little before the current stage (#552: the running one); a "Loading…" row loads the next page
+// when it comes near the screen (mounted), "earlier stages" the page above; a change of the view goes back to the first page, a re-read keeps them.
+// An item with a run (#194) has a progress ring in its status block: the estimated % (RunProgress.estimateProgress over the item's `run` from the service:
+// its trail and its workflow's typical step times), the current step or group, the gate / failure / done states; hovering or clicking the ring shows the
+// run's summary (estimate, elapsed and time left, now, gate, run id; #236: the ring and the step text carry no native title over the app's popover). The
+// run's steps are the pipeline of the Workflow band (#282), no longer in that popover.
+// The run's timer (#272, in the time line since #282): "23:41", gate waits left out, frozen at the end; tick() moves it every second, green within the item's
+// time estimate, amber up to 130% of it, red beyond. A run sent back to a step it had done (a fix round) keeps the progress it had earned and says "Round 2 ·
+// fix round after Code review" under the step: the same run, not a new one. A refused start (#196: kept work, the item that paused the roadmap, an error
+// without a run) offers Retry / Skip like a failed run; the bar's "Show the item" scrolls to the item that paused it. Start, Resume and Run this stage list
+// the items whose workflow pushes while the default development workflow (#195, DefaultWorkflow) merges locally: switch them to the default, or start anyway.
+// Cut lines (#260, #555): "Release here" in a stage's ⋮ menu asks for the release's name (the #cut-line-modal dialog of backlog.js) and adds a release entry
+// after the stage. The screen draws the roadmap folded (RoadmapModel.foldReleases: each entry as the `release` of the stage before it) and saves it unfolded:
+// a dashed line with its name, the state of its release run (in progress, on hold, failed, shipped) and a link to the run, ↑ ↓ (it moves between stages,
+// a stage moved leaves it in place), Rename and Remove while no run is going; then its card, planned included (the stages it closes, its estimate). The
+// stages below wait until it shipped; a finished stage hidden by the open-work filter still shows its line while it waits, and so does the view grouped by
+// epic (the waiting lines lead it, each with its stage). Planned: the latest only (#425). The stage whose run is in progress is the Current one, the first
+// open stage, when another, shows Next (#552).
+// The bar (#269): the roadmap's state is a dot before its title (blue and pulsing while running, amber paused, red paused by a failure, grey planned, green
+// done; the readable state in its tooltip and aria-label), then the counts, Start / Resume, Pause (amber, with its icon), Stop (red, with its icon, after a
+// confirmation) and a ⋮ menu built from MENU (Clear, Restore an earlier version…; the keyboard opens it, the arrows move in it, Esc closes it). The filters
+// (the epic, Planned | All, the date range, Group by epic) sit on a filter row above the bar. A pause by an item's failure is the page's error alert (#270,
+// alerts(): Retry / Skip, Show the item); other pause notes (the budget cap, a stage run on its own that ended, a release on hold) stay in the bar.
+// Ask the Oracle (#271): a card whose item failed, was interrupted or stopped, or could not start has "Ask the Oracle about this failure" beside Retry / Skip
+// (the gate button's code, gate-oracle.js). Undo (#281): removing, moving or dragging an item, a stage or an issue, renaming a stage, moving or removing a
+// cut line, Clear and Replace show a toast with Undo (app.js showToast's action; api.undoRoadmap puts back what the edit changed); "Restore an earlier
+// version…" lists the versions kept before each edit.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError, setShowAll, setSince, setEpic, showRoadmap }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
 // fmtDur, agentLabel, scheduleRender, showToast), run-list.js's (progressAvatar, robotAvatar, PERSON_SVG, ENGINE_SVG),
@@ -1141,7 +1118,7 @@
     // the page to draw; #260: each drawn stage with its cut line; a hidden (finished) stage's line
     // still shows while its release has not shipped (between the drawn stages, and beyond them when
     // the page reaches that end of the roadmap)
-    const page = RoadmapModel.pageOf(vis, current, pages);
+    const page = RoadmapModel.pageOf(vis, next >= 0 ? Math.min(next, current) : current, pages); // #552: the Next stage stays on it
     const drawn = new Map(page.drawn.map((x) => [x.s, x]));
     const from = page.earlier ? page.drawn[0]?.s ?? 0 : 0;
     const to = page.more ? page.drawn.at(-1).s : r.stages.length - 1;

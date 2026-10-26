@@ -150,57 +150,63 @@ test('shipRelease: a tag that exists at another commit is refused; shipping twic
 // ---- packages/engine/domains/roadmap/roadmap.js: the cut line's state -----------------------------------------------------------
 
 const stageOf = (id, number, over = {}) => ({ id, name: '', items: [{ id: `i${number}`, workflow: 'a.yaml', number }], ...over });
+// #555: the cut line is a release entry of its own between the stages (its id, not a stage's)
+const releaseOf = (name, over = {}) => ({ kind: 'release', name, ...over });
+const entryOf = (r) => r.stages.find((s) => s.kind === 'release');
+const lineOf = (e) => Object.fromEntries(['name', 'status', 'runId'].filter((k) => e?.[k] !== undefined).map((k) => [k, e[k]]));
 
 test('an edit keeps the cut line\'s release state under the same name, never takes it from the edit, and a rename starts over (#260)', (t) => {
   const dir = tmp(t, 'roadmap-line-');
-  const [s1] = roadmaps.saveStages(dir, 'p', [stageOf(null, 1, { release: { name: 'v1', status: 'shipped' } }), stageOf(null, 2)]).stages;
-  assert.deepEqual(s1.release, { name: 'v1' }, 'an edit cannot mark a release shipped');
-  roadmaps.setRelease(dir, 'p', s1.id, { status: 'running', runId: 'r9' });
-  const kept = roadmaps.saveStages(dir, 'p', roadmaps.readRoadmap(dir, 'p').stages.map((s) => ({ ...s, release: s.release && { name: ' v1 ' } }))).stages[0];
-  assert.deepEqual(kept.release, { name: 'v1', status: 'running', runId: 'r9' });
-  const renamed = roadmaps.saveStages(dir, 'p', roadmaps.readRoadmap(dir, 'p').stages.map((s) => ({ ...s, release: s.release && { name: 'v2' } }))).stages[0];
-  assert.deepEqual(renamed.release, { name: 'v2' });
-  assert.equal(roadmaps.setRelease(dir, 'p', 'no-such-stage', { status: 'shipped' }), null);
+  const saved = roadmaps.saveStages(dir, 'p', [stageOf(null, 1), releaseOf('v1', { status: 'shipped' }), stageOf(null, 2)]);
+  const rel = entryOf(saved);
+  assert.deepEqual(lineOf(rel), { name: 'v1' }, 'an edit cannot mark a release shipped');
+  roadmaps.setRelease(dir, 'p', rel.id, { status: 'held', runId: 'r9' });
+  const kept = entryOf(roadmaps.saveStages(dir, 'p', roadmaps.readRoadmap(dir, 'p').stages.map((s) => (s.kind === 'release' ? { ...s, name: ' v1 ', status: undefined, runId: undefined } : s))));
+  assert.deepEqual(lineOf(kept), { name: 'v1', status: 'held', runId: 'r9' });
+  const renamed = entryOf(roadmaps.saveStages(dir, 'p', roadmaps.readRoadmap(dir, 'p').stages.map((s) => (s.kind === 'release' ? { ...s, name: 'v2' } : s))));
+  assert.deepEqual(lineOf(renamed), { name: 'v2' });
+  assert.equal(roadmaps.setRelease(dir, 'p', 'no-such-release', { status: 'shipped' }), null);
 });
 
 test('a held release pauses a running roadmap at its line; a resumed release run takes the line and the roadmap waits again (#260)', (t) => {
   const dir = tmp(t, 'roadmap-line-');
-  const [s1] = roadmaps.saveStages(dir, 'p', [stageOf(null, 1, { release: { name: 'v1' } }), stageOf(null, 2)]).stages;
+  const rel = entryOf(roadmaps.saveStages(dir, 'p', [stageOf(null, 1), releaseOf('v1'), stageOf(null, 2)]));
   roadmaps.setState(dir, 'p', 'running');
-  roadmaps.takeRelease(dir, 'p', s1.id, 'r1');
-  const held = roadmaps.holdRelease(dir, 'p', s1.id, 'held', 'Release v1 was not shipped');
-  assert.deepEqual(held.stages[0].release, { name: 'v1', status: 'held', runId: 'r1' });
-  assert.deepEqual([held.state, held.error, held.releaseHold], ['paused', 'Release v1 was not shipped', s1.id]);
+  roadmaps.takeRelease(dir, 'p', rel.id, 'r1');
+  const held = roadmaps.holdRelease(dir, 'p', rel.id, 'held', 'Release v1 was not shipped');
+  assert.deepEqual(lineOf(entryOf(held)), { name: 'v1', status: 'held', runId: 'r1' });
+  assert.deepEqual([held.state, held.error, held.releaseHold], ['paused', 'Release v1 was not shipped', rel.id]);
   const after = roadmaps.adoptResumed(dir, 'p', 'r1', 'r2');
-  assert.deepEqual(after.stages[0].release, { name: 'v1', status: 'running', runId: 'r2' });
+  assert.deepEqual(lineOf(entryOf(after)), { name: 'v1', status: 'running', runId: 'r2' });
   assert.deepEqual([after.state, after.error, after.releaseHold], ['running', null, null]);
 });
 
 test('a pause of the owner\'s is not undone by a release run that takes the line (#260)', (t) => {
   const dir = tmp(t, 'roadmap-line-');
-  const [s1] = roadmaps.saveStages(dir, 'p', [stageOf(null, 1, { release: { name: 'v1' } }), stageOf(null, 2)]).stages;
+  const rel = entryOf(roadmaps.saveStages(dir, 'p', [stageOf(null, 1), releaseOf('v1'), stageOf(null, 2)]));
   roadmaps.setState(dir, 'p', 'running');
-  roadmaps.takeRelease(dir, 'p', s1.id, 'r1');
-  roadmaps.holdRelease(dir, 'p', s1.id, 'failed', 'Release v1 was not shipped');
+  roadmaps.takeRelease(dir, 'p', rel.id, 'r1');
+  roadmaps.holdRelease(dir, 'p', rel.id, 'failed', 'Release v1 was not shipped');
   roadmaps.setState(dir, 'p', 'paused');
-  const after = roadmaps.takeRelease(dir, 'p', s1.id, 'r2');
+  const after = roadmaps.takeRelease(dir, 'p', rel.id, 'r2');
   assert.equal(after.state, 'paused');
-  assert.equal(after.stages[0].release.runId, 'r2');
+  assert.equal(entryOf(after).runId, 'r2');
   // a held line of a roadmap that is not running only records the outcome
   roadmaps.setState(dir, 'p', 'planned');
-  assert.equal(roadmaps.holdRelease(dir, 'p', s1.id, 'held', 'x').state, 'planned');
-  assert.equal(roadmaps.takeRelease(dir, 'p', 'no-such-stage', 'r3'), null);
+  assert.equal(roadmaps.holdRelease(dir, 'p', rel.id, 'held', 'x').state, 'planned');
+  assert.equal(roadmaps.takeRelease(dir, 'p', 'no-such-release', 'r3'), null);
 });
 
 test('advance: a cut line after the last stage keeps the roadmap open; a stage run on its own ignores cut lines (#260)', () => {
   const item = (id, status) => ({ id, workflow: 'w.yaml', number: 1, issues: [{ number: 1 }], status, runId: null, runs: [], error: null });
   const base = { state: 'running', simulated: false, error: null, pausedBy: null, scope: null };
-  const last = roadmaps.advance({ ...base, stages: [{ id: 's1', release: { name: 'v1' }, items: [item('i1', 'done')] }] }, { runOf: () => null });
-  assert.deepEqual(last.release, { stage: 's1', name: 'v1' });
+  const line = { kind: 'release', id: 'rel-1', name: 'v1', items: [] };
+  const last = roadmaps.advance({ ...base, stages: [{ id: 's1', items: [item('i1', 'done')] }, line] }, { runOf: () => null });
+  assert.deepEqual(last.release, { id: 'rel-1', name: 'v1' });
   assert.equal(last.roadmap.state, 'running');
   const scoped = roadmaps.advance({
     ...base, scope: { stage: 's2' },
-    stages: [{ id: 's1', release: { name: 'v1' }, items: [item('i1', 'done')] }, { id: 's2', items: [item('i2', 'planned')] }],
+    stages: [{ id: 's1', items: [item('i1', 'done')] }, line, { id: 's2', items: [item('i2', 'planned')] }],
   }, { runOf: () => null });
   assert.deepEqual(scoped.start.map((x) => x.id), ['i2']);
   assert.equal(scoped.release, undefined);
