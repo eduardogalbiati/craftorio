@@ -30,7 +30,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { snapshot, changedTestFiles } = require('../engine/test-paths');
+const { snapshot, changedTestFiles, existingRefs } = require('../engine/test-paths');
 const { WorkflowRun } = require('../engine/workflow');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
@@ -190,4 +190,94 @@ test('#525 two guarded turns of one run start at most 12 git processes in all', 
   }, { count: true });
   assert.equal(finished.status, 'success', finished.error);
   assert.ok(started.length <= 12, `${started.length} git processes in a run of two guarded turns (at most 12):\n${started.join('\n')}`);
+});
+
+test('#525 the repository root is asked of git once per run, not on every guarded turn', { timeout: 60000 }, async (t) => {
+  const { finished, started } = await runSteps(t, (repo, stepId) => {
+    if (stepId === 'polish') write(repo, 'src/extra.js', 'module.exports = 3;\n');
+  }, { count: true });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(started.filter((c) => c.includes('--show-toplevel')).length, 1, started.join('\n'));
+});
+
+test('#525 snapshot given the repository of an earlier snapshot does not ask git for the root and sees the new HEAD', async (t) => {
+  const repo = makeRepo(t);
+  const first = await snapshot(repo);
+  commit(repo, 'feature', { 'src/app.js': 'module.exports = 2;\n' });
+  write(repo, 'test/app.test.js', 'dirty before the turn\n');
+  const started = [];
+  calls = started;
+  let again;
+  try { again = await snapshot(repo, undefined, { repo: { root: first.root, gitDir: first.gitDir } }); } finally { calls = null; }
+  assert.deepEqual(started.filter((c) => c.includes('--show-toplevel')), []);
+  assert.equal(again.head, git(repo, 'rev-parse', 'HEAD'));
+  assert.notEqual(again.head, first.head);
+  assert.deepEqual(Object.keys(again.dirty), ['test/app.test.js']);
+});
+
+// Porcelain paths: spaces and non-ASCII letters, never quoted
+test('#525 changedTestFiles lists modified and untracked test files whose names have spaces and accents', async (t) => {
+  const repo = makeRepo(t);
+  commit(repo, 'spaced', { 'test/my app ção.test.js': 'ok\n' });
+  const snap = await snapshot(repo);
+  write(repo, 'test/my app ção.test.js', 'rewritten by the developer\n');
+  write(repo, 'test/new file.test.js', 'new\n');
+  assert.deepEqual(await changedTestFiles(snap, { bases: ['refs/heads/main'] }), ['test/my app ção.test.js', 'test/new file.test.js']);
+});
+
+test('#525 a test file with spaces that was already dirty and stays so is not refused', async (t) => {
+  const repo = makeRepo(t);
+  commit(repo, 'spaced', { 'test/my app.test.js': 'ok\n' });
+  write(repo, 'test/my app.test.js', 'the user\'s own change\n');
+  const snap = await snapshot(repo);
+  write(repo, 'src/app.js', 'module.exports = 2;\n');
+  assert.deepEqual(await changedTestFiles(snap, { bases: ['refs/heads/main'] }), []);
+});
+
+test('#525 an unresolved merge conflict on a test file with spaces in its name is not a change', async (t) => {
+  const repo = makeRepo(t);
+  commit(repo, 'branch', { 'test/my app.test.js': 'from the branch\n' });
+  git(repo, 'switch', '-q', 'main');
+  commit(repo, 'main', { 'test/my app.test.js': 'from main\n' });
+  git(repo, 'switch', '-q', 'feat');
+  const snap = await snapshot(repo);
+  assert.throws(() => git(repo, 'merge', '-q', '--no-edit', 'main'));
+  assert.deepEqual(await changedTestFiles(snap, { bases: ['refs/heads/main'] }), []);
+});
+
+test('#525 existingRefs keeps, in their order, only the refs that name a commit', async (t) => {
+  const repo = makeRepo(t);
+  git(repo, 'tag', '-a', '-m', 'v1', 'v1', 'main');
+  const refs = ['refs/remotes/origin/main', 'refs/tags/v1', 'refs/heads/feat', 'refs/heads/main', 'main'];
+  assert.deepEqual(await existingRefs(repo, refs), ['refs/tags/v1', 'refs/heads/feat', 'refs/heads/main', 'main']);
+  assert.deepEqual(await existingRefs(repo, []), []);
+});
+
+test('#525 existingRefs does not take a ref under the base name for the base itself', async (t) => {
+  const repo = makeRepo(t);
+  git(repo, 'branch', '-q', '-m', 'main', 'trunk');
+  git(repo, 'branch', '-q', 'main/x', 'trunk');
+  assert.deepEqual(await existingRefs(repo, ['refs/heads/main']), []);
+});
+
+// A linked worktree keeps its rebase state in its own git dir (.git/worktrees/<name>), not the common one
+test('#525 inside a rebase in a linked worktree, a pure combination of both sides is not a change', async (t) => {
+  const repo = makeRepo(t);
+  const FILE = 'test/app.test.js';
+  commit(repo, 'branch', { [FILE]: 'ok\nfrom the branch\n' });
+  git(repo, 'switch', '-q', 'main');
+  commit(repo, 'main', { [FILE]: 'ok\nfrom main\n' });
+  const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'git-calls-525-wt-'));
+  fs.rmSync(wt, { recursive: true, force: true });
+  t.after(() => fs.rmSync(wt, { recursive: true, force: true }));
+  git(repo, 'worktree', 'add', '-q', wt, 'feat');
+  assert.throws(() => git(wt, '-c', 'core.editor=true', 'rebase', 'main'));
+  const snap = await snapshot(wt);
+  fs.writeFileSync(path.join(wt, FILE), 'ok\nfrom main\nfrom the branch\n');
+  git(wt, 'add', FILE);
+  assert.deepEqual(await changedTestFiles(snap, { bases: ['refs/heads/main'] }), []);
+  // a line neither side wrote is still the agent's
+  fs.writeFileSync(path.join(wt, FILE), 'ok\nfrom main\nfrom the branch\nnew line\n');
+  git(wt, 'add', FILE);
+  assert.deepEqual(await changedTestFiles(snap, { bases: ['refs/heads/main'] }), [FILE]);
 });
