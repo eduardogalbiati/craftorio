@@ -4,8 +4,8 @@
 // - packages/engine/domains/roadmap/roadmap.js: a stage may carry `disabled: true` (stored in the roadmap JSON; an enabled stage
 //   has no such field). cleanStages / saveStages keep `disabled` when the incoming stage omits it
 //   (an Oracle or Product Owner edit), set it on an explicit true and drop it on an explicit false.
-//   advance() never starts an item of a disabled stage and moves past it; a disabled stage's cut line
-//   (`release`, #260) holds nothing; a roadmap whose enabled stages are all finished is `done` while
+//   advance() never starts an item of a disabled stage and moves past it; a release entry after a
+//   disabled stage stays in place (#555); a roadmap whose enabled stages are all finished is `done` while
 //   the disabled stages stay planned. currentStage() names the first unfinished ENABLED stage.
 //   setState(..., 'running', { stage }) on a disabled stage throws a message asking to enable it.
 // - packages/engine/domains/night/night-watch.js roadmapIncidents: a running roadmap with only disabled stages left is not
@@ -128,23 +128,51 @@ test('#284 advance with a scope (Run this stage): when the scoped stage ends and
   assert.deepEqual([out.roadmap.state, ids(out.start).length], ['done', 0]);
 });
 
-test('#284 advance: a disabled stage\'s cut line holds nothing: the stage after it starts and no release is asked', () => {
+test('#284 advance: a disabled first stage does not start its own items', () => {
   const r = mkRoadmap([
-    { id: 's1', items: [mkItem('i1', 1, { runId: 'r1', runs: ['r1'] })] },
-    { id: 's2', disabled: true, release: { name: 'v2.0' }, items: [mkItem('i2', 2)] },
-    { id: 's3', items: [mkItem('i3', 3)] },
-  ]);
-  const out = roadmaps().advance(r, { runOf });
-  assert.deepEqual([ids(out.start), out.release === undefined], [['i3'], true]);
-});
-
-test('#284 advance: a disabled first stage with a cut line does not start its own items either', () => {
-  const r = mkRoadmap([
-    { id: 's1', disabled: true, release: { name: 'v1.0' }, items: [mkItem('i1', 1)] },
+    { id: 's1', disabled: true, items: [mkItem('i1', 1)] },
     { id: 's2', items: [mkItem('i2', 2)] },
   ]);
   const out = roadmaps().advance(r, { runOf });
   assert.deepEqual([ids(out.start), out.release === undefined], [['i2'], true]);
+});
+
+// #555: a release is its own entry of the list ({ kind: 'release', id, name }, between stages): a
+// disabled stage before it is skipped and does not hold it, and the release is not lost with it.
+// (This replaces #284's rule that a disabled stage's cut line, `stage.release`, held nothing.)
+test('#555 advance: a disabled stage before a release is skipped; once the enabled stages before it are done, the release is asked', () => {
+  const r = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { runId: 'r1', runs: ['r1'] })] },
+    { id: 's2', disabled: true, items: [mkItem('i2', 2)] },
+    { kind: 'release', id: 'rel-2', name: 'v2.0' },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ]);
+  const out = roadmaps().advance(r, { runOf });
+  assert.deepEqual([ids(out.start), out.release?.id, out.release?.name], [[], 'rel-2', 'v2.0']);
+});
+
+test('#555 RoadmapModel.pendingRelease: a disabled stage before the release does not drop it', () => {
+  const { pendingRelease } = require('@multiagent/shared/roadmap-model');
+  const r = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
+    { id: 's2', disabled: true, items: [mkItem('i2', 2)] },
+    { kind: 'release', id: 'rel-2', name: 'v2.0' },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ]);
+  assert.equal(pendingRelease(r, 3)?.name, 'v2.0');
+});
+
+test('#555 disabling the only stage before a release keeps the release saved after it', (t) => {
+  const dir = tmp(t);
+  const R = roadmaps();
+  R.saveStages(dir, 'p1', [
+    { id: 's1', items: [{ workflow: 'w.yaml', number: 1 }] },
+    { kind: 'release', id: 'rel-1', name: 'v1.0' },
+    { id: 's2', items: [{ workflow: 'w.yaml', number: 2 }] },
+  ], { issues: issues(1, 2) });
+  const stages = R.readRoadmap(dir, 'p1').stages.map((s) => (s.id === 's1' ? { ...s, disabled: true } : s));
+  R.saveStages(dir, 'p1', stages, { issues: issues(1, 2) });
+  assert.deepEqual(R.readRoadmap(dir, 'p1').stages.map((s) => (s.kind === 'release' ? `release:${s.name}` : `${s.id}${s.disabled ? ' (disabled)' : ''}`)), ['s1 (disabled)', 'release:v1.0', 's2']);
 });
 
 test('#284 enabling a stage again (save with disabled: false) makes it run in its order at the next dispatch', (t) => {

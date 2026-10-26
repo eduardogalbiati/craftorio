@@ -30,16 +30,19 @@ const done = (id, n, runId, extra = {}) => H.item(id, 'done', n, `Issue ${n}`, {
 
 // 4 stages; 1.0.0 shipped (cut line after stage 2), 1.1.0 waiting at Ship (started from the
 // Releases screen: no cut line; its runs end in stage 3), a cut line 1.2.0 after stage 4 not started,
-// 0.9.0 shipped with no stage in the roadmap. The history lists them oldest first.
+// 0.9.0 shipped with no stage in the roadmap. The history lists them oldest first. The cut lines are
+// release entries of the list (#555), not a field of the stage before them.
 function fixture({ releases } = {}) {
   return {
     roadmap: {
       state: 'paused',
       stages: [
         { id: 'st1', name: 'Login', note: '', items: [done('i1', 1, 'r1'), done('i2', 2, 'r2')] },
-        { id: 'st2', name: 'Profile', note: '', release: { name: '1.0.0', status: 'shipped', runId: 'rel-100' }, items: [done('i3', 3, 'r3'), done('i4', 4, 'r4')] },
+        { id: 'st2', name: 'Profile', note: '', items: [done('i3', 3, 'r3'), done('i4', 4, 'r4')] },
+        { kind: 'release', id: 'rel-entry-100', name: '1.0.0', status: 'shipped', runId: 'rel-100' },
         { id: 'st3', name: 'Payments', note: '', items: [done('i5', 5, 'r5'), H.item('i6', 'planned', 6, 'Issue 6')] },
-        { id: 'st4', name: 'Reports', note: '', release: { name: '1.2.0' }, items: [H.item('i7', 'planned', 7, 'Issue 7')] },
+        { id: 'st4', name: 'Reports', note: '', items: [H.item('i7', 'planned', 7, 'Issue 7')] },
+        { kind: 'release', id: 'rel-entry-120', name: '1.2.0' },
       ],
     },
     issues: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ number: n, title: `Issue ${n}`, labels: [], epic: n === 1 ? 'E1' : 'E2' })),
@@ -57,7 +60,8 @@ function fixture({ releases } = {}) {
 const byTestId = (html, id) => H.findAll(html, (e) => e.attrs['data-testid'] === id);
 const blockOf = (html, version) => byTestId(html, 'roadmap-release-block').find((e) => H.visibleText(e.inner).includes(`Release ${version}`)) || null;
 const lineOf = (html, version) => byTestId(html, 'roadmap-release-line').find((e) => H.visibleText(e.inner).includes(version)) || null;
-const stageAt = (html, s) => H.findEl(html, (e) => e.attrs['data-testid'] === 'roadmap-stage' && e.attrs['data-stage'] === String(s));
+// The stage shown as "Stage <s + 1>" (release entries do not count in the stage numbers, #555).
+const stageAt = (html, s) => H.stageEl(html, s + 1);
 const must = (el, what) => { assert.ok(el, what); return el; };
 const allText = (el) => `${H.visibleText(el.outer)} ${el.attrs.title || ''} ${el.attrs['aria-label'] || ''}`;
 
@@ -111,7 +115,7 @@ test('#291 a simulated release run is marked Simulated', () => {
 
 test('#291 the block is not a stage: stage numbers unchanged, no stage controls, not a drop target', () => {
   const html = H.loadRoadmap().R.html(fixture(), () => {}, ALL);
-  assert.deepEqual(byTestId(html, 'roadmap-stage').map((e) => e.attrs['data-stage']), ['0', '1', '2', '3']);
+  assert.equal(H.stageCount(html), 4);
   for (const n of [1, 2, 3, 4]) assert.ok(H.stageEl(html, n), `Stage ${n} keeps its number`);
   for (const v of ['1.0.0', '1.1.0']) {
     const block = blockOf(html, v);
@@ -142,12 +146,15 @@ test('#291 a release not shipped yet: its line says the version and the state', 
   assert.ok(text.includes('Waiting for you'), text);
 });
 
-test('#291 the block and line replace the cut-line row once the release run started; a cut line not started keeps Rename and Remove', () => {
+test('#291 #555 a planned release\'s dashed line keeps Rename and Remove; a shipped one cannot be renamed', () => {
   const html = H.loadRoadmap().R.html(fixture(), () => {}, ALL);
   const cuts = byTestId(html, 'roadmap-cut-line');
-  assert.deepEqual(cuts.map((e) => e.attrs['data-cut-stage']), ['3'], 'only the 1.2.0 cut line (after stage 4) keeps its row');
-  const labels = H.findAll(cuts[0].inner, (e) => e.name === 'button').map((b) => H.visibleText(b.inner));
+  const buttons = (el) => H.findAll(el.inner, (e) => e.name === 'button').map((b) => H.visibleText(b.inner));
+  const planned = must(cuts.find((e) => allText(e).includes('1.2.0')), 'the dashed line of 1.2.0');
+  const labels = buttons(planned);
   assert.ok(labels.includes('Rename') && labels.includes('Remove'), labels.join(', '));
+  const shipped = cuts.find((e) => allText(e).includes('1.0.0'));
+  assert.equal(shipped ? buttons(shipped).includes('Rename') : false, false, 'no Rename on the shipped 1.0.0 line');
 });
 
 // ---- the Releases filter --------------------------------------------------------------------------------
@@ -206,6 +213,59 @@ test('#291 a release chosen whose runs the date range hides: the empty state say
   const { ctx, calls } = H.makeCtx();
   await R.onClick(H.clickOn(html, (e) => 'data-rm-all-time' in e.attrs), ctx, d);
   assert.deepEqual(calls.since, ['total']);
+});
+
+// ---- #555: a release is its own item of the roadmap; its card shows when planned too ----------------------
+// Shape assumed (the issue's): a release is an entry of `roadmap.stages` between stages,
+// { kind: 'release', id, name, status?, runId? } (no items; not a stage: the stages keep their numbers).
+// The service's roadmapReleases (data.releases) places every release entry, a planned one included:
+// { version, status: 'planned', runs: [], estimate: { usd, minutes } }. Right after the dashed line
+// (`roadmap-cut-line`, naming the release), the release's card (`roadmap-release-block`) shows its
+// name, its state (Planned), the stages it closes (by name: the ones since the previous release) and
+// its estimate.
+function plannedFixture({ status = 'planned', entry = {} } = {}) {
+  const est = (usd) => ({ usd, minutes: 60, runs: 12 });
+  return {
+    roadmap: {
+      state: 'planned',
+      stages: [
+        { id: 'st1', name: 'Login', note: '', estimate: est(3), items: [H.item('i1', 'planned', 1, 'Issue 1')] },
+        { id: 'st2', name: 'Profile', note: '', estimate: est(4.5), items: [H.item('i2', 'planned', 2, 'Issue 2')] },
+        { kind: 'release', id: 'rel-120', name: '1.2.0', ...entry },
+        { id: 'st3', name: 'Payments', note: '', estimate: est(2), items: [H.item('i3', 'planned', 3, 'Issue 3')] },
+      ],
+    },
+    issues: [1, 2, 3].map((n) => ({ number: n, title: `Issue ${n}`, labels: [] })),
+    releases: { releases: [{ version: '1.2.0', status, runs: [], estimate: { usd: 7.5, minutes: 90 }, ...(entry.runId ? { runId: entry.runId } : {}) }] },
+  };
+}
+const plannedBlock = (d = plannedFixture()) => {
+  const html = H.loadRoadmap().R.html(d, () => {}, ALL);
+  return { html, block: must(blockOf(html, '1.2.0'), 'a roadmap-release-block "Release 1.2.0"') };
+};
+
+test('#555 a planned release\'s card sits right after its dashed line, before the next stage; the stages keep their numbers', () => {
+  const { html, block } = plannedBlock();
+  const cut = must(byTestId(html, 'roadmap-cut-line').find((e) => allText(e).includes('1.2.0')), 'the dashed line of 1.2.0');
+  assert.deepEqual([block.start > cut.start, block.start < must(H.stageEl(html, 3), 'Stage 3').start, H.stageCount(html)], [true, true, 3]);
+});
+
+test('#555 a planned release\'s card says Planned', () => {
+  assert.match(H.visibleText(plannedBlock().block.inner), /planned/i);
+});
+
+test('#555 a planned release\'s card names the stages it closes', () => {
+  const text = H.visibleText(plannedBlock().block.inner);
+  assert.deepEqual([text.includes('Login'), text.includes('Profile'), text.includes('Payments')], [true, true, false]);
+});
+
+test('#555 a planned release\'s card shows its estimate', () => {
+  assert.ok(H.visibleText(plannedBlock().block.inner).includes('$7.50'), H.visibleText(plannedBlock().block.inner));
+});
+
+test('#555 a release entry whose run is checking keeps its card in its place in the list', () => {
+  const { html, block } = plannedBlock(plannedFixture({ status: 'checking', entry: { status: 'running', runId: 'rel-run-120' } }));
+  assert.deepEqual([block.start > must(H.stageEl(html, 2), 'Stage 2').start, block.start < must(H.stageEl(html, 3), 'Stage 3').start, /checking/i.test(H.visibleText(block.inner))], [true, true, true]);
 });
 
 test('#291 a release with no stage in the roadmap: its block and line alone, with its run count', () => {

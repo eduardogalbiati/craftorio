@@ -532,6 +532,84 @@ test('html: the stage run on its own is highlighted (running or paused), the bar
   assert.match(paused, /<span class="badge warn">This stage only · paused<\/span>/);
 });
 
+// ---- #552: the running stage is Current; the first open stage, when another, is Next ------------------
+// Assumed: the stage with an item `running` gets `.rm-stage.current` and the Current badge (the
+// latest such stage when two run); RoadmapModel.currentStage (the first open stage), when it is
+// another stage, gets a "Next" badge (i18n key backlog_roadmap.next, the sibling of
+// backlog_roadmap.current; en "next") and no `.current`. Nothing running: as before.
+// `stageHead`: { cls: the section's classes, badges: the texts of the head's badges }.
+function stageHead(html, s) {
+  const m = new RegExp(`<section class="rm-stage([^"]*)" data-stage="${s}"[^>]*>\\s*<div class="rm-stage-head">([\\s\\S]*?)<button`).exec(html);
+  assert.ok(m, `stage ${s + 1} is drawn`);
+  return { cls: m[1].trim().split(/\s+/).filter(Boolean), badges: [...m[2].matchAll(/<span class="badge[^"]*"[^>]*>([^<]*)<\/span>/g)].map((b) => b[1].trim().toLowerCase()) };
+}
+const drawStages = (statuses, over = {}) => loadRoadmap().BacklogRoadmap.html(threeStageData(statuses, { state: 'running', ...over }), () => {}, SHOW_ALL);
+
+test('#552 the stage whose item is running is the current one (highlight and Current badge), not the first open stage', () => {
+  const html = drawStages(['done', 'planned', 'running']);
+  const head = stageHead(html, 2);
+  assert.deepEqual([head.cls.includes('current'), head.badges.includes('current')], [true, true]);
+});
+
+test('#552 the first open stage, when another stage runs, shows a Next badge and no highlight', () => {
+  const html = drawStages(['done', 'planned', 'running']);
+  const head = stageHead(html, 1);
+  assert.deepEqual([head.cls.includes('current'), head.badges.includes('current'), head.badges.includes('next')], [false, false, true]);
+});
+
+test('#552 nothing running: the first open stage is Current and no stage says Next', () => {
+  const html = drawStages(['done', 'planned', 'planned']);
+  const heads = [0, 1, 2].map((s) => stageHead(html, s));
+  assert.deepEqual([heads[1].cls.includes('current'), heads[1].badges.includes('current'), heads.some((h) => h.badges.includes('next'))], [true, true, false]);
+});
+
+test('#552 the running stage is also the first open one: Current, and no stage says Next', () => {
+  const html = drawStages(['done', 'running', 'planned']);
+  const heads = [0, 1, 2].map((s) => stageHead(html, s));
+  assert.deepEqual([heads[1].cls.includes('current'), heads.some((h) => h.badges.includes('next'))], [true, false]);
+});
+
+test('#552 two stages running: the later one is current', () => {
+  const html = drawStages(['running', 'planned', 'running']);
+  assert.deepEqual([0, 1, 2].map((s) => stageHead(html, s).cls.includes('current')), [false, false, true]);
+});
+
+test('#552 an item parked at a human gate counts as finished: its stage is neither current nor next', () => {
+  const html = drawStages(['parked', 'planned', 'running']);
+  const head = stageHead(html, 0);
+  assert.deepEqual([head.cls.includes('current'), head.badges.includes('current'), head.badges.includes('next')], [false, false, false]);
+});
+
+test('#552 a disabled stage is never current nor next', () => {
+  const data = threeStageData(['planned', 'planned', 'running'], { state: 'running' });
+  data.roadmap.stages[0].disabled = true;
+  const head = stageHead(loadRoadmap().BacklogRoadmap.html(data, () => {}, SHOW_ALL), 0);
+  assert.deepEqual([head.cls.includes('current'), head.badges.includes('current'), head.badges.includes('next')], [false, false, false]);
+});
+
+test('#552 a stage run on its own (#141) keeps "Running this stage only" and its highlight, with no Next elsewhere', () => {
+  const html = drawStages(['planned', 'running', 'planned'], { scope: { stage: 'st2' } });
+  const heads = [0, 1, 2].map((s) => stageHead(html, s));
+  assert.deepEqual([heads[1].cls.includes('current'), heads[1].badges.includes('running this stage only'), heads.some((h) => h.badges.includes('next'))], [true, true, false]);
+});
+
+test('#552 the Next badge has its label in English and Brazilian Portuguese (backlog_roadmap.next)', () => {
+  const read = (lang) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n', `${lang}.json`), 'utf8'));
+  const [en, pt] = [read('en'), read('pt-BR')];
+  assert.deepEqual([typeof en['backlog_roadmap.next'], typeof pt['backlog_roadmap.next']], ['string', 'string']);
+  assert.equal(en['backlog_roadmap.next'].toLowerCase(), 'next');
+});
+
+test('#552 RoadmapModel.runningStage: the index of the latest stage with a running item, -1 when none', () => {
+  const { runningStage } = require('@multiagent/shared/roadmap-model');
+  const stage = (status) => ({ items: [{ id: status, status }] });
+  assert.deepEqual([
+    runningStage({ stages: [stage('done'), stage('planned'), stage('running')] }),
+    runningStage({ stages: [stage('running'), stage('running'), stage('planned')] }),
+    runningStage({ stages: [stage('done'), stage('planned')] }),
+  ], [2, 1, -1]);
+});
+
 test('onClick [data-rm-run-stage]: running a stage while an earlier one is still planned asks to confirm first, naming it; declining starts nothing', async () => {
   const confirms = [];
   const { BacklogRoadmap, startCalls } = loadRoadmap({ confirmDialog: async (title, body) => { confirms.push({ title, body }); return false; } });

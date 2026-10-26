@@ -8,7 +8,8 @@
 // after this stage" / "Pause now", the pausing badge and Cancel pause, #391), "Move on" past an item at
 // a human gate, its parked card and "Move on from this stage" (#395), "Run later" / "Run earlier" past the
 // stages Planned hides (#426), the live refresh keeping the scroll position and updating rows in
-// place (#491), on the demo roadmap (scripts/screenshot.js
+// place (#491), a planned release's card after its dashed line (#555), the Current and Next stages
+// (#552), a cleanly merged item's Merge station (#614), a running item's live cost meter (#615), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -1259,4 +1260,159 @@ Then('the toast says stage {int} moved {word} and is stage {int} now', async ({ 
   await expect(t).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(t).toContainText(`Moved stage ${before} ${direction}`);
   await expect(t).toContainText(new RegExp(`it is stage ${after} now`, 'i'));
+});
+
+// ---- #555: a planned release is an item of the Roadmap -------------------------------------------------
+// What the screen exposes (new for #555): a planned release (a cut line, stage.release, not shipped)
+// draws its #291 block right after its dashed line (data-testid="roadmap-cut-line", data-cut-stage =
+// the stage's index), also while planned: data-testid="roadmap-release-block" with data-release =
+// its name and data-status="planned", holding data-testid="roadmap-release-card" ("Release v0.10"),
+// which names the stages it closes (e.g. "Stages 2–4") and its estimate ("≈ $X"). Disabling the stage
+// before it leaves it in place. Its "Remove" button (on the card or its line, accessible name starting
+// with "Remove") takes it off; the toast (data-testid="toast", as #281) says "Removed the release
+// <name>" with an "Undo" button that brings it back.
+
+const cutLine = (page, name) => page.getByTestId('roadmap-cut-line').filter({ hasText: releaseRe(name) }).first();
+const plannedRelease = (page, name) => page.locator(`[data-testid="roadmap-release-block"][data-release="${name}"]`).first();
+const plannedReleaseCard = (page, name) => plannedRelease(page, name).getByTestId('roadmap-release-card');
+
+// the card follows its dashed line in the page, with no stage between them
+Then('the card of the planned release {string} comes right after its dashed line', async ({ e2e }, name) => {
+  const page = e2e.window;
+  const card = plannedReleaseCard(page, name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cutLine(page, name)).toBeVisible();
+  const between = await card.evaluate((el, source) => {
+    const re = new RegExp(source);
+    const line = Array.from(document.querySelectorAll('[data-testid="roadmap-cut-line"]')).find((l) => re.test(l.textContent));
+    if (!line || !(line.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) return -1;
+    return Array.from(document.querySelectorAll('[data-testid="roadmap-stage"]'))
+      .filter((s) => (line.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING) && (s.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)).length;
+  }, releaseRe(name).source);
+  expect(between, `the card of "${name}" comes after its dashed line (-1: before it or no line)`).toBe(0);
+});
+
+Then('the card of the planned release {string} names the stages it closes, up to stage {int}', async ({ e2e }, name, n) => {
+  const card = plannedReleaseCard(e2e.window, name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(releaseRe(name));
+  await expect(card).toContainText(new RegExp(`\\bstages?\\b[^\\n]*\\b${n}\\b`, 'i'));
+});
+
+Then('the card of the planned release {string} shows its estimate', async ({ e2e }, name) => {
+  await expect(plannedReleaseCard(e2e.window, name)).toContainText(/≈\s*\$\s?\d/, { timeout: LOAD_TIMEOUT });
+});
+
+When('I remove the planned release {string}', async ({ e2e }, name) => {
+  const page = e2e.window;
+  await expect(plannedReleaseCard(page, name)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const remove = plannedRelease(page, name).getByRole('button', { name: /^remove\b/i })
+    .or(cutLine(page, name).getByRole('button', { name: /^remove\b/i })).first();
+  await remove.scrollIntoViewIfNeeded();
+  await remove.click();
+  const confirm = page.getByTestId('confirm-modal');
+  if (await confirm.isVisible()) await confirm.getByRole('button', { name: /^remove\b/i }).click();
+});
+
+// ---- #552: Current and Next on the stages ------------------------------------------------------------------
+// What the screen exposes (new for #552): the current stage (the one with a running item; with nothing
+// running, the first open stage) carries data-current="true" on its roadmap-stage section and a
+// "Current" badge, data-testid="roadmap-stage-current"; when the first open stage is another one, it
+// shows a "Next" badge, data-testid="roadmap-stage-next". One of each at most on the page.
+
+// a planned stage of one item (issue #5521, made up) put in place of stage n, which moves down
+Given('the roadmap has an open stage {string} before stage {int}', async ({ e2e }, name, n) => {
+  editRoadmap(e2e, (r) => {
+    expect(r.stages[n - 1], `the demo roadmap's stage ${n}`).toBeTruthy();
+    const model = r.stages.flatMap((s) => s.items).find((x) => x.status === 'planned' && !x.runId && !x.error);
+    expect(model, 'a planned item in the demo roadmap').toBeTruthy();
+    const issue = { number: 5521, url: 'https://github.com/example/demo-app/issues/5521', title: `${name} item`, body: '', knownPullRequests: [] };
+    const base = JSON.parse(JSON.stringify(model));
+    for (const k of ['issues', 'reason', 'modeReason', 'origin', 'cost']) delete base[k];
+    const item = { ...base, id: 'item-earlier-5521', ...issue, status: 'planned', runId: null, runs: [], error: null };
+    r.stages.splice(n - 1, 0, { id: 'stage-earlier-5521', name, note: '', items: [item] });
+  });
+});
+
+Then('stage {int} is highlighted as the current stage', async ({ e2e }, n) => {
+  const page = e2e.window;
+  const s = stage(page, n);
+  await expect(s).toHaveAttribute('data-current', 'true', { timeout: LOAD_TIMEOUT });
+  await expect(s.getByTestId('roadmap-stage-current')).toHaveText('Current');
+  await expect(page.getByTestId('roadmap-stage-current')).toHaveCount(1);
+  await expect(s.getByTestId('roadmap-stage-next')).toHaveCount(0);
+});
+
+Then('stage {int} is not highlighted as the current stage', async ({ e2e }, n) => {
+  const s = stage(e2e.window, n);
+  await expect(s).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(s).not.toHaveAttribute('data-current', 'true');
+  await expect(s.getByTestId('roadmap-stage-current')).toHaveCount(0);
+});
+
+Then('stage {int} shows the {string} badge', async ({ e2e }, n, text) => {
+  expect(text).toBe('Next');
+  const page = e2e.window;
+  await expect(stage(page, n).getByTestId('roadmap-stage-next')).toHaveText(text, { timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId('roadmap-stage-next')).toHaveCount(1);
+});
+
+Then('no stage shows the {string} badge', async ({ e2e }, text) => {
+  expect(text).toBe('Next');
+  const page = e2e.window;
+  await expect(page.getByTestId('roadmap-stage').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId('roadmap-stage-next')).toHaveCount(0);
+});
+
+// ---- #614: a cleanly merged item's Merge station ---------------------------------------------------------
+// The pipeline's stations (#282, roadmap-station, data-state); a done station reads "✓", one not run "—".
+
+Then('the pipeline of the done roadmap item {string} shows its {string} station as done', async ({ e2e }, title, name) => {
+  const item = e2e.window.locator('[data-testid="roadmap-item"][data-status="done"]').filter({ hasText: title }).first();
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const station = item.getByTestId('roadmap-pipeline').getByTestId('roadmap-station').filter({ hasText: name });
+  await expect(station).toHaveCount(1);
+  await expect(station).toHaveAttribute('data-state', 'done');
+  await expect(station).toContainText('✓');
+  await expect(station).not.toContainText('—');
+});
+
+// ---- #615: a running item's cost meter follows its run ----------------------------------------------------
+// The card's Cost meter (data-testid="roadmap-meter-cost", #282) reads "$X.XX" (then "of ≈ $Y"): its
+// first amount is the run's cost so far. The window is marked when the cost is noted: a reload clears it.
+
+const costNoted = new WeakMap();
+const costOf = async (page, title) => {
+  const text = await roadmapItem(page, title).getByTestId('roadmap-meter-cost').innerText();
+  const m = text.match(/\$\s?([\d,]+(?:\.\d+)?)/);
+  return m ? Number(m[1].replace(/,/g, '')) : null;
+};
+
+When('I note the cost meter of the roadmap item {string}', async ({ e2e }, title) => {
+  const page = e2e.window;
+  await expect(roadmapItem(page, title).getByTestId('roadmap-meter-cost')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const before = await costOf(page, title);
+  costNoted.set(e2e, before == null ? 0 : before);
+  await page.evaluate(() => { window.e2eCostNoted = true; });
+});
+
+// a session of the run's current step answers with this cost, appended to its events as the engine does
+When('the running demo run {string} records a session cost of {float} dollars', async ({ e2e }, fragment, usd) => {
+  const { file, events } = runEvents(e2e, fragment);
+  const current = events.filter((e) => e.type === 'step.started').at(-1);
+  expect(current, `the demo run ${fragment} has a step running`).toBeTruthy();
+  const opened = events.filter((e) => e.type === 'session.opened').at(-1);
+  const event = {
+    ts: new Date().toISOString(), type: 'session.message_received', session_id: opened?.session_id || `s-${current.step_id}`, step_id: current.step_id,
+    cost_usd: usd, duration_ms: 60000, session: opened?.session || { agent: 'reviewer', provider: 'claude', model: 'claude-sonnet-5-5' },
+  };
+  fs.appendFileSync(file, `${JSON.stringify(event)}\n`);
+});
+
+Then('the cost meter of the roadmap item {string} grows by {float} dollars without a reload', async ({ e2e }, title, usd) => {
+  const page = e2e.window;
+  const before = costNoted.get(e2e);
+  expect(before, 'the cost noted earlier').not.toBeUndefined();
+  await expect.poll(() => costOf(page, title), { timeout: LOAD_TIMEOUT }).toBeCloseTo(before + usd, 1);
+  expect(await page.evaluate(() => window.e2eCostNoted === true), 'the window was not reloaded').toBe(true);
 });

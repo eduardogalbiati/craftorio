@@ -716,3 +716,96 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then the roadmap item "Planned item 1030" shows "Appended from elsewhere"
     And the roadmap item "Planned item 1030" was updated in place
     And the roadmap item "Planned item 1030" has not moved on the screen
+
+  # ---- #555: a planned release is an item of the Roadmap ----------------------------------------------
+  # The demo roadmap plans one release, "v0.10", on a cut line after stage 4 "Test batch"; stage 5
+  # waits for it. While planned, its card shows right after its dashed line: its name, the stages it
+  # closes and its estimate.
+
+  @issue-555
+  Scenario: A planned release shows its card right after its dashed line, with the stages it closes and its estimate
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap shows the block "Release v0.10" right after stage 4
+    And the release block "v0.10" shows its release card
+    And the card of the planned release "v0.10" comes right after its dashed line
+    And the card of the planned release "v0.10" names the stages it closes, up to stage 4
+    And the card of the planned release "v0.10" shows its estimate
+
+  @issue-555
+  Scenario: Disabling the stage before a planned release leaves the release in place
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 4
+    And I choose "Disable" in the stage actions menu
+    Then stage 4 is shown as disabled
+    And the roadmap shows the release block "v0.10"
+    And the card of the planned release "v0.10" comes right after its dashed line
+    When I reload the app
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then stage 4 is shown as disabled
+    And the card of the planned release "v0.10" comes right after its dashed line
+
+  @issue-555
+  Scenario: Removing a planned release can be undone from its toast
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I remove the planned release "v0.10"
+    Then a toast says "Removed the release v0.10" with an "Undo" button
+    And the roadmap does not show the release block "v0.10"
+    When I click "Undo" in the toast
+    Then the roadmap shows the release block "v0.10"
+    And the card of the planned release "v0.10" comes right after its dashed line
+
+  # ---- #552: the running stage is Current, the first open stage before it is Next --------------------
+  # An open stage "Earlier work" (one planned item) is put before the demo's stage "Tonight", whose run
+  # #16 is running: "Tonight" becomes stage 3 and is the current one; stage 2 is the first open stage.
+
+  @issue-552
+  Scenario: The stage with a running item is Current, an earlier open stage shows "Next"
+    Given the app is open
+    And the roadmap has an open stage "Earlier work" before stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then stage 3 is the stage "Tonight"
+    And stage 3 is highlighted as the current stage
+    And stage 2 shows the "Next" badge
+    And stage 2 is not highlighted as the current stage
+
+  @issue-552
+  Scenario: With nothing running the first open stage is Current and no stage shows "Next"
+    Given the app is open
+    And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then stage 1 is highlighted as the current stage
+    And no stage shows the "Next" badge
+
+  # ---- #614: a cleanly merged item's Merge station reads done -------------------------------------------
+  # "Add a /health endpoint" (#9) is one of tonight's done items: its run merged with no merge conflict to
+  # resolve, so no step of the Merge station ran.
+
+  @issue-614
+  Scenario: A finished item that merged cleanly shows its Merge station as done
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I click the done chip of stage 2
+    Then the pipeline of the done roadmap item "Add a /health endpoint" shows its "Merge" station as done
+
+  # ---- #615: a running item's cost meter follows its run --------------------------------------------------
+  # The demo run "run00016" (#16) is in code review; a reviewer session's cost is appended to its events
+  # (as the engine records it) while the Roadmap is open, with no reload.
+
+  @issue-615
+  Scenario: A running item's cost meter shows a new session cost of its run without reloading
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I note the cost meter of the roadmap item "Keyboard focus is lost after closing a dialog"
+    And the running demo run "run00016" records a session cost of 2.50 dollars
+    Then the cost meter of the roadmap item "Keyboard focus is lost after closing a dialog" grows by 2.50 dollars without a reload

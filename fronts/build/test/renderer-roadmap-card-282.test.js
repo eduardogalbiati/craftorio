@@ -337,6 +337,36 @@ test('#282 a done item: the meters compare with the estimate (cost under it ok, 
   assert.deepEqual([part(html, 'a', 'roadmap-meter-cost').attrs['data-verdict'], part(html, 'a', 'roadmap-meter-time').attrs['data-verdict']], ['ok', 'over']);
 });
 
+// ---- #614: a run that merged cleanly draws its Merge station done ------------------------------------------
+// Assumed: the service's runView gives the card's run `mergedCommit` (the merged commit, null when the
+// run did not merge); the card passes it to RunProgress.pipeline, whose Merge station is then done (✓)
+// and names that commit (its title, its accessible name or its text).
+const AI_HERO = 'ai-development-local-hero.yaml';
+const MERGED = 'abc1234def567890abc1234def567890abc12345';
+function mergedCard(mergedCommit) {
+  const start = H.NOW - 2 * H.HOUR;
+  const progress = [step('develop', 'done', start), step('code_review', 'done', start + 10 * H.MIN), step('test', 'done', start + 20 * H.MIN)];
+  return card({
+    workflow: AI_HERO, workflowName: 'AI development, local hero', status: 'done', runId: 'run-m', runs: ['run-m'],
+    run: H.run({ status: 'success', workflow: AI_HERO, startedAt: H.iso(start), finishedAt: H.iso(start + 30 * H.MIN), progress, groups: wfEntry(AI_HERO).groups, mergedCommit }),
+  });
+}
+const mergeStation = (html) => allByTestId(part(html, 'a', 'roadmap-pipeline').outer, 'roadmap-station').find((e) => e.attrs['data-step'] === 'Merge');
+
+test('#614 a done item whose run merged cleanly (never entered resolve_merge): the Merge station is done ✓', async () => {
+  const { R } = await ready();
+  const st = mergeStation(draw(R, one(mergedCard(MERGED), { state: 'done' })));
+  assert.ok(st, 'a Merge station');
+  assert.deepEqual([st.attrs['data-state'], text(st).includes('✓')], ['done', true]);
+});
+
+test('#614 the Merge station of a merged run names the merged commit', async () => {
+  const { R } = await ready();
+  const st = mergeStation(draw(R, one(mergedCard(MERGED), { state: 'done' })));
+  assert.ok(st, 'a Merge station');
+  assert.match(`${st.attrs.title || ''} ${st.attrs['aria-label'] || ''} ${H.visibleText(st.outer)}`, /abc1234/);
+});
+
 // ---- the stations of each bundled development workflow ---------------------------------------------------
 
 for (const file of DEV_WORKFLOWS) {
