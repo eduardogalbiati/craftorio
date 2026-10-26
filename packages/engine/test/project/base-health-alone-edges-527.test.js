@@ -58,7 +58,8 @@ function fakeExec() {
 }
 
 const suite = (failures) => async () => ({ failures: failures.map((f) => ({ ...f })), log: failures.length ? 'red' : 'green' });
-const passAlone = async () => ({ status: 'pass', failures: [], ms: 800 });
+// #613: the second round (rerunFiles, one call for the failed files) in place of the re-run alone
+const passAlone = async () => ({ failures: [], log: 'green on the re-run' });
 
 function checkArgs(repo, locks, extra = {}) {
   return {
@@ -71,50 +72,51 @@ test('#527 a check whose only failures are green alone is green-alone: the last 
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const fx = fakeExec();
-  const args = checkArgs(f.repo, locks, { exec: fx.exec, runAlone: passAlone });
+  const args = checkArgs(f.repo, locks, { exec: fx.exec, rerunFiles: passAlone });
   assert.equal((await runBaseCheck(ws, { ...args, runSuite: suite([]) })).status, 'green');
   const greenAt = readStore(ws, PROJECT).lastGreen?.at;
   assert.ok(greenAt, 'a green check sets the last green (fixture check)');
-  assert.equal((await runBaseCheck(ws, { ...args, runSuite: suite([PLAIN]) })).status, 'red');
+  const stillRed = async () => ({ failures: [{ ...PLAIN }], log: 'red again' });
+  assert.equal((await runBaseCheck(ws, { ...args, rerunFiles: stillRed, runSuite: suite([PLAIN]) })).status, 'red');
 
   const r = await runBaseCheck(ws, { ...args, runSuite: suite([SLOW]) });
-  assert.deepEqual({ status: r.status, alone: r.alone === true, issues: (r.issues || []).length }, { status: 'green', alone: true, issues: 0 });
+  assert.deepEqual({ status: r.status, issues: (r.issues || []).length }, { status: 'green', issues: 0 });
   assert.equal(readStore(ws, PROJECT).lastGreen?.at, greenAt, 'not a green suite: the last green does not move');
   assert.deepEqual(knownFailures(ws, PROJECT).map((x) => x.test), [PLAIN.test], 'the open failure is not marked fixed');
   assert.equal(fx.creates.length, 1, 'only the plain failure was ever filed');
 });
 
-test('#527 a timed-out test whose re-run alone throws is kept: recorded and filed', async (t) => {
+test('#527 a timed-out test whose re-run throws is kept: recorded and filed', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const fx = fakeExec();
-  const runAlone = async () => { throw new Error('spawn EPERM'); };
-  const r = await runBaseCheck(ws, { ...checkArgs(f.repo, locks, { exec: fx.exec, runAlone }), runSuite: suite([SLOW]) });
+  const rerunFiles = async () => { throw new Error('spawn EPERM'); };
+  const r = await runBaseCheck(ws, { ...checkArgs(f.repo, locks, { exec: fx.exec, rerunFiles }), runSuite: suite([SLOW]) });
   assert.equal(r.status, 'red');
   assert.equal(fx.creates.length, 1);
   assert.ok(fx.creates[0].includes(SLOW.test), fx.creates[0]);
   assert.deepEqual(knownFailures(ws, PROJECT).map((x) => x.test), [SLOW.test]);
 });
 
-test('#527 a timing assertion (a duration, not a timeout) is re-run alone and, green alone, files nothing', async (t) => {
+test('#527 a timing assertion (a duration, not a timeout) is re-run and, green on the re-run, files nothing', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const fx = fakeExec();
   const files = [];
-  const runAlone = async ({ file }) => { files.push(String(file)); return { status: 'pass', failures: [], ms: 700 }; };
-  await runBaseCheck(ws, { ...checkArgs(f.repo, locks, { exec: fx.exec, runAlone }), runSuite: suite([TIMING]) });
-  assert.deepEqual(files, [TIMING.file], 're-run alone');
+  const rerunFiles = async ({ files: list }) => { files.push(...Array.from(list || [], String)); return { failures: [], log: 'green' }; };
+  await runBaseCheck(ws, { ...checkArgs(f.repo, locks, { exec: fx.exec, rerunFiles }), runSuite: suite([TIMING]) });
+  assert.deepEqual(files, [TIMING.file], 're-run');
   assert.equal(fx.creates.length, 0, 'nothing filed');
   assert.equal(knownFailures(ws, PROJECT).length, 0, 'nothing recorded');
 });
 
-test('#527 the "red under load, green alone" line names the runs active at the time', async (t) => {
+test('#527 the "red in the whole suite, green on the re-run" line names the runs active at the time', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const logs = [];
   const log = (level, message) => logs.push(String(message));
-  await runBaseCheck(ws, { ...checkArgs(f.repo, locks, { exec: fakeExec().exec, runAlone: passAlone, log, load: () => ['run-a', 'run-b'] }), runSuite: suite([SLOW]) });
-  const line = logs.find((l) => /red under load, green alone/.test(l)) || '';
+  await runBaseCheck(ws, { ...checkArgs(f.repo, locks, { exec: fakeExec().exec, rerunFiles: passAlone, log, load: () => ['run-a', 'run-b'] }), runSuite: suite([SLOW]) });
+  const line = logs.find((l) => /red in the whole suite, green on the re-run/.test(l)) || '';
   assert.ok(line.includes('run-a') && line.includes('run-b'), `the load is named: ${line}`);
 });
 

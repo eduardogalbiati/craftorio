@@ -19,6 +19,8 @@
 // - A test is red alone when runAlone's status is not 'pass' (its failures list it, or it hangs).
 // - The green-alone log line goes through `log(level, message)` and matches /red under load, green alone/,
 //   naming the test.
+// #613 widened the rule: every failure goes through one second round (rerunFiles({ cwd, env, files, commit })
+// → { failures, log?, error? }, base-health-rerun.test.js) in place of runAlone; these tests use it.
 // - runBaseCheck also takes the suite slot (base-health-slot-527.test.js): the slot folder is a temp
 //   MULTIAGENT_LOCKS_DIR here.
 const test = require('node:test');
@@ -64,16 +66,21 @@ function fakeExec() {
   return { exec, creates };
 }
 
-/** runAlone, faked: `outcome[file]` is 'pass' or 'fail'; each call recorded with whether its cwd exists. */
+/**
+ * #613: the second round (rerunFiles, one call for the failed tests' files) replaced the re-run alone.
+ * `outcome[file]` is 'pass' or 'fail'; each file of each call recorded with whether its cwd exists.
+ */
 function fakeAlone(outcome) {
   const calls = [];
-  const runAlone = async ({ cwd, file, test: name, timeoutMs }) => {
-    calls.push({ file: String(file), test: name == null ? null : String(name), timeoutMs, cwdExists: !!cwd && fs.existsSync(cwd), cwd: String(cwd) });
-    const status = outcome[file] || 'pass';
-    const failing = [SLOW, SLOW2, PLAIN].filter((f) => f.file === file).map((f) => ({ test: f.test, file: f.file, error: 'still failing alone' }));
-    return { status, failures: status === 'fail' ? failing : [], ms: 1200 };
+  const rounds = [];
+  const rerunFiles = async ({ cwd, files }) => {
+    const list = Array.from(files || [], String);
+    rounds.push(list);
+    for (const file of list) calls.push({ file, cwdExists: !!cwd && fs.existsSync(cwd), cwd: String(cwd) });
+    const failures = [SLOW, SLOW2, PLAIN].filter((f) => list.includes(f.file) && outcome[f.file] === 'fail').map((f) => ({ test: f.test, file: f.file, error: 'still failing' }));
+    return { failures, log: 'rerun log' };
   };
-  return { runAlone, calls };
+  return { rerunFiles, calls, rounds };
 }
 
 function suiteOf(failures) {
@@ -95,51 +102,52 @@ test('#527 a test timed out in the whole suite that passes alone files nothing, 
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const fx = fakeExec();
-  const { runAlone, calls } = fakeAlone({ [SLOW.file]: 'pass' });
-  const r = await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([SLOW]).runSuite, runAlone, exec: fx.exec });
+  const { rerunFiles, calls } = fakeAlone({ [SLOW.file]: 'pass' });
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([SLOW]).runSuite, rerunFiles, exec: fx.exec });
   assert.equal(fx.creates.length, 0, 'no issue filed');
-  assert.equal(calls.length, 1, 'the timed-out test is re-run alone');
+  assert.equal(calls.length, 1, 'the timed-out test is re-run (#613: in the second round)');
   assert.equal(r.fixItem ? r.fixItem.id : null, null, 'no fix item');
   assert.equal(fixStages(ws).length, 0, 'no "Fix the base" stage');
   assert.equal(load().knownFailures(ws, PROJECT).length, 0, 'nothing recorded as failing on the base');
 });
 
-test('#527 a test red under load and green alone is logged as such, naming the test', async (t) => {
+test('#527 a test red under load and green on the re-run is logged as such, naming the test', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const logs = [];
   const log = (level, message) => logs.push(String(message ?? level));
-  const { runAlone } = fakeAlone({ [SLOW.file]: 'pass' });
-  await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([SLOW]).runSuite, runAlone, exec: fakeExec().exec, log });
-  const line = logs.find((l) => /red under load, green alone/.test(l));
-  assert.ok(line, `a "red under load, green alone" line: ${JSON.stringify(logs)}`);
+  const { rerunFiles } = fakeAlone({ [SLOW.file]: 'pass' });
+  await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([SLOW]).runSuite, rerunFiles, exec: fakeExec().exec, log });
+  // #613: the line of the second round
+  const line = logs.find((l) => /red in the whole suite, green on the re-run/.test(l));
+  assert.ok(line, `a "red in the whole suite, green on the re-run" line: ${JSON.stringify(logs)}`);
   assert.ok(line.includes(SLOW.test), `the line names the test: ${line}`);
 });
 
-test('#527 of two tests timed out in the whole suite, only the one red alone files an issue', async (t) => {
+test('#527 of two tests timed out in the whole suite, only the one red on the re-run files an issue', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const fx = fakeExec();
-  const { runAlone, calls } = fakeAlone({ [SLOW.file]: 'fail', [SLOW2.file]: 'pass' });
+  const { rerunFiles, calls, rounds } = fakeAlone({ [SLOW.file]: 'fail', [SLOW2.file]: 'pass' });
   const suite = suiteOf([SLOW, SLOW2]);
-  const r = await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suite.runSuite, runAlone, exec: fx.exec });
-  assert.deepEqual(calls.map((c) => c.file).sort(), [SLOW2.file, SLOW.file].sort(), 'each timed-out test re-runs alone');
-  assert.ok(calls.every((c) => c.cwdExists && path.resolve(c.cwd) === path.resolve(suite.seen.cwd)), 'alone in the check\'s base checkout, still there');
-  assert.ok(calls.every((c) => Number.isFinite(c.timeoutMs) && c.timeoutMs > 0), 'with a per-test budget');
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suite.runSuite, rerunFiles, exec: fx.exec });
+  assert.equal(rounds.length, 1, '#613: one second round for both');
+  assert.deepEqual(calls.map((c) => c.file).sort(), [SLOW2.file, SLOW.file].sort(), 'each timed-out test re-runs');
+  assert.ok(calls.every((c) => c.cwdExists && path.resolve(c.cwd) === path.resolve(suite.seen.cwd)), 're-run in the check\'s base checkout, still there');
   assert.equal(fx.creates.length, 1, 'one issue');
-  assert.ok(fx.creates[0].includes(SLOW.test), `the issue names the test red alone: ${fx.creates[0]}`);
+  assert.ok(fx.creates[0].includes(SLOW.test), `the issue names the test red on the re-run: ${fx.creates[0]}`);
   assert.equal(r.status, 'red');
-  assert.deepEqual(load().knownFailures(ws, PROJECT).map((x) => x.test), [SLOW.test], 'only the test red alone is recorded');
+  assert.deepEqual(load().knownFailures(ws, PROJECT).map((x) => x.test), [SLOW.test], 'only the test red on the re-run is recorded');
 });
 
-// Guard (green before the change): a failure that is not about time is filed as before, never re-run alone.
-test('#527 guard: an ordinary assertion failure is filed without a re-run alone', async (t) => {
+// #613: an ordinary assertion failure goes through the second round too; red again, it is filed.
+test('#527 an ordinary assertion failure is re-run too and, red again, filed', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const fx = fakeExec();
-  const { runAlone, calls } = fakeAlone({});
-  await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([PLAIN]).runSuite, runAlone, exec: fx.exec });
-  assert.equal(calls.length, 0, 'not re-run alone');
+  const { rerunFiles, calls } = fakeAlone({ [PLAIN.file]: 'fail' });
+  await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([PLAIN]).runSuite, rerunFiles, exec: fx.exec });
+  assert.deepEqual(calls.map((c) => c.file), [PLAIN.file], 're-run in the second round');
   assert.equal(fx.creates.length, 1);
   assert.ok(fx.creates[0].includes(PLAIN.test));
 });
