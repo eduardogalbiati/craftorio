@@ -373,6 +373,9 @@ function initNotifications() {
   // was disconnected (its events are lost)
   window.addEventListener('focus', () => loadActiveRuns());
   api.onReconnect?.(() => loadActiveRuns());
+  // the browser client's pushed channel down: "Disconnected, reconnecting…" until it is back (#603;
+  // nothing before the first connection, so the page's start does not flash it)
+  api.onConnectionChange?.((up) => $('#connection-status')?.classList.toggle('hidden', up !== false));
   window.addEventListener('blur', reportNotifyContext);
   document.addEventListener('visibilitychange', reportNotifyContext);
   api.onNotificationClick((target) => openNotificationTarget(target || {}));
@@ -647,6 +650,7 @@ const RUN_EVENT_REDUCERS = {
   },
   'approval.resolved': (v, ev, sess, effects) => {
     v.approvals.delete(ev.approval_id);
+    v.answered?.delete(ev.approval_id); // the push confirms the answered card (#603)
     // the owner's time at the gates, shown apart from agent time (Details, the Time KPI)
     if (v.run && ev.wait_ms) v.run.gateWaitMs = (v.run.gateWaitMs || 0) + ev.wait_ms;
     // "Accept and save to issue #n" (#125): the preview opens when the run ends (workflow.finished)

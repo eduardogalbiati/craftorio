@@ -71,25 +71,52 @@
   // Pushed channels (run:event, term:data, term:exit, auth:changed) and fire-and-forget messages.
   // Reconnects when the connection drops (server restart, network); events pushed meanwhile are
   // lost, so a reconnection is announced (onReconnect) for the UI to read the state again.
+  // A watchdog (#603) replaces an open socket on which no frame (not even the engine's `ws:ping`
+  // heartbeat) arrived for SILENCE_MS: a frozen or half-dead socket never fires `close`.
+  const SILENCE_MS = 20000;
   const listeners = new Map();
   const reconnected = new Set();
+  const connectionListeners = new Set();
   const outbox = [];
   let socket = null;
   let dropped = false;
+  let connected = false;
+  let lastFrame = 0;
+  let watchdog = null;
+  function setConnected(up) {
+    if (connected === up) return;
+    connected = up;
+    for (const cb of connectionListeners) cb(up);
+  }
+  function checkAlive() {
+    if (socket?.readyState !== WebSocket.OPEN || Date.now() - lastFrame <= SILENCE_MS) return;
+    // the dead socket's late events must not reopen another one
+    const dead = socket;
+    dead.onopen = dead.onmessage = dead.onclose = null;
+    try { dead.close(); } catch { /* already gone */ }
+    dropped = true;
+    setConnected(false);
+    connect();
+  }
   function connect() {
     socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
     socket.onopen = () => {
+      lastFrame = Date.now();
+      // armed once, at the first connection (#603)
+      watchdog ??= setInterval(checkAlive, 2000);
       while (outbox.length && socket.readyState === WebSocket.OPEN) socket.send(outbox.shift());
+      setConnected(true);
       if (dropped) for (const cb of reconnected) cb();
       dropped = false;
       checkVersion();
     };
     socket.onmessage = (m) => {
+      lastFrame = Date.now();
       let msg;
       try { msg = JSON.parse(m.data); } catch { return; }
       for (const cb of listeners.get(msg.channel) || []) cb(msg.payload);
     };
-    socket.onclose = () => { dropped = true; setTimeout(connect, 1500); };
+    socket.onclose = () => { dropped = true; setConnected(false); setTimeout(connect, 1500); };
   }
   connect();
   const subscribe = (channel) => (cb) => {
@@ -165,6 +192,9 @@
     // where this page's engine runs, seen from the window: 'remote' inside the desktop app, else 'browser'
     engineConnection: { mode: desktopClient ? 'remote' : 'browser', host: location.host },
     onReconnect: (cb) => { reconnected.add(cb); return () => reconnected.delete(cb); },
+    // the pushed channel's state, for the shell's "reconnecting" indicator (#603)
+    onConnectionChange: (cb) => { connectionListeners.add(cb); return () => connectionListeners.delete(cb); },
+    get connected() { return connected; },
   };
   for (const entry of manifest.result) {
     if (entry.method) api[entry.method] = method(entry);

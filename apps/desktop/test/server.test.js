@@ -296,7 +296,7 @@ test('GET /api/manifest lists every channel, and the desktop and browser clients
   const browser = loadApiHttpApi(manifest);
   const methodsOf = (api, extra) => Object.keys(api).filter((k) => !extra.includes(k)).sort();
   const preloadMethods = methodsOf(preload, ['platform']);
-  const browserMethods = methodsOf(browser, ['platform', 'onReconnect']);
+  const browserMethods = methodsOf(browser, ['platform', 'onReconnect', 'onConnectionChange', 'connected']);
   assert.ok(preloadMethods.length > 30);
   assert.deepEqual(preloadMethods, browserMethods);
 });

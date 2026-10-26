@@ -21,8 +21,10 @@ function renderRunGates() {
   const v = selectedView();
   const box = $('#run-gates');
   const gates = [...v.approvals.values()];
-  box.classList.toggle('hidden', !gates.length);
-  const key = `${gates.map((g) => `${g.run_id}:${g.approval_id}`).join('|')}:${runLabel(v.run)}`;
+  // the gates answered from this window, until approval.resolved confirms them (#603)
+  const answered = [...(v.answered?.values() || [])];
+  box.classList.toggle('hidden', !gates.length && !answered.length);
+  const key = `${gates.map((g) => `${g.run_id}:${g.approval_id}`).join('|')}:${answered.map((a) => `${a.gate.approval_id}:${a.note}`).join('|')}:${runLabel(v.run)}`;
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = gates.map((g) => {
@@ -41,14 +43,16 @@ function renderRunGates() {
     const side = gateSideHtml(g);
     const rec = g.brief?.recommendation?.answer;
     return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-testid="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}"${rec ? ` data-recommend="${esc(rec)}"` : ''}>${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
-  }).join('');
+  }).join('') + answered.map(({ gate: g, note }) => `<div class="run-gate run-gate-answered" data-testid="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}"><div class="run-gate-head"><b>${esc(note)}</b><span class="muted small mono">${esc(`step: ${g.step_id}`)}</span></div></div>`).join('');
   mountGateSides(box);
   paintGateApps();
 }
 
 // A click on a gate card's button answers that gate (true/false or a choice id) with the run's id,
-// so it works for any run in progress; the card goes away with approval.resolved. A choice that
-// needs the feedback text (feedback_required) is not sent without one.
+// so it works for any run in progress. The accepted answer leaves the run's gates at once (the card
+// says "Answered", or when a gate answered elsewhere was; the badge and the menu follow, #603);
+// approval.resolved only confirms it. A choice that needs the feedback text (feedback_required) is
+// not sent without one.
 function onRunGateClick(e) {
   const tool = e.target.closest('[data-gate-tool]');
   if (tool) { onGateTool(e, tool.closest('.run-gate')?.dataset.run); return; }
@@ -67,7 +71,16 @@ function onRunGateClick(e) {
       const extra = images.length ? [b.dataset.intent || null, images] : b.dataset.intent ? [b.dataset.intent] : [];
       return api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run, ...extra);
     })
-    .then((ok) => { if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast(t('run.the_gate_did_not_accept_the'), t('run.it_needs_a_text_or_it')); } })
+    .then((ok) => {
+      if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast(t('run.the_gate_did_not_accept_the'), t('run.it_needs_a_text_or_it')); return; }
+      const note = ok?.already_answered ? t('run.already_answered_at', { time: TimeZone.formatTime(ok.answered_at, TimeZone.current()) }) : t('run.answered');
+      const run = state.runs.get(card.dataset.run);
+      const gate = run?.approvals.get(card.dataset.approval);
+      if (gate) { run.approvals.delete(gate.approval_id); (run.answered ||= new Map()).set(gate.approval_id, { gate, note }); }
+      const actions = card.querySelector('.run-gate-actions');
+      if (actions) actions.textContent = note;
+      scheduleRender();
+    })
     .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast(t('run.could_not_answer_the_gate'), errMsg(err)); });
   // the answer opposite to the gate's recommendation asks once (#213); any other is sent at once
   // (data-recommend on the card: the recommended answer, approve / reject or a choice id)
