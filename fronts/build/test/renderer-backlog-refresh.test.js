@@ -174,8 +174,8 @@ test('no form open: status events refresh the screen at most once per 2 s', asyn
   assert.equal(t.renders(), 1, 'the changed data is rendered once');
 });
 
-test('no form open: session messages (session.message_received) refresh nothing', async () => {
-  const t = load();
+test('no form open, outside the Roadmap: session messages (session.message_received) refresh nothing', async () => {
+  const t = load({ mode: 'list' });
   t.setData(A);
   for (let i = 0; i < 10; i++) {
     t.run({ type: 'session.message_received', text: 'working' });
@@ -183,6 +183,17 @@ test('no form open: session messages (session.message_received) refresh nothing'
   }
   assert.deepEqual(t.fetches, []);
   assert.equal(t.renders(), 0);
+});
+
+test('#615 on the Roadmap: session messages refresh it (its cost meter) at most once per 2 s', async () => {
+  const t = load();
+  t.setData(A);
+  const start = t.clock.now;
+  for (let i = 0; i < 10; i++) {
+    t.run({ type: 'session.message_received', text: 'working', cost_usd: 0.1 });
+    await t.advance(300);
+  }
+  assert.deepEqual(t.fetches.map((x) => x - start), [0, 2000]);
 });
 
 test('reload with the same data as shown renders nothing; changed data renders once', async () => {
