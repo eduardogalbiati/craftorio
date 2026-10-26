@@ -14,7 +14,7 @@ Eduardo Galbiati (`eduardogalbiati/multiagent-orchestrator`, branch `main`).
   family (a test enforces it). Languages: `js`, `python`, `go`, `java`, `csharp`; platforms: `gh`,
   `gl`. What a family shares is a suffix-less skill referenced with `uses:`. `code-review` is one
   skill with per-language `rules/*.md`.
-- **Agents run unattended**: skills record an assumption or a default; only Grill me may ask, and an agent of a step with `ask_human: true` through `needs_human`, which pauses the run at a gate (#567).
+- **Agents run unattended**: skills record an assumption or a default; only Grill me may ask.
 - **The workspace is the product** (packaged .exe): everything the user edits or produces lives in
   the workspace folder; the app folder (read-only app.asar) only holds bundled defaults. Never read
   or write user data relative to `__dirname`.
