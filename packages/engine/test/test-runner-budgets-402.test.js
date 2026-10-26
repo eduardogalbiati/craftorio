@@ -94,8 +94,10 @@ test('#402 a hung test is reported by name and file, "timed out after N s", and 
 
 // A unit file and a slow file (slow/…slow.test.js), each requiring its own module and writing
 // "start|end <name>" to a trace file around a short wait. Inside the repository (a gitignored
-// folder) so node's coverage table lists the modules.
+// folder) so node's coverage table lists the modules. mkdtempSync never creates its parent, and
+// a fresh checkout has no .test-output/ yet (#602).
 function twoGroups(t) {
+  fs.mkdirSync(path.join(root, '.test-output'), { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, '.test-output', 'runner-groups-402-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
   const trace = path.join(dir, 'trace.txt');
