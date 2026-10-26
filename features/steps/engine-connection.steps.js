@@ -29,6 +29,8 @@ function connectionWindow(e2e) {
 Given('this computer cannot encrypt the engine token', async ({ e2e }) => {
   await e2e.app.evaluate(({ safeStorage }) => {
     safeStorage.isEncryptionAvailable = () => false;
+    // #578: the async check that replaces it on Electron 45
+    safeStorage.isAsyncEncryptionAvailable = async () => false;
   });
 });
 
