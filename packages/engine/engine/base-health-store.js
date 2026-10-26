@@ -1,6 +1,7 @@
 // The base-health store (#405): the tests known to fail on a project's base, one file per project,
 // <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck: the last base
-// check's { commit, at, status }, #598 }). Each failure is keyed
+// check's { commit, at, status }, #598, flaky: the tests red in the base check's whole suite and green
+// on its re-run, { test, file, commit, at }, #613 }). Each failure is keyed
 // by file + test: first_seen, last_seen, the runs that saw it, its issue. Here so the engine can
 // record a run's pre-existing failures (recordSightings, packages/engine/engine/machine-actions.js) without the
 // root area; filing issues and the base check stay in packages/engine/domains/project/base-health.js.
@@ -14,6 +15,8 @@ const { writeJsonSafe } = require('../domains/workspace/state-file');
 // sightings of a pre-existing failure that file its issue
 const RUNS_FOR_ISSUE = 2;
 const HISTORY = 20;
+// #613: the flaky sightings kept per project
+const FLAKY_HISTORY = 100;
 
 const slug = (s) => path.basename(String(s || '')).replace(/[^\w.-]+/g, '-');
 const storeDir = (ws) => path.join(ws, 'backlog', 'base-health');
@@ -24,8 +27,13 @@ function readStore(ws, projectId) {
   try {
     const s = JSON.parse(fs.readFileSync(storeFile(ws, projectId), 'utf8'));
     // #598: the last check (commit, at, status), kept when there is one
-    return { failures: Array.isArray(s.failures) ? s.failures : [], lastGreen: s.lastGreen || null, ...(s.lastCheck ? { lastCheck: s.lastCheck } : {}) };
-  } catch { return { failures: [], lastGreen: null }; }
+    return {
+      failures: Array.isArray(s.failures) ? s.failures : [],
+      lastGreen: s.lastGreen || null,
+      ...(s.lastCheck ? { lastCheck: s.lastCheck } : {}),
+      flaky: Array.isArray(s.flaky) ? s.flaky : [],
+    };
+  } catch { return { failures: [], lastGreen: null, flaky: [] }; }
 }
 const writeStore = (ws, projectId, store) => writeJsonSafe(storeFile(ws, projectId), store, {
   validate: (s) => (Array.isArray(s?.failures) ? null : 'failures is not a list'),
@@ -92,6 +100,14 @@ function addSightings(store, { runId, commit, failures = [], at }) {
   return due;
 }
 
+// #613: the base check's tests red in the whole suite, green on the re-run, added to `store` (in
+// memory) as flaky sightings { test, file, commit, at }, the latest FLAKY_HISTORY kept
+function addFlaky(store, failures, { commit, at }) {
+  const seen = failures.map((f) => ({ test: String(f.test || ''), file: String(f.file || ''), commit: commit || null, at }));
+  store.flaky = [...(store.flaky || []), ...seen].slice(-FLAKY_HISTORY);
+  return seen;
+}
+
 /**
  * A run's pre-existing failures recorded in the store, nothing filed (the engine's suite step; the
  * service's packages/engine/domains/project/base-health.js recordPreexisting files what is due for the same run).
@@ -109,6 +125,7 @@ function recordSightings(ws, opts) {
 }
 
 module.exports = {
+  addFlaky,
   addSightings,
   confirmedFailures,
   HISTORY,

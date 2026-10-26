@@ -12,8 +12,9 @@
 // (settings.defaultWorkflow through DefaultWorkflow.resolve, read each time, #413). A simulated run
 // never reaches here; the check itself runs the suite in simulation, never pushes.
 // #527: the check waits for the machine-wide suite slot (announced `waiting`, "base check waiting for
-// the suite slot", and in the server log), re-runs a timing failure alone (runFileAlone) before filing,
-// and inserts no fix item for an issue a live run works on (ctx.liveRunForIssues).
+// the suite slot", and in the server log) and inserts no fix item for an issue a live run works on
+// (ctx.liveRunForIssues). #613: with failures, the failed tests' files run once more in one command
+// (rerunFor, its own log) before anything is filed.
 
 const fs = require('fs');
 const path = require('path');
@@ -27,12 +28,18 @@ const simulation = require('../../engine/simulation');
 const depsCache = require('../../engine/deps-cache');
 const {
   detectTestCommand,
+  FILE_TIMEOUT_MS,
+  filteredCommand,
   parseFailures,
   runCommand,
-  runFileAlone,
   suiteDurations,
   suiteTimeout,
 } = require('../../engine/suite-step');
+const {
+  fitsCommandLine,
+  takesFileList,
+  TEST_FILES_ENV,
+} = require('../../engine/suite-command-line');
 
 module.exports = (ctx) => {
   // projectId -> the merge whose check a release deferred (the latest one: it checks the newest tip)
@@ -139,16 +146,38 @@ module.exports = (ctx) => {
     return { failures, log, error };
   };
 
-  // #527: one timing failure's file alone in the check's checkout (suite-step runFileAlone), its log
-  // next to the suite's (base-check-<project>-alone-<n>.log)
-  const aloneFor = (project) => {
-    let n = 0;
-    return async ({ cwd, env, file, timeoutMs }) => {
-      const command = detectTestCommand(cwd);
-      if (!command || !file) return { status: 'fail', failures: [], ms: 0 };
-      const logFile = logOf(project.id).replace(/-suite\.log$/, `-alone-${++n}.log`);
-      return runFileAlone({ command, file, cwd, where: 'in the base check', env, timeoutMs, run: runCommand, logFile, why: 'it failed on time in the whole suite' });
-    };
+  // #613: the second round, the failed tests' files in one command in the check's checkout (on the
+  // command line, else through the list file of #553/#597 when the runner reads one), its log next to
+  // the suite's (base-check-<project>-rerun.log, the list beside it as -rerun.files.txt)
+  const rerunFor = (project) => async ({ cwd, env, files }) => {
+    const logFile = logOf(project.id).replace(/-suite\.log$/, '-rerun.log');
+    fs.rmSync(logFile, { force: true });
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    const command = detectTestCommand(cwd);
+    if (!command) {
+      fs.appendFileSync(logFile, 'no test command found\n');
+      return { failures: [], log: '', error: 'no test command found' };
+    }
+    let run = filteredCommand(command, files);
+    let listEnv = {};
+    if (!run || !fitsCommandLine(run)) {
+      if (!takesFileList(command, cwd)) {
+        fs.appendFileSync(logFile, `the command cannot run ${files.length} file(s) on their own: ${command}\n`);
+        return { failures: [], log: '', error: `${command} cannot run the failed files on their own` };
+      }
+      const list = logFile.replace(/\.log$/, '.files.txt');
+      fs.writeFileSync(list, `${files.join('\n')}\n`);
+      run = command;
+      listEnv = { [TEST_FILES_ENV]: list };
+    }
+    fs.appendFileSync(logFile, `$ ${run}\n# ${files.length} file(s) re-run in the base check: they failed in the whole suite\n`);
+    const timeoutMs = Math.min(FILE_TIMEOUT_MS * files.length, suiteTimeout(suiteDurations({ file: path.join(ctx.ws.cache, 'suite-durations.json'), key: `${project.folder}\n${command}` })));
+    const r = await runCommand({ command: run, cwd, env: { ...env, ...listEnv }, timeoutMs, logFile });
+    let log = '';
+    try { log = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
+    const failures = parseFailures(log, { cwd });
+    const error = r.timedOut ? 'the re-run timed out' : r.error || (r.code && !failures.length ? `the re-run exited with ${r.code}, no failure parsed` : null);
+    return { failures, log, error };
   };
 
   // #527: the wait for the machine-wide suite slot, in the server log and on the Roadmap
@@ -160,7 +189,7 @@ module.exports = (ctx) => {
     }),
   });
   const serverLog = (level, message) => (level === 'warn' || level === 'error' ? console.warn : console.log)(String(message).startsWith('base check') ? message : `base check: ${message}`);
-  // the runs active while the check ran: the load a "red under load, green alone" line names
+  // the runs active while the check ran: the load a "red in the whole suite, green on the re-run" line names
   const load = () => [...(ctx.active?.values?.() || [])].map((r) => r.runId).filter(Boolean);
 
   // The owner hears of a red or failed check (a green or deferred one is silent)
@@ -186,7 +215,7 @@ module.exports = (ctx) => {
       trigger: tested === 'not green' ? 'not-green' : 'merge',
       releaseHoldsBase: () => releaseHoldsBase(project.id),
       runSuite: suiteFor(project),
-      runAlone: aloneFor(project),
+      rerunFiles: rerunFor(project),
       slot: slotFor(project),
       log: serverLog,
       load,

@@ -43,11 +43,17 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   the log file and notifies "Base check could not run: <reason>", with no issue and no fix item
   (nothing is known about the tests). The store records the last check as
   `lastCheck: { commit, at, status }` (`green`, `red`, `error`); `lastGreen` stays the last green
-  commit. A failure whose error is `test timed
-  out` or a timing assertion is re-run alone (`runFileAlone`, the per-test budget) in the base
-  checkout before anything is recorded: green alone, it is logged "red under load, green alone"
-  with the runs active at the time, and records, files and reopens nothing. Only confirmed
-  failures (red alone, or a plain assertion) are stored with `confirmed_at`. A red test files (or updates) its issue with the commit range (the last
+  commit. Two rounds (#613, widening #527's timing-only re-run): when the whole suite has failures,
+  a second round runs only the failed tests' files, one command (the list file of #553/#597 when
+  they do not fit the command line), in the same base checkout while the check still holds the
+  suite slot, its log in `worktrees/base-check-<project>-rerun.log`; a green check runs no second
+  round and no test runs a third time (a timing failure goes through the same round). Only a test
+  red in both rounds is stored with `confirmed_at` and filed. A test red then green is logged "red
+  in the whole suite, green on the re-run" with the runs active at the time and kept as a flaky
+  sighting in the store (`flaky: [{ test, file, commit, at }]`), nothing filed or reopened; when
+  every failure was green on the re-run the check is `green` (`lastGreen` unchanged). A second
+  round that throws, times out or does not start counts as red for its tests; a failure without a
+  file is filed after the first round. A red test files (or updates) its issue with the commit range (the last
   green check, the first red commit) and the log; a test red again after a green check reopens its
   issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
   adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`;

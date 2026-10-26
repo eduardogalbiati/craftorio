@@ -12,14 +12,17 @@
 //   fix item, mode auto, goes in a new stage before the roadmap's current one (packages/engine/domains/roadmap/roadmap.js
 //   insertFrontStage). It never pushes, never answers a gate and never touches a running item.
 //   #527: it holds the machine-wide `suite` slot (packages/engine/engine/machine-slot.js, #455) for its suite, so
-//   no run's whole suite loads the machine meanwhile; a timing failure (`test timed out`, a duration)
-//   is re-run alone first and only one red alone is recorded (confirmed_at) and filed; no fix item for
-//   an issue a live run works on (the dispatcher skips a base-health item whose issue has one).
+//   no run's whole suite loads the machine meanwhile; no fix item for an issue a live run works on
+//   (the dispatcher skips a base-health item whose issue has one).
+//   #613: with failures, a second round runs only the failed tests' files (one call, same checkout,
+//   slot still held; a timing failure too, nothing runs a third time); only a test red twice is
+//   recorded (confirmed_at) and filed; red then green is logged ("red in the whole suite, green on the
+//   re-run") and kept as a flaky sighting. A second round that throws or errors counts as red.
 // - knownFailures: what the Roadmap shows ("N known failures on the base", backlog:get baseFailures).
-// Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck }: #598,
+// Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck, flaky }: #598,
 // lastCheck { commit, at, status green | red | error } is the last check that reached the base's
-// checkout, lastGreen the last green one; a check stopped before it, waiting for the slot or on a
-// folder that is not a repository, records nothing); the logs and
+// checkout, lastGreen the last green one, #613 flaky the sightings { test, file, commit, at }; a check
+// stopped before it, waiting for the slot or on a folder that is not a repository, records nothing); the logs and
 // issue bodies next to it, in <project id>/ (the store itself: packages/engine/engine/base-health-store.js, so
 // the engine records a run's failures without this module). Wired by packages/engine/service/areas/base-health.js.
 
@@ -29,7 +32,7 @@ const issues = require('../backlog/issues');
 const roadmaps = require('../roadmap/roadmap');
 const { LOCAL } = require('@multiagent/shared/default-workflow');
 const { prepareBaseWorktree, removeWorktree } = require('../../engine/worktree');
-const { FILE_TIMEOUT_MS, suiteEnv } = require('../../engine/suite-step');
+const { suiteEnv } = require('../../engine/suite-step');
 const {
   acquireSlot,
   slotDir,
@@ -38,6 +41,7 @@ const {
   SUITE_SLOT_ENV,
 } = require('../../engine/machine-slot');
 const {
+  addFlaky,
   addSightings,
   HISTORY,
   knownFailures,
@@ -173,39 +177,47 @@ function serialize(fn) {
   return next;
 }
 
-// #527: a failure that may come from the machine's load, not from the code: a test timed out, or a
-// timing assertion (the slowest-file order, a duration)
-const TIMING_FAILURE = /test timed out|timed out after|\bslowest\b|\bduration\b|\btook \d+(\.\d+)? ?m?s\b/i;
-const aboutTime = (f) => TIMING_FAILURE.test(String(f.error || f.reason || ''));
+const normFile = (f) => String(f || '').split('\\').join('/');
 
-// #527: the timing failures re-run alone (runAlone), in the check's checkout while the slot is held
-// → the failures to record: the others, and the timing ones red alone. Without runAlone, all of them.
-async function confirmAlone(failures, { runAlone, cwd, env, commit, load, log }) {
-  if (typeof runAlone !== 'function') return failures;
-  const out = [];
-  for (const f of failures) {
-    if (!aboutTime(f)) { out.push(f); continue; }
-    let r;
-    try { r = await runAlone({ cwd, env, file: f.file, test: f.test, timeoutMs: FILE_TIMEOUT_MS, commit }); } catch (e) { r = { status: 'fail', error: e.message }; }
-    if (r?.status !== 'pass') { out.push(f); continue; }
+// #613 (widens #527's timing-only re-run): the second round, one call to rerunFiles with the distinct
+// files of the failed tests, in the check's checkout while the slot is held → { red, flaky }: red the
+// failures red again (same test and file), those without a file and all of them when the round throws
+// or returns an error (timed out, did not start); flaky the ones green on the re-run. Without
+// rerunFiles, all of them red.
+async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log }) {
+  const files = [...new Set(failures.filter((f) => f.file).map((f) => f.file))];
+  if (typeof rerunFiles !== 'function' || !files.length) return { red: failures, flaky: [] };
+  let r;
+  try { r = await rerunFiles({ cwd, env, files, commit }); } catch (e) { r = { failures: [], error: e.message }; }
+  if (!r || r.error) {
+    log('warn', `base check: the re-run of ${files.length} file(s) failed (${r?.error || 'no result'}): its tests count as red`);
+    return { red: failures, flaky: [] };
+  }
+  const again = new Set((r.failures || []).filter((f) => f?.test).map((f) => `${normFile(f.file)}\n${f.test}`));
+  const red = [];
+  const flaky = [];
+  for (const f of failures) (!f.file || again.has(`${normFile(f.file)}\n${f.test}`) ? red : flaky).push(f);
+  if (flaky.length) {
     let runs = [];
     try { runs = (typeof load === 'function' ? load() : []) || []; } catch { runs = []; }
-    log('info', `base check: ${f.test} (${f.file || 'unknown file'}) red under load, green alone in ${((r.ms || 0) / 1e3).toFixed(1)} s (load: ${runs.length ? runs.join(', ') : 'no run active'})`);
+    for (const f of flaky) log('info', `base check: ${f.test} (${f.file}) red in the whole suite, green on the re-run (load: ${runs.length ? runs.join(', ') : 'no run active'})`);
   }
-  return out;
+  return { red, flaky };
 }
 
 /**
  * The base check: the suite on a clean checkout of the local base tip; a red test files its issue
  * and, with onRed 'fix', a fix item. → { status: green | red | deferred | error, commit, issues, fixItem }
  * #527: it takes the machine-wide `suite` slot first (waiting for a run's whole suite, `slot.onWait`
- * and a log line say so), frees it however it ends; a timing failure is re-run alone (`runAlone`) and
- * recorded only when red alone (confirmed_at: what a run's suite may count as pre-existing).
+ * and a log line say so), frees it however it ends.
+ * #613: with failures, a second round (`rerunFiles`) runs only the failed tests' files; a test is
+ * recorded (confirmed_at: what a run's suite may count as pre-existing) and filed only when red in
+ * both rounds; red then green is a flaky sighting (the store's `flaky`), nothing filed.
  * @param {string} ws the workspace root
  * @param {{ projectId: string, repo: string, base: string, platform?: string, ghRepo?: string,
  *   trigger?: string, onRed?: string, releaseHoldsBase?: () => boolean,
  *   runSuite: ({ cwd, env, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
- *   runAlone?: ({ cwd, env, file, test, timeoutMs, commit }) => Promise<{ status: string, failures: object[], ms: number }>,
+ *   rerunFiles?: ({ cwd, env, files, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
  *   slot?: { dir?: string, holder?: string, onWait?: Function, pollMs?: number },
  *   liveRunForIssues?: (issues: object[]) => object|null, load?: () => string[],
  *   exec?: Function, workflow?: string, log?: Function }} opts
@@ -236,6 +248,7 @@ function runBaseCheck(ws, opts) {
     let info;
     let result;
     let failures = [];
+    let flaky = [];
     try {
       info = await prepareBaseWorktree({ repo, base, dir, log, remote: false });
       if (!info) return { status: 'error', error: `${repo} is not a git repository`, commit: null, issues: [], fixItem: null };
@@ -244,7 +257,7 @@ function runBaseCheck(ws, opts) {
       try {
         result = await opts.runSuite({ cwd: info.workDir, env, commit: info.commit });
         failures = (result?.failures || []).filter((f) => f?.test);
-        if (failures.length) failures = await confirmAlone(failures, { ...opts, cwd: info.workDir, env, commit: info.commit, log });
+        if (failures.length) ({ red: failures, flaky } = await confirmTwice(failures, { ...opts, cwd: info.workDir, env, commit: info.commit, log }));
       } catch (e) {
         result = { failures: [], log: '', error: e.message };
       }
@@ -258,7 +271,9 @@ function runBaseCheck(ws, opts) {
       const store = readStore(ws, projectId);
       // #598: when the base was last checked, however it ended (lastGreen stays the last green commit)
       const checked = (status) => { store.lastCheck = { commit: info.commit, at, status }; };
-      // #527: red only under load, green alone: not a green suite either, nothing recorded but the check
+      // #613: the tests red in the whole suite, green on the re-run
+      if (flaky.length) addFlaky(store, flaky, { commit: info.commit, at });
+      // #527, #613: red only in the whole suite, green on the re-run: not a green suite either, nothing recorded but the check
       if (!failures.length && underLoad && !result?.error) {
         checked('green');
         writeStore(ws, projectId, store);
@@ -281,7 +296,7 @@ function runBaseCheck(ws, opts) {
       fs.mkdirSync(dirLog, { recursive: true });
       const logFile = path.join(dirLog, `${stamp(at)}-suite.log`);
       fs.writeFileSync(logFile, String(result.log || ''));
-      // #527: confirmed by this check (alone for a timing failure): a run's suite may count it as pre-existing
+      // #527, #613: confirmed by this check (red in both rounds): a run's suite may count it as pre-existing
       const entries = failures.map((f) => Object.assign(upsert(store, f, at, info.commit), { base_check: { at, commit: info.commit, trigger: opts.trigger || 'merge' }, confirmed_at: at }));
       checked('red');
       writeStore(ws, projectId, store);
