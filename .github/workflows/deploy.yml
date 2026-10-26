@@ -4,6 +4,8 @@
 #   a PRERELEASE v<package.json version>-rc.N (N: the rcs of that version so far + 1), never latest;
 # - pushing a vX.Y.Z tag promotes the rc of the same commit without a rebuild: its release is
 #   renamed to the tag, marked latest and keeps its assets. A commit without an rc is refused.
+# Every rc carries SHA256SUMS of its packages, signed with cosign keyless (SHA256SUMS.sigstore.json),
+# and the sums in its notes; a promotion keeps both (#557).
 # macOS builds are not signed nor notarized (README "Install").
 name: Deploy
 
@@ -121,8 +123,12 @@ jobs:
 
   publish:
     needs: build
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    # main only, never a fork: the signature's identity is deploy.yml@refs/heads/main (#557)
+    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'eduardogalbiati/multiagent-orchestrator' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # gh release create
+      id-token: write   # cosign keyless signature of SHA256SUMS (#557)
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -133,6 +139,29 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: assets
+      # #557: one `sha256sum` line per package, from the files this job uploads (file names without
+      # assets/); the same sums go in the release notes, before the generated ones
+      - name: SHA256SUMS of the assets
+        run: |
+          cd assets
+          test -n "$(ls -A)"
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+          {
+            echo "## SHA-256"
+            echo
+            echo "| Asset | SHA-256 |"
+            echo "| --- | --- |"
+            while read -r hash file; do echo "| \`${file}\` | \`${hash}\` |"; done < SHA256SUMS
+            echo
+            echo "Check a download against \`SHA256SUMS\` and its signature \`SHA256SUMS.sigstore.json\`: README \"Install\"."
+          } > "$RUNNER_TEMP/sha256-notes.md"
+      - uses: sigstore/cosign-installer@v3
+      # #557: keyless signature through this job's OIDC token (no key to keep or leak); the bundle
+      # binds SHA256SUMS to this repository's deploy.yml on main (cosign verify-blob, README "Install")
+      - name: Sign SHA256SUMS
+        run: cosign sign-blob --yes --bundle assets/SHA256SUMS.sigstore.json assets/SHA256SUMS
       - name: Publish release candidate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -149,7 +178,7 @@ jobs:
           RC="v${VERSION}-rc.${N}"
           git push origin "refs/tags/${RC}"
           gh release create "$RC" assets/* \
-            --verify-tag --title "$RC" --generate-notes --prerelease
+            --verify-tag --title "$RC" --generate-notes --notes-file "$RUNNER_TEMP/sha256-notes.md" --prerelease
           echo "Release candidate published: $RC"
 
   # A vX.Y.Z tag on a commit with an rc: that release becomes the stable one, assets reused (no build)

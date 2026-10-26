@@ -27,6 +27,28 @@ builds are not signed yet, so each system warns once before the first start.
   sandbox helper binary was found, but is not configured correctly", give the sandbox helper its
   rights once: `sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox`.
 
+**Check the download.** Every release has a `SHA256SUMS` file (one line per package: its SHA-256,
+then its name), the same sums in its notes, and `SHA256SUMS.sigstore.json`, a signature that ties
+`SHA256SUMS` to this repository's Deploy workflow. Download them next to your package, compute the
+hash of the package and compare it with its line in `SHA256SUMS` (or in the release notes):
+
+- **Windows** (PowerShell): `Get-FileHash -Algorithm SHA256 MultiagentOrchestrator-win32-x64.zip`.
+- **macOS**: `shasum -a 256 MultiagentOrchestrator-darwin-arm64.zip` (or `shasum -a 256 --ignore-missing -c SHA256SUMS`).
+- **Linux**: `sha256sum MultiagentOrchestrator-linux-x64.AppImage` (or `sha256sum --ignore-missing -c SHA256SUMS`).
+
+Then check that `SHA256SUMS` itself comes from this repository, with
+[cosign](https://docs.sigstore.dev/cosign/system_config/installation/) (any system):
+
+```
+cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
+  --certificate-identity https://github.com/eduardogalbiati/multiagent-orchestrator/.github/workflows/deploy.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+It prints `Verified OK`. A different hash or a failed check means the file is not the one the
+release published: do not run it. This checks the download, not the app: the packages themselves
+are still not code-signed.
+
 **Sizing.** Each run in progress takes about 4 threads and 6 GB of RAM (its agent CLI, its tests,
 its tooling). The app reads this machine at start and proposes how many runs at once (1 to 6) and
 how many test workers per run (Settings › Execution › Concurrent runs, also shown in the Setup); a

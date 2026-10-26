@@ -24,6 +24,17 @@ test('release assets: every deploy.yml build uploads exactly the files the scrip
   }
 });
 
+test('#557 release assets: the publish job writes SHA256SUMS and its signature into assets/, published with the packages', () => {
+  const wf = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/deploy.yml'), 'utf8'));
+  const steps = wf.jobs.publish.steps;
+  const at = (re) => steps.findIndex((s) => re.test(s.run || ''));
+  const sums = steps[at(/sha256sum/)].run;
+  assert.match(sums, /cd assets\n/, 'the sums name the files without the assets/ prefix');
+  assert.match(sums, /\nmv [^\n]* SHA256SUMS\n/, 'written outside assets/ first: SHA256SUMS never sums itself');
+  assert.match(steps[at(/cosign sign-blob/)].run, /--bundle assets\/SHA256SUMS\.sigstore\.json assets\/SHA256SUMS$/);
+  assert.ok(at(/gh release create "\$RC" assets\/\*/) > at(/cosign sign-blob/), 'assets/* (packages, sums, signature) published after the signature');
+});
+
 // preview.yml's targets job keeps its own list of builds (inline JSON in a shell variable).
 function previewTargets() {
   const wf = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/preview.yml'), 'utf8'));
