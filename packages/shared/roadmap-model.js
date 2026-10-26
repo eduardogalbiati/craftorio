@@ -47,6 +47,36 @@
   const isRelease = (entry) => !!entry && entry.kind === 'release';
   /** #555: the number "Stage N" of the stage at index `s` of the list (the release entries before it do not count). */
   const stageNumber = (roadmap, s) => stagesOf(roadmap).slice(0, s + 1).filter((x) => !isRelease(x)).length;
+  /**
+   * #555: a list whose stages carry their cut line (`release`, as written before #555 and as the
+   * Roadmap screen saves it): each becomes a release entry right after its stage (its id kept, else
+   * `release-<stage id>`), every release entry with an empty `items`.
+   */
+  const releaseEntries = (stages) => (Array.isArray(stages) ? stages.flatMap((s) => {
+    if (isRelease(s)) return [{ ...s, items: [] }];
+    if (!s || !s.release) return [s];
+    const { release, ...stage } = s;
+    if (!String(release.name || '').trim()) return [stage];
+    return [stage, { ...release, kind: 'release', id: release.id || (stage.id ? `release-${stage.id}` : null), items: [] }];
+  }) : stages);
+  /**
+   * #555: the roadmap as the Roadmap screen draws and edits it: each release entry back on the stage
+   * before it (`release`, the stage's cut line), so the stage indexes are the stage numbers; one that
+   * follows no stage of its own (first, or right after another release) kept in `leadReleases`, which
+   * a save sends first. The service turns the stages back into entries (releaseEntries).
+   */
+  function foldReleases(roadmap) {
+    if (!roadmap) return roadmap;
+    const stages = [];
+    const leadReleases = [];
+    for (const e of releaseEntries(stagesOf(roadmap))) {
+      const before = stages.at(-1);
+      if (!isRelease(e)) stages.push(e);
+      else if (before && !before.release) stages[stages.length - 1] = { ...before, release: (({ kind: _k, items: _i, ...rel }) => rel)(e) };
+      else leadReleases.push(e);
+    }
+    return { ...roadmap, stages, leadReleases };
+  }
   /** Whether a stage still has work: an item not done or skipped (disabled or not). */
   const hasUnfinished = (stage) => itemsOf(stage).some((x) => !isFinished(x));
   /** Whether the automation works on a stage: enabled (#284) with an unfinished item. */
@@ -204,22 +234,24 @@
   const earlierRuns = (x) => (x?.runId ? [...new Set(x.runs || [])].filter((id) => id !== x.runId) : []);
 
   // The releases the Roadmap knows (#291; `data.releases`: the service's roadmapReleases), each with
-  // `at`: where it is drawn (#555: its release entry's index, planned or not; else the last stage with
-  // a run in it; -1: none), `cut` (it has a release entry) and `closes` (#555: the stages since the
-  // previous release entry, [{ name, number }]).
+  // `at`: the index of the stage it is drawn after, among the stages only (#555: its release entry,
+  // planned or not; else the last stage with a run in it; -1: none), `cut` (it has a release entry)
+  // and `closes` (#555: the stages since the previous release entry, [{ name, number }]).
   function roadmapReleases(r, data) {
     const list = (data?.releases?.releases || []).filter((x) => x?.version).map((x) => ({ ...x, cut: false, at: -1 }));
+    const entries = { stages: releaseEntries(stagesOf(r)) };
     let from = 0;
-    stagesOf(r).forEach((entry, s) => {
+    entries.stages.forEach((entry, s) => {
       if (!isRelease(entry)) return;
-      const closes = stagesOf(r).slice(from, s).flatMap((x, k) => (isRelease(x) ? [] : [{ name: x.name || '', number: stageNumber(r, from + k) }]));
+      const closes = entries.stages.slice(from, s).flatMap((x, k) => (isRelease(x) ? [] : [{ name: x.name || '', number: stageNumber(entries, from + k) }]));
       from = s + 1;
       const x = list.find((y) => !y.cut && y.version === entry.name);
-      if (x) Object.assign(x, { runId: x.runId || entry.runId || null, cut: true, at: s, closes });
+      if (x) Object.assign(x, { runId: x.runId || entry.runId || null, cut: true, at: stageNumber(entries, s) - 1, closes });
     });
+    const stages = entries.stages.filter((x) => !isRelease(x));
     for (const x of list.filter((y) => !y.cut)) {
       const runs = new Set(x.runs || []);
-      x.at = stagesOf(r).findLastIndex((stage) => itemsOf(stage).some((i) => itemRuns(i).some((id) => runs.has(id))));
+      x.at = stages.findLastIndex((stage) => itemsOf(stage).some((i) => itemRuns(i).some((id) => runs.has(id))));
     }
     return list;
   }

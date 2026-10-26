@@ -74,6 +74,8 @@ module.exports = (ctx) => {
         status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate, atGate,
         progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
+        // #614: the commit the run merged (the card's Merge station is done with it)
+        mergedCommit: r.localMerge?.commit || r.outputs?.merged_commit || null,
       };
     };
     const prices = workspace.readSettings(ctx.ws).prices || {};

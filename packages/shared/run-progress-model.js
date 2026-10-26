@@ -217,8 +217,14 @@
    *   earlier station: `sentBackBy`, estimateProgress's), round (the times the run entered it), current
    *   (the step it is at, on the station it is at), agents (who worked there, as progressGroups').
    * Without a trail every station is todo (a gate: gate).
+   * #614: `merged` (the commit a run merged, null: none): a clean merge is no step of its own, so the
+   * station of the group named Merge is done with it, entered or not, and names the commit (`merged`).
    */
-  function pipeline({ steps = [], groups = [], mode = null, progress = [], status = 'running', sentBackBy = null } = {}) {
+  function pipeline({ merged = null, ...opts } = {}) {
+    const list = trailStations(opts);
+    return merged ? list.map((st) => (st.grouped && st.name === 'Merge' ? { ...st, state: 'done', merged } : st)) : list;
+  }
+  function trailStations({ steps = [], groups = [], mode = null, progress = [], status = 'running', sentBackBy = null } = {}) {
     const stations = workflowStations({ steps, groups, mode });
     const idle = (st) => ({ ...st, state: st.gate ? 'gate' : 'todo', round: 0, current: null, agents: [] });
     const chips = progressGroups(progress, stations.map((st) => ({ name: st.key, steps: st.steps })), status);
