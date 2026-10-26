@@ -21,7 +21,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const REPO = path.join(__dirname, '..');
 const SCRIPT = path.join(REPO, 'scripts', 'docs-usage.js');
@@ -209,6 +209,62 @@ test('the CLI prints the JSON model with --json and the Markdown report without 
   const md = execFileSync(process.execPath, args, { encoding: 'utf8' });
   assert.equal(md.includes('docs/agents/storage.md'), true);
   assert.equal(md.trimStart().startsWith('{'), false);
+});
+
+// A repository with sub-docs (docs/agents/engine/*.md) and skill rules (skills/<s>/rules/*.md):
+// e1 read one sub-doc and one rule (outside the worktree), then edited packages/engine/engine/
+// without reading engine.md; e2 read engine.md before editing workflows/.
+function nestedFixture(t) {
+  const base = tmp(t, 'docs-usage-574-nested-');
+  const root = path.join(base, 'repo');
+  for (const doc of ['AGENTS.md', 'docs/agents/engine.md', 'docs/agents/engine/gates.md', 'docs/agents/engine/loops.md', 'skills/code-review/SKILL.md', 'skills/code-review/rules/spec.md', 'skills/code-review/rules/style.md']) {
+    write(path.join(root, doc), `# ${doc}\n`);
+  }
+  const workspace = path.join(base, 'ws');
+  const D = '2026-10-15';
+  const wt = 'C:/w/worktrees/run-n';
+  writeRun(path.join(workspace, 'runs'), 'run-n', [
+    wfStarted(D, PROJECT),
+    opened(D, 'e1', 'developer', 'develop', wt),
+    read(D, 2, 'e1', `${wt}/docs/agents/engine/gates.md`),
+    read(D, 3, 'e1', 'C:/ws/skills/code-review/rules/spec.md'),
+    edit(D, 4, 'e1', `${wt}/packages/engine/engine/workflow.js`),
+    opened(D, 10, 'e2', 'developer', 'develop', wt),
+    read(D, 11, 'e2', `${wt}/docs/agents/engine.md`),
+    edit(D, 12, 'e2', `${wt}/workflows/x.yaml`),
+    wfFinished(D),
+  ], {
+    run_id: 'run-n', workflow: 'AI Development', project_id: PROJECT, status: 'success', started_at: at(D), finished_at: at(D, 50),
+    mock: false, cost_accounting: 'per_turn', worktree: { dir: wt, work_dir: wt },
+    sessions: [{ id: 'e1', agent: 'developer' }, { id: 'e2', agent: 'developer' }],
+  });
+  return { root, workspace };
+}
+
+test('counts the sub-docs under docs/agents and the rule files of a skill as docs', async (t) => {
+  const { docsUsage } = load();
+  const { root, workspace } = nestedFixture(t);
+  const { model } = await docsUsage({ workspace, root, project: PROJECT, since: SINCE });
+  assert.deepEqual(sessionOf(model, 'run-n', 'e1').docs_read, ['docs/agents/engine/gates.md', 'skills/code-review/rules/spec.md']);
+  assert.equal(model.reads['docs/agents/engine/gates.md'], 1);
+  assert.equal(model.reads['skills/code-review/rules/spec.md'], 1);
+  assert.deepEqual(model.never_read, ['AGENTS.md', 'docs/agents/engine/loops.md', 'skills/code-review/SKILL.md', 'skills/code-review/rules/style.md']);
+});
+
+test('an edit under packages/engine/engine/ without engine.md read counts as engine.md skipped', async (t) => {
+  const { docsUsage } = load();
+  const { root, workspace } = nestedFixture(t);
+  const { model } = await docsUsage({ workspace, root, project: PROJECT, since: SINCE });
+  assert.deepEqual(sessionOf(model, 'run-n', 'e1').topics_skipped, ['docs/agents/engine.md']);
+  assert.deepEqual(sessionOf(model, 'run-n', 'e2').topics_skipped, []);
+  assert.deepEqual(model.skipped_by_topic, { 'docs/agents/engine.md': 1 });
+});
+
+test('the CLI warns on stderr when --since is not a date', (t) => {
+  const { root, workspace } = fixture(t);
+  const r = spawnSync(process.execPath, [SCRIPT, '--workspace', workspace, '--root', root, '--project', PROJECT, '--since', '10/01/2026', '--json'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  assert.match(r.stderr, /--since/);
 });
 
 test('npm run docs:usage runs the script', () => {
