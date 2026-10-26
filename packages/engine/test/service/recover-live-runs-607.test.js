@@ -168,6 +168,10 @@ test('a run killed at a gate asks the gate again and waits for the owner; Resume
 
   const { runId } = await b.api['runs:resume']({ runId: victim.runId, step: 'plan' });
   assert.notEqual(runId, victim.runId, 'Resume from step still starts a new run');
+  // the resumed run meets the gate again: only the owner answers it (#112)
+  await waitFor(() => b.events.some((e) => e.type === 'approval.requested' && e.run_id === runId), 'the resumed run\'s gate');
+  const gate = b.events.find((e) => e.type === 'approval.requested' && e.run_id === runId);
+  b.api['approval:resolve']({ runId, id: gate.approval_id, answer: true });
   await waitFor(() => b.events.some((e) => e.type === 'workflow.finished' && e.run_id === runId), 'the resumed run to end');
 });
 
