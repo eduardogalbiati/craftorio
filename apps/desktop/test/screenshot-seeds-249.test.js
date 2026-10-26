@@ -100,7 +100,7 @@ test('code map: "how to add a screen" says where the seed goes, not an edit of s
 });
 
 test('renderer.md no longer asks for a VIEWS entry in scripts/screenshot.js for a new screen', () => {
-  const doc = fs.readFileSync(path.join(ROOT, 'docs', 'agents', 'renderer.md'), 'utf8');
+  const doc = fs.readdirSync(path.join(ROOT, 'docs', 'agents', 'renderer')).map((f) => fs.readFileSync(path.join(ROOT, 'docs', 'agents', 'renderer', f), 'utf8')).join('\n');
   assert.doesNotMatch(doc, /`VIEWS` entry in\s+`scripts\/screenshot\.js`/);
   assert.match(doc, /scripts\/screenshot\/views\//);
 });

@@ -18,7 +18,7 @@ screen; they are skipped for changes without UI. You run unattended: record a de
 ## Conventions (the developer builds with them, the reviewer checks against them)
 
 - **Reuse the shared components** before writing new ones: the project's docs name them (this
-  orchestrator: "UI conventions" in `docs/agents/renderer.md`; elsewhere the design system, the
+  orchestrator: `docs/agents/renderer/ui-conventions.md`; elsewhere the design system, the
   shared stylesheet or component folder). Copy the markup of a screen that already uses them.
 - **Controls follow the data**: a fixed list (`enum`) is a select or a segmented toggle, never a
   text box; a flag is a switch or a checkbox; free text only for free values. Short values (a mode,

@@ -150,7 +150,7 @@ test("#366 the config's header documents auto and points at the measurements", (
 });
 
 test('#366 docs/agents/testing.md says how to set the workers on a slow machine', () => {
-  const doc = read('docs/agents/testing.md');
+  const doc = fs.readdirSync(path.join(ROOT, 'docs', 'agents', 'testing')).map((f) => read(`docs/agents/testing/${f}`)).join('\n');
   assert.match(doc, /#366/);
   assert.match(doc, /\bauto\b/);
   assert.match(doc, /MULTIAGENT_E2E_WORKERS=1/);

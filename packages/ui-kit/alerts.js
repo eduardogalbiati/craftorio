@@ -8,7 +8,7 @@
 // role="status". × (info and warning only: an error stays while its cause does) hides the alert until
 // its condition clears; the page calls set() on every render, so an alert whose condition cleared
 // leaves by itself. The component knows no screen: a page builds its own list and mounts it
-// (`Alerts.mount(box).set(list)`; docs/agents/renderer.md, "Page alerts").
+// (`Alerts.mount(box).set(list)`; docs/agents/renderer/ui-patterns.md, "Page alerts").
 // Browser: window.Alerts; Node: module.exports (test/renderer-alerts-270.test.js).
 (function (root) {
   const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];

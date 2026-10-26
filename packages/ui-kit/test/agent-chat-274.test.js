@@ -431,7 +431,7 @@ test('#274 agent-chat.js\'s header comment lists what it owns and the three chat
 });
 
 test('#274 docs/agents/renderer.md names agent-chat.js and says new agent chats use it', () => {
-  const doc = fs.readFileSync(path.join(ROOT, 'docs', 'agents', 'renderer.md'), 'utf8');
+  const doc = fs.readdirSync(path.join(ROOT, 'docs', 'agents', 'renderer')).map((f) => fs.readFileSync(path.join(ROOT, 'docs', 'agents', 'renderer', f), 'utf8')).join('\n');
   assert.match(doc, /agent-chat\.js/);
   const sentence = doc.split(/(?<=\.)\s+/).find((s) => /agent-chat\.js/.test(s) && /\bnew\b/i.test(s) && /\bchats?\b/i.test(s))
     || doc.split(/\n\s*\n|\n-\s/).find((p) => /agent-chat\.js/.test(p) && /\bnew\b[^.]*\bchats?\b/i.test(p));

@@ -64,7 +64,7 @@ test('#333 requireId refuses what is not a file name inside its folder, naming t
 
 test('#333 docs/agents/testing.md describes the channel sweep and how to add a skip', () => {
   const fs = require('fs');
-  const doc = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'docs', 'agents', 'testing.md'), 'utf8');
+  const doc = fs.readdirSync(path.join(__dirname, '..', '..', '..', '..', 'docs', 'agents', 'testing')).map((f) => fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'docs', 'agents', 'testing', f), 'utf8')).join('\n');
   assert.match(doc, /service-channel-sweep-333/);
   assert.match(doc, /channel-sweep-skips\.js/);
   assert.match(doc, /hostile/i);

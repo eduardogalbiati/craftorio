@@ -279,7 +279,7 @@ test('the renderer loads the upgrade before app.js (past-turn costs of live even
 });
 
 test('docs/agents/storage.md says how to add an upgrade when a run\'s shape changes', () => {
-  const doc = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'docs', 'agents', 'storage.md'), 'utf8');
+  const doc = fs.readdirSync(path.join(__dirname, '..', '..', '..', '..', 'docs', 'agents', 'storage')).map((f) => fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'docs', 'agents', 'storage', f), 'utf8')).join('\n');
   assert.match(doc, /readRunRecord/);
   assert.match(doc, /upgrade/i);
 });

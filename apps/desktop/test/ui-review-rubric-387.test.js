@@ -205,7 +205,7 @@ test('#387 THIRD_PARTY_NOTICES credits frontend-design under Apache 2.0', () => 
 });
 
 test('#387 docs: renderer.md and agents-and-steps.md describe the design section, the axe step and the developer skills', () => {
-  const renderer = read('docs/agents/renderer.md');
+  const renderer = fs.readdirSync(path.join(ROOT, 'docs', 'agents', 'renderer')).map((f) => read(`docs/agents/renderer/${f}`)).join('\n');
   assert.match(renderer, /axe/i);
   assert.match(renderer, /design section|plan before the markup/i);
   assert.match(read('docs/agents/engine/agents-and-steps.md'), /design-system/);

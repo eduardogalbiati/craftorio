@@ -175,7 +175,7 @@ test('#346 RunEvent is a union by `type`: an event with an unknown type is a typ
 });
 
 test('#346 docs/agents/testing.md says how to opt a file in, where the types live and how the ratchet works', () => {
-  const doc = read('docs/agents/testing.md');
+  const doc = fs.readdirSync(path.join(root, 'docs', 'agents', 'testing')).map((f) => read(`docs/agents/testing/${f}`)).join('\n');
   assert.match(doc, /\/\/ @ts-check/);
   assert.match(doc, /packages\/shared\/types\.js/);
   assert.match(doc, /npm run typecheck/);

@@ -79,7 +79,7 @@ The interface text lives in `packages/shared/i18n/`: `en.json` is the source, on
 the code to `PAGE_LANGUAGES` in `packages/shared/i18n.js`, and run
 `node --test test/i18n-329.test.js test/i18n-catalog-check-329.test.js`. A key you leave out shows
 the English text. Check the screens with `npm run screenshot -- --view settings --lang <code>`.
-Details: [`docs/agents/renderer.md`](docs/agents/renderer.md) ("Interface language").
+Details: [`docs/agents/renderer/interface-language.md`](docs/agents/renderer/interface-language.md).
 
 ## Where the docs live
 

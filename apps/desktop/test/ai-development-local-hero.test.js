@@ -225,7 +225,7 @@ test('ai-development-local-hero (#151): the docs name the ui_reviewer, the code_
   const engine = fs.readdirSync(topics).filter((f) => f.endsWith('.md')).map((f) => fsRead('docs', 'agents', 'engine', f)).join('\n');
   assert.match(engine, /ui_reviewer/);
   assert.match(engine, /code_review[\s\S]{0,300}(fan-out|parallel)|(fan-out|parallel)[\s\S]{0,300}code_review/i);
-  assert.match(fsRead('docs', 'agents', 'renderer.md'), /design-system/);
+  assert.match(fs.readdirSync(path.join(__dirname, '..', '..', '..', 'docs', 'agents', 'renderer')).map((f) => fsRead('docs', 'agents', 'renderer', f)).join('\n'), /design-system/);
 });
 
 test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on Fable 5.1 when the run asks, with 3x the turn timeout', (t) => {

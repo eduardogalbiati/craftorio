@@ -13,7 +13,7 @@ debugging, easier resume. ([factor 5](https://github.com/humanlayer/12-factor-ag
   `summary.json`, `meta.json`, `sessions/`, `handoffs/`, `decisions.tsv`, `evidence/`,
   `attachments/`. Plain files the owner, the agents and the supervisor can read; portable between
   machines. The SQLite index only speeds up listings and is rebuilt from the files
-  (`docs/agents/storage.md`, "Files are the source of truth"; rule: never make the database the only
+  (`docs/agents/storage/files.md`, "Files are the source of truth"; rule: never make the database the only
   copy of something a run produced).
 - **Old runs are upgraded on read, never rewritten.** `readRunRecord` returns a run in the current
   shape through a pure, idempotent `upgradeRunRecord` (`src/shared/run-record.js`, #350); readers

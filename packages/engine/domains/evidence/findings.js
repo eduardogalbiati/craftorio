@@ -230,7 +230,7 @@ function issueOf(found, { imageUrl = null, issuesLanguage = null } = {}) {
     '',
     h.bundle,
     '',
-    `\`${found.dir}\` (screenshot.png, marked.png, marks.json, context.json, note.md): read it as docs/agents/renderer.md "Reading a finding bundle" says.`,
+    `\`${found.dir}\` (screenshot.png, marked.png, marks.json, context.json, note.md): read it as docs/agents/renderer/findings.md "Reading a finding bundle" says.`,
     '',
     h.criteria,
     '',

@@ -194,7 +194,7 @@ test("the config's header comment describes the two lanes instead of one Electro
 });
 
 test('docs/agents/testing.md documents the E2E lanes (#365)', () => {
-  const doc = read('docs/agents/testing.md');
+  const doc = fs.readdirSync(path.join(ROOT, 'docs', 'agents', 'testing')).map((f) => read(`docs/agents/testing/${f}`)).join('\n');
   assert.match(doc, /#365/);
   assert.match(doc, /lane/i);
 });

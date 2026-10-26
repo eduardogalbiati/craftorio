@@ -299,6 +299,6 @@ test('#345 the docs say where a new module goes: the code map and renderer.md na
   const map = codeMap(root);
   assert.match(map, /packages\/shared\//);
   assert.match(map, /scripts\/layers\.js|layers/);
-  const doc = read(path.join(root, 'docs', 'agents', 'renderer.md'));
+  const doc = fs.readdirSync(path.join(root, 'docs', 'agents', 'renderer')).map((f) => read(path.join(root, 'docs', 'agents', 'renderer', f))).join('\n');
   assert.match(doc, /packages\/shared\//);
 });

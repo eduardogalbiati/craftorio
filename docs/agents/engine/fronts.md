@@ -7,7 +7,7 @@ kernel (`packages/engine`) and a front (`fronts/<id>`), and before changing how 
 them (`packages/engine/service/index.js`, `manifest.js`, `fronts.js`). The study is
 `docs/reorganisation-study-2026-10.md` (decision 1 of 2026-10-24: vertical fronts); the UI side of a
 front (its screens, its Home card, the composition file, the actions registry) is in
-[renderer.md](../renderer.md), "Composition".
+[loading-and-composition.md](../renderer/loading-and-composition.md).
 
 ## What a front package carries
 

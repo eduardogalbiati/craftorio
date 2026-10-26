@@ -22,11 +22,13 @@ const path = require('path');
 const { readRunRecord } = require('@multiagent/engine/domains/run/run-record');
 const { relativePath, touchOf } = require('@multiagent/shared/city-agents');
 
-// the folders a topic line of AGENTS.md names, with its doc ("Read before changing ...")
+// the folders a topic line of AGENTS.md or a nested AGENTS.md (#572) names, with its doc ("Read
+// before changing ..."); the first match wins, so packages/engine/test/ counts as testing
 const TOPICS = [
   { doc: 'docs/agents/renderer.md', re: /^(packages\/ui-kit\/|fronts\/|apps\/[^/]+\/renderer\/)/ },
-  { doc: 'docs/agents/engine.md', re: /^(workflows\/|packages\/engine\/engine\/)/ },
   { doc: 'docs/agents/testing.md', re: /^(test\/|(apps|packages)\/[^/]+\/test\/)/ },
+  { doc: 'docs/agents/engine.md', re: /^(workflows\/|packages\/engine\/)/ },
+  { doc: 'docs/agents/windows-gotchas.md', re: /^scripts\// },
 ];
 
 // The shared lists a session's edits show: AGENTS.md and CLAUDE.md are the indexes every run reads,

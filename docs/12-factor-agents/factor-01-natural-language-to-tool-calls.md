@@ -18,7 +18,7 @@ does it. ([factor 1](https://github.com/humanlayer/12-factor-agents/blob/main/co
   the steps it may choose from; anything else is an escalation).
 - **The Product Owner.** A conversation about an issue ends in a structured action on a service
   channel (`src/domains/po/`, `src/service/channels/`): file the issue, update a task list, add to
-  an existing one. The git platform stays the source of truth (`docs/agents/storage.md`, "Issues");
+  an existing one. The git platform stays the source of truth (`docs/agents/storage/issues-and-backlog.md`);
   the model never writes to it directly.
 - **Gate answers.** A human's free-text feedback at a gate is carried as data (`output.feedback`,
   the run-wide `feedback` list) into the next agent's prompt; the engine decides the route from the

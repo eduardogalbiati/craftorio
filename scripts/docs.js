@@ -28,9 +28,11 @@
 //                            file, in file-name order (`<order>-<section>.md`), joined by a blank
 //                            line; a fragment keeps a generated block as its empty markers, filled
 //                            as above. A feature adds a fragment, never edits README.md.
-//   docs/agents/engine.md    (#251) the index of docs/agents/engine/*.md, one topic per file: one
-//                            line per topic from its first heading and the line after it (its
-//                            summary line), in file-name order. Committed; a test fails when stale.
+//   docs/agents/<topic>.md   (#251, #573) the index of each topic folder docs/agents/<topic>/*.md
+//                            (engine, renderer, storage, testing…), one subtopic per file: one line
+//                            per file from its first heading and the line after it (its summary
+//                            line), in file-name order, after the topic's title and intro
+//                            (TOPIC_INTROS). Committed; a test fails when stale.
 //   apps/<app>/renderer/index.html  each app's page (apps/desktop, phase 3's apps/web): its stylesheets
 //                            and scripts, between `<!-- generated:styles -->` / `<!-- generated:scripts -->`
 //                            markers (#152), from the app's composition (`<app>/composition.js`, the
@@ -49,8 +51,10 @@
 //
 //   npm run docs                   everything
 //   node scripts/docs.js --derived only the gitignored files (the npm hooks)
-//   node scripts/docs.js --check   writes nothing; exit 1 when the README, engine.md or
-//                                  index.html's lists are out of date or a source file has no header comment (CI)
+//   node scripts/docs.js --check   writes nothing; exit 1 when the README, a topic index or
+//                                  index.html's lists are out of date, a subtopic file lacks its heading
+//                                  and summary line or a source file has no header comment (CI); a
+//                                  warning for each topic doc over DOC_LINE_LIMIT lines (#573)
 // No dependency beyond js-yaml (installed before `prepare` runs) and the app's own modules (the
 // channel reference loads the channel files).
 
@@ -100,8 +104,13 @@ const FOLDERS = [
   ['skills/', 'The bundled skills, one folder each (`SKILL.md` + support files, seeded into `<workspace>/skills/`); the README table is generated from their frontmatter.'],
   ['docs/screens/', 'One fragment per screen (`menu`, `order`, text): the README\'s screens table.'],
   ['docs/features/', 'One fragment per feature (`order`, then `<!-- section:<name> -->` pieces): the README\'s generated workflows, engine, workspace and structure sections.'],
-  ['docs/agents/', 'These topic docs, indexed by `AGENTS.md` (`CLAUDE.md` imports it; `test/claude-md.test.js` keeps the index small and its links valid).'],
+  ['docs/agents/', 'These topic docs, indexed by `AGENTS.md` (`CLAUDE.md` imports it; `test/claude-md.test.js` keeps the index small and its links valid). A topic or subtopic file over 200 lines is listed by `npm run docs -- --check` (#573).'],
   ['docs/agents/engine/', 'One file per engine topic (`# <Title>`, a summary line, the notes): `docs/agents/engine.md` is their generated index.'],
+  ['docs/agents/<topic>/', 'One file per subtopic of a long topic (`engine/`, `renderer/`, `storage/`, `testing/`; `# <Title>`, a summary line, the notes): `docs/agents/<topic>.md` is their generated index (#573).'],
+  ['packages/engine/AGENTS.md', 'The engine\'s nested agent instructions (#572): the topic docs to read first and the rules most often broken there; `packages/engine/CLAUDE.md` imports it. Markdown: no header comment.'],
+  ['packages/ui-kit/AGENTS.md', 'The UI kit\'s nested agent instructions (#572): read `renderer.md` first, how to check a screen. Markdown: no header comment.'],
+  ['fronts/<id>/AGENTS.md', 'Each front\'s nested agent instructions (#572): read `renderer.md` first, how to check a screen. Markdown: no header comment.'],
+  ['scripts/AGENTS.md', 'The scripts\' nested agent instructions (#572): read `windows-gotchas.md` first; line endings, paths, EBUSY. Markdown: no header comment.'],
   ['docs/readme/', 'One file per hand-written README section, in file-name order: `README.md` is assembled from them (generated blocks kept as empty markers).'],
   ['supabase/migrations/', '`accounts` table (sign-up, last seen, app version, OS) and `touch_account()`. Applied by pasting into the Supabase SQL editor.'],
 ];
@@ -171,7 +180,7 @@ function codeMap(root = ROOT) {
     '  its tests go in `test/service/<area>.test.js` (a front\'s in `fronts/<id>/test/`; see [testing.md](testing.md)).',
     '- **A screen**: a folder `views/<view>/` in the front that owns it (`fronts/<id>/views/<view>/`; a shell',
     '  screen in `packages/ui-kit/views/`) with',
-    '  `<view>.js` calling `registerView` and `<view>.css` (see [renderer.md](renderer.md), "Composition"),',
+    '  `<view>.js` calling `registerView` and `<view>.css` (see [loading-and-composition.md](renderer/loading-and-composition.md)),',
     '  a fragment `docs/screens/<view>.md` (`menu`, `order`, text) for',
     '  the README table, and its screenshot seed `scripts/screenshot/views/<view>.js` (its tabs, modes,',
     '  demo data and how it opens; found by the screenshot runner, which is never edited for a screen);',
@@ -206,9 +215,10 @@ function codeMap(root = ROOT) {
     '- **A README section** (a `## ` heading of its own): a fragment `docs/readme/<order>-<section>.md` (the',
     '  README is assembled from them in file-name order: pick a name that sorts where it belongs); never edit',
     '  `README.md` itself, `npm run docs` rebuilds it and `test/docs.test.js` fails when it is stale.',
-    '- **An engine topic** (implementer\'s notes on a workflow YAML feature): add to its file in',
-    '  `docs/agents/engine/`, or add a file there (`# <Title>`, then a one-line summary); `npm run docs`',
-    '  lists it in the [engine.md](engine.md) index (never edit the index by hand).',
+    '- **An engine topic** (implementer\'s notes on a workflow YAML feature), or a subtopic of any split',
+    '  topic: add to its file in `docs/agents/engine/` (or `docs/agents/<topic>/`), or add a file there',
+    '  (`# <Title>`, then a one-line summary); `npm run docs` lists it in the [engine.md](engine.md)',
+    '  (`<topic>.md`) index (never edit the index by hand). A file over 200 lines is split (#573).',
     '- **Something in the workspace index** (`<workspace>/index.db`, `packages/engine/domains/workspace/store.js`): append a migration to',
     '  `MIGRATIONS` (never edit a shipped one: `PRAGMA user_version` counts them) and a helper next to its',
     '  table\'s; only the service writes (the engine emits). The files stay the source of truth: a cache',
@@ -353,38 +363,93 @@ function buildReadme(root = ROOT) {
   return renderReadme(assembleReadme(root) ?? read(root, 'README.md'), root);
 }
 
-const ENGINE_TOPICS = path.join('docs', 'agents', 'engine');
-const ENGINE_INDEX = path.join('docs', 'agents', 'engine.md');
+const AGENTS_DOCS = path.join('docs', 'agents');
+const ENGINE_TOPICS = path.join(AGENTS_DOCS, 'engine');
 const FIELD_REF = path.join(ENGINE_TOPICS, 'field-reference.md');
+// Generated files of docs/agents/: not topics (left out of the indexes) and exempt from the size rule.
+const GENERATED = [CODE_MAP, TEST_MAP, CHANNELS_REF, FIELD_REF].map(posix);
+// The size rule (#573): a topic or subtopic file over this many lines is listed by `--check`, as a
+// warning while capabilities.md, decisions.md and engine/gates-and-run-end.md still exceed it.
+const DOC_LINE_LIMIT = 200;
+// Each index's title and the lines before its list; a topic folder not named here gets `# <topic>`.
+const TOPIC_INTROS = {
+  engine: {
+    title: 'Engine: workflow YAML features',
+    intro: [
+      'Read the topic you need before changing `packages/engine/engine/workflow.js` or a workflow YAML. The README',
+      'documents the same features for users; these topics are the implementer\'s summary, one file each.',
+      'Which field is valid where, its type and the loader\'s message: [the field reference](engine/field-reference.md)',
+      '(generated from the loader\'s rule table, #352; gitignored like the code map).',
+    ],
+  },
+  renderer: {
+    title: 'Renderer (UI)',
+    intro: ['Read this before changing anything in the UI: the UI kit (`packages/ui-kit/`), a front (`fronts/<id>/`) or an app\'s page folder (`apps/<app>/renderer/`).'],
+  },
+  storage: {
+    title: 'Storage: files and the SQLite index',
+    intro: [
+      'Read this before touching run listings, the Backlog queue, pending gates, notifications or',
+      '`packages/engine/domains/workspace/store.js` (#76).',
+    ],
+  },
+  testing: {
+    title: 'Testing',
+    intro: ['Read this before writing or changing tests, and before any check that could start a real CLI.'],
+  },
+};
 
-// docs/agents/engine/*.md (#251): { file, title, summary }, the title from the first heading, the
-// summary from the first non-blank line after it. The generated field reference is not a topic.
-function engineTopics(root = ROOT) {
-  return mdFiles(root, ENGINE_TOPICS).filter((file) => file !== path.basename(FIELD_REF)).map((file) => {
-    const lines = read(root, path.join(ENGINE_TOPICS, file)).split('\n');
+const isGenerated = (rel) => GENERATED.includes(posix(rel));
+const topicFiles = (root, topic) => mdFiles(root, path.join(AGENTS_DOCS, topic)).filter((f) => !isGenerated(path.join(AGENTS_DOCS, topic, f)));
+
+// The topic folders (#573): every docs/agents/<topic>/ holding a topic file, by name.
+function topicFolders(root = ROOT) {
+  const dir = path.join(root, AGENTS_DOCS);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
+    .filter((topic) => topicFiles(root, topic).length);
+}
+
+// docs/agents/<topic>/*.md (#251, #573): { file, title, summary }, the title from the first heading,
+// the summary from the first non-blank line after it ('' when it is another heading).
+function topics(root = ROOT, topic = 'engine') {
+  return topicFiles(root, topic).map((file) => {
+    const lines = read(root, path.join(AGENTS_DOCS, topic, file)).split('\n');
     const at = lines.findIndex((l) => /^#+\s/.test(l));
     const summary = at < 0 ? '' : (lines.slice(at + 1).find((l) => l.trim()) || '');
-    return { file, title: at < 0 ? path.basename(file, '.md') : lines[at].replace(/^#+\s+/, '').trim(), summary: /^#/.test(summary) ? '' : summary.trim() };
+    return { file, heading: at >= 0, title: at < 0 ? path.basename(file, '.md') : lines[at].replace(/^#+\s+/, '').trim(), summary: /^#/.test(summary) ? '' : summary.trim() };
   });
 }
 
-// docs/agents/engine.md, the index of the engine topics; null when there is no topic file.
-function engineIndex(root = ROOT) {
-  const topics = engineTopics(root);
-  if (!topics.length) return null;
+// docs/agents/<topic>.md, the index of a topic folder; null when it holds no topic file.
+function topicIndex(root = ROOT, topic = 'engine') {
+  const list = topics(root, topic);
+  if (!list.length) return null;
+  const { title = topic, intro = [] } = TOPIC_INTROS[topic] || {};
   return [
-    '# Engine: workflow YAML features',
+    `# ${title}`,
     '',
-    '<!-- Generated by `npm run docs` from docs/agents/engine/*.md (each file\'s first heading and summary line): edit or add a topic file, not this index. -->',
+    `<!-- Generated by \`npm run docs\` from docs/agents/${topic}/*.md (each file's first heading and summary line): edit or add a topic file, not this index. -->`,
     '',
-    'Read the topic you need before changing `packages/engine/engine/workflow.js` or a workflow YAML. The README',
-    'documents the same features for users; these topics are the implementer\'s summary, one file each.',
-    'Which field is valid where, its type and the loader\'s message: [the field reference](engine/field-reference.md)',
-    '(generated from the loader\'s rule table, #352; gitignored like the code map).',
-    '',
-    ...topics.map((t) => `- [${t.title}](engine/${t.file})${t.summary ? `: ${t.summary}` : ''}`),
+    ...(intro.length ? [...intro, ''] : []),
+    ...list.map((t) => `- [${t.title}](${topic}/${t.file})${t.summary ? `: ${t.summary}` : ''}`),
     '',
   ].join('\n');
+}
+
+const engineTopics = (root = ROOT) => topics(root, 'engine');
+const engineIndex = (root = ROOT) => topicIndex(root, 'engine');
+
+// The topic and subtopic files over the size rule's limit (#573): [{ file, lines }], generated files
+// and the generated indexes left out.
+function oversizedDocs(root = ROOT, limit = DOC_LINE_LIMIT) {
+  const folders = topicFolders(root);
+  const files = [
+    ...mdFiles(root, AGENTS_DOCS).filter((f) => !folders.includes(path.basename(f, '.md'))).map((f) => path.join(AGENTS_DOCS, f)),
+    ...folders.flatMap((topic) => topicFiles(root, topic).map((f) => path.join(AGENTS_DOCS, topic, f))),
+  ].filter((rel) => !isGenerated(rel));
+  return files.map((rel) => ({ file: posix(rel), lines: read(root, rel).replace(/\n$/, '').split('\n').length }))
+    .filter((d) => d.lines > limit);
 }
 
 // ---- the pages: index.html generated from each app's composition (phase 3 of the reorganisation study) ----
@@ -558,10 +623,12 @@ function channelReference() {
 // the problems `--check` reports (also run by npm run check, scripts/check.js)
 function checkDocs(root = ROOT) {
   const problems = [];
-  const engine = engineIndex(root);
   const current = (rel) => (fs.existsSync(path.join(root, rel)) ? read(root, rel) : null);
   if (buildReadme(root) !== current('README.md')) problems.push('README.md is out of date with docs/readme/: run `npm run docs` and commit it.');
-  if (engine !== null && engine !== current(ENGINE_INDEX)) problems.push('docs/agents/engine.md is out of date with docs/agents/engine/: run `npm run docs` and commit it.');
+  for (const topic of topicFolders(root)) {
+    if (topicIndex(root, topic) !== current(path.join(AGENTS_DOCS, `${topic}.md`))) problems.push(`docs/agents/${topic}.md is out of date with docs/agents/${topic}/: run \`npm run docs\` and commit it.`);
+    for (const t of topics(root, topic)) if (!t.heading || !t.summary) problems.push(`docs/agents/${topic}/${t.file} has no first heading and summary line (its index lists them): start it with \`# <Title>\` and a one-line summary.`);
+  }
   for (const app of pageApps(root)) {
     const html = read(root, indexHtmlOf(root, app));
     try {
@@ -574,10 +641,11 @@ function checkDocs(root = ROOT) {
 
 function main(argv = process.argv.slice(2), root = ROOT) {
   const derivedOnly = argv.includes('--derived');
-  const engine = engineIndex(root);
   if (argv.includes('--check')) {
     const problems = checkDocs(root);
     for (const p of problems) console.error(p);
+    // a warning, never the exit code, until the docs over the limit are split (decisions.md, #573)
+    for (const d of oversizedDocs(root)) console.warn(`warning: ${d.file} has ${d.lines} lines (over ${DOC_LINE_LIMIT}): split it into subtopic files under docs/agents/<topic>/.`);
     return problems.length ? 1 : 0;
   }
   fs.writeFileSync(path.join(root, CODE_MAP), codeMap(root));
@@ -590,7 +658,7 @@ function main(argv = process.argv.slice(2), root = ROOT) {
   fs.writeFileSync(path.join(root, FIELD_REF), fieldReference());
   if (!derivedOnly) {
     fs.writeFileSync(path.join(root, 'README.md'), buildReadme(root));
-    if (engine !== null) fs.writeFileSync(path.join(root, ENGINE_INDEX), engine);
+    for (const topic of topicFolders(root)) fs.writeFileSync(path.join(root, AGENTS_DOCS, `${topic}.md`), topicIndex(root, topic));
     for (const app of pageApps(root)) fs.writeFileSync(path.join(root, indexHtmlOf(root, app)), renderIndexHtml(read(root, indexHtmlOf(root, app)), root, app));
   }
   return 0;
@@ -612,6 +680,7 @@ module.exports = {
   loadRule,
   main,
   missingHeaders,
+  oversizedDocs,
   pageApps,
   pageLayers,
   rendererAssets,
@@ -619,4 +688,7 @@ module.exports = {
   renderReadme,
   screensTable,
   skillsTable,
+  topicFolders,
+  topicIndex,
+  topics,
 };

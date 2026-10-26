@@ -47,5 +47,5 @@ Tracked as #566 under the epic #565; the highest-value gap in this guide, becaus
 ## References
 
 - [12-Factor Agents, factor 12](https://github.com/humanlayer/12-factor-agents/blob/main/content/factor-12-stateless-reducer.md)
-- `docs/agents/storage.md`: "Old runs: the run record upgrades them on read"
+- `docs/agents/storage/files.md`: "Old runs: the run record upgrades them on read"
 - `docs/agents/engine/resume.md`, `docs/agents/decisions.md` 2026-10-13 (#368, pause)

@@ -32,7 +32,7 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
 - 24/7 meter (#188): a paused roadmap or a stall counts as blocked only inside a Night watch window
   (from its incident log); outside it, nothing records the pause, so that time counts as no work.
 - Untested production files (#306): the follow-ups (one issue each, not filed yet) and the map's
-  blind spot for the service loader are listed in [testing.md](testing.md), "Production files no
+  blind spot for the service loader are listed in [simulated-runs.md](testing/simulated-runs.md), "Production files no
   test reaches".
 - Reorganisation into an engine package and modular fronts (Project Analyser, Code & Build,
   Design & Plan, AI; Settings as the shell): measurements, target layout, phased plan and the

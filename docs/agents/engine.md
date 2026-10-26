@@ -7,11 +7,12 @@ documents the same features for users; these topics are the implementer's summar
 Which field is valid where, its type and the loader's message: [the field reference](engine/field-reference.md)
 (generated from the loader's rule table, #352; gitignored like the code map).
 
-- [Agents and steps](engine/agents-and-steps.md): What agents and steps declare: skills, fan-out, step types (screenshots, suite, test ids), transitions, inputs, agent options, and the events and guards around a turn.
+- [Agents and steps](engine/agents-and-steps.md): What agents and steps declare: skills, fan-out, transitions, gates, inputs and agent options (the machine steps and the guards around a turn are their own topics).
 - [Chaining: declared outputs and `then` (#134)](engine/chaining.md): Declared run outputs and `then`: what a finished run hands to the next one, and how the service starts it.
 - [Evidence: screenshots per step and round (#146)](engine/evidence.md): Where a run's screenshots go (`evidence/<step>/round-<n>/`), the evidence index and who reads it.
 - [Fronts: the engine side of a front (#590)](engine/fronts.md): Phase 4 of the reorganisation study: a front package carries the channels, areas and domain modules only it uses; the engine discovers them from the installed fronts and serves the ones the app's composition names.
 - [Gates, loops and how a run ends](engine/gates-and-run-end.md): Human gates (feedback, choices, summaries), the supervisor, refused tool calls, waits, how a run ends and ships, and the bundled workflows' rules for several issues.
+- [Machine steps: screenshots, release version, test ids, check](engine/machine-steps.md): The steps without an agent besides the suite, and the test requests, coverage and file guards around the test steps.
 - [Providers](engine/providers.md): Turn timeouts, per-run agent overrides, fallback chains, limits per model, retries and other provider details.
 - [Repository workflows (#485)](engine/repository-workflows.md): A repository's `.multiagent/project.yaml`: the workflows a project is worked on with, how a name resolves, and why a repository's own workflow is accepted per commit and capped.
 - [Resume from a step](engine/resume.md): Resuming a run from a step: what the new run keeps, the service channels behind the dialog, and why a human gate always asks again.
@@ -20,5 +21,7 @@ Which field is valid where, its type and the loader's message: [the field refere
 - [Saved pipelines (#135)](engine/saved-pipelines.md): Saved pipelines (`<workspace>/pipelines/*.yaml`): their shape, how they are checked, and how they run as a chain.
 - [Sessions and handoff notes](engine/sessions-and-handoff-notes.md): Session modes (persistent, ephemeral, handoff), handoff notes, context and request limits, the prompt cache, turn metrics and costs, idle agents.
 - [Step fragments: `fragment: <name>` (#434)](engine/step-fragments.md): Step bodies several workflows share, kept once in `fragments/<name>.yaml` and included by a step's `fragment:` key; a project's workflow set composed from them by the ways-of-working interview (#487).
+- [The suite step](engine/suite-step.md): The orchestrator runs the project's whole test suite (`type: suite`, #177): command, scopes, waits, failures.
+- [Guards around a turn](engine/turn-guards.md): Tool timeouts, test inputs, the environment allowlist, the base worktree, dependencies, the memory guard and self-healing.
 - [A workflow as a step: `type: workflow` (#174)](engine/workflow-step.md): A step that runs another workflow as child runs: inputs, `foreach`, output, limits, stop and resume, parent and child links.
 - [Worktrees and template context](engine/worktrees-and-template-context.md): The run's worktree option, what templates can read, and transition actions.

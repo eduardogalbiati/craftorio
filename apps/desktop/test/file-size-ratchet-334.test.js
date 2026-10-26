@@ -127,7 +127,7 @@ test('#334 a CRLF file of exactly 1,000 lines is within the cap', (t) => {
 });
 
 test('#334 docs/agents/testing.md states the rule, that a new exception needs the owner\'s ok in its issue, and the usual ways to split', () => {
-  const doc = fs.readFileSync(path.join(root, 'docs', 'agents', 'testing.md'), 'utf8');
+  const doc = fs.readdirSync(path.join(root, 'docs', 'agents', 'testing')).map((f) => fs.readFileSync(path.join(root, 'docs', 'agents', 'testing', f), 'utf8')).join('\n');
   assert.match(doc, /1,000 lines/);
   assert.match(doc, /file-size-ratchet/);
   assert.match(doc, /owner/i);

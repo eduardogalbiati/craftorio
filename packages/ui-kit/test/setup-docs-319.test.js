@@ -43,7 +43,7 @@ test('README Screens table has a Setup row', () => {
 });
 
 test('docs/agents/renderer.md mentions Setup', () => {
-  assert.match(read('docs/agents/renderer.md'), /Setup/);
+  assert.match(fs.readdirSync(path.join(root, 'docs', 'agents', 'renderer')).map((f) => read(`docs/agents/renderer/${f}`)).join('\n'), /Setup/);
 });
 
 test('no renderer file says "use simulation mode"', () => {

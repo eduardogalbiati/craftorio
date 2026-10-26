@@ -4,8 +4,7 @@ Electron desktop app (Windows first) that runs multi-agent workflows defined in 
 turn is a headless CLI process: Claude Code (`claude -p`), Codex CLI (`codex exec`) or Grok Build
 (`grok --prompt-file`). A deterministic engine walks the workflow graph; an AI supervisor is called
 only when a step fails, or on demand. Everything is recorded in a local workspace folder. Owner:
-Eduardo Galbiati (`eduardogalbiati/multiagent-orchestrator`, branch `main`). The README is the
-user-facing doc.
+Eduardo Galbiati (`eduardogalbiati/multiagent-orchestrator`, branch `main`).
 
 ## Hard rules
 
@@ -50,6 +49,8 @@ npm run screenshot -- --view backlog --mode kanban --out <dir>   # one screen, s
 
 ## Topic docs (read the one for your task)
 
+`packages/engine/`, `packages/ui-kit/`, `fronts/<id>/` and `scripts/` carry their own AGENTS.md.
+
 - [code-map.md](docs/agents/code-map.md), [test-map.md](docs/agents/test-map.md), [channels.md](docs/agents/channels.md): file roles, tests, channel schemas (`npm run docs`, gitignored).
 - [docs/agents/decisions.md](docs/agents/decisions.md): the owner's decisions. Read before changing behaviour an earlier decision set.
 - [docs/agents/engine.md](docs/agents/engine.md): workflow YAML, sessions and handoff notes, gates, how a run ends, templates. Read before changing the engine or a workflow.
@@ -59,6 +60,6 @@ npm run screenshot -- --view backlog --mode kanban --out <dir>   # one screen, s
 - [docs/agents/testing.md](docs/agents/testing.md): CI, machine-independent tests, mock provider, real CLIs. Read before writing tests.
 - [docs/agents/windows-gotchas.md](docs/agents/windows-gotchas.md): line endings, paths, node-pty, the exe, EBUSY. Read before scripted edits, terminals or packaging.
 - [docs/agents/environment.md](docs/agents/environment.md): Node/npm/Electron, CLIs, workspace layout. Read before installing or upgrading.
-- [docs/agents/renderer.md](docs/agents/renderer.md): the UI and how to check it. Read before changing `packages/ui-kit/`, `fronts/` or `apps/*/renderer/`.
+- [docs/agents/renderer.md](docs/agents/renderer.md): the UI and how to check it. Read before changing a screen.
 - [docs/agents/backlog.md](docs/agents/backlog.md): open ideas. Read when planning new work.
 - [seeds.md](docs/agents/seeds.md): writing an analysis seed.

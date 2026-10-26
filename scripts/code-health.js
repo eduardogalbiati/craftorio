@@ -19,7 +19,7 @@
 // score are the Architecture tab's pure core (packages/shared/architecture-model.js, #356). Output
 // is deterministic: sorted JSON keys, dates from the commits; churn git cannot read (a shallow
 // clone, no repository) is `null` and named in `missing`, never 0. How to read it and how to split
-// a function: docs/agents/testing.md ("Code health"). Checked by test/code-health-344.test.js.
+// a function: docs/agents/testing/code-health.md ("Code health"). Checked by test/code-health-344.test.js.
 //
 //   node scripts/code-health.js [--json] [--root <dir>]    distribution and the top 20 functions
 //   node scripts/code-health.js --hotspots [--json]         complexity x churn, files and functions
@@ -47,7 +47,7 @@ const { measureSource } = require('@multiagent/shared/code-complexity');
 const ROOT = path.join(__dirname, '..');
 const MAX_COMPLEXITY = 25;
 const MIN_DUPLICATE_LINES = 8;
-const HOW_TO = 'docs/agents/testing.md ("Code health")';
+const HOW_TO = 'docs/agents/testing.md › code-health.md ("Code health")';
 
 // '<file>:<function name>' -> its complexity when listed; only lower it
 const COMPLEXITY_EXCEPTIONS = {

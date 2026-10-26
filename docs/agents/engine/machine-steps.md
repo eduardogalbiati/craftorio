@@ -1,0 +1,106 @@
+# Machine steps: screenshots, release version, test ids, check
+
+The steps without an agent besides the suite, and the test requests, coverage and file guards around the test steps.
+
+- A **screenshots step** (`type: screenshots`, no agent, #144; `runScreenshots` → `packages/engine/engine/screenshot-step.js`): `from: <step>` (whose output lists `screenshots: [{ name, caption, args }]`, `args` = the options of the project's screenshot command), `folder` (default the step id), `base` (template, the ref of the "original" side; default the worktree's base ref), `timeout` per shot (default 3m). It runs `npm run screenshot -- <args> --out <run_dir>/evidence/<folder>/round-<visit> --name <name> --side modified`, then the same with `--side original --ref <base>`, with the agents' environment (simulation only, scratch workspace); at most 8 entries, `--out/--name/--side/--ref/--caption` in `args` are refused. It never fails and never calls the supervisor: an empty list, a simulated run (`mock`: nothing is launched), no worktree, no `screenshot` script in the worktree's package.json, an invalid entry, a timeout or a crash end up in its output `{ kind: 'screenshots', folder, round, dir, taken, screens, screenshots: [{ path, caption, side }], errors: [{ name, side?, error }], reason, message }` (`message`: "N screenshots of M screens taken in round n" or "No screenshots: <reason>"). software-development and local-hero run `developer_screenshots` (from `develop`, folder `developer`) on every way into `developer_check`, whose message shows `message`; the gate's Artifacts panel shows that round only (`lastCapture` in gate-panel.js).
+  - **The screenshot slot (#199)**: at most one Electron screenshot process at a time on the machine, across all runs and apps. Each capture of the step takes the machine-wide slot (`packages/engine/engine/machine-slot.js`, `acquireSlot('screenshot')`: a file `<os tmp>/multiagent-orchestrator/locks/screenshot.slot` with pid, host and token, or under `MULTIAGENT_LOCKS_DIR`) and passes its token to `npm run screenshot` (`MULTIAGENT_SCREENSHOT_SLOT`), which then does not wait for it. While another run holds it the step emits `screenshots.waiting` (`holder_pid`) and a log line "waiting for the screenshot slot". `scripts/screenshot.js` takes the same slot itself (`acquireSlotSync`), so an agent's `npm run screenshot` (evidence, test writer, E2E runner) waits too and prints the same line. A slot whose process is gone, or held over 15 minutes, is freed; a wait over 20 minutes fails that capture.
+
+- **`type: release_version`** (#325, release.yaml's first step): no agent; the rendered `version`
+  (a semver, a leading `v` dropped) into the package.json of `dir` (default `{{ worktree_dir }}`)
+  and the root `version` / `packages[""].version` of its package-lock.json or npm-shrinkwrap.json,
+  formatting and line endings kept, one commit on `branch` (created when the worktree is detached)
+  (`packages/engine/domains/releases/releases.js` `writeReleaseVersion`). Nothing written, with the reason in the output and the
+  run log, for a name that is not a semver, no package.json, the same or a lower version, a run
+  without its own worktree, or a git error: it never fails the run. Output: { status: written |
+  unchanged, from, to, files, commit, change: "package.json 0.3.0 → 1.2.0", message }. Simulation:
+  nothing written, `change` says what a real run would set.
+  - **Test requests** (#212, `serveTestRequests`): an agent turn that ends with a ```` ```run-tests ````
+    block (`parseTestRequest`: test files, or `affected`) has them run by the engine in the agent's
+    working folder (log `logs/tests-<step>-<n>.log`), then the agent resumes in the same step with a
+    summary only (`testResultsPrompt`: counts, failures with their first 3 lines, the log's path), at
+    most 3 per turn; `summary.suite_runs.requests` counts them.
+  - **`full_suite: warn`** on an agent step: a tool call of its agent that starts the whole suite
+    (`isFullSuiteCommand`: `npm test`, `pytest`, `go test ./...`, `dotnet test`, `mvn test`, the
+    suite step's own command…) is noted, not refused: a `log` warn `kind: full_suite_by_agent`.
+  - `summary.suite_runs: { engine, agents }`: whole-suite runs by suite steps and by agents (the
+    measure of #177).
+  - **`files` / `expect: red`** on a suite step (#220): only the listed test files (a template such
+    as `"{{ steps.acceptance_tests.output.tests_added }}"`; missing files are left out, log
+    `logs/<step>-<visit>.log`), never the whole suite after them. `expect: red` makes it a red check
+    (`redCheckOutput`, `suiteStep.redCheck`): `red_check { red, green, partly_green, broken }`,
+    status `broken` when a file cannot run (else `pass`), no base check, `affected_tests` /
+    `affected_reasons` from `relatedTests` (the existing tests reaching the sources the new tests
+    import) and a `message` for the next prompt. Simulation: default red; `mockSequences.suite`
+    `pass` = all green, `broken` = all broken.
+  - **`expect: green`** (#355, `workflows/refactor.yaml`'s `green_check`): the listed tests pin the
+    current behaviour and must pass on the unchanged code: a plain `pass | fail | blocked` status,
+    no base check (a pinned test that fails is never waved through as failing on the base).
+    Simulation: default `pass`.
+  - **`coverage: true`** on a suite step (#225; set on the bundled development workflows' `suite`):
+    a `node --test` command runs with `--experimental-test-coverage` (`suiteStep.coverageCommand`);
+    an npm script (`npm test`, `npm run <name>`, with `-- <files>`) runs its `<name>:coverage`
+    script when package.json has one (this project: `npm run test:coverage`), else a script that is
+    a plain `node --test …` runs inlined with the flag; any other command runs without coverage. Whenever the output (or the #219
+    human log) has node's coverage table, `coverage/coverage-summary.md` (totals and the changed
+    files' coverage, `packages/engine/domains/evidence/coverage-summary.js`) is saved as a Tests artifact and the output gets
+    `coverage { lines, branches, functions, files, path }`. No model call.
+  - **`result.md`** (#225): `finish` writes the run's result summary (`packages/engine/domains/evidence/result-summary.js`: status,
+    issues, commits, suite results, coverage, screenshots, key artifacts) before `workflow.finished`;
+    it is the run's first artifact (category `result`, `packages/engine/domains/evidence/artifact-categories.js`).
+  - **New elements** (#185): a screenshots step's original side that failed only with
+    `screenshot: nothing matches <selector>` while its modified side was taken goes to
+    `new_elements`, not `errors`; the message counts them (`2 new elements (no original)`) and
+    `recordEvidence` keeps the step's outcome in the evidence manifest (`captures`).
+  - **`protect_files`** on an agent or an agent step (#220, the step's wins): a file list template
+    rendered before each turn; `sendToAgent` snapshots exactly those files (`testPaths.snapshot`
+    with the paths as patterns) and refuses a turn that changes one, like `edits_tests: false`
+    (`protectedRefusedPrompt`, event `tests.refused` with `protected: true`, log `kind:
+    protected_refused`, the turn fails after 2 retries), whatever `edits_tests` says.
+  - **`test_map: true`** on an agent step (#219): `writeTestMap` writes the code → tests map of the
+    agent's checkout to `<run_dir>/test-map.md` before each turn and passes its path as
+    `{{ test_map }}`.
+  - Agent mode (#219): `suiteEnv` sets `MULTIAGENT_AGENT_MODE=1`, and each run gets
+    `MULTIAGENT_TEST_HUMAN_LOG=<log>.human.log`; a runner that knows them (this project's
+    `scripts/test.js`) prints one failures-only JSON line, read first by `parseFailures` /
+    `parseCounts` (output `human_log`, `file_counts`, failures with `line` and `kind`).
+  - software-development and local-hero: `test` (test writer, focused tests) → `suite` → build; a
+    failing suite goes back to the test writer (its prompt gets the failures and the log path when
+    `previous_step == 'suite'`), 2 rounds, then `test_failed`.
+  - **`commit_tests: true`** on a single-agent step (the test writer's `test` step in both
+    development workflows and test-batch, #209): after the turn (before the suite, the build and the
+    local merge) `commitLeftoverTests` lists the run worktree's local changes (`localChanges` in
+    test-paths.js; no worktree = nothing to do). `committed: false` in the answer → a `log` warn
+    `kind: tests_uncommitted`. All of them test files (`tests_paths`) → the engine stages and
+    commits them (`Tests for #<issues> (committed by the orchestrator)`), event
+    `tests.autocommitted { files, commit }`, a `log` warn `kind: tests_autocommitted`, the output
+    gets `committed: true, autocommitted`, `summary.tests_autocommitted`. Other files changed too →
+    never committed: the step goes back to its agent once with both lists (`retry`, no new note),
+    then, if non-test files are still changed, a gate (Continue / Stop the run); test files left
+    after it are committed as above.
+
+- A **test id step** (`type: test_ids`, no agent, no model call, #246; `runTestIdsStep` →
+  `packages/engine/engine/test-ids.js`): the static `getByTestId('…')` ids of the E2E step definitions (`steps`,
+  default `features/steps`) that the renderer's source (`renderer`, default `src/renderer`) does not
+  contain; both are repository-relative templates that render to one folder or several (one per line
+  or comma-separated, #588), and the output lists them. Output `{ kind: 'test_ids', status: pass |
+  missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
+  project has no step definitions. The same rule backs the `missing_test_ids` filter
+  (`{{ worktree_dir | missing_test_ids(steps, renderer) }}`, one line per id) and test/e2e-playwright.test.js.
+  ai-development-local-hero passes its `steps_folders` / `ui_folders` inputs (#588; defaults
+  `features/steps`, `src/renderer/`); the `ui_files(folders)` filter keeps the files of a list under
+  the UI folders, so a change there routes to `developer_screenshots` and the UI reviewer.
+  ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
+  were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
+  (`vars.testid_returns`), then develop's own routes follow.
+- A **check step** (`type: check`, no agent, no model call, #404; `runCheckStep` →
+  `packages/engine/engine/check-step.js`): the project's rule checks in the run's checkout, `command` (a
+  template; empty: `npm run check` when the project's package.json has a `check` script) through the
+  suite's `runCommand`, `timeout` optional (default 10m), the log in `logs/check-<visit>.log`. It runs
+  in a mock run too (a local, free check, like the test id step). Output `{ kind: 'check', status:
+  pass | fail | skipped, command, findings, message, round }`: `findings` are the command's last 40
+  lines, `skipped` when there is no checkout or no command. ai-development-local-hero runs it as
+  `rule_check` after each develop commit (input `check_command`), the last agent-less step before
+  the owner's gate or the review; the routes into it test `worktree_dir | check_command(...)` (the
+  template filter), so a project without a check command never visits it. A failure goes back to
+  develop with the findings at most twice per review round (`vars.check_returns`), then to the
+  `check_failed` gate; a pass goes to `developer_check` (validated mode) or the review.

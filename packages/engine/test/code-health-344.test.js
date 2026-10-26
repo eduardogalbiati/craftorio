@@ -501,7 +501,7 @@ test('#344 the line ratchet of #334 stays alongside, at 1,000 lines', () => {
 });
 
 test('#344 docs/agents/testing.md gives the limits, how to read the report and how to split a function', () => {
-  const doc = fs.readFileSync(path.join(root, 'docs', 'agents', 'testing.md'), 'utf8');
+  const doc = fs.readdirSync(path.join(root, 'docs', 'agents', 'testing')).map((f) => fs.readFileSync(path.join(root, 'docs', 'agents', 'testing', f), 'utf8')).join('\n');
   assert.match(doc, /code-health/);
   assert.match(doc, /\b25\b/);
   assert.match(doc, /--hotspots/);

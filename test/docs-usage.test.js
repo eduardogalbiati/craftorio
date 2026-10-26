@@ -274,7 +274,9 @@ test('npm run docs:usage runs the script', () => {
 
 test('the docs say how a script reads the session stream and where the baseline is', () => {
   const doc = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
-  const topic = doc('docs/agents/testing.md') + doc('docs/agents/storage.md');
+  // testing and storage are indexes over their subtopic files since #573
+  const folder = (topic) => fs.readdirSync(path.join(REPO, 'docs', 'agents', topic)).map((f) => doc(`docs/agents/${topic}/${f}`)).join('\n');
+  const topic = folder('testing') + folder('storage');
   assert.equal(topic.includes('docs-usage'), true, 'testing.md or storage.md names scripts/docs-usage.js');
   assert.equal(doc('docs/12-factor-agents/codebase-structure.md').includes('docs:usage'), true, 'codebase-structure.md gives the measurement command');
   assert.equal(/docs-usage|docs:usage/.test(doc('docs/agents/decisions.md')), true, 'decisions.md records whether the retrospective consumes the report');

@@ -18,7 +18,7 @@ const ROOT = path.join(__dirname, '..');
 // the folders scanned (sourceDirs of the root, then scripts/)
 const DIRS = (root) => [...sourceDirs(root), 'scripts'];
 const MAX_LINES = 1000;
-const HOW_TO = 'docs/agents/testing.md ("File size ratchet")';
+const HOW_TO = 'docs/agents/testing.md › code-health.md ("File size ratchet")';
 
 // path (from the repository root, with /) -> its line count when listed; only lower it
 const EXCEPTIONS = {

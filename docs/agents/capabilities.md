@@ -82,6 +82,16 @@ app auto-trusts only its own folders (`runs/`, `skills/`, `workflows/`, `trustWo
 `packages/engine/domains/cli/cli-trust.js`); `repos/`, `worktrees/` and project folders keep each CLI's own trust prompt,
 which a live "cli-new" terminal shows to the user.
 
+**Nested instructions files (#572)**: `packages/engine/`, `packages/ui-kit/`, each `fronts/<id>/`
+and `scripts/` carry an `AGENTS.md` (the engine also a `CLAUDE.md` with `@AGENTS.md`). Codex reads
+the nested `AGENTS.md` by its convention. Claude loads a folder's `CLAUDE.md` when it reads a file
+in that folder; `.claude/rules/*.md` is project configuration, which `--setting-sources ''` may drop,
+so it is not used. Manual check (a real-model call, not automated): start an isolated agent on this
+repo (`npm run run -- --file ai-arena.yaml --task "Read packages/engine/engine/workflow.js and quote the
+first rule your instructions give for that folder"`) and look in its session stream for the
+nested file's "simulation" rule. Not yet run: the files also work as plain text an agent can be
+pointed to, so nothing depends on the result.
+
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k
 tokens with the user's setup → 22.0k isolated with the developer's capabilities**.

@@ -123,7 +123,7 @@ One repository, one `node_modules` (default hoisting), the workspaces of the roo
   shell, the run kernel, the controls, `style.css`, the shell's screens in `views/`), plain page scripts.
 - `fronts/<id>/` = `@multiagent/front-<id>` (phase 3): the four fronts `analyser`, `build`, `plan`,
   `ai`, each its `views/`, `features/` and `test/`. An app's `composition.js` lists the fronts it ships
-  ([renderer.md](renderer.md), "Composition").
+  ([loading-and-composition.md](renderer/loading-and-composition.md)).
 - `apps/desktop/` = `@multiagent/desktop`: `host/` (Electron's main, the root `package.json`'s `main`),
   `renderer/` (its page, `index.html`, generated from its composition; the engine connection page),
   `assets/`, `scripts/package.js` (`npm run build`). `node-pty`, xterm, marked and dompurify are its

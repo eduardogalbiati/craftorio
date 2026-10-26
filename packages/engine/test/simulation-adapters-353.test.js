@@ -259,7 +259,7 @@ test('#353 no this.mock checks remain in packages/engine/engine/run/ outside the
 // ---- docs -----------------------------------------------------------------------------------
 
 test('#353 docs/agents/testing.md documents the simulated machine actions', () => {
-  const doc = fs.readFileSync(path.join(root, 'docs', 'agents', 'testing.md'), 'utf8');
+  const doc = fs.readdirSync(path.join(root, 'docs', 'agents', 'testing')).map((f) => fs.readFileSync(path.join(root, 'docs', 'agents', 'testing', f), 'utf8')).join('\n');
   assert.match(doc, /packages\/engine\/engine\/machine-actions\.js/);
   assert.match(doc, /simulated machine actions/i);
 });
