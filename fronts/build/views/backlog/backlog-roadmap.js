@@ -10,13 +10,13 @@
 // done, its title the merged commit, #614; a station opens the run there). 3: the Product Owner's reason (#105), then the error line and the Edit form. The
 // other inputs are edited in an Edit form built from the workflow's input definitions (api.listWorkflows, loaded once) by WorkflowInputs (workflow-inputs.js,
 // #116: human labels, pills, switches, show_if), with Save / Cancel. The plan is edited too: stages and items up/down or by drag, an issue dragged from one
-// item to another, items removed, a stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear;
-// Retry / Skip on a failed item. A stage's head has its number, its name and its state (its estimate only with more than one item); its actions are in its ⋮
-// menu (#282; the keyboard opens it, the arrows move in it, Esc closes it): Disable / Enable (#284: a disabled stage is skipped while the roadmap runs; still
-// listed, dimmed, with a "Disabled" badge, counted apart in the bar), Run this stage (#141: only its items, then the roadmap pauses; out of order after a
-// confirmation; off, with the reason, while the roadmap runs or on a disabled stage), Release here, Run earlier / later, the note. A Product Owner proposal
-// (#105, JSON) is added or replaces the roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of stages
-// (api.saveRoadmap); the service keeps each item's runs by id.
+// item to another, items removed, a stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear; Retry / Skip on a failed item. A
+// stage's head has its number, its name and its state (its estimate only with more than one item); its actions are in its ⋮ menu (#282; the keyboard opens
+// it, the arrows move in it, Esc closes it): Disable / Enable (#284: a disabled stage is skipped while the roadmap runs; still listed, dimmed, with a
+// "Disabled" badge, counted apart in the bar), Run this stage (#141: only its items, then the roadmap pauses; out of order after a confirmation; off, with
+// the reason, while the roadmap runs or on a disabled stage), Release here, Run earlier / later, the note. A Product Owner proposal (#105, JSON) is added or
+// replaces the roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of stages (api.saveRoadmap); the service keeps
+// each item's runs by id.
 // #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written elsewhere since, the service applies only this edit, or
 // refuses it (`conflict`): the screen shows the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or, when its item is
 // gone, those values show in the "Not saved" box (`lost`, roadmap-save-conflict). `changedElsewhere` words what changed for the open form's notice
@@ -24,17 +24,14 @@
 // epic's items done. Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it on otherwise asks to start the
 // roadmap) and the last refill; `liveBanner` is the banner backlog.js shows on top of every view while it is on.
 // When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the ChainPicker (chain-picker.js), mounted by mountChain.
-// Cost (#205, #206): each item shows its estimate ("≈ $X", tooltip: how and from how many runs; "no
-// estimate yet" without history), its real cost once it has a run, and the Product Owner's Cost step
-// (a badge: the tests, screenshots and grouping it chose); a stage of several items its estimate. A roadmap the
-// budget cap paused offers "Raise for today" and "Resume anyway" (api.roadmapBudget).
-// Time (#215): the estimated time next to the cost ("≈ 1 h 45 min"; a stage: its longest item); once
-// the run ends, "$22.21 of ≈ $15.18 ▲ +46%" and "3 h 41 min of ≈ 1 h 45 min" coloured by Estimates.verdict
-// (estimates.js: green at or under, amber up to +25%, red above, with an arrow), the difference and
-// the longest step in the tooltip; while it runs, "on track", then amber or red once past it.
-// A finished stage shows its real total against its estimate the same way. The bar sums them up (#421,
-// roadmap-summary.js): "Planned ≈ $X · ≈ T" left, "+ n without estimate", "Spent $Y", "By release" (test ids: roadmap-summary-by-release, its list roadmap-summary-releases, one roadmap-summary-release-row per cut line).
-// Inputs (#216): the item's inputs as WorkflowInputs.inputPills ("Unit tests: Run existing").
+// Cost (#205, #206): each item shows its estimate ("≈ $X", tooltip: how and from how many runs; "no estimate yet" without history), its real cost once it has
+// a run, and the Product Owner's Cost step (a badge: the tests, screenshots and grouping it chose); a stage of several items its estimate. A roadmap the
+// budget cap paused offers "Raise for today" and "Resume anyway" (api.roadmapBudget). Time (#215): the estimated time next to the cost ("≈ 1 h 45 min"; a
+// stage: its longest item); once the run ends, "$22.21 of ≈ $15.18 ▲ +46%" and "3 h 41 min of ≈ 1 h 45 min" coloured by Estimates.verdict (estimates.js:
+// green at or under, amber up to +25%, red above, with an arrow), the difference and the longest step in the tooltip; while it runs, "on track", then amber
+// or red once past it. A finished stage shows its real total against its estimate the same way. The bar sums them up (#421, roadmap-summary.js): "Planned ≈
+// $X · ≈ T" left, "+ n without estimate", "Spent $Y", "By release" (test ids: roadmap-summary-by-release, its list roadmap-summary-releases, one
+// roadmap-summary-release-row per cut line). Inputs (#216): the item's inputs as WorkflowInputs.inputPills ("Unit tests: Run existing").
 // What it shows (#217, #268): html()'s `view` ({ epic, showAll, since }, remembered by backlog.js). The Planned | All switch: Planned (showAll off) is the
 // open work, every item but the done and skipped ones, a stage with nothing left hidden, and only the latest release (#425); All is every item and release.
 // The date range (`since`: last 24 hours by default … Total) filters by an item's last activity (added, its run's start, its run's end): in Planned the open
@@ -52,22 +49,15 @@
 // fix round after Code review" under the step: the same run, not a new one. A refused start (#196: kept work, the item that paused the roadmap, an error
 // without a run) offers Retry / Skip like a failed run; the bar's "Show the item" scrolls to the item that paused it. Start, Resume and Run this stage list
 // the items whose workflow pushes while the default development workflow (#195, DefaultWorkflow) merges locally: switch them to the default, or start anyway.
-// Cut lines (#260, #555): "Release here" in a stage's ⋮ menu asks for the release's name (the #cut-line-modal dialog of backlog.js) and adds a release entry
-// after the stage. The screen draws the roadmap folded (RoadmapModel.foldReleases: each entry as the `release` of the stage before it) and saves it unfolded:
-// a dashed line with its name, the state of its release run (in progress, on hold, failed, shipped) and a link to the run, ↑ ↓ (it moves between stages,
-// a stage moved leaves it in place), Rename and Remove while no run is going; then its card, planned included (the stages it closes, its estimate). The
-// stages below wait until it shipped; a finished stage hidden by the open-work filter still shows its line while it waits, and so does the view grouped by
-// epic (the waiting lines lead it, each with its stage). Planned: the latest only (#425). The stage whose run is in progress is the Current one, the first
-// open stage, when another, shows Next (#552).
-// The bar (#269): the roadmap's state is a dot before its title (blue and pulsing while running, amber paused, red paused by a failure, grey planned, green
-// done; the readable state in its tooltip and aria-label), then the counts, Start / Resume, Pause (amber, with its icon), Stop (red, with its icon, after a
-// confirmation) and a ⋮ menu built from MENU (Clear, Restore an earlier version…; the keyboard opens it, the arrows move in it, Esc closes it). The filters
-// (the epic, Planned | All, the date range, Group by epic) sit on a filter row above the bar. A pause by an item's failure is the page's error alert (#270,
-// alerts(): Retry / Skip, Show the item); other pause notes (the budget cap, a stage run on its own that ended, a release on hold) stay in the bar.
-// Ask the Oracle (#271): a card whose item failed, was interrupted or stopped, or could not start has "Ask the Oracle about this failure" beside Retry / Skip
-// (the gate button's code, gate-oracle.js). Undo (#281): removing, moving or dragging an item, a stage or an issue, renaming a stage, moving or removing a
-// cut line, Clear and Replace show a toast with Undo (app.js showToast's action; api.undoRoadmap puts back what the edit changed); "Restore an earlier
-// version…" lists the versions kept before each edit.
+// Cut lines (#260, #555, docs/features/release.md): "Release here" (a stage's ⋮ menu, the #cut-line-modal dialog of backlog.js) adds a release entry after the
+// stage, drawn folded (RoadmapModel.foldReleases) as a dashed line (its run's state and link, ↑ ↓, Rename and Remove while no run is going) then its card,
+// planned included. A finished stage hidden by the open-work filter still shows its waiting line, so does the view grouped by epic. Planned: the latest only
+// (#425). The stage whose run is in progress is the Current one; the first open stage, when another, shows Next (#552).
+// The bar (#269): the state's dot (its tooltip and aria-label), the counts, Start / Resume, Pause, Stop (after a confirmation) and a ⋮ menu built from MENU
+// (Clear, Restore an earlier version…; keyboard: arrows, Esc). The filters (the epic, Planned | All, the date range, Group by epic) sit on a row above it. A
+// pause by an item's failure is the page's error alert (#270, alerts(): Retry / Skip, Show the item); other pause notes stay in the bar. Ask the Oracle
+// (#271): a failed, interrupted, stopped or unstarted card has "Ask the Oracle about this failure" (gate-oracle.js). Undo (#281): each edit's toast has Undo
+// (app.js showToast's action; api.undoRoadmap); "Restore an earlier version…" lists the versions kept before each edit.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError, setShowAll, setSince, setEpic, showRoadmap }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
 // fmtDur, agentLabel, scheduleRender, showToast), run-list.js's (progressAvatar, robotAvatar, PERSON_SVG, ENGINE_SVG),
@@ -827,14 +817,11 @@
 
   // The release block: its state, its release run's stations with their rounds, its time, cost and
   // fixes, "Open run" (at the Ship gate, the gate waits there: nothing here answers it).
-  // #555: a planned release (its release entry, no run yet) has the same card: Planned, the stages it
-  // closes and its estimate, as its cut line said before
+  // #555: a planned release (its release entry, no run yet) has the same card: Planned, the stages it closes and its estimate
   const blockState = (x) => (x.status === 'planned' ? ['', t('backlog_roadmap.release_planned'), t('backlog_roadmap.release_planned_help'), ''] : RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking);
-  function plannedFacts(x) {
-    const closes = (x.closes || []).map((c) => `${t('backlog_roadmap.stage')} ${c.number}${c.name ? ` ${c.name}` : ''}`).join(', ');
-    const est = x.estimate?.usd != null ? `≈ ${money(x.estimate.usd)}${x.estimate.minutes ? ` · ${mins(x.estimate.minutes)}` : ''}` : '';
-    return [closes ? t('backlog_roadmap.release_closes', { stages: closes }) : '', est].filter(Boolean).join(' · ');
-  }
+  const closesText = (x) => (x.closes || []).map((c) => `${t('backlog_roadmap.stage')} ${c.number}${c.name ? ` ${c.name}` : ''}`).join(', ');
+  const plannedFacts = (x) => [closesText(x) ? t('backlog_roadmap.release_closes', { stages: closesText(x) }) : '',
+    x.estimate?.usd != null ? `≈ ${money(x.estimate.usd)}${x.estimate.minutes ? ` · ${mins(x.estimate.minutes)}` : ''}` : ''].filter(Boolean).join(' · ');
   function releaseBlockHtml(x) {
     const [tone, label, help] = blockState(x);
     const name = t('backlog_roadmap.release_version', { version: x.version });
@@ -1019,13 +1006,6 @@
     }
   }
 
-  // The highlight: a stage run on its own (#141) is current; else (#552) the running stage, the first open one (never a disabled one, #284) then next
-  function highlightOf(r) {
-    const [scoped, first] = [scopedStage(r), RoadmapModel.currentStage(r)];
-    const running = scoped >= 0 ? -1 : RoadmapModel.runningStage(r);
-    return scoped >= 0 ? { scoped, current: scoped, next: -1 } : running < 0 ? { scoped, current: first, next: -1 } : { scoped, current: running, next: first !== running ? first : -1 };
-  }
-
   /**
    * The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender`
    * redraws once the workflows are loaded. `view` (#217, #268): what backlog.js remembers, { epic,
@@ -1045,7 +1025,7 @@
     if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
-    const { scoped, current, next } = highlightOf(r);
+    const { scoped, current, next } = RoadmapModel.highlight(r); // #141, #552: the running stage is current, the first open one Next
     const offStages = r.stages.filter((s) => s.disabled);
     const offOpen = offStages.filter(RoadmapModel.hasUnfinished);
     const acts = may(r);
@@ -1799,14 +1779,8 @@
     if (!stage) return 'handled';
     const dir = { up: -1, down: 1 }[el.dataset.rmRelease];
     if (dir) {
-      // #555: the release moves before this stage / after the next one (onto a stage with no cut line)
-      const s = stages.indexOf(stage);
-      const onto = stages[s + dir];
-      if (!onto || onto.release || !stage.release) return 'handled';
-      const name = stage.release.name;
-      onto.release = stage.release;
-      delete stage.release;
-      await save(ctx, r, stages, { label: t('backlog_roadmap.moved_the_release_name', { name }) });
+      const name = RoadmapModel.moveRelease(stages, stages.indexOf(stage), dir); // #555: onto a stage with no cut line
+      if (name != null) await save(ctx, r, stages, { label: t('backlog_roadmap.moved_the_release_name', { name }) });
     } else if (el.dataset.rmRelease === 'remove') {
       const name = stage.release?.name || ''; if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name }), t('common.remove'))) return 'handled';
       delete stage.release; await save(ctx, r, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
@@ -1835,17 +1809,16 @@
   // #555: a release with no stage of its own before it (`leadReleases[k]`): renamed or removed
   async function leadReleaseClicked({ ctx, r, data, stages }, el, k) {
     const leads = clone(r.leadReleases || []);
-    const rel = leads[k];
-    if (!rel) return 'handled';
-    const name0 = rel.name;
-    if (el.dataset.rmRelease === 'remove') {
-      if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name: name0 }), t('common.remove'))) return 'handled';
+    const [rel, act] = [leads[k], el.dataset.rmRelease];
+    const keep = (edit) => save(ctx, { ...r, leadReleases: leads }, stages, edit);
+    if (rel && act === 'remove') {
+      if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name: rel.name }), t('common.remove'))) return 'handled';
       leads.splice(k, 1);
-      await save(ctx, { ...r, leadReleases: leads }, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name: name0 }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
-    } else if (el.dataset.rmRelease === 'edit') {
-      await ReleaseName.cutLineDialog(name0, ctx, { ...data, roadmap: r }, Math.max(0, rel.after), async (name) => {
+      await keep({ label: t('backlog_roadmap.removed_the_cut_line_name', { name: rel.name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
+    } else if (rel && act === 'edit') {
+      await ReleaseName.cutLineDialog(rel.name, ctx, { ...data, roadmap: r }, Math.max(0, rel.after), async (name) => {
         leads[k] = { ...rel, name };
-        const out = await save(ctx, { ...r, leadReleases: leads }, stages, { label: t('backlog_roadmap.renamed_the_cut_line_name', { from: name0, name }), dialog: true });
+        const out = await keep({ label: t('backlog_roadmap.renamed_the_cut_line_name', { from: rel.name, name }), dialog: true });
         return out?.conflict ? out.conflict.reason || 'The roadmap changed elsewhere: nothing was saved.' : null;
       });
     }
@@ -1854,10 +1827,8 @@
   async function stageMoveClicked({ ctx, r, stages, target }, el) {
     const { s } = locate(stages, target);
     const up = el.dataset.rmStage === 'up';
-    const cuts = stages.map((st) => st.release); // #555: the releases stay where they are
-    const t = RoadmapModel.moveStage(stages, s, up ? -1 : 1, drawnAt); // #426: past the stages the view hides
+    const t = RoadmapModel.moveStage(stages, s, up ? -1 : 1, drawnAt); // #426: past the stages the view hides; #555: the releases stay
     if (t < 0) return 'handled';
-    stages.forEach((st, i) => { if (cuts[i]) st.release = cuts[i]; else delete st.release; });
     await save(ctx, r, stages, { label: I18n.t(up ? 'backlog_roadmap.moved_stage_up' : 'backlog_roadmap.moved_stage_down', { stage: s + 1 }), detail: I18n.t('backlog_roadmap.it_is_stage_n_now', { stage: t + 1 }) });
     return 'handled';
   }
@@ -1986,7 +1957,7 @@
       clearMarks();
       let ok = true;
       if (dragging.issue) {
-        const why = dropProblem(roadmapOf(data)?.stages,dragging, itemEl?.dataset.item);
+        const why = dropProblem(roadmapOf(data)?.stages, dragging, itemEl?.dataset.item);
         ok = !why;
         // its own item stays unmarked while the drag has just started there; once the cursor has
         // left it, coming back shows why it is refused ("already in this item")

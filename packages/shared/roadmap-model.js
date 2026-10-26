@@ -352,12 +352,34 @@
   // #426: "Run earlier / later" moves stage `s` just before the previous / just after the next drawn
   // stage (the hidden ones in between keep their order), to the roadmap's start / end when none is
   // drawn on that side. Changes `stages`; returns the stage's new index, -1 when it cannot move.
+  // #555: on the folded stages, the cut lines (`release`) stay where they are
   function moveStage(stages, s, dir, drawn) {
     const near = drawnNeighbour(stages, s, dir, drawn);
     const to = near >= 0 ? near : dir < 0 ? 0 : stages.length - 1;
     if (!stages[s] || to === s) return -1;
+    const cuts = stages.map((st) => st.release);
     stages.splice(to, 0, ...stages.splice(s, 1));
+    stages.forEach((st, i) => { if (cuts[i]) st.release = cuts[i]; else delete st.release; });
     return to;
+  }
+
+  // #555: on the folded stages, the cut line of stage `s` moves onto the stage before (dir -1) or after
+  // (1) it, when that one has none. Changes `stages`; returns the release's name, null when it cannot move.
+  function moveRelease(stages, s, dir) {
+    const [from, onto] = [stages[s], stages[s + dir]];
+    if (!from?.release || !onto || onto.release) return null;
+    onto.release = from.release;
+    delete from.release;
+    return onto.release.name;
+  }
+
+  // #552: the highlight. A stage run on its own (#141) is current; else the running stage, and the first
+  // open one (never a disabled one, #284) is `next` when it is another; nothing running: the first open one
+  function highlight(r) {
+    const [scoped, first] = [scopedStage(r), currentStage(r)];
+    const running = scoped >= 0 ? -1 : runningStage(r);
+    if (scoped >= 0) return { scoped, current: scoped, next: -1 };
+    return running < 0 ? { scoped, current: first, next: -1 } : { scoped, current: running, next: first !== running ? first : -1 };
   }
 
   const api = {
@@ -375,12 +397,14 @@
     earlierRuns,
     foldReleases,
     hasUnfinished,
+    highlight,
     inRange,
     isFinished,
     isOpen,
     isRelease,
     itemIssues,
     itemRuns,
+    moveRelease,
     moveStage,
     pageOf,
     pauseChoices,
