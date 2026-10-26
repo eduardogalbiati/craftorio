@@ -102,6 +102,7 @@
     const edit = edits.get(key);
     const done = filedSplit(ctx, msg, s);
     const title = s.title || ctx.issueOf(s.issue)?.title || '';
+    // Edit's "…" goes out as &hellip;: a literal "…" in a button's text is what marks it busy (#609)
     return `<div class="po-group po-split${done ? ' applied' : ''}" data-split="${s.issue}" data-testid="po-split-card">
         <div class="po-group-head">${ctx.issueRef(s.issue)}<b class="po-split-title" title="${esc(title)}">${esc(title)}</b>
           <span class="badge">${s.tasks?.length || 0} ${t('backlog_po_proposals.tasks_2')}</span>
