@@ -27,3 +27,14 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   `human_approval` step the previous run decided is refused (`supervisor.skippedGate`): resume from
   the gate, which asks again. Gate outputs are dropped from the kept outputs
   (`supervisor.withoutGateDecisions`), so every gate reached again opens again.
+- **The state from the log** (#606): `runStateFromEvents(events, summary)` (`engine/run/resume.js`)
+  is a pure function of a run's `events.jsonl` (and `summary.json`) giving
+  `{ nextStep, visits, vars, sessions, handoffs, openGate }`, the same as the run held in memory:
+  visits are the highest `step.started` visit per step, less the visit a cut or a pause left
+  unfinished; `nextStep` is null once finished, else `summary.paused.step`, the gate left open, or
+  the step started or routed to last; `vars` come from `step.transition.set`; sessions are each
+  agent's latest persistent one (never the orchestrator's); handoffs each agent's latest note; the
+  open gate an `approval.requested` with no `approval.resolved`. Nothing calls it yet: `seedResume`
+  and the start-up recovery move onto it in #566. It reduces the longest real run (4117 events,
+  5.4 MB) in under 1 ms (parsing the file takes ~30 ms), so the engine keeps its in-memory state while
+  running; a per-step reducer is a follow-up.

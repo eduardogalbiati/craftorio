@@ -29,7 +29,7 @@ built the way it is. It complements [`docs/agents/`](../agents/) (the implemente
 | 9 | [Compact errors into the context window](factor-09-compact-errors.md) | covered | previous-attempt summary, schema errors, `action_error`, stall detection |
 | 10 | [Small, focused agents](factor-10-small-focused-agents.md) | covered | one role per agent, skills per step, read-only agents, child workflows |
 | 11 | [Trigger from anywhere](factor-11-trigger-from-anywhere.md) | partial | app, CLI, browser, phone, roadmap, chaining; no inbound platform events |
-| 12 | [Make your agent a stateless reducer](factor-12-stateless-reducer.md) | gap | the run advances inside a long-lived object; `events.jsonl` is a record, not the state |
+| 12 | [Make your agent a stateless reducer](factor-12-stateless-reducer.md) | gap | the run advances inside a long-lived object; its resume state is a pure function of `events.jsonl` (#606), not used by the engine yet (#566) |
 | 13 | [Pre-fetch all the context you might need](factor-13-prefetch-context.md) (bonus) | covered | template filters, `wait:` probes, project map, dependency cache |
 
 Status words: **covered** = the factor is a working rule of the code, with tests; **partial** = the

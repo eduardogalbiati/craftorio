@@ -5,7 +5,8 @@
 // instruction; `replayConfirmedGate` (start, #112) records the gate the owner confirmed in the
 // Resume dialog as their decision; `resumeSession` continues an agent's previous provider
 // conversation (#233: the CLI's running total seeded); `previousChildren` (#175) the child runs the
-// previous run finished; `resumableSteps` the steps the supervisor may resume from. The worktree
+// previous run finished; `resumableSteps` the steps the supervisor may resume from;
+// `runStateFromEvents` (#606) the state a resume needs, a pure function of the run's log. The worktree
 // reuse is in packages/engine/engine/run/checkout.js (setupWorktree); the dialog and its channels in packages/engine/domains/supervisor/supervisor.js.
 
 'use strict';
@@ -15,6 +16,75 @@ const { checkAttachments, seedClaudeTotal } = require('../providers');
 // #368: what ends a run that pauses (the step loop, a gate left unanswered, children that paused):
 // status `paused`, not an error (WorkflowRun#endOfError)
 const pausedError = () => Object.assign(new Error('Paused after the current turn'), { paused: true });
+
+// #606: the state a resume needs, a pure function of a run's events.jsonl (and its summary.json):
+// { nextStep, visits, vars, sessions, handoffs, openGate }, the same as the WorkflowRun that recorded
+// them holds in memory. Reads no file and changes nothing it is given (like upgradeRunRecord, #350).
+// - visits: the highest visit started per step; the visit a run was cut or paused in, unfinished,
+//   is not counted (WorkflowRun#endOfError); steps never visited are left out
+// - nextStep: null once the run finished (or for an empty log); a paused run's summary.paused.step;
+//   else the gate left open; else the step started or routed to last (`end`: null)
+// - vars: the `set:` of each step.transition; sessions: each agent's latest persistent session
+//   (never the orchestrator's), from its latest snapshot; handoffs: each agent's latest note
+// - openGate: { step, approval_id } of an approval.requested no approval.resolved answered (or withdrew)
+const visitKey = (ev) => `${ev.step_id}\n${ev.visit || 1}`;
+
+// a session event: its snapshot's provider conversation, and the agent's latest persistent session
+// (an ephemeral or handoff one is not the one the agent continues)
+function reduceSession(acc, ev) {
+  const s = ev.session;
+  if (!s || s.agent === 'orchestrator') return;
+  acc.providerIds.set(s.id, s.provider_session_id ?? null);
+  if (ev.type === 'session.opened' && (!s.mode || s.mode === 'persistent')) acc.latestSession[s.agent] = s.id;
+}
+
+// one reducer per event type the resume state reads (#606); the others leave it as it is
+const RUN_STATE_REDUCERS = {
+  'step.started': (acc, ev) => {
+    acc.visits[ev.step_id] = Math.max(acc.visits[ev.step_id] || 0, ev.visit || 1);
+    acc.lastStarted = ev;
+    acc.cursor = ev.step_id;
+  },
+  'step.finished': (acc, ev) => { acc.finishedVisits.add(visitKey(ev)); },
+  'step.transition': (acc, ev) => {
+    acc.cursor = ev.to;
+    Object.assign(acc.vars, structuredClone(ev.set || {}));
+  },
+  'session.opened': reduceSession,
+  'session.updated': reduceSession,
+  'session.closed': reduceSession,
+  'handoff.saved': (acc, ev) => {
+    if (ev.note) acc.handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path ?? null };
+  },
+  'approval.requested': (acc, ev) => { acc.gates.set(ev.approval_id, { step: ev.step_id, approval_id: ev.approval_id }); },
+  'approval.resolved': (acc, ev) => { acc.gates.delete(ev.approval_id); },
+  'workflow.finished': (acc, ev) => { acc.finished = ev; },
+};
+
+// the step a resume runs next: none once the run finished; a paused run's summary.paused.step;
+// else the gate left open, else the step started or routed to last
+function nextStepOf(acc, open, summary) {
+  const finished = acc.finished;
+  if (finished?.status === 'paused') return summary?.paused?.step ?? finished.summary?.paused?.step ?? open?.step ?? null;
+  if (finished) return null;
+  return open?.step ?? (acc.cursor === 'end' ? null : acc.cursor);
+}
+
+function runStateFromEvents(events, summary = null) {
+  /** @type {{ visits: Record<string, number>, vars: Record<string, any>, providerIds: Map<string, any>, latestSession: Record<string, string>, handoffs: Record<string, any>, gates: Map<string, any>, finishedVisits: Set<string>, lastStarted: any, cursor: any, finished: any }} */
+  const acc = {
+    visits: {}, vars: {}, providerIds: new Map(), latestSession: {}, handoffs: {}, gates: new Map(),
+    finishedVisits: new Set(), lastStarted: null, cursor: null, finished: null,
+  };
+  for (const ev of events || []) RUN_STATE_REDUCERS[ev.type]?.(acc, ev);
+  // the visit the run was cut or paused in, unfinished: not counted (a failed or stopped run keeps it)
+  const cut = !acc.finished || acc.finished.status === 'paused';
+  const step = acc.lastStarted?.step_id;
+  if (cut && step && !acc.finishedVisits.has(visitKey(acc.lastStarted)) && --acc.visits[step] <= 0) delete acc.visits[step];
+  const open = [...acc.gates.values()].pop() || null;
+  const sessions = Object.fromEntries(Object.entries(acc.latestSession).map(([agent, id]) => [agent, { session_id: id, provider_session_id: acc.providerIds.get(id) ?? null }]));
+  return { nextStep: nextStepOf(acc, open, summary), visits: acc.visits, vars: acc.vars, sessions, handoffs: acc.handoffs, openGate: open };
+}
 
 const methods = {
   // The start of a resumed run: it yields once first (#368: it may start at a gate, a run paused
@@ -95,4 +165,5 @@ const methods = {
 module.exports = {
   methods,
   pausedError,
+  runStateFromEvents,
 };

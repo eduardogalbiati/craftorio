@@ -84,6 +84,9 @@ What each run, queue, gate and notification file holds, and how old runs upgrade
   (the run record's `#277 multi-result turn` upgrade, below); the files are never rewritten. The
   memory guard writes `process.killed` and `memory.hold` events (engine/agents-and-steps.md,
   "Memory guard").
+- **Run vars** (#606): a `step.transition` whose transition has `set:` carries `set`, the values
+  it gave `vars` (rendered), so `runStateFromEvents` (engine/resume.md) rebuilds `vars` from the log.
+  A new optional field: older runs simply have none (no `UPGRADES` entry).
 - Never make the database the only copy of something a run produced.
 
 ### Old runs: the run record upgrades them on read (#350)

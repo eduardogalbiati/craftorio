@@ -117,7 +117,9 @@ const methods = {
         return this.recoverFromActionError(step, { on_error: t.on_error, recover: t.recover }, e);
       }
       // `set:` run variables for the next steps' templates (`vars.<name>`)
-      for (const [k, v] of Object.entries(t.set || {})) this.ctx.vars[k] = typeof v === 'string' ? render(v, scope).trim() : v;
+      // (#606: recorded on step.transition as `set`, so the run's vars are a function of its log)
+      const set = t.set ? Object.fromEntries(Object.entries(t.set).map(([k, v]) => [k, typeof v === 'string' ? render(v, scope).trim() : v])) : null;
+      Object.assign(this.ctx.vars, set || {});
       // limits first: once max_visits / loop.max_iterations is reached the flow goes to
       // on_exhausted and the delegation is skipped (nothing would check that fix any more)
       let target = this.applyCounters(step, t);
@@ -138,7 +140,7 @@ const methods = {
       if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
       const ends = target === 'end' && t.status && t.status !== 'success';
       if (ends) this.endStatus = { status: t.status, message: `Run ended as ${t.status} at step "${step.id}" (${t.when}).` };
-      this.emitEvent('step.transition', { from: step.id, to: target, when: t.when, ...(ends ? { status: t.status } : {}) });
+      this.emitEvent('step.transition', { from: step.id, to: target, when: t.when, ...(ends ? { status: t.status } : {}), ...(set ? { set } : {}) });
       return target;
     }
     throw new Error(`No transition matched in step "${step.id}".`);

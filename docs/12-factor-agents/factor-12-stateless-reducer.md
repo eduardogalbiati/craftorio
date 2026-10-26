@@ -20,6 +20,11 @@ restarted, moved or replayed; a reducer can. ([factor 12](https://github.com/hum
 - **Resume seeds a run from recorded facts.** A resumed run takes the previous steps' outputs and
   visits, the sessions and the handoff notes from the files (`seedResume` in
   `src/engine/run/resume.js`).
+- **The resume state is a function of the log** (#606). `runStateFromEvents(events, summary)`
+  (`packages/engine/engine/run/resume.js`) is pure and gives the step to run next, the visits,
+  `vars` (recorded as `step.transition.set`), the sessions, the handoff notes and the open gate; a
+  replay of each bundled workflow's mock run gives the state the in-memory run held. The engine does
+  not use it yet (start-up recovery: #566).
 
 ## Gaps
 
