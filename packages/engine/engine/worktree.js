@@ -35,12 +35,26 @@ function git(args, cwd, { timeout = GIT_TIMEOUT_MS, auth = false } = {}) {
   return new Promise((resolve, reject) => {
     execFile('git', [...(auth ? authArgs() : []), ...args], { cwd, env, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       // no stderr: say how it ended (exit code, signal or timeout), not only the command line
-      if (err) reject(new Error(`git ${args[0]} failed: ${String(stderr).trim() || `${err.message.trim()} (${err.killed ? 'killed after the timeout' : `exit code ${err.code ?? '?'}${err.signal ? `, signal ${err.signal}` : ''}`})`}`));
+      if (err) reject(new Error(`git ${gitCommand(args)} failed: ${gitStderr(stderr) || `${err.message.trim()} (${err.killed ? 'killed after the timeout' : `exit code ${err.code ?? '?'}${err.signal ? `, signal ${err.signal}` : ''}`})`}`));
       else resolve(String(stdout).trim());
     });
   });
 }
 const tryGit = (...a) => git(...a).catch(() => null);
+
+// Git for Windows' bash warns (no /tmp) before git's own line: keep git's lines first (#610)
+const SHELL_WARNING = /^\S*\bba?sh(\.exe)?: warning:/i;
+function gitStderr(stderr) {
+  const lines = String(stderr).trim().split('\n');
+  const kept = lines.filter((l) => !SHELL_WARNING.test(l.trim()));
+  return (kept.length ? kept : lines).join('\n').trim();
+}
+// The git command an error names: past the `-c key=value` pairs (identityArgs) (#610)
+function gitCommand(args) {
+  let i = 0;
+  while (args[i] === '-c') i += 2;
+  return args[i] ?? args[0];
+}
 
 /**
  * Canonical form of a path, for comparing (or relativizing) our paths with the ones git prints.
