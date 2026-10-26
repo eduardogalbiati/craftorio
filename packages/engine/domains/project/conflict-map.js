@@ -10,10 +10,14 @@
 //   - lines: the lines (numbered at HEAD) that more than one run changed: each run's `git -U0` hunks,
 //     carried to HEAD through `git diff <commit> HEAD`;
 //   - no finished real run with commits (a new project): the last commits of the branch, one commit
-//     counting as one run (`source: 'git'`).
+//     counting as one run (`source: 'git'`); its lines carried to HEAD through the newer commits' own
+//     hunks of the window's one `git log -p` (#526: no git process per commit).
 // Saved per project in <workspace>/backlog/<projectId>.conflict-map.json: loadConflictMap builds it
-// when the file is missing, updateConflictMap rebuilds it after a run merges. Read-only for the Product
-// Owner, never blocks a run; built from git and the run folders only, no model call.
+// when the file is missing, updateConflictMap rebuilds it after a run merges. The Product Owner's turn
+// (#526) never waits for a whole build: it reads the saved map or waits BUILD_WAIT_MS at most for a build
+// under way (conflictMapWithin), and a missing map is built after its agent answers
+// (buildConflictMapInBackground, one build per map at a time), saved for the next Analyze. Read-only for
+// the Product Owner, never blocks a run; built from git and the run folders only, no model call.
 
 const fs = require('fs');
 const path = require('path');
@@ -31,12 +35,16 @@ const MAX_FILES = 200;
 const MAX_LINES = 100;
 const GIT_COMMITS = 50;
 const GIT_CONCURRENCY = 8;
+// the longest the Product Owner's turn waits for a map being built before it goes on without it (#526)
+const BUILD_WAIT_MS = 3000;
 const HOT_WINDOW = 20;
 const HOT_SHARE = 0.5;
 const LINE_FIX = 'Split this line into one item per line, sorted, so each run adds its own line instead of editing this one (a shared list or import).';
 
+// null without a process once the clone is gone (#526: a background build outlives the turn)
 function git(args, cwd) {
   return new Promise((resolve) => {
+    if (!isRepo(cwd)) return resolve(null);
     execFile('git', ['-c', 'core.quotepath=false', ...args], { cwd, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }, (err, out) => resolve(err ? null : String(out)));
   });
 }
@@ -111,16 +119,22 @@ async function hubLines(repo, changes, files) {
     for (const ch of list) {
       if (!exists.has(ch.file)) continue;
       for (const h of ch.hunks) {
-        for (let n = h.c; n < h.c + h.d; n++) {
-          const at = carry(n, toHead.get(ch.file) || []);
-          if (at == null) continue;
-          const key = `${ch.file}\n${at}`;
-          if (!byLine.has(key)) byLine.set(key, new Set());
-          byLine.get(key).add(ch.unit);
-        }
+        for (let n = h.c; n < h.c + h.d; n++) addLine(byLine, ch.file, carry(n, toHead.get(ch.file) || []), ch.unit);
       }
     }
   });
+  return hubsOf(repo, byLine);
+}
+
+function addLine(byLine, file, at, unit) {
+  if (at == null) return;
+  const key = `${file}\n${at}`;
+  if (!byLine.has(key)) byLine.set(key, new Set());
+  byLine.get(key).add(unit);
+}
+
+// The lines more than one unit changed, with their text at HEAD (one `git show` per hub file).
+async function hubsOf(repo, byLine) {
   const hubs = [...byLine].filter(([, units]) => units.size > 1).map(([key, units]) => {
     const [file, line] = key.split('\n');
     return { file, line: Number(line), units: [...units] };
@@ -128,6 +142,36 @@ async function hubLines(repo, changes, files) {
   const texts = new Map();
   await pool([...new Set(hubs.map((h) => h.file))], async (file) => texts.set(file, String(await git(['show', `HEAD:${file}`], repo) || '').split('\n')));
   return hubs.map((h) => ({ ...h, text: String(texts.get(h.file)?.[h.line - 1] ?? '').replace(/\r$/, '').slice(0, 200) }));
+}
+
+/**
+ * hubLines for the git fallback (#526): each commit's lines carried to HEAD through the hunks of the same
+ * file in the window's newer commits (`unitIds` newest first), so no `git diff <sha> HEAD` per commit; one
+ * `git ls-tree` for the files still at HEAD.
+ */
+async function windowHubLines(repo, changes, unitIds, files) {
+  const order = new Map(unitIds.map((id, n) => [id, n]));
+  const byFile = new Map();
+  for (const ch of changes) if (ch.file && files.has(ch.file)) byFile.set(ch.file, [...(byFile.get(ch.file) || []), ch]);
+  const byLine = new Map();
+  if (!byFile.size) return [];
+  const listed = await git(['ls-tree', '-r', '--name-only', 'HEAD', '--', ...byFile.keys()], repo);
+  const atHead = new Set(String(listed || '').split('\n').map((l) => l.trim()).filter(Boolean));
+  for (const [file, list] of byFile) {
+    if (!atHead.has(file)) continue;
+    const newestFirst = [...list].sort((a, b) => order.get(a.unit) - order.get(b.unit));
+    newestFirst.forEach((ch, k) => {
+      const later = newestFirst.slice(0, k).reverse();
+      for (const h of ch.hunks) {
+        for (let n = h.c; n < h.c + h.d; n++) {
+          let at = n;
+          for (const next of later) if (at != null) at = carry(at, next.hunks);
+          addLine(byLine, file, at, ch.unit);
+        }
+      }
+    });
+  }
+  return hubsOf(repo, byLine);
 }
 
 // Each counted run's own hunks: its log range (no merges) or its PR merge commit's diff.
@@ -187,7 +231,7 @@ async function fromGit(repo) {
     // the path-limited log reaches past the window: keep only the window's commits
     for (const p of parsePatch(patch || '')) if (byUnit.has(p.sha)) changes.push({ unit: p.sha, ...p });
   }
-  return { source: 'git', runs: unitIds.length, runIds: unitIds, files, lines: linesOf(await hubLines(repo, changes, shared), unitIds) };
+  return { source: 'git', runs: unitIds.length, runIds: unitIds, files, lines: linesOf(await windowHubLines(repo, changes, unitIds, shared), unitIds) };
 }
 
 /**
@@ -243,6 +287,53 @@ async function loadConflictMap({ backlogDir, projectId, runs, repo, store = null
   return readConflictMap(backlogDir, projectId) || updateConflictMap({ backlogDir, projectId, runs, repo, store });
 }
 
+// the background builds under way, by map file: one per map at a time (#526)
+const building = new Map();
+
+/**
+ * Builds and saves a missing map in the background (#526): started on the next turn of the event loop,
+ * so the caller's own work ends first; nothing when the map is saved or a build is under way. → the
+ * build (the map, or null when it failed: logged, never rejects), or null.
+ */
+function buildConflictMapInBackground({ backlogDir, projectId, runs, repo, store = null }) {
+  const key = conflictMapPath(backlogDir, projectId);
+  if (building.has(key) || readConflictMap(backlogDir, projectId)) return building.get(key) || null;
+  const build = new Promise((resolve) => setImmediate(resolve))
+    // the backlog folder gone meanwhile (a removed workspace): nothing to save it in
+    .then(() => (fs.existsSync(backlogDir) ? updateConflictMap({ backlogDir, projectId, runs, repo, store }) : null))
+    .catch((e) => { console.error('conflict map:', e.message); return null; })
+    .finally(() => building.delete(key));
+  building.set(key, build);
+  return build;
+}
+
+/**
+ * The saved map; when missing, the background build under way if it ends within `waitMs`, else null
+ * (#526: the Product Owner's turn never waits for a whole build).
+ */
+async function conflictMapWithin({ backlogDir, projectId, waitMs = BUILD_WAIT_MS }) {
+  const saved = readConflictMap(backlogDir, projectId);
+  const build = building.get(conflictMapPath(backlogDir, projectId));
+  if (saved || !build) return saved;
+  let timer;
+  const late = new Promise((resolve) => { timer = setTimeout(() => resolve(null), waitMs); timer.unref?.(); });
+  try { return await Promise.race([build, late]); } finally { clearTimeout(timer); }
+}
+
+/**
+ * Runs `turn(conflictMap)` with the map of `of` (`{ backlogDir, projectId, runs, repo, store }`; null:
+ * no map, e.g. an issue turn), waiting a few seconds at most (#526); a failure only leaves the map out
+ * (#150). A missing map is built in the background once `turn` is done, for the next turn.
+ */
+async function withConflictMap(of, turn) {
+  const conflictMap = of ? await conflictMapWithin(of).catch((e) => { console.error('conflict map:', e.message); return null; }) : null;
+  try {
+    return await turn(conflictMap);
+  } finally {
+    if (of && !conflictMap) buildConflictMapInBackground(of);
+  }
+}
+
 /**
  * The files and lines changed by more than `threshold` of the newest `window` runs of `map` (two runs at
  * least), most-changed first, files before lines: [{ kind: 'file'|'line', file, line?, text?, runs, of,
@@ -274,11 +365,14 @@ function hotSpots(map, { window = HOT_WINDOW, threshold = HOT_SHARE } = {}) {
 
 module.exports = {
   buildConflictMap,
+  buildConflictMapInBackground,
   carry,
   conflictMapPath,
+  conflictMapWithin,
   hotSpots,
   loadConflictMap,
   parsePatch,
   readConflictMap,
   updateConflictMap,
+  withConflictMap,
 };

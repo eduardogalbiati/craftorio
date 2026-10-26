@@ -21,7 +21,8 @@
 // a test-batch stage after each stage with untested issues (testBatchStages). The answer records both
 // steps and the plan's estimated total (#206, packages/engine/domains/usage/cost-estimate.js when the runs are given).
 // Conflict map (#150, packages/engine/domains/project/conflict-map.js): the report's "## Conflict map" lists the files and lines most
-// runs change (the saved map, built when missing; capped at CONFLICT_MAP_CAP); the answer keeps groups
+// runs change (the saved map; when missing, the turn runs without it and builds it in the background once
+// its agent is done, for the next Analyze (#526); capped at CONFLICT_MAP_CAP); the answer keeps groups
 // touching one hot file in different stages and lists the hot spots in `decongest`, each with a fix the
 // owner may file as an issue with a click.
 // Live progress (#180, packages/engine/domains/chat/chat-progress.js): ask's `onItem` gets the turn's items as they arrive
@@ -83,7 +84,11 @@ const poCalibration = require('@multiagent/shared/po-calibration');
 const poSplit = require('./po-split');
 const { separateSharedFiles } = require('./po-hot-files');
 const { mockSteps, partialText } = require('../chat/chat-progress');
-const { hotSpots, loadConflictMap, readConflictMap } = require('../project/conflict-map');
+const {
+  hotSpots,
+  readConflictMap,
+  withConflictMap,
+} = require('../project/conflict-map');
 const { conflictsOf } = require('../project/repo-performance');
 const { storeFor } = require('../workspace/store');
 const { readEvents } = require('../supervisor/supervisor');
@@ -213,7 +218,7 @@ const RULES = [
   'Give every group the default workflow (marked "(default)" in the report\'s Workflows) unless an issue needs another one; then say why in the group\'s `reason`.',
   'When the workflow has a `mode` input, set it on every group and say why in `mode_reason`: `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour), `auto` for the engine, refactors, docs and tests.',
   'Split what is too big (`splits`): for an issue the report marks with split signals, propose 2-4 child issues. Each child has a title, the numbers of the parent\'s tasks it takes (every task in exactly one child, none dropped or invented), its complexity and its `stage` (children of one stage can run together). Say whether the parent becomes an umbrella linking its children or is closed in favour of them. Never split an issue without signals.',
-  'Conflict map (the report\'s "## Conflict map"): two groups expected to touch the same hot file or hot line go to different stages, or into one group when they belong together; every conflict you report names the hot file that causes it in `files`. List each hot spot (marked "hot") in `decongest` with a fix in the repository\'s terms (one item per line, sorted; a per-feature file plus a generated aggregate; a split by screen or module) and its `runs` and `of`.',
+  'Conflict map (the report\'s conflict-map section, when it has one): two groups expected to touch the same hot file or hot line go to different stages, or into one group when they belong together; every conflict you report names the hot file that causes it in `files`. List each hot spot (marked "hot") in `decongest` with a fix in the repository\'s terms (one item per line, sorted; a per-feature file plus a generated aggregate; a split by screen or module) and its `runs` and `of`.',
   'Shared test files count too: two groups of one stage that add scenarios to the same `.feature` file (or tests to the same test file) conflict in it at the merge, like a shared source file: put them in different stages or one group, and name that file in the conflict\'s `files`.',
   'Epics (`epics`): place each issue without an epic in an existing epic of its theme (`place`, the epic\'s id from the report); propose a new epic (a title, a one-paragraph goal, its member issues) when several issues share a theme and no epic exists; name epics to merge or split. Prefer grouping issues of the same epic in one run when they touch the same code.',
   'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.',
@@ -1496,12 +1501,12 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       checkBudget(budget);
       let tokens;
       let sessionId;
-      // #150: the saved conflict map, built when missing; a failure only leaves the section out
-      const conflictMap = issueMode ? null : await loadConflictMap({ backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) }).catch((e) => { console.error('conflict map:', e.message); return null; });
-      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen });
-      ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone, language,
-      }));
+      // #150 / #526: the saved conflict map, a few seconds' wait at most; built in the background when missing
+      const mapOf = issueMode ? null : { backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) };
+      ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await withConflictMap(mapOf, (conflictMap) => callAgent({
+        mode, question: q, report: (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen }),
+        previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone, language,
+      })));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
     }
   } catch (e) {
