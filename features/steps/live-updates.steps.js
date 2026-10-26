@@ -79,6 +79,9 @@ Given('the served engine has a project {string}', async ({ e2e }, name) => {
 });
 
 Given('the browser\'s live updates from the engine go through a relay I control', async ({ e2e }) => {
+  // a served engine on a new workspace opens the first-run Setup (#319) over every page: the scenarios
+  // start from Home, as a workspace set up before does (setupDone true, saved before the window loads)
+  await callEngine(e2e, 'settings:set', { setupDone: true });
   const relay = { hold: false, down: false, links: new Set() };
   const cut = (link) => {
     relay.links.delete(link);
