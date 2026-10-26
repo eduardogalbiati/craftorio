@@ -26,7 +26,10 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
 - **Gates**: a resume never reuses a human gate's decision. A step after (in the workflow's order) a
   `human_approval` step the previous run decided is refused (`supervisor.skippedGate`): resume from
   the gate, which asks again. Gate outputs are dropped from the kept outputs
-  (`supervisor.withoutGateDecisions`), so every gate reached again opens again.
+  (`supervisor.withoutGateDecisions`), so every gate reached again opens again. An agent's own
+  question (#567, `needs_human` on an `ask_human` step) is never taken as answered: the answer is
+  not kept (`humanAnswer` lives only in the running run), so a resume at that step runs the agent
+  again and it asks again.
 - **The state from the log** (#606): `runStateFromEvents(events, summary)` (`engine/run/resume.js`)
   is a pure function of a run's `events.jsonl` (and `summary.json`) giving
   `{ nextStep, visits, vars, sessions, handoffs, openGate }`, the same as the run held in memory:

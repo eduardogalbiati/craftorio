@@ -1893,6 +1893,13 @@ free text: it is the gate's `output.feedback`, and every non-empty one is added 
 (`[{ step, choice, text }]`, the whole run) for the next prompts. `previous_step` is the id of the step
 that ran before the current one.
 
+An agent step with `ask_human: true` (and an `output_schema`) lets its agent ask the owner (#567): an
+answer with `needs_human: { question, options: [{ id, label }], default }` opens a `kind: decision`
+gate on the step with the question, the options and free text; the answer comes back to the same
+agent's next turn as `human_answer` (and in its prompt), and the step's transitions run only after
+that turn. Without the field the answer's `needs_human` is an ordinary field (a warning). See
+`docs/agents/engine/gates-and-run-end.md`.
+
 `on_error: <step>` keeps a failing step (agent error, output that never validates) from ending the
 run: its output becomes `{ error }` and the flow continues at that step (the arena's `verify` uses it,
 so a verifier failure still reaches the human review with the document). When an answer does not

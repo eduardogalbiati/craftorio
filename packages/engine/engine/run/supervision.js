@@ -24,6 +24,8 @@ const { DENIAL_WARN } = require('./turns');
 const STALL_SAME_OUTPUT = 3;
 const STALL_SLOW_FACTOR = 3;
 const STALL_SLOW_MIN_MS = 10 * 60e3;
+// #567: an agent's questions in a row (needs_human) that make a stall; one question never is one
+const STALL_QUESTIONS = 2;
 // What the supervisor may spend per run (orchestrator.supervisor.max_cost_usd) before the person is asked.
 const SUPERVISOR_MAX_COST_USD = 5;
 const median = (xs) => {
@@ -287,6 +289,32 @@ const methods = {
     if (answer !== 'retry') return null;
     this.onCallGoto(step, { ...d, instruction: feedback || d.instruction }, step.id, [step.id]);
     return step.id;
+  },
+
+  // #567: an agent asking again right after an answer (STALL_QUESTIONS in a row) is a stall: the
+  // supervisor on call may `continue` with the agent's own default (its decision, never the
+  // owner's answer) or leave it to the owner (`user_action`). Returns the human_answer it gives, or
+  // null: the gate opens (off, a limit reached, no decision, user_action).
+  async superviseQuestion(step, st, q) {
+    if (st.asks < STALL_QUESTIONS) return null;
+    const signal = { kind: 'repeated_question', detail: `${st.asks} questions in a row: ${String(q.question).slice(0, 200)}${q.default != null ? ` (its default: ${q.default})` : ''}` };
+    this.recordStall(step.id, signal);
+    const blocked = this.onCallBlocked(st);
+    if (blocked) {
+      if (blocked !== 'off') this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called on the repeated question of ${step.id} (${blocked}); asking you.` });
+      return null;
+    }
+    const d = await this.askOnCall(step, st, { kind: 'stall', signals: [{ step: step.id, ...signal }], retryStep: null, steps: [], actions: ['continue', 'user_action'] });
+    if (!d) return null;
+    const evidence = `${signal.kind}: ${signal.detail}`.slice(0, 300);
+    if (d.action !== 'continue') {
+      this.onCallDecided(step, 'stall', d, 'user_action', { evidence });
+      return null;
+    }
+    this.onCallDecided(step, 'stall', d, 'continue', { goto: step.id, evidence, note: `gave the agent its default: ${q.default ?? '(none: its own best assumption)'}` });
+    const def = q.default != null ? String(q.default) : null;
+    const label = def && Array.isArray(q.options) ? q.options.find((o) => o && String(o.id) === def)?.label || null : null;
+    return { question: String(q.question).trim(), choice: def, label, feedback: d.instruction || '', default: def, by: 'supervisor' };
   },
 
   async superviseActionError(step, route, e) {

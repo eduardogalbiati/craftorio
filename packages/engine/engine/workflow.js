@@ -654,6 +654,9 @@ class WorkflowRun extends EventEmitter {
       }
       if (step.commit_tests) output = await this.commitLeftoverTests(step, st, output);
       st.output = output;
+      // #567: the agent asked the owner (needs_human): the step runs again with the answer, no transition yet
+      const asked = await this.agentQuestion(step, st, output, t0);
+      if (asked) return asked;
       scope = { ...this.ctx, output, iteration: st.iteration };
       if (step.wait) await this.afterAgentTurn(step, st);
     }
@@ -708,10 +711,16 @@ class WorkflowRun extends EventEmitter {
     const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName, evidence_dir: evidence.roundDir(this.runDir, step.id, visit) };
     // `test_map: true` (#219): the code → tests map of the agent's checkout, as {{ test_map }}
     if (step.test_map) scope.test_map = this.writeTestMap(agentName);
+    // #567: the answer to the question of its previous turn (agentQuestion), as {{ human_answer }}
+    if (step.ask_human) scope.human_answer = st.humanAnswer || null;
     let prompt = render(step.prompt, scope).trim();
     if (st.supervisorNote) {
       prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
       if (!step.agents) st.supervisorNote = null;
+    }
+    if (st.humanAnswer) {
+      prompt += this.humanAnswerNote(st.humanAnswer);
+      st.humanAnswer = null;
     }
     // #607: this agent's turn of the step was cut by the app's crash: what it did, as a retry gets it
     if (st.lostTurns?.[agentName]) {

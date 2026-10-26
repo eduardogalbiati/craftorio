@@ -24,19 +24,19 @@ over whatever channel they use. ([factor 7](https://github.com/humanlayer/12-fac
   a pause never answers a gate, a resume never reuses a decision, the Night watch never resumes a
   paused run, and `save_to_issue` writes nothing before the owner confirms the preview.
 - **Agents run unattended by design.** Skills record an assumption or a default instead of asking;
-  only the Grill me interview may ask (`AGENTS.md`, "Hard rules"). The place to ask is a gate the
-  workflow author put there, not the middle of a turn.
+  only the Grill me interview and a step that opts in may ask (`AGENTS.md`, "Hard rules").
+- **An agent can raise a gate on its own step (#567).** A step with `ask_human: true` (in the
+  bundled workflows: `develop` of `software-development`) adds the shared `needs_human: { question,
+  options: [{ id, label }], default }` fragment to its `output_schema` (`NEEDS_HUMAN_SCHEMA`,
+  `packages/engine/engine/run/outputs.js`). An answer with a question ends the visit without a
+  transition and opens a `kind: decision` gate of the step (`agentQuestion` in
+  `packages/engine/engine/run/gates.js`, `approval.requested` with `by: 'agent'`); the answer comes
+  back to the same agent's next turn as `human_answer`. Nothing blocks: the run waits at a gate like
+  any other. A second question in a row is a stall the supervisor on call may settle with the
+  agent's own default (`superviseQuestion`), recorded as its decision.
 
 ## Gaps
 
-- **An agent cannot raise a gate itself.** The factor's shape is an agent output such as
-  `needs_human: { question, options }` that the engine turns into a gate and pauses on. Here, an
-  agent that hits a real ambiguity mid-turn either picks a default (as the skills tell it to) or
-  repeats itself until the stall check wakes the supervisor. Adding the output field would keep the
-  unattended rule intact (the run pauses at a gate; nothing blocks waiting for a reply) and give the
-  supervisor and the owner the agent's own question instead of a diagnosis after the fact. It
-  changes a recorded decision (only Grill me asks), so it needs an entry in `decisions.md` whichever
-  way the owner decides. Tracked as #567 under the epic #565.
 - **One channel for answers.** Gates reach the owner in the app, by notification and on a paired
   phone; there is no e-mail or chat channel. Enough for a single-owner desktop product today.
 

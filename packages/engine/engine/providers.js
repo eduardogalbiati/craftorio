@@ -599,6 +599,13 @@ function mockScenarios(h, statuses = []) {
 const EMPTY_UNLESS_ASKED = ['preexisting_failures', 'ui_findings'];
 const mockEmptyList = (key, h) => key === 'dismissed' || (EMPTY_UNLESS_ASKED.includes(key) && !h.sequences?.[key]);
 
+// The simulated agent's question (#567, sequences.needs_human)
+const MOCK_QUESTION = {
+  question: 'Should the new setting be on by default? (simulated question)',
+  options: [{ id: 'off', label: 'Off by default' }, { id: 'on', label: 'On by default' }],
+  default: 'off',
+};
+
 // h.sequences (WorkflowRun's mockSequences) overrides the defaults per field
 function mockValue(s, key, h) {
   if (s.enum) {
@@ -620,7 +627,14 @@ function mockValue(s, key, h) {
   switch (s.type) {
     case 'object': {
       const o = {};
-      for (const [k, ps] of Object.entries(s.properties || {})) o[k] = mockValue(ps, k, h);
+      for (const [k, ps] of Object.entries(s.properties || {})) {
+        // sequences.needs_human: { <step>: n } (#567): an ask_human step asks the owner on its first n visits
+        if (k === 'needs_human') {
+          if (h.visit <= (+h.sequences?.needs_human?.[String(h.stepId).split(':')[0]] || 0)) o[k] = structuredClone(MOCK_QUESTION);
+          continue;
+        }
+        o[k] = mockValue(ps, k, h);
+      }
       if ('state' in o && o.state !== 'needs_fix') delete o.fix_request;
       if ('state' in o && o.state !== 'needs_human') delete o.question;
       return o;

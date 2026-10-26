@@ -134,6 +134,8 @@
     entry('steps[].protect_files', AGENT_STEPS, 'file list', 'protect_files must be a file list: a template or a list of paths.', { template: true, placeMessage: 'protect_files is only valid on an agent step.' }),
     // #219: the code → tests map given to its prompt as {{ test_map }}
     entry('steps[].test_map', AGENT_STEPS, 'boolean', 'test_map must be true or false, on an agent step.'),
+    // #567: the agent may answer `needs_human` (a question); the engine opens a gate on the step
+    entry('steps[].ask_human', AGENT_STEPS, 'boolean', 'ask_human must be true or false, on an agent step.'),
     noAgent('agent'),
     noAgent('agents'),
     // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel

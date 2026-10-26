@@ -48,11 +48,28 @@ function parseTestRequest(text) {
 // the shared validator (#338, packages/engine/domains/workspace/json-schema.js): its paths start at `output`
 const { validateSchema } = require('../../domains/workspace/json-schema');
 
+// #567: an agent's question to the owner (12-Factor Agents, factor 7), the shared fragment an
+// `ask_human` step's schema gets: the engine opens a gate on the step and the answer comes back as
+// `human_answer` in the agent's next turn.
+const NEEDS_HUMAN_SCHEMA = {
+  type: 'object',
+  description: 'Only when a choice the owner would want to make blocks you (irreversible or costly): your question. Otherwise leave it out and record an assumption.',
+  required: ['question'],
+  properties: {
+    question: { type: 'string' },
+    options: { type: 'array', items: { type: 'object', required: ['id', 'label'], properties: { id: { type: 'string' }, label: { type: 'string' } } } },
+    default: { type: 'string', description: 'The option id (or answer) you would take without an answer.' },
+  },
+};
+
 // The schema one agent of a step answers with (#387): the step's `output_schema`, extended for a
 // fan-out agent by `agent_output_schema: { <agent>: { properties, required } }` (its properties
 // added, its required fields appended). The ui_reviewer of code_review adds its per-screen lines.
+// #567: a step with `ask_human: true` also offers `needs_human` (never required).
 function stepOutputSchema(step, agentName) {
-  const base = step?.output_schema;
+  const base = step?.ask_human && step.output_schema
+    ? { ...step.output_schema, properties: { ...(step.output_schema.properties || {}), needs_human: NEEDS_HUMAN_SCHEMA } }
+    : step?.output_schema;
   const extra = agentName ? step?.agent_output_schema?.[agentName] : null;
   if (!base || !extra) return base;
   return {
@@ -261,6 +278,7 @@ module.exports = {
   extractJson,
   MAX_TEST_REQUESTS,
   methods,
+  NEEDS_HUMAN_SCHEMA,
   parseTestRequest,
   repeatKey,
   stepOutputSchema,

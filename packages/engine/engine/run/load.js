@@ -129,6 +129,10 @@ const outputNeedsProbe = (key) => function waitOutputProbe(s, ctx) {
 function commitTestsSingleAgent(s, ctx) {
   if (s.commit_tests !== undefined && s.agents) fail(ctx, messageOf('steps[].commit_tests'));
 }
+// #567: the question is a field of one agent's JSON answer, so the step needs both
+function askHumanShape(s, ctx) {
+  if (s.ask_human === true && isAgentStep(s) && (s.agents || !s.output_schema)) fail(ctx, 'ask_human needs a single agent and an output_schema (needs_human is a field of its JSON answer).');
+}
 function baseWorktreeNeedsWorktree(s, ctx) {
   if (s.base_worktree !== undefined && !ctx.wf.orchestrator?.worktree) fail(ctx, messageOf('steps[].base_worktree'));
 }
@@ -314,7 +318,8 @@ const TRANSITION_CHECKS = resolveChecks('steps[].transitions[].', [
   'ship.tag', shipOnHumanGate, shipNeedsWorktree, shellSafeTemplates,
 ]);
 const STEP_CHECKS = resolveChecks('steps[].', [
-  stepCapabilities, namedSchema, 'display', 'edits_tests', 'protect_files', 'test_map', 'agent', 'agents',
+  stepCapabilities, namedSchema, 'display', 'edits_tests', 'protect_files', 'test_map', 'ask_human', 'agent', 'agents',
+  askHumanShape,
   // the step types without an agent, then the agent steps (one applies to a step)
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
   childWorkflow, 'steps', 'renderer', 'version', 'dir', 'branch', 'action', projectMapFrom, fanOutGoal, knownAgents,

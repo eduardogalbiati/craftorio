@@ -486,6 +486,8 @@ steps:
 
   - id: develop
     agent: developer
+    # #567: the developer may ask the owner (needs_human) when a choice is theirs to make
+    ask_human: true
     prompt: |
       Task: {{ inputs.task }}
 

@@ -24,7 +24,7 @@ built the way it is. It complements [`docs/agents/`](../agents/) (the implemente
 | 4 | [Tools are structured outputs](factor-04-tools-are-structured-outputs.md) | covered | `output_schema`, schema retry, transitions on output fields |
 | 5 | [Unify execution state and business state](factor-05-unify-execution-and-business-state.md) | partial | files are the source of truth; a restart runs on them (#607), a running run keeps its state in memory |
 | 6 | [Launch, pause, resume with simple APIs](factor-06-launch-pause-resume.md) | covered | `runs:resume`, `run:pause`; a crash continues by itself at the next start (#607) |
-| 7 | [Contact humans with tool calls](factor-07-contact-humans-with-tool-calls.md) | partial, by decision | human gates are workflow steps; an agent cannot ask mid-turn |
+| 7 | [Contact humans with tool calls](factor-07-contact-humans-with-tool-calls.md) | covered | human gates are workflow steps; an `ask_human` step's agent raises its own gate with `needs_human` (#567) |
 | 8 | [Own your control flow](factor-08-own-your-control-flow.md) | covered | the engine, transitions, `max_visits`, `on_exhausted`, probes |
 | 9 | [Compact errors into the context window](factor-09-compact-errors.md) | covered | previous-attempt summary, schema errors, `action_error`, stall detection |
 | 10 | [Small, focused agents](factor-10-small-focused-agents.md) | covered | one role per agent, skills per step, read-only agents, child workflows |
@@ -42,8 +42,8 @@ adherence, #565 (see the pages for the reasoning):
 
 1. Factor 12, #566: done (#606, #607): a crash continues the same run at the last finished turn
    without the owner.
-2. Factor 7, #567: let an agent ask for a human as a structured output that the engine turns into
-   a gate.
+2. Factor 7, #567: done: an agent asks for a human as a structured output (`needs_human`) that the
+   engine turns into a gate of its step.
 3. Factor 11, #568: start runs from platform events (an issue label, a pull request comment).
 
 The repository's own structure for agents (rules files, topic docs, skills) has its page,

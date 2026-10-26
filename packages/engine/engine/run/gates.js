@@ -135,6 +135,8 @@ const methods = {
       // save_to_issue: <choice> (#125): a run about an issue also offers "<choice> and save to issue #n";
       // the answer is that choice (transitions unchanged) with intent save_to_issue
       ...(step.save_to_issue && this.issues?.[0] ? { save_to_issue: { choice: step.save_to_issue, issue: this.issues[0] } } : {}),
+      // #567: an agent's own question (agentQuestion): who asks, and a decision only the owner takes
+      ...(step.by === 'agent' ? { by: 'agent', agent: step.agent, kind: 'decision' } : {}),
     };
 
     // registered before its event, so runs:active lists it as soon as anyone hears of it
@@ -153,6 +155,62 @@ const methods = {
     this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback, ...extra });
     if (this.approvals.has(id)) this.setStatus(this.orchestrator, 'waiting'); // not answered by a listener already
     return answered;
+  },
+
+  // #567: an agent step with `ask_human: true` whose answer has `needs_human.question` (12-Factor
+  // Agents, factor 7). The visit ends (its output kept for the templates, no transition) and the run
+  // waits at a gate of the step with the question; the answer goes to the agent's next turn as
+  // `human_answer` and the step runs again. Its transitions run only after the answering turn. The
+  // gate is the owner's (kind decision): only a second question in a row wakes the supervisor on
+  // call (superviseQuestion), which may give the agent its own default. Returns the step to run
+  // (the same one) or null: no question, the run goes on as usual. Without the opt-in the field is
+  // an ordinary one, with a warning.
+  async agentQuestion(step, st, output, t0) {
+    const q = !step.agents && output && typeof output === 'object' ? output.needs_human : null;
+    if (!q || typeof q !== 'object' || !String(q.question || '').trim()) { st.asks = 0; return null; }
+    if (!step.ask_human) {
+      st.asks = 0;
+      this.emitEvent('log', { level: 'warn', step_id: step.id, message: `${step.id}: the answer has needs_human, but the step does not set ask_human: true; it is an ordinary field, no gate opens.` });
+      return null;
+    }
+    this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, needs_human: true });
+    st.asks = (st.asks || 0) + 1;
+    const answer = (await this.superviseQuestion(step, st, q)) || await this.askHuman(step, q);
+    st.humanAnswer = answer;
+    this.emitEvent('step.transition', { from: step.id, to: step.id, when: answer.by === 'supervisor' ? 'needs_human: supervisor on call' : 'needs_human' });
+    return step.id;
+  },
+
+  // The gate of an agent's question: its options as choices (an answer box alone without any), free
+  // text, the agent's default under the message. Resolves to the human_answer of the next turn.
+  async askHuman(step, q) {
+    const options = (Array.isArray(q.options) ? q.options : [])
+      .filter((o) => o && String(o.id ?? '').trim())
+      .map((o) => ({ id: String(o.id), label: String(o.label || o.id) }));
+    const choices = options.length ? options : [{ id: 'answer', label: 'Send my answer' }];
+    const def = q.default != null ? String(q.default) : null;
+    const defLabel = def && options.find((o) => o.id === def)?.label;
+    const agent = this.displayNames().agents[step.agent] || step.agent;
+    const { answer, feedback } = await this.requestApproval({
+      id: step.id, raw: true, by: 'agent', agent: step.agent,
+      message: `${agent} asks: ${String(q.question).trim()}${def ? `\n\nIts default: ${defLabel ? `${defLabel} (${def})` : def}` : ''}`,
+      choices, feedback: { label: options.length ? 'Your answer or more context (optional)' : 'Your answer' },
+    });
+    // a yes/no answer (an auto-approve): yes takes the agent's default
+    const choice = typeof answer === 'boolean' ? (answer ? def : null) : answer;
+    return {
+      question: String(q.question).trim(), choice, label: options.find((o) => o.id === choice)?.label || null,
+      feedback: feedback || '', default: def, by: 'owner',
+    };
+  },
+
+  // What the agent's next turn is told of the answer (consumed by runAgentStep)
+  humanAnswerNote(a) {
+    const pick = a.choice ? `${a.choice}${a.label ? ` (${a.label})` : ''}` : '(no option chosen)';
+    if (a.by === 'supervisor') {
+      return `\n\n---\nYou asked "${a.question}" again. The supervisor on call answered for the owner with your own default: ${pick}. Go on with it${a.feedback ? `\n${a.feedback}` : ''}`;
+    }
+    return `\n\n---\nThe owner answered your question "${a.question}": ${pick}${a.feedback ? `\n${a.feedback}` : ''}`;
   },
 
   // A gate's summary template (#213), rendered and trimmed: '' when the step has none, is engine-made

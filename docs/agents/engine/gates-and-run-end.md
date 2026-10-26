@@ -34,6 +34,25 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   `options` (up to 3) win over the workflow's `recommend:`; its full note stays under the message.
   In the UI, an answer opposite to the recommendation asks once to confirm. The notification, the
   toast, the roadmap's waiting badge and the Oracle's wake line use the headline.
+- Agent-raised gates (#567, 12-Factor Agents factor 7): an agent step with `ask_human: true` (one
+  agent, an `output_schema`; load refuses it otherwise) gets the shared `needs_human: { question,
+  options: [{ id, label }], default }` fragment in its schema (`NEEDS_HUMAN_SCHEMA`,
+  packages/engine/engine/run/outputs.js). An answer with a question (`agentQuestion`,
+  packages/engine/engine/run/gates.js) ends the visit (`step.finished` with `needs_human: true`, its
+  output kept in `steps.<id>.output`, no transition) and opens an engine-made gate of the step:
+  message = the question and the agent's default, choices = the options (a single "Send my answer"
+  without any), free text; `approval.requested` carries `by: 'agent'`, `agent` and `kind:
+  'decision'`. The answer (`{ question, choice, label, feedback, default, by }`) is `{{ human_answer
+  }}` in the step's next prompt and a note appended to it, whatever the session mode; the step runs
+  again (`step.transition` to itself, `when: needs_human`) and its transitions run after that
+  turn. A yes answer (auto-approve) takes the default. Never automated: the supervisor, the Night
+  watch, the Oracle and a pause never answer it; a resume runs the step again and the agent asks
+  again. A second question in a row (`STALL_QUESTIONS`, packages/engine/engine/run/supervision.js) is
+  a stall (`repeated_question`): the supervisor on call may `continue` with the agent's default
+  (`supervisor.decision` and decisions.tsv, never `approval.resolved`) or `user_action`; blocked,
+  off or past its limits, the gate opens. Without `ask_human`, `needs_human` is an ordinary field and
+  a `warn` log. Bundled opt-in: `develop` of software-development; mock: `mockSequences.needs_human:
+  { <step>: n }` asks on the first n visits.
 - `save_to_issue: <choice id>` on a gate (#125, writer-reviewer's `decide` / `out_of_rounds`): when the
   run has an issue, the gate's event carries `save_to_issue: { choice, issue }` and the UI adds
   "Accept and save to issue #n". It answers that choice (transitions unchanged) with `intent:

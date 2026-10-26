@@ -8,6 +8,17 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-26** (#567, 12-Factor Agents factor 7): agents stay unattended (skills record an
+  assumption or a default), with one exception beside Grill me: the agent of a step that opts in
+  with `ask_human: true` may answer `needs_human: { question, options, default }`, which pauses the
+  run at a `kind: decision` gate of its step; the answer comes back to its next turn as
+  `human_answer`. Opt-in per step, off by default; bundled: `develop` of software-development only
+  (no read-only role; ai-arena's writer `synthesize` answers free text without an `output_schema`,
+  so it stays out until it has one). The supervisor never answers the question; a second one in a
+  row is a stall it may settle with the agent's own default, recorded as its decision. Why: an agent
+  facing a choice the owner would want to make (irreversible or costly) asks it itself instead of a
+  wrong default found at the next gate or a stall diagnosed after the fact; nothing blocks waiting
+  for a reply. Replaces "only Grill me may ask".
 - **2026-10-24** (#558, the reorganisation study `docs/reorganisation-study-2026-10.md`): the app
   becomes an engine package plus modular fronts, in one git repository with npm workspaces (no
   submodules, no separate repositories), by phases that each stop on their own: 0 these decisions,
