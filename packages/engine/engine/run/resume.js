@@ -25,7 +25,7 @@ const pausedError = () => Object.assign(new Error('Paused after the current turn
 // - nextStep: null once the run finished (or for an empty log); a paused run's summary.paused.step;
 //   else the gate left open; else the step started or routed to last (`end`: null)
 // - vars: the `set:` of each step.transition; sessions: each agent's latest persistent session
-//   (never the orchestrator's), from its latest snapshot; handoffs: each agent's latest note
+//   (never the orchestrator's), from its latest snapshot (a session event or a turn's answer); handoffs: each agent's latest note
 // - openGate: { step, approval_id } of an approval.requested no approval.resolved answered (or withdrew)
 const visitKey = (ev) => `${ev.step_id}\n${ev.visit || 1}`;
 
@@ -53,6 +53,8 @@ const RUN_STATE_REDUCERS = {
   'session.opened': reduceSession,
   'session.updated': reduceSession,
   'session.closed': reduceSession,
+  // a turn's answer records the provider conversation before session.updated (a run cut in between)
+  'session.message_received': reduceSession,
   'handoff.saved': (acc, ev) => {
     if (ev.note) acc.handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path ?? null };
   },
