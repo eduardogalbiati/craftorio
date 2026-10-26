@@ -241,6 +241,80 @@ test('#567 mockSequences.needs_human: { write: 1 } makes the mock provider ask o
   assert.equal(starts(events, 'write').length, 2);
 });
 
+test('#567 without a sequence the mock provider never asks, even on an ask_human step', async (t) => {
+  const r = makeRun(t, askWF());
+  const { events, finished } = await run(r);
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(agentGates(events).length, 0);
+  assert.equal(starts(events, 'write').length, 1);
+});
+
+// ---- after the review: shapes and edges -----------------------------------------------------------
+
+test('#567 loadWorkflow: ask_human needs a single agent and an output_schema', (t) => {
+  const noSchema = `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: w\n    agent: a\n    ask_human: true\n    prompt: x\n`;
+  assert.throws(() => loadWorkflow(writeTmp(t, noSchema).file), /ask_human needs a single agent and an output_schema/);
+  const fanOut = `agents: { a: { provider: claude, model: m }, b: { provider: claude, model: m } }\nsteps:\n  - id: w\n    agents: [a, b]\n    ask_human: true\n    prompt: x\n    output_schema: { type: object, properties: { s: { type: string } } }\n`;
+  assert.throws(() => loadWorkflow(writeTmp(t, fanOut).file), /ask_human needs a single agent/);
+});
+
+test('#567 a question without options: one answer choice, the owner\'s text reaches the next turn; a plain yes takes the agent\'s default', async (t) => {
+  const r = makeRun(t, askWF({ prompt: 'write [{{ human_answer.choice }}|{{ human_answer.feedback }}]' }));
+  const calls = script(r, { a: [
+    { status: 'done', needs_human: { question: 'Which port?' } },
+    { status: 'done', needs_human: { question: 'Keep the old flag?', default: 'keep' } },
+    { status: 'done' }, {},
+  ] });
+  let n = 0;
+  const { events, finished } = await run(r, (e) => (n++ === 0 ? [e.choices[0].id, 'use 8080'] : [true, '']));
+  assert.equal(finished.status, 'success', finished.error);
+  const gates = agentGates(events);
+  assert.equal(gates.length, 2);
+  assert.equal(gates[0].choices.length, 1);
+  assert.equal(!!gates[0].feedback, true);
+  assert.match(calls.a[1], /use 8080/);
+  assert.match(calls.a[2], /\[keep\|\]/);
+});
+
+test('#567 the agent\'s gate is listed by pendingGates with who asked and its default (a reloaded window or the phone rebuilds it)', async (t) => {
+  const r = makeRun(t, askWF());
+  script(r, { a: [{ status: 'done', needs_human: QUESTION }, { status: 'done' }, {}] });
+  let pending = null;
+  r.on('event', (e) => {
+    if (e.type !== 'approval.requested') return;
+    pending = r.pendingGates().map((g) => ({ step_id: g.step_id, by: g.by, agent: g.agent, default: g.default, kind: g.kind }));
+    setImmediate(() => r.resolveApproval(e.approval_id, 'pg', 'user', ''));
+  });
+  await r.start();
+  assert.deepEqual(pending, [{ step_id: 'write', by: 'agent', agent: 'a', default: 'sqlite', kind: 'decision' }]);
+});
+
+test('#567 two questions in a row with the supervisor answering user_action: the second gate opens for the owner', async (t) => {
+  const r = makeRun(t, askWF({ supervisor: 'enabled: true, on_call: true, max_interventions: 2, max_total: 10' }));
+  const calls = script(
+    r,
+    { a: [{ status: 'done', needs_human: QUESTION }, { status: 'done', needs_human: QUESTION }, { status: 'done' }, {}] },
+    [{ explanation: 'Only the owner knows.', action: 'user_action', user_action: 'answer the question' }],
+  );
+  let n = 0;
+  const { events, finished } = await run(r, () => (n++ === 0 ? ['pg', ''] : ['sqlite', 'second answer']));
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(agentGates(events).length, 2);
+  assert.equal(events.find((e) => e.type === 'supervisor.decision')?.action, 'user_action');
+  assert.deepEqual(events.filter((e) => e.type === 'approval.resolved' && e.step_id === 'write').map((e) => [e.by, e.choice]), [['user', 'pg'], ['user', 'sqlite']]);
+  assert.match(calls.a[2], /second answer/);
+});
+
+test('#567 two questions in a row without a supervisor: a stall is logged and the owner is asked again', async (t) => {
+  const r = makeRun(t, askWF());
+  script(r, { a: [{ status: 'done', needs_human: QUESTION }, { status: 'done', needs_human: QUESTION }, { status: 'done' }, {}] });
+  const { events, finished } = await run(r, () => ['pg', '']);
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(agentGates(events).length, 2);
+  assert.equal(events.find((e) => e.type === 'log' && e.kind === 'stall')?.step_id, 'write');
+  assert.equal(events.some((e) => e.type === 'supervisor.started'), false);
+});
+
 test('#567 the bundled software-development opts in its develop step, never its read-only reviewer', () => {
   const wf = loadWorkflow(path.join(root, 'workflows', 'software-development.yaml'));
   const step = (id) => wf.steps.find((s) => s.id === id);
