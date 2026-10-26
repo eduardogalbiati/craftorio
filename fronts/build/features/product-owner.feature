@@ -72,3 +72,47 @@ Feature: Backlog Product Owner
       | window  | size     |
       | default | 1400x900 |
       | narrow  | 900x800  |
+
+  # #609: the simulated plan answer proposes to split #15, to place #9 in the epic "Run reports" and to
+  # create the epic "Ui" (#16, #10). Only the clicked proposal's button works (busy, disabled) while
+  # its request is in flight; the other proposals stay clickable. The requests are held so they stay
+  # in flight while the scenario checks.
+  @issue-609
+  Scenario: Placing issues in an epic leaves the other proposals clickable
+    Given the app is open
+    And applying the Product Owner's proposals takes a while
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I click the suggested question "Build a roadmap"
+    Then the Product Owner answers
+    And the Product Owner proposes to split "Run safety: one app per workspace"
+    When I click "Place in epic" on the Product Owner's proposal for the epic "Run reports"
+    Then "Place in epic" on the proposal for the epic "Run reports" shows it is working and cannot be clicked again
+    And "Create epic" on the proposal for the new epic "Ui" can still be clicked
+    And "Split" on the split card of "Run safety: one app per workspace" can still be clicked
+
+  @issue-609
+  Scenario: Splitting an issue leaves the epic proposals clickable
+    Given the app is open
+    And applying the Product Owner's proposals takes a while
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I click the suggested question "Build a roadmap"
+    Then the Product Owner answers
+    And the Product Owner proposes to split "Run safety: one app per workspace"
+    When I click "Split" on the split card of "Run safety: one app per workspace"
+    Then "Split" on the split card of "Run safety: one app per workspace" shows it is working and cannot be clicked again
+    And "Place in epic" on the proposal for the epic "Run reports" can still be clicked
+    And "Create epic" on the proposal for the new epic "Ui" can still be clicked
+
+  @issue-609
+  Scenario: While the Product Owner answers, its earlier proposals cannot be applied
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I click the suggested question "Build a roadmap"
+    Then the Product Owner answers
+    And the Product Owner proposes to split "Run safety: one app per workspace"
+    Given the Product Owner's next answer takes a while
+    When I ask the Product Owner "Which issues should go first?"
+    Then every split and epic button of the Product Owner's answer is disabled while it answers
