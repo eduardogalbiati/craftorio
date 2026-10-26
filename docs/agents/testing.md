@@ -144,6 +144,17 @@ Read this before writing or changing tests, and before any check that could star
 - **Mock runs in tests**: a test that runs the mock provider sets `MULTIAGENT_MOCK_DELAY_SCALE`
   (0.05 or less) and waits on events (`workflow.finished`, `approval.requested`), not on timers.
 
+## Reading a session stream (#574)
+
+A script that counts what agents did reads each run with `readRunRecord(runDir)` (storage.md, "Old
+runs"), so an older run shape is upgraded first (#350), and walks its `events`: `session.opened`
+gives the session's `agent` and `cwd`, and each `session.stream` event whose `item.kind` is
+`tool_call` is one tool call, `item.name` (`Read`, `Edit`, `Write`, `Bash`, ...) with its
+`item.input` (`file_path`, `command`). Paths are absolute in the session's worktree, with either
+slash: make them relative to `cwd`. `sessions/<id>.jsonl` holds the same events per session; read
+`events.jsonl` so the upgrade applies. `scripts/docs-usage.js` does this (`npm run docs:usage`);
+its tests build fixture run folders (`test/docs-usage.test.js`).
+
 ## Whole simulated runs (#305, #306)
 
 `npm test` runs one process per file, `cpus - 1` at a time: its wall time is bounded below by its

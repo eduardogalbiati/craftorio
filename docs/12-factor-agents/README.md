@@ -46,6 +46,9 @@ adherence, #565 (see the pages for the reasoning):
    a gate.
 3. Factor 11, #568: start runs from platform events (an issue label, a pull request comment).
 
+The repository's own structure for agents (rules files, topic docs, skills) has its page,
+[codebase-structure.md](codebase-structure.md), with the baseline of which docs the sessions read (#574).
+
 ## How to read a factor page
 
 Every page has the same four sections:

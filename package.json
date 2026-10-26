@@ -25,6 +25,7 @@
   "scripts": {
     "check": "node scripts/check.js",
     "docs": "node scripts/docs.js",
+    "docs:usage": "node scripts/docs-usage.js",
     "lint:lists": "node scripts/lint-lists.js",
     "prepare": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "prestart": "node scripts/docs.js --derived && node scripts/build-3d.js",
