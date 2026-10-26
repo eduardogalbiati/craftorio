@@ -14,7 +14,10 @@
 // (packages/engine/service/channels/roadmap.js) and the Oracle's roadmap.stages (packages/engine/service/areas/oracle.js).
 
 const path = require('path');
-const { isRelease } = require('@multiagent/shared/roadmap-model');
+const {
+  isRelease,
+  releaseEntries,
+} = require('@multiagent/shared/roadmap-model');
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -189,7 +192,8 @@ function mergeEdit(read, edited, current) {
 function onStored({ stored, stages, base, read }) {
   if (!base || !stored?.updatedAt || String(base) === stored.updatedAt) return { ok: true, stages };
   if (!read) return refuse('the roadmap was changed elsewhere since this edit read it, and what it read is no longer known here: reload and apply the edit again.');
-  return mergeEdit(read, Array.isArray(stages) ? stages : [], stored.stages || []);
+  // #555: an edit of the Roadmap screen carries its cut lines on the stages (`release`): as entries
+  return mergeEdit(read, Array.isArray(stages) ? releaseEntries(stages) : [], stored.stages || []);
 }
 
 module.exports = {

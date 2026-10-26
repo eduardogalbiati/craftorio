@@ -547,7 +547,7 @@
     const steps = wf?.steps?.length ? wf.steps : [...new Map((run?.progress || []).map((e) => [e.step, { id: e.step, type: e.type }])).values()];
     const groups = wf?.groups?.length ? wf.groups : run?.groups || [];
     const status = !run || run.status === 'running' || run.status === 'pending' ? 'running' : run.status;
-    const list = RunProgress.pipeline({ steps, groups, mode: modeOf(x) || null, progress: run?.progress || [], status, sentBackBy: v?.round ? v.est.sentBackBy : null });
+    const list = RunProgress.pipeline({ steps, groups, mode: modeOf(x) || null, progress: run?.progress || [], status, sentBackBy: v?.round ? v.est.sentBackBy : null, merged: run?.mergedCommit || null }); // #614
     // the roadmap knows the gate before the trail says so
     return x.waiting ? list.map((st) => (st.state === 'running' ? { ...st, state: 'waiting' } : st)) : list;
   }
@@ -593,7 +593,7 @@
         running: t('backlog_roadmap.station_working', { worker: v?.worker || t('backlog_roadmap.orchestrator') }), waiting: t('backlog_roadmap.station_waiting'), failed: `✕ ${stationWord('failed')}`, stopped: stationWord('stopped'),
       }[st.state];
       const inner = `<span class="rp-avs">${stationAvatars(st, x, run)}</span><span class="rm-station-name">${esc(name)}${st.round > 1 ? ` <span class="rp-round">×${st.round}</span>` : ''}</span><span class="rm-station-state">${esc(text)}</span>`;
-      const attrs = `class="rm-station st-${st.state}${st.gate ? ' gate' : ''}" data-testid="roadmap-station" data-step="${esc(st.name)}" data-state="${st.state}"`;
+      const attrs = `class="rm-station st-${st.state}${st.gate ? ' gate' : ''}" data-testid="roadmap-station" data-step="${esc(st.name)}" data-state="${st.state}"${st.merged ? ` title="${esc(t('backlog_roadmap.merged_commit', { commit: String(st.merged).slice(0, 7) }))}"` : ''}`;
       if (!run) return `<div ${attrs}>${inner}</div>`;
       // a click opens the run there (the gate: at the station that holds it)
       const at = st.gate ? st.host : st;
@@ -730,7 +730,9 @@
   // item (a single item's card says it); its actions in the ⋮ menu. A disabled stage (#284,
   // `stage.disabled`) is skipped while the roadmap runs: still listed in its place, dimmed, with a
   // "Disabled" badge, never the current one.
-  function stageHtml(stage, s, count, current, byNumber, scoped, r, shown) {
+  // #552: `current` is the stage whose run is in progress (else the first open one), `next` the first
+  // open stage when another one runs (its Next badge, no highlight), -1 when none.
+  function stageHtml(stage, s, count, current, byNumber, scoped, r, shown, next = -1) {
     const done = !RoadmapModel.hasUnfinished(stage);
     const off = !!stage.disabled;
     const { items, folded, open, cut = Infinity } = shown;
@@ -746,10 +748,11 @@
     // #368: paused after the current turn (the service's stage.pause): waiting for a turn, or paused since
     const pause = stage.pause ? `<p class="rm-stage-pause small" data-testid="roadmap-stage-pause-state" data-state="${esc(stage.pause.state)}">${esc(RunProgress.pauseLabel(stage.pause))}</p>` : '';
     const stateBadge = s === scoped ? `<span class="badge ${r.state === 'running' ? 'live' : 'warn'}">${r.state === 'running' ? t('backlog_roadmap.running_this_stage_only') : t('backlog_roadmap.this_stage_only_paused')}</span>`
-      : s === current ? `<span class="badge live">${t('backlog_roadmap.current')}</span>` : done ? `<span class="badge" data-status="done">${t('backlog_roadmap.done_2')}</span>` : '';
+      : s === current ? `<span class="badge live" data-testid="roadmap-stage-current">${t('backlog_roadmap.current')}</span>`
+        : s === next ? `<span class="badge" data-testid="roadmap-stage-next">${t('backlog_roadmap.next')}</span>` : done ? `<span class="badge" data-status="done">${t('backlog_roadmap.done_2')}</span>` : '';
     const offBadge = off ? `<span class="badge warn rm-disabled-badge" data-testid="roadmap-stage-disabled" title="${t('backlog_roadmap.skipped_while_the_roadmap_runs_it')}">${t('backlog_roadmap.disabled')}</span>` : '';
     return `
-      <section class="rm-stage${s === current ? ' current' : ''}${s === scoped ? ' scoped' : ''}${done ? ' finished' : ''}${off ? ' disabled' : ''}" data-stage="${s}" data-drop-stage="${s}" data-testid="roadmap-stage"${off ? ' data-disabled="true"' : ''}>
+      <section class="rm-stage${s === current ? ' current' : ''}${s === scoped ? ' scoped' : ''}${done ? ' finished' : ''}${off ? ' disabled' : ''}" data-stage="${s}" data-drop-stage="${s}" data-testid="roadmap-stage"${off ? ' data-disabled="true"' : ''}${s === current ? ' data-current="true"' : ''}>
         <div class="rm-stage-head">
           <span class="muted small">${t('backlog_roadmap.stage')} ${s + 1}</span>
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="${t('backlog_roadmap.name_optional')}" aria-label="${t('backlog_roadmap.stage_name')}" />
@@ -771,12 +774,15 @@
     failed: ['warn', 'release run failed', 'Its release run failed: open it, then Resume the roadmap to check the release again'],
     shipped: ['', 'shipped', 'Pushed and tagged: the stages below run'],
   };
-  // `where`: says after which stage it sits (the view grouped by epic shows no stages)
-  function cutLineHtml(stage, s, where = false) {
+  // `where`: says after which stage it sits (the view grouped by epic shows no stages); `count`: the
+  // stages (#555: a release not running nor shipped moves before this stage or after the next, ↑ ↓)
+  function cutLineHtml(stage, s, where = false, count = 0) {
     const rel = stage.release;
     if (!rel?.name) return '';
     const [tone, label, help] = RELEASE_STATE[rel.status] || ['', '', 'The stages below wait until this release shipped'];
     const locked = rel.status === 'running' || rel.status === 'shipped';
+    const move = (dir, glyph, key) => `<button class="link-btn small" type="button" data-rm-release="${dir}" aria-label="${esc(t(key, { name: rel.name }))}" title="${esc(t(key, { name: rel.name }))}">${glyph}</button>`;
+    const moves = locked || where ? '' : (s > 0 ? move('up', '↑', 'backlog_roadmap.move_the_release_up') : '') + (s < count - 1 ? move('down', '↓', 'backlog_roadmap.move_the_release_down') : '');
     return `
       <div class="rm-cut${rel.status === 'shipped' ? ' shipped' : ''}" data-testid="roadmap-cut-line" data-cut-stage="${s}" title="${esc(help)}">
         <span class="rm-cut-label"><span aria-hidden="true">✂</span> ${t('backlog_roadmap.release_here')}</span>
@@ -784,7 +790,7 @@
         ${where ? `<span class="muted small">${t('backlog_roadmap.after_stage')} ${s + 1}</span>` : ''}
         ${label ? `<span class="badge ${tone}">${esc(label)}</span>` : ''}
         ${rel.runId ? `<button class="link-btn small" type="button" data-rm-release-run="${esc(rel.runId)}" title="${t('backlog_roadmap.open_the_release_run_runid', { runId: esc(rel.runId) })}">${t('backlog_roadmap.open_the_run')}</button>` : ''}
-        ${locked ? '' : `<button class="link-btn small" type="button" data-rm-release="edit" aria-label="${t('backlog_roadmap.rename_the_release_name', { name: esc(rel.name) })}">${t('backlog_roadmap.rename')}</button>
+        ${moves}${locked ? '' : `<button class="link-btn small" type="button" data-rm-release="edit" aria-label="${t('backlog_roadmap.rename_the_release_name', { name: esc(rel.name) })}">${t('backlog_roadmap.rename')}</button>
         <button class="link-btn small" type="button" data-rm-release="remove" aria-label="${t('backlog_roadmap.remove_the_cut_line_name', { name: esc(rel.name) })}" title="${t('backlog_roadmap.the_stages_below_no_longer_wait')}">${t('common.remove')}</button>`}
       </div>`;
   }
@@ -842,8 +848,16 @@
 
   // The release block: its state, its release run's stations with their rounds, its time, cost and
   // fixes, "Open run" (at the Ship gate, the gate waits there: nothing here answers it).
+  // #555: a planned release (its release entry, no run yet) has the same card: Planned, the stages it
+  // closes and its estimate, as its cut line said before
+  const blockState = (x) => (x.status === 'planned' ? ['', t('backlog_roadmap.release_planned'), t('backlog_roadmap.release_planned_help'), ''] : RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking);
+  function plannedFacts(x) {
+    const closes = (x.closes || []).map((c) => `${t('backlog_roadmap.stage')} ${c.number}${c.name ? ` ${c.name}` : ''}`).join(', ');
+    const est = x.estimate?.usd != null ? `≈ ${money(x.estimate.usd)}${x.estimate.minutes ? ` · ${mins(x.estimate.minutes)}` : ''}` : '';
+    return [closes ? t('backlog_roadmap.release_closes', { stages: closes }) : '', est].filter(Boolean).join(' · ');
+  }
   function releaseBlockHtml(x) {
-    const [tone, label, help] = RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking;
+    const [tone, label, help] = blockState(x);
     const name = t('backlog_roadmap.release_version', { version: x.version });
     const going = x.status === 'checking' || x.status === 'waiting';
     const rounds = x.stations || {};
@@ -855,7 +869,7 @@
     const fixes = Number(rounds.fix) || 0;
     const tests = ['unit', 'e2e'].map((k) => x.tests?.[k]).every((t) => !t) ? ''
       : [['unit', 'Unit'], ['e2e', 'E2E']].filter(([k]) => x.tests?.[k]).map(([k, t]) => `${t} ${x.tests[k].passed ?? 0} passed${x.tests[k].failed ? `, ${x.tests[k].failed} failed` : ''}`).join(' · ');
-    const facts = [x.durationMs ? mins(Math.max(1, Math.round(x.durationMs / 60000))) : '', x.runCost != null ? money(x.runCost) : '', fixes ? plural(fixes, 'backlog_roadmap.fixes_count') : '', tests].filter(Boolean).join(' · ');
+    const facts = x.status === 'planned' ? plannedFacts(x) : [x.durationMs ? mins(Math.max(1, Math.round(x.durationMs / 60000))) : '', x.runCost != null ? money(x.runCost) : '', fixes ? plural(fixes, 'backlog_roadmap.fixes_count') : '', tests].filter(Boolean).join(' · ');
     return `
       <section class="rm-release is-${esc(x.status)}" data-testid="roadmap-release-block" data-release="${esc(x.version)}" role="group" tabindex="0" aria-label="${esc(`${name}, ${label}`)}">
         <div class="rm-release-card" data-testid="roadmap-release-card" title="${esc(help)}">
@@ -888,7 +902,8 @@
         ${shipped && x.mock !== true ? `<button class="link-btn small" type="button" data-rm-open-releases title="${t('backlog_roadmap.the_release_s_notes_issues_and')}">${t('backlog_roadmap.open_in_releases')}</button>` : ''}
       </div>`;
   }
-  const releaseHtml = (x) => releaseBlockHtml(x) + releaseLineHtml(x);
+  // #555: a planned release's dashed line is its cut line, drawn before its card
+  const releaseHtml = (x) => releaseBlockHtml(x) + (x.status === 'planned' ? '' : releaseLineHtml(x));
 
   // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
   // a parked item (#395) still needs the owner at its gate: it stays with the open work
@@ -1036,9 +1051,9 @@
     loadWorkflows(rerender, view.project || null);
     const { SINCE, cardCount } = RoadmapModel;
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
-    const r = data?.roadmap || { state: 'planned', stages: [] };
+    const r = roadmapOf(data) || { state: 'planned', stages: [] };
     // #291: the releases, and the one the Releases filter chose
-    const rv = RoadmapModel.releaseView(r, data, view.release || '', !!view.showAll); // #425: Planned, the latest only
+    const rv = RoadmapModel.releaseView(data?.roadmap || r, data, view.release || '', !!view.showAll); // #425: Planned, the latest only
     const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs, runs: rv.runs };
     const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}|${rv.choice}`;
     if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
@@ -1047,7 +1062,12 @@
     // a stage run on its own (#141) is the one in progress; the others keep their planned look
     const scoped = scopedStage(r);
     // #284: a disabled stage is skipped (RoadmapModel.currentStage): never the current one, counted apart
-    const current = scoped >= 0 ? scoped : RoadmapModel.currentStage(r);
+    // #552: the stage whose run is in progress is the current one; the first open stage, when it is
+    // another one, is the next (currentStage still decides what the automation starts)
+    const first = RoadmapModel.currentStage(r);
+    const running = scoped >= 0 ? -1 : RoadmapModel.runningStage(r);
+    const current = scoped >= 0 ? scoped : running >= 0 ? running : first;
+    const next = running >= 0 && first !== running ? first : -1;
     const offStages = r.stages.filter((s) => s.disabled);
     const offOpen = offStages.filter(RoadmapModel.hasUnfinished);
     const acts = may(r);
@@ -1128,13 +1148,14 @@
     // #291: a release block (and its version line) after its stage, in place of its cut line once its
     // release run started; with a release chosen, no other line, and its block last when its stage is
     // not drawn (or it has none)
-    const cutLine = (stage, s) => (rv.choice || rv.list.some((x) => x.cut && x.at === s) ? '' : cutLineHtml(stage, s));
+    // #555: a planned release keeps its cut line, its card right after it
+    const cutLine = (stage, s) => (rv.choice || rv.list.some((x) => x.cut && x.at === s && x.status !== 'planned') ? '' : cutLineHtml(stage, s, false, r.stages.length));
     const placed = (x) => x.at >= 0 && (!rv.choice || drawn.has(x.at));
     const blocksAfter = (s) => rv.shown.filter((x) => placed(x) && x.at === s).map(releaseHtml).join('');
     const staged = r.stages.map((stage, s) => {
       if (s < from || s > to) return '';
       const x = drawn.get(s);
-      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x) + cutLine(stage, s) + blocksAfter(s);
+      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x, next) + cutLine(stage, s) + blocksAfter(s);
       return (!v.epic && stage.release?.status !== 'shipped' ? cutLine(stage, s) : '') + blocksAfter(s);
     }).join('') + (rv.choice ? rv.shown.filter((x) => !placed(x)).map(releaseHtml).join('') : '')
       // #291: the release's block is always drawn, so the empty state goes next to it when the date
@@ -1203,7 +1224,7 @@
    * "Open the Roadmap"). It leaves when the roadmap goes on.
    */
   function alerts(data, ctx, { shown = true } = {}) {
-    const r = data?.roadmap;
+    const r = roadmapOf(data);
     if (!failedPause(r) || !r.error) return [];
     const item = r.stages.flatMap((s) => s.items).find((x) => x.id === r.pausedBy);
     const act = (action) => async () => {
@@ -1368,10 +1389,14 @@
   // #287 `r`: the roadmap the edit was made on (its updatedAt is the save's base); `edit.form`: the
   // item with the Edit form's values, kept when the save is refused; `edit.dialog` (#454): a dialog
   // shows a refusal itself (the screen still shows the stored roadmap). → the service's answer
+  // #555: the screen draws and edits the roadmap folded (RoadmapModel.foldReleases: each release entry
+  // as the cut line of the stage before it); a save sends the releases no stage carries first
+  const roadmapOf = (data) => RoadmapModel.foldReleases(data?.roadmap);
+  const withLead = (r, stages) => [...(r?.leadReleases || []), ...stages];
   async function save(ctx, r, stages, edit = null) {
     let out = null;
     try {
-      out = await api.saveRoadmap(ctx.projectId, stages, edit?.label || null, r?.updatedAt || null);
+      out = await api.saveRoadmap(ctx.projectId, withLead(r, stages), edit?.label || null, r?.updatedAt || null);
       ctx.setData(out);
       if (out?.conflict) { if (!edit?.dialog) refused(ctx, out, edit?.form); }
       else if (edit && !edit.quiet) undoToast(ctx, out, edit.label, edit.detail);
@@ -1416,11 +1441,11 @@
     const ids = new Set(items.map((x) => x.id));
     const stages = clone(r.stages);
     for (const x of stages.flatMap((st) => st.items)) if (ids.has(x.id)) Object.assign(x, { workflow: def.file, workflowName: def.name });
-    const out = await api.saveRoadmap(ctx.projectId, stages, null, r.updatedAt || null);
+    const out = await api.saveRoadmap(ctx.projectId, withLead(r, stages), null, r.updatedAt || null);
     ctx.setData(out);
     // #287: refused (the roadmap changed elsewhere): nothing starts, the reason shows
     if (out?.conflict) { refused(ctx, out); return null; }
-    return out?.roadmap || r;
+    return roadmapOf(out) || r;
   }
 
   // The bar's Pause (#391: its menu, after the stage or now; Cancel pause takes it back) and Stop (#269: asks first); true: done
@@ -1649,7 +1674,7 @@
   async function clicked(e, ctx, data) {
     // #354: the Conflict map link opens the project's page on its tab (drawn with or without a roadmap)
     if (window.ProjectConflictMap?.onLinkClick(e)) return true;
-    const r = data?.roadmap;
+    const r = roadmapOf(data);
     if (!r) return false;
     const c = { ctx, r, data, target: e.target };
     const [click, at] = matched(CLICKS, e.target);
@@ -1786,7 +1811,17 @@
     const cut = el.closest('[data-cut-stage]');
     const stage = stages[cut ? Number(cut.dataset.cutStage) : locate(stages, el).s];
     if (!stage) return 'handled';
-    if (el.dataset.rmRelease === 'remove') {
+    const dir = { up: -1, down: 1 }[el.dataset.rmRelease];
+    if (dir) {
+      // #555: the release moves before this stage / after the next one (onto a stage with no cut line)
+      const s = stages.indexOf(stage);
+      const onto = stages[s + dir];
+      if (!onto || onto.release || !stage.release) return 'handled';
+      const name = stage.release.name;
+      onto.release = stage.release;
+      delete stage.release;
+      await save(ctx, r, stages, { label: t('backlog_roadmap.moved_the_release_name', { name }) });
+    } else if (el.dataset.rmRelease === 'remove') {
       const name = stage.release?.name || ''; if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name }), t('common.remove'))) return 'handled';
       delete stage.release; await save(ctx, r, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
     } else {
@@ -1799,11 +1834,12 @@
         const target = stage.id ? base.stages.find((s) => s.id === stage.id) : base.stages[at];
         // the stage was removed in the stored roadmap: nothing to save, the dialog says so
         if (!target) return 'The stage was removed elsewhere: nothing was saved.';
-        target.release = { name };
+        target.release = { ...target.release, name }; // #555: a rename keeps the release entry (its id)
         const label = from ? t('backlog_roadmap.renamed_the_cut_line_name', { from, name }) : t('backlog_roadmap.set_the_cut_line_name', { name });
         const out = await save(ctx, base.r, base.stages, { label, dialog: true });
         if (!out?.conflict) return null;
-        base = { r: out.roadmap, stages: clone(out.roadmap?.stages || []) };
+        const stored = roadmapOf(out);
+        base = { r: stored, stages: clone(stored?.stages || []) };
         return out.conflict.reason || 'The roadmap changed elsewhere: nothing was saved.';
       });
     }
@@ -1812,8 +1848,10 @@
   async function stageMoveClicked({ ctx, r, stages, target }, el) {
     const { s } = locate(stages, target);
     const up = el.dataset.rmStage === 'up';
+    const cuts = stages.map((st) => st.release); // #555: the releases stay where they are
     const t = RoadmapModel.moveStage(stages, s, up ? -1 : 1, drawnAt); // #426: past the stages the view hides
     if (t < 0) return 'handled';
+    stages.forEach((st, i) => { if (cuts[i]) st.release = cuts[i]; else delete st.release; });
     await save(ctx, r, stages, { label: I18n.t(up ? 'backlog_roadmap.moved_stage_up' : 'backlog_roadmap.moved_stage_down', { stage: s + 1 }), detail: I18n.t('backlog_roadmap.it_is_stage_n_now', { stage: t + 1 }) });
     return 'handled';
   }
@@ -1861,7 +1899,7 @@
 
   // The stage's name and note: saved when they change (the Edit form saves with its Save button).
   async function onChange(e, ctx, data) {
-    const r = data?.roadmap;
+    const r = roadmapOf(data);
     const el = e.target;
     if (r && el.matches('[data-rm-live]')) {
       await setLive(ctx, r, el.checked);
@@ -1942,7 +1980,7 @@
       clearMarks();
       let ok = true;
       if (dragging.issue) {
-        const why = dropProblem(data?.roadmap?.stages, dragging, itemEl?.dataset.item);
+        const why = dropProblem(roadmapOf(data)?.stages,dragging, itemEl?.dataset.item);
         ok = !why;
         // its own item stays unmarked while the drag has just started there; once the cursor has
         // left it, coming back shows why it is refused ("already in this item")
@@ -1968,7 +2006,7 @@
   async function onDrop(e, ctx, data) {
     const d = dragging;
     onDragEnd();
-    const r = data?.roadmap;
+    const r = roadmapOf(data);
     const stageEl = e.target.closest('[data-drop-stage]');
     if (!d || !r || !stageEl) return;
     e.preventDefault();
@@ -2004,13 +2042,14 @@
     // #253: an epic groups issues, it is never planned as work
     const issues = asked.filter((i) => !i?.isEpic);
     if (!issues.length) return;
-    const stages = clone(data?.roadmap?.stages);
+    const r = roadmapOf(data);
+    const stages = clone(r?.stages);
     const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
       // #262: the provider / model / effort per agent chosen in the Assign dialog
       ...(agentOverrides && Object.keys(agentOverrides).length ? { agentOverrides } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
-    const out = await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`, data?.roadmap?.updatedAt || null);
+    const out = await api.saveRoadmap(ctx.projectId, withLead(r, stages), `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`, data?.roadmap?.updatedAt || null);
     ctx.setData(out);
     if (out?.conflict) refused(ctx, out);
   }
