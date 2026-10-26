@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { root, liveState, replayState, recordedRun } = require('../run-state-606');
+const { root, readLog, liveState, replayState, recordedRun } = require('../run-state-606');
 
 const FIXTURE = `apiVersion: multiagent/v1
 kind: Workflow
@@ -34,11 +34,14 @@ steps:
     message: "ok?"
 `;
 
-function fixtureFile(t) {
+// `set:` values YAML reads as a number and a boolean, next to a string
+const TYPED_SET = FIXTURE.replace('set: { planned: "yes", round: "1" }', 'set: { planned: "yes", round: 2, retry: true }');
+
+function fixtureFile(t, text = FIXTURE) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-606-wf-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'fixture-run-state-606.yaml');
-  fs.writeFileSync(file, FIXTURE);
+  fs.writeFileSync(file, text);
   return file;
 }
 
@@ -67,6 +70,25 @@ test('a run paused at its gate: its log gives the gate to ask again as the next 
   assert.equal(live.openGate, 'review');
   assert.deepEqual(live.visits, { plan: 1, work: 1 });
   assert.deepEqual(live.vars, { planned: 'yes', round: '1' });
+});
+
+test('a `set:` of a number and a boolean is recorded on its transition as the run holds it in its vars', async (t) => {
+  const run = await recordedRun(t, { file: fixtureFile(t, TYPED_SET) });
+  const recorded = readLog(run.runDir).events.filter((ev) => ev.type === 'step.transition' && ev.set).map((ev) => ev.set);
+  assert.deepEqual(recorded, [{ planned: 'yes', round: 2, retry: true }]);
+  assert.deepEqual({ ...run.ctx.vars }, { planned: 'yes', round: 2, retry: true });
+  assertReplayMatches(run);
+});
+
+test('run-retrospective: the replay of its mock run gives the in-memory state', async (t) => {
+  // the run it looks back on: a finished run in the same runs folder
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-606-retro-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true, maxRetries: 5 }));
+  const previous = '20261026-120000-aaaa0606';
+  fs.mkdirSync(path.join(runsDir, previous));
+  fs.writeFileSync(path.join(runsDir, previous, 'events.jsonl'), `${JSON.stringify({ seq: 1, type: 'workflow.started', workflow: 'writer-reviewer' })}\n`);
+  const run = await recordedRun(t, { file: bundled('run-retrospective.yaml'), inputs: { run_id: previous }, options: { runsDir, skillsDirs: [] } });
+  assertReplayMatches(run);
 });
 
 test('writer-reviewer: the replay of its mock run gives the in-memory state', async (t) => {

@@ -117,6 +117,60 @@ test("gives each agent's latest session with its provider conversation, never th
   assert.deepEqual({ session_id: sessions.rev.session_id, provider_session_id: sessions.rev.provider_session_id }, { session_id: 'rev-1', provider_session_id: 'conv-r' });
 });
 
+test('a log cut right after the run started has no step to run next yet and no visits (the resume starts at the first step)', () => {
+  const state = load()(log(started));
+  assert.equal(state.nextStep, null);
+  assert.deepEqual(state.visits, {});
+  assert.equal(state.openGate, null);
+});
+
+test('a failed or cancelled run keeps the visit it ended in, and has nothing to run next', () => {
+  const reduce = load();
+  for (const status of ['failed', 'cancelled']) {
+    const events = log(started, stepStarted('plan'), stepFinished('plan'), transition('plan', 'work'),
+      stepStarted('work'), { type: 'workflow.finished', status, error: 'boom', summary: { status } });
+    const state = reduce(events, { status });
+    assert.deepEqual(state.visits, { plan: 1, work: 1 }, status);
+    assert.equal(state.nextStep, null, status);
+  }
+});
+
+test('a gate withdrawn by a check, whose answer has no step id, is not open', () => {
+  const events = log(started, stepStarted('review'), gateAsked('a1', 'review'),
+    { type: 'approval.resolved', approval_id: 'a1', withdrawn: true, by: 'check', wait_ms: 3 });
+  const state = load()(events);
+  assert.equal(state.openGate, null);
+});
+
+test('takes the vars of every transition, the later ones over the earlier, numbers and booleans kept as they are', () => {
+  const events = log(started,
+    stepStarted('plan'), stepFinished('plan'), { ...transition('plan', 'work'), set: { red_suite: 'unit', round: 1, retry: true } },
+    stepStarted('work'), stepFinished('work'), { ...transition('work', 'end'), set: { red_suite: 'e2e', round: 2 } });
+  assert.deepEqual(load()(events).vars, { red_suite: 'e2e', round: 2, retry: true });
+});
+
+test("an agent's ephemeral or handoff session opened after its persistent one is not the session it continues", () => {
+  const withMode = (ev, mode) => ({ ...ev, session: { ...ev.session, mode } });
+  const events = log(started,
+    withMode(session('session.opened', 'dev-1', 'dev', null), 'persistent'),
+    withMode(session('session.updated', 'dev-1', 'dev', 'conv-1'), 'persistent'),
+    withMode(session('session.opened', 'dev-2', 'dev', null), 'ephemeral'),
+    withMode(session('session.closed', 'dev-2', 'dev', 'conv-2', 'success'), 'ephemeral'),
+    withMode(session('session.opened', 'dev-3', 'dev', null), 'handoff'),
+    withMode(session('session.closed', 'dev-3', 'dev', 'conv-3', 'success'), 'handoff'));
+  const { sessions } = load()(events);
+  assert.deepEqual({ session_id: sessions.dev?.session_id, provider_session_id: sessions.dev?.provider_session_id }, { session_id: 'dev-1', provider_session_id: 'conv-1' });
+});
+
+test('a provider conversation recorded only by the answer of a turn (the run cut before the session was updated) is the one to continue', () => {
+  const opened = session('session.opened', 'dev-1', 'dev', null);
+  const answered = { type: 'session.message_received', session_id: 'dev-1', turn: 1, step_id: 'plan', text: 'done', session: { ...opened.session, status: 'idle', provider_session_id: 'conv-1' } };
+  const events = log(started, stepStarted('plan'), opened, answered);
+  const { sessions } = load()(events);
+  assert.equal(sessions.dev?.session_id, 'dev-1');
+  assert.equal(sessions.dev?.provider_session_id, 'conv-1');
+});
+
 test('is pure: the log is left unchanged and the same log always gives the same state', () => {
   const reduce = load();
   const events = log(started, session('session.opened', 'dev-1', 'dev', 'conv-1'), stepStarted('plan'), stepFinished('plan'),
