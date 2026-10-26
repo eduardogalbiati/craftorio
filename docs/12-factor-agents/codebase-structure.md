@@ -27,33 +27,40 @@ for Coding Agents") adds: build the rules gradually and expect some to become un
    npm run docs:usage -- --project multiagent-orchestrator --since 2026-09-26 [--json]
    ```
 
-   It counts, per run and session, the docs read through the Read tool, the files edited, the topic
-   docs of edited folders not read in the same session (the folder table `TOPICS` in the script),
-   a shared list file edited, a `git push` to `main` and a real run started (no `--mock`); the rules
-   the data cannot show are listed as not measured.
+   It counts, per run and session, the docs read through the Read tool (every `.md` under
+   `docs/agents/` and `skills/`, and `AGENTS.md`), the files edited, the topic docs of edited folders
+   not read in the same session (the folder table `TOPICS` in the script), a shared list file
+   edited, a `git push` to `main` and a real run attempted (a run command without `--mock`; the
+   engine refuses it under `MULTIAGENT_SIMULATION_ONLY`); the rules the data cannot show are listed
+   as not measured.
 
 ### Baseline (2026-09-26 to 2026-10-26)
 
-356 runs of this repository, 3263 sessions.
+356 runs of this repository, 3267 sessions.
 
 | Rule broken | Times | Runs |
 |---|---|---|
-| `real_run_in_check` (`npm run run` / `scripts/run.js` without `--mock`) | 17 | 17 |
+| `real_run_in_check` (a real run attempted: `npm run run` / `scripts/run.js` without `--mock`) | 18 | 18 |
 | `shared_list_edit` (`AGENTS.md`, `CLAUDE.md` edited) | 17 | 15 |
 | `push_to_main` | 0 | 0 |
 
 | Topic doc | Sessions that read it | Sessions that edited its folder without reading it |
 |---|---|---|
 | `docs/agents/testing.md` (`test/`, `*/*/test/`) | 101 | 402 |
-| `docs/agents/engine.md` (`workflows/`) | 62 | 47 |
+| `docs/agents/engine.md` (`workflows/`, `packages/engine/engine/`) | 62 | 50 |
 | `docs/agents/renderer.md` (`packages/ui-kit/`, `fronts/`, `apps/*/renderer/`) | 76 | 6 |
 
+- Engine sub-docs (`docs/agents/engine/*.md`) read: `agents-and-steps.md` 32,
+  `gates-and-run-end.md` 7, `worktrees-and-template-context.md` 6, `resume.md` 5, the others 1 to 4.
 - Other topic docs read: `decisions.md` 35, `storage.md` 30, `capabilities.md` 29, `code-map.md`
   21, `worktrees.md` 17, `environment.md` 11, `backlog.md` 6, `seeds.md` 3, `channels.md`,
   `test-map.md` and `windows-gotchas.md` 2 each. `AGENTS.md` itself: 12 (it is in every Claude
   session's context without a read).
-- Never read: no topic doc; 21 skills, mostly other languages' variants (`build-audit-*`,
-  `e2e-test-writer-*`, `unit-test-writer-rust`) and writing skills (`adr-writing`, `test-plan-writing`).
+- Most read of all: the code-review rules `javascript-typescript.md` 210 and `smells.md` 190.
+- Never read: 4 engine sub-docs (`chaining.md`, `evidence.md`, `fronts.md`, `roadmap-pauses.md`);
+  21 skills, mostly other languages' variants (`build-audit-*`, `e2e-test-writer-*`,
+  `unit-test-writer-rust`) and writing skills (`adr-writing`, `test-plan-writing`); 3 code-review
+  rules (`csharp.md`, `java-kotlin.md`, `python.md`).
 - How to read it: a skill a step names is given in its prompt, not read, so "never read" for a
   skill means "never opened by hand", not "unused". The testing.md count is high because test
   writers get the testing skills in their prompt; it is the first candidate for a path-scoped rule.

@@ -16,10 +16,13 @@ test('a run counts as real without --mock', () => {
   assert.equal(startsRealRun('node scripts/run.js --file x.yaml'), true);
   assert.equal(startsRealRun('npm run run -- --mock --task "x"'), false);
   assert.equal(startsRealRun('npm run test:engine'), false);
+  assert.equal(startsRealRun('npm run run -- --task "a | b; c" --mock'), false);
+  assert.equal(startsRealRun('npm run run -- --task \'a && b\''), true);
 });
 
 test('paths become relative to the worktree, a skill outside it by its suffix', () => {
   assert.equal(relative('c:\\W\\wt\\docs\\agents\\x.md', 'C:/w/wt'), 'docs/agents/x.md');
   assert.equal(relative('C:/ws/skills/a/SKILL.md', 'C:/w/wt'), 'skills/a/SKILL.md');
+  assert.equal(relative('C:/ws/skills/code-review/rules/spec.md', 'C:/w/wt'), 'skills/code-review/rules/spec.md');
   assert.equal(relative('C:/elsewhere/f.js', 'C:/w/wt'), 'C:/elsewhere/f.js');
 });

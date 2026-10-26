@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Which docs and rules the coding agents use (#574), counted from a project's recorded runs: per
-// run and session, the docs/agents/*.md, skills/*/SKILL.md and AGENTS.md files the agent read (its
-// Read tool calls), the files it edited (Edit / Write / MultiEdit / NotebookEdit), the topic docs of
+// run and session, the .md files under docs/agents/ and skills/ and AGENTS.md the agent read (its
+// Read tool calls), the files it edited (city-agents' touchOf: its change tools), the topic docs of
 // the folders it edited without reading them (TOPICS), and the rules the commands and edits show
-// broken (a shared list edited, a push to main, a real run started); then the reads per doc, the
+// broken (a shared list edited, a push to main, a real run attempted: under MULTIAGENT_SIMULATION_ONLY
+// the engine refuses it, so the stream shows the try, not a run); then the reads per doc, the
 // docs no session read and the rules the data cannot show (NOT_MEASURED).
 // Runs are <workspace>/runs/<id> read through readRunRecord (the record upgrade on read, #350), so
 // an older run shape counts too; the tool calls are its `session.stream` events of kind tool_call.
@@ -19,15 +20,19 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { readRunRecord } = require('@multiagent/engine/domains/run/run-record');
+const { relativePath, touchOf } = require('@multiagent/shared/city-agents');
 
 // the folders a topic line of AGENTS.md names, with its doc ("Read before changing ...")
 const TOPICS = [
   { doc: 'docs/agents/renderer.md', re: /^(packages\/ui-kit\/|fronts\/|apps\/[^/]+\/renderer\/)/ },
-  { doc: 'docs/agents/engine.md', re: /^workflows\// },
+  { doc: 'docs/agents/engine.md', re: /^(workflows\/|packages\/engine\/engine\/)/ },
   { doc: 'docs/agents/testing.md', re: /^(test\/|(apps|packages)\/[^/]+\/test\/)/ },
 ];
 
-// files that hold a shared list the agents must add to, never edit ("Add, don't edit shared lists")
+// The shared lists a session's edits show: AGENTS.md and CLAUDE.md are the indexes every run reads,
+// where "Add, don't edit shared lists" applies to the file itself. The name lists npm run lint:lists
+// checks (module.exports, destructured requires) live in any source file and are judged by their
+// layout, not by who edited them: they stay in NOT_MEASURED.
 const SHARED_LISTS = ['AGENTS.md', 'CLAUDE.md'];
 
 const RULES = ['shared_list_edit', 'push_to_main', 'real_run_in_check'];
@@ -42,36 +47,56 @@ const NOT_MEASURED = [
   'edits by a provider whose stream has no file_path in its tool calls (a patch tool, a shell redirect)',
 ];
 
-const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'NotebookEdit', 'Write']);
-
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-const slash = (p) => String(p || '').replace(/\\/g, '/');
-
-// a path relative to the session's worktree; a skill outside it by its skills/<name>/SKILL.md suffix
+// a path relative to the session's worktree (city-agents' rule); a skill outside it (the workspace's
+// skills folder) by its skills/<name>/... suffix; anything else as recorded, with forward slashes
 function relative(file, cwd) {
-  const p = slash(file);
-  const base = slash(cwd).replace(/\/+$/, '');
-  if (base && p.toLowerCase().startsWith(`${base.toLowerCase()}/`)) return p.slice(base.length + 1);
-  const skill = p.match(/(?:^|\/)(skills\/[^/]+\/SKILL\.md)$/);
-  if (skill) return skill[1];
-  return p.replace(/^\.\//, '');
+  const rel = relativePath(file, cwd);
+  if (rel) return rel;
+  const p = String(file || '').replace(/\\/g, '/');
+  const skill = p.match(/(?:^|\/)(skills\/[^/]+\/(?:[^/]+\/)*[^/]+\.md)$/);
+  return skill ? skill[1] : p;
 }
 
-// the docs an agent can read in the repository at `root`
+// the docs an agent can read in the repository at `root`: every .md under docs/agents/ and skills/
+// (topic sub-docs such as docs/agents/engine/*.md and skill rules included), and AGENTS.md
 function readableDocs(root) {
-  const list = (dir) => { try { return fs.readdirSync(path.join(root, dir), { withFileTypes: true }); } catch { return []; } };
-  const docs = list('docs/agents').filter((d) => d.isFile() && d.name.endsWith('.md')).map((d) => `docs/agents/${d.name}`);
-  const skills = list('skills').filter((d) => d.isDirectory() && fs.existsSync(path.join(root, 'skills', d.name, 'SKILL.md'))).map((d) => `skills/${d.name}/SKILL.md`);
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = fs.readdirSync(path.join(root, dir), { withFileTypes: true }); } catch { return []; }
+    return entries.flatMap((d) => (d.isDirectory() ? walk(`${dir}/${d.name}`) : d.isFile() && d.name.endsWith('.md') ? [`${dir}/${d.name}`] : []));
+  };
   const agents = fs.existsSync(path.join(root, 'AGENTS.md')) ? ['AGENTS.md'] : [];
-  return [...docs, ...skills, ...agents].sort();
+  return [...walk('docs/agents'), ...walk('skills'), ...agents].sort();
 }
 
-// each command of a shell line (split at ;, &&, ||, | and new lines)
-const commands = (line) => String(line || '').split(/\r?\n|&&|\|\||;|\|/).map((c) => c.trim()).filter(Boolean);
+// each command of a shell line, split at ;, &&, ||, | and new lines outside quotes
+function commands(line) {
+  const out = [];
+  let cur = '';
+  let quote = null;
+  const s = String(line || '');
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      cur += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      cur += ch;
+    } else if (ch === ';' || ch === '\n' || ch === '|' || (ch === '&' && s[i + 1] === '&')) {
+      if ((ch === '|' || ch === '&') && s[i + 1] === ch) i++;
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((c) => c.trim()).filter(Boolean);
+}
 
 function pushesToMain(line) {
   return commands(line).some((c) => {
@@ -98,11 +123,11 @@ function sessionsOfRun(summary, events) {
   for (const e of events) {
     if (e.type !== 'session.stream' || e.item?.kind !== 'tool_call' || !e.session_id) continue;
     const s = of(e.session_id);
-    const input = e.item.input || {};
-    const file = input.file_path || input.notebook_path;
-    if (e.item.name === 'Read' && file) s.read.add(relative(file, s.cwd));
-    else if (EDIT_TOOLS.has(e.item.name) && file) s.edited.add(relative(file, s.cwd));
-    else if (typeof input.command === 'string') s.commands.push(input.command);
+    const t = touchOf(e.item);
+    const command = e.item.input?.command;
+    if (t?.kind === 'change') s.edited.add(relative(t.file, s.cwd));
+    else if (t?.tool === 'Read') s.read.add(relative(t.file, s.cwd));
+    else if (typeof command === 'string') s.commands.push(command);
   }
   return [...sessions.values()];
 }
@@ -171,6 +196,7 @@ function markdownOf(model) {
     `# Docs usage: ${model.project} since ${model.since}`,
     `${model.runs.length} runs, ${sessions} sessions.`,
     '## Broken rules',
+    '`real_run_in_check` counts the attempts (a run command without `--mock`); the engine refuses a real run under `MULTIAGENT_SIMULATION_ONLY`.',
     table(['Rule', 'Times', 'Runs'], byCount(model.rules_broken).map(([rule, n]) => [`\`${rule}\``, n, runsBroken(rule).join(', ') || '-'])),
     '## Topic docs skipped (folder edited, doc not read in the session)',
     table(['Topic doc', 'Sessions'], byCount(model.skipped_by_topic).map(([d, n]) => [d, n])),
@@ -185,6 +211,7 @@ function markdownOf(model) {
 }
 
 if (require.main === module) {
+  if (arg('since') && !/^\d{4}-\d{2}-\d{2}$/.test(arg('since'))) process.stderr.write(`docs-usage: --since ${arg('since')} is not YYYY-MM-DD; the report may come out empty\n`);
   const { markdown, model } = docsUsage({
     ...(arg('workspace') ? { workspace: arg('workspace') } : {}),
     ...(arg('root') ? { root: arg('root') } : {}),
