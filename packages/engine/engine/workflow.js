@@ -389,6 +389,8 @@ class WorkflowRun extends EventEmitter {
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       then: this.then || undefined,
       from: this.from || undefined,
+      // #607: a run the Backlog queue started; recovered, it still pauses the queue when it fails (#445)
+      from_queue: this.fromQueue || undefined,
       parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
@@ -712,9 +714,9 @@ class WorkflowRun extends EventEmitter {
       if (!step.agents) st.supervisorNote = null;
     }
     // #607: this agent's turn of the step was cut by the app's crash: what it did, as a retry gets it
-    if (st.lostTurn?.agent === agentName) {
-      prompt += `\n\n---\n${st.lostTurn.note}`;
-      st.lostTurn = null;
+    if (st.lostTurns?.[agentName]) {
+      prompt += `\n\n---\n${st.lostTurns[agentName]}`;
+      delete st.lostTurns[agentName];
     }
     if (this.restoredWorkNote) {
       prompt += `\n\n---\n${this.restoredWorkNote}`;

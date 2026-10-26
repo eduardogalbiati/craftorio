@@ -37,6 +37,13 @@ const IDLE_WARN_MS = 5 * 60e3;
 // bytes in GB (binary, like Task Manager), one decimal: the memory guard's messages (#276)
 const gib = (bytes) => (bytes / 1024 ** 3).toFixed(1);
 
+// One stream item into a turn's calls (attemptSummary's map): a tool call, or the result of one;
+// a live turn (track) and the turn a crash cut (#607, resume.js) note them alike
+function noteToolCall(calls, item) {
+  if (item.kind === 'tool_call') calls.set(item.id, { ...item });
+  if (item.kind === 'tool_result' && calls.has(item.id)) calls.get(item.id).result = item;
+}
+
 // What a failed attempt of a turn did (a process killed at its timeout writes no handoff note), for
 // the next attempt: its tool calls, oldest first (the last ATTEMPT_CALLS), each with the first line
 // of its result. calls: tool call id -> { name, input, result? }.
@@ -184,14 +191,13 @@ const methods = {
           if (item.tier) cache.tier = item.tier;
           return;
         }
-        if (item.kind === 'tool_call') calls.set(item.id, { ...item });
+        noteToolCall(calls, item);
         if (suiteWarn !== null && item.kind === 'tool_call' && suiteStep.isFullSuiteCommand(item.input?.command, suiteWarn)) {
           this.suiteRuns.agents++;
           this.emitEvent('log', { level: 'warn', kind: 'full_suite_by_agent', step_id: stepId, agent: agentName, command: String(item.input.command).slice(0, 200), message: `[${agentName}] started the whole test suite in ${stepId} (\`${String(item.input.command).slice(0, 120)}\`): the orchestrator runs it once per round after the step; agents run only the focused tests of the change.` });
         }
         if (item.kind === 'tool_call' && capabilities.CLAUDE_SUBAGENT_TOOLS.includes(item.name)) tools.subagents++;
         if (item.kind !== 'tool_result') return;
-        if (calls.has(item.id)) calls.get(item.id).result = item;
         if (isToolTimeout(item)) {
           // #178: a command cut by the tool's timeout returned nothing; without an explicit `timeout` it hit the default
           const call = calls.get(item.id);
@@ -398,4 +404,5 @@ module.exports = {
   gib,
   IDLE_WARN_MS,
   methods,
+  noteToolCall,
 };

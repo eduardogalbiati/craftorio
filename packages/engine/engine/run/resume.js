@@ -17,7 +17,7 @@
 'use strict';
 
 const { checkAttachments, emptyUsage, seedClaudeTotal } = require('../providers');
-const { attemptSummary } = require('./turns');
+const { attemptSummary, noteToolCall } = require('./turns');
 
 // #368: what ends a run that pauses (the step loop, a gate left unanswered, children that paused):
 // status `paused`, not an error (WorkflowRun#endOfError)
@@ -66,6 +66,12 @@ const RUN_STATE_REDUCERS = {
   },
   'approval.requested': (acc, ev) => { acc.gates.set(ev.approval_id, { step: ev.step_id, approval_id: ev.approval_id }); },
   'approval.resolved': (acc, ev) => { acc.gates.delete(ev.approval_id); },
+  // #607: a recovery never answers the gate the crash left open, it asks it again under a new id:
+  // the gates opened before it are over, and the run continues at the step it recovered at
+  'run.recovered': (acc, ev) => {
+    acc.gates.clear();
+    if (ev.step_id) acc.cursor = ev.step_id;
+  },
   'workflow.finished': (acc, ev) => { acc.finished = ev; },
 };
 
@@ -95,12 +101,14 @@ function runStateFromEvents(events, summary = null) {
 }
 
 // #607: the resume state plus what a recovery continues with, a pure function of the run's log too:
-// - outputs: each step's last finished output (an errored visit's excepted, like resumeSpec)
+// - outputs: each step's last finished output (an errored visit's excepted). The same rule as
+//   resumeSpec's steps (packages/engine/domains/supervisor/supervisor.js): resumeSpec is meant to
+//   read it from here (seedResume built on the reduction, #566's follow-up), not to grow a third copy
 // - snapshots: each session's last snapshot (never the orchestrator's: the recovery opens its own)
-// - lostTurn: { session_id, step_id, turn, attempt, calls, usage, costUsd, modelCalls } of the turn
-//   the crash cut (a message_sent no message_received answered, its step still running), else null;
-//   calls: its tool calls [{ id, name, input, result? }], usage / costUsd / modelCalls: what its
-//   stream's usage items reported (#233)
+// - lostTurns: [{ session_id, step_id, turn, attempt, calls, usage, costUsd, modelCalls }], the turns
+//   the crash cut (a message_sent no message_received answered, its step still running: several in
+//   an `agents:` step); calls: their tool calls [{ id, name, input, result? }], usage / costUsd /
+//   modelCalls: what their stream's usage items reported (#233)
 // - seq, nSession, nApproval: the highest event seq, session (sN) and gate (aN) numbers, so the
 //   recovered run's ids follow on; startedAt: the run's workflow.started time; lastFinished: the step
 //   that finished last (the recovered run's previous step)
@@ -126,10 +134,9 @@ function recoveryStateFromEvents(events) {
     }
     noteTurnEvent(turns, ev);
   }
-  const open = [...turns.values()].pop();
-  const lostTurn = open ? { ...open, calls: [...open.calls.values()] } : null;
+  const lostTurns = [...turns.values()].map((t) => ({ ...t, calls: [...t.calls.values()] }));
   return {
-    ...runStateFromEvents(events), outputs, snapshots, lostTurn, seq, nSession, nApproval, lastFinished,
+    ...runStateFromEvents(events), outputs, snapshots, lostTurns, seq, nSession, nApproval, lastFinished,
     startedAt: started?.ts ? Date.parse(started.ts) : null,
   };
 }
@@ -151,8 +158,7 @@ function noteTurnEvent(turns, ev) {
 
 // one stream item of a turn the crash may cut: its tool calls with their results, its model calls' usage
 function noteStreamItem(t, item) {
-  if (item.kind === 'tool_call') t.calls.set(item.id, { id: item.id, name: item.name, input: item.input });
-  if (item.kind === 'tool_result' && t.calls.has(item.id)) t.calls.get(item.id).result = item;
+  noteToolCall(t.calls, item);
   if (item.kind !== 'usage') return;
   t.modelCalls++;
   t.usage ??= {};
@@ -224,8 +230,11 @@ const methods = {
     for (const [agent, note] of Object.entries(state.handoffs)) this.handoffNotes.set(agent, note);
     for (const snap of Object.values(state.snapshots)) {
       const s = sessionFromSnapshot(snap);
+      // #312: the folder of the account that opened it; an account gone since keeps the conversation
+      // behind (it never moves to another account): the agent opens a new session from its handoff note
+      s.accountDir = (s.account && this.enabledAccounts(s.provider).find((a) => a.name === s.account)?.dir) || null;
       this.sessions.set(s.id, s);
-      if (s.closedAt || (s.mode && s.mode !== 'persistent')) continue;
+      if (s.closedAt || (s.mode && s.mode !== 'persistent') || (s.account && !s.accountDir)) continue;
       this.agentSessions.set(s.agent, s.id);
       // #233: the CLI's running total of that conversation, so its next turn costs only its own part
       if (!this.machine.simulated && s.providerSessionId && s.cliTotalUsd != null) seedClaudeTotal(s.providerSessionId, s.cliTotalUsd);
@@ -233,19 +242,26 @@ const methods = {
     for (const ev of events) if (ev.type !== 'session.stream') this.trail.apply(ev);
     Object.assign(this, { seq: state.seq, nSession: state.nSession, nApproval: state.nApproval, prevStepId: state.lastFinished });
     this.attachments = events.find((e) => e.type === 'workflow.started')?.attachments || {};
-    this.recovered = { nextStep: state.nextStep, lostTurn: state.lostTurn, startedAt: state.startedAt, worktree: recover.worktree || null, from: state.seq };
+    this.recovered = { nextStep: state.nextStep, lostTurns: state.lostTurns, startedAt: state.startedAt, worktree: recover.worktree || null, from: state.seq };
   },
 
   // #607: the start of a recovered run: `run.recovered` (never a second workflow.started: the run is
-  // the same one), then the turn the crash cut, recorded as a stopped attempt with what its stream
-  // reported (#233, countStoppedAttempt; nothing reported: its cost is not recorded) and told to the
-  // agent's next turn of that step as a <previous_attempt> block (runAgentStep). Its ephemeral or
-  // handoff session closes; a persistent one stays the agent's.
+  // the same one), then each turn the crash cut (recordLostTurn).
   startRecovered() {
     const r = this.recovered;
-    this.emitEvent('run.recovered', { step_id: r.nextStep, after_seq: r.from, gate: !!r.nextStep && this.wf.steps.find((s) => s.id === r.nextStep)?.type === 'human_approval', lost_turn: r.lostTurn ? { session_id: r.lostTurn.session_id, step_id: r.lostTurn.step_id, turn: r.lostTurn.turn } : null });
-    const lost = r.lostTurn;
-    const session = lost && this.sessions.get(lost.session_id);
+    this.emitEvent('run.recovered', {
+      step_id: r.nextStep, after_seq: r.from, gate: !!r.nextStep && this.wf.steps.find((s) => s.id === r.nextStep)?.type === 'human_approval',
+      lost_turns: r.lostTurns.map((t) => ({ session_id: t.session_id, step_id: t.step_id, turn: t.turn })),
+    });
+    for (const lost of r.lostTurns) this.recordLostTurn(lost);
+  },
+
+  // #607: a turn the crash cut, recorded as a stopped attempt with what its stream reported (#233,
+  // countStoppedAttempt; nothing reported: its cost is not recorded) and told to the agent's next turn
+  // of that step as a <previous_attempt> block (runAgentStep, st.lostTurns by agent). Its ephemeral or
+  // handoff session closes; a persistent one stays the agent's.
+  recordLostTurn(lost) {
+    const session = this.sessions.get(lost.session_id);
     if (!session) return;
     const err = Object.assign(new Error('the app stopped during this turn; the run was recovered at the next start'), {
       partial: { usage: lost.usage, costUsd: lost.costUsd, modelCalls: lost.modelCalls },
@@ -262,7 +278,7 @@ const methods = {
     }
     if (session.mode && session.mode !== 'persistent') this.closeSession(session, 'failed');
     const st = lost.step_id && this.ctx.steps[lost.step_id];
-    if (st) st.lostTurn = { agent: session.agent, note: attemptSummary(new Map(lost.calls.map((c) => [c.id, c])), err, lost.attempt) };
+    if (st) (st.lostTurns ??= {})[session.agent] = attemptSummary(new Map(lost.calls.map((c) => [c.id, c])), err, lost.attempt);
   },
 
   // the owner confirmed, in the Resume from step dialog, a gate the previous run decided (#112):

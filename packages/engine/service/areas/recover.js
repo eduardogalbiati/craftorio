@@ -58,20 +58,21 @@ module.exports = (ctx) => {
     return claimed;
   }
 
-  // Starts the claimed runs, one after the other; one that cannot start gives its owner.json back and
-  // stays interrupted (its mark is reported at the next notifyInterruptedRun).
+  // Starts the claimed runs, one after the other; one that cannot start (a busy slot, low memory, the
+  // budget, its workflow gone) gives its owner.json back, stays interrupted and is reported at once.
   async function recoverLiveRuns(claimed) {
     for (const c of claimed || []) {
       const { spec, started } = c;
       try {
         await ctx.startWorkflowRun({
           file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId, issues: spec.issues, agentOverrides: spec.agentOverrides,
-          then: started.then || null, from: started.from || null,
+          then: started.then || null, from: started.from || null, fromQueue: !!started.from_queue,
           recover: { runId: c.runId, events: c.events, worktree: spec.worktree, personas: spec.personas, owner: c.owner },
         });
       } catch (e) {
         c.owner.release();
         console.error(`run recovery: ${c.runId} could not continue: ${e.message}`);
+        ctx.reportInterruptedRun(c.mark);
       }
     }
   }

@@ -43,13 +43,19 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   stale, continues **in its own folder with its own id** (and so its own worktree) at its last
   finished turn, with no dialog. `recoveryStateFromEvents` adds to the state above each step's last
   output, each session's last snapshot (turns, tokens, cost: `summary.json` adds up the same
-  figures as a run without a crash), the event/session/gate counters and the turn the crash cut. The
-  run records `run.recovered { step_id, after_seq, gate, lost_turn }`, never a second
-  `workflow.started`. The gate it waited at asks again with a new id (the recovery never answers
-  it; `openIndex({ recovering })` does not close it as interrupted). The cut turn is recorded as a
+  figures as a run without a crash), the event/session/gate counters and the turns the crash cut
+  (several in an `agents:` step). The run records `run.recovered { step_id, after_seq, gate,
+  lost_turns }`, never a second `workflow.started`; in the reduction it closes the gates opened
+  before it, so a second recovery never asks a gate the first one already asked again and the owner
+  answered. The gate it waited at asks again with a new id (the recovery never answers
+  it; `openIndex({ recovering })` does not close it as interrupted). Each cut turn is recorded as a
   `session.attempt_stopped` (#233: its stream's usage priced, else `cost_usd: null`,
   `cost_not_recorded`), its ephemeral session closes, and that agent's next turn of the step gets
-  the `<previous_attempt>` block (factor 9) after its prompt. Never a second copy: a run another live
+  the `<previous_attempt>` block (factor 9) after its prompt. A persistent session continues on the
+  account that opened it (#312); an account gone since leaves it behind and the agent starts from its
+  handoff note. A run the Backlog queue started (`workflow.started.from_queue`) still pauses the
+  queue when it fails after a recovery (#445). A run that cannot start again (a busy slot, low
+  memory, the budget) gives `owner.json` back, stays `interrupted` and is reported at once. Never a second copy: a run another live
   process owns is left (#112); the process claims `owner.json` in the same tick as the check, so a
   second service started next sees it alive. Not recovered: real runs under
   `MULTIAGENT_SIMULATION_ONLY=1`, child runs (their parent's step runs them again), finished runs;

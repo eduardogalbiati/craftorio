@@ -202,6 +202,13 @@ module.exports = (ctx) => {
     interrupted.forEach((info) => events.emit('run:interrupted', info));
     return notices[0] || null;
   }
+  // #607: a run the start-up claimed but could not start again, reported at once (notifyInterruptedRun
+  // may have run while it started); its mark goes, so it is never reported twice
+  function reportInterruptedRun(info) {
+    markActiveRun(String(info.runId), null);
+    ctx.notify(notifier.interruptedNotice(info));
+    events.emit('run:interrupted', info);
+  }
 
   const isRunning = () => active.size > 0 || reserved.size > 0;
   // The run in progress with this id; without an id, the only one in progress (older callers).
@@ -685,6 +692,7 @@ module.exports = (ctx) => {
     notifyInterruptedRun,
     passedGates,
     prepareRestart,
+    reportInterruptedRun,
     runAlive,
     runIsLive,
     runWorkflow,
