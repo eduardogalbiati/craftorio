@@ -143,6 +143,7 @@ async function existingRefs(root, refs) {
 // Test files the turn changed since `snap` (sorted). `bases`: refs whose commits are not the
 // agent's (the run's base branch, local and remote); the ones that do not exist are skipped.
 // `existing`: those of them that exist, when already known (#525: found once per run).
+/** @param {any} snap @param {{ bases?: string[], existing?: string[] }} [opts] */
 async function changedTestFiles(snap, { bases = [], existing } = {}) {
   if (!snap) return [];
   const { root, head } = snap;

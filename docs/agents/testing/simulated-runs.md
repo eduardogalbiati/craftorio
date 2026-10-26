@@ -6,8 +6,11 @@ The whole mock runs of the bundled workflows (#305, #306), their inventory and t
 
 `npm test` runs one process per file, `cpus - 1` at a time: its wall time is bounded below by its
 longest file, and every file pays for what its helpers do at load. A whole simulated run of a
-bundled workflow takes 4 to 8 s (more under the suite's load); two thirds of the files finish in
-under 1.5 s.
+bundled workflow takes about 8 s alone (more under the suite's load); two thirds of the files
+finish in under 1.5 s. Measured (#525, 2026-10-26, Windows, one run of software-development with
+the default mock answers, `MULTIAGENT_MOCK_DELAY_SCALE=0.05`, alone on the machine): 8.0 s and 32
+`git` processes, down from 11.8 s and 100 before the test-file guard's git calls were cut (one
+`git status` per snapshot and check, the root and the existing base refs found once per run).
 
 - **When a change needs a whole-run test**: a new transition between steps, a new step type, a new
   gate (or a new answer of one), a new loop or round cap, a new way a run ends. Assert every
