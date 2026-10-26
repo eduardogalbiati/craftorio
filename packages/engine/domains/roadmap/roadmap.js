@@ -72,6 +72,7 @@ const {
   isRelease,
   ITEM_STATES,
   pendingRelease,
+  releaseEntries,
   stageNumber,
   STATES,
 } = require('@multiagent/shared/roadmap-model');
@@ -93,14 +94,12 @@ const newId = (prefix) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 // stored a single issue as the item itself, with no list: they are normalized when read and written.
 const normalizeItem = (x) => (!x || typeof x !== 'object' || (Array.isArray(x.issues) && x.issues.length) || !x.number ? x : { ...x, issues: itemIssues(x) });
 // #555: a release entry has no items of its own (an empty list, for the readers of every entry's
-// items); a stage's old cut line (`release`) becomes an entry right after it, its id from the stage's
+// items); a stage's cut line (`release`) becomes an entry right after it (RoadmapModel.releaseEntries;
+// `migrate`: a file read, whose old cut lines get their id from the stage's)
 const releaseEntry = (raw, id) => ({ kind: 'release', id, ...raw, items: [] });
-const normalizeStages = (stages) => (Array.isArray(stages) ? stages.flatMap((s) => {
-  if (isRelease(s)) return [releaseEntry(s, s.id)];
-  if (!s || !Array.isArray(s.items)) return [s];
-  const { release, ...stage } = { ...s, items: s.items.map(normalizeItem) };
-  return release && String(release.name || '').trim() ? [stage, releaseEntry(release, stage.id ? `release-${stage.id}` : null)] : [stage];
-}) : stages);
+const normalizeStages = (stages, migrate = false) => (Array.isArray(stages)
+  ? releaseEntries(stages.map((s) => (s && !isRelease(s) && Array.isArray(s.items) ? { ...s, items: s.items.map(normalizeItem) } : s)), { migrate })
+  : stages);
 
 // #287: the stages of each roadmap file as recently read or written, by `updatedAt` (in memory, the
 // last SEEN_MAX per file): an edit based on an older read is merged against what it read
@@ -123,14 +122,14 @@ function readRoadmap(dir, projectId) {
     const file = roadmapFile(dir, projectId);
     const r = { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(file, 'utf8')) };
     remember(file, r.updatedAt, r.stages);
-    return { ...r, stages: normalizeStages(r.stages) };
+    return { ...r, stages: normalizeStages(r.stages, true) };
   } catch { return emptyRoadmap(); }
 }
 
 /** #287: the stages of the roadmap as they were at `updatedAt` (read or written by this process), or null. */
 function readRoadmapAt(dir, projectId, updatedAt) {
   const text = seen.get(roadmapFile(dir, projectId))?.get(String(updatedAt || ''));
-  return text ? normalizeStages(JSON.parse(text)) : null;
+  return text ? normalizeStages(JSON.parse(text), true) : null;
 }
 
 // What a roadmap file must look like (#112: a write that breaks it is refused, packages/engine/domains/workspace/state-file.js).
@@ -160,7 +159,7 @@ function persisted(roadmap) {
   return {
     ...roadmap,
     // a stage's `pause` (#368: its pause line) is the screen's too
-    stages: normalizeStages(roadmap.stages || []).map(({ pause: _p, ...s }) => ({
+    stages: normalizeStages(roadmap.stages || [], true).map(({ pause: _p, ...s }) => ({
       ...s,
       // `waiting` and `run` (#194: its progress for the card) are the screen's, never stored
       items: (s.items || []).map(({ waiting: _w, run: _r, ...x }) => (isFinished(x) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),

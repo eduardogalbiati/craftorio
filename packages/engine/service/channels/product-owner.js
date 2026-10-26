@@ -38,6 +38,7 @@ const usage = require('../../domains/usage/usage');
 const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
 const { isArchived } = require('@multiagent/shared/backlog-archive');
+const { isRelease } = require('@multiagent/shared/roadmap-model');
 const { requireObject } = require('../common');
 const {
   ANY,
@@ -161,20 +162,22 @@ module.exports = (ctx) => {
       const { roadmap, dropped } = roadmaps.propose(ctx.ws.backlog, id, [{ items }], { issues, alive: ctx.runAlive });
       const added = numbers.filter((n) => !dropped.includes(n));
       if (!added.length) throw new Error(`${refs(numbers)} ${numbers.length > 1 ? 'are' : 'is'} already planned in the roadmap: nothing was added.`);
-      return { text: `${added.map((n) => `#${n} ${issues.find((i) => i.number === n).title}`).join('; ')}: added to the roadmap in stage ${roadmap.stages.length} (${workflow})${dropped.length ? `; ${refs(dropped)} already planned` : ''}.` };
+      return { text: `${added.map((n) => `#${n} ${issues.find((i) => i.number === n).title}`).join('; ')}: added to the roadmap in stage ${roadmap.stages.filter((s) => !isRelease(s)).length} (${workflow})${dropped.length ? `; ${refs(dropped)} already planned` : ''}.` };
     },
     // the Roadmap's drag of a planned item to another stage ({ itemId, stage: its number, 1-based; one past the last adds a stage })
+    // #555: the number counts the stages only, not the release entries between them
     'roadmap.move': (p, { mock }) => {
       const read = roadmaps.readRoadmap(ctx.ws.backlog, p.projectId);
       const stages = read.stages || [];
+      const count = stages.filter((s) => !isRelease(s)).length;
       const item = stages.flatMap((s) => s.items || []).find((x) => x.id === String(p.itemId || ''));
       if (!item) throw new Error(`Roadmap item ${p.itemId} does not exist.`);
       if (item.status !== 'planned') throw new Error(`Roadmap item ${p.itemId} is ${item.status}: only a planned item moves.`);
       const to = Number(p.stage);
-      if (!Number.isInteger(to) || to < 1 || to > stages.length + 1) throw new Error(`Stage ${p.stage} does not exist: say a stage number from 1 to ${stages.length + 1}.`);
+      if (!Number.isInteger(to) || to < 1 || to > count + 1) throw new Error(`Stage ${p.stage} does not exist: say a stage number from 1 to ${count + 1}.`);
       const next = stages.map((s) => ({ ...s, items: (s.items || []).filter((x) => x.id !== item.id) }));
-      if (to > next.length) next.push({ name: '', note: '', items: [] });
-      next[to - 1].items.push(item);
+      if (to > count) next.push({ name: '', note: '', items: [] });
+      next.filter((s) => !isRelease(s))[to - 1].items.push(item);
       // #287: based on this read; a roadmap written before the action runs gets the move only
       return ctx.performAction('roadmap.stages', { projectId: p.projectId, stages: next, base: read.updatedAt }, { mock });
     },

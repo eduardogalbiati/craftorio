@@ -813,8 +813,9 @@ function backlogState(data) {
     // #615: a live run's cost so far, so the card's cost meter follows it without a full read
     const cost = typeof x.actualUsd === 'number' ? { actualUsd: x.actualUsd } : {};
     if (!x.run) return cost;
-    const { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } = x.run;
-    return { ...cost, run: { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } };
+    const { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error, mergedCommit } = x.run;
+    // #614: a run that merged while live (a parked item's) shows its Merge station done
+    return { ...cost, run: { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error, ...(mergedCommit ? { mergedCommit } : {}) } };
   };
   const item = (x) => ({
     id: x.id, status: x.status || null, runId: x.runId || null, runs: x.runs || [], waiting: !!x.waiting,

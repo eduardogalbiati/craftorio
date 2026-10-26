@@ -72,8 +72,8 @@ function undoEdit(currentStages, edit) {
     const edited = thenStages.get(old.id);
     for (const k of ['name', 'note', 'disabled']) {
       if (after && edited && same(old[k], edited[k])) continue;
-      // #555: a release whose run has started is not the edit's to rename
-      if (isRelease(rest) && (rest.status || rest.runId)) continue;
+      // #555: a running or shipped release is not the edit's to rename (roadmap.js LOCKED_RELEASE; held and failed ones are)
+      if (isRelease(rest) && ['running', 'shipped'].includes(rest.status)) continue;
       if (old[k] === undefined) delete rest[k]; else rest[k] = clone(old[k]);
     }
     return rest;

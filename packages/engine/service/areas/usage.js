@@ -21,7 +21,7 @@ const supervisorChat = require('../../domains/supervisor/supervisor-chat');
 const repoPerformance = require('../../domains/project/repo-performance');
 const roadmap = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
-const { itemRuns } = require('@multiagent/shared/roadmap-model');
+const { isRelease, itemRuns } = require('@multiagent/shared/roadmap-model');
 const {
   computeUsageAsync,
   readLocalUsageAsync,
@@ -108,7 +108,8 @@ module.exports = (ctx) => {
     const project = projectList.find((p) => p.id === projectId)
       || projectList.find((p) => all.some((r) => runs.projectOf(r, projectList)?.id === p.id)) || projectList[0] || null;
     const list = project ? runs.runsForProject(all, project) : [];
-    const stages = project ? roadmap.readRoadmap(ctx.ws.backlog, project.id).stages.map((s, i) => ({
+    // #555: the stages only, not the release entries between them
+    const stages = project ? roadmap.readRoadmap(ctx.ws.backlog, project.id).stages.filter((s) => !isRelease(s)).map((s, i) => ({
       name: s.name || `Stage ${i + 1}`, runIds: s.items.flatMap(itemRuns),
     })) : [];
     const perf = await repoPerformance.repositoryPerformance({

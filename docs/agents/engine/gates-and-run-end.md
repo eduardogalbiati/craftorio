@@ -160,7 +160,7 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   counts it like an action.
 - Cut lines (#260, service): a release entry of the roadmap (#555, `{ kind: 'release', id, name }`
   between two stages; an older stage's `release: { name }` is read as one right after it) holds every
-  stage after it. `advance` returns `release: { stage, name }` (`stage`: the entry's id) once the
+  stage after it. `advance` returns `release: { id, name }` (`id`: the entry's id) once the
   enabled stages before it are finished; the
   service (`roadmapRelease`, packages/engine/service/areas/releases.js) starts release.yaml with the project's
   folder, base and the history since the last release, and records `runId` / `status` on the line

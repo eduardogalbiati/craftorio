@@ -1510,7 +1510,7 @@
   "backlog_roadmap.remove_the_cut_line": "Remover a linha de corte",
   "backlog_roadmap.remove_the_cut_line_name": "Remover a linha de corte {name}",
   "backlog_roadmap.removed_an_item_from_the_roadmap": "Removeu um item do roadmap",
-  "backlog_roadmap.removed_the_cut_line_name": "Linha de corte {name} removida",
+  "backlog_roadmap.removed_the_cut_line_name": "Release {name} removida",
   "backlog_roadmap.removed_value_from_the_roadmap": "Removeu {value} do roadmap",
   "backlog_roadmap.renamed_the_cut_line_name": "Linha de corte {from} renomeada para {name}",
   "backlog_roadmap.rename": "Renomear",

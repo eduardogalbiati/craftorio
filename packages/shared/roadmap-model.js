@@ -49,33 +49,39 @@
   const stageNumber = (roadmap, s) => stagesOf(roadmap).slice(0, s + 1).filter((x) => !isRelease(x)).length;
   /**
    * #555: a list whose stages carry their cut line (`release`, as written before #555 and as the
-   * Roadmap screen saves it): each becomes a release entry right after its stage (its id kept, else
-   * `release-<stage id>`), every release entry with an empty `items`.
+   * Roadmap screen saves it): each becomes a release entry right after its stage, every release entry
+   * with an empty `items`. Its id is kept; a new one has none (the service gives it one), except when
+   * `migrate` reads a file written before #555: `release-<stage id>`, the same on every read.
    */
-  const releaseEntries = (stages) => (Array.isArray(stages) ? stages.flatMap((s) => {
+  const releaseEntries = (stages, { migrate = false } = {}) => (Array.isArray(stages) ? stages.flatMap((s) => {
     if (isRelease(s)) return [{ ...s, items: [] }];
     if (!s || !s.release) return [s];
     const { release, ...stage } = s;
     if (!String(release.name || '').trim()) return [stage];
-    return [stage, { ...release, kind: 'release', id: release.id || (stage.id ? `release-${stage.id}` : null), items: [] }];
+    return [stage, { ...release, kind: 'release', id: release.id || (migrate && stage.id ? `release-${stage.id}` : null), items: [] }];
   }) : stages);
   /**
    * #555: the roadmap as the Roadmap screen draws and edits it: each release entry back on the stage
    * before it (`release`, the stage's cut line), so the stage indexes are the stage numbers; one that
-   * follows no stage of its own (first, or right after another release) kept in `leadReleases`, which
-   * a save sends first. The service turns the stages back into entries (releaseEntries).
+   * follows no stage of its own (first, or right after another release) kept in `leadReleases` with
+   * `after`: the index of the stage before it (-1: the roadmap's start). unfoldReleases puts them back.
    */
   function foldReleases(roadmap) {
     if (!roadmap) return roadmap;
     const stages = [];
     const leadReleases = [];
-    for (const e of releaseEntries(stagesOf(roadmap))) {
+    for (const e of releaseEntries(stagesOf(roadmap), { migrate: true })) {
       const before = stages.at(-1);
       if (!isRelease(e)) stages.push(e);
       else if (before && !before.release) stages[stages.length - 1] = { ...before, release: (({ kind: _k, items: _i, ...rel }) => rel)(e) };
-      else leadReleases.push(e);
+      else leadReleases.push({ ...e, after: stages.length - 1 });
     }
     return { ...roadmap, stages, leadReleases };
+  }
+  /** #555: the list a save sends: the folded `stages`, each of `leadReleases` back after the stage it followed (by index, as the cut lines). */
+  function unfoldReleases(leadReleases, stages) {
+    const lead = (s) => (leadReleases || []).filter((e) => Math.min(e.after, stages.length - 1) === s).map(({ after: _a, ...e }) => e);
+    return [...lead(-1), ...stages.flatMap((stage, s) => [stage, ...lead(s)])];
   }
   /** Whether a stage still has work: an item not done or skipped (disabled or not). */
   const hasUnfinished = (stage) => itemsOf(stage).some((x) => !isFinished(x));
@@ -235,18 +241,19 @@
 
   // The releases the Roadmap knows (#291; `data.releases`: the service's roadmapReleases), each with
   // `at`: the index of the stage it is drawn after, among the stages only (#555: its release entry,
-  // planned or not; else the last stage with a run in it; -1: none), `cut` (it has a release entry)
-  // and `closes` (#555: the stages since the previous release entry, [{ name, number }]).
+  // planned or not, 0 for one before every stage; else the last stage with a run in it; -1: none),
+  // `cut` (it has a release entry, `entry`: its id) and `closes` (#555: the stages since the previous
+  // release entry, [{ name, number }]).
   function roadmapReleases(r, data) {
     const list = (data?.releases?.releases || []).filter((x) => x?.version).map((x) => ({ ...x, cut: false, at: -1 }));
-    const entries = { stages: releaseEntries(stagesOf(r)) };
+    const entries = { stages: releaseEntries(stagesOf(r), { migrate: true }) };
     let from = 0;
     entries.stages.forEach((entry, s) => {
       if (!isRelease(entry)) return;
       const closes = entries.stages.slice(from, s).flatMap((x, k) => (isRelease(x) ? [] : [{ name: x.name || '', number: stageNumber(entries, from + k) }]));
       from = s + 1;
       const x = list.find((y) => !y.cut && y.version === entry.name);
-      if (x) Object.assign(x, { runId: x.runId || entry.runId || null, cut: true, at: stageNumber(entries, s) - 1, closes });
+      if (x) Object.assign(x, { runId: x.runId || entry.runId || null, cut: true, entry: entry.id, at: Math.max(0, stageNumber(entries, s) - 1), closes });
     });
     const stages = entries.stages.filter((x) => !isRelease(x));
     for (const x of list.filter((y) => !y.cut)) {
@@ -259,15 +266,16 @@
   /**
    * The Roadmap's Releases filter's choice (`wanted`: '' all, 'next' the next release, else a version):
    * { list, choice, shown (the releases drawn), runs (the run ids a chosen release narrows to, null: all), chosen }
-   * #425: with no choice, Planned (`showAll` false) draws only the latest placed release (greatest `at`), All every one.
+   * #425: with no choice, Planned (`showAll` false) draws only the latest placed release with a run (greatest `at`), All every one;
+   * #555: the planned releases (no run yet) are drawn in both.
    */
   function releaseView(r, data, wanted, showAll) {
     const list = roadmapReleases(r, data);
     const chosen = wanted && wanted !== 'next' ? list.find((x) => x.version === wanted) || null : null;
     const choice = chosen ? wanted : wanted === 'next' && list.length ? 'next' : '';
     const placed = list.filter((x) => x.at >= 0);
-    const latest = placed.reduce((a, x) => (!a || x.at > a.at ? x : a), null);
-    if (!choice) return { list, choice, shown: showAll ? placed : latest ? [latest] : [], runs: null, chosen: null };
+    const latest = placed.filter((x) => x.status !== 'planned').reduce((a, x) => (!a || x.at > a.at ? x : a), null);
+    if (!choice) return { list, choice, shown: showAll ? placed : placed.filter((x) => x === latest || x.status === 'planned'), runs: null, chosen: null };
     if (chosen) return { list, choice, shown: [chosen], runs: new Set(chosen.runs || []), chosen };
     // what merged since the last release: the done items' runs no shipped release holds
     const shipped = new Set(list.filter((x) => x.status === 'shipped').flatMap((x) => x.runs || []));
@@ -305,11 +313,14 @@
    * The page of the visible stages to draw: from LEAD_STAGES before the current stage (so it is in
    * the first page however long the finished history is), PAGE_STAGES stages or PAGE_ITEMS cards per
    * page (a longer stage is cut: `cut`, its first cards). `pages`: { more, earlier } pages drawn
-   * around the first. → { drawn, earlier (visible stages above the page), more (something is left below it) }
+   * around the first. #552 `next`: the first open stage when it is before the running `current` one,
+   * the page starts from it instead when both fit on it. → { drawn, earlier (visible stages above the page), more (something is left below it) }
    */
-  function pageOf(list, current, pages) {
-    const at = Math.max(0, list.findIndex((x) => x.s >= current));
-    const base = Math.max(0, at - LEAD_STAGES);
+  function pageOf(list, current, pages, next = -1) {
+    const index = (s) => Math.max(0, list.findIndex((x) => x.s >= s));
+    const at = index(current);
+    const from = next >= 0 && next < current && at - index(next) < PAGE_STAGES - LEAD_STAGES ? index(next) : at;
+    const base = Math.max(0, from - LEAD_STAGES);
     const start = Math.max(0, base - pages.earlier * PAGE_STAGES);
     let stagesLeft = PAGE_STAGES * (1 + pages.more);
     let cardsLeft = PAGE_ITEMS * (1 + pages.more);
@@ -383,6 +394,7 @@
     stageNumber,
     stageProgress,
     unfinishedItems,
+    unfoldReleases,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RoadmapModel = api;

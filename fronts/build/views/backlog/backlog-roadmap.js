@@ -752,16 +752,18 @@
     shipped: ['', 'shipped', 'Pushed and tagged: the stages below run'],
   };
   // `where`: says after which stage it sits (the view grouped by epic shows no stages); `count`: the
-  // stages (#555: a release not running nor shipped moves before this stage or after the next, ↑ ↓)
-  function cutLineHtml(stage, s, where = false, count = 0) {
+  // stages (#555: a release not running nor shipped moves before this stage or after the next, ↑ ↓);
+  // `lead`: the index in `leadReleases` of a release with no stage of its own before it (renamed and
+  // removed, not moved: the stage before it already has its cut line)
+  function cutLineHtml(stage, s, where = false, count = 0, lead = -1) {
     const rel = stage.release;
     if (!rel?.name) return '';
     const [tone, label, help] = RELEASE_STATE[rel.status] || ['', '', 'The stages below wait until this release shipped'];
     const locked = rel.status === 'running' || rel.status === 'shipped';
     const move = (dir, glyph, key) => `<button class="link-btn small" type="button" data-rm-release="${dir}" aria-label="${esc(t(key, { name: rel.name }))}" title="${esc(t(key, { name: rel.name }))}">${glyph}</button>`;
-    const moves = locked || where ? '' : (s > 0 ? move('up', '↑', 'backlog_roadmap.move_the_release_up') : '') + (s < count - 1 ? move('down', '↓', 'backlog_roadmap.move_the_release_down') : '');
+    const moves = locked || where || lead >= 0 ? '' : (s > 0 ? move('up', '↑', 'backlog_roadmap.move_the_release_up') : '') + (s < count - 1 ? move('down', '↓', 'backlog_roadmap.move_the_release_down') : '');
     return `
-      <div class="rm-cut${rel.status === 'shipped' ? ' shipped' : ''}" data-testid="roadmap-cut-line" data-cut-stage="${s}" title="${esc(help)}">
+      <div class="rm-cut${rel.status === 'shipped' ? ' shipped' : ''}" data-testid="roadmap-cut-line" ${lead >= 0 ? `data-cut-lead="${lead}"` : `data-cut-stage="${s}"`} title="${esc(help)}">
         <span class="rm-cut-label"><span aria-hidden="true">✂</span> ${t('backlog_roadmap.release_here')}</span>
         <b class="rm-cut-name">${esc(rel.name)}</b>
         ${where ? `<span class="muted small">${t('backlog_roadmap.after_stage')} ${s + 1}</span>` : ''}
@@ -1117,22 +1119,28 @@
     // the page to draw; #260: each drawn stage with its cut line; a hidden (finished) stage's line
     // still shows while its release has not shipped (between the drawn stages, and beyond them when
     // the page reaches that end of the roadmap)
-    const page = RoadmapModel.pageOf(vis, next >= 0 ? Math.min(next, current) : current, pages); // #552: the Next stage stays on it
+    const page = RoadmapModel.pageOf(vis, current, pages, next); // #552: the running stage, and the Next one when it fits
     const drawn = new Map(page.drawn.map((x) => [x.s, x]));
     const from = page.earlier ? page.drawn[0]?.s ?? 0 : 0;
     const to = page.more ? page.drawn.at(-1).s : r.stages.length - 1;
     // #291: a release block (and its version line) after its stage, in place of its cut line once its
     // release run started; with a release chosen, no other line, and its block last when its stage is
     // not drawn (or it has none)
-    // #555: a planned release keeps its cut line, its card right after it
-    const cutLine = (stage, s) => (rv.choice || rv.list.some((x) => x.cut && x.at === s && x.status !== 'planned') ? '' : cutLineHtml(stage, s, false, r.stages.length));
+    // #555: a planned release keeps its cut line, its card right after it; a release with no stage of
+    // its own before it (`leadReleases`) is drawn the same way after the one before it (first: before stage 1)
+    const ran = (rel) => !!rel?.id && rv.list.some((x) => x.cut && x.entry === rel.id && x.status !== 'planned');
+    const cutLine = (stage, s, lead) => (rv.choice || ran(stage.release) ? '' : cutLineHtml(stage, s, false, r.stages.length, lead));
+    const leads = r.leadReleases || [];
+    const leadIds = new Set(leads.map((e) => e.id));
     const placed = (x) => x.at >= 0 && (!rv.choice || drawn.has(x.at));
-    const blocksAfter = (s) => rv.shown.filter((x) => placed(x) && x.at === s).map(releaseHtml).join('');
-    const staged = r.stages.map((stage, s) => {
+    const blocksAfter = (s) => rv.shown.filter((x) => placed(x) && x.at === s && !leadIds.has(x.entry)).map(releaseHtml).join('');
+    const leadAfter = (s, shownStage) => leads.map((rel, k) => (rel.after !== s ? ''
+      : (shownStage || (!v.epic && rel.status !== 'shipped') ? cutLine({ release: rel }, s, k) : '') + rv.shown.filter((x) => x.entry === rel.id && placed(x)).map(releaseHtml).join(''))).join('');
+    const staged = (from === 0 ? leadAfter(-1, true) : '') + r.stages.map((stage, s) => {
       if (s < from || s > to) return '';
       const x = drawn.get(s);
-      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x, next) + cutLine(stage, s) + blocksAfter(s);
-      return (!v.epic && stage.release?.status !== 'shipped' ? cutLine(stage, s) : '') + blocksAfter(s);
+      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x, next) + cutLine(stage, s) + blocksAfter(s) + leadAfter(s, true);
+      return (!v.epic && stage.release?.status !== 'shipped' ? cutLine(stage, s) : '') + blocksAfter(s) + leadAfter(s, false);
     }).join('') + (rv.choice ? rv.shown.filter((x) => !placed(x)).map(releaseHtml).join('') : '')
       // #291: the release's block is always drawn, so the empty state goes next to it when the date
       // range or the epic hides every stage of the release
@@ -1366,9 +1374,9 @@
   // item with the Edit form's values, kept when the save is refused; `edit.dialog` (#454): a dialog
   // shows a refusal itself (the screen still shows the stored roadmap). → the service's answer
   // #555: the screen draws and edits the roadmap folded (RoadmapModel.foldReleases: each release entry
-  // as the cut line of the stage before it); a save sends the releases no stage carries first
+  // as the cut line of the stage before it); a save puts the releases no stage carries back in their places
   const roadmapOf = (data) => RoadmapModel.foldReleases(data?.roadmap);
-  const withLead = (r, stages) => [...(r?.leadReleases || []), ...stages];
+  const withLead = (r, stages) => RoadmapModel.unfoldReleases(r?.leadReleases, stages);
   async function save(ctx, r, stages, edit = null) {
     let out = null;
     try {
@@ -1784,6 +1792,8 @@
   }
   // #260: a cut line after the stage: named in the dialog (add, rename) or removed, saved at once
   async function releaseClicked({ ctx, r, data, stages }, el) {
+    const lead = el.closest('[data-cut-lead]');
+    if (lead) return leadReleaseClicked({ ctx, r, data, stages }, el, Number(lead.dataset.cutLead));
     const cut = el.closest('[data-cut-stage]');
     const stage = stages[cut ? Number(cut.dataset.cutStage) : locate(stages, el).s];
     if (!stage) return 'handled';
@@ -1806,7 +1816,8 @@
       const from = stage.release?.name || '';
       const at = stages.indexOf(stage);
       let base = { r, stages };
-      await ReleaseName.cutLineDialog(from, ctx, data, at, async (name) => {
+      // the dialog's suggestion reads the stages folded, as `at` counts them
+      await ReleaseName.cutLineDialog(from, ctx, { ...data, roadmap: r }, at, async (name) => {
         const target = stage.id ? base.stages.find((s) => s.id === stage.id) : base.stages[at];
         // the stage was removed in the stored roadmap: nothing to save, the dialog says so
         if (!target) return 'The stage was removed elsewhere: nothing was saved.';
@@ -1817,6 +1828,25 @@
         const stored = roadmapOf(out);
         base = { r: stored, stages: clone(stored?.stages || []) };
         return out.conflict.reason || 'The roadmap changed elsewhere: nothing was saved.';
+      });
+    }
+    return 'handled';
+  }
+  // #555: a release with no stage of its own before it (`leadReleases[k]`): renamed or removed
+  async function leadReleaseClicked({ ctx, r, data, stages }, el, k) {
+    const leads = clone(r.leadReleases || []);
+    const rel = leads[k];
+    if (!rel) return 'handled';
+    const name0 = rel.name;
+    if (el.dataset.rmRelease === 'remove') {
+      if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name: name0 }), t('common.remove'))) return 'handled';
+      leads.splice(k, 1);
+      await save(ctx, { ...r, leadReleases: leads }, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name: name0 }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
+    } else if (el.dataset.rmRelease === 'edit') {
+      await ReleaseName.cutLineDialog(name0, ctx, { ...data, roadmap: r }, Math.max(0, rel.after), async (name) => {
+        leads[k] = { ...rel, name };
+        const out = await save(ctx, { ...r, leadReleases: leads }, stages, { label: t('backlog_roadmap.renamed_the_cut_line_name', { from: name0, name }), dialog: true });
+        return out?.conflict ? out.conflict.reason || 'The roadmap changed elsewhere: nothing was saved.' : null;
       });
     }
     return 'handled';
