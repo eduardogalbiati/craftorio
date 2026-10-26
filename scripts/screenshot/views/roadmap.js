@@ -179,8 +179,10 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   const merged = (start, k, runId) => {
     const steps = PATH.map(([s, m]) => [s, Math.round(m * k)]);
     const { lines, end } = events(start, steps, null);
+    // #614: merged into the local main, so the pipeline's Merge station reads done
     write(runId, [...lines, ev(end, 'workflow.finished', { status: 'success' })], {
       status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps), sessions: sessionsOf(steps, k),
+      local_merge: { branch: `feat/${runId.slice(-8)}`, base: 'main', commit: runId.replace(/\D/g, '').padEnd(40, 'a') },
     });
     return runId;
   };
@@ -189,6 +191,19 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
     const start = now + day * 864e5;
     merged(start, k, `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-210000-hist000${n + 1}`);
   });
+  // #555: v0.9's release run (demoReleases' history), the past run the planned release's estimate reads
+  const release = '20260110-170000-rel00009';
+  const relStart = Date.parse('2026-01-10T17:00:00.000Z');
+  const relEnd = relStart + 38 * min;
+  writeEvents(path.join(ws.runs, release), release, [
+    ev(relStart, 'workflow.started', { workflow: 'release', file: 'release.yaml', project_id: projectId, mock: false, inputs: { task: 'Check the release v0.9 of demo', version: 'v0.9' } }),
+    ev(relEnd, 'workflow.finished', { status: 'success' }),
+  ]);
+  fs.writeFileSync(path.join(ws.runs, release, 'summary.json'), JSON.stringify({
+    run_id: release, workflow: 'release', project_id: projectId, mock: false, status: 'success', inputs: { version: 'v0.9' },
+    started_at: new Date(relStart).toISOString(), finished_at: new Date(relEnd).toISOString(), duration_ms: relEnd - relStart,
+    sessions: [{ id: 's-fix', step_id: 'fix', agent: 'developer', provider: 'claude', model: 'claude-opus-5-5', cost_usd: 1.12, turns: 1 }],
+  }, null, 2));
   const stamp = (m) => new Date(now - m * min).toISOString().slice(0, 10).replace(/-/g, '');
   // #215: tonight's two runs that already merged: one cheaper and faster than estimated (green),
   // one far over (red)

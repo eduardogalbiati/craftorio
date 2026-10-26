@@ -79,8 +79,15 @@
   function sessionsOfEvents(events = []) {
     const byId = new Map();
     for (const e of events) {
-      if (SESSION_EVENTS.has(e.type) && e.session) byId.set(e.session_id, { ...e.session, status: e.type === 'session.closed' ? e.status : e.session.status });
-      else if (e.type === 'session.status' && byId.has(e.session_id)) byId.get(e.session_id).status = e.status;
+      if (SESSION_EVENTS.has(e.type) && e.session) {
+        const s = { ...e.session, status: e.type === 'session.closed' ? e.status : e.session.status };
+        // a snapshot without its cost keeps what the session cost so far, plus this turn's (#615)
+        if (s.cost_usd == null) {
+          const cost = (Number(byId.get(e.session_id)?.cost_usd) || 0) + (e.type === 'session.message_received' ? Number(e.cost_usd) || 0 : 0);
+          if (cost) s.cost_usd = round(cost);
+        }
+        byId.set(e.session_id, s);
+      } else if (e.type === 'session.status' && byId.has(e.session_id)) byId.get(e.session_id).status = e.status;
       else if (e.type === 'session.message_received' && byId.has(e.session_id)) {
         const s = byId.get(e.session_id);
         Object.assign(s, { turns: (Number(s.turns) || 0) + 1, tokens: addUsage(s.tokens, e.usage), cost_usd: round((Number(s.cost_usd) || 0) + (Number(e.cost_usd) || 0)) });

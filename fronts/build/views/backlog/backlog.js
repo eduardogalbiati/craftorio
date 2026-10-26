@@ -263,24 +263,24 @@
 
   // Runs start, move between steps, stop at gates and end while the screen is open (#214): only the
   // events that change an item's status, progress ring (#194) or waiting badge refresh the screen,
-  // at most once per RUN_THROTTLE_MS, and through liveReload (never under an open Edit form). The
-  // session messages agents send several times a second refresh nothing.
+  // at most once per RUN_THROTTLE_MS, and through liveReload (never under an open Edit form). Session
+  // messages (several a second) refresh only the Roadmap, whose cost meters follow them (#615).
   const RUN_THROTTLE_MS = 2000;
   const RUN_STATUS_EVENTS = /^(workflow\.(started|finished)|step\.(started|finished|waiting)|approval\.(requested|resolved))$/;
   let runTimer = null;
   let runLast = 0;
   api.onEvent((ev) => {
-    if (ev?.type && !RUN_STATUS_EVENTS.test(ev.type)) return;
+    if (ev?.type && !RUN_STATUS_EVENTS.test(ev.type) && !(ev.type === 'session.message_received' && bl.mode === 'roadmap')) return;
     if (!visible() || runTimer) return;
     runTimer = setTimeout(() => { runTimer = null; runLast = Date.now(); liveReload(); }, Math.max(0, runLast + RUN_THROTTLE_MS - Date.now()));
   });
   // The queue also changes without run events (a start that fails, the next issue starting), and a
-  // live roadmap's refill (#164) with none. Also the fallback of the file watch (#204): while the
-  // service cannot watch backlog/, the Roadmap screen is polled every 5 s.
+  // live roadmap's refill (#164) with none. Also the file watch's fallback (#204) and a running roadmap
+  // item's cost meter (#615: its run may be in another app): the Roadmap screen is polled every 5 s.
   let watching = true;
   api.backlogWatching?.().then((w) => { watching = w !== false; }).catch(() => {});
   setInterval(() => {
-    const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running') || bl.data?.roadmap?.live || bl.data?.refresh?.running;
+    const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running') || bl.data?.roadmap?.live || bl.data?.refresh?.running || (bl.mode === 'roadmap' && bl.data?.roadmap?.stages?.some((s) => (s.items || []).some((x) => x.status === 'running')));
     if (visible() && (busy || (!watching && bl.mode === 'roadmap'))) liveReload();
   }, 5000);
   // #272: the Roadmap cards' run timers move every second (their text only: nothing is redrawn)
