@@ -229,16 +229,16 @@ const methods = {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const guarded = !!this.wf.agents[agentName] && (opts.editsTests ?? agent.edits_tests) === false;
     const dir = guarded ? this.workingDir(agent) : null;
-    const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths)
+    const snap = guarded ? await this.guardSnapshot(dir, this.wf.tests_paths)
       .catch((e) => { throw new Error(`Could not snapshot the test files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (edits_tests: false): ${e.message}`); }) : null;
     const protect = this.wf.agents[agentName] ? renderFileList(opts.protectFiles ?? agent.protect_files, this.ctx) : [];
-    const psnap = protect.length ? await testPaths.snapshot(this.workingDir(agent), protect)
+    const psnap = protect.length ? await this.guardSnapshot(this.workingDir(agent), protect)
       .catch((e) => { throw new Error(`Could not snapshot the protected files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (protect_files): ${e.message}`); }) : null;
     let res = await this.agentTurn(agentName, prompt, { ...opts, guarded, protect });
     res = await this.serveTestRequests(agentName, prompt, res, { ...opts, guarded, protect });
     for (let attempt = 1; snap; attempt++) {
       // an unchecked turn fails the step: passing it would let test changes through the guard
-      const files = await testPaths.changedTestFiles(snap, { bases: this.baseRefs() })
+      const files = await this.guardCheck(snap)
         .catch((e) => { throw new Error(`Could not check the test files changed by ${agentName} in ${opts.stepId || 'a delegated turn'} (edits_tests: false): ${e.message}`); });
       if (!files.length) break;
       const stepId = opts.stepId || 'a delegated turn';
@@ -249,7 +249,7 @@ const methods = {
       res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, protect, retry: true });
     }
     for (let attempt = 1; psnap; attempt++) {
-      const files = await testPaths.changedTestFiles(psnap, { bases: this.baseRefs() })
+      const files = await this.guardCheck(psnap)
         .catch((e) => { throw new Error(`Could not check the protected files changed by ${agentName} in ${opts.stepId || 'a delegated turn'} (protect_files): ${e.message}`); });
       if (!files.length) break;
       const stepId = opts.stepId || 'a delegated turn';
@@ -260,6 +260,24 @@ const methods = {
       res = await this.agentTurn(agentName, this.protectedRefusedPrompt(agentName, prompt, res.text, files, psnap.head), { ...opts, guarded, protect, retry: true });
     }
     return res;
+  },
+
+  // #525: the guard's snapshot and check reuse, per run, what a turn cannot change: the repository
+  // root and git dir of a working folder, and which base refs exist. HEAD, the local changes and the
+  // rebase state are asked again on every snapshot and check.
+  async guardSnapshot(dir, patterns) {
+    this.guardRepos ??= new Map();
+    const snap = await testPaths.snapshot(dir, patterns, { repo: this.guardRepos.get(dir) });
+    if (snap) this.guardRepos.set(dir, { root: snap.root, gitDir: snap.gitDir });
+    return snap;
+  },
+
+  async guardCheck(snap) {
+    const bases = this.baseRefs();
+    const key = [snap.root, ...bases].join('\n');
+    this.guardBases ??= new Map();
+    if (!this.guardBases.has(key)) this.guardBases.set(key, await testPaths.existingRefs(snap.root, bases));
+    return testPaths.changedTestFiles(snap, { existing: this.guardBases.get(key) });
   },
 
   // creates the run folders an agent with commands may write to; the temp folder (#414) comes from

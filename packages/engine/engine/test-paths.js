@@ -81,45 +81,87 @@ function insideGit(dir) {
   }
 }
 
+// #525: the guard's local changes in one process (`localChanges` and the unmerged list took three):
+// the files modified, deleted, untracked or unmerged, and the unmerged ones, relative to the
+// repository root (porcelain paths always are; with -z never quoted). No renames: a renamed file is
+// its new path plus its old one deleted, as `diff --name-only` lists them.
+async function status(root) {
+  const entries = (await git(['--no-optional-locks', 'status', '--porcelain=v2', '-z', '--untracked-files=all', '--no-renames'], root)).split('\0');
+  const changed = new Set();
+  const unmerged = new Set();
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    // the path follows a fixed number of fields: 8 for `1` (changed), 9 for `2` (renamed, the old path
+    // in the next entry), 10 for `u` (unmerged)
+    if (e[0] === '1') changed.add(e.split(' ').slice(8).join(' '));
+    else if (e[0] === '2') { changed.add(e.split(' ').slice(9).join(' ')); changed.add(entries[++i]); }
+    else if (e[0] === 'u') { const f = e.split(' ').slice(10).join(' '); changed.add(f); unmerged.add(f); }
+    else if (e[0] === '?') changed.add(e.slice(2));
+  }
+  return { changed: [...changed], unmerged };
+}
+
 // State of the checkout before a turn, or null when `dir` is not a git work tree: HEAD, and the
 // content of the test files that already had local changes (the user's, or an earlier turn's).
 // Any other git error rejects: without a snapshot the turn could not be checked.
-async function snapshot(dir, patterns = TESTS_PATHS) {
-  let root;
-  try {
-    root = await git(['rev-parse', '--show-toplevel'], dir);
-  } catch (e) {
-    if (!insideGit(dir)) return null;
-    throw e;
+// `repo`: `{ root, gitDir }` of an earlier snapshot of `dir` in the same run (#525: they do not change).
+async function snapshot(dir, patterns = TESTS_PATHS, { repo } = {}) {
+  let { root, gitDir } = repo || {};
+  if (!root || !gitDir) {
+    try {
+      [root, gitDir] = (await git(['rev-parse', '--show-toplevel', '--absolute-git-dir'], dir)).split('\n').map((l) => l.replace(/\r$/, ''));
+    } catch (e) {
+      if (!insideGit(dir)) return null;
+      throw e;
+    }
   }
-  const head = await git(['rev-parse', '--verify', 'HEAD'], root);
+  const [head, local] = await Promise.all([git(['rev-parse', '--verify', 'HEAD'], root), status(root)]);
   const isTest = testMatcher(patterns);
   // inside a rebase HEAD sits on the base: keep the branch's side, the turn may finish the rebase
-  const rebaseHead = await rebaseOrigHead(root);
-  return { root, head, rebaseHead, patterns, dirty: await workingBlobs(root, (await localChanges(root)).filter(isTest)) };
+  const rebaseHead = await rebaseOrigHead(root, gitDir);
+  return { root, gitDir, head, rebaseHead, patterns, dirty: await workingBlobs(root, local.changed.filter(isTest)) };
+}
+
+// #525: the refs of `refs` that name a commit, in their order: the full ref names in one process,
+// any other revision in one each
+async function existingRefs(root, refs) {
+  const full = refs.filter((r) => r.startsWith('refs/'));
+  const found = new Set();
+  if (full.length) {
+    for (const l of lines(await git(['for-each-ref', '--format=%(refname) %(objecttype) %(*objecttype)', ...full], root))) {
+      // a pattern also matches the refs under it (refs/heads/main/x): only the exact name counts
+      const [name, type, peeled] = l.split(' ');
+      if (full.includes(name) && (type === 'commit' || peeled === 'commit')) found.add(name);
+    }
+  }
+  for (const ref of refs.filter((r) => !r.startsWith('refs/'))) {
+    if (await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], root).catch(() => null)) found.add(ref);
+  }
+  return refs.filter((r) => found.has(r));
 }
 
 // Test files the turn changed since `snap` (sorted). `bases`: refs whose commits are not the
 // agent's (the run's base branch, local and remote); the ones that do not exist are skipped.
-async function changedTestFiles(snap, { bases = [] } = {}) {
+// `existing`: those of them that exist, when already known (#525: found once per run).
+async function changedTestFiles(snap, { bases = [], existing } = {}) {
   if (!snap) return [];
   const { root, head } = snap;
   const isTest = testMatcher(snap.patterns);
-  const exclude = [];
-  for (const ref of bases) {
-    if (await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], root).catch(() => null)) exclude.push(ref);
-  }
-  const committed = lines(await git([...G, 'log', '--no-merges', '--name-only', '--format=', 'HEAD', `^${head}`, ...exclude.map((r) => `^${r}`), '--'], root));
-  const files = [...new Set([...committed, ...(await localChanges(root)), ...Object.keys(snap.dirty)])].filter(isTest);
+  const exclude = existing || await existingRefs(root, bases);
+  const [log, local] = await Promise.all([
+    git([...G, 'log', '--no-merges', '--name-only', '--format=', 'HEAD', `^${head}`, ...exclude.map((r) => `^${r}`), '--'], root),
+    status(root),
+  ]);
+  const files = [...new Set([...lines(log), ...local.changed, ...Object.keys(snap.dirty)])].filter(isTest);
   // compared by content with the snapshot: a test file changed and then restored is not a change
   const now = await workingBlobs(root, files);
   const before = { ...(await commitBlobs(root, head, files.filter((f) => !(f in snap.dirty)))), ...snap.dirty };
   const changed = files.filter((f) => now[f] !== before[f]);
-  const unmerged = new Set(lines(await git([...G, 'diff', '--name-only', '--diff-filter=U'], root)));
+  const { unmerged } = local;
   const out = [];
   // inside a rebase HEAD sits on the base: the branch's side is the rebase's original head, the one
   // in progress now or, when the turn finished it (`rebase --continue`), the one at the snapshot
-  const branchHead = (await rebaseOrigHead(root)) || snap.rebaseHead || head;
+  const branchHead = (await rebaseOrigHead(root, snap.gitDir)) || snap.rebaseHead || head;
   for (const f of changed) {
     // #380: a conflict the turn's rebase left for someone else (git wrote the markers, not the agent)
     if (unmerged.has(f)) continue;
@@ -129,11 +171,11 @@ async function changedTestFiles(snap, { bases = [] } = {}) {
   return out.sort();
 }
 
-// The commit a rebase in progress started from, or null when no rebase is in progress.
-async function rebaseOrigHead(root) {
+// The commit a rebase in progress started from, or null when no rebase is in progress. Read from the
+// work tree's own git dir (#525: no `rev-parse --git-path` per marker); never cached, a turn changes it.
+async function rebaseOrigHead(root, gitDir) {
   for (const dir of ['rebase-merge', 'rebase-apply']) {
-    const file = path.resolve(root, await git(['rev-parse', '--git-path', `${dir}/orig-head`], root).catch(() => ''));
-    const sha = (await fs.promises.readFile(file, 'utf8').catch(() => '')).trim();
+    const sha = (await fs.promises.readFile(path.join(gitDir, dir, 'orig-head'), 'utf8').catch(() => '')).trim();
     if (sha && await git(['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], root).catch(() => null)) return sha;
   }
   return null;
@@ -167,6 +209,7 @@ async function combinesBothSides(root, head, bases, file) {
 
 module.exports = {
   changedTestFiles,
+  existingRefs,
   globToRegExp,
   localChanges,
   snapshot,
