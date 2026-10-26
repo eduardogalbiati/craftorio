@@ -11,14 +11,17 @@
 // The demo workspace has no issue queue. The queue lives in the service's index (packages/engine/domains/workspace/store.js), not
 // in a file the app follows, and no channel pauses it with an error, so the Given makes, inside the
 // app's main process, the call the service makes when a queued run fails (packages/engine/service/areas/runs.js:
-// backlog.setPaused(dir, projectId, true, "#n failed: resume to start the next issues.")).
+// backlog.pauseForFailure(dir, projectId, [n]), drawn "#n failed: resume to start the next issues.").
+// Since #445 a failure pause on an empty queue is stale and dropped (withoutStalePause), so the
+// Given first queues an open issue of the demo backlog (one still waiting), then pauses for #13's
+// failure, both in one synchronous call so the queue never starts the waiting issue in between.
 
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, Then } = require('../../../../features/steps/fixtures');
 
 const LOAD_TIMEOUT = 30000;
-const QUEUE_ERROR = '#13 failed: resume to start the next issues.';
+const FAILED_ISSUE = 13;
 
 const alerts = (page) => page.getByTestId('page-alerts').filter({ visible: true }).first();
 const shownAlert = (page) => alerts(page).getByTestId('page-alert').filter({ visible: true }).first();
@@ -28,19 +31,25 @@ Given('a queued run failed and paused the issue queue', async ({ e2e }) => {
     module: path.resolve(__dirname, '..', '..', '..', '..', 'packages', 'engine', 'domains', 'backlog', 'backlog.js'),
     dir: path.join(e2e.scratch, 'workspace', 'backlog'),
     projectId: e2e.project.id,
-    error: QUEUE_ERROR,
+    failed: FAILED_ISSUE,
   };
   const res = await e2e.app.evaluate((_electron, a) => {
     const load = process.mainModule?.require;
     if (!load) return { missing: true };
     try {
-      load(a.module).setPaused(a.dir, a.projectId, true, a.error);
-      return { queue: load(a.module).readQueue(a.dir, a.projectId) };
+      const backlog = load(a.module);
+      const waiting = (backlog.readBacklog(a.dir, a.projectId)?.issues || []).find((i) => i.state === 'open' && i.number !== a.failed);
+      if (!waiting) return { noIssue: true };
+      backlog.enqueue(a.dir, a.projectId, { issues: [waiting], workflow: 'software-development.yaml', workflowName: 'software-development', mock: true });
+      backlog.pauseForFailure(a.dir, a.projectId, [a.failed]);
+      const q = backlog.readQueue(a.dir, a.projectId);
+      return { queue: { paused: q.paused, reason: q.reason?.key || null, waiting: q.items.length } };
     } catch (e) { return { thrown: String(e?.message || e) }; }
   }, args);
   expect(res.missing, "the app's main process loads its modules").toBeFalsy();
-  expect(res.thrown, 'pausing the queue with an error').toBeFalsy();
-  expect(res.queue).toMatchObject({ paused: true, error: QUEUE_ERROR });
+  expect(res.noIssue, 'the demo backlog has an open issue to queue').toBeFalsy();
+  expect(res.thrown, 'queuing an issue and pausing the queue for a failure').toBeFalsy();
+  expect(res.queue, 'a paused queue with an issue still waiting (not a stale pause)').toMatchObject({ paused: true, reason: 'backlog.queue_failed', waiting: 1 });
 });
 
 Then('the shown alert offers {string}', async ({ e2e }, name) => {

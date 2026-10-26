@@ -96,16 +96,19 @@ Feature: Artifacts
     And the artifact shows no "Open the report" button
     And the app is still on its own page
 
-  # @fixme until #556 (release 1.3.0): never passed: #466's sanitizer drops the file: href the step clicks
-  @issue-466 @fixme
+  # The sanitizer drops the link's file: href (#466), so "the full log" stays as words with no local
+  # page behind them; a click on those words leaves the app where it is.
+  @issue-466 @issue-556
   Scenario: A link to a local page in an agent's report keeps the app on its page
     Given the app is open
     And the demo run "res00225" has a report "audit-report.md" reading "The audit found no issue." with a link "the full log" to a local page
     When I open the demo run "res00225"
     And I open the run's Artifacts tab
     And I open the artifact "audit-report.md"
-    And I click the link "the full log" in the artifact
+    Then the artifact shows "the full log" with no link to a local page
+    When I click the words "the full log" in the artifact
     Then the app is still on its own page
+    And the artifact shows "The audit found no issue."
     And the artifact shows "The audit found no issue."
 
   # #477 (SEC-12): a file of a kind the app does not know (an agent-written summary.cmd) is never

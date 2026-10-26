@@ -199,6 +199,22 @@ When('I click the link {string} in the artifact', async ({ e2e }, name) => {
   await preview(e2e.window).getByRole('link', { name, exact: true }).click();
 });
 
+// #466 (#556): the sanitizer keeps the link's words but drops its file: href; whatever element holds
+// the words, none of the document's links points at a local file
+Then('the artifact shows {string} with no link to a local page', async ({ e2e }, words) => {
+  const doc = preview(e2e.window);
+  // the words may be a bare <a> or plain text of their paragraph
+  await expect(doc.getByText(words).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const hrefs = await doc.locator('[href], [action], [formaction]').evaluateAll((els) => els
+    .flatMap((el) => ['href', 'action', 'formaction'].map((a) => el.getAttribute(a)))
+    .filter((v) => v !== null));
+  expect(hrefs.filter((v) => /^\s*file:/i.test(v)), 'no file: target left in the document').toEqual([]);
+});
+
+When('I click the words {string} in the artifact', async ({ e2e }, words) => {
+  await preview(e2e.window).getByText(words).first().click();
+});
+
 // ---- Open only for the kinds the app knows (#477) -----------------------------------------------
 // The Artifacts screen's viewer (data-testid="artifact-viewer": the selected file's toolbar and
 // preview). Its actions are buttons named "Open", "Show in folder", "Copy path"; none is clicked here.

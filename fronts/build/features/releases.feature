@@ -70,15 +70,15 @@ Feature: Releases
 
   # #376: a release on the project city. A real git repository tagged 1.1.0, 1.1.1 and 1.1.2: 1.1.2
   # adds one file (#12), removes one and changes one (#13); see fronts/analyser/features/steps/release-city.steps.js
-  # @fixme until #556 (release 1.3.0): since #430 the city opens in a modal the step does not look in
-  @issue-376 @fixme
+  # Since #430 the city opens in a modal over the Releases screen (#556).
+  @issue-376 @issue-556
   Scenario: "Show on the map" on a release shows the city with what the release changed
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
     When I open "Releases" in the sidebar
     And I choose the project "shop" in the header
     And I click "Show on the map" on the release "1.1.2"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Releases" screen
     And the city release header compares "1.1.1" to "1.1.2"
     And the city release header counts 1 added, 1 changed and 1 removed
     And the city release counts are given by the zone "Core" and the district "Sources"

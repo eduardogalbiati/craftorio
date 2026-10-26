@@ -155,12 +155,12 @@ Feature: Backlog Board and Roadmap
     Then its Archive action is disabled with the reason "Planned in stage 5: remove it from the roadmap first"
 
   # ---- #422: the "Queue" error alert offers Resume, never a dismiss × ---------------------------------
-  # The demo workspace has no issue queue: the Given pauses it the way the service does when a queued
-  # run failed ("#13 failed: resume to start the next issues."). The roadmap's own error ("Could not
+  # The demo workspace has no issue queue: the Given queues one open issue and pauses the queue the way
+  # the service does when a queued run failed ("#13 failed: resume to start the next issues."); an
+  # issue still waits, so the pause is not stale (#445). The roadmap's own error ("Could not
   # start #14") is another alert, so the scenarios bring the queue's alert into view first.
 
-  # @fixme until #556 (release 1.3.0): since #445 a failure pause on an empty queue is stale and dropped
-  @issue-422 @fixme
+  @issue-422 @issue-556
   Scenario: The Queue error alert offers Resume and no close button
     Given the app is open
     And a queued run failed and paused the issue queue
@@ -170,8 +170,7 @@ Feature: Backlog Board and Roadmap
     And the shown alert offers "Resume"
     And the shown alert has no "Dismiss" button
 
-  # @fixme until #556 (release 1.3.0): since #445 a failure pause on an empty queue is stale and dropped
-  @issue-422 @fixme
+  @issue-422 @issue-556
   Scenario: Resume in the Queue error alert resumes the queue and the alert goes away
     Given the app is open
     And a queued run failed and paused the issue queue

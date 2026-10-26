@@ -204,8 +204,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
   # The demo project "demo-app" has no git repository and no city plan, so the issue's project is the
   # seeded "billing-service" (src/billing.js in the district Billing of the zone Backend,
   # tools/export.py in Export of Tooling) with its own synced backlog and roadmap.
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-375 @fixme
+  # Since #430 "Show on the map" opens the city in a modal over the screen it was asked from (#556).
+  @issue-375 @issue-556
   Scenario: "Show on the map" on a Backlog issue opens the city with the issue's expected footprint
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -214,14 +214,13 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose the project "billing-service" in the header
     And I open the Board as a list
     And I click "Show on the map" on the Backlog issue "Change the discount rule"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Backlog" screen
     And the city impact header names the issue "Change the discount rule"
     And the city impact header counts 2 files, in the districts "Billing" and "Export" and the zones "Backend" and "Tooling"
     And the city impact header gives the share of the files in the Danger Zone as a percentage
     And the city lists "src/refunds.js" apart as a new file expected in "Billing"
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-375 @fixme
+  @issue-375 @issue-556
   Scenario: "Show the stage on the map" colours the stage's items and marks a building both would change as a conflict
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -232,13 +231,12 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose the project "billing-service" in the header
     And I open the Roadmap
     And I click "Show the stage on the map" on the roadmap stage "Billing fixes"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Roadmap" screen
     And the city legend lists "Change the discount rule" and "Round the export totals"
     And the city marks "src/billing.js" as a conflict of the stage
     And the city does not mark "tools/export.py" as a conflict of the stage
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-427 @fixme
+  @issue-427 @issue-556
   Scenario: Paths cited with a line range count as the files they name
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -247,12 +245,11 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose the project "billing-service" in the header
     And I open the Board as a list
     And I click "Show on the map" on the Backlog issue "Change the discount rule"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Backlog" screen
     And the city impact header counts 2 files, in the districts "Billing" and "Export" and the zones "Backend" and "Tooling"
     And the city lists no new file for the issue
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-427 @fixme
+  @issue-427 @issue-556
   Scenario: A root file name the repository lacks is not counted as an expected file
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -261,13 +258,12 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose the project "billing-service" in the header
     And I open the Board as a list
     And I click "Show on the map" on the Backlog issue "Change the discount rule"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Backlog" screen
     And the city impact header counts 1 file, in the district "Billing" and the zone "Backend"
     And the city lists no new file for the issue
     And the city impact header does not mention "1792597401661-0000.json"
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-427 @fixme
+  @issue-427 @issue-556
   Scenario: The stage footprint marks a file two items cite with line ranges as a conflict
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -278,12 +274,11 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose the project "billing-service" in the header
     And I open the Roadmap
     And I click "Show the stage on the map" on the roadmap stage "Billing fixes"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Roadmap" screen
     And the city marks "src/billing.js" as a conflict of the stage
     And the city does not mark "tools/export.py" as a conflict of the stage
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-429 @fixme
+  @issue-429 @issue-556
   Scenario: The issue's Expected files section is read as its own source with its own legend colour
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -299,14 +294,13 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose the project "billing-service" in the header
     And I open the Board as a list
     And I click "Show on the map" on the Backlog issue "Change the discount rule"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Backlog" screen
     And the city impact header counts 2 files, in the districts "Billing" and "Export" and the zones "Backend" and "Tooling"
     And the city lists "src/refunds.js" apart as a new file expected in "Billing"
     And the city legend lists "Expected files" and "Cited in the issue"
     And the city legend gives "Expected files" a colour of its own, apart from "Cited in the issue"
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-429 @fixme
+  @issue-429 @issue-556
   Scenario: After a run the impact card names the source of each hit and miss and compares issues with and without the section
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -326,7 +320,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the Board as a list
     And I click "Show on the map" on the Backlog issue "Round the export totals"
     Then the city impact card shows the hit rate of the run
-    When I open "Backlog" in the sidebar
+    When I close the city modal
+    And I open "Backlog" in the sidebar
     And I choose the project "billing-service" in the header
     And I open the Board as a list
     And I click "Show on the map" on the Backlog issue "Change the discount rule"
@@ -416,8 +411,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     When I close the city card
     Then pointing at the middle of the city shows the hover card of "src/billing.js"
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-449 @fixme
+  @issue-449 @issue-556
   Scenario: "Show on the map" still highlights the issue's building and greys the others
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -426,7 +420,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose the project "billing-service" in the header
     And I open the Board as a list
     And I click "Show on the map" on the Backlog issue "Change the discount rule"
-    Then the Architecture tab shows the project city
+    Then the city opens in a modal over the "Backlog" screen
     And the city impact header names the issue "Change the discount rule"
     And the city highlights the building "src/billing.js" and greys "tools/export.py"
 
@@ -517,8 +511,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the city shows the agent "developer · implement"
     And the city shows no "Most connected" panel
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-440 @fixme
+  # The city modal covers the side bar (#430): it is closed before the Releases screen opens (#556).
+  @issue-440 @issue-556
   Scenario: A release opened on the map shows the release mode alone, nothing left of an earlier impact preview
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
@@ -530,10 +524,12 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I click "Show on the map" on the Backlog issue "Add the new module"
     Then the city is in the "Issue impact" mode titled "Issue #1"
     And the city legend has the "Cited in the issue" row
-    When I open "Releases" in the sidebar
+    When I close the city modal
+    And I open "Releases" in the sidebar
     And I choose the project "shop" in the header
     And I click "Show on the map" on the release "1.1.2"
-    Then the city is in the "Release" mode titled "Release 1.1.1 → 1.1.2"
+    Then the city opens in a modal over the "Releases" screen
+    And the city is in the "Release" mode titled "Release 1.1.1 → 1.1.2"
     And the city release header compares "1.1.1" to "1.1.2"
     And the city shows no "Agents at work" panel
     And the city shows no "Most connected" panel
@@ -541,8 +537,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the city legend has the "Added" row
     And the city legend has no "Cited in the issue" row
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-440 @fixme
+  # In the city modal (#430) the mode's Close closes the modal, back to the Backlog under it (#556).
+  @issue-440 @issue-556
   Scenario: Closing an issue's impact preview goes back to the Backlog and leaves no impact behind on the city
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -555,7 +551,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the city impact header names the issue "Change the discount rule"
     And the city legend has the "Cited in the issue" row
     When I close the city's mode
-    Then the Backlog screen is shown
+    Then no city modal is open
+    And the Backlog screen is shown
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
     And I open the "Architecture" project tab
@@ -602,8 +599,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the city legend has the "Tooling" row
     And the city shows no "Legend" button for the legend
 
-  # @fixme until #556 (release 1.3.0): since #430 "Show on the map" opens the city in a modal the steps do not look in
-  @issue-441 @fixme
+  # In the city modal (#430) the mode's Close closes the modal, so the side bar is reachable again (#556).
+  @issue-441 @issue-556
   Scenario: A panel minimized in the release mode is still minimized when a release opens again, not in Explore
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
@@ -612,7 +609,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I click "Show on the map" on the release "1.1.2"
     And I minimize the city's "Release" panel
     And I close the city's mode
-    And I open "Projects" in the sidebar
+    Then no city modal is open
+    When I open "Projects" in the sidebar
     And I open the project "shop" from the Projects screen
     And I open the "Architecture" project tab
     And I switch the Architecture tab to "City"
