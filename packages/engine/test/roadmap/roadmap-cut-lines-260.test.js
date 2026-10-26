@@ -193,3 +193,22 @@ test('#555 undo (#281) of "Removed release v1.4" puts the release entry back in 
   const out = undoEdit(after, recordEdit(before, after, 'Removed release v1.4'));
   assert.deepEqual([out.ok, order(out.stages || [])], [true, ['s1', 'release:v1.4', 's2']]);
 });
+
+test('#555 restoring a version saved before #555 (a stage with `release`) gives back the cut line as an entry release-<stage id>', (t) => {
+  const { saveVersion, listVersions, restoreVersion } = require('../../domains/roadmap/roadmap-history');
+  const ws = tmp(t);
+  saveVersion(ws, 'proj', [{ ...mStage('s1', 1), release: { name: 'v1.3' } }, mStage('s2', 2)], 'Before the move');
+  const out = restoreVersion(ws, 'proj', listVersions(ws, 'proj')[0].id, [mStage('s1', 1), mStage('s2', 2)]);
+  const entry = (out.stages || []).find(isRelease);
+  assert.deepEqual(
+    [out.ok, order(out.stages || []), entry?.id, out.stages?.[0]?.release],
+    [true, ['s1', 'release:v1.3', 's2'], 'release-s1', undefined],
+  );
+});
+
+test('#555 undoing an edit recorded before #555 brings the stage\'s old `release` back as an entry after it', () => {
+  const { undoEdit } = require('../../domains/roadmap/roadmap-undo');
+  const before = [{ ...mStage('s1', 1), release: { name: 'v1.3' } }, mStage('s2', 2)];
+  const out = undoEdit([mStage('s1', 1), mStage('s2', 2)], { label: 'Removed the 1.3 cut line', at: '2026-10-20T10:00:00.000Z', before, after: [mStage('s1', 1), mStage('s2', 2)] });
+  assert.deepEqual([out.ok, order(out.stages || []), (out.stages || []).find(isRelease)?.id], [true, ['s1', 'release:v1.3', 's2'], 'release-s1']);
+});

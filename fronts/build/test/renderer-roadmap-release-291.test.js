@@ -204,7 +204,7 @@ test('#291 a release chosen whose runs the date range hides: the empty state say
   const R = H.loadRoadmap().R;
   const d = fixture();
   const old = H.iso(H.NOW - 10 * H.DAY);
-  for (const st of d.roadmap.stages) for (const it of st.items) it.origin = old;
+  for (const st of d.roadmap.stages) for (const it of st.items || []) it.origin = old; // #555: release entries have no items
   const html = R.html(d, () => {}, { showAll: true, since: '24h', release: '1.0.0' });
   assert.equal(H.stageCount(html), 0);
   const empty = must(byTestId(html, 'roadmap-release-empty')[0], 'a roadmap-release-empty state');

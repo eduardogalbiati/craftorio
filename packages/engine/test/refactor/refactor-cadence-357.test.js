@@ -168,3 +168,24 @@ test('#357 placeRefactor on an empty roadmap is a new first stage', () => {
   const { placeRefactor } = load();
   assert.deepEqual(placeRefactor({ roadmap: roadmapOf(), files: ['src/a.js'], conflictMap: null }), { stage: 0 });
 });
+
+// #555: a release is an entry of roadmap.stages between stages (no items of its own); a refactor never goes into it
+const withRelease = (roadmap, at) => ({ stages: [...roadmap.stages.slice(0, at), { kind: 'release', id: 'rel-1', name: 'v1.4', items: [] }, ...roadmap.stages.slice(at)] });
+
+test('#555 placeRefactor skips a release entry right after the conflicting stage and takes the stage after it', () => {
+  const { placeRefactor } = load();
+  const roadmap = withRelease(roadmapOf([item('i1', 1, 'planned', ['src/a.js'])], [item('i2', 2, 'planned', ['src/z.js'])]), 1);
+  assert.deepEqual(placeRefactor({ roadmap, files: ['src/a.js'], conflictMap: null }), { stage: 2 });
+});
+
+test('#555 placeRefactor with a release entry last after the conflicting stage places it in a new stage', () => {
+  const { placeRefactor } = load();
+  const roadmap = withRelease(roadmapOf([item('i1', 1, 'planned', ['src/a.js'])]), 1);
+  assert.deepEqual(placeRefactor({ roadmap, files: ['src/a.js'], conflictMap: null }), { stage: 2 });
+});
+
+test('#555 placeRunNow skips a release entry after the current stage', () => {
+  const { placeRunNow } = load();
+  const roadmap = withRelease(roadmapOf([item('i1', 1, 'running', ['src/a.js'])], [item('i2', 2, 'planned', ['src/z.js'])]), 1);
+  assert.deepEqual(placeRunNow({ roadmap, files: ['src/a.js'], conflictMap: null }), { stage: 2 });
+});
