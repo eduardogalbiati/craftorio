@@ -241,6 +241,39 @@ test('#613 a failure without a file is filed as before and is not part of the se
   assert.deepEqual(load().knownFailures(ws, PROJECT).map((x) => x.test), [NOFILE.test]);
 });
 
+test('#613 a test the second round names with backslashes in its file is still red twice: filed, not flaky', async (t) => {
+  const { ws, locks } = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  const fx = fakeExec();
+  const rerunFiles = async () => ({ failures: [{ ...BROKEN, file: BROKEN.file.replace(/\//g, '\\'), error: 'still red' }], log: 'rerun log' });
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([BROKEN]).runSuite, rerunFiles, exec: fx.exec });
+  assert.equal(r.status, 'red');
+  assert.equal(fx.creates.length, 1);
+  assert.deepEqual(load().knownFailures(ws, PROJECT).map((x) => x.test), [BROKEN.test]);
+  assert.deepEqual(flakyOf(ws), [], 'no flaky sighting');
+});
+
+test('#613 the store reads back the flaky sightings already written, and none for a store without them', (t) => {
+  const { ws } = tmpWs(t);
+  const store = loadStore();
+  const file = path.join(ws, 'backlog', 'base-health', `${PROJECT}.json`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ failures: [], lastGreen: null }));
+  assert.deepEqual(store.readStore(ws, PROJECT).flaky, []);
+  const seen = { test: FLAKY.test, file: FLAKY.file, commit: 'abc1234', at: '2026-10-26T16:48:09.923Z' };
+  fs.writeFileSync(file, JSON.stringify({ failures: [], lastGreen: null, flaky: [seen] }));
+  assert.deepEqual(store.readStore(ws, PROJECT).flaky, [seen]);
+});
+
+test('#613 the store keeps the latest 100 flaky sightings', () => {
+  const { addFlaky } = loadStore();
+  const store = { failures: [], lastGreen: null, flaky: Array.from({ length: 99 }, (_, i) => ({ test: `old ${i}`, file: 'test/a.test.js', commit: 'c0', at: '2026-10-25T00:00:00.000Z' })) };
+  addFlaky(store, [{ test: 'new 1', file: 'test/b.test.js' }, { test: 'new 2', file: 'test/c.test.js' }], { commit: 'c1', at: '2026-10-26T00:00:00.000Z' });
+  assert.equal(store.flaky.length, 100);
+  assert.deepEqual([store.flaky[0].test, store.flaky[98].test, store.flaky[99].test], ['old 1', 'new 1', 'new 2'], 'the oldest dropped first');
+  assert.deepEqual({ ...store.flaky[99] }, { test: 'new 2', file: 'test/c.test.js', commit: 'c1', at: '2026-10-26T00:00:00.000Z' });
+});
+
 test('#613 a deferred check (a release holds the base) runs neither round', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
