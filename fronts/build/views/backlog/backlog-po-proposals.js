@@ -11,6 +11,9 @@
 // The Epics section: issues to place, grouped by epic (Place in epic), new epics (title, goal,
 // members: Create epic), and epics to merge or split (advice). Each is applied on the owner's click
 // (api.applyProductOwnerEpic). A real write asks first; developer or simulated mode only previews.
+// While a split or an epic is filing, only its own proposal is locked and only the button clicked
+// shows a spinner (aria-busy); every other proposal stays usable (#609). The Product Owner's own
+// turn (ctx.busy) still locks them all.
 // Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
 /* global api */
 (() => {
@@ -18,7 +21,7 @@
   const workflowOf = new Map(); // split key → the children's workflow picked (#195; else the default)
   const saved = new Map(); // split key → the owner's saved edit (filed instead of the PO's)
   const notes = new Map(); // split or epic key → { text, error }
-  let busy = false;
+  const inFlight = new Map(); // split or epic key → the action clicked, while its request is pending (#609)
 
   const clone = (s) => ({ issue: s.issue, parent: s.parent, children: s.children.map((c) => ({ ...c, tasks: [...c.tasks] })) });
   const splitKey = (msg, s) => `${msg.ts}:split:${s.issue}`;
@@ -27,7 +30,11 @@
   const filedSplit = (ctx, msg, s) => ctx.messages.find((x) => x.split && x.split.at === msg.ts && x.split.issue === s.issue && !x.split.preview)?.split;
   const appliedEpic = (ctx, msg, key) => ctx.messages.find((x) => x.epicApplied && x.epicApplied.at === msg.ts && x.epicApplied.key === key && !x.epicApplied.preview)?.epicApplied;
   const noteHtml = (key) => { const n = notes.get(key); return n ? `<span class="small ${n.error ? 'error' : 'muted'}">${esc(n.text)}</span>` : ''; };
-  const off = (ctx) => (busy || ctx.busy ? ' disabled' : '');
+  const off = (ctx, key) => (ctx.busy || inFlight.has(key) ? ' disabled' : '');
+  // the button `name` of proposal `key`: disabled like `off`, and busy (aria-busy + a spinner) when it is the one filing
+  const actBusy = (key, name) => inFlight.get(key) === name;
+  const act = (ctx, key, name) => `${off(ctx, key)}${actBusy(key, name) ? ' aria-busy="true"' : ''}`;
+  const spin = (key, name) => (actBusy(key, name) ? '<span class="spinner" aria-hidden="true"></span>' : '');
   const epicTitle = (id) => (window.BacklogActions?.data()?.epics || []).find((e) => e.id === id)?.title || id;
 
   // ---- splits (#124) ---------------------------------------------------------------------------------
@@ -38,7 +45,7 @@
     const value = splitWorkflow(key);
     const list = DefaultWorkflow.projectFirst((state.workflows || []).filter((w) => !w.error && w.inputs?.task));
     const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
-    return `<select class="po-wf" data-split-wf aria-label="${t('backlog_po_proposals.workflow_of_the_children_in_the')}" title="${t('backlog_po_proposals.the_workflow_of_the_children_s')}"${off(ctx)}>${options.map((w) =>
+    return `<select class="po-wf" data-split-wf aria-label="${t('backlog_po_proposals.workflow_of_the_children_in_the')}" title="${t('backlog_po_proposals.the_workflow_of_the_children_s')}"${off(ctx, key)}>${options.map((w) =>
       `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === DefaultWorkflow.current().file ? ' (default)' : ''}</option>`).join('')}</select>`;
   }
 
@@ -103,10 +110,10 @@
         ${s.repaired ? `<div class="small muted">${t('backlog_po_proposals.the_proposal_was_adjusted_so_that')}</div>` : ''}
         ${edit ? editHtml(s, edit) : childrenHtml(s, current(msg, s))}
         ${done || edit ? '' : `<div class="row po-group-actions">
-          <button class="btn sm primary" type="button" data-split-act="split"${off(ctx)} title="${t('backlog_po_proposals.file_the_children_then_update_issue', { issue: s.issue })}">${t('backlog_po_proposals.split')}</button>
-          <button class="btn sm ghost" type="button" data-split-act="split-roadmap"${off(ctx)} title="${t('backlog_po_proposals.file_the_children_then_plan_them', { key: esc(DefaultWorkflow.label(splitWorkflow(key))) })}">${t('backlog_po_proposals.split_roadmap')}</button>
+          <button class="btn sm primary" type="button" data-split-act="split"${act(ctx, key, 'split')} title="${t('backlog_po_proposals.file_the_children_then_update_issue', { issue: s.issue })}">${spin(key, 'split')}${t('backlog_po_proposals.split')}</button>
+          <button class="btn sm ghost" type="button" data-split-act="split-roadmap"${act(ctx, key, 'split-roadmap')} title="${t('backlog_po_proposals.file_the_children_then_plan_them', { key: esc(DefaultWorkflow.label(splitWorkflow(key))) })}">${spin(key, 'split-roadmap')}${t('backlog_po_proposals.split_roadmap')}</button>
           ${workflowSelect(key, ctx)}
-          <button class="btn sm ghost" type="button" data-split-act="edit"${off(ctx)} title="${t('backlog_po_proposals.move_a_task_merge_two_children')}">${t('backlog_po_proposals.edit')}</button>
+          <button class="btn sm ghost" type="button" data-split-act="edit"${off(ctx, key)} title="${t('backlog_po_proposals.move_a_task_merge_two_children')}">${t('backlog_po_proposals.edit').replace('…', '&hellip;')}</button>
           ${noteHtml(key)}</div>`}
       </div>`;
   }
@@ -125,15 +132,16 @@
     for (const p of ep.place || []) { if (!byEpic.has(p.epic)) byEpic.set(p.epic, []); byEpic.get(p.epic).push(p); }
     const action = (key, label, title) => {
       const done = appliedEpic(ctx, msg, key);
+      const k = epicKey(msg, key);
       return done ? `<span class="badge live">${esc(done.epic?.id || '')} ${t('backlog_po_proposals.done')}</span>`
-        : `<div class="row po-group-actions"><button class="btn sm primary" type="button" data-epic-act="${esc(key)}"${off(ctx)} title="${esc(title)}">${label}</button>${noteHtml(epicKey(msg, key))}</div>`;
+        : `<div class="row po-group-actions"><button class="btn sm primary" type="button" data-epic-act="${esc(key)}"${act(ctx, k, key)} title="${esc(title)}">${spin(k, key)}${label}</button>${noteHtml(k)}</div>`;
     };
-    const place = [...byEpic].map(([id, list]) => `<div class="po-group${appliedEpic(ctx, msg, `place:${id}`) ? ' applied' : ''}">
+    const place = [...byEpic].map(([id, list]) => `<div class="po-group${appliedEpic(ctx, msg, `place:${id}`) ? ' applied' : ''}" data-testid="po-epic-card">
         <div class="po-group-head"><span class="badge bl-epic" title="${t('backlog_po_proposals.epic_id', { id: esc(id) })}">${esc(list[0].epicTitle || epicTitle(id))}</span><span class="po-issues">${list.map((p) => ctx.issueRef(p.issue)).join('')}</span></div>
         <ul class="po-list small">${list.map((p) => `<li>#${p.issue} ${esc(ctx.issueOf(p.issue)?.title || '')}${p.reason ? ` <span class="muted">${esc(p.reason)}</span>` : ''}</li>`).join('')}</ul>
         ${action(`place:${id}`, 'Place in epic', `Move ${list.map((p) => `#${p.issue}`).join(', ')} into this epic`)}
       </div>`).join('');
-    const create = (ep.create || []).map((c, n) => `<div class="po-group${appliedEpic(ctx, msg, `create:${n}`) ? ' applied' : ''}">
+    const create = (ep.create || []).map((c, n) => `<div class="po-group${appliedEpic(ctx, msg, `create:${n}`) ? ' applied' : ''}" data-testid="po-epic-card">
         <div class="po-group-head"><b class="po-split-title" title="${esc(c.title)}">${esc(c.title)}</b><span class="badge">${t('backlog_po_proposals.new_epic')}</span><span class="po-issues">${c.issues.map(ctx.issueRef).join('')}</span></div>
         ${c.goal ? `<div class="small">${esc(c.goal)}</div>` : ''}
         ${action(`create:${n}`, 'Create epic', `Create the epic and place ${c.issues.map((x) => `#${x}`).join(', ')} in it`)}
@@ -156,7 +164,7 @@
     const simulated = devMode();
     if (!simulated && !await confirmDialog(t('backlog_po_proposals.split_issue_into_length_issues', { issue: s.issue, length: p.children.length }),
       t(p.parent === 'close' ? 'backlog_po_proposals.split_filed_parent_closed' : 'backlog_po_proposals.split_filed_parent_task_list', { count: p.children.length, issue: s.issue }), t('backlog_po_proposals.split'))) return;
-    busy = true;
+    inFlight.set(key, roadmap ? 'split-roadmap' : 'split');
     notes.delete(key);
     ctx.render();
     try {
@@ -178,7 +186,7 @@
     } catch (e) {
       notes.set(key, { text: errMsg(e), error: true });
     } finally {
-      busy = false;
+      inFlight.delete(key);
       ctx.render();
     }
   }
@@ -203,7 +211,7 @@
     const simulated = devMode();
     if (!simulated && !await confirmDialog(...what)) return;
     const k = epicKey(msg, key);
-    busy = true;
+    inFlight.set(k, key);
     notes.delete(k);
     ctx.render();
     try {
@@ -214,7 +222,7 @@
     } catch (e) {
       notes.set(k, { text: errMsg(e), error: true });
     } finally {
-      busy = false;
+      inFlight.delete(k);
       ctx.render();
     }
   }
