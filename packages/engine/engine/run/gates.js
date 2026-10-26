@@ -136,7 +136,8 @@ const methods = {
       // the answer is that choice (transitions unchanged) with intent save_to_issue
       ...(step.save_to_issue && this.issues?.[0] ? { save_to_issue: { choice: step.save_to_issue, issue: this.issues[0] } } : {}),
       // #567: an agent's own question (agentQuestion): who asks, and a decision only the owner takes
-      ...(step.by === 'agent' ? { by: 'agent', agent: step.agent, kind: 'decision' } : {}),
+      // and its default, the choice --auto-approve answers
+      ...(step.by === 'agent' ? { by: 'agent', agent: step.agent, kind: 'decision', ...(step.default ? { default: step.default } : {}) } : {}),
     };
 
     // registered before its event, so runs:active lists it as soon as anyone hears of it
@@ -192,7 +193,7 @@ const methods = {
     const defLabel = def && options.find((o) => o.id === def)?.label;
     const agent = this.displayNames().agents[step.agent] || step.agent;
     const { answer, feedback } = await this.requestApproval({
-      id: step.id, raw: true, by: 'agent', agent: step.agent,
+      id: step.id, raw: true, by: 'agent', agent: step.agent, default: choices.some((c) => c.id === def) ? def : null,
       message: `${agent} asks: ${String(q.question).trim()}${def ? `\n\nIts default: ${defLabel ? `${defLabel} (${def})` : def}` : ''}`,
       choices, feedback: { label: options.length ? 'Your answer or more context (optional)' : 'Your answer' },
     });

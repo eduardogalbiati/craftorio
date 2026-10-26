@@ -8,7 +8,9 @@ used_by: "developer"
 # Bug diagnosis
 
 Adapted from the diagnosing-bugs skill in mattpocock/skills (MIT). You run unattended: nobody
-can answer questions, so record assumptions instead of asking.
+can answer questions, so record assumptions instead of asking. Only on a step whose output
+schema offers `needs_human`, ask instead for a choice the owner would want to make (irreversible
+or costly): a question, its options and your default.
 
 ## 1. Build a feedback loop (do not skip)
 

@@ -13,7 +13,9 @@ log is how a human later understands **why** the result looks the way it does.
 ## What to log
 
 A decision is worth a line when a reasonable engineer could have chosen differently:
-- an assumption made instead of asking (ambiguous requirement, missing information);
+- an assumption made instead of asking (ambiguous requirement, missing information); when your
+  output schema offers `needs_human`, ask instead for a choice the owner would want to make
+  (irreversible or costly), and log the answer you got;
 - choosing between approaches (library, algorithm, where to put the code, merge vs rebase);
 - skipping something on purpose (a test, a check, a comment not addressed);
 - a workaround, a retry, or a change of plan after a failure.

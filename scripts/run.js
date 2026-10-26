@@ -6,7 +6,9 @@
 // --attach: an image attached to an input (#129; repeat it for several), e.g. --attach task=C:/shots/bug.png.
 // --file: an absolute path is used as is; a name or relative path is looked up in <workspace>/workflows
 // first, then in the workflows bundled with the app (workflows/ in this repository).
-// --auto-approve approves every human gate (use with care outside mock mode).
+// --auto-approve approves every human gate (use with care outside mock mode); an agent's question
+// (#567) gets the agent's default.
+// --mock-ask <step>: in mock mode, that ask_human step asks the owner once (mockSequences.needs_human).
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
@@ -35,6 +37,7 @@ function parseArgs(argv) {
     const next = () => argv[++i];
     if (k === '--mock') a.mock = true;
     else if (k === '--auto-approve') a.autoApprove = true;
+    else if (k === '--mock-ask') (a.mockAsks ??= {})[next()] = 1;
     else if (k === '--file') a.file = next();
     else if (k === '--task') a.inputs.task = next();
     else if (k === '--repo') a.inputs.repo_path = next();
@@ -65,6 +68,7 @@ const run = new WorkflowRun({
   inputs: args.inputs,
   attachments: args.attachments,
   mock: args.mock,
+  ...(args.mock && args.mockAsks ? { mockSequences: { needs_human: args.mockAsks } } : {}),
   runsDir: ws.runs,
   skillsDirs: [ws.skills],
   budget,
@@ -80,6 +84,8 @@ const rec = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
 
 const t = () => new Date().toLocaleTimeString('en-US');
 const short = (s, n = 160) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n);
+// --auto-approve: with choices, the first option; an agent's question (#567), the agent's default
+const autoAnswer = (ev) => (ev.choices ? (ev.by === 'agent' && ev.default) || ev.choices[0].id : true);
 
 run.on('event', (ev) => {
   rec.write(ev);
@@ -105,8 +111,7 @@ run.on('event', (ev) => {
     case 'approval.requested':
       console.log(`${t()}   ? ${short(ev.message, 200)}${ev.choices ? `  [${ev.choices.map((c) => c.id).join(' | ')}]` : ''}`);
       if (args.autoApprove) {
-        // with choices, picks the first option
-        const answer = ev.choices ? ev.choices[0].id : true;
+        const answer = autoAnswer(ev);
         console.log(`${t()}     → ${ev.choices ? `chose "${answer}"` : 'approved'} automatically (--auto-approve)`);
         // answered as 'auto': a `ship:` transition (#260) only follows the owner's own answer
         setTimeout(() => run.resolveApproval(ev.approval_id, answer, 'auto'), 200);

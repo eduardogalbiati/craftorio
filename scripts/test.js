@@ -255,7 +255,8 @@ async function main() {
   // Fresh temporary workspace: the tests do not write to the user's workspace or the registry, and the
   // bundled skills and workflows are seeded from scratch. Kept on failure for inspection.
   const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-test-ws-'));
-  const status = run(['scripts/run.js', '--mock', '--auto-approve', '--task', 'Engine test'], {
+  // the developer asks the owner once (#567): --auto-approve answers with its default
+  const status = run(['scripts/run.js', '--mock', '--auto-approve', '--mock-ask', 'develop', '--task', 'Engine test'], {
     MULTIAGENT_MOCK_DELAY_SCALE: '0.2',
     MULTIAGENT_WORKSPACE: wsDir,
   });
