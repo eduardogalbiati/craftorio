@@ -88,6 +88,8 @@ body:not(.dev-mode) .dev-only { display: none !important; }
   padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;
   color: var(--orange); border: 1px solid currentColor;
 }
+/* the pushed channel is down (#603, app.js initNotifications) */
+.connection-status { padding: 2px 8px; border-radius: 999px; font-size: 11px; white-space: nowrap; color: var(--yellow); border: 1px solid currentColor; }
 /* #412: the 24/7 chip and the usage right after the Project select (the run KPIs left the bar) */
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 /* #254: the bar's own content wraps at the left (#208); the Oracle's button and the notifications

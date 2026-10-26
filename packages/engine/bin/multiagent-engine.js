@@ -4,7 +4,7 @@
 // (packages/engine/server) and the UI in a browser (the folder the root package.json's `multiagent.ui`
 // names, served from the app root), or in
 // the desktop app of another computer (Settings › Execution › Engine, apps/desktop/host/engine-connection.js).
-//   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--insecure-http] [--workspace <dir>] [--fronts <id,id>]
+//   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--allow-host <name>]... [--insecure-http] [--workspace <dir>] [--fronts <id,id>]
 //
 // The fronts it serves (phase 4, #590, docs/agents/engine/fronts.md): the composition of the UI app it
 // serves (`<multiagent.ui>/../composition.js`, apps/web/composition.js), every installed front
@@ -25,28 +25,44 @@
 // local network. Outside 127.0.0.1 the traffic is plain HTTP: put it behind a reverse proxy with TLS
 // (on a tailnet WireGuard already encrypts it; `tailscale serve` adds HTTPS). Any other address
 // (0.0.0.0, a LAN IP) is refused unless --insecure-http is given: only behind a VPN or a TLS proxy.
+//
+// HTTPS over Tailscale (#541): leave the server on 127.0.0.1 and run `tailscale serve --bg 7300`
+// (it proxies only to loopback, not to this machine's own Tailscale IP). `tailscale serve` forwards
+// the browser's Host (`<machine>.<tailnet>.ts.net`), which a loopback server refuses (DNS rebinding,
+// SEC-16) unless allowed: this machine's MagicDNS name (`tailscale status --json`, Self.DNSName) is
+// read at start, and --allow-host <name> (repeatable) adds names. The banner lists them; without
+// Tailscale the server starts with the loopback names only and says so.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const workspace = require('../domains/workspace/workspace');
 const { createService } = require('../service');
-const { createServer } = require('../server');
+const {
+  createServer,
+  normalizeHostName,
+} = require('../server');
 const { createAuth, fileStorage } = require('../domains/account/auth');
 const authConfig = require('../domains/account/auth-config');
 const runOwner = require('../domains/run/run-owner');
-const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../server/listen-host');
+const {
+  isLoopback,
+  isTailscaleIp,
+  lanAddresses,
+  resolveListenHost,
+} = require('../server/listen-host');
 const { appPackage, appRoot } = require('../domains/workspace/app-root');
 
 function parseArgs(argv) {
-  const a = { port: 7300, host: '127.0.0.1', workspace: null, insecureHttp: false, fronts: null };
+  const a = { port: 7300, host: '127.0.0.1', workspace: null, insecureHttp: false, fronts: null, allowHosts: [] };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`Missing value for ${k}`); return v; };
     if (k === '--port') a.port = Number(next());
     else if (k === '--host') a.host = next();
+    else if (k === '--allow-host') a.allowHosts.push(next());
     else if (k === '--insecure-http') a.insecureHttp = true;
     else if (k === '--workspace') a.workspace = path.resolve(next());
     else if (k === '--fronts') a.fronts = next().split(',').map((x) => x.trim()).filter(Boolean);
@@ -64,6 +80,25 @@ function openBrowser(url) {
   try {
     spawn(cmd, args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: process.platform === 'win32' }).on('error', () => {}).unref();
   } catch { /* printed above */ }
+}
+
+// This machine's MagicDNS name, the Host `tailscale serve` forwards (#541): { name } or { name: null,
+// why }. Never fails the start: Tailscale missing, stopped or slow means loopback names only.
+function readMagicDnsName() {
+  return new Promise((resolve) => {
+    execFile('tailscale', ['status', '--json'], { timeout: 3000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+      let status = null;
+      try { status = JSON.parse(stdout); } catch { /* below */ }
+      if (!status) {
+        const why = err?.code === 'ENOENT' ? 'the tailscale command is not installed or not on the PATH'
+          : err?.killed ? 'tailscale status did not answer' : 'tailscale status failed';
+        return resolve({ name: null, why });
+      }
+      if (status.BackendState && status.BackendState !== 'Running') return resolve({ name: null, why: `Tailscale is ${status.BackendState}` });
+      const name = String(status.Self?.DNSName || '').replace(/\.$/, '');
+      resolve(name ? { name } : { name: null, why: 'Tailscale has no MagicDNS name for this machine' });
+    });
+  });
 }
 
 // the composition of the UI app this server serves (apps/web/composition.js: `{ fronts: [ids] }`), if any
@@ -133,7 +168,9 @@ setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktre
 service.clearPastedImages();
 
 const token = process.env.MULTIAGENT_SERVER_TOKEN || crypto.randomBytes(24).toString('base64url');
-const server = createServer({ service, auth, token });
+// a loopback server answers only the loopback names and these (#541); another address answers any Host
+const loopback = isLoopback(listen.host);
+let server = null;
 // Beyond this machine: the addresses another computer can type (Tailscale's first), and where the
 // desktop app takes them.
 function printRemoteAccess(host, port) {
@@ -148,25 +185,42 @@ function printRemoteAccess(host, port) {
   if (addrs.some((a) => a.tailscale)) console.log('On a tailnet WireGuard encrypts the traffic; `tailscale serve` adds HTTPS.');
 }
 
-server.listen(args.port, listen.host, async () => {
-  const { port } = server.address();
-  const host = listen.host;
-  const shown = host === '0.0.0.0' || host === '::' ? os.hostname() : host.includes(':') ? `[${host}]` : host;
-  console.log(`Multiagent Orchestrator engine server — workspace ${ws.root}`);
-  console.warn('The token is full control of this machine (a shell, gate approval, paid runs): share it only with yourself.');
-  console.log(`Open: http://${shown}:${port}/?token=${encodeURIComponent(token)}`);
-  console.log('  (shown once: the page keeps it in a cookie; clear this line from the shell history and the terminal\'s scrollback if others can read them.)');
-  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) printRemoteAccess(host, port);
-  if (authOff) console.warn('MULTIAGENT_AUTH=off: runs do not need an account.');
-  else {
-    const s = await auth.refresh().catch(() => auth.state());
-    console.log(s.user ? `Account: ${s.user.email}` : 'Not signed in: sign in from the browser UI before starting runs.');
+// The names a loopback server answers besides localhost, 127.0.0.1 and [::1] (#541), never the token.
+function printAllowedHosts(names, magic) {
+  const unread = magic.name ? '' : `Tailscale's name not read: ${magic.why}`;
+  if (names.length) {
+    console.log(`Also answers (tailscale serve): ${names.join(', ')}${unread ? ` (${unread})` : ''}`);
+  } else {
+    console.log(`Answers only localhost, 127.0.0.1 and [::1] (no --allow-host; ${unread}): behind \`tailscale serve\` pass --allow-host <machine>.<tailnet>.ts.net.`);
   }
-});
+}
+
+(async () => {
+  const magic = loopback ? await readMagicDnsName() : { name: null };
+  const allowedHosts = loopback ? [...new Set([...args.allowHosts, magic.name].map(normalizeHostName).filter(Boolean))] : [];
+  server = createServer({ service, auth, token, allowedHosts });
+  server.listen(args.port, listen.host, async () => {
+    const { port } = server.address();
+    const host = listen.host;
+    const shown = host === '0.0.0.0' || host === '::' ? os.hostname() : host.includes(':') ? `[${host}]` : host;
+    console.log(`Multiagent Orchestrator engine server — workspace ${ws.root}`);
+    console.warn('The token is full control of this machine (a shell, gate approval, paid runs): share it only with yourself.');
+    console.log(`Open: http://${shown}:${port}/?token=${encodeURIComponent(token)}`);
+    console.log('  (shown once: the page keeps it in a cookie; clear this line from the shell history and the terminal\'s scrollback if others can read them.)');
+    if (loopback) printAllowedHosts(allowedHosts, magic);
+    else printRemoteAccess(host, port);
+    if (authOff) console.warn('MULTIAGENT_AUTH=off: runs do not need an account.');
+    else {
+      const s = await auth.refresh().catch(() => auth.state());
+      console.log(s.user ? `Account: ${s.user.email}` : 'Not signed in: sign in from the browser UI before starting runs.');
+    }
+  });
+})();
 
 const stop = () => {
   service.shutdown();
   lock.release();
+  if (!server) process.exit(0);
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 };

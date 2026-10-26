@@ -8,8 +8,11 @@
 //                         as app:version answers it; a client built for another contract shows a banner
 //                         (apps/web/renderer/api-http.js). Contract tests over HTTP: test/contract/.
 //   GET  /ws              WebSocket. The server pushes { "channel", "payload" } (chat:progress, run:event,
-//                         supervisor:watch, term:data, term:exit, auth:changed); the client sends { "channel", "arg" }
-//                         for the fire-and-forget channels (term:input, term:resize).
+//                         supervisor:watch, term:data, term:exit, auth:changed), and a { "channel": "ws:ping" }
+//                         heartbeat every wsPingIntervalMs with a protocol ping (#603: a client that
+//                         answers no ping is dropped; the page treats a missing heartbeat as a dead
+//                         socket); the client sends { "channel", "arg" } for the fire-and-forget channels
+//                         (term:input, term:resize).
 //   GET  /                the UI (apps/web/renderer: the page, api-http.js; the UI kit and the fronts it loads) and the few libraries
 //                         it loads from node_modules.
 //
@@ -23,7 +26,9 @@
 // request came over HTTPS (TLS, or x-forwarded-proto: https from a TLS proxy). Requests whose Origin
 // is another site are refused (CSRF, cross-site WebSocket hijacking): the engine runs the user's CLIs
 // on the user's files. A server bound to loopback answers only a Host of localhost / 127.0.0.1 /
-// [::1] (DNS rebinding, SEC-16), as packages/engine/control/index.js does (isLoopbackHost).
+// [::1] (DNS rebinding, SEC-16), as packages/engine/control/index.js does (isLoopbackHost), plus the
+// names given in createServer({ allowedHosts }) (the name `tailscale serve` forwards, #541), matched
+// exactly: they come from the owner (--allow-host) or the machine (its MagicDNS name), never a header.
 
 const http = require('http');
 const fs = require('fs');
@@ -69,6 +74,8 @@ const COOKIE_MAX_AGE_S = 7 * 24 * 60 * 60;
 const MAX_FORM = 4096;
 // a pasted image of up to 10 MB travels as base64 (clipboard:saveImage, #130)
 const MAX_BODY = 15 * 1024 * 1024;
+// the WebSocket ping and heartbeat period (#603): two heartbeats within the page's watchdog (20 s)
+const WS_PING_INTERVAL_MS = 10000;
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -122,7 +129,14 @@ function isLoopbackHost(host, port = null) {
 // DNS rebinding (SEC-16): a server bound to loopback (--host 127.0.0.1) answers only a Host that names
 // this machine; another name means a page of another site whose name now points here. A server bound
 // to another address (0.0.0.0 with --insecure-http, a Tailscale IP) is reached by other names.
-const hostAllowed = (req, boundAddress) => !isLoopbackAddress(boundAddress) || isLoopbackHost(req.headers.host);
+// `allowed`: the extra names a loopback server answers (normalizeHostName'd), e.g. the ts.net name
+// `tailscale serve` forwards with or without its port (#541): an exact match, never a suffix.
+const hostAllowed = (req, boundAddress, allowed = []) => !isLoopbackAddress(boundAddress) || isLoopbackHost(req.headers.host)
+  || (allowed.length > 0 && allowed.includes(normalizeHostName(String(req.headers.host || '').replace(/:\d+$/, ''))));
+
+// a host name as compared by hostAllowed: trimmed, lower case, without the trailing dot of a DNS
+// name (Tailscale's Self.DNSName ends with one, #541)
+const normalizeHostName = (name) => String(name || '').trim().toLowerCase().replace(/\.$/, '');
 
 // came over HTTPS: TLS here, or a TLS reverse proxy in front (its first x-forwarded-proto)
 const overHttps = (req) => !!req.socket?.encrypted || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
@@ -155,10 +169,14 @@ async function callChannel(fn, arg) {
  * @param service  the engine service (packages/engine/service)
  * @param auth     optional account module (src/auth): adds the auth:* channels and pushes auth:changed
  * @param token    shared secret every client must present (at least 16 characters)
+ * @param allowedHosts  names a loopback-bound server answers besides the loopback ones (the name
+ *                 `tailscale serve` forwards, #541); exact, case-insensitive, any port
+ * @param wsPingIntervalMs  the WebSocket ping / heartbeat period (#603)
  * @returns an http.Server, not listening yet
  */
-function createServer({ service, auth = null, token, root = appRoot(), ui = uiDir() }) {
+function createServer({ service, auth = null, token, root = appRoot(), ui = uiDir(), allowedHosts = [], wsPingIntervalMs = WS_PING_INTERVAL_MS }) {
   const served = staticDirs(root, ui);
+  const allowed = [...new Set(allowedHosts.map(normalizeHostName).filter(Boolean))];
   if (!token || String(token).length < 16) throw new Error('The server needs a token of at least 16 characters.');
   const isToken = tokenCheck(token);
   const cookieToken = (req) => {
@@ -168,7 +186,7 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
   const authorized = (req) => isToken(bearer(req)) || isToken(cookieToken(req));
   // signed in by the cookie: its Max-Age starts again, so a window left open keeps working
   const byCookie = (req) => !isToken(bearer(req)) && isToken(cookieToken(req));
-  const pinned = (req) => hostAllowed(req, server.address()?.address);
+  const pinned = (req) => hostAllowed(req, server.address()?.address, allowed);
   const cookieHeader = (req) => `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${COOKIE_MAX_AGE_S}${overHttps(req) ? '; Secure' : ''}`;
 
   const api = { ...service.api };
@@ -227,7 +245,7 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (!pinned(req)) throw new HttpError(403, 'This server answers only to localhost, 127.0.0.1 or [::1].');
+      if (!pinned(req)) throw new HttpError(403, `This server answers only to ${['localhost', '127.0.0.1', '[::1]', ...allowed].join(', ').replace(/, ([^,]+)$/, ' or $1')}.`);
       // a browser opening the URL printed by the server: keep the token in a cookie and drop it
       // from the address bar
       if (req.method === 'GET' && url.searchParams.has('token')) {
@@ -275,6 +293,8 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
     if (!pinned(req) || !sameOrigin(req)) return refuse(403, 'Forbidden');
     if (!authorized(req)) return refuse(401, 'Unauthorized');
     wss.handleUpgrade(req, socket, head, (ws) => {
+      ws.isAlive = true;
+      ws.on('pong', () => { ws.isAlive = true; });
       ws.on('message', (data) => {
         let msg;
         try { msg = JSON.parse(data); } catch { return; }
@@ -295,9 +315,23 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
   });
   if (auth) unsubscribe.push(auth.onChange(broadcast('auth:changed')));
 
+  // Ping both ways (#603): a client that did not answer the last ping is dropped; the others get a
+  // protocol ping and a heartbeat frame the page's watchdog can see.
+  const heartbeat = JSON.stringify({ channel: 'ws:ping' });
+  const pinger = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!ws.isAlive) { ws.terminate(); continue; }
+      ws.isAlive = false;
+      try { ws.ping(); } catch { /* closing */ }
+      if (ws.readyState === ws.OPEN) ws.send(heartbeat);
+    }
+  }, wsPingIntervalMs);
+  pinger.unref?.();
+
   // close() would wait forever for open WebSockets and keep-alive connections: end them first
   const close = server.close.bind(server);
   server.close = (cb) => {
+    clearInterval(pinger);
     unsubscribe.forEach((off) => off());
     unsubscribe.length = 0;
     for (const ws of wss.clients) ws.terminate();
@@ -317,6 +351,7 @@ module.exports = {
   hostAllowed,
   HttpError,
   isLoopbackHost,
+  normalizeHostName,
   readJson,
   sameOrigin,
   sendJson,

@@ -16,7 +16,10 @@
 //   is re-run alone first and only one red alone is recorded (confirmed_at) and filed; no fix item for
 //   an issue a live run works on (the dispatcher skips a base-health item whose issue has one).
 // - knownFailures: what the Roadmap shows ("N known failures on the base", backlog:get baseFailures).
-// Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen }); the logs and
+// Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck }: #598,
+// lastCheck { commit, at, status green | red | error } is the last check that reached the base's
+// checkout, lastGreen the last green one; a check stopped before it, waiting for the slot or on a
+// folder that is not a repository, records nothing); the logs and
 // issue bodies next to it, in <project id>/ (the store itself: packages/engine/engine/base-health-store.js, so
 // the engine records a run's failures without this module). Wired by packages/engine/service/areas/base-health.js.
 
@@ -253,11 +256,22 @@ function runBaseCheck(ws, opts) {
     const at = new Date().toISOString();
     return withStore(ws, projectId, async () => {
       const store = readStore(ws, projectId);
-      // #527: red only under load, green alone: not a green suite either, nothing recorded
-      if (!failures.length && underLoad && !result?.error) return { status: 'green', alone: true, commit: info.commit, issues: [], fixItem: null };
+      // #598: when the base was last checked, however it ended (lastGreen stays the last green commit)
+      const checked = (status) => { store.lastCheck = { commit: info.commit, at, status }; };
+      // #527: red only under load, green alone: not a green suite either, nothing recorded but the check
+      if (!failures.length && underLoad && !result?.error) {
+        checked('green');
+        writeStore(ws, projectId, store);
+        return { status: 'green', alone: true, commit: info.commit, issues: [], fixItem: null };
+      }
       if (!failures.length) {
-        if (result?.error) return { status: 'error', error: result.error, commit: info.commit, issues: [], fixItem: null };
+        if (result?.error) {
+          checked('error');
+          writeStore(ws, projectId, store);
+          return { status: 'error', error: result.error, commit: info.commit, issues: [], fixItem: null };
+        }
         // green: the known failures are fixed (their entries keep the issue, should the test go red again)
+        checked('green');
         store.lastGreen = { commit: info.commit, at };
         for (const f of store.failures) if (!f.fixed_at) f.fixed_at = at;
         writeStore(ws, projectId, store);
@@ -269,6 +283,7 @@ function runBaseCheck(ws, opts) {
       fs.writeFileSync(logFile, String(result.log || ''));
       // #527: confirmed by this check (alone for a timing failure): a run's suite may count it as pre-existing
       const entries = failures.map((f) => Object.assign(upsert(store, f, at, info.commit), { base_check: { at, commit: info.commit, trigger: opts.trigger || 'merge' }, confirmed_at: at }));
+      checked('red');
       writeStore(ws, projectId, store);
       const out = await report(ws, projectId, entries, { ...opts, onRed, commit: info.commit, lastGreen: store.lastGreen?.commit, logFile, logText: result.log });
       writeStore(ws, projectId, store);

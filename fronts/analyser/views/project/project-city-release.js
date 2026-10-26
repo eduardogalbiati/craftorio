@@ -125,7 +125,10 @@
     el.setAttribute('data-testid', 'city-release');
     el.setAttribute('data-city-panel', 'release'); // #440: the release mode's card; #441: its chevron
     el.setAttribute('aria-live', 'polite');
-    city.el.appendChild(el);
+    // #428: the impact card's place, at the top of the city's left column (.pci is no longer absolute:
+    // appended to the city, it lay over the mode's header and its Close)
+    if (city.leftColumn) city.leftColumn(el);
+    else city.el.appendChild(el);
     let request = null; // { to, from }
     let data = null; // architecture:release's answer
     let issue = null; // the issue filter

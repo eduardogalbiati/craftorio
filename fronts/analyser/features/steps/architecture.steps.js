@@ -90,7 +90,10 @@ const ANALYSIS_TIMEOUT = 60000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const visible = (locator) => locator.filter({ visible: true });
 const projectPage = (page) => visible(page.getByTestId('project-page')).first();
-const tab = (page) => projectPage(page).locator('#project-panel-architecture');
+// Where the one visible city is (#430, #556): "Show on the map" opens it in the city modal attached to
+// the body (data-testid="city-modal"), over the screen it was asked from; otherwise it is the project's
+// Architecture tab. The modal comes last in the document, so it wins when both are shown.
+const tab = (page) => visible(page.locator('[data-testid="city-modal"], [data-testid="project-page"] #project-panel-architecture')).last();
 const byId = (page, id) => visible(tab(page).getByTestId(id)).first();
 const analyzeButton = (page) => tab(page).getByTestId('architecture-analyze');
 const cityModeButton = (page, mode) => visible(tab(page).getByTestId(`architecture-mode-${mode.toLowerCase()}`)).first();

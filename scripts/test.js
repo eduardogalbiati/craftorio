@@ -32,11 +32,37 @@
 // One whole suite at a time per machine (#455): in agent mode, the whole suite (no file, no list) takes
 // the machine-wide `suite` slot first (packages/engine/engine/machine-slot.js), unless it inherits it, and lends
 // it to the test files it runs (#528).
+// No test file on a child's command line (#597): each group's files and options go to a JSON file in
+// the temp folder, and the group's child (`node scripts/test.js --child <file>`) starts them with
+// node:test's run() and the same reporters, so any number of files runs (a Windows command line
+// holds 32,767 characters: the whole suite's 838 paths took 43,510 and the spawn died ENAMETOOLONG).
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+
+// #597: a group's child reads its group file, runs it and ends; the runner's code below is the parent's.
+// Fails like `node --test`: exit 1 when a test fails (a todo's failure does not count).
+const childAt = process.argv.indexOf('--child');
+if (childAt >= 0) {
+  const { run: runTests } = require('node:test');
+  const { spec } = require('node:test/reporters');
+  const { PassThrough } = require('stream');
+  const g = JSON.parse(fs.readFileSync(process.argv[childAt + 1], 'utf8'));
+  const stream = runTests({
+    files: g.files, concurrency: g.concurrency, timeout: g.timeout || Infinity, coverage: g.coverage,
+    execArgv: ['--require', path.join(__dirname, 'test-exit.js')],
+  });
+  stream.on('test:fail', (d) => { if (!d.todo) process.exitCode = 1; });
+  for (const [reporter, destination] of g.reporters) {
+    const source = stream.pipe(new PassThrough({ objectMode: true }));
+    const out = destination === 'stdout' ? process.stdout : fs.createWriteStream(destination);
+    (reporter === 'spec' ? source.pipe(new spec()) : source.compose(require(reporter))).pipe(out);
+  }
+  return;
+}
+
 const { isAgentMode, REPORTER } = require('@multiagent/engine/engine/agent-test-report');
 const { workspaces } = require('./source-tree');
 const machineSlot = require('@multiagent/engine/engine/machine-slot');
@@ -114,7 +140,7 @@ if (process.env.NODE_TEST_CONTEXT) say(`warning: NODE_TEST_CONTEXT=${process.env
 // Per-file wall times (scripts/test-reporter-slowest.js, #305), written to a temp file and printed
 // after the report: the five slowest files, the suite's critical path.
 const timesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-test-times-'));
-const coverage = process.argv.includes('--experimental-test-coverage') ? ['--experimental-test-coverage'] : [];
+const coverage = process.argv.includes('--experimental-test-coverage');
 // One group per budget (#402), the shortest first; the override gives every file the same budget
 const budgetOf = new Map(files.map((f) => [f, testTimeoutMs(f)]));
 const budgets = [...new Set(budgetOf.values())].sort((a, b) => a - b);
@@ -135,14 +161,18 @@ groups.forEach((g, i) => {
   g.specFile = i ? path.join(timesDir, `spec${suffix}.log`) : null;
   if (g.reportFile) fs.rmSync(g.reportFile, { force: true });
   if (groups.length > 1) say(`${g.files.length} file(s): --test-timeout=${g.timeout} ms, concurrency ${g.concurrency}`);
+  // #597: the group's files reach its child through this file, whatever their number
+  g.groupFile = path.join(timesDir, `group${suffix}.json`);
+  fs.writeFileSync(g.groupFile, JSON.stringify({
+    files: g.files, concurrency: g.concurrency, timeout: g.timeout, coverage,
+    reporters: [
+      ['spec', g.specFile || 'stdout'],
+      ...(agent ? [[path.join(__dirname, 'test-reporter-agent.js'), g.reportFile]] : []),
+      [path.join(__dirname, 'test-reporter-slowest.js'), g.timesFile],
+    ],
+  }));
 });
-const argsOf = (g) => [
-  '--test', `--test-concurrency=${g.concurrency}`, `--test-timeout=${g.timeout}`, '--require', path.join(__dirname, 'test-exit.js'), ...coverage,
-  '--test-reporter=spec', `--test-reporter-destination=${g.specFile || 'stdout'}`,
-  ...(agent ? ['--test-reporter=./scripts/test-reporter-agent.js', `--test-reporter-destination=${g.reportFile}`] : []),
-  '--test-reporter=./scripts/test-reporter-slowest.js', `--test-reporter-destination=${g.timesFile}`,
-  ...g.files,
-];
+const argsOf = (g) => [__filename, '--child', g.groupFile];
 // the groups run at the same time: an async spawn each, with run()'s output and environment
 const runAsync = (args) => new Promise((resolve) => {
   const fd = agent ? fs.openSync(humanLog, 'a') : null;

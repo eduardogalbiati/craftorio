@@ -280,7 +280,11 @@ async function loadActiveRuns() {
       if (!state.runId) state.runId = a.runId;
       hydrateRun(a.runId);
     }
-    if (Array.isArray(a.gates)) v.approvals = new Map(a.gates.map((g) => [g.approval_id, { type: 'approval.requested', ...g, run_id: a.runId }]));
+    if (Array.isArray(a.gates)) {
+      v.approvals = new Map(a.gates.map((g) => [g.approval_id, { type: 'approval.requested', ...g, run_id: a.runId }]));
+      // an answered card goes once the engine no longer lists its gate, its push lost or not (#603)
+      for (const id of [...(v.answered?.keys() || [])]) if (!v.approvals.has(id)) v.answered.delete(id);
+    }
     // #368: pausing after the current turn, as the engine says (a reloaded window included)
     if (v.run && a.pause !== undefined) v.run.pause = a.pause;
   }
@@ -288,6 +292,7 @@ async function loadActiveRuns() {
     if (live.has(runId) || v.run?.status !== 'running' || hydrating.has(runId)) continue;
     v.run.status = 'interrupted';
     v.approvals.clear();
+    v.answered?.clear();
   }
   scheduleRender();
 }
@@ -373,6 +378,9 @@ function initNotifications() {
   // was disconnected (its events are lost)
   window.addEventListener('focus', () => loadActiveRuns());
   api.onReconnect?.(() => loadActiveRuns());
+  // the browser client's pushed channel down: "Disconnected, reconnecting…" until it is back (#603;
+  // nothing before the first connection, so the page's start does not flash it)
+  api.onConnectionChange?.((up) => $('#connection-status')?.classList.toggle('hidden', up !== false));
   window.addEventListener('blur', reportNotifyContext);
   document.addEventListener('visibilitychange', reportNotifyContext);
   api.onNotificationClick((target) => openNotificationTarget(target || {}));
@@ -584,6 +592,7 @@ const RUN_EVENT_REDUCERS = {
     v.chainLoaded = false;
     v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
     v.approvals.clear();
+    v.answered?.clear(); // no answered card outlives its run, approval.resolved lost or not (#603)
     orch(ev, `workflow finished: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
     if (liveRuns().length) effects.push({ toast: [`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id] });
     if (v.saveToIssue) effects.push({ openSaveToIssue: true });
@@ -647,6 +656,7 @@ const RUN_EVENT_REDUCERS = {
   },
   'approval.resolved': (v, ev, sess, effects) => {
     v.approvals.delete(ev.approval_id);
+    v.answered?.delete(ev.approval_id); // the push confirms the answered card (#603)
     // the owner's time at the gates, shown apart from agent time (Details, the Time KPI)
     if (v.run && ev.wait_ms) v.run.gateWaitMs = (v.run.gateWaitMs || 0) + ev.wait_ms;
     // "Accept and save to issue #n" (#125): the preview opens when the run ends (workflow.finished)

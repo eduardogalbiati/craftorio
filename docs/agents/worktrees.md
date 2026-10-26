@@ -47,8 +47,21 @@ actions, or any code that deletes or checks out branches.
   new key once (the old entry stays for the runs that link it); an entry changed through the link
   (its hidden lockfile changed) or emptied is marked `unusable` in entry.json and never given to a
   new worktree. A move or link that fails (EBUSY, another volume) keeps the install in the worktree
-  (`local`) and the cache untouched. Not cached (agents install as before, told by the command
-  guide): npm/yarn/pnpm workspaces, `file:`/`link:` dependencies, and the other languages
+  (`local`) and the cache untouched. **npm workspaces (#599)** are cached: the entry holds the
+  installed tree without npm's workspace links (they point into the installing worktree), and the
+  worktree's `node_modules` is a real folder of links marked by `.deps-cache.json`: a junction per
+  top-level item of the entry (a scope with a workspace package is a folder of links to its hoisted
+  children), a copy of the hidden lockfile (a package added there marks the entry unusable), and one
+  absolute link per workspace package into that worktree, so `require('@multiagent/shared')` loads
+  the worktree's own files from the root and from `packages/*`, `fronts/*`, `apps/*`. The key gains
+  the workspace set (folder=name) and a hash of the manifests' dependency fields. Each workspace
+  package's lifecycle scripts run on a hit, then the root's; the `dependencies (…)` log line says
+  "workspace links recreated (N)". Measured on this repository: a miss 24.0 s, a hit 2.5 s (with
+  `prepare`). Limits: a workspace package's `.bin` command resolves through the entry on
+  Linux/macOS, a hoisted package does not find a workspace package. Not cached (agents install as
+  before, told by the command guide): yarn/pnpm workspaces, an npm workspaces glob other than
+  `<folder>/*` or a folder, a nested `node_modules` in a workspace package, `file:`/`link:`
+  dependencies, and the other languages
   (`NOT_CACHED`: poetry/uv/requirements, go.sum, Gemfile.lock). Agents are told in their command
   guide (`depsGuide`); Claude refuses `npm ci` and `rm -rf node_modules` (`DEPS_DENIED_COMMANDS`
   in capabilities.js; Codex/Grok: the after-step check). `removeWorktree` and `cleanupWorktrees`

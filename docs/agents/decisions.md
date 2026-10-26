@@ -176,7 +176,10 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   pure core in `packages/shared/`; complexity comes only from a real tool, never a regex; the analysis is
   the Oracle's, on demand, in its daily budget. What the Oracle finds feeds the Refactor tab, where
   the Product Owner prioritizes. Why: a parser per language cannot be the base when a project can be
-  in any language, or several.
+  in any language, or several. (#574, 2026-10-26) Which docs and rules the agents use is a script,
+  `scripts/docs-usage.js` (`npm run docs:usage`), not a seed, and the `run-retrospective` workflow
+  does not take its report as an input. Why: the questions are countable from the run folders, so
+  no model is needed; the retrospective reads one run, the report aggregates a period.
 - **2026-10-13** (#367): a machine profile sizes the concurrent runs and the test workers per run
   from the machine (threads, RAM), shown with its reasons in Setup and Settings › Execution and
   always overridable: a manual value wins and stays when the machine changes. It never lowers a

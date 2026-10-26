@@ -102,6 +102,8 @@ of a run's shape, in order: `single issue: issues`, `#233 stopped attempt`, `#23
 run list, the Oracle's focus) read the current shape only: they never test for an older one. The
 run index stores the upgraded summary; bump `READ_VERSION` in `packages/engine/domains/run/runs.js` (and the figures' sig
 in `packages/engine/service/areas/insights.js`) when an upgrade changes what was indexed.
+Scripts over many runs read them the same way: `scripts/docs-usage.js` (#574) takes each run's
+tool calls from the upgraded events (testing.md, "Reading a session stream").
 
 When a change alters what a run records (a field renamed, a cost counted another way, a list moved):
 1. Change the engine to write the new shape, with a marker an older record lacks when the shape

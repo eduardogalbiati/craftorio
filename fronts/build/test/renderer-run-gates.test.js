@@ -75,6 +75,8 @@ function loadHelpers() {
     showToast: (...args) => toasts.push(args),
     // run.js settles the pasted images of the answer (packages/ui-kit/paste-image.js)
     PasteImage: { settle: async () => {}, attachments: () => [] },
+    // an accepted answer redraws the gates, the badge and the menu at once (#603)
+    scheduleRender: () => {},
   };
   vm.createContext(withI18n(sandbox));
   vm.runInContext(`${esc}\n${pendingGates}\n${onRunGateClick}\nthis.helpers = { pendingGates, onRunGateClick };`, sandbox);

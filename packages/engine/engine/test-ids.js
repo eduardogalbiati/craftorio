@@ -5,7 +5,9 @@
 //   - a used id is the static string of `getByTestId('…')` / `getByTestId("…")` in a step file;
 //     dynamic ids (template strings, variables) are skipped;
 //   - an id is defined when the renderer's source text contains it (a plain substring check).
-// Folders are repository-relative: steps default to features/steps, the renderer to src/renderer.
+// Folders are repository-relative, one folder or a list (#579, #588: this app's step definitions and
+// UI are spread over its root and its fronts): steps default to features/steps, the renderer to
+// src/renderer (the old layout; the bundled workflow passes its `steps_folders` / `ui_folders` inputs).
 
 const fs = require('fs');
 const path = require('path');
@@ -38,24 +40,28 @@ function listFiles(root, dir, exts) {
   return out.sort();
 }
 
-// The step definition files of a project (repository-relative, forward slashes).
+// The step definition files of a project (repository-relative, forward slashes), each once when the
+// folders overlap. `steps`: one folder or a list (#588: the root's and each front's features/steps).
 function stepFiles(root, { steps = DEFAULT_STEPS } = {}) {
-  return listFiles(root, steps, STEP_EXTS);
+  return [...new Set([].concat(steps).flatMap((dir) => listFiles(root, dir, STEP_EXTS)))];
 }
 
 // One `{ id, files }` per id the step definitions use that the renderer lacks (files: the step files
 // that use it), in order of first use.
 function missingTestIds(root, { steps = DEFAULT_STEPS, renderer = DEFAULT_RENDERER } = {}) {
   const used = new Map();
-  for (const file of stepFiles(root, { steps })) {
+  const files = stepFiles(root, { steps });
+  for (const file of files) {
     for (const id of testIdsUsed(fs.readFileSync(path.join(root, file), 'utf8'))) {
       if (!used.has(id)) used.set(id, []);
       used.get(id).push(file);
     }
   }
   if (!used.size) return [];
-  // `renderer`: one folder, or a list of folders (this app's page is spread over its UI kit and its fronts)
-  const source = [].concat(renderer).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  // `renderer`: one folder, or a list of folders (this app's page is spread over its UI kit and its fronts);
+  // the step definitions inside a UI folder (fronts/<id>/features/steps, #588) never define an id
+  const stepSet = new Set(files);
+  const source = [...new Set([].concat(renderer).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS)))].filter((f) => !stepSet.has(f)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
   return [...used].filter(([id]) => !source.includes(id)).map(([id, files]) => ({ id, files }));
 }
 

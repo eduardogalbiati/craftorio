@@ -89,7 +89,16 @@ fields (references between steps, agents, transitions, groups) are the named rul
   that release run ends. The check takes the machine-wide `suite` slot (#527, like a run's
   whole-suite round, #455) before its `npm test` and frees it on every exit (green, red, error);
   while a run holds it the check waits, logs "base check waiting for the suite slot" in the server
-  log and shows `waiting` on the Roadmap's base-check card. A failure whose error is `test timed
+  log and shows `waiting` on the Roadmap's base-check card. Before the suite the checkout gets its
+  dependencies (#598, `depsFor` in `packages/engine/service/areas/base-health.js`): the shared cache
+  when it serves the project (a workspaces monorepo included, #599), else the project's own install
+  (`npm ci --no-audit --no-fund` for npm), its time and output in the check's log
+  (`worktrees/base-check-<project>-suite.log`). A check that could not run (`status: 'error'`: the
+  install failed, no test command, the runner crashed) writes one engine log line with the reason and
+  the log file and notifies "Base check could not run: <reason>", with no issue and no fix item
+  (nothing is known about the tests). The store records the last check as
+  `lastCheck: { commit, at, status }` (`green`, `red`, `error`); `lastGreen` stays the last green
+  commit. A failure whose error is `test timed
   out` or a timing assertion is re-run alone (`runFileAlone`, the per-test budget) in the base
   checkout before anything is recorded: green alone, it is logged "red under load, green alone"
   with the runs active at the time, and records, files and reopens nothing. Only confirmed
@@ -243,11 +252,15 @@ fields (references between steps, agents, transitions, groups) are the named rul
   (the first n answers of that step have one test command cut at the default).
 - A **test id step** (`type: test_ids`, no agent, no model call, #246; `runTestIdsStep` →
   `packages/engine/engine/test-ids.js`): the static `getByTestId('…')` ids of the E2E step definitions (`steps`,
-  default `features/steps`) that the renderer's source (`renderer`, default `apps/desktop/renderer`) does not
-  contain; both folders are repository-relative templates. Output `{ kind: 'test_ids', status: pass |
+  default `features/steps`) that the renderer's source (`renderer`, default `src/renderer`) does not
+  contain; both are repository-relative templates that render to one folder or several (one per line
+  or comma-separated, #588), and the output lists them. Output `{ kind: 'test_ids', status: pass |
   missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
   project has no step definitions. The same rule backs the `missing_test_ids` filter
-  (`{{ worktree_dir | missing_test_ids }}`, one line per id) and test/e2e-playwright.test.js.
+  (`{{ worktree_dir | missing_test_ids(steps, renderer) }}`, one line per id) and test/e2e-playwright.test.js.
+  ai-development-local-hero passes its `steps_folders` / `ui_folders` inputs (#588; defaults
+  `features/steps`, `src/renderer/`); the `ui_files(folders)` filter keeps the files of a list under
+  the UI folders, so a change there routes to `developer_screenshots` and the UI reviewer.
   ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
   were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
   (`vars.testid_returns`), then develop's own routes follow.

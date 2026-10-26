@@ -103,6 +103,11 @@ Read this before writing or changing tests, and before any check that could star
   (its npm script is not `node <file>` naming the variable) runs the whole suite, and the message
   says why; a runner whose own counts show it ignored the list (files outside it, or as many tests
   as the run's whole suite) is reported as a whole run (`list_ignored`). Without `scope` (test-batch, E2E release) a suite step runs the whole suite.
+  Inside `scripts/test.js` no test file is on a child's command line (#597): the whole suite, a
+  selection in its arguments, a `MULTIAGENT_TEST_FILES` list and `--workspace` alike, each time-budget
+  group's files, concurrency, timeout and reporters go to a JSON file in its temp folder, and the
+  group's child (`node scripts/test.js --child <file>`) starts them with node:test's `run()`, so the
+  32,767-character limit of a Windows command line no longer bounds the number of test files.
   Agents never run suites in their turn: they end a turn with a ```` ```run-tests ```` block (one
   test file per line, or `affected`), the engine runs them like the suite step (log
   `logs/tests-<step>-<n>.log`) and resumes the agent with a summary only (counts, each failure's
@@ -138,6 +143,17 @@ Read this before writing or changing tests, and before any check that could star
   never writes tests" (`edits_tests: false`).
 - **Mock runs in tests**: a test that runs the mock provider sets `MULTIAGENT_MOCK_DELAY_SCALE`
   (0.05 or less) and waits on events (`workflow.finished`, `approval.requested`), not on timers.
+
+## Reading a session stream (#574)
+
+A script that counts what agents did reads each run with `readRunRecord(runDir)` (storage.md, "Old
+runs"), so an older run shape is upgraded first (#350), and walks its `events`: `session.opened`
+gives the session's `agent` and `cwd`, and each `session.stream` event whose `item.kind` is
+`tool_call` is one tool call, `item.name` (`Read`, `Edit`, `Write`, `Bash`, ...) with its
+`item.input` (`file_path`, `command`). Paths are absolute in the session's worktree, with either
+slash: make them relative to `cwd`. `sessions/<id>.jsonl` holds the same events per session; read
+`events.jsonl` so the upgrade applies. `scripts/docs-usage.js` does this (`npm run docs:usage`);
+its tests build fixture run folders (`test/docs-usage.test.js`).
 
 ## Whole simulated runs (#305, #306)
 

@@ -46,6 +46,15 @@ function liveRunOf(ctx, opts, what, optional = false) {
   throw clientError(`Run ${runId} is not in progress: there is nothing to ${what}.`);
 }
 
+// A gate of run `runId` answered before (#603): { already_answered, answered_at } from its
+// approval.resolved event (the run going on or ended), else false
+function answeredBefore(ctx, runId, id) {
+  let events;
+  try { events = runs.runEvents(ctx.runFolder(runId)); } catch { return false; }
+  const ev = events.find((e) => e.type === 'approval.resolved' && e.approval_id === id);
+  return ev ? { already_answered: true, answered_at: ev.ts } : false;
+}
+
 module.exports = (ctx) => [
   {
     channel: 'run:start',
@@ -151,6 +160,8 @@ module.exports = (ctx) => [
   // #333: a human gate opens only to the owner's answer: a run id given as null or '' is refused (never
   // "the only run waiting"), and so is an answer the gate does not offer: true/false on a gate
   // without choices, one of its choice ids on a gate with choices.
+  // #603: a gate of that run answered before answers { already_answered: true, answered_at } (a
+  // window that missed the push says so); a gate the run never asked, false.
   {
     channel: 'approval:resolve',
     method: 'resolveApproval',
@@ -166,7 +177,7 @@ module.exports = (ctx) => [
       const waiting = [...ctx.active.values()].filter((r) => r.approvals.has(id));
       const run = runId ? ctx.active.get(runId) : waiting.length === 1 ? waiting[0] : null;
       const gate = run?.approvals.get(id)?.gate;
-      if (!gate) return false;
+      if (!gate) return runId ? answeredBefore(ctx, runId, id) : false;
       const offered = gate.choices
         ? typeof answer === 'string' && gate.choices.some((c) => c.id === answer)
         : typeof answer === 'boolean';

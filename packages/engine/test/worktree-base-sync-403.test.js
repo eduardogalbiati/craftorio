@@ -80,6 +80,22 @@ test('#403 syncWithBase: a rebase git refuses without a conflict (a pre-rebase h
   assert.equal(git(f.repo, 'rev-parse', 'refs/heads/main'), fix);
 });
 
+test('#610 syncWithBase: a hook refusal keeps git\'s message when a shell warning comes first on stderr', async (t) => {
+  const f = await setup(t);
+  const head = commit(f.dir, 'feature.txt', 'feature\n', 'the run\'s change');
+  commit(f.repo, 'fix.txt', 'fixed\n', 'fix the failing test on main');
+  const hooks = path.resolve(f.dir, git(f.dir, 'rev-parse', '--git-path', 'hooks'));
+  fs.mkdirSync(hooks, { recursive: true });
+  // Git for Windows' bash prints this when it finds no /tmp, before git's own refusal line (#610)
+  fs.writeFileSync(path.join(hooks, 'pre-rebase'), '#!/bin/sh\necho "bash.exe: warning: could not find /tmp, please create!" >&2\nexit 1\n', { mode: 0o755 });
+  const r = await syncWithBase({ repo: f.repo, dir: f.dir, base: 'main' });
+  assert.equal(r.moved, false);
+  assert.equal(r.blocked, null);
+  assert.match(String(r.skipped), /rebase failed: .*pre-rebase hook refused/i);
+  assert.equal(git(f.dir, 'rev-parse', 'HEAD'), head);
+  assert.equal(midRebase(f.dir), false);
+});
+
 test('#403 syncWithBase: uncommitted changes to tracked files skip the rebase and keep the changes', async (t) => {
   const f = await setup(t);
   const head = commit(f.dir, 'feature.txt', 'feature\n', 'the run\'s change');

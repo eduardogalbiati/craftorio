@@ -121,7 +121,11 @@ the token stays out of the address bar). The token (from `MULTIAGENT_SERVER_TOKE
 then kept in an HttpOnly, SameSite=Strict cookie for a week (`Secure` when the request came over
 HTTPS, e.g. `X-Forwarded-Proto: https` from a TLS proxy); API clients send
 `Authorization: Bearer <token>`. On `127.0.0.1` the server answers only requests whose `Host` is
-`localhost`, `127.0.0.1` or `[::1]` (DNS rebinding): a proxy in front must keep that `Host`.
+`localhost`, `127.0.0.1` or `[::1]` (DNS rebinding), plus the names it allows: this computer's
+MagicDNS name, read at start from `tailscale status --json`, and each `--allow-host <name>` (repeat
+it for several names). They match exactly, with any port and in any case, never as a suffix. The
+start banner lists them, or says that only the loopback names are answered (for example when
+Tailscale is not running). A proxy in front must send one of these names as `Host`.
 
 - API: `POST /api/<channel>` with `{ "arg": … }` → `{ "result": … }` or `{ "error": … }`. The channels are the
   desktop app's IPC channels (`projects:list`, `run:start`, `artifacts:read`, `auth:state`, …).
@@ -178,8 +182,20 @@ with the token encrypted by the OS, never in the workspace. A computer that offe
 - **Sign-in**: a remote app cannot sign the server in yet (the provider's page would open on the
   engine's computer), so the server runs with `MULTIAGENT_AUTH=off`; the account only counts users.
 - Plain HTTP over Tailscale is encrypted by WireGuard. For HTTPS, leave `npm run serve` on
-  `127.0.0.1`, run `tailscale serve --bg 7300` on that computer and type
-  `https://<machine>.<tailnet>.ts.net` in the app.
+  `127.0.0.1` and put `tailscale serve` in front of it on that computer:
+
+  ```powershell
+  npm run serve -- --host 127.0.0.1 --port 7300 --allow-host <machine>.<tailnet>.ts.net
+  tailscale serve --bg 7300
+  ```
+
+  Then type `https://<machine>.<tailnet>.ts.net` in the app or the browser
+  (`tailscale serve --bg --https=8443 7300` serves it on `:8443`). `tailscale serve` forwards that
+  name as `Host`; the server allows its own MagicDNS name when Tailscale is running at start, and
+  `--allow-host` keeps it allowed when it is not. Check the start banner: `Also answers (tailscale
+  serve): …` must list the name. `tailscale serve` proxies only to loopback: pointed at this
+  computer's own Tailscale address (`http://100.x.y.z:7300`, a server on `--host tailscale`) it
+  answers 502.
 - Any other plain `http://` address (a LAN IP such as `192.168.1.10`, a server on `0.0.0.0`) is not
   encrypted: the token and every page could be read or replaced on the network. Saving it needs
   **Allow an insecure connection**, and the connection page warns about it every time it shows it.

@@ -3837,7 +3837,9 @@
 
   "run.a_scratch_copy_of_the_workspace": "A scratch copy of the workspace for the checks of this run's agents (simulated runs, screenshots): not artifacts, removed once the run ends. {dir}",
   "run.active": "active",
+  "run.already_answered_at": "Already answered at {time}",
   "run.and_more_more": "and {more} more",
+  "run.answered": "Answered",
   "run.approval_required": "Approval required",
   "run.artifacts": "Artifacts",
   "run.as_a_comment": "as a comment",
@@ -4761,6 +4763,7 @@
   "shell.notifications": "Notifications",
   "shell.project": "Project",
   "shell.project_title": "The project every screen shows",
+  "shell.reconnecting": "Disconnected, reconnecting…",
   "shell.resume_title": "Resume from step",
   "shell.resume_yes": "Resume from this step",
   "shell.run": "Run",

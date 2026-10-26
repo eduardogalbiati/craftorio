@@ -256,3 +256,16 @@ test('#441 the release card is a panel: minimized it keeps the issue picked, exp
   assert.equal(String(chev()?.getAttribute('aria-expanded')), 'true');
   assert.match(text(q(city.el, 'city-release-header')), /1 added/);
 });
+
+// #556 (a #428 regression): appended to the city, the card lay over the mode's header and its Close
+test('#428 the release card sits at the top of the city\'s left column, away from the mode\'s Close', async (t) => {
+  const { city } = await shown(t);
+  const card = q(city.el, 'city-release');
+  const left = city.el.querySelector('[data-pc-left]');
+  const close = q(city.el, 'city-mode-close');
+  assert.equal(left === null, false, 'the left column');
+  assert.equal(close === null, false, 'the mode\'s Close');
+  assert.equal(left.contains(card), true, 'the card is in the left column');
+  assert.equal(left.firstElementChild === card, true, 'at its top');
+  assert.equal(card.contains(close) || left.contains(close), false, 'the mode\'s Close is not under the card');
+});

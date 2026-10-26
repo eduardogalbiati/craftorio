@@ -299,18 +299,7 @@ test('detect: no lockfile gives null', (t) => {
   assert.equal(depsCache.detect(dir), null);
 });
 
-test('detect: a workspaces monorepo (package.json workspaces, or pnpm-workspace.yaml) is not_cached', (t) => {
-  const dir1 = tmpDir(t, 'detect-ws1-');
-  fs.writeFileSync(path.join(dir1, 'package.json'), JSON.stringify({ name: 'p', workspaces: ['packages/*'] }));
-  fs.writeFileSync(path.join(dir1, 'package-lock.json'), '{}');
-  assert.match(depsCache.detect(dir1).notCached, /workspaces monorepo/);
-
-  const dir2 = tmpDir(t, 'detect-ws2-');
-  fs.writeFileSync(path.join(dir2, 'package.json'), '{"name":"p"}');
-  fs.writeFileSync(path.join(dir2, 'pnpm-lock.yaml'), 'lockfileVersion: 6\n');
-  fs.writeFileSync(path.join(dir2, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
-  assert.match(depsCache.detect(dir2).notCached, /workspaces monorepo/);
-});
+// #599: npm workspaces monorepos are cached now (deps-cache-workspaces-599.test.js)
 
 test('detect: local file:/link: dependencies in the lockfile are not_cached (their links point into one worktree)', (t) => {
   const dir = tmpDir(t, 'detect-link-');

@@ -3837,7 +3837,9 @@
 
   "run.a_scratch_copy_of_the_workspace": "Uma cópia de rascunho do workspace para as verificações dos agentes desta execução (execuções simuladas, capturas de tela): não são artefatos, removida quando a execução termina. {dir}",
   "run.active": "ativo",
+  "run.already_answered_at": "Já respondido às {time}",
   "run.and_more_more": "e mais {more}",
+  "run.answered": "Respondido",
   "run.approval_required": "Aprovação necessária",
   "run.artifacts": "Artefatos",
   "run.as_a_comment": "como comentário",
@@ -4761,6 +4763,7 @@
   "shell.notifications": "Notificações",
   "shell.project": "Projeto",
   "shell.project_title": "O projeto que todas as telas mostram",
+  "shell.reconnecting": "Desconectado, reconectando…",
   "shell.resume_title": "Retomar a partir da etapa",
   "shell.resume_yes": "Retomar a partir desta etapa",
   "shell.run": "Execução",
