@@ -39,6 +39,14 @@
   const atGate = (item) => !!item && ((item.status === 'running' && !!item.waiting) || (item.status === 'failed' && !!item.runId && !!item.run?.atGate));
   const stagesOf = (roadmap) => (roadmap && Array.isArray(roadmap.stages) ? roadmap.stages : []);
   const itemsOf = (stage) => (stage && Array.isArray(stage.items) ? stage.items : []);
+  /**
+   * #555: a release (a cut line, #260) is its own entry of the roadmap's list, between two stages:
+   * { kind: 'release', id, name, status?, runId?, shippedAt? } with no items of its own. It is never a
+   * stage: never open, never current, and not counted in the stage numbers ("Stage N").
+   */
+  const isRelease = (entry) => !!entry && entry.kind === 'release';
+  /** #555: the number "Stage N" of the stage at index `s` of the list (the release entries before it do not count). */
+  const stageNumber = (roadmap, s) => stagesOf(roadmap).slice(0, s + 1).filter((x) => !isRelease(x)).length;
   /** Whether a stage still has work: an item not done or skipped (disabled or not). */
   const hasUnfinished = (stage) => itemsOf(stage).some((x) => !isFinished(x));
   /** Whether the automation works on a stage: enabled (#284) with an unfinished item. */
@@ -50,6 +58,12 @@
    * skipped by the automation: it stays in the list and nothing of it starts while the roadmap runs.
    */
   const currentStage = (roadmap) => stagesOf(roadmap).findIndex(isOpen);
+  /**
+   * #552: index of the stage whose run is in progress (an item `running`, not waiting at a human gate:
+   * #395 counts that one as finished), the later one when two stages have one; -1 when nothing runs.
+   * The screen's highlight; currentStage still decides what the automation starts next.
+   */
+  const runningStage = (roadmap) => stagesOf(roadmap).findLastIndex((s) => !s.disabled && itemsOf(s).some((x) => x.status === 'running' && !x.waiting));
 
   /**
    * #237: the stage run on its own (#141, `scope`), or -1 when there is none or it is over (disabled,
@@ -61,14 +75,14 @@
   /** #391: the stage a running roadmap pauses after (the bar's "Pausing after stage N"), -1 when none. */
   const pausingAfterStage = (roadmap) => (roadmap?.state === 'running' && roadmap.scope?.pauseAfter ? scopeIndex(roadmap) : -1);
   /**
-   * The first cut line (#260) the roadmap reached and whose release has not shipped: a stage with a
-   * `release` before stage `at` (every stage when `at` < 0: the roadmap is over), all finished by then.
+   * The first release entry (#260, #555) the roadmap reached and that has not shipped: one before stage
+   * `at` (the whole list when `at` < 0: the roadmap is over), every enabled stage before it finished.
+   * A disabled stage (#284) before it is skipped and does not hold it: the release stays.
    */
   function pendingRelease(roadmap, at) {
     const stages = stagesOf(roadmap);
     const reached = at < 0 ? stages : stages.slice(0, at);
-    // a disabled stage (#284) is skipped, its cut line with it
-    return reached.find((s) => !s.disabled && s.release && s.release.status !== 'shipped') || null;
+    return reached.find((s) => isRelease(s) && s.status !== 'shipped') || null;
   }
   /** #391: the roadmap bar's two pauses, the default first ([{ after, label, hint }]; the stage in progress named). */
   function pauseChoices(roadmap) {
@@ -76,7 +90,7 @@
     // a cut line held before the stage: "after this stage" pauses at once (packages/engine/domains/roadmap/roadmap.js pauseAfterStage)
     const now = at < 0 || pendingRelease(roadmap, at);
     return [
-      { after: 'stage', label: t('roadmap.pause_after_stage'), hint: now ? t('roadmap.pause_after_stage_now') : t('roadmap.pause_after_stage_hint', { stage: at + 1 }) },
+      { after: 'stage', label: t('roadmap.pause_after_stage'), hint: now ? t('roadmap.pause_after_stage_now') : t('roadmap.pause_after_stage_hint', { stage: stageNumber(roadmap, at) }) },
       { after: 'now', label: t('roadmap.pause_now'), hint: t('roadmap.pause_now_hint') },
     ];
   }
@@ -190,21 +204,22 @@
   const earlierRuns = (x) => (x?.runId ? [...new Set(x.runs || [])].filter((id) => id !== x.runId) : []);
 
   // The releases the Roadmap knows (#291; `data.releases`: the service's roadmapReleases), each with
-  // `at`: the stage it follows (its cut line's, else the last stage with a run in it; -1: none) and
-  // `cut` (it has a cut line).
+  // `at`: where it is drawn (#555: its release entry's index, planned or not; else the last stage with
+  // a run in it; -1: none), `cut` (it has a release entry) and `closes` (#555: the stages since the
+  // previous release entry, [{ name, number }]).
   function roadmapReleases(r, data) {
     const list = (data?.releases?.releases || []).filter((x) => x?.version).map((x) => ({ ...x, cut: false, at: -1 }));
-    r.stages.forEach((stage, s) => {
-      const line = stage.release;
-      const x = line?.runId && list.find((y) => y.version === line.name);
-      if (!x) return;
-      x.runId = x.runId || line.runId;
-      x.cut = true;
-      x.at = s;
+    let from = 0;
+    stagesOf(r).forEach((entry, s) => {
+      if (!isRelease(entry)) return;
+      const closes = stagesOf(r).slice(from, s).flatMap((x, k) => (isRelease(x) ? [] : [{ name: x.name || '', number: stageNumber(r, from + k) }]));
+      from = s + 1;
+      const x = list.find((y) => !y.cut && y.version === entry.name);
+      if (x) Object.assign(x, { runId: x.runId || entry.runId || null, cut: true, at: s, closes });
     });
     for (const x of list.filter((y) => !y.cut)) {
       const runs = new Set(x.runs || []);
-      x.at = r.stages.findLastIndex((stage) => stage.items.some((i) => itemRuns(i).some((id) => runs.has(id))));
+      x.at = stagesOf(r).findLastIndex((stage) => itemsOf(stage).some((i) => itemRuns(i).some((id) => runs.has(id))));
     }
     return list;
   }
@@ -225,7 +240,7 @@
     // what merged since the last release: the done items' runs no shipped release holds
     const shipped = new Set(list.filter((x) => x.status === 'shipped').flatMap((x) => x.runs || []));
     const pending = list.filter((x) => x.status !== 'shipped');
-    const runs = new Set([...r.stages.flatMap((s) => s.items).filter((i) => i.status === 'done').flatMap(itemRuns).filter((id) => !shipped.has(id)), ...pending.flatMap((x) => x.runs || [])]);
+    const runs = new Set([...stagesOf(r).flatMap(itemsOf).filter((i) => i.status === 'done').flatMap(itemRuns).filter((id) => !shipped.has(id)), ...pending.flatMap((x) => x.runs || [])]);
     return { list, choice, shown: pending, runs, chosen: null };
   }
 
@@ -319,6 +334,7 @@
     inRange,
     isFinished,
     isOpen,
+    isRelease,
     itemIssues,
     itemRuns,
     moveStage,
@@ -328,7 +344,9 @@
     pendingRelease,
     refusedStart,
     releaseView,
+    runningStage,
     scopedStage,
+    stageNumber,
     stageProgress,
     unfinishedItems,
   };

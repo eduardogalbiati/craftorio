@@ -29,6 +29,7 @@ const projects = require('../../domains/project/projects');
 const releases = require('../../domains/releases/releases');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
+const { isRelease } = require('@multiagent/shared/roadmap-model');
 
 const RELEASE_WORKFLOW = 'release.yaml';
 
@@ -45,10 +46,12 @@ module.exports = (ctx) => {
   const idOf = (projectId) => path.basename(String(projectId));
   const isReleaseRun = (r) => path.basename(String(r?.file || '')) === RELEASE_WORKFLOW;
   const projectRuns = (project) => runs.runsForProject(runs.listRuns(ctx.ws.runs), project);
-  // the roadmap's first cut line whose release has not shipped: [stage, its release], or null
+  // the roadmap's first release entry (#555) that has not shipped: { stage (its id), ...the entry }, or null
   function waitingLine(projectId) {
-    const stage = roadmaps.readRoadmap(ctx.ws.backlog, projectId).stages.find((s) => s.release && s.release.status !== 'shipped');
-    return stage ? { stage: stage.id, ...stage.release } : null;
+    const entry = roadmaps.readRoadmap(ctx.ws.backlog, projectId).stages.find((s) => isRelease(s) && s.status !== 'shipped');
+    if (!entry) return null;
+    const { items: _i, kind: _k, ...line } = entry;
+    return { stage: entry.id, ...line };
   }
 
   // The next release of a project: what merged locally since the last one, named by the cut line waiting.

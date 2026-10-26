@@ -27,14 +27,17 @@
 // may name issues another item holds and runs even when they are closed. The budget cap (packages/engine/domains/usage/budget.js)
 // pauses a roadmap before a start (`budget`: the period, spent, cap and next stage); "Resume anyway"
 // records `budgetWaived` (the day or night it covers) and Start clears the pause.
-// Cut lines (#260, packages/engine/domains/releases/releases.js): a stage with `release: { name }` ends a release ("Release here",
-// drawn after it). When every stage up to the line is finished, `advance` starts nothing after it and
-// asks for the release run (`release: { stage, name }`); the service starts the bundled release
-// workflow and records it on the line (`takeRelease`: `runId`, `status: 'running'`), and the stages
-// after the line wait until it shipped (`status: 'shipped'`, `setRelease`). A release run that ends
-// otherwise leaves the line held or failed and pauses the roadmap there (`holdRelease`,
-// `releaseHold`); Resume checks the release again. A roadmap running one stage (`scope`) and a
-// roadmap without cut lines never wait.
+// Cut lines (#260, packages/engine/domains/releases/releases.js): a release is its own entry of the ordered list (#555,
+// `{ kind: 'release', id, name, status?, runId?, shippedAt?, items: [] }` between two stages, "Release
+// here"); moving, disabling, emptying or removing a stage leaves it where it is. When every enabled
+// stage before it is finished, `advance` starts nothing after it and asks for the release run
+// (`release: { id, name }`); the service starts the bundled release workflow and records it on the
+// entry (`takeRelease`: `runId`, `status: 'running'`), and the stages after it wait until it shipped
+// (`status: 'shipped'`, `setRelease`). A release run that ends otherwise leaves the entry held or
+// failed and pauses the roadmap there (`holdRelease`, `releaseHold`: its id); Resume checks the
+// release again. A running or shipped release keeps its name and place. A roadmap running one stage
+// (`scope`) and a roadmap without releases never wait. Files written before #555 kept the cut line as
+// a `release` field of the stage before it: a read moves it into an entry right after that stage.
 // Stale edits (#287): every write reads and writes the file in one synchronous step (`updateRoadmap`),
 // so the service's writers never interleave; `readRoadmapAt` gives back the stages a screen read, by
 // their `updatedAt`, for a save based on that read (packages/engine/domains/roadmap/roadmap-merge.js).
@@ -66,8 +69,10 @@ const {
   atGate,
   currentStage,
   isFinished,
+  isRelease,
   ITEM_STATES,
   pendingRelease,
+  stageNumber,
   STATES,
 } = require('@multiagent/shared/roadmap-model');
 const { writeJsonSafe } = require('../workspace/state-file');
@@ -87,7 +92,15 @@ const newId = (prefix) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 // fields (`number`, `url`, `title`, `body`) stay on the item for older readers. Files written before
 // stored a single issue as the item itself, with no list: they are normalized when read and written.
 const normalizeItem = (x) => (!x || typeof x !== 'object' || (Array.isArray(x.issues) && x.issues.length) || !x.number ? x : { ...x, issues: itemIssues(x) });
-const normalizeStages = (stages) => (Array.isArray(stages) ? stages.map((s) => (s && Array.isArray(s.items) ? { ...s, items: s.items.map(normalizeItem) } : s)) : stages);
+// #555: a release entry has no items of its own (an empty list, for the readers of every entry's
+// items); a stage's old cut line (`release`) becomes an entry right after it, its id from the stage's
+const releaseEntry = (raw, id) => ({ kind: 'release', id, ...raw, items: [] });
+const normalizeStages = (stages) => (Array.isArray(stages) ? stages.flatMap((s) => {
+  if (isRelease(s)) return [releaseEntry(s, s.id)];
+  if (!s || !Array.isArray(s.items)) return [s];
+  const { release, ...stage } = { ...s, items: s.items.map(normalizeItem) };
+  return release && String(release.name || '').trim() ? [stage, releaseEntry(release, stage.id ? `release-${stage.id}` : null)] : [stage];
+}) : stages);
 
 // #287: the stages of each roadmap file as recently read or written, by `updatedAt` (in memory, the
 // last SEEN_MAX per file): an edit based on an older read is merged against what it read
@@ -129,7 +142,7 @@ function roadmapProblem(r) {
   if (r.live != null && typeof r.live !== 'boolean') return 'live is not true or false';
   for (const s of r.stages) {
     if (!s || !Array.isArray(s.items)) return 'a stage has no items list';
-    if (s.release != null && !String(s.release?.name || '').trim()) return 'a cut line has no release name';
+    if (isRelease(s) && (!s.id || !String(s.name || '').trim() || s.items.length)) return 'a release has no id or name, or has items';
     for (const x of s.items) {
       if (!x?.id || !x.workflow) return 'an item has no id or workflow';
       if (!ITEM_STATES.includes(x.status)) return `item ${x.id} has an unknown status ${JSON.stringify(x.status)}`;
@@ -323,21 +336,43 @@ function assertUnique(stages) {
   }
 }
 
-// A stage's cut line (#260): its release name, trimmed (none without a name). What the release run
-// did to it (status, runId, when it shipped) comes from the same line already in the roadmap, never
-// from the edit: an edit cannot mark a release shipped, and a renamed line is a new release.
+// A release entry (#260, #555): its name, trimmed (none without a name), its id kept (a new one gets
+// one). What the release run did to it (status, runId, when it shipped) comes from the same entry
+// already in the roadmap, never from the edit: an edit cannot mark a release shipped, a renamed one
+// is a new release, and a running or shipped one keeps its name (cleanStages keeps its place too).
+const LOCKED_RELEASE = new Set(['running', 'shipped']);
 function cleanRelease(raw, old) {
+  if (old && LOCKED_RELEASE.has(old.status)) return { ...old };
   const name = String(raw?.name || '').trim();
   if (!name) return null;
-  return old?.name === name ? { ...old, name } : { name };
+  return old?.name === name ? { ...old, name } : releaseEntry({ name }, String(raw?.id || '') || newId('release'));
+}
+
+// #555: the running and shipped releases of `previous` stay where they were: right after the stage
+// (or release) they followed, at the start when they led; one an edit left out comes back
+function keepLockedReleases(out, previous) {
+  const before = previous?.stages || [];
+  const locked = before.filter((s) => isRelease(s) && LOCKED_RELEASE.has(s.status));
+  if (!locked.length) return out;
+  const ids = new Set(locked.map((s) => s.id));
+  const kept = new Map(out.filter((s) => ids.has(s.id)).map((s) => [s.id, s]));
+  const list = out.filter((s) => !ids.has(s.id));
+  for (const entry of locked) {
+    // the nearest entry before it that is still there (its stage removed: the one before that)
+    let k = before.indexOf(entry) - 1;
+    while (k >= 0 && !list.some((s) => s.id === before[k].id)) k -= 1;
+    list.splice(k < 0 ? 0 : list.findIndex((s) => s.id === before[k].id) + 1, 0, kept.get(entry.id) || { ...entry });
+  }
+  return list;
 }
 
 // #284: a stage is not disabled while one of its items runs (nothing in progress would stop)
 const DISABLE_BUSY = 'An item of this stage is running: wait for it, or stop its run, before disabling the stage.';
 
 /**
- * Validated stages from the UI or a proposal: [{ id?, name?, note?, release?: { name }, items: [...] }].
- * Empty stages are dropped. `known`: the synced backlog's issues (titles, URLs, bodies); `previous`:
+ * Validated stages from the UI or a proposal: [{ id?, name?, note?, items: [...] }], with the release
+ * entries between them ({ kind: 'release', id?, name }, #555; a stage's `release: { name }` of an older
+ * writer becomes one after it). Empty stages are dropped, the releases stay. `known`: the synced backlog's issues (titles, URLs, bodies); `previous`:
  * the roadmap edited; `alive(runId)`: as for `runIsAlive` (the file stores a running item as planned).
  * @param {any} stages
  * @param {{ issues?: any[] | null, previous?: Roadmap | null, alive?: Alive }} [options]
@@ -345,12 +380,13 @@ const DISABLE_BUSY = 'An item of this stage is running: wait for it, or stop its
 function cleanStages(stages, { issues = [], previous = null, alive = null } = {}) {
   const known = new Map((issues || []).map((i) => [i.number, i]));
   const prevItems = new Map(allItems(previous || emptyRoadmap()).map((x) => [x.id, x]));
-  const prevReleases = new Map((previous?.stages || []).filter((s) => s?.id && s.release).map((s) => [s.id, s.release]));
+  const prevReleases = new Map((previous?.stages || []).filter((s) => s?.id && isRelease(s)).map((s) => [s.id, s]));
   const prevDisabled = new Set((previous?.stages || []).filter((s) => s?.id && s.disabled).map((s) => s.id));
   const prevWaiting = new Set((previous?.stages || []).filter((s) => s?.id && s.waiting).map((s) => s.id));
   const prevBusy = new Set((previous?.stages || []).filter((s) => s?.id && (s.items || []).some((x) => runIsAlive(x, alive))).map((s) => s.id));
-  const out = (Array.isArray(stages) ? stages : []).map((s) => {
-    const release = cleanRelease(s?.release, prevReleases.get(s?.id));
+  const listed = normalizeStages((Array.isArray(stages) ? stages : []).filter(Boolean));
+  const out = listed.map((s) => {
+    if (isRelease(s)) return cleanRelease(s, prevReleases.get(s.id));
     // #284: only an edit that says so changes the switch; a writer that does not know it (the
     // Oracle's roadmap.stages, a proposal, an outside script) keeps what is stored
     const disabled = s?.disabled === undefined ? prevDisabled.has(s?.id) : !!s.disabled;
@@ -363,12 +399,12 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
     return {
       // no name: shown as "Stage <n>" wherever it is when shown (reordering renumbers it)
       id: s?.id || newId('stage'), name: waiting && !disabled ? dropWaitingSuffix(name) : name, note: String(s?.note || '').trim(),
-      ...(release ? { release } : {}),
       ...(disabled ? { disabled: true } : {}),
       ...(waiting && disabled ? { waiting: true } : {}),
       items: (Array.isArray(s?.items) ? s.items : []).map((x) => cleanItem(x, known, prevItems)),
     };
-  }).filter((s) => s.items.length);
+  }).filter((s) => s && (isRelease(s) || s.items.length));
+  out.splice(0, out.length, ...keepLockedReleases(out, previous));
   // #435: stages the owner adds after the waiting refactor stage (the Backlog's add stage, a move to
   // a new last stage) go before it, so it stays last; reordering stored stages is left as asked
   const prevIds = new Set((previous?.stages || []).map((s) => s?.id).filter(Boolean));
@@ -404,7 +440,7 @@ function saveStages(dir, projectId, stages, { issues, alive = null } = {}) {
  */
 function restoreStages(dir, projectId, change, { alive = null } = {}) {
   return updateRoadmap(dir, projectId, (r) => {
-    const stages = change(r.stages).filter((s) => s.items.length);
+    const stages = change(r.stages).filter((s) => isRelease(s) || s.items.length);
     assertUnique(stages);
     // #284: an Undo that would disable a stage whose item started meanwhile is refused, with the reason
     const now = new Map(r.stages.map((s) => [s.id, s]));
@@ -503,7 +539,7 @@ function dropIssues(dir, projectId, numbers, { alive = null } = {}) {
         const { issues: _old, ...rest } = x;
         return left.length ? [{ ...rest, ...left[0], issues: left }] : [];
       }),
-    })).filter((s) => s.items.length),
+    })).filter((s) => isRelease(s) || s.items.length),
   }));
 }
 
@@ -638,7 +674,7 @@ function adoptResumed(dir, projectId, oldRunId, newRunId) {
   const item = allItems(r).find((x) => x.runId === oldRunId) || allItems(r).find((x) => (x.runs || []).includes(oldRunId));
   // #260: a cut line's release run resumed (from its Ship gate after a Hold): the new run is the line's,
   // and a roadmap paused at that line waits for it again
-  const line = item ? null : r.stages.find((s) => s.release?.runId === oldRunId);
+  const line = item ? null : r.stages.find((s) => isRelease(s) && s.runId === oldRunId);
   if (line) return takeRelease(dir, projectId, line.id, newRunId);
   if (!item) return null;
   return updateRoadmap(dir, projectId, (cur) => ({
@@ -661,38 +697,40 @@ function mergedPullRequest(runDir) {
   });
 }
 
-/** Records what the release run did on a stage's cut line (#260): `patch` = { status, runId, ... }; null when the line is gone. */
-function setRelease(dir, projectId, stageId, patch) {
-  if (!findStage(readRoadmap(dir, projectId), stageId)?.release) return null;
+// #555: the release entry `id` patched with `patch` (its run's fields), the others as they are
+const patchRelease = (r, id, patch) => r.stages.map((s) => (isRelease(s) && s.id === id ? { ...s, ...patch } : s));
+const hasRelease = (dir, projectId, id) => isRelease(findStage(readRoadmap(dir, projectId), id));
+
+/** Records what the release run did on a release entry (#260, #555: its id): `patch` = { status, runId, ... }; null when the entry is gone. */
+function setRelease(dir, projectId, releaseId, patch) {
+  if (!hasRelease(dir, projectId, releaseId)) return null;
+  return updateRoadmap(dir, projectId, (r) => ({ ...r, stages: patchRelease(r, releaseId, patch) }));
+}
+
+/**
+ * A release entry's run started (#260: by the roadmap, by the owner on the Releases screen, or a
+ * resumed one): it is the entry's run, and a roadmap that the entry's last release run paused
+ * (`releaseHold`) waits for it again. Null when the entry is gone.
+ */
+function takeRelease(dir, projectId, releaseId, runId) {
+  if (!hasRelease(dir, projectId, releaseId)) return null;
   return updateRoadmap(dir, projectId, (r) => ({
-    ...r, stages: r.stages.map((s) => (s.id === stageId && s.release ? { ...s, release: { ...s.release, ...patch } } : s)),
+    ...r, ...(r.releaseHold ? { releaseHold: null } : {}), ...(r.releaseHold === releaseId && r.state === 'paused' ? { state: 'running', error: null } : {}),
+    stages: patchRelease(r, releaseId, { status: 'running', runId }),
   }));
 }
 
 /**
- * A cut line's release run started (#260: by the roadmap, by the owner on the Releases screen, or a
- * resumed one): it is the line's run, and a roadmap that the line's last release paused
- * (`releaseHold`) waits for it again. Null when the line is gone.
+ * A release entry's run ended without shipping (#260; `status`: held | failed): the entry says so
+ * and a running roadmap pauses at it (`releaseHold`: its id, so only this pause is undone when a
+ * release run takes the entry again). Start / Resume clears it: the release is then checked again.
+ * @returns {object|null} the roadmap, or null when the entry is gone
  */
-function takeRelease(dir, projectId, stageId, runId) {
-  if (!findStage(readRoadmap(dir, projectId), stageId)?.release) return null;
+function holdRelease(dir, projectId, releaseId, status, message) {
+  if (!hasRelease(dir, projectId, releaseId)) return null;
   return updateRoadmap(dir, projectId, (r) => ({
-    ...r, ...(r.releaseHold ? { releaseHold: null } : {}), ...(r.releaseHold === stageId && r.state === 'paused' ? { state: 'running', error: null } : {}),
-    stages: r.stages.map((s) => (s.id === stageId && s.release ? { ...s, release: { ...s.release, status: 'running', runId } } : s)),
-  }));
-}
-
-/**
- * A cut line's release run ended without shipping (#260; `status`: held | failed): the line says so
- * and a running roadmap pauses at it (`releaseHold`: the stage, so only this pause is undone when a
- * release run takes the line again). Start / Resume clears it: the release is then checked again.
- * @returns {object|null} the roadmap, or null when the line is gone
- */
-function holdRelease(dir, projectId, stageId, status, message) {
-  if (!findStage(readRoadmap(dir, projectId), stageId)?.release) return null;
-  return updateRoadmap(dir, projectId, (r) => ({
-    ...r, ...(r.state === 'running' ? { state: 'paused', pausedBy: null, error: message, releaseHold: stageId } : {}),
-    stages: r.stages.map((s) => (s.id === stageId && s.release ? { ...s, release: { ...s.release, status } } : s)),
+    ...r, ...(r.state === 'running' ? { state: 'paused', pausedBy: null, error: message, releaseHold: releaseId } : {}),
+    stages: patchRelease(r, releaseId, { status }),
   }));
 }
 
@@ -742,7 +780,7 @@ function stagePauseLine(r, stage) {
 const finishRoadmap = (r) => ({ ...r, state: 'done', error: null, pausedBy: null, scope: null });
 
 const refs = (item) => itemIssues(item).map((i) => `#${i.number}`).join(', ');
-const stageName = (r, at) => r.stages[at].name || `Stage ${at + 1}`;
+const stageName = (r, at) => r.stages[at].name || `Stage ${stageNumber(r, at)}`;
 
 // One stage's step: its items whose issues are all closed are skipped, a failure pauses the roadmap,
 // else the items to start; null when every item is finished.
@@ -778,9 +816,9 @@ function stageStep(r, at, { closed, canStart, now }) {
  * (now: the clock of a stage pause's `pausedAt`, #368)
  * A live roadmap (#164) whose last stage ends stays running and asks for a refill (`refill: true`):
  * the caller adds the next stages, or ends it (packages/engine/domains/roadmap/live-roadmap.js applyRefill).
- * A cut line (#260) the roadmap reached and whose release has not shipped holds everything after it:
- * nothing starts and the caller is asked for the release run (`release: { stage, name }`).
- * @returns {{ roadmap: object, start: object[], refill?: true, release?: { stage: string, name: string } }} the items to start (still `planned`: the caller marks them)
+ * A release entry (#260, #555) the roadmap reached and that has not shipped holds everything after it:
+ * nothing starts and the caller is asked for the release run (`release: { id, name }`).
+ * @returns {{ roadmap: object, start: object[], refill?: true, release?: { id: string, name: string } }} the items to start (still `planned`: the caller marks them)
  */
 function advance(roadmap, { runOf, closed = () => false, canStart = () => true, now = () => new Date() }) {
   // Statuses follow the runs whatever the roadmap state (#112): `runOf` reports a run another live
@@ -795,7 +833,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true, 
     const more = r.scope?.pauseAfter && (r.live || pendingRelease(r, -1));
     if (currentStage(r) < 0 && !more) return { roadmap: finished, start: [] };
     // #391: a pause after the stage names it by its number, as the bar's "Pausing after stage N" did
-    const name = r.scope?.pauseAfter ? `Stage ${at + 1} done${r.stages[at].name ? ` (${r.stages[at].name})` : ''}` : `${stageName(r, at)} done`;
+    const name = r.scope?.pauseAfter ? `Stage ${stageNumber(r, at)} done${r.stages[at].name ? ` (${r.stages[at].name})` : ''}` : `${stageName(r, at)} done`;
     return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: `${name}. The other stages are still planned: Start runs the roadmap from its first unfinished stage.` }, start: [] };
   };
   // #237: a scope whose stage ended while the roadmap was paused goes as it does while running
@@ -818,7 +856,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true, 
   for (;;) {
     const at = currentStage(r);
     const line = pendingRelease(r, at);
-    if (line) return { roadmap: r, start: [], release: { stage: line.id, name: line.release.name } };
+    if (line) return { roadmap: r, start: [], release: { id: line.id, name: line.name } };
     if (at < 0) return r.live ? { roadmap: r, start: [], refill: true } : { roadmap: finished, start: [] };
     const step = stageStep(r, at, { closed, canStart, now });
     if (step) return step;
@@ -868,7 +906,7 @@ function skipItem(dir, projectId, itemId, why) {
 function issueStages(roadmap) {
   const out = new Map();
   (roadmap.stages || []).forEach((s, n) => {
-    for (const x of s.items) for (const i of itemIssues(x)) if (!testsLater(x) || !out.has(i.number)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null, ...(s.disabled ? { disabled: true } : {}), ...(s.disabled && s.waiting ? { waiting: true } : {}) });
+    for (const x of s.items) for (const i of itemIssues(x)) if (!testsLater(x) || !out.has(i.number)) out.set(i.number, { stage: stageNumber(roadmap, n), name: s.name || `Stage ${stageNumber(roadmap, n)}`, status: x.status, itemId: x.id, origin: x.origin || null, ...(s.disabled ? { disabled: true } : {}), ...(s.disabled && s.waiting ? { waiting: true } : {}) });
   });
   return out;
 }

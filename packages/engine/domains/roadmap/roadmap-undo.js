@@ -2,7 +2,8 @@
 // and after it, with its label ("Removed #279 from the roadmap"). `undoEdit` puts that back into the
 // roadmap as it is now, never an older copy of the whole file:
 // - what the edit removed comes back at its place (an item, with its stage when it went too), the
-//   stages and the items go back to their order, a stage to its name, note and cut line;
+//   stages and the items go back to their order, a stage to its name and note, a release entry
+//   (#555) to its place and name (not one whose release run started);
 // - what the edit added goes, unless it has started since;
 // - an item that exists now keeps its run (status, runId, runs, error), and one that is running or
 //   done is not changed at all; items and stages added since stay.
@@ -16,7 +17,7 @@
 // (packages/engine/service/channels/roadmap.js) and packages/engine/domains/roadmap/roadmap-history.js.
 
 const { testsLater } = require('./roadmap');
-const { isFinished } = require('@multiagent/shared/roadmap-model');
+const { isFinished, isRelease } = require('@multiagent/shared/roadmap-model');
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -69,27 +70,29 @@ function undoEdit(currentStages, edit) {
     if (!cur) { const { items, ...rest } = clone(old); return rest; }
     const { items, ...rest } = cur;
     const edited = thenStages.get(old.id);
-    for (const k of ['name', 'note', 'release', 'disabled']) {
+    for (const k of ['name', 'note', 'disabled']) {
       if (after && edited && same(old[k], edited[k])) continue;
-      // a cut line whose release run has started is not the edit's to change
-      if (k === 'release' && (rest.release?.status || rest.release?.runId)) continue;
+      // #555: a release whose run has started is not the edit's to rename
+      if (isRelease(rest) && (rest.status || rest.runId)) continue;
       if (old[k] === undefined) delete rest[k]; else rest[k] = clone(old[k]);
     }
     return rest;
   }
 
+  // #555: a release entry (no items) comes back or stays by itself; one the edit added goes, unless its run started
+  const addedRelease = (s) => !!after && thenStages.has(s.id) && !before.some((b) => b.id === s.id) && !s.status && !s.runId;
   const stages = [];
   for (const old of back) {
     const cur = nowStages.get(old.id);
     const items = [...(old.items || []).map(item).filter(Boolean), ...(cur?.items || []).filter(stays)];
-    if (items.length) stages.push({ ...head(old, cur), items });
+    if (items.length || isRelease(old)) stages.push({ ...head(old, cur), items });
   }
   // the stages added since (or by the edit, with what has started in them)
   const known = new Set(back.map((s) => s.id));
   for (const cur of current) {
     if (known.has(cur.id)) continue;
     const items = (cur.items || []).filter(stays);
-    if (items.length) stages.push({ ...cur, items });
+    if (items.length || (isRelease(cur) && !addedRelease(cur))) stages.push({ ...cur, items });
   }
 
   // an issue belongs to one unfinished item (packages/engine/domains/roadmap/roadmap.js assertUnique)

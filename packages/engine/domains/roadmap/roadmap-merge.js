@@ -2,9 +2,11 @@
 // Oracle edit that says what it read) sends the whole stages with the `updatedAt` it read (`base`);
 // when the stored roadmap is newer, `onStored` applies only what the edit changed against that read
 // to the stored stages, by item and stage id, and keeps everything else as stored:
-// - a stage's name, note, cut line or switch; an item's workflow, simulation, chain, each input, and
+// - a stage's name, note or switch; an item's workflow, simulation, chain, each input, and
 //   its issues (the ones the edit added or took out, so an issue appended elsewhere stays);
-// - a move (to another stage, or a new order), a removal, a new item or stage.
+// - a move (to another stage, or a new order), a removal, a new item or stage;
+// - a release entry (#555, { kind: 'release', id, name }, between stages) is added, moved, renamed and
+//   removed like a stage (it has no items: a removal takes it out, an empty one stays).
 // It refuses, changing nothing, when the edit cannot be applied: the item or stage it changes is gone,
 // the same field changed on both sides to different values, an item it removes changed elsewhere,
 // or the read is no longer known (packages/engine/domains/roadmap/roadmap.js keeps the recent reads in memory, `readRoadmapAt`).
@@ -12,6 +14,7 @@
 // (packages/engine/service/channels/roadmap.js) and the Oracle's roadmap.stages (packages/engine/service/areas/oracle.js).
 
 const path = require('path');
+const { isRelease } = require('@multiagent/shared/roadmap-model');
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -28,7 +31,6 @@ const refuse = (why) => ({ ok: false, reason: `${upper(why)} Nothing was saved.`
 const STAGE = {
   name: { what: 'name', get: (s) => String(s?.name || '').trim() },
   note: { what: 'note', get: (s) => String(s?.note || '').trim() },
-  release: { what: 'cut line', get: (s) => String(s?.release?.name || '').trim() },
   disabled: { what: 'switch', get: (s) => !!s?.disabled },
 };
 const ITEM = {
@@ -59,7 +61,7 @@ function mergeEdit(read, edited, current) {
   const key = (e) => (e.id && (baseStages.has(e.id) || outStage.has(e.id)) ? e.id : e);
   const where = (id) => {
     for (const s of out) {
-      const n = s.items.findIndex((x) => x.id === id);
+      const n = (s.items || []).findIndex((x) => x.id === id);
       if (n >= 0) return { s, n };
     }
     return null;
@@ -82,12 +84,17 @@ function mergeEdit(read, edited, current) {
       const c = outStage.get(b.id);
       if (!c) return refuse(`${gone(b)}: its ${f.what} could not be changed.`);
       if (!same(f.get(c), f.get(b)) && !same(f.get(c), f.get(e))) return refuse(`the ${f.what} of ${stageLabel(base, b)} was changed elsewhere too.`);
-      if (k === 'release') {
-        if (f.get(e)) c.release = clone(e.release); else delete c.release;
-      } else if (k === 'disabled') {
+      if (k === 'disabled') {
         if (e.disabled) c.disabled = true; else delete c.disabled;
       } else c[k] = e[k];
     }
+  }
+  // #555: the release entries the edit removed go (a stage goes with its last item, step 4)
+  const listed = new Set(edited.map((e) => e.id).filter(Boolean));
+  for (const b of base.filter((s) => isRelease(s) && !listed.has(s.id))) {
+    const c = outStage.get(b.id);
+    if (c) out.splice(out.indexOf(c), 1);
+    outStage.delete(b.id);
   }
   // 2. the stages the edit added, after the stage before them in the edit
   edited.forEach((e, i) => {
@@ -167,11 +174,11 @@ function mergeEdit(read, edited, current) {
   for (const e of edited) {
     const target = outStage.get(key(e));
     if (!target) continue;
-    const ids = (e.items || []).map((x) => x.id).filter((id) => id && target.items.some((y) => y.id === id));
+    const ids = (e.items || []).map((x) => x.id).filter((id) => id && (target.items || []).some((y) => y.id === id));
     const before = (baseStages.get(e.id)?.items || []).map((x) => x.id).filter((id) => ids.includes(id));
     if (before.length === ids.length && !same(ids, before)) reorder(target.items, ids);
   }
-  return { ok: true, stages: out.filter((s) => s.items.length) };
+  return { ok: true, stages: out.filter((s) => isRelease(s) || s.items.length) };
 }
 
 /**
