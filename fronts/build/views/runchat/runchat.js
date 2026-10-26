@@ -398,7 +398,13 @@
       buttons.forEach((x) => { x.disabled = true; });
       // the answer opposite to the gate's recommendation asks once (#213); images pasted into the feedback (#130) go with it
       const answer = v === 'true' ? true : v === 'false' ? false : v;
-      const send = () => PasteImage.collect(b.closest('.duo-ask').querySelector('textarea')).then((images) => api.resolveApproval(b.dataset.approval, answer, text, chat.runId, b.dataset.intent || null, ...(images.length ? [images] : [])));
+      const send = () => PasteImage.collect(b.closest('.duo-ask').querySelector('textarea')).then((images) => api.resolveApproval(b.dataset.approval, answer, text, chat.runId, b.dataset.intent || null, ...(images.length ? [images] : [])))
+        // the engine's answer: refused (buttons back), or answered before, elsewhere (#603)
+        .then((ok) => {
+          if (ok === false) { buttons.forEach((x) => { x.disabled = false; }); showToast(t('run.the_gate_did_not_accept_the'), t('run.it_needs_a_text_or_it')); return; }
+          if (ok?.already_answered) showToast(t('run.already_answered_at', { time: TimeZone.formatTime(ok.answered_at, TimeZone.current()) }));
+        })
+        .catch((err) => { buttons.forEach((x) => { x.disabled = false; }); showToast(t('run.could_not_answer_the_gate'), errMsg(err)); });
       const gate = chat.model.gates.get(b.dataset.approval);
       if (!window.gateAgainstRecommendation?.(gate, answer)) { send(); return; }
       window.confirmGateAnswer(gate, answer).then((ok) => (ok ? send() : buttons.forEach((x) => { x.disabled = false; })));

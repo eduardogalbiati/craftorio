@@ -280,7 +280,11 @@ async function loadActiveRuns() {
       if (!state.runId) state.runId = a.runId;
       hydrateRun(a.runId);
     }
-    if (Array.isArray(a.gates)) v.approvals = new Map(a.gates.map((g) => [g.approval_id, { type: 'approval.requested', ...g, run_id: a.runId }]));
+    if (Array.isArray(a.gates)) {
+      v.approvals = new Map(a.gates.map((g) => [g.approval_id, { type: 'approval.requested', ...g, run_id: a.runId }]));
+      // an answered card goes once the engine no longer lists its gate, its push lost or not (#603)
+      for (const id of [...(v.answered?.keys() || [])]) if (!v.approvals.has(id)) v.answered.delete(id);
+    }
     // #368: pausing after the current turn, as the engine says (a reloaded window included)
     if (v.run && a.pause !== undefined) v.run.pause = a.pause;
   }
@@ -288,6 +292,7 @@ async function loadActiveRuns() {
     if (live.has(runId) || v.run?.status !== 'running' || hydrating.has(runId)) continue;
     v.run.status = 'interrupted';
     v.approvals.clear();
+    v.answered?.clear();
   }
   scheduleRender();
 }
@@ -587,6 +592,7 @@ const RUN_EVENT_REDUCERS = {
     v.chainLoaded = false;
     v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
     v.approvals.clear();
+    v.answered?.clear(); // no answered card outlives its run, approval.resolved lost or not (#603)
     orch(ev, `workflow finished: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
     if (liveRuns().length) effects.push({ toast: [`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id] });
     if (v.saveToIssue) effects.push({ openSaveToIssue: true });
