@@ -138,10 +138,10 @@ function control(html, attr) {
   assert.fail(`no control with ${attr}`);
 }
 const isDisabled = (c) => /\sdisabled(\s|=|$)/.test(c.attrs);
-// A visible busy state: aria-busy, a busy/loading/spinner class on the button or inside it, or a "…" label.
-const isBusy = (c) => /aria-busy="true"/.test(c.attrs)
-  || /class="[^"]*\b(busy|loading|spinner|spinning|is-busy)\b/.test(c.attrs)
-  || /\b(busy|loading|spinner|spinning)\b|…/.test(c.inner);
+// A visible busy state: aria-busy, or a busy/loading/spinner class on the button or on an element inside
+// it. Not a "…" in the label: an idle label may end with one ("Edit…").
+const BUSY_CLASS = /class="[^"]*\b(busy|loading|spinner|spinning|is-busy)\b/;
+const isBusy = (c) => /aria-busy="true"/.test(c.attrs) || BUSY_CLASS.test(c.attrs) || BUSY_CLASS.test(c.inner);
 
 // A click on a split's button (`act`) or an epic's (`epicAct`), through onClick like the drawer does.
 function clickSplit(BacklogPoProposals, ctx, issue, act) {
@@ -346,6 +346,21 @@ test('#609 a split in flight leaves the epics\' buttons enabled', async () => {
   const html = BacklogPoProposals.epicsHtml(ctx, msg);
   for (const key of ['create:0', 'create:1', 'place:E1']) assert.equal(isDisabled(control(html, `data-epic-act="${key}"`)), false, `${key} stays enabled`);
   pending.get(71).resolve({ messages: [], children: [] });
+  await settle();
+});
+
+test('#609 the clicked button keeps its label while busy, and each epic proposal is a po-epic-card', async () => {
+  const { BacklogPoProposals, pending } = loadWithPendingEpics();
+  const msg = epicsMsg('t609i');
+  const ctx = makeCtx([msg]);
+
+  clickEpic(BacklogPoProposals, ctx, 'create:0');
+  await settle();
+  const html = BacklogPoProposals.epicsHtml(ctx, msg);
+  const text = (c) => c.inner.replace(/<[^>]*>/g, '').trim();
+  assert.equal(text(control(html, 'data-epic-act="create:0"')), 'Create epic', 'the busy button still reads "Create epic"');
+  assert.equal((html.match(/data-testid="po-epic-card"/g) || []).length, 3, 'one card per Place in epic group and per new epic');
+  pending.get('create:0').resolve({ messages: [] });
   await settle();
 });
 
