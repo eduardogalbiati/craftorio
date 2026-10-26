@@ -543,19 +543,24 @@ const methods = {
   // skipped when the project has no step definitions (no BDD steps) or the run has no checkout.
   runTestIdsStep(step, st) {
     const dir = this.ctx.worktree_dir;
-    const folder = (key, def) => (step[key] ? render(String(step[key]), this.ctx).trim() : '') || def;
+    // #588: each field renders to one folder or several, one per line or comma-separated (the hero
+    // workflow joins its `steps_folders` / `ui_folders` inputs)
+    const folder = (key, def) => {
+      const list = (step[key] ? render(String(step[key]), this.ctx) : '').split(/[\n,]/).map((f) => f.trim()).filter(Boolean);
+      return list.length ? list : [def];
+    };
     const folders = { steps: folder('steps', testIds.DEFAULT_STEPS), renderer: folder('renderer', testIds.DEFAULT_RENDERER) };
     const base = { kind: 'test_ids', round: st.visits, steps: folders.steps, renderer: folders.renderer, missing: [] };
     let output;
     if (!dir || !fs.existsSync(dir)) {
       output = { ...base, status: 'skipped', message: 'Test id check skipped: the run has no checkout.' };
     } else if (!testIds.stepFiles(dir, folders).length) {
-      output = { ...base, status: 'skipped', message: `Test id check skipped: the project has no BDD step definitions in ${folders.steps}.` };
+      output = { ...base, status: 'skipped', message: `Test id check skipped: the project has no BDD step definitions in ${folders.steps.join(', ')}.` };
     } else {
       const missing = testIds.missingTestIds(dir, folders);
       output = missing.length
-        ? { ...base, status: 'missing', missing, message: `${missing.length} test id(s) the E2E step definitions use are not in ${folders.renderer}:\n${testIds.missingTestIdLines(missing)}` }
-        : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${folders.renderer}.` };
+        ? { ...base, status: 'missing', missing, message: `${missing.length} test id(s) the E2E step definitions use are not in ${folders.renderer.join(', ')}:\n${testIds.missingTestIdLines(missing)}` }
+        : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${folders.renderer.join(', ')}.` };
     }
     this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'test_ids', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
     return output;

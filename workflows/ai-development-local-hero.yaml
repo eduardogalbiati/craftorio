@@ -247,6 +247,17 @@ inputs:
     label: Screenshots
     options: { "off": "Off", changed: Changed screens, all: All }
     description: "All: the developer's UI states before your check and the evidence's captures. Changed: only the screens the issue changes, original and modified. Off: no screenshot step and no npm run screenshot by any agent; the evidence is the diff, the logs and the test results (cheapest: the evidence step costs about $0.3-1.5 and 5-10 min of a run)."
+  # #588: where the project's UI and its E2E step definitions live (another layout than src/renderer/)
+  ui_folders:
+    label: "UI folders"
+    type: array
+    default: [src/renderer/]
+    description: "The project's UI folders, repository-relative (one per line). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there."
+  steps_folders:
+    label: "Step definition folders"
+    type: array
+    default: [features/steps]
+    description: "The folders of the project's E2E step definitions, repository-relative (one per line), read by the test id check."
   test_command:
     type: string
     default: ""
@@ -935,7 +946,7 @@ steps:
       They are acceptance files too: never edit them or their step definitions (the orchestrator
       refuses the turn). Their steps may locate controls that do not exist yet: add the
       `data-testid`s (and the roles and accessible names) they use to the screens you build.
-      {% set ids = worktree_dir | missing_test_ids %}{% if ids and not steps.develop.output %}Add these test ids: their step definitions use them and the renderer does not have them yet
+      {% set ids = worktree_dir | missing_test_ids(inputs.steps_folders, inputs.ui_folders) %}{% if ids and not steps.develop.output %}Add these test ids: their step definitions use them and the renderer does not have them yet
       (the orchestrator checks them right after your commit, before the review):
       {{ ids }}
       {% endif %}
@@ -1066,10 +1077,10 @@ steps:
       # unless validate_every_round)
       - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
         goto: developer_screenshots
-      # #151: a committed UI change (screens to capture, or files under src/renderer/) is captured
-      # right after develop in every mode too, for the ui_reviewer in code_review (a UI fix round
-      # included); a change without UI skips it
-      - when: "output.committed and inputs.screenshots != 'off' and ((output.screenshots or []) | length or 'src/renderer/' in ((output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+      # #151: a committed UI change (screens to capture, or files under the UI folders, #588) is
+      # captured right after develop in every mode too, for the ui_reviewer in code_review (a UI fix
+      # round included); a change without UI skips it
+      - when: "output.committed and inputs.screenshots != 'off' and ((output.screenshots or []) | length or (output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
         goto: developer_screenshots
       # #404: the project's rule checks before the owner's gate or the review (rule_check, no model
       # call); a project without a check command goes on as before
@@ -1128,11 +1139,13 @@ steps:
   # step definitions must be in the renderer (packages/engine/engine/test-ids.js, the rule of
   # test/e2e-playwright.test.js). Missing ones go back to the developer with the list and where each
   # is used, at most twice in the run; then the run goes on and the suite's test reports them. A
-  # project without BDD step definitions is skipped (a note in the output). Another project's
-  # folders: `steps:` / `renderer:` (repository-relative; default features/steps, src/renderer).
+  # project without BDD step definitions is skipped (a note in the output). The folders come from
+  # the steps_folders / ui_folders inputs (#588; default features/steps, src/renderer/).
   - id: testid_check
     display: Test id check (scenarios)
     type: test_ids
+    steps: "{{ (inputs.steps_folders or []) | join('\\n') }}"
+    renderer: "{{ (inputs.ui_folders or []) | join('\\n') }}"
     transitions:
       - when: "output.status == 'missing' and (vars.testid_returns or 0) | int < 2"
         goto: develop
@@ -1142,7 +1155,7 @@ steps:
         goto: issue_not_done
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
         goto: developer_screenshots
-      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
         goto: developer_screenshots
       # #404: the project's rule checks before the owner's gate or the review
       - when: "worktree_dir | check_command(inputs.check_command)"
@@ -1258,7 +1271,7 @@ steps:
         goto: developer_screenshots
         set: *accepted_gaps
       # #151: a UI change is captured for the ui_reviewer, as in develop's transitions
-      - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+      - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
         goto: developer_screenshots
         set: *accepted_gaps
       - when: "choice == 'continue'"
@@ -1286,7 +1299,7 @@ steps:
       - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes' and inputs.screenshots != 'off'"
         goto: developer_screenshots
       # #151: a UI change is captured for the ui_reviewer, as in develop's transitions
-      - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+      - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
         goto: developer_screenshots
       # #404: the project's rule checks before the owner's gate or the review
       - when: "choice == 'continue' and worktree_dir | check_command(inputs.check_command)"
@@ -1310,7 +1323,7 @@ steps:
     min_success: 1
     required_agents: [reviewer]
     agent_when:
-      ui_reviewer: "previous_step in ['developer_screenshots', 'developer_check'] and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+      ui_reviewer: "previous_step in ['developer_screenshots', 'developer_check'] and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
     prompt: |
       {% if agent == 'ui_reviewer' %}
       {% set shots = steps.developer_screenshots.output %}
@@ -1325,7 +1338,7 @@ steps:
       {% if shots and (shots.screenshots or []) | length %}{{ shots.screenshots | to_yaml }}{% endif %}
       Look at each PNG once, original and modified. When there is no screenshot (a simulated run, a
       failed capture, or no screen listed), review the diff of the styles and markup instead:
-      `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} -- src/renderer/`.
+      `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} -- {{ (inputs.ui_folders or ['src/renderer/']) | join(' ') }}`.
       Judge only what the change touched, never the rest of the app, and never the code's logic.
       For each screenshot (or each changed screen, without screenshots), go through the fixed
       checklist of ui-conventions and mark each item pass or fail with one line of evidence:

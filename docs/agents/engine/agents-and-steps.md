@@ -252,11 +252,15 @@ fields (references between steps, agents, transitions, groups) are the named rul
   (the first n answers of that step have one test command cut at the default).
 - A **test id step** (`type: test_ids`, no agent, no model call, #246; `runTestIdsStep` →
   `packages/engine/engine/test-ids.js`): the static `getByTestId('…')` ids of the E2E step definitions (`steps`,
-  default `features/steps`) that the renderer's source (`renderer`, default `apps/desktop/renderer`) does not
-  contain; both folders are repository-relative templates. Output `{ kind: 'test_ids', status: pass |
+  default `features/steps`) that the renderer's source (`renderer`, default `src/renderer`) does not
+  contain; both are repository-relative templates that render to one folder or several (one per line
+  or comma-separated, #588), and the output lists them. Output `{ kind: 'test_ids', status: pass |
   missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
   project has no step definitions. The same rule backs the `missing_test_ids` filter
-  (`{{ worktree_dir | missing_test_ids }}`, one line per id) and test/e2e-playwright.test.js.
+  (`{{ worktree_dir | missing_test_ids(steps, renderer) }}`, one line per id) and test/e2e-playwright.test.js.
+  ai-development-local-hero passes its `steps_folders` / `ui_folders` inputs (#588; defaults
+  `features/steps`, `src/renderer/`); the `ui_files(folders)` filter keeps the files of a list under
+  the UI folders, so a change there routes to `developer_screenshots` and the UI reviewer.
   ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
   were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
   (`vars.testid_returns`), then develop's own routes follow.

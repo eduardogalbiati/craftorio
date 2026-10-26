@@ -2,7 +2,7 @@
 // Templates and expressions of a run (#250, from packages/engine/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
-// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `check_command`, `issue_numbers`,
+// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `issue_numbers`,
 // `issue_lines`, `one_line`, `suite_lines`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
 // loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
@@ -157,13 +157,23 @@ tpl.addFilter('suite_scope', (output, noun) => suiteStep.suiteScope(output, noun
 
 // The test ids the E2E step definitions of a checkout use and its renderer lacks (#246, the rule of
 // packages/engine/engine/test-ids.js), one line per id with the step files that use it; '' when none or without
-// a folder. Optional folders, repository-relative: steps (features/steps), renderer (apps/desktop/renderer).
-//   {{ worktree_dir | missing_test_ids }}
+// a folder. Optional folders, repository-relative, one or a list (#588): steps (features/steps), renderer
+// (src/renderer).
+//   {{ worktree_dir | missing_test_ids(inputs.steps_folders, inputs.ui_folders) }}
 tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
   if (!dir || !fs.existsSync(String(dir))) return '';
   try {
     return testIds.missingTestIdLines(testIds.missingTestIds(String(dir), { steps: steps || undefined, renderer: renderer || undefined }));
   } catch { return ''; }
+});
+
+// The files of a list (a step's files_changed) under the project's UI folders (#588), compared with
+// forward slashes; folders: one or a list, repository-relative (default src/renderer, the old layout).
+//   when: "(output.files_changed or []) | ui_files(inputs.ui_folders) | length"
+tpl.addFilter('ui_files', (files, folders) => {
+  const norm = (p) => String(p ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const dirs = [].concat(folders ?? testIds.DEFAULT_RENDERER).map(norm).filter(Boolean);
+  return [].concat(files ?? []).filter((f) => dirs.some((d) => norm(f) === d || norm(f).startsWith(`${d}/`)));
 });
 
 // The project's check command of a checkout (#404, packages/engine/engine/check-step.js): the given one (the
