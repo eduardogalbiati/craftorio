@@ -29,17 +29,38 @@ test('release assets: every deploy.yml build uploads exactly the files the scrip
 // #557: the publish job's SHA256SUMS step, run with bash (as on the runner: `bash -e`) on fake assets
 const SHA_ABC = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';     // sha256("abc")
 const SHA_EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';   // sha256("")
+// A bash with coreutils: on Windows the Git Bash next to git (a bare `bash` may be WSL's, with no distro)
+let bashFound;
+function findBash() {
+  if (bashFound !== undefined) return bashFound;
+  const candidates = ['bash'];
+  if (process.platform === 'win32') {
+    const exec = spawnSync('git', ['--exec-path'], { encoding: 'utf8' });
+    if (!exec.error && exec.status === 0) candidates.unshift(path.resolve(exec.stdout.trim(), '..', '..', '..', 'bin', 'bash.exe'));
+    candidates.unshift(path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'));
+  }
+  bashFound = candidates.find((b) => {
+    if (b !== 'bash' && !fs.existsSync(b)) return false;
+    const probe = spawnSync(b, ['-c', 'sha256sum --version'], { encoding: 'utf8' });
+    return !probe.error && probe.status === 0;
+  }) || null;
+  return bashFound;
+}
+const removeDir = (dir) => { try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* left in TMP */ } };
+
 function runSumsStep(t, files) {
   const wf = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/deploy.yml'), 'utf8'));
   const step = wf.jobs.publish.steps.find((s) => /sha256sum/.test(s.run || ''));
   assert.ok(step, 'the publish job has a sha256sum step');
+  const bash = findBash();
+  if (!bash) { t.skip('no bash with sha256sum on this machine'); return null; }
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'sums-557-'));
   const runnerTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-557-'));
-  t.after(() => { fs.rmSync(work, { recursive: true, force: true }); fs.rmSync(runnerTemp, { recursive: true, force: true }); });
+  t.after(() => { removeDir(work); removeDir(runnerTemp); });
   fs.mkdirSync(path.join(work, 'assets'));
   for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(work, 'assets', name), body);
-  const r = spawnSync('bash', ['-e', '-c', step.run], { cwd: work, env: { ...process.env, RUNNER_TEMP: runnerTemp }, encoding: 'utf8' });
-  if (r.error) { t.skip(`bash unavailable: ${r.error.code}`); return null; }
+  const r = spawnSync(bash, ['-e', '-c', step.run], { cwd: work, env: { ...process.env, RUNNER_TEMP: runnerTemp }, encoding: 'utf8' });
+  assert.equal(r.error, undefined, `bash ran: ${r.error && r.error.code}`);
   const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
   const notes = fs.readdirSync(runnerTemp).map((f) => read(path.join(runnerTemp, f))).filter((s) => s !== null).join('\n');
   return { status: r.status, stderr: r.stderr, sums: read(path.join(work, 'assets', 'SHA256SUMS')), notes };
