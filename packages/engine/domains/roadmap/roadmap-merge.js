@@ -44,6 +44,14 @@ const ITEM = {
 };
 const content = (x) => ({ ...Object.fromEntries(Object.entries(ITEM).map(([k, f]) => [k, f.get(x)])), inputs: x?.inputs || {}, issues: numbers(x) });
 
+// #555: the cut line after the stage `id` of a list: the names of the release entries right after it
+const cutAfter = (list, id) => {
+  const n = list.findIndex((s) => !isRelease(s) && s.id === id);
+  if (n < 0) return null;
+  const next = list.slice(n + 1).findIndex((s) => !isRelease(s));
+  return list.slice(n + 1, next < 0 ? undefined : n + 1 + next).map((s) => String(s.name || '').trim()).join('\n');
+};
+
 // the elements of `list` whose id is in `ids` take the order of `ids`, in the places they hold
 function reorder(list, ids) {
   const slots = list.map((x, n) => (ids.includes(x.id) ? n : -1)).filter((n) => n >= 0);
@@ -92,6 +100,11 @@ function mergeEdit(read, edited, current) {
         if (e.disabled) c.disabled = true; else delete c.disabled;
       } else c[k] = e[k];
     }
+    // #555: the cut line after a stage, changed on both sides to different ones (as the stage's
+    // `release` field before #555: a line drawn elsewhere after the stage the edit draws one after)
+    if (isRelease(e)) continue;
+    const [was, mine, now] = [cutAfter(base, b.id), cutAfter(edited, b.id), cutAfter(current, b.id)];
+    if (now != null && was !== mine && was !== now && mine !== now) return refuse(`the cut line of ${stageLabel(base, b)} was changed elsewhere too.`);
   }
   // #555: the release entries the edit removed go (a stage goes with its last item, step 4)
   const listed = new Set(edited.map((e) => e.id).filter(Boolean));
