@@ -51,6 +51,36 @@ const cutAfter = (list, id) => {
   const next = list.slice(n + 1).findIndex((s) => !isRelease(s));
   return list.slice(n + 1, next < 0 ? undefined : n + 1 + next).map((s) => String(s.name || '').trim()).join('\n');
 };
+// #555: the cut line after the edit's stage `e`, changed on both sides to different ones (as the stage's
+// `release` field before #555: a line drawn elsewhere after the stage the edit draws one after)
+function cutChangedElsewhere(base, edited, current, e) {
+  if (isRelease(e)) return false;
+  const [was, mine, now] = [cutAfter(base, e.id), cutAfter(edited, e.id), cutAfter(current, e.id)];
+  return now != null && was !== mine && was !== now && mine !== now;
+}
+
+// step 1 of mergeEdit: the edit's changes to the stages' own fields, applied to the stored stages
+// (`outStage`, by id); a refusal when one was changed elsewhere too, else null
+function mergeStageFields(base, edited, current, outStage, gone) {
+  const baseStages = new Map(base.map((s) => [s.id, s]));
+  for (const e of edited) {
+    const b = e.id && baseStages.get(e.id);
+    if (!b) continue;
+    for (const [k, f] of Object.entries(STAGE)) {
+      // a writer that does not know the switch (#284) leaves it as stored
+      if (k === 'disabled' && e.disabled === undefined) continue;
+      if (same(f.get(b), f.get(e))) continue;
+      const c = outStage.get(b.id);
+      if (!c) return refuse(`${gone(b)}: its ${f.what} could not be changed.`);
+      if (!same(f.get(c), f.get(b)) && !same(f.get(c), f.get(e))) return refuse(`the ${f.what} of ${stageLabel(base, b)} was changed elsewhere too.`);
+      if (k === 'disabled') {
+        if (e.disabled) c.disabled = true; else delete c.disabled;
+      } else c[k] = e[k];
+    }
+    if (cutChangedElsewhere(base, edited, current, e)) return refuse(`the cut line of ${stageLabel(base, b)} was changed elsewhere too.`);
+  }
+  return null;
+}
 
 // the elements of `list` whose id is in `ids` take the order of `ids`, in the places they hold
 function reorder(list, ids) {
@@ -86,26 +116,8 @@ function mergeEdit(read, edited, current) {
   const gone = (s) => (outStage.has(s.id) ? null : `${stageLabel(base, s)} was removed elsewhere`);
 
   // 1. the stages' own fields
-  for (const e of edited) {
-    const b = e.id && baseStages.get(e.id);
-    if (!b) continue;
-    for (const [k, f] of Object.entries(STAGE)) {
-      // a writer that does not know the switch (#284) leaves it as stored
-      if (k === 'disabled' && e.disabled === undefined) continue;
-      if (same(f.get(b), f.get(e))) continue;
-      const c = outStage.get(b.id);
-      if (!c) return refuse(`${gone(b)}: its ${f.what} could not be changed.`);
-      if (!same(f.get(c), f.get(b)) && !same(f.get(c), f.get(e))) return refuse(`the ${f.what} of ${stageLabel(base, b)} was changed elsewhere too.`);
-      if (k === 'disabled') {
-        if (e.disabled) c.disabled = true; else delete c.disabled;
-      } else c[k] = e[k];
-    }
-    // #555: the cut line after a stage, changed on both sides to different ones (as the stage's
-    // `release` field before #555: a line drawn elsewhere after the stage the edit draws one after)
-    if (isRelease(e)) continue;
-    const [was, mine, now] = [cutAfter(base, b.id), cutAfter(edited, b.id), cutAfter(current, b.id)];
-    if (now != null && was !== mine && was !== now && mine !== now) return refuse(`the cut line of ${stageLabel(base, b)} was changed elsewhere too.`);
-  }
+  const fields = mergeStageFields(base, edited, current, outStage, gone);
+  if (fields) return fields;
   // #555: the release entries the edit removed go (a stage goes with its last item, step 4)
   const listed = new Set(edited.map((e) => e.id).filter(Boolean));
   for (const b of base.filter((s) => isRelease(s) && !listed.has(s.id))) {
