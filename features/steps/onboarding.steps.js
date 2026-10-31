@@ -27,12 +27,12 @@ const { Given, When, Then } = require('./fixtures');
 const LOAD_TIMEOUT = 30000;
 // the access check (git ls-remote, up to 30 s in the engine) and a local clone
 const IMPORT_TIMEOUT = 45000;
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const wizard = (page) => page.getByTestId('project-wizard');
 const currentStep = (page) => wizard(page).locator('[aria-current="step"]').first();
 const tray = (page) => page.getByTestId('onboarding-tray');
-const trayItem = (page, name) => tray(page).getByTestId('tray-item').filter({ hasText: new RegExp(`\\b${escapeRe(name)}\\b`) });
+// the name is its own element (the tray's <strong>), read as text with no word after it: "missing-641failed" has no \b
+const trayItem = (page, name) => tray(page).getByTestId('tray-item').filter({ has: page.getByText(name, { exact: true }) });
 // an amount of money ("$0.42", "$ 1", "0.42 USD") or an estimate said unknown (onboarding-model's
 // costSummary: a missing estimate is null, never $0)
 const AMOUNT = /\$\s?\d|\d(\.\d+)?\s*USD\b|unknown|not known|no estimate/i;
