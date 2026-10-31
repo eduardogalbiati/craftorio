@@ -74,7 +74,7 @@ Filled in by the Code & Build workflows at each step: the run, the commit and th
 | 1. `onboarding-model.js` and tests | done | 20261031-143716-3710e990 | d7ba344d, local merge into main |
 | 2. The clone as a job | done | 20261031-145746-8dfe137a | 674ddc38, local merge into main |
 | 3. Jobs and channels | done | 20261031-153207-02654e57 | 966d1595, local merge into main |
-| 4. Wizard in the UI | pending | — | — |
+| 4. Wizard in the UI | done | 20261031-162314-a4a4f350 | 30387301, local merge into main |
 | 5. Review and Next steps | pending | — | — |
 | 6. Setup and Projects | pending | — | — |
 | 7. Seed, E2E, i18n, docs | pending | — | — |
