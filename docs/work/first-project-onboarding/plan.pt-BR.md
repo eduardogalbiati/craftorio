@@ -75,6 +75,6 @@ Preenchido pelos workflows de Code & Build a cada passo: o run que fez, o commit
 | 2. Clone em job | concluído | 20261031-145746-8dfe137a | 674ddc38, merge local na main |
 | 3. Jobs e canais | concluído | 20261031-153207-02654e57 | 966d1595, merge local na main |
 | 4. Assistente na UI | concluído | 20261031-162314-a4a4f350 | 30387301, merge local na main |
-| 5. Revisão e Next steps | pendente | — | — |
+| 5. Revisão e Next steps | concluído | 20261031-172436-27d42531 | 7d2dc763, merge local na main |
 | 6. Setup e Projects | pendente | — | — |
 | 7. Seed, E2E, i18n, docs | pendente | — | — |
