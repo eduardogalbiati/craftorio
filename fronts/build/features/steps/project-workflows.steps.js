@@ -75,10 +75,12 @@ Given('a local git repository {string} whose workflows manifest lists {string} a
   git(e2e, folder, ['commit', '-q', '-m', 'Declare the workflows']);
 });
 
+// Projects › New project opens the onboarding wizard since #643; the project dialog's Create mode
+// (with its Workflows block) is still the header's project selector's "New project…".
 When('I start a new project {string} in the folder {string}', async ({ e2e }, name, folderName) => {
   const screen = visible(e2e.window.getByTestId('projects-screen')).first();
   await expect(screen).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await screen.getByRole('button', { name: 'New project', exact: true }).click();
+  await e2e.window.getByTestId('header-project').selectOption({ label: 'New project…' });
   const dialog = projectDialog(e2e.window);
   await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
   await dialog.getByLabel(/^\s*Name\b/).first().fill(name);

@@ -101,7 +101,8 @@ Given("the app is open while another analysis holds the machine's analysis slot"
   e2e.close = async () => { await close(); fs.rmSync(locks, { recursive: true, force: true }); };
 });
 
-// Temporary until onboarding step 6 wires the wizard to Projects › New project: the page global opens it
+// The page global opens the wizard directly; Projects › New project and the Setup's last step also
+// open it since #643 (features/setup-projects-onboarding.feature drives those paths)
 When('I open the project wizard', async ({ e2e }) => {
   const page = e2e.window;
   await expect(page.getByRole('navigation').getByRole('button', { name: 'Home', exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });

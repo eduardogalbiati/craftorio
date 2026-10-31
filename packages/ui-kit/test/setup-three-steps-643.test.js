@@ -30,9 +30,10 @@ const WORKFLOWS = [
 ];
 
 // The page on a workspace with these settings; setSettings merges the patch like the engine does
-function page({ settings = { setupDone: false }, projects = [] } = {}) {
+function page({ settings = { setupDone: false }, projects = [], fronts } = {}) {
   let saved = JSON.parse(JSON.stringify(settings));
   return loadApp({
+    fronts,
     api: {
       getSettings: async () => JSON.parse(JSON.stringify(saved)),
       setSettings: async (patch) => { saved = { ...saved, ...JSON.parse(JSON.stringify(patch || {})) }; return JSON.parse(JSON.stringify(saved)); },
@@ -106,6 +107,98 @@ test('#643 the Setup\'s last step opens the onboarding wizard, not the old New p
   }
   assert.equal(wizardShown(app), true, 'the wizard (#project-wizard) is shown on its start step');
   assert.equal(app.el('#project-modal-title').textContent, '', 'the old New project dialog was not opened');
+});
+
+// Review of #643: the Setup reaches the wizard through the build front's action openProjectWizard
+// (fronts/build/views/projects/project-wizard.js), so a composition without that front has no New
+// project button and reaching First project opens nothing, without an error.
+test('#643 without the build front: no openProjectWizard action, no New project on First project, and reaching it throws nothing', async () => {
+  const app = page({ projects: [], fronts: ['ai'] });
+  await app.boot();
+  assert.equal(setupOpen(app), true, 'a new workspace opens the Setup');
+  assert.equal(app.run("window.Actions.has('openProjectWizard')"), false);
+  await pressNext(app); // Agents -> Try it safely
+  await pressNext(app); // Try it safely -> First project
+  await app.settle(10);
+  assert.equal(app.el('#setup-modal #setup-title').textContent, 'Add your first project');
+  assert.equal(/data-testid="setup-new-project"/.test(String(app.el('#setup-modal #setup-body').innerHTML)), false, 'no New project button');
+  assert.equal(wizardShown(app), false, 'no wizard');
+  assert.deepEqual(app.errors.map((e) => String(e?.message || e)), []);
+});
+
+test('#643 with the build front: the openProjectWizard action exists and opens the wizard on its start step', async () => {
+  const app = page({ settings: { setupDone: true } });
+  await app.boot();
+  assert.equal(app.run("window.Actions.has('openProjectWizard')"), true);
+  app.run("window.Actions.call('openProjectWizard')");
+  await app.settle(10);
+  assert.equal(wizardShown(app), true);
+});
+
+test('#643 First project shows its New project button when the build front is there', async () => {
+  const app = page({ projects: [{ id: 'p1', name: 'Shop', folder: 'C:/p/shop' }] });
+  await app.boot();
+  await pressNext(app);
+  await pressNext(app);
+  assert.equal(/data-testid="setup-new-project"/.test(String(app.el('#setup-modal #setup-body').innerHTML)), true);
+});
+
+// The wizard has no callback: the Setup watches #project-wizard's hidden attribute (a MutationObserver,
+// replaced here by a recording one: the fake DOM has no mutations) and reads the projects again.
+test('#643 when the wizard opened by the Setup closes, First project reads the projects again and lists the new one', async () => {
+  const projects = [];
+  const app = page({ projects });
+  await app.boot();
+  app.run(`window.__observers = [];
+    window.MutationObserver = class {
+      constructor(fn) { this.fn = fn; this.on = false; window.__observers.push(this); }
+      observe(target) { this.on = true; this.target = target; }
+      disconnect() { this.on = false; }
+      takeRecords() { return []; }
+    };`);
+  await pressNext(app); // Agents -> Try it safely
+  await pressNext(app); // Try it safely -> First project: the wizard opens
+  await app.settle(10);
+  assert.equal(wizardShown(app), true, 'the wizard opened');
+  const reads = app.callsTo('listProjects').length;
+  projects.push({ id: 'p9', name: 'Fresh Café', folder: 'C:/p/fresh' }); // what the wizard created
+  app.run(`window.ProjectWizard.close();
+    window.__observers.filter((o) => o.on && o.target && o.target.id === 'project-wizard')
+      .forEach((o) => o.fn([{ type: 'attributes', attributeName: 'hidden', target: o.target }], o));`);
+  await app.settle(20);
+  assert.equal(app.callsTo('listProjects').length > reads, true, 'the projects were read again');
+  assert.equal(String(app.el('#setup-modal #setup-body').innerHTML).includes('Fresh Café'), true, 'the new project is listed');
+  assert.equal(setupOpen(app), true, 'the Setup is still open, on its last step');
+});
+
+// The wizard opened over the Setup keeps the focus: Next/Finish under it is not focused again.
+test('#643 when the last step opens the wizard, the focus is not put back on the Setup\'s Next/Finish', async () => {
+  const app = page({ projects: [] });
+  await app.boot();
+  const next = app.el('#setup-modal #btn-setup-next');
+  let focused = 0;
+  next.focus = () => { focused += 1; };
+  await pressNext(app); // Agents -> Try it safely
+  assert.equal(focused > 0, true, 'a plain Next focuses Next again (the check sees focus calls)');
+  focused = 0;
+  await pressNext(app); // Try it safely -> First project: the wizard opens
+  await app.settle(10);
+  assert.equal(wizardShown(app), true, 'the wizard opened');
+  assert.equal(focused, 0, 'Next/Finish was not focused under the wizard');
+});
+
+test('#643 reaching First project with a project already there opens no wizard and focuses Finish', async () => {
+  const app = page({ projects: [{ id: 'p1', name: 'Shop', folder: 'C:/p/shop' }] });
+  await app.boot();
+  const next = app.el('#setup-modal #btn-setup-next');
+  let focused = 0;
+  next.focus = () => { focused += 1; };
+  await pressNext(app);
+  focused = 0;
+  await pressNext(app);
+  await app.settle(10);
+  assert.equal(wizardShown(app), false, 'no wizard: the workspace has a project');
+  assert.equal(focused, 1, 'Finish has the focus');
 });
 
 // ---- the settings: hiddenWorkflows and setupDone ---------------------------------------------------
