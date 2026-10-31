@@ -92,18 +92,19 @@ Details: [`docs/agents/renderer/interface-language.md`](docs/agents/renderer/int
 
 ## Releasing
 
-Releases are "rc + stable" (#489):
+GitHub Actions run only for a release (2026-10-31, `docs/agents/decisions.md`, #489):
 
-1. Every push to `main` (or a run of the **Deploy** workflow by hand) builds and smoke-tests every OS
-   and publishes a **prerelease** `v<package.json version>-rc.N`, never marked latest.
-2. To ship a stable version, tag the rc's commit `vX.Y.Z` and push the tag (the app's Releases
-   screen does it with "Promote to stable"). Deploy renames that rc's release to the tag and marks it
-   latest, reusing its assets: nothing is rebuilt. A tag on a commit without an rc fails with the
-   reason.
-3. Bump `version` in `package.json` (`npm version <x.y.z> --no-git-tag-version`) when the next rcs
-   should carry the next version.
+1. A push to `main` builds nothing. The app records each merge as a release candidate
+   (`vX.Y.Z-rc.N`) on its Releases screen.
+2. To ship a stable version, tag the candidate's commit `vX.Y.Z` and push the tag (the app's Releases
+   screen does it with "Promote to stable"). **Deploy** builds and smoke-tests every OS from that tag,
+   runs the tests, and publishes the release, marked latest; **Pages** publishes the public page.
+3. To try a build first, run **Deploy** by hand on `main`: it publishes a **prerelease**
+   `v<package.json version>-rc.N`, never marked latest.
+4. Bump `version` in `package.json` (`npm version <x.y.z> --no-git-tag-version`) before the tag, so
+   the app reports the version it ships as.
 
-There is no CHANGELOG file: the changes of each version are its notes on
+The changes of each version are in [CHANGELOG.md](CHANGELOG.md) and in its notes on
 [GitHub Releases](https://github.com/eduardogalbiati/multiagent-orchestrator/releases).
 
 ## Built by its own workflows

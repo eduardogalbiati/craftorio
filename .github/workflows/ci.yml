@@ -1,15 +1,12 @@
 name: CI
 
-# Standard GitHub-hosted runners are free for public repositories; CI still runs only what a change
-# needs, so it stays fast (scripts/ci-plan.js): PRs on ubuntu + windows, macOS when a platform-sensitive
-# path changes or the PR has the `ci:macos` label (applies from the next push, or re-run it), weekly
-# on main, and on manual runs. Docs-only PRs run no tests. A PR from a fork gets the same tests but
-# records no commit status (its token is read-only): the report steps run only for this repository.
+# Runs only by hand (owner decision of 2026-10-31, docs/agents/decisions.md): the runs' own suites test
+# every change before it merges, and a release runs `npm test` on every OS in deploy.yml. Run it from
+# Actions › CI when a check of every OS is wanted before a release. Standard GitHub-hosted runners are
+# free for public repositories; a manual run tests every OS (scripts/ci-plan.js). The pull_request
+# plumbing below (the ci/tested status, the docs-only and macOS plans) stays for when PRs trigger it
+# again; a PR from a fork records no commit status (its token is read-only).
 on:
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: "0 6 * * 1"   # Mondays: the macOS pass on main
   workflow_dispatch:
 
 # A new push to a PR cancels the run of the previous commit.

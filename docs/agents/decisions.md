@@ -8,6 +8,22 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-31** (#489 of 2026-10-22, then the owner session of 2026-10-31): releases are "rc +
+  stable", and this repository's GitHub Actions run only for a release. Every merge into `main` is a
+  release candidate `vX.Y.Z-rc.N` the app records (never latest); the stable release is the last
+  candidate promoted with a `vX.Y.Z` tag on its commit, by the night's release train when the base
+  check is green on that commit, or on demand ("Promote to stable" on the Releases screen). The train
+  promotes alone only with the night permission "Promote a release" (off by default), otherwise it
+  proposes; a red base check or a candidate on **Hold** stops it. The stable version is the label
+  suggestion (#436) over the issues since the last stable, editable. The cut line stays the manual
+  milestone checked by the full release run. In this repository the pushed tag builds every OS, runs
+  `npm test` there and publishes the release as latest (`deploy.yml`) and the public page
+  (`pages.yml`); a push to `main` builds nothing, CI (`ci.yml`) runs only by hand, and an rc
+  prerelease is built only by a manual Deploy run. Replaces the tag-only release of #482 and, on
+  2026-10-31, the GitHub build of every candidate (an rc on every OS per merge, promoted without a
+  rebuild). Why: the owner had to remember to cut a release, and the latest build was whatever merged
+  last; and the owner does not want to spend Actions minutes (macOS counts about ten times) on every
+  merge or pull request while the repository is private, the runs' own suites testing each change.
 - **2026-10-26** (#567, 12-Factor Agents factor 7): agents stay unattended (skills record an
   assumption or a default), with one exception beside Grill me: the agent of a step that opts in
   with `ask_human: true` may answer `needs_human: { question, options, default }`, which pauses the
@@ -51,16 +67,6 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   `chrome-sandbox` is setuid (or that installs the profile) is the way to a sandbox by default and
   stays a future packaging target. Assumption recorded by the run, not yet confirmed by the owner.
   Why: on Ubuntu 24.04 the AppImage ran with Chromium's renderer sandbox off and nobody was told.
-- **2026-10-22** (#489): releases are "rc + stable". Every merge into `main` becomes a prerelease
-  candidate `vX.Y.Z-rc.N` (built on every OS, never latest); the stable release is the last
-  candidate promoted without a rebuild (a `vX.Y.Z` tag on its commit), by the night's release train
-  when the base check is green on that commit, or on demand ("Promote to stable" on the Releases
-  screen). The train promotes alone only with the night permission "Promote a release" (off by
-  default), otherwise it proposes; a red base check or a candidate on **Hold** stops it. The stable
-  version is the label suggestion (#436) over the issues since the last stable, editable. The cut
-  line stays the manual milestone checked by the full release run. Replaces the tag-only release of
-  #482. Why: the owner had to remember to cut a release, and the latest build was whatever merged
-  last; a built, checked candidate promoted as is costs no rebuild.
 - **2026-10-22** (#469, #474): workflows, skills and seeds are code. Transition `action:` and
   `ship.build` stay shell strings (the bundled ones use `&&` and `{% if %}`: an argv list would
   break them); `loadWorkflow` allows there unfiltered only an allowlist of names the workflow or
