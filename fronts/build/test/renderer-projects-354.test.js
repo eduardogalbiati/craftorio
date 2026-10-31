@@ -152,7 +152,8 @@ test('#354 the Projects screen has Open folder and New project in its header', a
   assert.ok(buttons.includes('New project'), `buttons: ${buttons.join(', ')}`);
 });
 
-test('#354 with no project, the Projects screen shows the empty state, whose New project opens the dialog', async () => {
+// #643: the empty state's New project opens the onboarding wizard (project-wizard.js), no longer the dialog
+test('#354 with no project, the Projects screen shows the empty state, whose New project opens the wizard', async () => {
   const app = page({ projects: [], storage: { 'multiagent.currentProject': '' } });
   await app.boot();
   app.run("showView('projects')");
@@ -165,7 +166,10 @@ test('#354 with no project, the Projects screen shows the empty state, whose New
   assert.ok(btn, 'the empty state has no New project button');
   app.el('#project-modal-title').textContent = '';
   await clickRendered(app, btn);
-  assert.equal(app.el('#project-modal-title').textContent, 'New project');
+  await app.settle(10);
+  const wizard = app.created.find((e) => e.id === 'project-wizard');
+  assert.equal(!!wizard && wizard.hidden !== true, true, 'the wizard is shown');
+  assert.equal(app.el('#project-modal-title').textContent, '', 'the old dialog was not opened');
 });
 
 test('#354 with two projects, the Projects screen shows one card per project', async () => {
