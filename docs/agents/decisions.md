@@ -88,7 +88,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   text (settings' `trustedFiles`, like Run App's confirmation). Skills and seeds have no import or
   save flow in the app yet, so only the notice covers them. Why: a downloaded workflow could run a
   command an agent's output (or its own template) chose.
-- **2026-10-15** (#404): the developer finds the repository's rule check failures in its own turn,
+- **2026-10-15** (#404, #396, #395): #404: the developer finds the repository's rule check failures in its own turn,
   before the suite. `npm run check` runs the fast rule checks (lists, layers, file sizes, code
   health, decisions log, docs, types, the Oracle's capabilities) with the same code the rule tests
   call; the developer runs the project's check command before its final answer, and in AI
@@ -97,15 +97,14 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   to the test writer, at most twice per review round, then to the owner at `check_failed`. The suite
   still runs every test, the rule tests included. Why: rule tests failed in 16 of the 32 runs with a
   red first suite round, each costing a suite round (4.7 min median) and a fix turn.
-- **2026-10-15** (#396): the owner may choose, before a run, that an AI Development (local hero)
-  run whose suite is red only outside the change goes on to the build and the merge, reported as
+  #396: the owner may choose, before a run, that an AI Development (local hero) run whose suite is red only outside the change goes on to the build and the merge, reported as
   not tested green (input `suite_red_outside_change: ask | continue`, default `ask`). A failure in
   the change, or a suite that cannot run, still opens `test_failed`. The gate is never answered by an
   agent: with the policy on it does not open for failures outside the change; the supervisor, the
   Oracle and the Night watch never change the input of a run in progress. A timed-out round is
   checked like a failure (the files still running rerun alone, on the branch and on the base).
   Why: a flaky or hanging test the change never touched held the roadmap for hours at the gate (#386).
-- **2026-10-15** (#395): the roadmap can move on past an item or a stage without answering its human
+  #395: the roadmap can move on past an item or a stage without answering its human
   gate ("Move on": the item is `parked`, which counts as finished for its stage, and the next stage
   starts without its change). The gate stays the owner's: nothing answers, stops or closes it. A gate
   answered later gives the item the run's outcome (done when it merged, else failed), and a parked
