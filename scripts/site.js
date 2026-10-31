@@ -4,6 +4,7 @@
 // GitHub Pages lets a browser keep every file for 10 minutes: the pages name their scripts and
 // stylesheets with a version of the content (`assets/reader.js?v=<hash>`, stampAssets), so a new
 // publish never runs the old reader against new data.
+// The page's icon is the app's (apps/desktop/assets/: icon-source.svg and icon.png), copied, never kept twice.
 // What it adds is docs/work/index.json, the list of items ([{ name, kind: 'item' | 'milestone' }]),
 // because a static host lists no folder.
 // An item is a folder of docs/work/ with at least one stage file (intent.md … maintain.md), or a
@@ -25,6 +26,8 @@ const STAGES = ['intent', 'spec', 'plan', 'test', 'deploy', 'maintain', 'milesto
 const COPIED = /\.(md|png|jpe?g|webp|gif)$/i;
 const ITEM = /^[a-z0-9][a-z0-9._-]*$/i;
 const ROOT_FILES = ['CHANGELOG.md', 'CHANGELOG.pt-BR.md'];
+// the app's icon, as the page's: [source in the repository, published path]
+const ICONS = [['apps/desktop/assets/icon-source.svg', 'assets/icon.svg'], ['apps/desktop/assets/icon.png', 'assets/icon.png']];
 
 function workItems(root) {
   const dir = path.join(root, 'docs', 'work');
@@ -76,6 +79,12 @@ function buildSite(root, out) {
     if (!fs.existsSync(path.join(root, f))) continue;
     fs.copyFileSync(path.join(root, f), path.join(out, f));
     files.push(f);
+  }
+  for (const [from, to] of ICONS) {
+    if (!fs.existsSync(path.join(root, from))) continue;
+    fs.mkdirSync(path.dirname(path.join(out, to)), { recursive: true });
+    fs.copyFileSync(path.join(root, from), path.join(out, to));
+    files.push(to);
   }
   const items = workItems(root);
   fs.mkdirSync(path.join(out, 'docs', 'work'), { recursive: true });
