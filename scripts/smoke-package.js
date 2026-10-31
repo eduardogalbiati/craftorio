@@ -29,8 +29,10 @@ let stderr = '';
 
 console.log(`Smoke: starting ${exe} on ${workspace}`);
 // A packaged app ignores MULTIAGENT_USER_DATA: Chromium's --user-data-dir keeps its user data (sign-in,
-// window state) away from the machine's real install
-const child = spawn(exe, [`--user-data-dir=${path.join(scratch, 'user-data')}`], {
+// window state) away from the machine's real install; on macOS, Chromium's --use-mock-keychain keeps
+// safeStorage away from the machine's keychain (#623)
+const args = [`--user-data-dir=${path.join(scratch, 'user-data')}`, ...(process.platform === 'darwin' ? ['--use-mock-keychain'] : [])];
+const child = spawn(exe, args, {
   stdio: expectSandboxWarning ? ['inherit', 'inherit', 'pipe'] : 'inherit',
   env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: workspace, MULTIAGENT_SMOKE_FILE: report },
 });

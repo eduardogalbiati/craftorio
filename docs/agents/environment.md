@@ -64,6 +64,7 @@ the workspace folder.
   `ditto`, Linux `.tar.gz` and AppImage through `appimagetool`), and `scripts/smoke-package.js`
   starts a packaged app in simulation on a scratch workspace and waits for it to quit by itself
   (`MULTIAGENT_SMOKE_FILE`, honoured only with `MULTIAGENT_SIMULATION_ONLY=1`, `apps/desktop/host/main.js`).
+  On macOS the packaged smoke and the screenshot tool run on Chromium's mock keychain (`use-mock-keychain`, #623).
 - **Release jobs**: `deploy.yml` (a `vX.Y.Z` tag or a manual dispatch) runs one build job per target on `windows-latest`
   (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and `ubuntu-latest`
   (linux x64: `npm rebuild node-pty` against Electron's headers, AppImage + tar.gz, smoke under

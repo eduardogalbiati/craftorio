@@ -633,7 +633,12 @@ function main() {
 
 // Electron's main process runs the capture; plain Node (the tests) and the E2E suite's Electron main
 // (features/support/electron-main.js, which sets global.multiagentScreenshotHelpers) only import the helpers.
-if (process.type === 'browser' && !global.multiagentScreenshotHelpers) main();
+if (process.type === 'browser' && !global.multiagentScreenshotHelpers) {
+  // Its user data folder is always throwaway: on macOS, Chromium's mock keychain keeps safeStorage away
+  // from the machine's keychain; appended while the module loads, before app is ready (#623)
+  if (process.platform === 'darwin') require('electron').app.commandLine.appendSwitch('use-mock-keychain');
+  main();
+}
 
 // re-exported for the E2E suite's demo workspace (features/support/app.js)
 const { demoDepsCache } = require('./screenshot/views/settings');
