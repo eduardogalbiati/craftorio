@@ -177,7 +177,9 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
   }
 
   /** Checks the access, creates the project and starts its clone; never waits for the clone. */
-  async function start({ name, repo }) {
+  async function start({ name, repo } = {}) {
+    if (typeof name !== 'string' || !name.trim()) throw clientError('The project name is missing.');
+    if (typeof repo !== 'string' || !repo.trim()) throw clientError('The repository URL is missing.');
     const access = await projects.checkAccess(repo, { git });
     const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir, ...(access.status === 'reachable' ? {} : { cloneError: accessReason(access) }) });
     // a folder of repos/ that already is a clone (a removed project imported again) needs no access
@@ -249,7 +251,7 @@ module.exports = (ctx) => {
       profile: ({ projectId }) => ctx.workflowInterview({ projectId }),
       projectMap: ({ projectId, folder }) => projectMap.analyzeMap({ folder, archRoot, projectId, mock: simulation.simulationOnly(), oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
       // the Product Owner's turn comes from the analyser front (ctx.refactorPriorityOptions); without it, the simulated ranking
-      ranking: ({ projectId }) => priority.rankProject({ refactorRoot: path.join(ws.root, 'refactor'), backlogDir: ws.backlog, projectId, model: null, mock: simulation.simulationOnly() || !ctx.refactorPriorityOptions, options: () => ctx.refactorPriorityOptions(projectId) }),
+      ranking: ({ projectId }) => priority.rankProject({ refactorRoot: path.join(ws.root, 'refactor'), backlogDir: ws.backlog, projectId, model: null, mock: simulation.simulationOnly() || !ctx.refactorPriorityOptions, options: () => ctx.refactorPriorityOptions?.(projectId) }),
     };
     const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs, emit: (event, state) => ctx.events.emit(event, state) });
     current = { ws, ob };
