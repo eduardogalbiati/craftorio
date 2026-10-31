@@ -1,0 +1,49 @@
+# The project's public page on GitHub Pages: the reader in site/ with docs/work/ and CHANGELOG.md,
+# assembled by scripts/site.js (no npm install: it only copies files and writes docs/work/index.json).
+# Off until the owner turns it on, so a push never fails on a repository without Pages:
+#   1. Settings › Pages › Build and deployment › Source: GitHub Actions (a public repository, or a plan
+#      with Pages for private ones: the site is public either way);
+#   2. Settings › Secrets and variables › Actions › Variables: SITE_PAGES = on.
+# Then every push to main that changes the page's sources publishes it; Run workflow publishes by hand.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/work/**'
+      - 'CHANGELOG.md'
+      - 'CHANGELOG.pt-BR.md'
+      - 'site/**'
+      - 'scripts/site.js'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: vars.SITE_PAGES == 'on'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/site.js --out build/site
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
+      - id: deployment
+        uses: actions/deploy-pages@v5
