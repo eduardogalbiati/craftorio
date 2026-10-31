@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const projects = require('../../domains/project/projects');
+const { cloned: waitClone } = require('./clone-wait');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'projects-472-'));
@@ -17,15 +18,8 @@ function tmp(t) {
 // a git that "clones" by creating the target's .git folder
 const fakeGit = async (args) => { if (args[0] === 'clone') fs.mkdirSync(path.join(args[2], '.git'), { recursive: true }); return ''; };
 
-// #639: the clone is a background job; the project once it ended (status no longer 'cloning')
-async function cloned(dir, id) {
-  for (let i = 0; i < 300; i++) {
-    const p = projects.readProject(dir, id);
-    if (p.status !== 'cloning') return p;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`project ${id} still cloning after 3 s`);
-}
+// #639: the clone is a background job
+const cloned = (dir, id) => waitClone(projects, dir, id);
 
 test('a project whose repository is cloned starts with ignoreInstallScripts on', async (t) => {
   const root = tmp(t);

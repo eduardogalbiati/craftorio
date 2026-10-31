@@ -162,15 +162,8 @@ function cloningGit(text = MANIFEST) {
   return { git, calls };
 }
 
-// #639: the clone is a background job; the project once it ended (status no longer 'cloning')
-async function cloned(projects, dir, id) {
-  for (let i = 0; i < 300; i++) {
-    const p = projects.readProject(dir, id);
-    if (p.status !== 'cloning') return p;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`project ${id} still cloning after 3 s`);
-}
+// #639: the clone is a background job
+const { cloned } = require('./project/clone-wait');
 
 test('#486 createProject on a freshly cloned repository with no workflows checked adopts the clone\'s manifest and derives the default', async (t) => {
   const root = tempDir(t, 'pj-wf-486-clone-');

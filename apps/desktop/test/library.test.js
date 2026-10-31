@@ -13,15 +13,9 @@ function tmp(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
-// #639: the clone is a background job; the project once it ended (status no longer 'cloning')
-async function cloned(dir, id) {
-  for (let i = 0; i < 300; i++) {
-    const p = projects.readProject(dir, id);
-    if (p.status !== 'cloning') return p;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`project ${id} still cloning after 3 s`);
-}
+// #639: the clone is a background job
+const { cloned: waitClone } = require('@multiagent/engine/test/project/clone-wait');
+const cloned = (dir, id) => waitClone(projects, dir, id);
 const memStore = () => ({ value: null, get() { return this.value; }, set(v) { this.value = v; } });
 
 test('setupWorkspace creates projects/ and skills/', (t) => {

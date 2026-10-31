@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const projects = require('../domains/project/projects');
+const { cloned } = require('./project/clone-wait');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clone-job-639-review-'));
@@ -13,14 +14,7 @@ function tmp(t) {
   return dir;
 }
 
-async function settled(dir, id) {
-  for (let i = 0; i < 300; i++) {
-    const p = projects.readProject(dir, id);
-    if (p.status !== 'cloning') return p;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`project ${id} still cloning after 3 s`);
-}
+const settled = (dir, id) => cloned(projects, dir, id);
 
 test('#639 a failed project pointed at a folder cloned by hand is ready, and Retry is refused', async (t) => {
   const root = tmp(t);

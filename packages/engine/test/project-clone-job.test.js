@@ -36,14 +36,7 @@ function soon(promise, what) {
 }
 
 // the project once its clone job ended (status no longer 'cloning')
-async function settled(projects, dir, id) {
-  for (let i = 0; i < 300; i++) {
-    const p = projects.readProject(dir, id);
-    if (p.status !== 'cloning') return p;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`project ${id} still cloning after 3 s`);
-}
+const { cloned: settled } = require('./project/clone-wait');
 
 // a fake git: ls-remote answers `lsRemote` (a string, or an Error to reject with); clone runs `clone(args)`
 function fakeGit({ lsRemote = 'abc123\tHEAD\n', clone } = {}) {
@@ -268,4 +261,60 @@ test('#639 Retry is refused for a project that is ready', async (t) => {
   assert.equal(typeof projects.retryClone, 'function', 'projects.js exports retryClone');
   await assert.rejects(async () => projects.retryClone(dir, p.id, { git }));
   assert.equal(projects.readProject(dir, p.id).status, 'ready');
+});
+
+// ---- edits while the clone runs (review) --------------------------------------------------------
+
+// collects the unhandled rejections raised while a test runs
+function watchRejections(t) {
+  const seen = [];
+  const onRejection = (e) => seen.push(String(e?.message || e));
+  process.on('unhandledRejection', onRejection);
+  t.after(() => process.off('unhandledRejection', onRejection));
+  return seen;
+}
+
+const tick = (ms = 50) => new Promise((r) => setTimeout(r, ms));
+
+test('#639 a project removed while its clone runs stays removed when the clone ends, with no unhandled error', async (t) => {
+  const projects = load();
+  const root = tmp(t);
+  const dir = path.join(root, 'projects');
+  const rejections = watchRejections(t);
+  for (const outcome of ['succeeds', 'fails']) {
+    const gate = deferred();
+    const { git } = fakeGit({ clone: async (args) => { await gate.promise; if (outcome === 'fails') throw new Error('fatal: early EOF'); return cloneOk(args); } });
+    const p = await soon(projects.createProject(dir, { name: `Gone ${outcome}`, repo: 'https://github.com/acme/gone.git' }, { git, reposDir: path.join(root, `repos-${outcome}`) }), 'createProject');
+    assert.equal(projects.removeProject(dir, p.id), true);
+
+    gate.resolve();
+    await tick();
+    assert.equal(fs.existsSync(path.join(dir, `${p.id}.json`)), false, `the clone that ${outcome} does not bring the record back`);
+    assert.equal(projects.listProjects(dir).some((x) => x.id === p.id), false);
+  }
+  assert.deepEqual(rejections, []);
+});
+
+test('#639 an edit while the clone runs keeps the project cloning, and the clone\'s end keeps the edit', async (t) => {
+  const projects = load();
+  const root = tmp(t);
+  const dir = path.join(root, 'projects');
+  const gate = deferred();
+  const { git } = fakeGit({ clone: async (args) => { await gate.promise; return cloneOk(args); } });
+  const p = await soon(projects.createProject(dir, { name: 'Moving', repo: 'https://github.com/acme/moving.git' }, { git, reposDir: path.join(root, 'repos') }), 'createProject');
+  const cloneFolder = p.folder;
+
+  const own = path.join(root, 'own-checkout');
+  fs.mkdirSync(own);
+  const edited = projects.updateProject(dir, p.id, { folder: own, description: 'edited while cloning' });
+  assert.equal(edited.status, 'cloning', 'a folder change does not end a clone that still runs');
+  assert.equal(projects.readProject(dir, p.id).status, 'cloning');
+
+  gate.resolve();
+  const done = await settled(projects, dir, p.id);
+  assert.equal(done.status, 'ready');
+  assert.equal(done.folder, path.resolve(own), 'the folder the owner chose is kept');
+  assert.equal(done.description, 'edited while cloning');
+  assert.deepEqual(done.previousFolders, [cloneFolder]);
+  assert.equal(done.cloneError ?? null, null);
 });
