@@ -6,64 +6,65 @@ status: accepted          # accepted by the product owner on 2026-10-31
 author: Claude (Code session), from the owner's request
 approver: Eduardo Galbiati (product owner)
 date: 2026-10-31
+translation: intent.pt-BR.md
 ---
 
-# Intent: onboarding do primeiro projeto
+# Intent: first project onboarding
 
-## Problema
+## Problem
 
-Cadastrar o primeiro projeto é a primeira coisa que alguém faz no app, e hoje não garante o fluxo completo.
+Adding the first project is the first thing anyone does in the app, and today it does not leave the project ready for the whole flow.
 
-- O Setup termina abrindo o diálogo genérico **New project**. Ele pede nome, URL, pasta e 15 caixas de workflow antes de o app conhecer o projeto.
-- O clone acontece **dentro** do Create (`createProject` espera o `git clone`): num repo grande, a tela trava.
-- A análise (**Ways of working**), a **cidade** e o **backlog de refatoração** já existem, mas ficam escondidos em botões e abas da página do projeto, para descobrir depois.
-- Os 15 workflows bundled se sobrepõem. O dono usa um só (`ai-development-local-hero`), e esse mesmo fluxo atende feature e fix.
-- O perfil de trabalho pergunta "solo ou time", o que não muda o fluxo. E não separa o que muda de verdade: trabalhar só local ou local com PRs remotos, e onde o CI roda.
+- Setup ends by opening the generic **New project** dialog. It asks for a name, a URL, a folder and 15 workflow checkboxes before the app knows the project.
+- The clone runs **inside** Create (`createProject` awaits `git clone`): with a big repository, the screen hangs.
+- The analysis (**Ways of working**), the **city** and the **refactor backlog** already exist, but they sit behind buttons and tabs of the project's page, to be found later.
+- The 15 bundled workflows overlap. The owner uses one (`ai-development-local-hero`), and that same flow serves both features and fixes.
+- The ways of working profile asks "solo or team", which does not change the flow. It does not separate what really changes: working only locally or locally with remote PRs, and where CI runs.
 
-![Setup › First project hoje](images/setup-project.jpg)
-![New project hoje](images/new-project.jpg)
+![Setup › First project today](images/setup-project.jpg)
+![New project today](images/new-project.jpg)
 
-## Resultado esperado
+## Proposed outcome
 
-Em poucos minutos, quem entra no app sai com um projeto pronto para trabalhar:
+In a few minutes, whoever opens the app leaves with a project ready to work on:
 
-- o código clonado (ou um repositório novo criado);
-- como o projeto trabalha hoje, lido do git (modo local ou remoto, CI, testes, release);
-- três fluxos padrão escolhidos e explicados: **feature**, **fix** (com o modo hotfix) e **release**;
-- a cidade do projeto e um backlog de refatoração ranqueado, com a nota de cada arquivo;
-- o modelo de trabalho do projeto: quais artefatos (intent, spec, plan) cada item gera;
-- próximos passos claros, e nada entrando no roadmap sem a escolha do usuário.
+- the code cloned (or a new repository created);
+- how the project is worked on today, read from git (local or remote mode, CI, tests, release);
+- three default workflows, chosen and explained: **feature**, **fix** (with its hotfix mode) and **release**;
+- the project's city and a ranked refactor backlog, with each file's score;
+- the project's work model: which artifacts (intent, spec, plan) each item produces;
+- clear next steps, and nothing entering the roadmap without the user's choice.
 
-## Usuários e sistemas afetados
+## Affected users and systems
 
-- **Usuários:** quem instala o app pela primeira vez, e quem adiciona mais um projeto. Muitas vezes não é técnico (vende ou planeja produto), mas trabalha com git.
-- **Sistemas:**
-  - Setup (`packages/ui-kit/setup.js`) e Projects (`fronts/build/views/projects/`);
+- **Users:** whoever installs the app for the first time, and whoever adds one more project. Often not technical (they sell or plan the product), but they work with git.
+- **Systems:**
+  - Setup (`packages/ui-kit/setup.js`) and Projects (`fronts/build/views/projects/`);
   - `createProject` (`packages/engine/domains/project/projects.js`);
-  - o Ways of working (#487: seed, interview, compose);
-  - o `project-map` e o Refactor (#357);
-  - os workflows bundled e os pipelines;
-  - o auto-push do projeto, que sai;
-  - o Backlog e o Roadmap.
+  - Ways of working (#487: seed, interview, compose);
+  - `project-map` and Refactor (#357);
+  - the bundled workflows and the pipelines;
+  - the project auto-push, which goes away;
+  - the Backlog and the Roadmap.
 
-## Restrições
+## Constraints
 
-- **Regras do AGENTS.md:**
-  - o app em inglês;
-  - o workspace é o produto;
-  - agentes rodam sem supervisão (só o Grill me pergunta);
-  - nenhuma automação atravessa um `human_approval`;
-  - checagens só em simulação.
-- Chamada a modelo real só com o custo mostrado antes e o clique do usuário.
-- O onboarding nunca escreve no repositório do usuário. Arquivos do projeto (artefatos, CI, harness de screenshot) só por um run, no gate de sempre.
-- Ações que saem da máquina (criar repo remoto, login no `gh`/`glab`) só com clique explícito.
-- GitHub e GitLab pelo mesmo caminho.
-- Os workflows de **Planning** (writer-reviewer, ai-arena, issue-tracker) ficam fora: são a próxima proposta.
+- **AGENTS.md rules:**
+  - the app in English;
+  - the workspace is the product;
+  - agents run unattended (only Grill me asks);
+  - no automation crosses a `human_approval`;
+  - checks in simulation only.
+- A real-model call only with its cost shown first and the user's click.
+- Onboarding never writes to the user's repository. Project files (artifacts, CI, the screenshot harness) only come through a run, at its usual gate.
+- Actions that leave the machine (creating a remote repository, signing in to `gh`/`glab`) only on an explicit click.
+- GitHub and GitLab take the same path.
+- The **Planning** workflows (writer-reviewer, ai-arena, issue-tracker) stay out: they are the next proposal.
 
-## Perguntas em aberto
+## Open questions
 
-1. O passo Workflows do Setup some? *Proposta: sim.*
-2. As análises com modelo vêm marcadas? *Proposta: sim, com o total visível e "Skip, analyze later".*
-3. O hotfix é um workflow próprio ou um modo do fix? *Proposta: um modo do fix.*
-4. Os nomes antigos dos workflows funcionam por quanto tempo? *Proposta: duas versões, por aliases.*
-5. O Monitor (erros de produção virando intents) entra nesta entrega? *Proposta: não, é a última fase.*
+1. Does Setup's Workflows step go away? *Proposed: yes.*
+2. Do the model analyses come checked? *Proposed: yes, with the total shown and "Skip, analyze later".*
+3. Is hotfix a workflow of its own or a mode of fix? *Proposed: a mode of fix.*
+4. How long do the workflows' old names keep working? *Proposed: two releases, through aliases.*
+5. Is the Monitor (production errors becoming intents) part of this delivery? *Proposed: no, it is the last phase.*

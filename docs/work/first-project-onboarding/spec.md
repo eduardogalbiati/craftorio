@@ -6,118 +6,119 @@ status: signed off        # by the product owner (and tech lead for the workflow
 intent: intent.md (accepted)
 approver: Eduardo Galbiati (product owner)
 date: 2026-10-31
+translation: spec.pt-BR.md
 ---
 
-# Spec: onboarding do primeiro projeto
+# Spec: first project onboarding
 
-## Requisitos
+## Requirements
 
-**R1. Entrada.** Um assistente de quatro etapas (Start · Repository · Analysis & workflows · Review), aberto como último passo do Setup e por Projects › New project. O Setup perde o passo Workflows. O diálogo antigo fica só para Edit project.
+**R1. Entry.** A four-step wizard (Start · Repository · Analysis & workflows · Review), opened as Setup's last step and from Projects › New project. Setup loses its Workflows step. The old dialog stays for Edit project only.
 
-**R2. Origem.** Dois cards: "Create new project" e "Import a repository". GitHub e GitLab ficam no mesmo card, com o provedor detectado pela URL. Links menores levam a outra URL git e a uma pasta local.
+**R2. Source.** Two cards: "Create new project" and "Import a repository". GitHub and GitLab share one card, with the provider detected from the URL. Smaller links lead to any git URL and a local folder.
 
-![Etapa 1](images/mock-1.jpg)
+![Step 1](images/mock-1.jpg)
 
-**R3. Importar.**
-- O repositório (URL ou `owner/repo`, com a lista do `gh`/`glab` quando logado) e o nome do projeto.
-- No Next, valida o acesso com `git ls-remote` e começa o clone em segundo plano, com uma bandeja de progresso.
-- Sem acesso, oferece o login do provedor da URL. Sem CLI, o import segue, avisando que issues e PRs ficam indisponíveis.
+**R3. Import.**
+- The repository (a URL or `owner/repo`, with the `gh`/`glab` list when signed in) and the project name.
+- On Next, it checks access with `git ls-remote` and starts the clone in the background, with a progress tray.
+- With no access, it offers the URL's provider sign-in. With no CLI, the import goes on, warning that issues and PRs will be unavailable.
 
-![Etapa 2](images/mock-2.jpg)
+![Step 2](images/mock-2.jpg)
 
-**R4. Criar novo.**
-- `git init`, README, `.gitignore` e o primeiro commit em `main`.
-- Remoto privado opcional no GitHub ou no GitLab, só com o CLI logado e o clique.
-- Três perguntas: onde as mudanças chegam (Local ou Local + remoto), o CI (nenhum, só na release, ou nos PRs e na release) e o estilo de release.
+**R4. Create new.**
+- `git init`, a README, `.gitignore` and the first commit on `main`.
+- An optional private remote on GitHub or GitLab, only with the CLI signed in and a click.
+- Three questions: where changes land (Local or Local + remote), CI (none, on releases, or on PRs and releases) and the release style.
 
-![Criar novo](images/mock-3.jpg)
+![Create new](images/mock-3.jpg)
 
-**R5. Análise.**
-- O que é grátis roda sempre: clone, fatos e o perfil do Ways of working pelo git.
-- O que custa vem marcado, com o total visível, e só roda no clique: a cidade + análise de arquitetura (`project-map`) e o ranking da refatoração.
-- O modelo é chamado no Ways of working só para os campos que o git não resolve.
-- "Skip, analyze later" deixa tudo para as abas.
+**R5. Analysis.**
+- What is free always runs: the clone, the facts and the Ways of working profile from git.
+- What costs comes checked, with the total shown, and runs only on the click: the city + architecture analysis (`project-map`) and the refactor ranking.
+- Ways of working calls the model only for the fields git cannot settle.
+- "Skip, analyze later" leaves everything to the tabs.
 
-![Etapa 3](images/mock-4.jpg)
+![Step 3](images/mock-4.jpg)
 
-**R6. Perfil de trabalho (Ways of working revisitado).**
-- `team` sai.
+**R6. Ways of working profile, revisited.**
+- `team` leaves.
 - `mode: local | remote`.
-- `ci: none | release | pr+release`, lido dos gatilhos dos arquivos de CI.
-- `tests: unit | unit+e2e` e `e2eCommand`, lidos de configs, scripts e da ordem dos jobs no CI.
-- Ficam como estão: `release`, `testCommand`, `checkCommand` e `languages`.
+- `ci: none | release | pr+release`, read from the CI files' triggers.
+- `tests: unit | unit+e2e` and `e2eCommand`, read from configs, scripts and the order of the CI jobs.
+- Unchanged: `release`, `testCommand`, `checkCommand` and `languages`.
 
-**R7. Fluxos sugeridos por regra**, cada um com o porquê e um seletor para trocar:
+**R7. Workflows suggested by rules**, each with its reason and a selector to change it:
 
-| Campo | Regra |
+| Field | Rule |
 |---|---|
-| `mode` | local: merge na base local e **push do main como último passo do workflow** (o auto-push do projeto sai); remote: PR no GitHub/GitLab, acompanhado e mesclado lá |
-| `ci` | pr+release: o feature remoto espera o CI do PR; release: a release faz push da tag e espera o run de CI; none: só a suíte local |
-| `tests` | unit+e2e: feature com E2E primeiro, fix com E2E depois; unit: implementa e depois escreve o unitário |
-| `release` | com tags: o hotfix sai da última tag e vira patch; per-merge: sai de main |
+| `mode` | local: merge into the local base and **push main as the workflow's last step** (the project auto-push goes away); remote: a PR on GitHub/GitLab, followed and merged there |
+| `ci` | pr+release: remote feature waits for the PR's CI; release: the release pushes the tag and waits for the CI run; none: the local suite only |
+| `tests` | unit+e2e: feature with E2E first, fix with E2E after; unit: implement, then write the unit tests |
+| `release` | with tags: a hotfix branches from the last tag and ships as a patch; per-merge: from main |
 
-**R8. Conjunto de workflows (Code & Build).** De 15 para 11, com aliases para os nomes antigos (manifestos, `hiddenWorkflows`, roadmap e histórico continuam funcionando):
+**R8. The workflow set (Code & Build).** From 15 to 11, with aliases for the old names (manifests, `hiddenWorkflows`, the roadmap and the run history keep working):
 
-| Hoje | Novo |
+| Today | New |
 |---|---|
-| `ai-development-local-hero`, `software-development-local-hero`, `software-development`, `multi-model-review` | `feature` (local/remote, E2E first/code first, review simples ou multi-modelo) e `fix` (novo, com o modo hotfix) |
-| `release`, `e2e-release` | `release` (o E2E vira passo) |
+| `ai-development-local-hero`, `software-development-local-hero`, `software-development`, `multi-model-review` | `feature` (local/remote, E2E first/code first, single or multi-model review) and `fix` (new, with its hotfix mode) |
+| `release`, `e2e-release` | `release` (E2E becomes a step) |
 | `project-map`, `refactor-proposals` | `analyze-project` |
 | `test-batch`, `run-retrospective` | `test-backfill`, `retrospective` |
-| `refactor`, `backlog-refresh` | sem mudança |
-| `writer-reviewer`, `ai-arena`, `issue-tracker` | fora (próxima proposta) |
+| `refactor`, `backlog-refresh` | unchanged |
+| `writer-reviewer`, `ai-arena`, `issue-tracker` | out (next proposal) |
 
-**R9. Modelo de trabalho.**
-- O projeto escolhe entre Leve (issue → feature/fix), Padrão (intent → spec → plan → código) e Completo (+ `REVIEW.md` + evals).
-- Feature começa no Padrão e fix no Leve.
-- Os artefatos, markdown **e** HTML com as imagens, são commitados em `docs/work/<item>/` pelo run, no gate de sempre.
+**R9. Work model.**
+- The project picks Light (issue → feature/fix), Standard (intent → spec → plan → code) or Full (+ `REVIEW.md` + evals).
+- Feature starts at Standard and fix at Light.
+- The artifacts (markdown, English source with a `.pt-BR.md` translation, plus their images) are committed in `docs/work/<item>/` by the run, at its usual gate. A reader renders the markdown at runtime.
 
-![Modelo de trabalho](images/mock-5.jpg)
+![Work model](images/mock-5.jpg)
 
-**R10. Revisão.**
-- Mostra o perfil, os fluxos, a cidade e o backlog de refatoração com a nota de cada arquivo (0 a 100) e o quadrante, como na aba Facts.
-- O Finish funciona a qualquer momento, e o que falta chega na página do projeto com uma notificação.
+**R10. Review.**
+- Shows the profile, the workflows, the city and the refactor backlog with each file's score (0 to 100) and quadrant, as on the Facts view.
+- Finish works at any time, and what is left arrives on the project page with a notification.
 
-![Revisão](images/mock-6.jpg)
+![Review](images/mock-6.jpg)
 
 **R11. Next steps.**
-- Os cartões: adicionar refatorações escolhidas ao roadmap, capturar a primeira ideia, a cadência de refatoração, "Set up release CI" quando não há CI de release, e "Investigate screenshots".
-- "Investigate screenshots" coloca um spike no roadmap do projeto para achar como rodar o front em sandbox.
-- Nada entra no roadmap sem clique.
+- The cards: add chosen refactors to the roadmap, capture the first idea, the refactor cadence, "Set up release CI" when there is no release CI, and "Investigate screenshots".
+- "Investigate screenshots" puts a spike on the project's roadmap to find how to run its front end in a sandbox.
+- Nothing enters the roadmap without a click.
 
 ![Next steps](images/mock-7.jpg)
 
-**R12. Monitor (última fase).**
-- Um grupo novo no menu, com Errors e o Night watch.
-- O app busca os erros de produção por polling de fontes conectadas e agrupa sem modelo.
-- O diagnóstico vira `intent.md` num card do Inbox. "Propose fix" começa o `fix`, que para no gate.
+**R12. Monitor (last phase).**
+- A new menu group, with Errors and the Night watch.
+- The app polls production errors from connected sources and groups them with no model.
+- The diagnosis becomes `intent.md` in an Inbox card. "Propose fix" starts `fix`, which stops at the gate.
 
 ![Monitor](images/mock-8.jpg)
 
 ## Design
 
-- **Assistente:** `fronts/build/views/projects/project-wizard.js`. As regras puras (etapas, sugestões, soma do custo) ficam em `packages/shared/onboarding-model.js`, testáveis sem DOM.
-- **Jobs em segundo plano:** `packages/engine/service/areas/project-onboarding.js` encadeia por dependência: clone → fatos → (perfil ∥ `project-map`) → ranking da refatoração. Respeita os slots da máquina e avisa a UI por canais `onboarding:*`.
-- **Projeto:** criado com `status: cloning` e, depois, `ready` ou `failed`, com Retry.
-- **Sugestão:** o `composeWorkflowSet` do #487, estendido para mode/ci/tests e para gerar feature/fix/release.
-- **Aliases:** no carregador de workflows, onde o nome antigo resolve para o novo com os inputs da variante.
-- **Onde fica cada coisa:** os fluxos do projeto ficam referenciados no JSON do projeto, no workspace. "Customize" escreve em `.multiagent/`, sem commit.
+- **Wizard:** `fronts/build/views/projects/project-wizard.js`. The pure rules (steps, suggestions, the cost sum) live in `packages/shared/onboarding-model.js`, testable with no DOM.
+- **Background jobs:** `packages/engine/service/areas/project-onboarding.js` chains by dependency: clone → facts → (profile ∥ `project-map`) → refactor ranking. It respects the machine's slots and tells the UI through `onboarding:*` channels.
+- **Project:** created with `status: cloning`, then `ready` or `failed`, with Retry.
+- **Suggestion:** #487's `composeWorkflowSet`, extended for mode/ci/tests and to generate feature/fix/release.
+- **Aliases:** in the workflow loader, where an old name resolves to the new one with its variant's inputs.
+- **Where things live:** the project's workflows are referenced in the project's JSON, in the workspace. "Customize" writes to `.multiagent/`, uncommitted.
 
-## Pontos de atenção
+## Areas of concern
 
-- **Para o tech lead (as mudanças de workflows):**
-  - trocar nomes de workflows mexe em manifestos de repositórios, no roadmap salvo e em testes;
-  - os aliases precisam entrar antes de qualquer rename;
-  - o fix é o único workflow novo.
-- **Push no modo Local:** tirar o auto-push e pôr o passo final de push fecha a corrida do #617, mas muda um comportamento que quem tem o auto-push ligado já usa.
-- **Custo:** as análises com modelo custam cerca de $1–2 por import (estimativa sem medição) e contam no orçamento diário.
-- **Escrita no repositório do usuário:** os artefatos (R9), o CI (R11) e o harness de screenshot só entram por run, com gate.
-- **Segurança do Monitor:** os tokens das fontes ficam no cofre do sistema. Webhook só depois da revisão de segurança (#466–#470).
+- **For the tech lead (the workflow changes):**
+  - renaming workflows touches repository manifests, the saved roadmap and tests;
+  - the aliases must land before any rename;
+  - fix is the only new workflow.
+- **Push in Local mode:** removing the auto-push and adding a final push step closes the #617 race, but it changes a behaviour that users with auto-push on already rely on.
+- **Cost:** the model analyses cost about $1–2 per import (an unmeasured estimate) and count toward the daily budget.
+- **Writes to the user's repository:** the artifacts (R9), CI (R11) and the screenshot harness only come through a run, with a gate.
+- **Monitor security:** the sources' tokens live in the system keychain. A webhook only after the security review (#466–#470).
 
-## Perguntas em aberto (vindas do intent e novas)
+## Open questions (from the intent and new)
 
-1. Por quanto tempo os aliases valem? *Proposta: duas versões.*
-2. Qual modelo de trabalho vem marcado? *Proposta: Standard para feature, Light para fix.*
-3. A pasta dos artefatos é configurável? *Proposta: sim. O padrão é `docs/work/<item>/`, e o Ways of working detecta uma pasta já usada (`docs/rfcs`, `adr/`).*
-4. Quais fontes de erro o Monitor suporta primeiro? *Proposta: Sentry e uma URL ou arquivo de log.*
-5. Monorepo com vários projetos? *Proposta: um projeto por repositório, por enquanto.*
+1. How long do the aliases last? *Proposed: two releases.*
+2. Which work model comes checked? *Proposed: Standard for feature, Light for fix.*
+3. Is the artifacts folder configurable? *Proposed: yes. The default is `docs/work/<item>/`, and Ways of working detects a folder already in use (`docs/rfcs`, `adr/`).*
+4. Which error sources does the Monitor support first? *Proposed: Sentry and a log URL or file.*
+5. Monorepo with several projects? *Proposed: one project per repository, for now.*

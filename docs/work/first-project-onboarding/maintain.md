@@ -4,18 +4,19 @@ issue: "#628"
 stage: maintain
 status: no incidents      # filled by the Monitor and the Night watch
 approver: service owner / on-call · product owner for product-facing findings
+translation: maintain.pt-BR.md
 ---
 
-# Maintain: incidentes e post-mortems
+# Maintain: incidents and post-mortems
 
-Depois da release, o documento continua vivo. Um erro do Monitor ou um achado do Night watch ligado a este item entra aqui; o diagnóstico vira um **novo intent** (um card no Inbox, com link de volta), e o loop recomeça.
+After the release, the document stays alive. A Monitor error or a Night watch finding tied to this item comes in here; its diagnosis becomes a **new intent** (an Inbox card, linking back), and the loop starts again.
 
-## Incidentes
+## Incidents
 
-| Data | Origem | Erro | Novo intent | Fix |
+| Date | Source | Error | New intent | Fix |
 |---|---|---|---|---|
-| — | — | — | — | nenhum incidente |
+| — | — | — | — | no incidents |
 
 ## Post-mortems
 
-Para cada incidente resolvido, um post-mortem curto: o que aconteceu, o impacto, a causa, o que foi corrigido (o commit ou PR do fix) e o que mudou para não repetir: um teste novo, uma regra de review, um eval. Escrito pelo agente a partir do diagnóstico e do fix, revisado pelo service owner.
+For each resolved incident, a short post-mortem: what happened, the impact, the cause, what was fixed (the fix's commit or PR) and what changed so it does not happen again: a new test, a review rule, an eval. Written by the agent from the diagnosis and the fix, reviewed by the service owner.

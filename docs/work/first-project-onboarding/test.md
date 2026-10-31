@@ -4,24 +4,25 @@ issue: "#628"
 stage: test
 status: not started       # filled by the runs: suite, E2E, screenshots, evals
 approver: code owner (at the PR or the developer's gate)
+translation: test.pt-BR.md
 ---
 
-# Test: evidência do onboarding
+# Test: onboarding evidence
 
-Esta etapa não tem um arquivo escrito por alguém: ela junta a evidência que os runs produzem, para o code owner aprovar olhando o que foi provado. Fica vazia até o primeiro run do Build.
+This stage has no file a person writes: it gathers the evidence the runs produce, so the code owner approves by looking at what was proven. It stays empty until the first Build run.
 
-## Suíte e testes
+## Suite and tests
 
-Cada run acrescenta uma linha: a suíte unitária, os testes escritos (E2E primeiro na feature, quando há suíte E2E) e o resultado.
+Each run adds a row: the unit suite, the tests written (E2E first for a feature, when there is an E2E suite) and the result.
 
-| Run | Unit | E2E | Resultado |
+| Run | Unit | E2E | Result |
 |---|---|---|---|
-| — | — | — | ainda nada |
+| — | — | — | nothing yet |
 
-## Screenshots de antes e depois
+## Before and after screenshots
 
-Os pares original/modificado do passo `screenshots`, com as checagens do axe (contraste, tamanho de alvo). Entram aqui as telas do assistente: start, repository, cloning, access-error, analysis e review.
+The original/modified pairs of the `screenshots` step, with the axe checks (contrast, target size). The wizard's screens go here: start, repository, cloning, access-error, analysis and review.
 
 ## Evals
 
-Só no modelo de trabalho Completo: o resultado dos evals de skills e workflows no CI, e se a mudança baixou a taxa de acerto.
+Only in the Full work model: the result of the skills' and workflows' evals in CI, and whether the change lowered the pass rate.

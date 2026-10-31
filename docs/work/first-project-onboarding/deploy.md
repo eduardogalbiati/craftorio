@@ -4,22 +4,23 @@ issue: "#628"
 stage: deploy
 status: not started       # filled by the review, the PR and the release
 approver: code owner (PR) · Eduardo Galbiati (release: Ship)
+translation: deploy.pt-BR.md
 ---
 
-# Deploy: revisão e release
+# Deploy: review and release
 
-## Revisão
+## Review
 
-Os achados da revisão de cada PR (ou do gate do desenvolvedor no modo local), lidos pelo `REVIEW.md` do projeto quando ele existe: o que foi corrigido, o que ficou com motivo.
+The review findings of each PR (or of the developer's gate in local mode), read against the project's `REVIEW.md` when there is one: what was fixed, and what was kept and why.
 
-| PR / run | Achados | Corrigidos | Mantidos |
+| PR / run | Findings | Fixed | Kept |
 |---|---|---|---|
-| — | — | — | ainda nada |
+| — | — | — | nothing yet |
 
 ## Release
 
-Preenchido pelo workflow `release`: a versão (tag), o que entrou, o run do CI de release (builds para macOS, Linux e Windows quando configurado) e quem deu o Ship.
+Filled in by the `release` workflow: the version (tag), what went in, the release CI run (macOS, Linux and Windows builds when configured) and who pressed Ship.
 
-| Versão | Itens | CI de release | Ship |
+| Version | Items | Release CI | Ship |
 |---|---|---|---|
-| — | — | — | ainda nada |
+| — | — | — | nothing yet |
