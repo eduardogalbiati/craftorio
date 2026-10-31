@@ -22,24 +22,24 @@
 const PV_TABS = [['overview', 'project.overview'], ['conflicts', 'project.conflict_map'], ['architecture', 'project.architecture'], ['refactor', 'project.refactor']];
 const PV_TABS_KEY = 'multiagent.projectTabs';
 
+// a map per project kept in localStorage under `key`: { <projectId>: <value> }
+function pvStored(key) {
+  try { return JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch { return {}; }
+}
+function pvRemember(key, id, value) {
+  try { localStorage.setItem(key, JSON.stringify({ ...pvStored(key), [id]: value })); } catch { /* storage unavailable */ }
+}
+
 // the tab each project was last shown on: { <projectId>: <tab> }
-function projectTabs() {
-  try { return JSON.parse(localStorage.getItem(PV_TABS_KEY) || '{}') || {}; } catch { return {}; }
-}
-function rememberProjectTab(id, tab) {
-  try { localStorage.setItem(PV_TABS_KEY, JSON.stringify({ ...projectTabs(), [id]: tab })); } catch { /* storage unavailable */ }
-}
+function projectTabs() { return pvStored(PV_TABS_KEY); }
+function rememberProjectTab(id, tab) { pvRemember(PV_TABS_KEY, id, tab); }
 
 // #642: the Next steps card of the projects the wizard finished: { <projectId>: 'open' | 'dismissed' }
 const PV_NEXT_STEPS_KEY = 'multiagent.nextSteps';
 // [id, i18n key of its label, of its line]: spec R11 for this phase (release CI, screenshots come later)
 const PV_NEXT_STEPS = [['refactors', 'project.next_steps_refactors', 'project.next_steps_refactors_text'], ['idea', 'project.next_steps_idea', 'project.next_steps_idea_text'], ['cadence', 'project.next_steps_cadence', 'project.next_steps_cadence_text']];
-function nextSteps() {
-  try { return JSON.parse(localStorage.getItem(PV_NEXT_STEPS_KEY) || '{}') || {}; } catch { return {}; }
-}
-function rememberNextSteps(id, value) {
-  try { localStorage.setItem(PV_NEXT_STEPS_KEY, JSON.stringify({ ...nextSteps(), [id]: value })); } catch { /* storage unavailable */ }
-}
+function nextSteps() { return pvStored(PV_NEXT_STEPS_KEY); }
+function rememberNextSteps(id, value) { pvRemember(PV_NEXT_STEPS_KEY, id, value); }
 
 function nextStepsMarkup(id) {
   if (nextSteps()[id] !== 'open') return '';

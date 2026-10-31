@@ -342,7 +342,7 @@
 
   function complexityCells(r, measured) {
     if (!measured) return '';
-    return `<td class="num">${r.complexity ?? '—'}</td><td class="num">${r.worst ?? '—'}</td><td>${r.quadrant ? `<span class="badge${r.quadrant === 'Danger Zone' ? ' warn' : ''}">${esc(r.quadrant)}</span>` : '—'}</td>`;
+    return `<td class="num">${r.complexity ?? '—'}</td><td class="num">${r.worst ?? '—'}</td><td>${r.quadrant ? `<span class="${window.ArchitectureModel.quadrantBadge(r.quadrant)}">${esc(r.quadrant)}</span>` : '—'}</td>`;
   }
 
   function hotspotsHtml(model) {

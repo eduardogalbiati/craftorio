@@ -10,7 +10,7 @@
 // (placeRunNow), written through packages/engine/domains/roadmap/roadmap.js, the target's Danger Zone score kept on the proposal
 // (`before`). ctx.planRefactor (#435) is the Architecture tab's Send to Refactor: it files the issue
 // and plans it the same way (in a simulation without host.fileIssue, a simulated issue in the synced
-// backlog).
+// backlog); refactor:addToRoadmap with `file` (#642, the onboarding's review) files the same way first.
 // The cadence ("Add a refactor to the roadmap every X runs", <workspace>/refactor/<project id>/
 // cadence.json { on, every, since }) listens to run:event: after every X real finished runs of the
 // project since it was turned on (or since its last item) the top ranked proposal with an issue and
@@ -231,17 +231,21 @@ module.exports = (ctx) => {
    */
   async function planRefactor(projectId, proposal) {
     const p = projectOf(projectId);
-    let stored = proposal;
-    if (!stored.issue) {
-      const data = backlog.readBacklog(ctx.ws.backlog, p.id);
-      if (!data) return stored;
-      if (ctx.host?.fileIssue || !simulation.simulationOnly()) stored = (await fileIssue({ projectId: p.id, id: stored.id })).proposal;
-      else stored = await fileWithHost(p, stored, asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal: stored, data })), simulatedFiler(p));
-    }
+    const stored = await fileFirst(p, proposal);
+    if (!stored.issue) return stored;
     if (stored.status === 'dismissed' || cadenceRules.unfinishedNumbers(roadmapOf(p.id)).has(Number(stored.issue))) return stored;
     return (await addToRoadmap(p, stored)).proposal;
   }
   ctx.planRefactor = planRefactor;
+
+  // files `proposal` as an issue when it has none (unchanged without a synced backlog); the stored proposal
+  async function fileFirst(p, proposal) {
+    if (proposal.issue) return proposal;
+    const data = backlog.readBacklog(ctx.ws.backlog, p.id);
+    if (!data) return proposal;
+    if (ctx.host?.fileIssue || !simulation.simulationOnly()) return (await fileIssue({ projectId: p.id, id: proposal.id })).proposal;
+    return fileWithHost(p, proposal, asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal, data })), simulatedFiler(p));
+  }
 
   // ---- the ranking -------------------------------------------------------------------------------
   async function prioritize({ projectId, mock }) {
@@ -363,10 +367,13 @@ module.exports = (ctx) => {
       channel: 'refactor:addToRoadmap',
       method: 'addRefactorToRoadmap',
       params: ['projectId', 'id', '...opts'],
-      schema: { params: ON_PROPOSAL({ runNow: FLAG }), result: shape({ proposal: PROPOSAL, stage: INT, waiting: BOOL }, ['proposal', 'stage']) },
-      fn: ({ projectId, id, runNow }) => {
+      schema: { params: ON_PROPOSAL({ runNow: FLAG, file: FLAG }), result: shape({ proposal: PROPOSAL, stage: INT, waiting: BOOL }, ['proposal', 'stage']) },
+      // #642 `file`: a proposal without an issue is filed first, as Send to Refactor does (the onboarding's review)
+      fn: async ({ projectId, id, runNow, file }) => {
         const p = projectOf(projectId);
-        return addToRoadmap(p, proposalOf(p, id), { mode: runNow ? 'runNow' : 'waiting' });
+        const proposal = file ? await fileFirst(p, proposalOf(p, id)) : proposalOf(p, id);
+        if (file && !proposal.issue) throw clientError('Sync the backlog first: the issue is filed in the synced repository.');
+        return addToRoadmap(p, proposal, { mode: runNow ? 'runNow' : 'waiting' });
       },
     },
     {

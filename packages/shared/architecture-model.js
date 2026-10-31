@@ -168,6 +168,8 @@
   }
 
   const quadrantRank = (q) => (q ? QUADRANTS.indexOf(q) : QUADRANTS.length);
+  // the badge class of a quadrant (the Facts view, the onboarding's review): the Danger Zone warns
+  const quadrantBadge = (q) => (q === QUADRANTS[0] ? 'badge warn' : 'badge');
   const byScore = (a, b) => (b.score ?? -1) - (a.score ?? -1) || b.complexity - a.complexity;
   const byHotness = (a, b) => quadrantRank(a.quadrant) - quadrantRank(b.quadrant) || byScore(a, b) || a.file.localeCompare(b.file);
 
@@ -430,6 +432,7 @@
     parseIgnoreRevs,
     parseLog,
     placeQuadrants,
+    quadrantBadge,
     QUADRANTS,
     scoreRows,
     sortKeys,

@@ -9,12 +9,15 @@
 //   api.startOnboarding answered), analysis (the jobs, wizard-cost with wizard-cost-total and the paid parts
 //   data-part="projectMap" | "ranking" before the click, wizard-analyze, wizard-skip) and review (#642, spec
 //   R10): wizard-review with wizard-review-city / -backlog / -refactors, each data-state="ready" | "pending"
-//   (its analysis still running: words say so), one wizard-review-refactor data-refactor="<id>" per proposal
+//   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
+//   | "later" (the analyses were skipped), one wizard-review-refactor data-refactor="<id>" per proposal
 //   with its file's score and quadrant and an unchecked wizard-review-refactor-pick, and the idea field
-//   wizard-review-idea. Navigation: wizard-back, wizard-next, wizard-close (Esc too), and on the review
+//   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation:
+//   wizard-back, wizard-next, wizard-close (Esc too), and on the review
 //   wizard-finish (never disabled, never waits): it closes the wizard on the project's page with its Next steps
 //   card (openProject with nextSteps, project.js), then sends the picked refactors to the roadmap as planned
-//   items and the idea to the Inbox.
+//   items (refactor:addToRoadmap with `file`: filed as issues first) and the idea to the Inbox; an analysis
+//   still running at Finish shows a toast when it ends.
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
 //   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
 //   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
@@ -48,6 +51,7 @@
   let opener = null; // the element that had the focus when the wizard opened
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
+  const finished = new Set(); // projectIds finished in the wizard with an analysis still running
 
   const platformOfRepo = (url) => window.Platforms?.platformOfRepoUrl?.(url) || null;
   const platformById = (id) => window.Platforms?.findPlatform?.(id) || null;
@@ -162,12 +166,30 @@
       ${actions}`;
   }
 
-  const jobDone = (id) => cur.onboarding?.jobs?.[id]?.status === 'done';
+  const jobOf = (id) => cur.onboarding?.jobs?.[id] || {};
+  const jobDone = (id) => jobOf(id).status === 'done';
 
-  function reviewSection(id, title, ready, body, pendingKey) {
-    return `<section class="card wizard-review-section" data-testid="wizard-review-${id}" data-state="${ready ? 'ready' : 'pending'}">
+  // a section's state: ready (its analysis and read done), failed / skipped (its analysis answered without
+  // a result), later (the analyses were skipped in the wizard) or pending (still running or reading)
+  function sectionState(job, read) {
+    if (!job) return read ? 'ready' : 'pending';
+    const s = jobOf(job).status;
+    if (s === 'done') return read ? 'ready' : 'pending';
+    if (s === 'failed' || s === 'skipped') return s;
+    return cur.model.analyzeLater && !ACTIVE.includes(cur.onboarding?.status) ? 'later' : 'pending';
+  }
+
+  function reviewSection(id, title, job, read, body, pendingKey) {
+    const state = sectionState(job, read);
+    const words = {
+      failed: () => t('onboarding.review_section_failed', { error: jobOf(job).error || t('onboarding.no_reason') }),
+      later: () => t('onboarding.review_section_later'),
+      pending: () => t(pendingKey),
+      skipped: () => t('onboarding.review_section_skipped'),
+    };
+    return `<section class="card wizard-review-section" data-testid="wizard-review-${id}" data-state="${state}">
         <h3>${esc(t(title))}</h3>
-        ${ready ? body() : `<p class="muted small">${esc(t(pendingKey))}</p>`}
+        ${state === 'ready' ? body() : `<p class="muted small">${esc(words[state]())}</p>`}
       </section>`;
   }
 
@@ -181,7 +203,7 @@
   function backlogBody() {
     const issues = cur.review.backlog?.issues || [];
     if (!issues.length) return `<p class="muted small">${esc(t('onboarding.review_backlog_empty'))}</p>`;
-    return `<ul class="wizard-review-list">${issues.map((i) => `<li><span class="mono muted">#${esc(i.number)}</span> <span class="wizard-review-name" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
+    return `<ul class="wizard-review-list">${issues.map((i) => `<li class="fit-box"><span class="mono muted">#${esc(i.number)}</span> <span class="text-cut" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
   }
 
   // each proposal with its file's score and quadrant (the Facts view's), and its pick for the roadmap
@@ -193,11 +215,11 @@
       const target = p.target || p.targetFiles?.[0] || '';
       const f = files.find((x) => x.file === target);
       const score = Number.isFinite(f?.score) ? `<span class="badge">${esc(t('onboarding.review_score', { score: f.score }))}</span>` : '';
-      const quadrant = f?.quadrant ? `<span class="badge${f.quadrant === 'Danger Zone' ? ' warn' : ''}">${esc(f.quadrant)}</span>` : '';
-      return `<li class="wizard-review-refactor" data-testid="wizard-review-refactor" data-refactor="${esc(p.id)}">
-          <label class="check"><input type="checkbox" data-testid="wizard-review-refactor-pick" data-refactor="${esc(p.id)}" aria-label="${esc(p.title)}"${cur.picked.has(p.id) ? ' checked' : ''}>
-            <span class="wizard-review-name" title="${esc(p.title)}">${esc(p.title)}</span></label>
-          <span class="mono muted small wizard-review-name" title="${esc(target)}">${esc(target)}</span>
+      const quadrant = f?.quadrant ? `<span class="${window.ArchitectureModel.quadrantBadge(f.quadrant)}">${esc(f.quadrant)}</span>` : '';
+      return `<li class="wizard-review-refactor fit-box" data-testid="wizard-review-refactor" data-refactor="${esc(p.id)}">
+          <label class="check small"><input type="checkbox" data-testid="wizard-review-refactor-pick" data-refactor="${esc(p.id)}" aria-label="${esc(p.title)}"${cur.picked.has(p.id) ? ' checked' : ''}>
+            <span class="text-cut" title="${esc(p.title)}">${esc(p.title)}</span></label>
+          <span class="mono muted small text-cut" title="${esc(target)}">${esc(target)}</span>
           <span class="wizard-review-badges">${score}${quadrant}</span>
         </li>`;
     };
@@ -210,9 +232,9 @@
     const later = cur.model.analyzeLater ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
     return `<div class="wizard-review" data-testid="wizard-review">
         <p class="muted"><strong>${esc(t('onboarding.review_title', { name: cur.model.name }))}</strong> ${esc(t('onboarding.review_text'))}</p>${later}
-        ${reviewSection('city', 'onboarding.review_city_title', jobDone('projectMap') && r.city !== undefined, cityBody, 'onboarding.review_pending_city')}
-        ${reviewSection('backlog', 'onboarding.review_backlog_title', r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
-        ${reviewSection('refactors', 'onboarding.review_refactors_title', jobDone('ranking') && r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors')}
+        ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city')}
+        ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
+        ${reviewSection('refactors', 'onboarding.review_refactors_title', 'ranking', r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors')}
         <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
           <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
           <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
@@ -244,16 +266,29 @@
 
   // ---- the engine's state ----------------------------------------------------------------------
 
+  // a render from an answer or an event waits while the owner types the idea (the caret stays): the
+  // idea field's blur renders what arrived meanwhile
+  function renderSoon() {
+    if (cur && document.activeElement?.id === 'wizard-review-idea') { cur.stale = true; return; }
+    render();
+  }
+
   function remember(state) {
     if (!state?.projectId) return;
     states.delete(state.projectId);
     states.set(state.projectId, state);
     renderTray();
+    // spec R10: what was left at Finish arrives on the project's page with a notification
+    if (finished.has(state.projectId) && ['analyzed', 'failed'].includes(state.status)) {
+      finished.delete(state.projectId);
+      const name = names.get(state.projectId) || state.projectId;
+      showToast(t(state.status === 'analyzed' ? 'onboarding.finished_analyzed' : 'onboarding.finished_failed', { name }));
+    }
     if (cur && cur.projectId === state.projectId) {
       cur.onboarding = state;
       if (cur.model.step === 'repository' && CLONED.includes(state.status)) toAnalysis();
       if (cur.model.step === 'review') loadReview(); // an analysis done meanwhile: read what it made
-      render();
+      renderSoon();
     }
   }
 
@@ -271,23 +306,26 @@
         if (!cur || cur.projectId !== pid) return;
         cur.reading.delete(key);
         cur.review[key] = value ?? null;
-        render();
+        renderSoon();
       };
       Promise.resolve(api[method]?.(pid)).then(answer, () => answer(null));
     }
   }
 
   // Finish: the project's page at once (with its Next steps card), then the chosen refactors to the
-  // roadmap as planned items (no runNow: nothing starts) and the idea to the Inbox, in the background
+  // roadmap as planned items (filed as issues first, no runNow: nothing starts) and the idea to the
+  // Inbox, in the background; an analysis still running notifies when it ends (remember)
   function finish() {
     const pid = cur.projectId;
     const picked = [...cur.picked];
     const idea = cur.idea.trim();
+    const running = ACTIVE.includes(cur.onboarding?.status);
     close();
     if (!pid) return;
+    if (running) finished.add(pid);
     window.Actions.call('openProject', pid, { nextSteps: true });
     const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
-    for (const id of picked) Promise.resolve(api.addRefactorToRoadmap(pid, id)).catch(failed);
+    for (const id of picked) Promise.resolve(api.addRefactorToRoadmap(pid, id, { file: true })).catch(failed);
     if (idea) Promise.resolve(api.createDiscoveryCard(pid, idea.slice(0, 200), idea, 'idea')).catch(failed);
   }
 
@@ -413,6 +451,7 @@
       root.addEventListener('input', onInput);
       root.addEventListener('change', onInput);
       root.addEventListener('keydown', onKey);
+      root.addEventListener('focusout', (e) => { if (cur?.stale && e.target?.id === 'wizard-review-idea') { cur.stale = false; render(); } });
       document.body.appendChild(root);
     }
     cur = { model: M.initialState(), projectId: null, onboarding: null, estimate: undefined, busy: false, ...freshReview() };
