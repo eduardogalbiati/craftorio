@@ -293,3 +293,29 @@ test('#642 a blank idea adds nothing to the backlog', { timeout: 20000 }, async 
   assert.equal(wizardClosed(app), true, 'the wizard closed');
   assert.equal(app.callsTo('createDiscoveryCard').length, 0, 'no idea kept');
 });
+
+// ---- a backlog never read before (a project just imported has no cache) -----------------------------
+
+test('#642 a backlog never read before is synced once, and the synced issues fill the review\'s backlog', { timeout: 20000 }, async () => {
+  const app = await reviewDone({ api: { getBacklog: async () => null, syncBacklog: async () => clone(BACKLOG) } });
+  assert.deepEqual(app.callsTo('syncBacklog').map((args) => String(args[0])), [PID], 'one sync of the new project');
+  const backlog = section(app, 'wizard-review-backlog');
+  assert.equal(backlog?.attrs['data-state'], 'ready', 'the backlog is shown');
+  assert.equal(textOf(backlog).includes('Login fails on Safari'), true, `the synced issue: ${textOf(backlog)}`);
+});
+
+test('#642 a backlog sync that fails (no repository) shows the empty backlog, and Finish still works', { timeout: 20000 }, async () => {
+  const app = await reviewDone({ api: { getBacklog: async () => null, syncBacklog: async () => { throw new Error('no repository'); } } });
+  const backlog = section(app, 'wizard-review-backlog');
+  assert.equal(backlog?.attrs['data-state'], 'ready', 'the backlog section stops waiting');
+  assert.equal(textOf(backlog).includes('No open issues.'), true, `the empty backlog's words: ${textOf(backlog)}`);
+  await finish(app);
+  assert.equal(wizardClosed(app), true, 'the wizard closed');
+  assert.equal(String(app.state().view), 'project', 'the project page is open');
+});
+
+test('#642 a backlog already read is not synced again by the review', { timeout: 20000 }, async () => {
+  const app = await reviewDone({ api: { syncBacklog: async () => clone(BACKLOG) } });
+  assert.equal(app.callsTo('syncBacklog').length, 0, 'no sync');
+  assert.equal(textOf(section(app, 'wizard-review-backlog')).includes('Login fails on Safari'), true, 'the cached issue');
+});
