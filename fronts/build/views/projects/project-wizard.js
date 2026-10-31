@@ -522,4 +522,5 @@
     close,
     open,
   };
+  window.Actions.register('openProjectWizard', () => open()); // Setup's First project step asks for it (setup.js)
 })();

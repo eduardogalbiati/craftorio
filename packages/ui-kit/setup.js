@@ -10,8 +10,9 @@
 // - Try it safely: Show simulation mode (= settings.developerMode), on by default on a first run,
 //   and the machine profile's line (#367: runs at once and test workers sized from this machine).
 // - First project: the projects, and New project opening the onboarding wizard (#643,
-//   window.ProjectWizard, fronts/build/views/projects/project-wizard.js; opened by itself when there
-//   is none, over the Setup; the list is read again when it closes). Finish saves setupDone and
+//   the action openProjectWizard of fronts/build/views/projects/project-wizard.js, no button without
+//   it; opened by itself when there is none, over the Setup, which then leaves it the focus; the
+//   list is read again when it closes). Finish saves setupDone and
 //   developerMode only, never settings.hiddenWorkflows (what a workspace hides from Start stays), then
 //   opens the Start drawer (Simulation checked when it shows, applyDeveloperMode).
 // window.Setup = { open(step), isOpen(), skip() } (app.js, Settings, scripts/screenshot.js).
@@ -181,14 +182,19 @@
     const list = projects.length
       ? `<div class="s-group">${projects.map((p) => `<div class="s-row"><div class="s-label"><b title="${esc(p.name)}">${esc(p.name)}</b><span title="${esc(p.folder)}">${esc(p.folder)}</span></div></div>`).join('')}</div>`
       : `<div class="empty-state setup-empty"><b>${t('setup.project.empty')}</b><p class="muted small">${t('setup.project.empty_help')}</p></div>`;
-    return `${list}<div class="row setup-row"><button type="button" class="btn sm" data-setup-project data-testid="setup-new-project">${t('setup.project.new')}</button><span class="muted small">${t('setup.project.finish_help')}</span></div>`;
+    const button = canNewProject() ? `<button type="button" class="btn sm" data-setup-project data-testid="setup-new-project">${t('setup.project.new')}</button>` : '';
+    return `${list}<div class="row setup-row">${button}<span class="muted small">${t('setup.project.finish_help')}</span></div>`;
   }
 
+  // the wizard is the build front's action: without that front, no New project in the Setup
+  const canNewProject = () => window.Actions.has('openProjectWizard');
+
   function newProject() {
-    window.ProjectWizard.open();
+    if (!canNewProject()) return false;
+    window.Actions.call('openProjectWizard');
     // the wizard has no callback: the list is read again when it closes (hidden)
     const wizard = document.getElementById('project-wizard');
-    if (!wizard || typeof MutationObserver !== 'function') return;
+    if (!wizard || typeof MutationObserver !== 'function') return true;
     const watch = new MutationObserver(async () => {
       if (!wizard.hidden) return;
       watch.disconnect();
@@ -196,6 +202,7 @@
       if (setup.open && STEPS[setup.step].id === 'first-project') render();
     });
     watch.observe(wizard, { attributes: true, attributeFilter: ['hidden'] });
+    return true;
   }
 
   // ---------- the stepper ----------
@@ -225,7 +232,8 @@
     } catch (e) { showToast(t('setup.save_failed'), errMsg(e)); return; }
     setup.step = Math.max(0, Math.min(STEPS.length - 1, setup.step + delta));
     render();
-    if (STEPS[setup.step].id === 'first-project' && !(state.projects || []).length && delta > 0) newProject();
+    // the wizard opened over the Setup keeps the focus, so Enter never reaches Finish under it
+    if (STEPS[setup.step].id === 'first-project' && !(state.projects || []).length && delta > 0 && newProject()) return;
     $s('#btn-setup-next').focus({ preventScroll: true });
   }
 
