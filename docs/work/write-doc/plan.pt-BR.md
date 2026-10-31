@@ -3,7 +3,7 @@ item: write-doc
 issue: "#636 (phases 0 and 1)"
 stage: build
 scope: phase 0 (spike) and phase 1 (MVP); phases 2–5 get their own plan.md
-status: draft             # draft → accepted (engineer / tech lead, in plan mode, before any code)
+status: accepted          # accepted by the owner (engineer / tech lead) on 2026-10-31
 spec: spec.md (signed off)
 date: 2026-10-31
 source: plan.md (English)
