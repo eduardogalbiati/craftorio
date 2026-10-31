@@ -9,9 +9,8 @@
 //   'Optional: Backlog sync and pull requests' (gh, glab).
 // - requirementBadges(reqs), reqs = { clis, forge } -> labels, e.g. 'Needs Codex',
 //   'Needs GitHub or GitLab CLI' when forge.
-// - preselectedWorkflows(workflows, states), workflows = [{ id, requirements: { clis, forge } }]:
-//   the ids with no missing requirement, 'ai-development-local-hero' first when ready, the others
-//   in input order.
+// - (#643: preselectedWorkflows went away with the Setup's Workflows step; its tests are gone, see
+//   setup-three-steps-643.test.js.)
 // - visibleWorkflows(workflows, hiddenWorkflows): the workflows whose id is not hidden, order
 //   kept; a missing hidden list -> all.
 const test = require('node:test');
@@ -51,20 +50,6 @@ const WORKFLOWS = [
   { id: 'ai-development-local-hero', requirements: { clis: ['claude', 'git'], forge: false } },
   { id: 'issue-tracker', requirements: { clis: ['claude', 'git'], forge: true } },
 ];
-
-test('preselectedWorkflows: the ready workflows, ai-development-local-hero first, the others in input order', () => {
-  const { preselectedWorkflows } = load();
-  const states = { claude: 'ready', git: 'ready', codex: 'missing', grok: 'missing', gh: 'ready', glab: 'missing' };
-  assert.deepEqual(preselectedWorkflows(WORKFLOWS, states), ['ai-development-local-hero', 'writer-reviewer', 'issue-tracker']);
-});
-
-test('preselectedWorkflows: a signed-out CLI or no forge leaves its workflows out', () => {
-  const { preselectedWorkflows } = load();
-  const states = { claude: 'signed-out', git: 'ready', codex: 'ready', gh: 'missing', glab: 'missing' };
-  assert.deepEqual(preselectedWorkflows(WORKFLOWS, states), []);
-  const noForge = { claude: 'ready', git: 'ready', codex: 'ready', gh: 'missing', glab: 'signed-out' };
-  assert.deepEqual(preselectedWorkflows(WORKFLOWS, noForge), ['ai-development-local-hero', 'ai-arena', 'writer-reviewer']);
-});
 
 test('visibleWorkflows: hidden ids are left out, order kept; no hidden list shows all', () => {
   const { visibleWorkflows } = load();

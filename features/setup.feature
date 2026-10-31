@@ -1,6 +1,6 @@
 Feature: First-run Setup
   On a new workspace, after the workspace dialog and sign-in, a Setup opens: a stepper (Agents, Try
-  it safely, Workflows, First project) with Back / Next / Skip. Skip or Finish marks the setup as done
+  it safely, First project; #643 removed Workflows) with Back / Next / Skip. Skip or Finish marks the setup as done
   and it never opens by itself again; Settings › Agents & CLIs can run it again. An existing
   workspace is marked as set up on upgrade, so it opens on Home.
 
@@ -10,7 +10,7 @@ Feature: First-run Setup
   Scenario: A new workspace opens the Setup on its Agents step, and Skip leads to Home
     Given the app is open on a new workspace
     Then the first-run Setup is open on its "Agents" step
-    And the Setup's stepper reads "Agents", "Try it safely", "Workflows" and "First project"
+    And the Setup's stepper reads "Agents", "Try it safely" and "First project"
     And the Setup lists Claude Code, Codex CLI, Grok Build, GitHub CLI, GitLab CLI and Git, each with a status
     And the Setup marks "Claude Code" as required
     And the Setup marks "Git" as required

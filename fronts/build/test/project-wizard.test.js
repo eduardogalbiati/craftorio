@@ -37,7 +37,8 @@
 // clicked through clickRendered (their own #id element when they have one, then the elements holding
 // their markup: delegated listeners on #project-wizard / #onboarding-tray work); a typed value goes
 // through the input's own input/change listeners and the wizard root's delegated ones.
-// Projects › New project (#btn-new-project) is not wired to the wizard yet: it still opens the old dialog.
+// #643: Projects › New project (#btn-new-project) opens the wizard, not the old dialog
+// (fronts/build/test/projects-new-opens-wizard-643.test.js covers the empty state and Edit).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@multiagent/ui-kit/test/page-pieces');
@@ -352,16 +353,16 @@ test('#641 no state leaves a blank panel: start, repository, cloning, no access,
   assert.deepEqual(blank, [], 'the states with a blank panel');
 });
 
-// ---- not wired yet ---------------------------------------------------------------------------------
+// ---- wired to Projects (#643) ----------------------------------------------------------------------
 
-// Guards today's behaviour (passes before the wizard exists): the wizard is not wired to Projects yet.
-test('#641 Projects › New project still opens the old New project dialog, not the wizard', async () => {
+test('#643 Projects › New project opens the wizard on its start step, not the old New project dialog', async () => {
   const app = page();
   await app.boot();
   app.run("showView('projects')");
   await app.settle(10);
   app.el('#project-modal-title').textContent = '';
   await app.click('#btn-new-project');
-  assert.equal(app.el('#project-modal-title').textContent, 'New project');
-  assert.equal(H.findEl(wizardMarkup(app), (e) => 'data-step' in e.attrs), null, 'the wizard is not shown');
+  await app.settle(10);
+  assert.equal(app.el('#project-modal-title').textContent, '', 'the old dialog was not opened');
+  assert.equal(currentStep(app), 'start', 'the wizard is shown on its start step');
 });

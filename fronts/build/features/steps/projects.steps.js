@@ -145,6 +145,31 @@ When('I turn on {string} in the project dialog', async ({ e2e }, label) => {
   await dialogSetting(e2e.window, label).check();
 });
 
+// #643: Projects › New project opens the project wizard (onboarding.steps.js); Edit keeps the dialog.
+// data-testid="projects-empty": the Projects screen's empty state (no project yet), holding its own
+// "New project" button; the header's "New project" comes first in the screen (its page head).
+Then('the Projects screen says there is no project yet', async ({ e2e }) => {
+  await expect(projectsScreen(e2e.window).getByTestId('projects-empty')).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+When("I choose New project in the Projects screen's empty state", async ({ e2e }) => {
+  await projectsScreen(e2e.window).getByTestId('projects-empty').getByRole('button', { name: 'New project', exact: true }).click();
+});
+
+When("I choose New project in the Projects screen's header", async ({ e2e }) => {
+  const screen = projectsScreen(e2e.window);
+  await expect(screen).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await screen.getByRole('button', { name: 'New project', exact: true }).first().click();
+});
+
+Then('the project dialog is for editing {string} with the repository {string}', async ({ e2e }, name, repo) => {
+  const dialog = projectDialog(e2e.window);
+  await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(dialog.getByRole('heading', { name: 'Edit project', exact: true })).toBeVisible();
+  await expect(dialog.getByLabel(/^\s*Name\b/).first()).toHaveValue(name);
+  await expect(dialog.getByLabel(/^\s*Git repository\b/).first()).toHaveValue(repo);
+});
+
 When('I save the project dialog', async ({ e2e }) => {
   await projectDialog(e2e.window).getByRole('button', { name: 'Save', exact: true }).click();
   await expect(visible(e2e.window.getByTestId('project-dialog'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });

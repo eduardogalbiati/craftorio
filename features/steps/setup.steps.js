@@ -2,13 +2,16 @@
 // confirm, setupDone in the workspace's settings.json, Settings › Agents & CLIs › "Run setup again".
 // Locators are roles and data-testid only (skills/ui-conventions):
 //   setup                                   the Setup (a large modal or screen)
-//   setup-step-<slug>                       a stepper item: agents, try-it-safely, workflows,
-//                                           first-project; the current one has aria-current="step"
+//   setup-step-<slug>                       a stepper item: agents, try-it-safely, first-project
+//                                           (#643: no workflows step any more); the current one
+//                                           has aria-current="step"
 //   setup-cli-<id>                          a row of the Agents step: claude, codex, grok, gh, glab,
 //                                           git; its status badge reads Ready / Not signed in / Not
 //                                           installed / Checking…, a required CLI shows "Required"
 //   setup-skip, setup-next, setup-back      the Setup's buttons
 //   confirm-modal                           the app's confirm dialog (index.html), Skip's confirm
+// (#643) the last step, First project, opens the project wizard (onboarding.steps.js) by itself on a
+// workspace with no project, as it opened the old New project dialog.
 // "Run setup again" is a button of Settings › Agents & CLIs, by its role and name.
 
 const fs = require('fs');
@@ -47,9 +50,7 @@ Then('the first-run Setup is open on its {string} step', async ({ e2e }, name) =
   await expect(stepItem(page, name)).toHaveAttribute('aria-current', 'step');
 });
 
-Then("the Setup's stepper reads {string}, {string}, {string} and {string}", async ({ e2e }, a, b, c, d) => {
-  const page = e2e.window;
-  const names = [a, b, c, d];
+async function stepperReads(page, names) {
   for (const name of names) {
     await expect(stepItem(page, name)).toBeVisible();
     await expect(stepItem(page, name)).toContainText(name);
@@ -61,6 +62,25 @@ Then("the Setup's stepper reads {string}, {string}, {string} and {string}", asyn
     return els.every((el, i) => i === 0 || (els[i - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
   }, ids);
   expect(inOrder, `the stepper reads ${names.join(', ')} in this order`).toBe(true);
+  // and nothing else (#643: three steps, no Workflows)
+  await expect(setup(page).locator('[data-testid^="setup-step-"]')).toHaveCount(names.length);
+}
+
+Then("the Setup's stepper reads {string}, {string} and {string}", async ({ e2e }, a, b, c) => {
+  await stepperReads(e2e.window, [a, b, c]);
+});
+
+Then("the Setup's stepper has no {string} step", async ({ e2e }, name) => {
+  await expect(stepItem(e2e.window, 'Agents')).toBeVisible();
+  await expect(stepItem(e2e.window, name)).toHaveCount(0);
+  await expect(setup(e2e.window).getByRole('listitem').filter({ hasText: name })).toHaveCount(0);
+});
+
+When("I go to the Setup's next step", async ({ e2e }) => {
+  const page = e2e.window;
+  const before = await setup(page).locator('[aria-current="step"]').getAttribute('data-testid');
+  await setup(page).getByTestId('setup-next').click();
+  await expect(setup(page).locator('[aria-current="step"]')).not.toHaveAttribute('data-testid', before);
 });
 
 Then('the Setup lists Claude Code, Codex CLI, Grok Build, GitHub CLI, GitLab CLI and Git, each with a status', async ({ e2e }) => {

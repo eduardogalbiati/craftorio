@@ -194,6 +194,14 @@ When('I close the project wizard', async ({ e2e }) => {
   }
 });
 
+// #643: opened from the Setup's last step or Projects › New project (not the old project dialog)
+Then('the project wizard is open on its first step', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(wizard(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(currentStep(page)).toHaveAttribute('data-step', 'start');
+  await expect(page.getByTestId('project-dialog').filter({ visible: true })).toHaveCount(0);
+});
+
 Then('the project wizard is not shown', async ({ e2e }) => {
   await expect(wizard(e2e.window)).toBeHidden();
 });
