@@ -61,3 +61,8 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
   `write-doc` + `issue`. The proposal, its decisions D1-D16 and the phased plan:
   [docs/write-doc-proposal-2026-10/](../write-doc-proposal-2026-10/README.md) (also in pt-BR).
   Waiting for the owner's decisions.
+- Project mockups (#625, epic): high-fidelity screens of any project, built from its existing
+  design system (detected or imported) or a kit read from its code, edited by selection and a side
+  chat. Intent accepted and spec signed off on 2026-10-31:
+  [docs/work/project-mockups/](../work/project-mockups/spec.md) (decisions D1-D18). It builds on
+  the write doc's shared artifact editor (#636), so its Build starts after that editor exists.
