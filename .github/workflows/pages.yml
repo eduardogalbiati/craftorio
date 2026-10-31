@@ -6,13 +6,22 @@
 #   1. Settings › Pages › Build and deployment › Source: GitHub Actions (a public repository, or a plan
 #      with Pages for private ones: the site is public either way);
 #   2. Settings › Secrets and variables › Actions › Variables: SITE_PAGES = on.
-# Then each release (a pushed vX.Y.Z tag, as deploy.yml) publishes it from the tagged commit; Run
-# workflow publishes main by hand (owner decision of 2026-10-31: Actions run for releases only).
+# Then each release (a pushed vX.Y.Z tag, as deploy.yml) publishes it from the tagged commit, a push to
+# main that changes the documents the page reads (docs/work/, the changelog, site/) republishes main, so
+# approved SDLC documents show without a manual run (owner, 2026-10-31: agents only commit to git), and
+# Run workflow publishes main by hand. Any other push to main builds nothing.
 name: Pages
 
 on:
   push:
     tags: ['v*', '!v*-rc.*']
+    branches: [main]
+    paths:
+      - 'docs/work/**'
+      - 'CHANGELOG.md'
+      - 'CHANGELOG.pt-BR.md'
+      - 'site/**'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
