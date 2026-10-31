@@ -355,6 +355,13 @@ O que muda no engine:
 - **Um lint de documento** (máquina): front-matter, as seções obrigatórias da skill, âncoras únicas, uma linha "Recommended" em cada decisão e imagens que existem.
 - **Nenhum renderer novo:** o editor e os workflows usam o leitor de documentos.
 
+**O editor é a base comum dos editores de artefatos do app** (decisão do dono). Os Mockups (épica #625), que vêm depois, o reaproveitam trocando só o renderizador. O que é comum: a seleção sobre o que está renderizado, o chat lateral (`agent-chat.js`), o mapa da seleção para o trecho da fonte, um commit por pedido com o diff, a fila de "não revisadas" e o gate de revisão. O renderizador é o ponto de extensão do editor, com uma interface pequena:
+- `render(source)`: desenhar a fonte;
+- `mapSelection(selection)`: transformar uma seleção no trecho da fonte (arquivo, linhas, trecho);
+- `applyDiff(diff)`: mostrar a mudança de um pedido sobre o que está renderizado.
+
+O write doc traz o renderizador de markdown (o leitor de documentos); os Mockups acrescentam um renderizador de telas (um iframe com sandbox e um inspetor por `data-mid`), como o segundo consumidor.
+
 ## Custo das chamadas reais
 
 **D14.** São ordens de grandeza, sem medição. Todo o desenvolvimento roda no provedor simulado (`MULTIAGENT_SIMULATION_ONLY=1`). Cada ação mostra o custo antes e conta no orçamento diário (#206).

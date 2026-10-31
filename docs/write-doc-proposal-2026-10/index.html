@@ -779,6 +779,13 @@ Writer / reviewer: any CLI, reads the project, writes only docs/work/&lt;item&gt
 <li><strong>A document lint</strong> (machine): front-matter, the skill&#39;s required sections, unique anchors, a &quot;Recommended&quot; line in every decision, images that exist.</li>
 <li><strong>No new renderer:</strong> the editor and the workflows use the document reader.</li>
 </ul>
+<p><strong>The editor is the common base of the app&#39;s artifact editors</strong> (the owner&#39;s decision). The Mockups (epic #625), which come later, reuse it and swap only the renderer. What is shared: selection on the rendered output, the side chat (<code>agent-chat.js</code>), the map from a selection to the source passage, one commit per request with its diff, the &quot;unreviewed&quot; queue and the review gate. The renderer is the editor&#39;s extension point, with a small interface:</p>
+<ul>
+<li><code>render(source)</code>: draw the source;</li>
+<li><code>mapSelection(selection)</code>: turn a selection into the source passage (file, lines, quote);</li>
+<li><code>applyDiff(diff)</code>: show a request&#39;s change on the rendered output.</li>
+</ul>
+<p>Write doc brings the markdown renderer (the document reader); the Mockups add a screen renderer (a sandboxed iframe with a <code>data-mid</code> inspector) as the second consumer.</p>
 <h2>Cost of real-model calls</h2>
 <p><strong>D14.</strong> These are orders of magnitude, not measured. All development runs on the mock provider (<code>MULTIAGENT_SIMULATION_ONLY=1</code>). Every action shows its cost first and counts toward the daily budget (#206).</p>
 <table>

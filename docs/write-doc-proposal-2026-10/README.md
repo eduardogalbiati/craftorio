@@ -355,6 +355,13 @@ What changes in the engine:
 - **A document lint** (machine): front-matter, the skill's required sections, unique anchors, a "Recommended" line in every decision, images that exist.
 - **No new renderer:** the editor and the workflows use the document reader.
 
+**The editor is the common base of the app's artifact editors** (the owner's decision). The Mockups (epic #625), which come later, reuse it and swap only the renderer. What is shared: selection on the rendered output, the side chat (`agent-chat.js`), the map from a selection to the source passage, one commit per request with its diff, the "unreviewed" queue and the review gate. The renderer is the editor's extension point, with a small interface:
+- `render(source)`: draw the source;
+- `mapSelection(selection)`: turn a selection into the source passage (file, lines, quote);
+- `applyDiff(diff)`: show a request's change on the rendered output.
+
+Write doc brings the markdown renderer (the document reader); the Mockups add a screen renderer (a sandboxed iframe with a `data-mid` inspector) as the second consumer.
+
 ## Cost of real-model calls
 
 **D14.** These are orders of magnitude, not measured. All development runs on the mock provider (`MULTIAGENT_SIMULATION_ONLY=1`). Every action shows its cost first and counts toward the daily budget (#206).

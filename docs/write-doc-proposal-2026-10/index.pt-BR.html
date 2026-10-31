@@ -832,6 +832,9 @@ date: 2026-10-31
 </div>
 
 <!-- custos -->
+<div class="decision" style="margin-top:20px"><div class="d-head"><span class="d-id">Base comum</span><h4>O editor é a base dos editores de artefatos do app</h4></div>
+<p style="font-size:14px">Decisão do dono: os Mockups (épica #625), que vêm depois, reaproveitam este editor trocando só o renderizador. É comum aos dois: a seleção sobre o que está renderizado, o chat lateral (<code>agent-chat.js</code>), o mapa da seleção para o trecho da fonte, um commit por pedido com o diff, a fila de "não revisadas" e o gate de revisão. O renderizador é o ponto de extensão do editor, com uma interface pequena: <code>render(source)</code>, <code>mapSelection(selection)</code> → trecho da fonte (arquivo, linhas, trecho) e <code>applyDiff(diff)</code>. O write doc traz o renderizador de markdown (o leitor); os Mockups acrescentam um renderizador de telas (iframe com sandbox e inspetor por <code>data-mid</code>), como o segundo consumidor.</p></div>
+
 <h2 id="custos">Custos de chamadas reais</h2>
 <p>Ordem de grandeza, sem medição. Todo o desenvolvimento roda no provedor simulado (<code>MULTIAGENT_SIMULATION_ONLY=1</code>). Cada ação mostra o custo antes e conta no orçamento diário (#206).</p>
 <div class="scroll"><table class="t">
