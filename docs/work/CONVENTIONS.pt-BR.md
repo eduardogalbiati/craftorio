@@ -36,6 +36,9 @@ translation: spec.pt-BR.md
 ---
 ```
 
+Campos opcionais:
+- `depends_on: write-doc` (ou uma lista: `depends_on:` seguido de linhas `- write-doc`): as pastas dos itens em que este item se apoia, com o motivo num comentário `#`. O leitor ordena um item depois dos itens de que ele depende e mostra "after write-doc" no cartão dele.
+
 ## Requisitos
 
 No `spec.md`, cada requisito é um parágrafo em negrito que começa pelo id. O leitor lista todos os requisitos no índice.

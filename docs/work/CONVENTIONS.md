@@ -36,6 +36,9 @@ translation: spec.pt-BR.md
 ---
 ```
 
+Optional fields:
+- `depends_on: write-doc` (or a list: `depends_on:` followed by `- write-doc` lines): the item folders this item builds on, with the reason as a `#` comment. The reader orders an item after the items it depends on and shows "after write-doc" on its card.
+
 ## Requirements
 
 In `spec.md`, each requirement is a bold paragraph that starts with its id. The reader lists every requirement in the index.
