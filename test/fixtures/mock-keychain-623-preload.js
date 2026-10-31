@@ -38,6 +38,8 @@ childProcess.spawn = (command, args, options) => {
 
 if (process.env.KEYCHAIN_623_ELECTRON === '1') {
   process.type = 'browser';
+  // the E2E suite's Electron main (features/support/electron-main.js) only imports the helpers
+  if (process.env.KEYCHAIN_623_E2E_HELPERS === '1') global.multiagentScreenshotHelpers = {};
   const app = {
     isPackaged: false,
     isReady: () => false,

@@ -87,3 +87,11 @@ test('the screenshot tool does not append use-mock-keychain on Windows nor on Li
   assert.equal(screenshotSwitches(t, 'win32').length, 0, 'Windows');
   assert.equal(screenshotSwitches(t, 'linux').length, 0, 'Linux');
 });
+
+test('on macOS the E2E suite importing the screenshot helpers neither appends use-mock-keychain nor starts a capture', (t) => {
+  // the E2E launches go through apps/desktop/host/main.js's own guard (#578)
+  const r = runScript(t, 'screenshot.js', ['--help'], { KEYCHAIN_623_PLATFORM: 'darwin', KEYCHAIN_623_ELECTRON: '1', KEYCHAIN_623_E2E_HELPERS: '1' });
+  assert.equal(r.status, 0, r.output);
+  assert.equal(r.entries.filter((e) => e.appendSwitch === 'use-mock-keychain').length, 0, 'no switch appended');
+  assert.equal(r.entries.some((e) => 'exit' in e), false, 'no capture started (main() not run)');
+});
