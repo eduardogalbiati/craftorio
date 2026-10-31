@@ -56,6 +56,13 @@ async function archivedCard(client) {
   return state;
 }
 
+// #640: an onboarding whose repository no git reaches (a missing local folder): failed, nothing cloned
+const UNREACHABLE_REPO = require('path').join(__dirname, 'no-such-repository');
+async function onboarding(client) {
+  const s = await client.call('onboarding:start', { name: unique('Contract onboarding'), repo: UNREACHABLE_REPO });
+  return { projectId: s.projectId };
+}
+
 const AGENT = { name: 'Contract agent', provider: 'claude', prompt: 'Checks the contract suite.' };
 async function agent(client) {
   const a = await client.call('agents:create', { ...AGENT, name: unique('Contract agent') });
@@ -180,6 +187,11 @@ module.exports = {
   'nightwatch:state': { arg: null },
   'notifications:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
   'notifications:read': { arg: { ids: [] }, invalid: { arg: { ids: 'all' } } },
+  // #640: a repository no git reaches: the onboarding ends failed (no-access) and nothing is cloned
+  'onboarding:analyze': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'onboarding:retry': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'onboarding:start': { arg: () => ({ name: unique('Contract onboarding'), repo: UNREACHABLE_REPO }), invalid: { arg: { name: 'No repository' } } },
+  'onboarding:status': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'oracle:history': { arg: null },
   'oracle:markRead': { arg: null, invalid: { arg: 42 } },
   'oracle:memory': { arg: null },

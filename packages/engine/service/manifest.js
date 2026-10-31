@@ -84,6 +84,7 @@ const PUSHED_EVENTS = [
   'baseCheck:changed',
   'chat:progress',
   'notifications:changed',
+  'onboarding:changed',
   'oracle:changed',
   'run:event',
   'run:meta',

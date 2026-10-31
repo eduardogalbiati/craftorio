@@ -3,9 +3,11 @@
 // packages/engine/service/seed-runs.js, the same run the Architecture tab's seeds:run makes: saved under
 // <workspace>/architecture/, so seeds:estimate, seeds:list and seeds:history see it, and refused as
 // busy while that seed already runs on the project) and answers its profile, the evidence behind each
-// field and the questions the profile leaves open (packages/engine/domains/workflow/workflow-compose.js openQuestions). Under
-// MULTIAGENT_SIMULATION_ONLY no model is called: the profile is read from the project's git history
-// (authors, merges) and files (test and check commands, languages) and the release style is left open.
+// field and the questions the profile leaves open (packages/engine/domains/workflow/workflow-compose.js openQuestions).
+// #640: the free profile is always read first from the project's git history (authors, merges) and files
+// (test and check commands, languages); the model only fills the fields it leaves null (the release
+// style), and the fields git settles keep git's value. Under MULTIAGENT_SIMULATION_ONLY, or with no
+// field left open, no model is called (the seed's simulated run is saved) and the open fields stay open.
 // workflowCompose builds the workflow set from the last profile and the owner's answers, its manifest
 // merged into the repository's .multiagent/project.yaml; only with write: true are the files written to
 // the project's .multiagent/ (never committed: the owner commits) and the project's set updated.
@@ -65,18 +67,33 @@ async function simulatedProfile(project) {
   };
 }
 
+// #640: a field git could not settle (null, or no language found)
+const open = (v) => v == null || (Array.isArray(v) && !v.length);
+
+// #640: the free profile with the model's answer only in the fields the free one leaves open
+function mergeProfile(free, model) {
+  const profile = { ...free.profile };
+  const evidence = { ...free.evidence };
+  for (const k of new Set([...Object.keys(free.profile), ...Object.keys(model.profile)])) {
+    if (!open(free.profile[k]) || open(model.profile[k])) continue;
+    profile[k] = model.profile[k];
+    if (model.evidence?.[k]) evidence[k] = model.evidence[k];
+  }
+  return { profile, evidence, simulated: false };
+}
+
 module.exports = (ctx) => {
   const root = () => seedRuns.seedsRoot(ctx);
   const projectOf = (projectId) => seedRuns.projectOf(ctx, projectId);
 
-  // the last ways-of-working run's { profile, evidence }, or null
-  async function lastProfile(p) {
+  // the last ways-of-working run's { profile, evidence } over the free profile (`free`: already read), or null
+  async function lastProfile(p, free = null) {
     const last = oracleSeeds.listSeedRuns(root(), p.id, SEED_ID)[0];
     if (!last) return null;
     const saved = oracleSeeds.readSeedRun(root(), p.id, SEED_ID, last.date);
     const model = saved?.model || {};
-    if (model.profile && typeof model.profile === 'object') return { profile: model.profile, evidence: model.evidence || {}, simulated: false };
-    return model.simulated ? simulatedProfile(p) : null;
+    if (model.profile && typeof model.profile === 'object') return mergeProfile(free || await simulatedProfile(p), { profile: model.profile, evidence: model.evidence || {} });
+    return model.simulated ? free || simulatedProfile(p) : null;
   }
 
   /** Runs the analysis → { profile, evidence, questions, simulated }, or { refused } (busy, or the Oracle's budget). */
@@ -84,9 +101,11 @@ module.exports = (ctx) => {
     const p = projectOf(projectId);
     const seed = seeds.readSeed(ctx.ws.seeds, SEED_ID);
     if (!seed) throw clientError(`The analysis seed ${SEED_ID} is missing from the workspace.`);
-    const out = await seedRuns.runSeed(ctx, { project: p, seed, mock: simulation.simulationOnly() });
+    const free = await simulatedProfile(p);
+    const ask = !simulation.simulationOnly() && Object.values(free.profile).some(open);
+    const out = await seedRuns.runSeed(ctx, { project: p, seed, mock: !ask });
     if (out.refused) return { refused: out.refused };
-    const found = await lastProfile(p);
+    const found = await lastProfile(p, free);
     if (!found) throw new Error(`The ${SEED_ID} analysis answered no profile.`);
     return { ...found, questions: compose.openQuestions(found.profile) };
   }

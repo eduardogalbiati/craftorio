@@ -9,6 +9,7 @@
 // #639: the clone is a background job: a project has a `status` (`cloning | ready | failed`, none = ready),
 // `cloneError` the reason of a failed clone; a `cloning` record no job of this process runs (the app closed
 // during the clone) reads `failed`; retryClone clones a failed one again; checkAccess runs `git ls-remote`.
+// #640: cloneJob lets the onboarding (packages/engine/service/areas/project-onboarding.js) wait for a clone.
 
 const fs = require('fs');
 const path = require('path');
@@ -70,6 +71,12 @@ function startClone(dir, id, { git, defaultWorkflow = null }) {
   return job;
 }
 
+// a new record's status: ready without a clone; #640: failed with the access check's reason, never cloned
+const cloneState = (cloned, cloneError) => (!cloned ? { status: 'ready' } : cloneError ? { status: 'failed', cloneError: String(cloneError) } : { status: 'cloning' });
+
+/** #640: the clone job this process runs for the project (a promise that never rejects), null when none runs. */
+const cloneJob = (dir, id) => jobs.get(jobKey(dir, id)) || null;
+
 function listProjects(dir) {
   if (!isDir(dir)) return [];
   return fs.readdirSync(dir)
@@ -86,9 +93,11 @@ function listProjects(dir) {
  * with status 'cloning' and clones the repository into it in the background (the folder must be
  * empty or not exist; #639); otherwise the project is 'ready' at once.
  * @param {{ name: string, folder?: string, repo?: string, description?: string }} data
- * @param {{ git?: Function, reposDir?: string }} opts reposDir: <workspace>/repos
+ * @param {{ git?: Function, reposDir?: string, cloneError?: string }} opts reposDir: <workspace>/repos;
+ *   cloneError (#640, the access check refused the repository): the project is saved 'failed' with
+ *   that reason and nothing is cloned (retryClone clones it)
  */
-async function createProject(dir, data, { git = execGit, reposDir = null } = {}) {
+async function createProject(dir, data, { git = execGit, reposDir = null, cloneError = null } = {}) {
   const name = String(data.name || '').trim();
   if (!name) throw new Error('Enter the project name.');
   fs.mkdirSync(dir, { recursive: true });
@@ -117,9 +126,9 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
   // none checked for a repository being cloned (its manifest could not be read before): the clone job reads it
   const workflows = cleanWorkflows(data.workflows);
   const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuild(workflows) : null;
-  const project = { name, description: data.description?.trim() || '', folder, repo, status: cloned ? 'cloning' : 'ready', ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
-  if (cloned) startClone(dir, id, { git, defaultWorkflow: data.defaultWorkflow });
+  if (project.status === 'cloning') startClone(dir, id, { git, defaultWorkflow: data.defaultWorkflow });
   return readProject(dir, id);
 }
 
@@ -288,6 +297,7 @@ function removeProject(dir, id) {
 
 module.exports = {
   checkAccess,
+  cloneJob,
   createProject,
   listProjects,
   projectDefaultWorkflow,
