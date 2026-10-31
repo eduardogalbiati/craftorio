@@ -1,0 +1,63 @@
+/* The new-project wizard and the onboarding's progress tray (#641, project-wizard.js): a modal panel
+   over a backdrop with the step indicator, the source cards, the repository fields, the alerts, the
+   cost of the analyses; the tray is fixed in the bottom-right corner and stays when the wizard closes. */
+
+.project-wizard:not([hidden]) { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); }
+.wizard-panel { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.wizard-panel:focus { outline: none; }
+.wizard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wizard-head h2 { margin: 0; font-size: 16px; }
+.wizard-close { min-width: 28px; min-height: 28px; font-size: 16px; }
+
+.wizard-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.wizard-steps li { flex: 1; font-size: 12px; color: var(--muted); padding: 6px 0 0; border-top: 2px solid var(--border); }
+.wizard-steps li.done { border-top-color: var(--accent); }
+.wizard-steps li[aria-current="step"] { color: var(--text); border-top-color: var(--accent); font-weight: 600; }
+
+.wizard-body { display: flex; flex-direction: column; gap: 12px; }
+.wizard-body p { margin: 0; }
+.wizard-sources { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.wizard-source { text-align: left; cursor: pointer; color: var(--text); font: inherit; font-size: 13px; }
+.wizard-source:hover:not([disabled]) { border-color: var(--muted); }
+.wizard-source.selected { border-color: var(--accent); }
+.wizard-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.wizard-source[disabled] { cursor: default; opacity: .6; }
+
+.wizard-fields { display: grid; gap: 12px; }
+.wizard-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.wizard-field input { font-size: 13px; }
+.wizard-field input[readonly] { color: var(--muted); }
+.wizard-field .badge:empty { display: none; }
+
+.wizard-import-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wizard-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
+.badge.status-cloning, .badge.status-analyzing, .badge.job-running { color: var(--accent); }
+.badge.status-ready, .badge.status-analyzed, .badge.job-done { color: var(--green); }
+.badge.status-failed, .badge.job-failed { color: var(--red); }
+.badge.job-waiting, .badge.job-skipped { color: var(--muted); }
+
+.wizard-alert { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.wizard-alert.error { border-color: var(--red); }
+.wizard-alert.error strong { color: var(--red); }
+.wizard-alert.warn { border-color: var(--yellow); }
+.wizard-alert.warn strong { color: var(--yellow); }
+.wizard-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.wizard-jobs, .wizard-cost-parts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.wizard-jobs li, .wizard-cost-parts li, .wizard-cost-total-row { display: flex; justify-content: space-between; gap: 8px; }
+.wizard-amount { font-family: var(--mono); }
+.wizard-cost-total-row { border-top: 1px solid var(--border); padding-top: 8px; font-size: 14px; }
+
+.wizard-foot { display: flex; align-items: center; gap: 8px; }
+.wizard-spacer { flex: 1; }
+
+/* ---------- the progress tray ---------- */
+.onboarding-tray:not([hidden]) { position: fixed; right: 16px; bottom: 16px; z-index: 61; width: 280px; max-height: 50vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tray-title { margin: 0; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+.tray-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tray-item { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.tray-head { display: flex; align-items: center; gap: 6px; }
+.tray-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-reason { margin: 0; color: var(--muted); }
+.tray-item .btn.small { align-self: flex-start; }
+.tray-dismiss { min-width: 24px; min-height: 24px; padding: 0 6px; }
