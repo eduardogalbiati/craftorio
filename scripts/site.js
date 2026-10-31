@@ -95,4 +95,9 @@ if (require.main === module) {
   console.log(`site: ${files.length} files, ${items.length} item(s) [${items.join(', ')}] in ${path.relative(root, out) || out}`);
 }
 
-module.exports = { buildSite, kindOf, stampAssets, workItems };
+module.exports = {
+  buildSite,
+  kindOf,
+  stampAssets,
+  workItems,
+};
