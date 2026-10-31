@@ -37,7 +37,7 @@ function rememberProjectTab(id, tab) { pvRemember(PV_TABS_KEY, id, tab); }
 // #642: the Next steps card of the projects the wizard finished: { <projectId>: 'open' | 'dismissed' }
 const PV_NEXT_STEPS_KEY = 'multiagent.nextSteps';
 // [id, i18n key of its label, of its line]: spec R11 for this phase (release CI, screenshots come later)
-const PV_NEXT_STEPS = [['refactors', 'project.next_steps_refactors', 'project.next_steps_refactors_text'], ['idea', 'project.next_steps_idea', 'project.next_steps_idea_text'], ['cadence', 'project.next_steps_cadence', 'project.next_steps_cadence_text']];
+const PV_NEXT_STEPS = [['refactors', 'onboarding.next_steps_refactors', 'onboarding.next_steps_refactors_text'], ['idea', 'onboarding.next_steps_idea', 'onboarding.next_steps_idea_text'], ['cadence', 'onboarding.next_steps_cadence', 'onboarding.next_steps_cadence_text']];
 function nextSteps() { return pvStored(PV_NEXT_STEPS_KEY); }
 function rememberNextSteps(id, value) { pvRemember(PV_NEXT_STEPS_KEY, id, value); }
 
@@ -48,8 +48,8 @@ function nextStepsMarkup(id) {
       <span class="muted small">${esc(t(line))}</span>
     </li>`;
   return `<section class="card pr-next-steps" data-testid="project-next-steps">
-      <header class="pr-next-steps-head"><h3>${esc(t('project.next_steps_title'))}</h3>
-        <button type="button" class="btn ghost sm" data-testid="next-steps-dismiss" data-next-steps-dismiss aria-label="${esc(t('project.next_steps_dismiss'))}">×</button></header>
+      <header class="pr-next-steps-head"><h3>${esc(t('onboarding.next_steps_title'))}</h3>
+        <button type="button" class="btn ghost sm" data-testid="next-steps-dismiss" data-next-steps-dismiss aria-label="${esc(t('onboarding.next_steps_dismiss'))}">×</button></header>
       <ul class="pr-next-steps-list">${PV_NEXT_STEPS.map(entry).join('')}</ul>
     </section>`;
 }

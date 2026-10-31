@@ -8,6 +8,22 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-31** (#629, #628, first project onboarding phase 1): a new project is made in a 4-step
+  wizard (start, repository, analysis, review: `fronts/build/views/projects/project-wizard.js`),
+  opened by Home's empty state, Projects › New project and the Setup's last step; Edit keeps the old
+  dialog. The clone is a job of the engine (`cloning | ready | failed`, an access check first): a
+  refused access or a failed clone ends `failed` with a readable reason and Retry, never `ready`.
+  The free analyses (facts, the Ways of working profile) run after the clone; the paid ones (the
+  project map, the ranking) only on the owner's click, their cost shown before it, and "analyze
+  later" never calls a model. The progress tray stays when the wizard closes; Finish never waits for
+  an analysis (one still running notifies when it ends). The project page leads with a "Next steps"
+  card (the refactors to the roadmap, the first idea, the refactor cadence; release CI and
+  screenshots come in a later phase). Setup loses its Workflows step. Phase 1 covers spec R1, R2,
+  R3, R5, R7 (today's workflows), R10, R11; create new, the revisited profile, the work model and the
+  Monitor are later phases. Done as the plan's 7 steps, one run each, in order, each recorded in the
+  plan's Progress table, checked simulated only (`MULTIAGENT_SIMULATION_ONLY=1`, the mock provider,
+  `npm run screenshot`), no real model call. Why: the first project is the first impression, and
+  nothing costs money nor fails silently in it. Spec and plan: `docs/work/first-project-onboarding/`.
 - **2026-10-26** (#567, 12-Factor Agents factor 7): agents stay unattended (skills record an
   assumption or a default), with one exception beside Grill me: the agent of a step that opts in
   with `ask_human: true` may answer `needs_human: { question, options, default }`, which pauses the

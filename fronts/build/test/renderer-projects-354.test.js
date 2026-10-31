@@ -110,7 +110,8 @@ test('#354 the project page\'s back link opens the Projects screen', async () =>
   assert.equal(app.state().view, 'projects');
 });
 
-test('#354 the New project entry points (Start drawer +, header "New project…", Home\'s "Create a project") open the New project dialog, never Settings', async () => {
+// #644: Home's "Create a project" opens the onboarding wizard (project-wizard.js), no longer the dialog
+test('#354 the New project entry points (Start drawer +, header "New project…") open the New project dialog, Home\'s "Create a project" the wizard, never Settings', async () => {
   const app = page({ projects: [], storage: { 'multiagent.currentProject': '' } });
   await app.boot();
   const opened = [];
@@ -127,8 +128,11 @@ test('#354 the New project entry points (Start drawer +, header "New project…"
   app.run("showView('dashboard')");
   await app.settle(10);
   await app.click('[data-home-act="project"]', { dataset: { homeAct: 'project' }, within: ['#view-dashboard'] });
-  opened.push(app.el('#project-modal-title').textContent);
-  assert.deepEqual(opened, ['New project', 'New project', 'New project']);
+  await app.settle(10);
+  const wizard = app.created.find((e) => e.id === 'project-wizard');
+  assert.equal(!!wizard && wizard.hidden !== true, true, 'Home opens the wizard');
+  assert.equal(app.el('#project-modal-title').textContent, '', 'Home did not open the old dialog');
+  assert.deepEqual(opened, ['New project', 'New project']);
   assert.notEqual(app.state().view, 'settings');
 });
 
