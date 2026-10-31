@@ -3,14 +3,17 @@
 // when they are there and does without them otherwise (a local build with no token, a fork).
 // A private repository's page is public: only the issues the items name in `issue:` and the open ones
 // carrying the backlog label (docs/work/README.md `backlog_label:`, default "roadmap") are published,
-// with the pull requests that name them, never the rest of the backlog.
+// with the pull requests that name them and their sub-issues (an epic's phases, GitHub's native
+// sub-issues), never the rest of the backlog.
 //
 //   frontMatterValue(text, key)    a front-matter value, comment and quotes removed, or ''
 //   issueRefs(root)                the issue numbers the items name (intent.md or milestone.md `issue:`), sorted
 //   weekly(dates, today, weeks)    commits per week, oldest first: [{ start: 'YYYY-MM-DD', commits }]
 //   gitActivity(root, today)       { weeks, commits30, merges30, last } from git log, or null outside a repository
 //   linkPrs(numbers, prs)          { [issue]: [pull requests naming "#issue" in their title or body] }
-//   fetchGithub(o)                 { repo, private, issues, backlog } from the REST API, or null without a token
+//   fetchGithub(o)                 { repo, private, issues, backlog } from the REST API, or null without a token;
+//                                  each issue carries `prs` and `children` (its sub-issues, open and closed,
+//                                  each with its own `children`: an epic's phases and their steps)
 
 const fs = require('fs');
 const path = require('path');
@@ -91,16 +94,24 @@ async function fetchGithub({ repo, token, numbers, label = 'roadmap', fetchImpl 
   const meta = await get('');
   const named = await Promise.all(numbers.map((n) => get(`/issues/${n}`).catch(() => null)));
   const labelled = (await get(`/issues?state=open&labels=${encodeURIComponent(label)}&per_page=50`)).filter((i) => !i.pull_request);
+  const children = await Promise.all(numbers.map((n) => get(`/issues/${n}/sub_issues?per_page=100`).catch(() => [])));
   const prs = await get('/pulls?state=all&sort=updated&direction=desc&per_page=100');
   const issues = {};
   const links = linkPrs(numbers, prs);
-  for (const i of named.filter(Boolean)) issues[i.number] = { ...issue(i), prs: links[i.number] || [] };
+  const sub = (i) => ({ number: i.number, title: i.title, state: i.state, url: i.html_url, closed: i.closed_at });
+  // one level more: a phase's own steps
+  const grand = await Promise.all(children.map((list) => Promise.all((list || []).map((c) => get(`/issues/${c.number}/sub_issues?per_page=100`).catch(() => [])))));
+  named.forEach((i, k) => {
+    if (i) issues[i.number] = { ...issue(i), prs: links[i.number] || [], children: (children[k] || []).map((c, j) => ({ ...sub(c), children: (grand[k][j] || []).map(sub) })) };
+  });
+  // an issue already shown inside an item (its own, one of its sub-issues or their steps) is not backlog
+  const shown = new Set(Object.values(issues).flatMap((i) => [i.number, ...i.children.flatMap((c) => [c.number, ...c.children.map((g) => g.number)])]));
   return {
     repo,
     private: Boolean(meta.private),
     generated: new Date().toISOString(),
     issues,
-    backlog: labelled.filter((i) => !issues[i.number]).map(issue),
+    backlog: labelled.filter((i) => !shown.has(i.number)).map(issue),
   };
 }
 

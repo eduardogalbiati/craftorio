@@ -430,6 +430,28 @@
     var g = ghIssue(it), pr = g && g.prs && g.prs[0];
     return pr ? 'PR #' + pr.number + ' ' + pr.state : '';
   }
+  // The item's sub-issues (its epic's phases on GitHub), folded under its card: how many are done, then
+  // the list, open ones first. A private repository's issues are named, never linked.
+  function subsHtml(it) {
+    var g = ghIssue(it), kids = g && g.children ? g.children : [];
+    if (!kids.length) return '';
+    var done = kids.filter(function (c) { return c.state === 'closed'; }).length;
+    var order = kids.slice().sort(function (a, b) { return (a.state === 'closed') - (b.state === 'closed') || a.number - b.number; });
+    return '<details class="subs"><summary><span class="sbar"><i style="width:' + Math.round(done / kids.length * 100) + '%"></i></span>' +
+      '<span>Sub-issues · <b>' + done + ' of ' + kids.length + '</b> done</span></summary><ul>' +
+      order.map(subLi).join('') + '</ul></details>';
+  }
+  // One sub-issue: its state and title; a phase with steps of its own folds them under it, with its count.
+  function subLi(c) {
+    var n = '#' + c.number, kids = c.children || [], done = kids.filter(function (k) { return k.state === 'closed'; }).length;
+    var line = '<i class="st st-' + c.state + '"></i><span class="num">' + (GH.private ? n : '<a href="' + esc(c.url) + '" target="_blank" rel="noopener noreferrer">' + n + '</a>') + '</span><span class="ttl">' + esc(c.title) + '</span>' +
+      '<span class="stt">' + (kids.length ? done + '/' + kids.length : c.state === 'closed' ? 'done' : 'open') + '</span>';
+    if (!kids.length) return '<li class="' + (c.state === 'closed' ? 'done' : '') + '">' + line + '</li>';
+    var order = kids.slice().sort(function (a, b) { return (a.state === 'closed') - (b.state === 'closed') || a.number - b.number; });
+    return '<li class="has-kids' + (c.state === 'closed' ? ' done' : '') + '"><details><summary>' + line + '</summary><ul>' + order.map(subLi).join('') + '</ul></details></li>';
+  }
+  // A card and its folded sub-issues, kept together (the details cannot sit inside the card's link).
+  function cardBlock(it) { return '<div class="cblock">' + itemCard(it) + subsHtml(it) + '</div>'; }
   function itemCard(it) {
     if (it.kind === 'milestone') return milestoneCard(it);
     var cur = it.stages[it.here];
@@ -592,18 +614,18 @@
       }
       ahead.forEach(function (it) {
         if (it.kind === 'milestone') row('s-mile', '<span class="n-mile"></span>', milestoneCard(it), isNaN(it.expected) ? '' : longDay(it.expected));
-        else row('s-plan', '<span class="n-plan"></span>', itemCard(it), isNaN(it.created) ? '' : 'created ' + shortDate(it.created));
+        else row('s-plan', '<span class="n-plan"></span>', cardBlock(it), isNaN(it.created) ? '' : 'created ' + shortDate(it.created));
       });
     }
     // today: the date on one side, what is being built on the other
     var nowCards = now.map(function (it) {
       if (it.kind === 'milestone') return milestoneCard(it);
       var sum = it.summary && it.summary[lang], p = it.plan;
-      return '<a class="wcard now g-progress" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
+      return '<div class="cblock"><a class="wcard now g-progress" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
         '<div class="wc-top"><span class="gtag">In progress · ' + SHORT[it.here] + '</span>' + refHtml(it) + '</div>' +
         '<h3>' + esc(it.title[lang]) + '</h3>' + (sum ? '<p class="msum">' + esc(sum) + '</p>' : '') + flowDots(it) +
         (p ? '<div class="pbar"><span><i style="width:' + Math.max(3, Math.round(p.done / p.total * 100)) + '%"></i></span><b>plan: ' + p.done + ' of ' + p.total + ' steps</b></div>' : '') +
-        (lastPr(it) ? '<div class="wc-foot">' + esc(lastPr(it)) + '</div>' : '') + '</a>';
+        (lastPr(it) ? '<div class="wc-foot">' + esc(lastPr(it)) + '</div>' : '') + '</a>' + subsHtml(it) + '</div>';
     }).join('') || '<p class="none">Nothing in progress right now.</p>';
     var todayLine = now.length + ' in progress' + (nextStop ? ' · next stop in ' + daysTo(nextStop.expected) + (daysTo(nextStop.expected) === 1 ? ' day' : ' days') : '');
     rows.push('<div class="srow today"><div class="snode" aria-hidden="true"><span class="n-today"></span></div><div class="smeta"><span class="kicker">Today</span><b>' + esc(longDay(T)) + '</b><span>' + esc(todayLine) + '</span></div><div class="scard">' + nowCards + '</div></div>');
@@ -730,7 +752,7 @@
           if (!query) return true;
           return (it.title.en + ' ' + it.title.pt + ' ' + it.name + ' ' + it.issue + ' ' + it.release + ' ' + it.target).toLowerCase().indexOf(query.toLowerCase()) >= 0;
         });
-        panes.work.querySelector('.wlist').innerHTML = placeAfter(shown).map(itemCard).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
+        panes.work.querySelector('.wlist').innerHTML = placeAfter(shown).map(cardBlock).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
         bindCards(panes.work);
       }
       panes.work.querySelectorAll('.chip').forEach(function (c) { c.addEventListener('click', function () { filter = c.dataset.f; panes.work.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', x === c); }); list(); }); });
@@ -806,7 +828,7 @@
     if (!g) return '';
     var link = function (x, label) { return GH.private ? esc(label) : '<a href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>'; };
     return '<b class="ihead">On GitHub</b><ul class="hist"><li><span><i class="st st-' + g.state + '"></i>' + link(g, 'Issue #' + g.number) + '</span><span>' + g.state + '</span><span></span></li>' +
-      (g.prs || []).slice(0, 5).map(function (pr) { return '<li><span>' + link(pr, 'PR #' + pr.number) + '</span><span>' + pr.state + '</span><span></span></li>'; }).join('') + '</ul>';
+      (g.prs || []).slice(0, 5).map(function (pr) { return '<li><span>' + link(pr, 'PR #' + pr.number) + '</span><span>' + pr.state + '</span><span></span></li>'; }).join('') + '</ul>' + subsHtml(it);
   }
 
   async function item() {

@@ -58,7 +58,14 @@ test('fetchGithub: only the named issues and the labelled backlog, with their pu
       { number: 628, title: 'Onboarding', state: 'open', html_url: 'i628', labels: [] },
       { number: 700, title: 'Next idea', state: 'open', html_url: 'i700', labels: [{ name: 'roadmap' }] },
       { number: 701, title: 'A pull request', pull_request: {} },
+      { number: 629, title: 'Onboarding phase 1', state: 'open', html_url: 'i629', labels: [] },
+      { number: 638, title: 'Step 1', state: 'open', html_url: 'i638', labels: [] },
     ],
+    '/issues/628/sub_issues?per_page=100': [
+      { number: 629, title: 'Onboarding phase 1', state: 'open', html_url: 'i629', closed_at: null },
+      { number: 630, title: 'Onboarding phase 2', state: 'closed', html_url: 'i630', closed_at: 'c' },
+    ],
+    '/issues/629/sub_issues?per_page=100': [{ number: 638, title: 'Step 1', state: 'closed', html_url: 'i638', closed_at: 'c' }],
     '/pulls?state=all&sort=updated&direction=desc&per_page=100': [{ number: 635, title: 'Docs (#628)', body: '', state: 'closed', merged_at: 'm', html_url: 'p635', updated_at: 'u' }],
   };
   const fetchImpl = async (url, opts) => {
@@ -70,6 +77,8 @@ test('fetchGithub: only the named issues and the labelled backlog, with their pu
   assert.equal(out.private, true);
   assert.deepEqual(Object.keys(out.issues), ['628']);
   assert.deepEqual(out.issues[628].prs.map((p) => [p.number, p.state]), [[635, 'merged']]);
-  assert.deepEqual(out.backlog.map((b) => b.number), [700], 'the backlog leaves out named issues and pull requests');
+  assert.deepEqual(out.issues[628].children.map((c) => [c.number, c.state]), [[629, 'open'], [630, 'closed']], 'the sub-issues, open and closed');
+  assert.deepEqual(out.issues[628].children[0].children.map((c) => [c.number, c.state]), [[638, 'closed']], 'a phase carries its steps');
+  assert.deepEqual(out.backlog.map((b) => b.number), [700], 'the backlog leaves out named issues, their sub-issues, their steps and pull requests');
   assert.ok(calls.every(([, auth]) => auth === 'Bearer t'));
 });
