@@ -5,6 +5,8 @@
 // stylesheets with a version of the content (`assets/reader.js?v=<hash>`, stampAssets), so a new
 // publish never runs the old reader against new data.
 // The page's icon is the app's (apps/desktop/assets/: icon-source.svg and icon.png), copied, never kept twice.
+// With a token (GH_TOKEN or GITHUB_TOKEN) it also writes docs/work/github.json, and from git
+// docs/work/activity.json (scripts/site-data.js: which issues may be published, and why).
 // What it adds is docs/work/index.json, the list of items ([{ name, kind: 'item' | 'milestone' }]),
 // because a static host lists no folder.
 // An item is a folder of docs/work/ with at least one stage file (intent.md … maintain.md), or a
@@ -12,15 +14,23 @@
 // from docs/work/, never a page or a script.
 //
 //   node scripts/site.js [--out build/site]      npm run site; then: npx serve build/site
+//   GH_TOKEN=$(gh auth token) npm run site       the same, with github.json
 //
 //   workItems(root)          the item folders of root/docs/work/, sorted
 //   kindOf(root, name)       'milestone' when the folder has a milestone.md and no stage file, else 'item'
 //   stampAssets(out)         adds ?v=<hash of the file> to each page's src/href under assets/
-//   buildSite(root, out)     writes the site into out (emptied first); returns { items, files }
+//   buildSite(root, out, data)  writes the site into out (emptied first), plus docs/work/<name>.json
+//                               for each { name: object } of data; returns { items, files }
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const {
+  fetchGithub,
+  frontMatterValue,
+  gitActivity,
+  issueRefs,
+} = require('./site-data');
 
 const STAGES = ['intent', 'spec', 'plan', 'test', 'deploy', 'maintain', 'milestone'];
 const COPIED = /\.(md|png|jpe?g|webp|gif)$/i;
@@ -69,7 +79,7 @@ function stampAssets(out) {
   }
 }
 
-function buildSite(root, out) {
+function buildSite(root, out, data = {}) {
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
   const files = copyTree(path.join(root, 'site'), out, () => true);
@@ -90,19 +100,31 @@ function buildSite(root, out) {
   fs.mkdirSync(path.join(out, 'docs', 'work'), { recursive: true });
   fs.writeFileSync(path.join(out, 'docs', 'work', 'index.json'), `${JSON.stringify(items.map((name) => ({ name, kind: kindOf(root, name) })), null, 2)}\n`);
   files.push('docs/work/index.json');
+  for (const [name, value] of Object.entries(data)) {
+    if (!value) continue;
+    fs.writeFileSync(path.join(out, 'docs', 'work', `${name}.json`), `${JSON.stringify(value, null, 2)}\n`);
+    files.push(`docs/work/${name}.json`);
+  }
   stampAssets(out);
   // GitHub Pages runs Jekyll on a branch deploy; the page needs none
   fs.writeFileSync(path.join(out, '.nojekyll'), '');
   return { items, files: files.sort() };
 }
 
-if (require.main === module) {
+async function main() {
   const root = path.join(__dirname, '..');
   const i = process.argv.indexOf('--out');
   const out = path.resolve(root, i > 0 ? process.argv[i + 1] : path.join('build', 'site'));
-  const { items, files } = buildSite(root, out);
-  console.log(`site: ${files.length} files, ${items.length} item(s) [${items.join(', ')}] in ${path.relative(root, out) || out}`);
+  const readme = fs.existsSync(path.join(root, 'docs', 'work', 'README.md')) ? fs.readFileSync(path.join(root, 'docs', 'work', 'README.md'), 'utf8') : '';
+  const repo = process.env.GITHUB_REPOSITORY || frontMatterValue(readme, 'repo');
+  const github = await fetchGithub({
+    repo, token: process.env.GH_TOKEN || process.env.GITHUB_TOKEN, numbers: issueRefs(root), label: frontMatterValue(readme, 'backlog_label') || 'roadmap',
+  }).catch((e) => { console.warn(`site: no github.json (${e.message})`); return null; });
+  const { items, files } = buildSite(root, out, { github, activity: gitActivity(root) });
+  console.log(`site: ${files.length} files, ${items.length} item(s) [${items.join(', ')}]${github ? `, ${Object.keys(github.issues).length} issue(s) and ${github.backlog.length} in the backlog from GitHub` : ''} in ${path.relative(root, out) || out}`);
 }
+
+if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
 
 module.exports = {
   buildSite,

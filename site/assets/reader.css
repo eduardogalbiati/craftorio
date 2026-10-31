@@ -432,3 +432,69 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
   .srow.today .smeta b{font-size:24px}
 }
 @media (prefers-reduced-motion:reduce){.n-today{animation:none}}
+
+/* from GitHub and git (docs/work/github.json, activity.json) */
+.st{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.st-open{background:var(--ok)}.st-closed{background:#a78bfa}
+.stat.span1{grid-column:span 1}.stat.span2{grid-column:span 2}.stat.span3{grid-column:1 / -1}
+.stat.act{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:4px 18px;align-items:end}
+.stat.act dt{grid-column:1 / -1}
+.spark{display:flex;align-items:flex-end;gap:4px;height:46px}
+.spark span{flex:1;height:100%;display:flex;align-items:flex-end}
+.spark i{display:block;width:100%;border-radius:3px 3px 1px 1px;background:color-mix(in oklab,var(--accent) 70%,var(--paper))}
+.spark span:last-child i{background:var(--accent)}
+.bcard{border-style:dashed}
+.blist{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+.blist .mono{font:12px var(--mono);color:var(--soft)}
+.blist .more{color:var(--soft);font-size:12.5px}
+.loopnote .ihead{margin-top:14px}
+
+/* an item's sub-issues, folded inside its card: one border around both, a hairline between */
+.cblock{display:flex;flex-direction:column;min-width:0;border:1px solid var(--line);border-radius:14px;background:var(--paper);overflow:hidden;transition:border-color .15s,box-shadow .15s}
+.cblock:hover{border-color:color-mix(in oklab,var(--accent) 55%,var(--line));box-shadow:0 6px 18px -10px color-mix(in oklab,var(--accent) 45%,transparent)}
+.cblock>.wcard{border:0;border-radius:0}
+.cblock>.wcard:hover{transform:none;box-shadow:none}
+.cblock:has(>.wcard.now){border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:color-mix(in oklab,var(--paper) 92%,var(--accent))}
+.subs{margin:0;border-top:1px solid var(--line);font-size:13px}
+.subs summary{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;color:var(--soft);list-style:none}
+.subs summary::-webkit-details-marker{display:none}
+.subs summary::after{content:"";margin-left:auto;width:7px;height:7px;border:solid var(--soft);border-width:0 1.5px 1.5px 0;transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.subs[open]>summary::after{transform:rotate(-135deg) translateY(-2px)}
+.subs summary:hover{color:var(--ink)}
+.subs summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.subs summary b{color:var(--ink);font-weight:600}
+.pips{display:inline-flex;gap:4px}
+.pips i{width:7px;height:7px;border-radius:50%;border:1.5px solid color-mix(in oklab,var(--soft) 60%,transparent);box-sizing:border-box}
+.pips i.on{background:var(--ok);border-color:var(--ok)}
+.sbar{width:64px;height:5px;border-radius:3px;background:var(--line);overflow:hidden;flex:0 0 auto}
+.sbar i{display:block;height:100%;background:var(--ok)}
+.subs ul{list-style:none;margin:0;padding:2px 16px 14px;display:flex;flex-direction:column;gap:7px}
+.subs li{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:baseline;gap:6px;line-height:1.4}
+.subs li .st{margin:0}
+.subs .num{font:12px var(--mono);color:var(--soft)}
+.subs .stt{font:11px var(--mono);color:var(--soft)}
+.subs li.done .ttl{color:var(--soft);text-decoration:line-through;text-decoration-color:color-mix(in oklab,var(--soft) 50%,transparent)}
+.loopnote .subs{margin:10px 0 0;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+.srow.today .scard{gap:14px}
+
+.subs li.has-kids{display:block}
+.subs li.has-kids>details>summary{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:baseline;gap:6px;padding:0;cursor:pointer;color:inherit}
+.subs li.has-kids>details>summary::after{display:none}
+.subs li.has-kids>details>summary .stt{color:var(--accent);font-weight:500}
+.subs li.has-kids>details>summary .stt::after{content:" ▾";font-size:9px}
+.subs li.has-kids>details[open]>summary .stt::after{content:" ▴"}
+.subs li ul{padding:6px 0 4px 22px;border-left:1px dashed var(--line);margin:6px 0 2px 3px}
+
+/* phone: the spine's cards run to the screen's edge as rows (no side borders, no corners), the Today
+   band is a tinted strip with no frame, and a card inside it drops its own border: one line, not boxes */
+@media (max-width:760px){
+  .spine{--bleed:max(16px,env(safe-area-inset-right,0px))}
+  .spine .scard>.cblock,.spine .scard>.wcard,.spine .scard>.rcard,.wlist>.cblock{border-left:0;border-right:0;border-radius:0;margin-right:calc(-1 * var(--bleed))}
+  .wlist>.cblock{margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)))}
+  .srow.today{border:0;border-radius:0;margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)));margin-right:calc(-1 * var(--bleed));padding:18px var(--bleed) 18px max(16px,env(safe-area-inset-left,0px));border-top:1px solid color-mix(in oklab,var(--accent) 30%,var(--line));border-bottom:1px solid color-mix(in oklab,var(--accent) 30%,var(--line))}
+  .srow.today .scard>.cblock,.srow.today .scard>.wcard{border:0;margin:0 calc(-1 * var(--bleed)) 0 0;background:transparent}
+  .srow.today .scard>.cblock>.wcard{padding-left:0;background:transparent}
+  .srow.today .subs summary,.srow.today .subs ul{padding-left:0}
+  .wlist{gap:0}
+  .wlist>.cblock+.cblock{border-top:0}
+}
