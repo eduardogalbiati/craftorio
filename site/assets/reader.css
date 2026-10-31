@@ -561,3 +561,13 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
 .cblock .deps .why{display:none}
 .sidebox .deps{padding:0 0 12px;border-top:0}
 .loopnote .deps b{display:inline}
+
+/* the next stage, whose document does not exist yet: announced, not in progress */
+.fd.next .d{background:var(--paper);border:2px dashed color-mix(in oklab,var(--accent) 70%,var(--soft))}
+.fd.next .l{color:var(--soft)}
+.stage.here.missing .st-num{background:transparent;border:1.5px dashed var(--accent);color:var(--accent);box-sizing:border-box}
+/* in a grid row the block stretches: the card fills it, and a milestone's look (dashed border,
+   gradient) belongs to the block, not to the card inside it */
+.cblock>.wcard{flex:1 1 auto}
+.cblock:has(>.wcard.mile){border-style:dashed;border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:linear-gradient(120deg,var(--wash),var(--paper) 70%)}
+.cblock>.wcard.mile{background:transparent}
