@@ -18,7 +18,9 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   suggestion (#436) over the issues since the last stable, editable. The cut line stays the manual
   milestone checked by the full release run. In this repository the pushed tag builds every OS, runs
   `npm test` there and publishes the release as latest (`deploy.yml`) and the public page
-  (`pages.yml`); a push to `main` builds nothing, CI (`ci.yml`) runs only by hand, and an rc
+  (`pages.yml`, which also republishes on a push to `main` that changes `docs/work/`, the changelog or
+  `site/`, so approved SDLC documents show without a manual run, the agents only committing to git:
+  owner, 2026-10-31); any other push to `main` builds nothing, CI (`ci.yml`) runs only by hand, and an rc
   prerelease is built only by a manual Deploy run. Replaces the tag-only release of #482 and, on
   2026-10-31, the GitHub build of every candidate (an rc on every OS per merge, promoted without a
   rebuild). Why: the owner had to remember to cut a release, and the latest build was whatever merged

@@ -28,7 +28,8 @@ request build nothing, so no Actions minutes are spent between releases.
   `vX.Y.Z-rc.N` instead, to try a build before tagging it. A job skips `npm test` only when the PR's
   CI tested the same tree.
 - `.github/workflows/pages.yml`: the public page (`site/`, `npm run site`) on GitHub Pages, published
-  with each `vX.Y.Z` tag or by hand; off until the repository variable `SITE_PAGES` is `on`.
+  with each `vX.Y.Z` tag, on a push to `main` that changes `docs/work/`, the changelog or `site/`, or by
+  hand; off until the repository variable `SITE_PAGES` is `on`.
 
 Standard GitHub-hosted runners are free for public repositories; CI still runs only what a change
 needs, so it stays fast, and every job has a `timeout-minutes`. A pull request from a fork gets the
