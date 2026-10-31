@@ -72,7 +72,7 @@ Preenchido pelos workflows de Code & Build a cada passo: o run que fez, o commit
 | Passo | Status | Run | Commit / PR |
 |---|---|---|---|
 | 1. `onboarding-model.js` e testes | concluído | 20261031-143716-3710e990 | d7ba344d, merge local na main |
-| 2. Clone em job | concluído | 20261031-145746-8dfe137a | 4349332d, merge local na main |
+| 2. Clone em job | concluído | 20261031-145746-8dfe137a | 674ddc38, merge local na main |
 | 3. Jobs e canais | pendente | — | — |
 | 4. Assistente na UI | pendente | — | — |
 | 5. Revisão e Next steps | pendente | — | — |

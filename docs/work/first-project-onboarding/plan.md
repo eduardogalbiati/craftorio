@@ -72,7 +72,7 @@ Filled in by the Code & Build workflows at each step: the run, the commit and th
 | Step | Status | Run | Commit / PR |
 |---|---|---|---|
 | 1. `onboarding-model.js` and tests | done | 20261031-143716-3710e990 | d7ba344d, local merge into main |
-| 2. The clone as a job | done | 20261031-145746-8dfe137a | 4349332d, local merge into main |
+| 2. The clone as a job | done | 20261031-145746-8dfe137a | 674ddc38, local merge into main |
 | 3. Jobs and channels | pending | — | — |
 | 4. Wizard in the UI | pending | — | — |
 | 5. Review and Next steps | pending | — | — |
