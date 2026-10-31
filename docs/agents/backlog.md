@@ -66,3 +66,9 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
   chat. Intent accepted and spec signed off on 2026-10-31:
   [docs/work/project-mockups/](../work/project-mockups/spec.md) (decisions D1-D18). It builds on
   the write doc's shared artifact editor (#636), so its Build starts after that editor exists.
+- Documentation agent (#658, epic): a final step in feature / fix / release that keeps each item's
+  `docs/work/<item>/` files current (plan Progress, test, deploy, CHANGELOG), then maintain.md,
+  milestones and incident intents; a new onboarding option turns it on. Its own item, not part of
+  the onboarding spec (owner, 2026-10-31): intent proposed in
+  [docs/work/documentation-agent/](../work/documentation-agent/intent.md). Depends on the
+  onboarding's phases 2 and 5 (#630, #633).
