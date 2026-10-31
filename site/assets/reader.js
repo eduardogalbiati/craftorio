@@ -59,6 +59,10 @@
   // ids for h2/h3, requirement anchors, links and images resolved inside the item folder.
   function render(md, opts) {
     var html = window.marked.parse(md, { gfm: true, breaks: false });
+    // what the sanitizer would drop but the conventions read: a task's box (decisions) and a code
+    // block's language (the mermaid flow), kept as data-* attributes on marked's own output
+    html = html.replace(/<input (checked="" )?disabled="" type="checkbox">/g, function (all, on) { return '<span data-task="' + (on ? 'x' : ' ') + '"></span>'; })
+      .replace(/<code class="language-mermaid">/g, '<code data-lang="mermaid">');
     var frag = window.DOMPurify.sanitize(html, {
       RETURN_DOM_FRAGMENT: true,
       FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed', 'svg', 'math'],
@@ -66,6 +70,7 @@
     });
     var box = document.createElement('div');
     box.appendChild(frag);
+    conventions(box);
     var title = '', toc = [], prefix = opts.prefix || 'doc';
     var h1 = box.querySelector('h1');
     if (h1 && opts.takeTitle) { title = h1.textContent; h1.remove(); }
@@ -98,6 +103,75 @@
     });
     box.querySelectorAll('table').forEach(function (t) { var w = document.createElement('div'); w.className = 'tbl'; t.parentNode.insertBefore(w, t); w.appendChild(t); });
     return { el: box, title: title, toc: toc };
+  }
+  // The SDLC document conventions (docs/work/CONVENTIONS.md), drawn from plain GitHub markdown:
+  // GitHub alerts ("> [!TIP]" …) as callouts, a decision (a task list under "### Dn · Title") as one
+  // card per option, the chosen one marked, and a mermaid flowchart as a strip of steps.
+  var ALERTS = { TIP: 'Tip', NOTE: 'Note', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
+  function conventions(box) {
+    box.querySelectorAll('blockquote').forEach(function (q) {
+      var p = q.querySelector('p'), m = p && p.textContent.match(/^\s*\[!(TIP|NOTE|IMPORTANT|WARNING|CAUTION)\]\s*/);
+      if (!m) return;
+      // drop the marker (a text node, then the line break marked keeps after it)
+      var t = p.firstChild;
+      if (t && t.nodeType === 3) t.nodeValue = t.nodeValue.replace(/^\s*\[!\w+\]\s*/, '');
+      while (p.firstChild && ((p.firstChild.nodeType === 3 && !p.firstChild.nodeValue.trim()) || p.firstChild.nodeName === 'BR')) p.firstChild.remove();
+      if (!p.childNodes.length) p.remove();
+      var box2 = document.createElement('div'); box2.className = 'alert alert-' + m[1].toLowerCase(); box2.setAttribute('role', 'note');
+      var label = document.createElement('div'); label.className = 'alert-h'; label.textContent = ALERTS[m[1]];
+      box2.appendChild(label);
+      while (q.firstChild) box2.appendChild(q.firstChild);
+      q.replaceWith(box2);
+    });
+    box.querySelectorAll('h3').forEach(function (h) {
+      if (!/^\s*D\d+\s*·/.test(h.textContent)) return;
+      var list = h.nextElementSibling;
+      if (list && list.tagName === 'P') list = list.nextElementSibling;   // the question line
+      if (!list || list.tagName !== 'UL' || !list.querySelector(':scope > li > [data-task], :scope > li > p > [data-task]')) return;
+      var cards = document.createElement('div'); cards.className = 'opts'; cards.setAttribute('role', 'list');
+      [].slice.call(list.children).forEach(function (li) {
+        var mark = li.querySelector('[data-task]'); if (!mark) return;
+        var chosen = mark.getAttribute('data-task') === 'x';
+        var name = li.querySelector('strong'), points = li.querySelector('ul');
+        var head = (name ? name.parentNode : li).cloneNode(true);
+        [].slice.call(head.querySelectorAll('ul,[data-task]')).forEach(function (n) { n.remove(); });
+        var nm = head.querySelector('strong'), why = '';
+        if (nm) { why = head.textContent.replace(nm.textContent, '').replace(/^[\s·]+|[\s·]+$/g, ''); }
+        var card = document.createElement('div'); card.className = 'opt' + (chosen ? ' chosen' : ''); card.setAttribute('role', 'listitem');
+        card.innerHTML = '<div class="opt-h"><span class="box" aria-hidden="true"></span><b></b>' + (why ? '<span class="tag"></span>' : '') + '</div>';
+        if (chosen) card.setAttribute('aria-label', 'Chosen option');
+        var b = card.querySelector('b'); if (nm) { while (nm.firstChild) b.appendChild(nm.firstChild); } else b.textContent = head.textContent.trim();
+        if (why) card.querySelector('.tag').textContent = why;
+        if (points) [].slice.call(points.children).forEach(function (pl) {
+          var k = pl.querySelector('strong'), sign = k ? k.textContent.trim() : '';
+          var pt = document.createElement('p'); pt.className = sign === '+' ? 'pro' : /^[−-]$/.test(sign) ? 'con' : '';
+          if (k && /^[+−-]$/.test(sign)) k.remove();
+          while (pl.firstChild) pt.appendChild(pl.firstChild);
+          card.appendChild(pt);
+        });
+        cards.appendChild(card);
+      });
+      h.className = 'dec';
+      list.replaceWith(cards);
+    });
+    box.querySelectorAll('code[data-lang="mermaid"]').forEach(function (code) {
+      var nodes = [], seen = {}, later = {};
+      code.textContent.split('\n').forEach(function (line) {
+        line.replace(/([A-Za-z0-9_]+)\[([^\]]+)\]/g, function (all, id, label) { if (!seen[id]) { seen[id] = 1; nodes.push({ id: id, label: label }); } return all; });
+        var d = line.match(/-\.->\s*([A-Za-z0-9_]+)/); if (d) later[d[1]] = 1;
+      });
+      if (!nodes.length) return;
+      var ol = document.createElement('ol'); ol.className = 'flowstrip';
+      nodes.forEach(function (n) {
+        var parts = n.label.split(/<br\s*\/?>/i), li = document.createElement('li');
+        if (later[n.id]) li.className = 'later';
+        var b = document.createElement('b'); b.textContent = parts[0].replace(/&amp;/g, '&'); li.appendChild(b);
+        if (parts[1]) { var sp = document.createElement('span'); sp.textContent = parts[1].replace(/&amp;/g, '&'); li.appendChild(sp); }
+        if (later[n.id]) { var lt = document.createElement('em'); lt.textContent = 'later'; li.appendChild(lt); }
+        ol.appendChild(li);
+      });
+      (code.closest('pre') || code).replaceWith(ol);
+    });
   }
   // Resolves a relative path inside base without letting "../" climb out of it.
   function resolve(base, rel) {
@@ -866,7 +940,10 @@
     var layout = document.createElement('div'); layout.className = 'layout';
     var left = document.createElement('aside'); left.className = 'left';
     var main = document.createElement('main');
-    layout.appendChild(left); layout.appendChild(main);
+    // the item's history and its issue on GitHub: a box on the right that stays on screen (in the left
+    // column it sat under the sticky index, which scrolled over it)
+    var side = document.createElement('aside'); side.className = 'side'; side.setAttribute('aria-label', 'History and issue');
+    layout.appendChild(left); layout.appendChild(main); layout.appendChild(side);
     root.appendChild(mbar); root.appendChild(scrim); root.appendChild(drawerEl); root.appendChild(layout);
 
     it.stages.forEach(function (s) {
@@ -906,7 +983,7 @@
         drawerEl.appendChild(dtoc);
       });
     });
-    left.insertAdjacentHTML('beforeend', '<div class="loopnote"><b>History</b>' + historyHtml(it) + issueHtml(it) + '</div>');
+    side.innerHTML = '<div class="sidebox loopnote"><b>History</b>' + historyHtml(it) + issueHtml(it) + '</div>';
 
     wire(it, pdf);
   }
