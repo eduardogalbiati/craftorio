@@ -32,6 +32,7 @@
     "start": "electron .",
     "run": "node scripts/run.js",
     "serve": "multiagent-engine",
+    "site": "node scripts/site.js",
     "pretest": "node scripts/docs.js --derived",
     "test": "node scripts/test.js",
     "pretest:coverage": "node scripts/docs.js --derived",
