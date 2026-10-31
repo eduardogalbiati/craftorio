@@ -6,7 +6,7 @@ status: accepted          # accepted by the product owner on 2026-10-31
 author: Claude (Code session), from the owner's request
 approver: Eduardo Galbiati (product owner)
 date: 2026-10-31
-depends_on: "the write doc flow (#636): its shared artifact editor"
+depends_on: write-doc     # its shared artifact editor (#636)
 source: intent.md (English)
 ---
 
