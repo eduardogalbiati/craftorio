@@ -119,3 +119,51 @@ Feature: Bring a project in with a guided wizard
     And I open the project "dismiss-642" from the Projects screen
     Then the project page of "dismiss-642" is open
     And the project page does not show the Next steps card
+
+  # #644 (onboarding step 7): the whole journey of a first start, simulated (MULTIAGENT_SIMULATION_ONLY=1,
+  # the mock provider). A new workspace has no project, so Home shows its empty state; its "Create a
+  # project" opens the wizard (until #644 it opened the old New project dialog). The sample repository is
+  # a local git repository with some code in the scenario's scratch folder, imported by its file:// URL.
+  @issue-644 @smoke
+  Scenario: From the empty Home, a sample repository becomes a project with its city, its backlog and the Next steps card
+    Given the app is open on a new workspace
+    And a local git repository with some code is ready to import
+    When I skip the Setup and confirm
+    Then Home says there is no project yet and offers to create one
+    When I choose to create a project from Home
+    Then the project wizard is open on its first step
+    When I choose to import a repository in the wizard
+    And I enter the local repository and the project name "sample-644"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard shows the analysis cost in total and for the project map and the refactor ranking
+    When I start the analysis in the wizard
+    Then the progress tray shows the project "sample-644" as analyzed
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review shows the project's city and its backlog
+    And every row of the review's refactor backlog shows a file's score from 0 to 100 and its quadrant
+    When I finish the wizard
+    Then the project wizard closes right away
+    And the project page of "sample-644" is open
+    And the project page shows the Next steps card
+
+  # The no-access path from the empty Home: the URL below fails the access check offline and online (no
+  # such repository). Edit the URL opens the fields again for a new import; the failed one stays in the tray.
+  @issue-644
+  Scenario: From the empty Home, a repository the app cannot reach shows the access error, and editing the URL imports a reachable one
+    Given the app is open on a new workspace
+    And a local git repository is ready to import
+    When I skip the Setup and confirm
+    And I choose to create a project from Home
+    And I choose to import a repository in the wizard
+    And I enter the repository "https://github.com/multiagent-e2e/does-not-exist-644" and the project name "missing-644"
+    And I go to the next step of the wizard
+    Then the wizard says the repository could not be reached and offers to retry
+    And the wizard offers to edit the repository
+    When I edit the repository in the wizard
+    And I enter the local repository and the project name "sample-644"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the progress tray shows the project "missing-644" as failed with its reason and a Retry
+    And the progress tray shows the project "sample-644" as ready
