@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Write doc phase 0: the editor on the document reader (spike)</title>
+<!--
+  Write doc, phase 0 (#646, part of #636; docs/work/write-doc/spec.md R4, R8, R9): the editor on
+  the document reader, a spike. The left pane is the reader (an iframe) showing the onboarding
+  example (docs/work/first-project-onboarding/), in English or in its pt-BR translation; the right
+  pane is a fake chat. Selecting text in the reader puts the selection payload in the chat
+  (DocEditorModel.selectionPayload, poc/doc-editor-model.js): file, anchor, source lines, passage,
+  context and version, always about the English source. Nothing leaves the page: no model is
+  called, the only requests are the local .md files.
+
+  The reader contract it assumes (the reader prototype is not in this repository): the reader
+  renders a .md, gives each block a data-src="<start>-<end>" with its source lines, and posts
+  { type: 'selection', file, src, text } to its parent on each selection. Until that prototype
+  lands, the iframe gets a minimal stand-in reader (srcdoc, below) that keeps the same contract:
+  one block per run of non-empty lines, as plain text.
+
+  Open: serve the repository root with any static server (fetch does not read file:// pages) and
+  open /poc/doc-editor.html. The tests (test/doc-editor-646.test.js) call the model directly on
+  recorded selections.
+-->
+<style>
+  :root { color-scheme: dark; --bg: #0f1218; --panel: #161a22; --line: #262c38; --text: #d7dce5; --muted: #8a91a3; --accent: #6aa9ff; --mono: ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: var(--text); font: 13px/1.5 system-ui, sans-serif; }
+  header { display: flex; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 14px; margin: 0 12px 0 0; }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; font: inherit; }
+  main { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+  iframe { width: 100%; height: 100%; border: 0; border-right: 1px solid var(--line); background: var(--panel); }
+  .chat { display: flex; flex-direction: column; min-height: 0; }
+  .chat-log { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-empty { color: var(--muted); }
+  .bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .bubble .meta { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .bubble pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.4 var(--mono); }
+  .bubble.error { border-color: #a14848; }
+  .chat-input { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+  .chat-input input { flex: 1; background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Write doc · editor spike</h1>
+  <label>Document
+    <select id="doc" data-testid="doc-editor-doc">
+      <option>intent</option><option selected>spec</option><option>plan</option>
+      <option>test</option><option>deploy</option><option>maintain</option>
+    </select>
+  </label>
+  <label>Language
+    <select id="lang" data-testid="doc-editor-lang">
+      <option value="en">English</option><option value="pt-BR">Português (Brasil)</option>
+    </select>
+  </label>
+</header>
+<main>
+  <iframe id="reader" title="Document reader" data-testid="doc-editor-reader"></iframe>
+  <section class="chat" aria-label="Chat (fake)" data-testid="doc-editor-chat">
+    <div class="chat-log" id="chat-log">
+      <p class="chat-empty">Select a passage in the document: its payload appears here. This chat is fake, it calls no model.</p>
+    </div>
+    <div class="chat-input"><input disabled placeholder="Ask for a change (no model in this spike)" aria-label="Message"></div>
+  </section>
+</main>
+<script src="doc-editor-model.js"></script>
+<script>
+  'use strict';
+  const DIR = 'docs/work/first-project-onboarding';
+  const docSelect = document.getElementById('doc');
+  const langSelect = document.getElementById('lang');
+  const reader = document.getElementById('reader');
+  const log = document.getElementById('chat-log');
+  let current = null; // { source: { file, markdown }, translation: { file, markdown } }
+
+  async function fetchText(rel) {
+    const res = await fetch(`../${rel}`);
+    if (!res.ok) throw new Error(`${rel}: ${res.status}`);
+    return res.text();
+  }
+
+  function escapeHtml(text) {
+    return text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  }
+
+  // The stand-in reader: one <div data-src> per block, posting the reader contract's message.
+  function readerDoc(file, markdown) {
+    const rows = markdown.split('\n');
+    const body = DocEditorModel.blocks(markdown).map((b) => {
+      const text = rows.slice(b.start - 1, b.end).join('\n');
+      const tag = b.heading === null ? 'div' : 'h2';
+      return `<${tag} data-src="${b.start}-${b.end}">${escapeHtml(text)}</${tag}>`;
+    }).join('\n');
+    const script = `document.addEventListener('mouseup', () => {
+      const sel = getSelection(); const text = sel.toString().trim(); if (!text) return;
+      const node = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
+      const block = node && node.closest('[data-src]'); if (!block) return;
+      parent.postMessage({ type: 'selection', file: ${JSON.stringify(file)}, src: block.dataset.src, text }, '*');
+    });`;
+    return `<!doctype html><meta charset="utf-8"><style>body{background:#161a22;color:#d7dce5;font:13px/1.6 system-ui,sans-serif;padding:16px 24px}
+      [data-src]{white-space:pre-wrap;margin:0 0 12px}h2{font-size:15px}</style>${body}<scr` + `ipt>${script}</scr` + `ipt>`;
+  }
+
+  function bubble(meta, text, error) {
+    log.querySelector('.chat-empty')?.remove();
+    const el = document.createElement('div');
+    el.className = error ? 'bubble error' : 'bubble';
+    el.innerHTML = `<div class="meta">${escapeHtml(meta)}</div><pre>${escapeHtml(text)}</pre>`;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function open() {
+    const name = docSelect.value;
+    try {
+      const [en, pt] = await Promise.all([fetchText(`${DIR}/${name}.md`), fetchText(`${DIR}/${name}.pt-BR.md`)]);
+      current = {
+        source: { file: `${DIR}/${name}.md`, markdown: en },
+        translation: { file: `${DIR}/${name}.pt-BR.md`, markdown: pt },
+      };
+      const shown = langSelect.value === 'en' ? current.source : current.translation;
+      reader.srcdoc = readerDoc(shown.file, shown.markdown);
+    } catch (err) {
+      current = null;
+      bubble('Could not open the document', `${err.message}. Serve the repository root with a static server and reload.`, true);
+    }
+  }
+
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (!current || !msg || msg.type !== 'selection') return;
+    try {
+      const payload = DocEditorModel.selectionPayload({ selection: { file: msg.file, src: msg.src, text: msg.text }, ...current });
+      bubble(`Selection in ${msg.file} (${msg.src})`, JSON.stringify(payload, null, 2));
+    } catch (err) {
+      bubble('Selection not mapped', err.message, true);
+    }
+  });
+
+  docSelect.addEventListener('change', open);
+  langSelect.addEventListener('change', open);
+  open();
+</script>
+</body>
+</html>

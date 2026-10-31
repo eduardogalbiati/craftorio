@@ -16,6 +16,10 @@ built. They are references, not part of the app:
   the analysis modes), on the v2 city (`project-city-v2.html`, its model in `project-city-v2.data.js`)
   with the app's HUD stylesheets verbatim; a demo bar picks the use case; the owner's approved
   screenshots are in `city-modes-screenshots/` (the issues port this layout, not a new reading);
+- `doc-editor.html`, write doc phase 0 (#646): the editor on the document reader, the onboarding
+  example in an iframe beside a fake chat, and `doc-editor-model.js`, the payload a selection hands
+  the chat (file, anchor, source lines, passage, context, version), a pt-BR selection mapped to the
+  English source;
 - `project-map/`, the cartographer skill draft (`SKILL.md`: how an AI writes a city plan) and the
   plans of this repository and of photocraft, a public Rust repository used to try the plan format.
 
@@ -23,7 +27,8 @@ Rules:
 
 - the packaged app leaves this folder out (`scripts/package.js`);
 - the generated docs leave it out (the code map and the code → tests map, `scripts/docs.js`);
-- no lint or test walks it.
+- no lint or test walks it, except `test/doc-editor-646.test.js`, which loads
+  `doc-editor-model.js` and reads `doc-editor.html`.
 
 When a proof of concept becomes a feature, the feature lives in `src/` with its tests; the files
 here stay as they were, for comparison.
