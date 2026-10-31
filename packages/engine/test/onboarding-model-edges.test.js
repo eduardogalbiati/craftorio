@@ -68,6 +68,13 @@ test('a profile with unit tests only is never offered the E2E release check', ()
   }
 });
 
+test('a local project with unit tests only is offered the code-first local workflow (implement, then unit tests); with E2E it is not', () => {
+  for (const ci of ['none', 'release', 'pr+release']) {
+    assert.ok(ids(suggestWorkflows({ mode: 'local', ci, tests: 'unit' })).includes('software-development-local-hero'), `unit ${ci}`);
+    assert.equal(ids(suggestWorkflows({ mode: 'local', ci, tests: 'unit+e2e' })).includes('software-development-local-hero'), false, `unit+e2e ${ci}`);
+  }
+});
+
 test('CI on releases and CI on PRs and releases both suggest the release workflow; no CI does not', () => {
   for (const mode of ['local', 'remote']) {
     for (const tests of ['unit', 'unit+e2e']) {
