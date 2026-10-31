@@ -13,6 +13,15 @@ function tmp(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
+// #639: the clone is a background job; the project once it ended (status no longer 'cloning')
+async function cloned(dir, id) {
+  for (let i = 0; i < 300; i++) {
+    const p = projects.readProject(dir, id);
+    if (p.status !== 'cloning') return p;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error(`project ${id} still cloning after 3 s`);
+}
 const memStore = () => ({ value: null, get() { return this.value; }, set(v) { this.value = v; } });
 
 test('setupWorkspace creates projects/ and skills/', (t) => {
@@ -77,8 +86,9 @@ test('project with a repository clones into the folder; a non-empty folder is re
   const dir = path.join(root, 'projects');
   const calls = [];
   const git = async (args) => { calls.push(args); if (args[0] === 'clone') fs.mkdirSync(path.join(args[2], '.git'), { recursive: true }); return ''; };
-  const p = await projects.createProject(dir, { name: 'Lib', repo: 'https://github.com/o/r.git' }, { git });
-  assert.equal(calls[0][0], 'clone');
+  const created = await projects.createProject(dir, { name: 'Lib', repo: 'https://github.com/o/r.git' }, { git });
+  const p = await cloned(dir, created.id);
+  assert.ok(calls.some((a) => a[0] === 'clone'));
   assert.ok(p.isGit);
   assert.equal(p.repo, 'https://github.com/o/r.git');
 
@@ -279,9 +289,10 @@ test('a project with a repository and no folder is cloned into <workspace>/repos
   const reposDir = path.join(tmp(t), 'repos');
   const calls = [];
   const git = async (args) => { calls.push(args); if (args[0] === 'clone') fs.mkdirSync(path.join(args[2], '.git'), { recursive: true }); return ''; };
-  const p = await projects.createProject(dir, { name: 'Orchestrator', repo: 'git@github.com:acme/multiagent-orchestrator.git' }, { git, reposDir });
+  const created = await projects.createProject(dir, { name: 'Orchestrator', repo: 'git@github.com:acme/multiagent-orchestrator.git' }, { git, reposDir });
+  const p = await cloned(dir, created.id);
   assert.equal(p.folder, path.join(reposDir, 'acme-multiagent-orchestrator'));
-  assert.deepEqual(calls[0], ['clone', 'git@github.com:acme/multiagent-orchestrator.git', p.folder]);
+  assert.deepEqual(calls.find((a) => a[0] === 'clone'), ['clone', 'git@github.com:acme/multiagent-orchestrator.git', p.folder]);
   assert.equal(p.isGit, true);
   // no repository: still an empty folder under projects/
   const q = await projects.createProject(dir, { name: 'Docs' }, { git, reposDir });

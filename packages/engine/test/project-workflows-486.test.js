@@ -162,11 +162,23 @@ function cloningGit(text = MANIFEST) {
   return { git, calls };
 }
 
+// #639: the clone is a background job; the project once it ended (status no longer 'cloning')
+async function cloned(projects, dir, id) {
+  for (let i = 0; i < 300; i++) {
+    const p = projects.readProject(dir, id);
+    if (p.status !== 'cloning') return p;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error(`project ${id} still cloning after 3 s`);
+}
+
 test('#486 createProject on a freshly cloned repository with no workflows checked adopts the clone\'s manifest and derives the default', async (t) => {
   const root = tempDir(t, 'pj-wf-486-clone-');
   const { git, calls } = cloningGit();
   const projects = require('../domains/project/projects');
-  const p = await projects.createProject(path.join(root, 'projects'), { name: 'Cloned', repo: 'https://github.com/o/r.git' }, { git, reposDir: path.join(root, 'repos') });
+  const created = await projects.createProject(path.join(root, 'projects'), { name: 'Cloned', repo: 'https://github.com/o/r.git' }, { git, reposDir: path.join(root, 'repos') });
+  const p = await cloned(projects, path.join(root, 'projects'), created.id);
+  assert.equal(p.status, 'ready');
   assert.ok(calls.some((c) => c.startsWith('clone ')), 'the repository was cloned');
   assert.deepEqual(setOf(p), MANIFEST_NAMES.map((n) => `${n}:manifest`));
   // the first solo/team/build entry of the manifest (backlog-refresh is intake)
@@ -181,7 +193,8 @@ test('#486 createProject on a freshly cloned repository keeps the checked workfl
   const { git } = cloningGit();
   const projects = require('../domains/project/projects');
   const workflows = [{ name: 'writer-reviewer', origin: 'bundled', category: 'build' }];
-  const p = await projects.createProject(path.join(root, 'projects'), { name: 'Checked', repo: 'https://github.com/o/r.git', workflows }, { git, reposDir: path.join(root, 'repos') });
+  const created = await projects.createProject(path.join(root, 'projects'), { name: 'Checked', repo: 'https://github.com/o/r.git', workflows }, { git, reposDir: path.join(root, 'repos') });
+  const p = await cloned(projects, path.join(root, 'projects'), created.id);
   assert.deepEqual(setOf(p), ['writer-reviewer:bundled']);
   assert.equal(bare(p.defaultWorkflow), 'writer-reviewer');
 });
