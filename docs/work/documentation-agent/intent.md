@@ -6,7 +6,9 @@ status: proposed          # proposed → accepted | rejected (product owner)
 author: Claude (Code session), from the owner's request
 approver: Eduardo Galbiati (product owner)
 date: 2026-10-31
-depends_on: first-project-onboarding     # its phase 2 rebuilds feature / fix / release (#630) and phase 5 adds the work model (#633)
+depends_on:
+  - first-project-onboarding   # phase 2 rebuilds feature / fix / release (#630), phase 5 adds the work model (#633)
+  - write-doc                  # intent and spec stay with the write doc flow (#636)
 translation: intent.pt-BR.md
 ---
 
