@@ -340,11 +340,15 @@ function explainGitError(args, stderr) {
   return `git ${args[0]} failed: ${msg}`;
 }
 
-function execGit(args, cwd) {
-  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' };
+// #639: `env` replaces process.env as the base (git ls-remote passes the allowlisted one); `timeout` in ms.
+// A missing git rejects with code 'ENOENT', a git stopped by the timeout with code 'ETIMEDOUT'.
+function execGit(args, cwd, { env: baseEnv = process.env, timeout = 0 } = {}) {
+  const env = { ...baseEnv, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' };
   return new Promise((resolve, reject) => {
-    execFile('git', [...gitAuthArgs(), ...args], { cwd, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) reject(new Error(explainGitError(args, stderr || err.message)));
+    execFile('git', [...gitAuthArgs(), ...args], { cwd, env, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err?.code === 'ENOENT') reject(Object.assign(new Error('git was not found: install git and make sure it is on the PATH.'), { code: 'ENOENT' }));
+      else if (err?.killed && timeout) reject(Object.assign(new Error(`git ${args[0]} timed out after ${Math.round(timeout / 1000)} s.`), { code: 'ETIMEDOUT' }));
+      else if (err) reject(new Error(explainGitError(args, stderr || err.message)));
       else resolve(stdout);
     });
   });

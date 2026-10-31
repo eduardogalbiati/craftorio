@@ -12,8 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
-const { execGit, gitAuthArgs, repoNameFromUrl } = require('../workspace/workspace');
+const { execGit, repoNameFromUrl } = require('../workspace/workspace');
 const { childEnv, PLATFORM_CLIS } = require('../../engine/child-env');
 const { cleanConfig } = require('../local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow
@@ -52,8 +51,8 @@ function patchMeta(dir, id, patch) {
 function startClone(dir, id, { git, defaultWorkflow = null }) {
   const key = jobKey(dir, id);
   const job = (async () => {
-    const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
     try {
+      const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
       await git(['clone', p.repo, p.folder], path.dirname(p.folder));
       const patch = { status: 'ready', cloneError: null };
       if (!cleanWorkflows(p.workflows).length) {
@@ -137,8 +136,8 @@ async function retryClone(dir, id, { git = execGit } = {}) {
 }
 
 /**
- * #639: whether `repo` can be cloned, from `git ls-remote` (never clones).
- * @returns {Promise<{ status: 'reachable' | 'no-access' | 'no-network', message?: string }>}
+ * #639: whether `repo` can be cloned, from `git ls-remote` (never clones); 'no-git' when git is not installed.
+ * @returns {Promise<{ status: 'reachable' | 'no-access' | 'no-network' | 'no-git', message?: string }>}
  */
 async function checkAccess(repo, { git = lsRemote } = {}) {
   try {
@@ -146,22 +145,16 @@ async function checkAccess(repo, { git = lsRemote } = {}) {
     return { status: 'reachable' };
   } catch (e) {
     const message = String(e?.message || e);
+    if (e?.code === 'ENOENT') return { status: 'no-git', message };
     // the network first: an SSH host that cannot be resolved also says "Could not read from remote repository"
-    if (/Could not resolve host|Failed to connect|Couldn't connect|Connection (timed out|refused)|Network is unreachable|No such host/i.test(message)) return { status: 'no-network', message };
+    if (e?.code === 'ETIMEDOUT' || /Could not resolve host|Failed to connect|Couldn't connect|Connection (timed out|refused)|timed out|Network is unreachable|No such host/i.test(message)) return { status: 'no-network', message };
     return { status: 'no-access', message };
   }
 }
 
-// #639: git ls-remote with the allowlisted environment of the platform CLIs (their tokens), no prompt
-function lsRemote(args, cwd) {
-  const env = { ...childEnv(process.env, { platforms: PLATFORM_CLIS }), GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' };
-  return new Promise((resolve, reject) => {
-    execFile('git', [...gitAuthArgs(), ...args], { cwd, env, windowsHide: true, timeout: 30000 }, (err, stdout, stderr) => {
-      if (err) reject(new Error(String(stderr || err.message).trim()));
-      else resolve(stdout);
-    });
-  });
-}
+// #639: git ls-remote with the allowlisted environment of the platform CLIs (their tokens), no prompt;
+// the SSH agent's socket passes too, so an SSH URL the clone (full environment) reaches answers 'reachable'
+const lsRemote = (args, cwd) => execGit(args, cwd, { env: childEnv(process.env, { platforms: PLATFORM_CLIS, passthrough: ['SSH_AUTH_SOCK', 'SSH_AGENT_PID'] }), timeout: 30000 });
 
 function updateProject(dir, id, patch) {
   const cur = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
@@ -188,14 +181,23 @@ function updateProject(dir, id, patch) {
   if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
   // #360: each analysis seed's deterministic tool, { <seed id>: command }, run instead of the Oracle
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
-  if (patch.folder !== undefined) {
-    const folder = path.resolve(String(patch.folder).trim());
-    if (!isDir(folder)) throw new Error(`Folder does not exist: ${folder}`);
-    if (cur.folder && path.resolve(cur.folder) !== folder) next.previousFolders = [...new Set([...(cur.previousFolders || []), cur.folder])];
-    next.folder = folder;
-  }
+  if (patch.folder !== undefined) moveFolder(next, cur, patch.folder, jobs.has(jobKey(dir, id)));
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);
+}
+
+// updateProject's folder change: the old folder joins previousFolders; #639: a project whose clone failed,
+// pointed at another folder (cloned by hand), is ready, so Retry never removes the owner's folder
+function moveFolder(next, cur, value, cloning) {
+  const folder = path.resolve(String(value).trim());
+  if (!isDir(folder)) throw new Error(`Folder does not exist: ${folder}`);
+  const moved = !cur.folder || path.resolve(cur.folder) !== folder;
+  if (moved && cur.folder) next.previousFolders = [...new Set([...(cur.previousFolders || []), cur.folder])];
+  if (moved && cur.status && cur.status !== 'ready' && !cloning) {
+    next.status = 'ready';
+    delete next.cloneError;
+  }
+  next.folder = folder;
 }
 
 // { install, command, url, cwd?, env? } with empty fields dropped; null without a command (the action is hidden)
