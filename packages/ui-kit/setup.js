@@ -1,5 +1,5 @@
-// The first-run Setup (#319): a large modal with a stepper, Agents · Try it safely · Workflows ·
-// First project, and Back / Next / Skip (Enter = Next, Esc = Skip after a confirm, app.js). app.js
+// The first-run Setup (#319): a large modal with a stepper, Agents · Try it safely · First project
+// (#643: no Workflows step any more), and Back / Next / Skip (Enter = Next, Esc = Skip after a confirm, app.js). app.js
 // opens it once per workspace (settings.setupDone === false, after the workspace dialog and under
 // the sign-in screen while it shows); Settings › Agents & CLIs › Run setup again reopens it. Finish
 // or Skip saves setupDone, so it never opens by itself again.
@@ -9,15 +9,14 @@
 //   a tooltip where no terminal can run it (the browser UI, canRunCommands).
 // - Try it safely: Show simulation mode (= settings.developerMode), on by default on a first run,
 //   and the machine profile's line (#367: runs at once and test workers sized from this machine).
-// - Workflows: the bundled workflows by category with their requirement badges and Ready / Missing
-//   state; the ready ones are picked (SetupModel.preselectedWorkflows), the unpicked ones go to
-//   settings.hiddenWorkflows at Finish (Workflows › Definitions › Show in Start undoes it).
-// - First project: the projects, and the existing New project dialog (opened by itself when there
-//   is none). Finish opens the Start drawer on the first picked workflow (Simulation checked when
-//   it shows, applyDeveloperMode).
+// - First project: the projects, and New project opening the onboarding wizard (#643,
+//   window.ProjectWizard, fronts/build/views/projects/project-wizard.js; opened by itself when there
+//   is none, over the Setup; the list is read again when it closes). Finish saves setupDone and
+//   developerMode only, never settings.hiddenWorkflows (what a workspace hides from Start stays), then
+//   opens the Start drawer (Simulation checked when it shows, applyDeveloperMode).
 // window.Setup = { open(step), isOpen(), skip() } (app.js, Settings, scripts/screenshot.js).
 // Registers its dialog with registerView (view-registry.js, modals only: no screen, no menu entry); uses app.js globals ($, esc,
-// state, api, errMsg, confirmDialog, showToast, openDrawer, applyDeveloperMode, CATEGORIES),
+// state, api, errMsg, confirmDialog, showToast, openDrawer, applyDeveloperMode),
 // start-drawer.js's loadCliStatus and command-hint.js's runSuggestedCommand / canRunCommands.
 // #329: every text comes from the catalog through t (packages/shared/i18n.js, setup.* keys); the
 // Interface language select above the stepper opens on the interface language (the saved one, else
@@ -28,7 +27,6 @@
   const STEPS = [
     { id: 'agents', name: () => t('setup.agents.name'), title: () => t('setup.agents.title'), lead: () => t('setup.agents.lead') },
     { id: 'try-it-safely', name: () => t('setup.try.name'), title: () => t('setup.try.name'), lead: () => t('setup.try.lead') },
-    { id: 'workflows', name: () => t('setup.workflows.name'), title: () => t('setup.workflows.title'), lead: () => t('setup.workflows.lead') },
     { id: 'first-project', name: () => t('setup.project.name'), title: () => t('setup.project.title'), lead: () => t('setup.project.lead') },
   ];
   const ACTION = { install: () => t('setup.install'), signIn: () => t('setup.sign_in') };
@@ -36,7 +34,6 @@
     step: 0,
     open: false,
     tools: null,       // env:details, null while checking
-    picked: null,      // workflow ids picked in the Workflows step (null: not shown yet)
     simulation: true,  // the Try it safely switch
     machine: null,     // settings:machineProfile (#367), its line shown in Try it safely
   };
@@ -178,40 +175,6 @@
     if (setup.open && STEPS[setup.step].id === 'try-it-safely') render();
   }
 
-  // ---------- Workflows ----------
-  function workflowCard(w) {
-    const id = window.SetupModel.workflowId(w.file);
-    const missing = window.SetupModel.missingRequirements(w.requirements, statesOf());
-    const badges = window.SetupModel.requirementBadges(w.requirements).map((b) => `<span class="badge">${esc(b)}</span>`).join('');
-    const ready = !missing.length;
-    return `
-      <label class="setup-wf${setup.picked.includes(id) ? ' picked' : ''}" data-testid="setup-workflow-${esc(id)}">
-        <input type="checkbox" data-setup-wf="${esc(id)}" ${setup.picked.includes(id) ? 'checked' : ''} aria-label="${esc(t('setup.workflows.show', { name: w.name }))}" />
-        <span class="setup-wf-main">
-          <b title="${esc(w.name)}">${esc(w.name)}</b>
-          <span class="muted small setup-wf-desc" title="${esc(w.description || '')}">${esc(w.description || '')}</span>
-          <span class="setup-wf-tags">${badges}<span class="pill ${ready ? 'pill-success' : 'pill-cancelled'}" title="${esc(ready ? t('setup.workflows.ready_title') : window.SetupModel.missingLabel(missing))}">${esc(ready ? t('setup.status.ready') : window.SetupModel.missingLabel(missing))}</span></span>
-        </span>
-      </label>`;
-  }
-
-  function renderWorkflows() {
-    if (!setup.tools) return `<p class="muted">${t('setup.workflows.checking')}</p>`;
-    const list = bundled();
-    if (!list.length) return `<p class="muted">${t('setup.workflows.none')}</p>`;
-    if (!setup.picked) {
-      const hidden = state.settings.hiddenWorkflows || [];
-      // a first run picks what is ready; a run again starts from what Start shows today
-      setup.picked = state.settings.setupDone ? list.map((w) => window.SetupModel.workflowId(w.file)).filter((id) => !hidden.includes(id))
-        : window.SetupModel.preselectedWorkflows(list.map((w) => ({ id: window.SetupModel.workflowId(w.file), requirements: w.requirements })), statesOf());
-    }
-    const first = (a, b) => (window.SetupModel.workflowId(b.file) === window.SetupModel.FIRST) - (window.SetupModel.workflowId(a.file) === window.SetupModel.FIRST);
-    return Object.entries(CATEGORIES).map(([cat, label]) => {
-      const items = list.filter((w) => (w.category || 'build') === cat).sort(first);
-      return items.length ? `<section class="setup-wf-group"><h4 class="badge cat-${esc(cat)}">${esc(label)}</h4><div class="setup-wfs">${items.map(workflowCard).join('')}</div></section>` : '';
-    }).join('') + `<p class="muted small" data-testid="setup-picked-count">${setup.picked.length ? t('setup.workflows.picked', { count: setup.picked.length }) : t('setup.workflows.none_picked')} ${t('setup.workflows.picked_help')}</p>`;
-  }
-
   // ---------- First project ----------
   function renderProject() {
     const projects = state.projects || [];
@@ -222,16 +185,17 @@
   }
 
   function newProject() {
-    window.Actions.call('openProjectModal', null, { fromHeader: true });
-    // the dialog has no callback: the list is read again when it closes
-    const modal = document.getElementById('project-modal');
+    window.ProjectWizard.open();
+    // the wizard has no callback: the list is read again when it closes (hidden)
+    const wizard = document.getElementById('project-wizard');
+    if (!wizard || typeof MutationObserver !== 'function') return;
     const watch = new MutationObserver(async () => {
-      if (!modal.classList.contains('hidden')) return;
+      if (!wizard.hidden) return;
       watch.disconnect();
       try { state.projects = await api.listProjects(); } catch { /* the list stays */ }
       if (setup.open && STEPS[setup.step].id === 'first-project') render();
     });
-    watch.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    watch.observe(wizard, { attributes: true, attributeFilter: ['hidden'] });
   }
 
   // ---------- the stepper ----------
@@ -244,7 +208,7 @@
     });
     $s('#setup-title').textContent = step.title();
     $s('#setup-lead').textContent = step.lead();
-    $s('#setup-body').innerHTML = { agents: renderAgents, 'try-it-safely': renderTry, workflows: renderWorkflows, 'first-project': renderProject }[step.id]();
+    $s('#setup-body').innerHTML = { agents: renderAgents, 'try-it-safely': renderTry, 'first-project': renderProject }[step.id]();
     $s('#btn-setup-back').disabled = setup.step === 0;
     $s('#btn-setup-next').textContent = setup.step === STEPS.length - 1 ? t('setup.finish') : t('setup.next');
   }
@@ -271,21 +235,14 @@
     document.body.classList.remove('setup-open');
   }
 
+  // #643: settings.hiddenWorkflows is never written here, an older workspace keeps what it hides
   async function finish() {
-    const ids = bundled().map((w) => window.SetupModel.workflowId(w.file));
-    const picked = setup.picked || ids.filter((id) => !(state.settings.hiddenWorkflows || []).includes(id));
-    // the unpicked bundled workflows are hidden (none picked: none hidden, Start is never left empty);
-    // custom ones keep what they had
-    const unpicked = picked.length ? ids.filter((id) => !picked.includes(id)) : [];
-    const hidden = [...new Set([...(state.settings.hiddenWorkflows || []).filter((id) => !ids.includes(id)), ...unpicked])];
     try {
-      state.settings = await api.setSettings({ setupDone: true, developerMode: setup.simulation, hiddenWorkflows: hidden });
+      state.settings = await api.setSettings({ setupDone: true, developerMode: setup.simulation });
     } catch (e) { showToast(t('setup.save_setup_failed'), errMsg(e)); return; }
     applyDeveloperMode();
     close();
-    const first = picked.includes(window.SetupModel.FIRST) ? window.SetupModel.FIRST : ids.find((id) => picked.includes(id));
-    const file = first && (state.workflows || []).find((w) => window.SetupModel.workflowId(w.file) === first)?.file;
-    openDrawer(file ? { workflow: file } : {}).catch((e) => showToast(t('setup.open_start_failed'), errMsg(e)));
+    openDrawer({}).catch((e) => showToast(t('setup.open_start_failed'), errMsg(e)));
   }
 
   async function skip() {
@@ -299,7 +256,6 @@
   async function open(stepId = 'agents') {
     setup.step = Math.max(0, STEPS.findIndex((s) => s.id === stepId));
     setup.open = true;
-    setup.picked = null;
     setup.simulation = state.settings.setupDone === false ? true : !!state.settings.developerMode;
     // a first run records that it is not done yet, so quitting before Finish or Skip opens it again
     // even after another setting was saved (workspace.js writeSettings leaves an unknown setupDone out)
@@ -329,12 +285,6 @@
     });
     body.addEventListener('change', (e) => {
       if (e.target.matches('[data-setup-sim]')) setup.simulation = e.target.checked;
-      const wf = e.target.closest('[data-setup-wf]');
-      if (!wf) return;
-      const id = wf.dataset.setupWf;
-      setup.picked = wf.checked ? [...setup.picked.filter((x) => x !== id), id] : setup.picked.filter((x) => x !== id);
-      render();
-      $s(`[data-setup-wf="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
     });
     $s('#setup-language-box').addEventListener('change', (e) => {
       if (e.target.matches('[data-setup-language]')) saveLanguage(e.target.value);

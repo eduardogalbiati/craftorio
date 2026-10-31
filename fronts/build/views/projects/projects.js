@@ -2,7 +2,9 @@
 // Projects (#354: back in the menu, Code & Build before Backlog; it was a page of Settings since
 // #254): the project cards (Start workflow, Open folder, Edit, Remove; a click opens the project's
 // page, views/project/) with Open folder and New project in the header, and the New / Edit project
-// dialog with its Local preview fields and the run command detected in the folder (#115). The dialog
+// dialog with its Local preview fields and the run command detected in the folder (#115). #643: New
+// project (the header and the empty state, data-testid="projects-empty") opens the onboarding wizard
+// (window.ProjectWizard, project-wizard.js); a card's Edit keeps the dialog. The dialog
 // is also opened from the Start drawer (app.js) and the header's project selector
 // (current-project.js), so openProjectModal stays a global; showProjects opens the screen. Both are
 // offered as actions (actions.js: openProjectModal, showProjects) to the kit and the other fronts; a
@@ -15,8 +17,8 @@ async function refreshProjects() {
   window.CurrentProject.refresh();
   const box = $('#projects-list');
   if (!state.projects.length) {
-    box.innerHTML = `<div class="empty-state"><b>${t('projects.no_projects_yet')}</b><p class="muted">${t('projects.create_a_project_that_points_to')}</p><button class="btn primary" id="empty-new-project">${t('projects.new_project')}</button></div>`;
-    $('#empty-new-project').onclick = () => openProjectModal(null);
+    box.innerHTML = `<div class="empty-state" data-testid="projects-empty"><b>${t('projects.no_projects_yet')}</b><p class="muted">${t('projects.create_a_project_that_points_to')}</p><button class="btn primary" id="empty-new-project">${t('projects.new_project')}</button></div>`;
+    $('#empty-new-project').onclick = () => window.ProjectWizard.open();
     return;
   }
   box.innerHTML = state.projects.map((p) => `
@@ -253,7 +255,7 @@ registerView({
   </div>`,
   mount() {
     $('#projects-list').onclick = onProjectsClick;
-    $('#btn-new-project').onclick = () => openProjectModal(null);
+    $('#btn-new-project').onclick = () => window.ProjectWizard.open();
     $('#btn-projects-folder').onclick = () => api.openPath(state.ws.projects);
     $('#project-form').onsubmit = saveProject;
     $('#btn-pj-cancel').onclick = () => closeModal('#project-modal');

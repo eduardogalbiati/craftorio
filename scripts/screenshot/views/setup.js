@@ -1,5 +1,5 @@
-// Screenshot seed of the first-run Setup (--view setup, #319): a first run (the Setup not done, the
-// ready workflows picked), opened on one step of its stepper (--mode, default agents).
+// Screenshot seed of the first-run Setup (--view setup, #319): a first run (the Setup not done),
+// opened on one step of its stepper (--mode, default agents; #643: no workflows step any more).
 
 function seed({ ws, workspace }) {
   workspace.writeSettings(ws, { setupDone: false });
@@ -12,7 +12,7 @@ async function open({ args, js, pause }) {
 }
 
 module.exports = {
-  modes: ['agents', 'try-it-safely', 'workflows', 'first-project'],
+  modes: ['agents', 'try-it-safely', 'first-project'],
   open,
   seed,
 };

@@ -40,7 +40,7 @@
 //                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)
 //   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
 //                      setup (#319): the first-run Setup on one step: agents (default) | try-it-safely |
-//                      workflows | first-project (with --missing-clis: CLIs not installed)
+//                      first-project (with --missing-clis: CLIs not installed)
 //                      nightwatch (#278): self-healing (Self-healing on since yesterday: "Self-healing
 //                      is on" in place of the end time, a finding of each detector, its days in the
 //                      report; its switch: --view settings --tab execution)

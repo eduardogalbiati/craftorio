@@ -28,15 +28,4 @@ body.setup-open .term-dock { z-index: 11; }
 .setup-cmd { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-modal .setup-out { margin: 4px 0 0; padding: 6px 8px; max-height: 6.5em; overflow: auto; font-size: 11px; white-space: pre-wrap; background: var(--panel-2); border-radius: 6px; color: var(--muted); }
 .setup-note { margin: 0; }
-.setup-wf-group { display: flex; flex-direction: column; gap: 6px; }
-.setup-wf-group h4 { align-self: flex-start; margin: 4px 0 0; font-family: inherit; }
-.setup-wfs { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
-.setup-wf { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; min-width: 0; }
-.setup-wf.picked { border-color: rgba(124,156,255,.45); background: rgba(124,156,255,.06); }
-.setup-wf input { margin-top: 3px; flex: none; }
-.setup-wf-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.setup-wf-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.setup-wf-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.setup-wf-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.setup-wf-tags .pill { border-radius: 8px; }
 .setup-empty { padding: 28px 16px; }

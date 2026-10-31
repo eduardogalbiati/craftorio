@@ -1,13 +1,12 @@
 // The first-run Setup's pure model (#319): CLI status badges, what each CLI is for, a workflow's
-// requirement badges and what it still lacks, the workflows preselected in the Workflows step and
-// the ones shown in Start (settings.hiddenWorkflows).
+// requirement badges and what it still lacks, and the workflows shown in Start (settings.hiddenWorkflows).
+// #643: the Setup lost its Workflows step, and preselectedWorkflows with it.
 // - statusBadge(tool): { label, state } for an envDetails entry ({ id, path, connected, checking });
 //   state is 'checking' | 'missing' | 'signed-out' | 'ready';
 // - toolRequirement(id): 'Required' or 'Optional: <what it enables>';
 // - requirementBadges(reqs): 'Needs Codex'... for a workflow's { clis, forge } (packages/engine/domains/workflow/workflow-requirements.js);
 // - missingRequirements(reqs, states): the CLI ids not 'ready', plus 'forge' when neither gh nor glab is;
 // - missingLabel(missing): 'Missing Codex CLI' for a card or the Start panel ('' when nothing);
-// - preselectedWorkflows(workflows, states): the ready ids, ai-development-local-hero first;
 // - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
 // - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml).
 // The labels are in the interface language (#329, packages/shared/i18n.js); the states never change.
@@ -19,7 +18,6 @@
   const NAMES = { claude: 'Claude Code', codex: 'Codex CLI', grok: 'Grok Build', gh: 'GitHub CLI', glab: 'GitLab CLI', git: 'Git' };
   const SHORT = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok', git: 'Git' };
   const REQUIRED = ['claude', 'git'];
-  const FIRST = 'ai-development-local-hero';
   const forge = () => t('setup.forge');
 
   const toolName = (id) => NAMES[id] || String(id || '');
@@ -57,21 +55,14 @@
     return t('setup.missing', { names: missing.map((id) => (id === 'forge' ? forge() : toolName(id))).join(', ') });
   }
 
-  function preselectedWorkflows(workflows, states) {
-    const ready = (workflows || []).filter((w) => !missingRequirements(w.requirements, states).length).map((w) => w.id);
-    return ready.includes(FIRST) ? [FIRST, ...ready.filter((id) => id !== FIRST)] : ready;
-  }
-
   function visibleWorkflows(workflows, hidden) {
     const set = new Set(Array.isArray(hidden) ? hidden : []);
     return (workflows || []).filter((w) => !set.has(w.id));
   }
 
   const api = {
-    FIRST,
     missingLabel,
     missingRequirements,
-    preselectedWorkflows,
     requirementBadges,
     statusBadge,
     toolName,

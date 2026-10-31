@@ -1,8 +1,8 @@
 /* global api */
 // The new-project wizard (#641, onboarding step 4 of docs/work/first-project-onboarding/plan.md; spec
 // R1-R3, R5): a modal over the page with the steps of OnboardingModel (packages/shared/onboarding-model.js),
-// and the onboarding's progress tray. Not wired to Projects yet (step 6): window.ProjectWizard = { open(), close() }
-// opens it (the checks, the screenshots); Projects › New project still opens the old dialog (projects.js).
+// and the onboarding's progress tray. window.ProjectWizard = { open(), close() } opens it: Projects › New project
+// (projects.js) and the Setup's First project step (#643, packages/ui-kit/setup.js); Edit keeps the old dialog.
 // - #project-wizard (data-testid="project-wizard", role="dialog"): the indicator (one data-step="<id>" per
 //   step, the current one aria-current="step"), then the step: start (wizard-source-import / wizard-source-new),
 //   repository (#wizard-repo, #wizard-name, #wizard-provider read from the URL, wizard-import-status once
