@@ -403,9 +403,10 @@ test('#482: CODE_OF_CONDUCT.md has a confidential email contact and the full Con
   }
 });
 
-// #489 replaced "never on a push to main": a push to main publishes a prerelease vX.Y.Z-rc.N (never
-// --latest, test/deploy-workflow-489.test.js), a vX.Y.Z tag promotes it; the -build.<n> tags stay gone.
-test('#482/#489: Deploy releases on a tag or a manual dispatch, a push to main only as a prerelease, and tags as vX.Y.Z or vX.Y.Z-rc.N', () => {
+// Since 2026-10-31 (docs/agents/decisions.md) a push to main builds nothing again: a vX.Y.Z tag builds
+// and publishes the release, a manual run an rc prerelease (test/deploy-workflow-489.test.js); the
+// -build.<n> tags stay gone.
+test('#482/#489: Deploy releases on a tag or a manual dispatch, and tags as vX.Y.Z or vX.Y.Z-rc.N', () => {
   const wf = yaml.load(read('.github/workflows/deploy.yml'));
   const on = wf.on || {};
   assert.ok('workflow_dispatch' in on && on.push && on.push.tags, 'on a tag and workflow_dispatch');

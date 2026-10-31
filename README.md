@@ -279,7 +279,7 @@ Then check that `SHA256SUMS` itself comes from this repository, with
 
 ```
 cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-  --certificate-identity https://github.com/eduardogalbiati/multiagent-orchestrator/.github/workflows/deploy.yml@refs/heads/main \
+  --certificate-identity-regexp '^https://github.com/eduardogalbiati/multiagent-orchestrator/.github/workflows/deploy.yml@refs/(tags/v.+|heads/main)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -2093,10 +2093,14 @@ Enabled in `software-development`. The other bundled workflows only read a folde
 
 ## CI/CD
 
-- `.github/workflows/ci.yml`: on every PR runs a syntax check and `npm test` on Ubuntu and Windows
-  (checks `test (<os>)`), plus a production `npm audit`. macOS runs too when the PR touches a
+GitHub Actions run only for a release (owner decision of 2026-10-31): a push to `main` and a pull
+request build nothing, so no Actions minutes are spent between releases.
+
+- `.github/workflows/ci.yml`: **by hand only** (Actions › CI › Run workflow): a syntax check,
+  `npm test` on Ubuntu, Windows and macOS (checks `test (<os>)`) and a production `npm audit`. When
+  pull requests trigger it again, it plans per PR: Ubuntu and Windows, macOS too when the PR touches a
   platform-sensitive path (worktrees, processes, terminals, packaging, dependencies, CI) or has the
-  `ci:macos` label (from the next push), every Monday on `main`, and on manual runs. A docs-only PR
+  `ci:macos` label (from the next push). A docs-only PR
   (`.md` files other than `AGENTS.md`, `CLAUDE.md`, `docs/agents/`, `skills/`, `docs/screens/` and `docs/features/`,
   which the tests read) runs no
   tests. A new push to a PR cancels the previous run. The `test` check is green only when every
@@ -2108,12 +2112,16 @@ Enabled in `software-development`. The other bundled workflows only read a folde
   pre-release `preview-pr-<n>` from the PR branch: the Windows build by default, `-f os=macos`,
   `linux` or `all` for the others. It keeps the builds a pre-release of the same commit already has
   (`-f rebuild=true` forces them) and skips `npm test` when the PR head has `ci/tested`.
-- `.github/workflows/deploy.yml`: production. A pushed `vX.Y.Z` tag (or a manual dispatch) packages the app on
-  `windows-latest` (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and
-  `ubuntu-latest` (linux x64, AppImage and tar.gz), launches each package in simulation until it
-  quits by itself (`scripts/smoke-package.js`, `xvfb-run` on Linux; a failure stops the release) and
-  publishes all of them in one release. Each job runs `npm test` only when the merged commit's tree
-  is not the one the PR's CI tested (`main` moved after CI ran).
+- `.github/workflows/deploy.yml`: production. A pushed `vX.Y.Z` tag (the app's **Promote to stable**
+  pushes it) packages the app on `windows-latest` (win32 x64), `macos-latest` (darwin arm64),
+  `macos-15-intel` (darwin x64) and `ubuntu-latest` (linux x64, AppImage and tar.gz), runs
+  `npm test` on each, launches each package in simulation until it quits by itself
+  (`scripts/smoke-package.js`, `xvfb-run` on Linux; a failure stops the release) and publishes all of
+  them as the release `vX.Y.Z`, marked latest. A manual run on `main` publishes a prerelease
+  `vX.Y.Z-rc.N` instead, to try a build before tagging it. A job skips `npm test` only when the PR's
+  CI tested the same tree.
+- `.github/workflows/pages.yml`: the public page (`site/`, `npm run site`) on GitHub Pages, published
+  with each `vX.Y.Z` tag or by hand; off until the repository variable `SITE_PAGES` is `on`.
 
 Standard GitHub-hosted runners are free for public repositories; CI still runs only what a change
 needs, so it stays fast, and every job has a `timeout-minutes`. A pull request from a fork gets the

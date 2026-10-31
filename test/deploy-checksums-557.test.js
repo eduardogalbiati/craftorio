@@ -6,7 +6,8 @@
 // - the notes keep `--generate-notes` and add the sums (`--notes` / `--notes-file`);
 // - sums and signature come before `gh release create`, never `continue-on-error`, never `|| true`;
 // - the signing never runs on a fork (a `github.repository` guard) nor on a pull request;
-// - the promotion (`gh release edit`) neither recomputes nor re-uploads anything: the rc's files stay;
+// - (2026-10-31) a stable tag builds and publishes its own release, an rc only by hand: both carry the
+//   sums and the signature;
 // - docs/readme/020-install.md says how to check a download per system; SEC-13 notes what shipped.
 // Reads files only: nothing here builds, signs or publishes.
 
@@ -105,12 +106,12 @@ test('#557 signing: the OIDC permission only on the publish job, never on forks 
   assert.match(guard, /github\.repository\s*==/, 'the signing is guarded against forks (github.repository == ...)');
 });
 
-test('#557 the promotion keeps the candidate\'s sums and signature (no recompute, no re-upload, notes kept)', () => {
-  const { steps } = jobOf(load(), /gh release edit/);
-  const script = steps.map(stepText).join('\n');
-  assert.doesNotMatch(script, /sha256sum|cosign|gpg|gh release upload|delete-asset/);
-  const edit = script.split('\n').filter((l) => /gh release edit/.test(l)).join('\n');
-  assert.doesNotMatch(edit, /--notes/, 'the notes with the sums are kept');
+test('#557 every release deploy.yml creates carries the sums: the stable one (tag) and the rc (by hand)', () => {
+  const { steps } = publishJob();
+  const creates = steps.filter((st) => /gh release create/.test(stepText(st)));
+  assert.equal(creates.length, 2, 'the stable release and the rc');
+  for (const st of creates) assert.match(stepText(st), /--notes-file[^\n]*sha256-notes/, `${st.name}: the sums in the notes`);
+  assert.equal(creates.every((st) => idx(steps, SIGNER) < steps.indexOf(st)), true, 'signed before either is created');
 });
 
 test('#557 Install docs: per system, compute the hash and compare it with SHA256SUMS', () => {
