@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildSite, workItems } = require('../scripts/site');
+const { buildSite, kindOf, workItems } = require('../scripts/site');
 
 function plant() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'site-build-'));
@@ -20,14 +20,17 @@ function plant() {
   put('docs/work/onboarding/notes.html', '<script>alert(1)</script>');
   put('docs/work/later/spec.md', '# Spec');
   put('docs/work/no-stage/notes.md', 'not an item');
+  put('docs/work/open-source/milestone.md', '---\nkind: milestone\n---\n');
   put('CHANGELOG.md', '# Changelog');
   return root;
 }
 
-test('an item is a folder of docs/work/ with a stage file', () => {
+test('an item is a folder of docs/work/ with a stage file or a milestone.md', () => {
   const root = plant();
-  assert.deepEqual(workItems(root), ['later', 'onboarding']);
+  assert.deepEqual(workItems(root), ['later', 'onboarding', 'open-source']);
   assert.deepEqual(workItems(path.join(root, 'nowhere')), []);
+  assert.equal(kindOf(root, 'onboarding'), 'item');
+  assert.equal(kindOf(root, 'open-source'), 'milestone');
 });
 
 test('the site holds the reader, the markdown, the images, the changelog and the item list', () => {
@@ -36,12 +39,14 @@ test('the site holds the reader, the markdown, the images, the changelog and the
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, 'stale.txt'), 'from an earlier build');
   const { items, files } = buildSite(root, out);
-  assert.deepEqual(items, ['later', 'onboarding']);
+  assert.deepEqual(items, ['later', 'onboarding', 'open-source']);
   for (const f of ['index.html', 'assets/reader.js', 'docs/work/README.md', 'docs/work/onboarding/intent.pt-BR.md', 'docs/work/onboarding/images/mock-1.jpg', 'CHANGELOG.md', 'docs/work/index.json']) {
     assert.ok(files.includes(f), f);
     assert.ok(fs.existsSync(path.join(out, f)), f);
   }
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'docs/work/index.json'), 'utf8')), ['later', 'onboarding']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'docs/work/index.json'), 'utf8')), [
+    { name: 'later', kind: 'item' }, { name: 'onboarding', kind: 'item' }, { name: 'open-source', kind: 'milestone' },
+  ]);
   assert.ok(fs.existsSync(path.join(out, '.nojekyll')));
   // a page or a script under docs/work/ is never published, and the folder starts empty
   assert.ok(!fs.existsSync(path.join(out, 'docs/work/onboarding/notes.html')));

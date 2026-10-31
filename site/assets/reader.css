@@ -356,3 +356,22 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
 .esteps code{align-self:flex-start;font-size:11px}
 .esteps span:last-child{font-size:12.5px;color:var(--soft);line-height:1.45}
 @media (max-width:860px){.esteps{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.esteps li:not(:last-child)::after{display:none}}
+
+/* a milestone: a marker on the project's history, not an SDLC item (no stages) */
+.wcard.mile{border-style:dashed;border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:linear-gradient(120deg,var(--wash),var(--paper) 70%)}
+.wcard.mile .mtag{display:inline-flex;align-items:center;gap:5px;background:var(--ink);color:var(--paper);border:0}
+.mtag svg,.mver svg{width:12px;height:12px}
+.msum{margin:2px 0 6px;font-size:14px;color:var(--soft);line-height:1.5}
+.mwhen{color:var(--ink)}
+.mwhen b{color:var(--accent);font-weight:700}
+.mwhen.big{font-size:16px;margin:-4px 0 18px}
+.mpage .panel{max-width:860px}
+.mpage .panel>h1{font-size:clamp(28px,3.4vw,40px);margin:6px 0 10px}
+.rel.mile .rel-side::before{border-radius:3px;transform:rotate(45deg);border-color:var(--ink);background:var(--paper)}
+.rel.mile.reached .rel-side::before{background:var(--ink)}
+.rel.mile .rel-body{border-style:dashed;background:linear-gradient(120deg,var(--wash),var(--paper) 70%)}
+.rel.mile .rsum{margin:0 0 4px}
+.rel.mile .rsum a{color:var(--ink);text-decoration:none}
+.rel.mile .rsum a:hover{color:var(--accent)}
+.mver{display:inline-flex;align-items:center;gap:6px;font-size:15px}
+.rel.mile .msum{margin:0}
