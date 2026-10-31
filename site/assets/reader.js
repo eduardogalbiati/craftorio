@@ -437,8 +437,10 @@
     if (!kids.length) return '';
     var done = kids.filter(function (c) { return c.state === 'closed'; }).length;
     var order = kids.slice().sort(function (a, b) { return (a.state === 'closed') - (b.state === 'closed') || a.number - b.number; });
-    return '<details class="subs"><summary><span class="sbar"><i style="width:' + Math.round(done / kids.length * 100) + '%"></i></span>' +
-      '<span>Sub-issues · <b>' + done + ' of ' + kids.length + '</b> done</span></summary><ul>' +
+    // a dot per sub-issue, filled when it is done (a bar past 12)
+    var pips = kids.length <= 12 ? '<span class="pips" aria-hidden="true">' + kids.map(function (c, k) { return '<i class="' + (k < done ? 'on' : '') + '"></i>'; }).join('') + '</span>'
+      : '<span class="sbar" aria-hidden="true"><i style="width:' + Math.round(done / kids.length * 100) + '%"></i></span>';
+    return '<details class="subs"><summary>' + pips + '<span><b>' + kids.length + '</b> sub-issues · ' + done + ' done</span></summary><ul>' +
       order.map(subLi).join('') + '</ul></details>';
   }
   // One sub-issue: its state and title; a phase with steps of its own folds them under it, with its count.
