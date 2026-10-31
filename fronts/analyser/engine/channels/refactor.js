@@ -35,6 +35,7 @@ const refactorIssues = require('@multiagent/engine/domains/refactor/refactor-iss
 const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
 const runs = require('@multiagent/engine/domains/run/runs');
 const simulation = require('@multiagent/engine/engine/simulation');
+const workspace = require('@multiagent/engine/domains/workspace/workspace');
 const { clientError, requireId } = require('@multiagent/engine/service/common');
 const {
   args,
@@ -238,6 +239,15 @@ module.exports = (ctx) => {
   }
   ctx.planRefactor = planRefactor;
 
+  // #642 the onboarding's review files before any visit to the Backlog: a project just imported has no
+  // cache, so it is synced first (a simulation reads no CLI: an empty backlog, as channels/backlog.js platformTarget)
+  async function syncedFirst(p) {
+    if (backlog.readBacklog(ctx.ws.backlog, p.id)) return;
+    const platform = workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+    const exec = simulation.simulationOnly() ? { exec: async () => '' } : {};
+    try { await backlog.syncBacklog({ dir: ctx.ws.backlog, project: p, platform, ...exec }); } catch (e) { throw clientError(`Sync the backlog first: ${e.message}`); }
+  }
+
   // files `proposal` as an issue when it has none (unchanged without a synced backlog); the stored proposal
   async function fileFirst(p, proposal) {
     if (proposal.issue) return proposal;
@@ -371,6 +381,7 @@ module.exports = (ctx) => {
       // #642 `file`: a proposal without an issue is filed first, as Send to Refactor does (the onboarding's review)
       fn: async ({ projectId, id, runNow, file }) => {
         const p = projectOf(projectId);
+        if (file && !proposalOf(p, id).issue) await syncedFirst(p);
         const proposal = file ? await fileFirst(p, proposalOf(p, id)) : proposalOf(p, id);
         if (file && !proposal.issue) throw clientError('Sync the backlog first: the issue is filed in the synced repository.');
         return addToRoadmap(p, proposal, { mode: runNow ? 'runNow' : 'waiting' });

@@ -292,14 +292,15 @@
     }
   }
 
-  // The review's reads, without waiting: each one once its analysis is done (the backlog at once);
-  // a failed read counts as answered with nothing
+  // The review's reads, without waiting: each one once its analysis is done (the backlog at once, synced
+  // when it was never read: a project just imported has no cache); a failed read counts as answered with nothing
   function loadReview() {
     const pid = cur.projectId;
     if (!pid) return;
-    const reads = [['backlog', 'getBacklog', true], ['city', 'architectureCity', jobDone('projectMap')],
-      ['facts', 'architectureFacts', jobDone('ranking')], ['proposals', 'refactorProposals', jobDone('ranking')]];
-    for (const [key, method, due] of reads) {
+    const backlogRead = () => Promise.resolve(api.getBacklog?.(pid)).then((data) => data || api.syncBacklog?.(pid));
+    const reads = [['backlog', backlogRead, true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
+      ['facts', () => api.architectureFacts?.(pid), jobDone('ranking')], ['proposals', () => api.refactorProposals?.(pid), jobDone('ranking')]];
+    for (const [key, read, due] of reads) {
       if (!due || cur.review[key] !== undefined || cur.reading.has(key)) continue;
       cur.reading.add(key);
       const answer = (value) => {
@@ -308,7 +309,7 @@
         cur.review[key] = value ?? null;
         renderSoon();
       };
-      Promise.resolve(api[method]?.(pid)).then(answer, () => answer(null));
+      new Promise((resolve) => resolve(read())).then(answer, () => answer(null));
     }
   }
 
