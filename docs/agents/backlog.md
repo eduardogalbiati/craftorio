@@ -44,3 +44,13 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
   runs on any engine whatever fronts it ships. The day a front ships a workflow of its own, its
   `engine/` could register the steps that workflow needs (`fronts.md`, "What stays in the engine
   kernel"), and a one-front engine would refuse a workflow whose steps no served front provides.
+- Write doc (#636, epic): one living document per work item in the project's `docs/work/<item>/`,
+  along the AI-native SDLC stages (intent.md, spec.md, plan.md, test.md, deploy.md, maintain.md,
+  each an English source with a pt-BR translation beside it, plus
+  images/), with markdown as the only source, read through the document reader (no rendered HTML
+  committed). Plan and Design are written by a writer, edited in the app by selecting a passage on
+  the rendered page and asking in a side chat, reviewed per request and with anchored notes, and
+  approved at a human gate; the workflows fill in the other stages. The Planning workflows become
+  `write-doc` + `issue`. The proposal, its decisions D1-D16 and the phased plan:
+  [docs/write-doc-proposal-2026-10/](../write-doc-proposal-2026-10/README.md) (also in pt-BR).
+  Waiting for the owner's decisions.
