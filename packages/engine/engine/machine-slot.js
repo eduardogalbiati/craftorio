@@ -26,8 +26,14 @@ const SUITE_SLOT = 'suite';
 const SUITE_SLOT_ENV = 'MULTIAGENT_SUITE_SLOT';
 // suite-step's MAX_TIMEOUT_MS (3 h) plus a margin for its grace and reruns (not imported: a cycle)
 const SUITE_MAX_HOLD_MS = 3 * 60 * 60e3 + 15 * 60e3;
+// #640: the onboarding's project map and refactor ranking (service/areas/project-onboarding.js), held
+// once per job; above the two Oracle / Product Owner turns (15 min each) with a margin
+const ANALYSIS_SLOT = 'analysis';
+const ANALYSIS_SLOT_ENV = 'MULTIAGENT_ANALYSIS_SLOT';
+const ANALYSIS_MAX_HOLD_MS = 45 * 60e3;
 
 const SLOT_DEFAULTS = {
+  [ANALYSIS_SLOT]: { maxHoldMs: ANALYSIS_MAX_HOLD_MS, env: ANALYSIS_SLOT_ENV },
   [SCREENSHOT_SLOT]: { maxHoldMs: MAX_HOLD_MS, env: SCREENSHOT_SLOT_ENV },
   [SUITE_SLOT]: { maxHoldMs: SUITE_MAX_HOLD_MS, env: SUITE_SLOT_ENV },
 };
@@ -113,6 +119,9 @@ function acquireSlotSync(name, { dir, waitMs = WAIT_MS, pollMs = 1000, onWait = 
 module.exports = {
   acquireSlot,
   acquireSlotSync,
+  ANALYSIS_MAX_HOLD_MS,
+  ANALYSIS_SLOT,
+  ANALYSIS_SLOT_ENV,
   machineSlotDir,
   MAX_HOLD_MS,
   SCREENSHOT_SLOT,

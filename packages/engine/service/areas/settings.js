@@ -29,6 +29,15 @@ const TOOLS = [
   { id: 'git', name: 'Git', args: ['--version'] },
 ];
 
+// a CLI of TOOLS on this machine: installed, and signed in by its own probe (`gh auth status`); env: the
+// probe's variables (#312: a provider account's folder). Also the onboarding's gh / glab check (#640).
+async function toolSignIn(id, env) {
+  const tool = TOOLS.find((t) => t.id === id);
+  const r = await resolveCommandAsync(id);
+  if (!r) return { installed: false, signedIn: false };
+  return { installed: true, signedIn: !!tool?.auth && (await runTool(r.file, tool.auth, env)).ok };
+}
+
 module.exports = () => {
   async function envDetails() {
     // #398: the brew commands only with Homebrew (looked up on macOS only)
@@ -56,9 +65,9 @@ module.exports = () => {
   // #312: the CLI's own sign-in probe (`codex login status`) run with the account's variable only:
   // true/false, or null when the CLI has no probe or is not installed. Its output is not returned.
   async function probeAccount(id, env) {
-    const tool = TOOLS.find((t) => t.id === id);
-    const r = tool?.auth && await resolveCommandAsync(id);
-    return r ? (await runTool(r.file, tool.auth, env)).ok : null;
+    if (!TOOLS.find((t) => t.id === id)?.auth) return null;
+    const s = await toolSignIn(id, env);
+    return s.installed ? s.signedIn : null;
   }
 
   // #312: a provider account's folder: signed in or not, and its login command (packages/engine/domains/cli/provider-accounts.js)
@@ -72,3 +81,5 @@ module.exports = () => {
     envDetails,
   };
 };
+
+module.exports.toolSignIn = toolSignIn;

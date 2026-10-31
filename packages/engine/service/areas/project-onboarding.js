@@ -10,7 +10,8 @@
 //     cli: { provider: github | gitlab, status: checking | ok | missing | signed-out, reason? } | null }
 // and every change is pushed as `onboarding:changed` (channels/onboarding.js). A refused access check or
 // a failed clone ends `failed` with a readable reason; onboardingRetry runs again what failed (the
-// access check and the clone, a failed job) and always checks gh / glab again.
+// access check and the clone, a failed job) and always checks gh / glab again. A project removed while
+// its jobs run loses its state; no error of a job escapes the chain.
 
 const path = require('path');
 const agents = require('../../domains/agents/agents');
@@ -20,15 +21,11 @@ const projectMap = require('../../domains/project/project-map');
 const projects = require('../../domains/project/projects');
 const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
-const { clientError, runTool } = require('../common');
-const { resolveCommandAsync } = require('../../engine/providers');
+const { clientError } = require('../common');
+const { toolSignIn } = require('./settings');
 
-const SLOT = 'analysis';
+const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap', 'ranking'];
-const CLIS = {
-  github: { id: 'gh', name: 'GitHub CLI' },
-  gitlab: { id: 'glab', name: 'GitLab CLI' },
-};
 
 // a readable reason for an access check that did not reach the repository
 function accessReason(access) {
@@ -39,57 +36,70 @@ function accessReason(access) {
   return detail ? `${lead} (${detail})` : lead;
 }
 
-// 'github' | 'gitlab' from the repository's URL, null for another host
+// 'github' | 'gitlab' (a platform with a CLI) from the repository's URL, null for another host
 function providerOf(repo) {
   const parsed = issues.parseRepoUrl(repo);
   const platform = parsed && issues.platformOfHost(parsed.host);
-  return CLIS[platform] ? platform : null;
+  return issues.PLATFORMS[platform]?.cli ? platform : null;
 }
 
 // the cli part of the state from what the check answered
 function cliState(provider, found) {
-  const { id, name } = CLIS[provider];
+  const { cli: id, label } = issues.PLATFORMS[provider];
+  const name = `${label} CLI`;
   if (!found?.installed) return { provider, status: 'missing', reason: `The ${name} (${id}) is not installed: the import goes on, but issues and pull requests are unavailable until you install it.` };
   if (!found.signedIn) return { provider, status: 'signed-out', reason: `The ${name} (${id}) is not signed in: the import goes on, but issues and pull requests are unavailable until you run ${id} auth login.` };
   return { provider, status: 'ok' };
 }
 
-// gh / glab on this machine: installed, and signed in (`auth status`)
-async function machineCli(provider) {
-  const r = await resolveCommandAsync(CLIS[provider].id);
-  if (!r) return { installed: false, signedIn: false };
-  const auth = await runTool(r.file, ['auth', 'status']);
-  return { installed: true, signedIn: auth.ok };
-}
+// gh / glab on this machine: installed, and signed in (settings.js's probe)
+const machineCli = (provider) => toolSignIn(issues.PLATFORMS[provider].cli);
 
 /**
  * The onboarding of new projects: { start, status, analyze, retry } (the state is documented above).
  * git: projects.js's git (ls-remote and clone); cli(provider) → { installed, signedIn };
  * jobs: { facts, profile, projectMap, ranking }, each async ({ projectId, folder, facts }) => result;
- * slotsDir: the machine slots' folder (default: the machine's); emit(event, state).
+ * slotsDir: the machine slots' folder (default: the machine's); pollMs: the slot's poll (default:
+ * acquireSlot's); emit(event, state).
  */
-function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs = 100 }) {
+function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs }) {
   const states = new Map();
   // per project: { wanted (analyze was asked), facts (the facts job's promise), free, paid (the running parts), cli }
   const work = new Map();
   const workOf = (id) => { if (!work.has(id)) work.set(id, {}); return work.get(id); };
   const snapshot = (s) => JSON.parse(JSON.stringify(s));
 
+  // no-op once the project's state is gone (the project was removed while a job ran)
   function change(id, patch, jobPatch = {}) {
     const s = states.get(id);
+    if (!s) return;
     Object.assign(s, patch);
     for (const k of Object.keys(patch)) if (patch[k] === undefined) delete s[k];
     for (const [job, value] of Object.entries(jobPatch)) s.jobs[job] = value;
     emit('onboarding:changed', snapshot(s));
   }
 
-  // a job of the chain: running (with the machine slot when `heavy`), then done or failed → its result, or null
+  // the project, or null once it was removed
+  function projectOf(id) {
+    try { return projects.readProject(projectsDir, id); } catch { return null; }
+  }
+
+  // an error outside the jobs (the project read, the clone's wait): the state is dropped when the project
+  // was removed, else it ends failed with the error as its reason
+  function stopped(id, e) {
+    if (!projectOf(id)) { states.delete(id); work.delete(id); return; }
+    change(id, { status: 'failed', code: undefined, reason: `The onboarding stopped: ${String(e?.message || e)}` });
+  }
+
+  // a job of the chain: running (with the machine slot when `heavy`), then done or failed → its result, or null;
+  // input() is read inside, so a removed project fails the job instead of escaping
   async function runJob(id, name, input, { heavy = false } = {}) {
     let slot = null;
     try {
       if (heavy) slot = await slots.acquireSlot(SLOT, { dir: slotsDir, pollMs, holder: `onboarding ${id} (${name})`, inherit: '' });
       change(id, {}, { [name]: { status: 'running' } });
-      const result = await jobs[name](input);
+      const result = await jobs[name](input());
+      if (result?.refused) throw new Error(result.refused.text || String(result.refused));
       change(id, {}, { [name]: { status: 'done' } });
       return { result };
     } catch (e) {
@@ -105,8 +115,8 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
   // the free part: the facts, then the profile
   function startFree(id) {
     const w = workOf(id);
-    w.facts = runJob(id, 'facts', inputOf(id));
-    w.free = w.facts.then((facts) => runJob(id, 'profile', { ...inputOf(id), facts: facts?.result ?? null }))
+    w.facts = runJob(id, 'facts', () => inputOf(id));
+    w.free = w.facts.then((facts) => runJob(id, 'profile', () => ({ ...inputOf(id), facts: facts?.result ?? null })))
       .finally(() => { w.free = null; });
   }
 
@@ -117,14 +127,14 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
     change(id, { status: 'analyzing' }, { projectMap: { status: 'waiting' }, ranking: { status: 'waiting' } });
     w.paid = (async () => {
       const facts = await w.facts;
-      const input = { ...inputOf(id), facts: facts?.result ?? null };
+      const input = () => ({ ...inputOf(id), facts: facts?.result ?? null });
       const map = await runJob(id, 'projectMap', input, { heavy: true });
-      if (map) await runJob(id, 'ranking', { ...input, map: map.result }, { heavy: true });
+      if (map) await runJob(id, 'ranking', () => ({ ...input(), map: map.result }), { heavy: true });
       else change(id, {}, { ranking: { status: 'skipped' } });
       await w.free;
       const s = states.get(id);
-      change(id, { status: s.jobs.projectMap.status === 'done' && s.jobs.ranking.status === 'done' ? 'analyzed' : 'ready' });
-    })().finally(() => { w.paid = null; });
+      if (s) change(id, { status: s.jobs.projectMap.status === 'done' && s.jobs.ranking.status === 'done' ? 'analyzed' : 'ready' });
+    })().catch((e) => stopped(id, e)).finally(() => { w.paid = null; });
   }
 
   // gh / glab for the repository's provider (none for another host)
@@ -140,16 +150,20 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
 
   // waits for the clone (and the CLI check), then ready with the free part, or failed with the clone's reason
   async function follow(id) {
-    await projects.cloneJob(projectsDir, id);
-    await workOf(id).cli;
-    const p = projects.readProject(projectsDir, id);
-    if (p.status !== 'ready') {
-      change(id, { status: 'failed', code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }, { clone: { status: 'failed', error: p.cloneError || null } });
-      return;
+    try {
+      await projects.cloneJob(projectsDir, id);
+      await workOf(id).cli;
+      const p = projects.readProject(projectsDir, id);
+      if (p.status !== 'ready') {
+        change(id, { status: 'failed', code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }, { clone: { status: 'failed', error: p.cloneError || null } });
+        return;
+      }
+      change(id, { status: 'ready', code: undefined, reason: undefined }, { clone: { status: 'done' } });
+      startFree(id);
+      if (workOf(id).wanted) startPaid(id);
+    } catch (e) {
+      stopped(id, e);
     }
-    change(id, { status: 'ready', code: undefined, reason: undefined }, { clone: { status: 'done' } });
-    startFree(id);
-    if (workOf(id).wanted) startPaid(id);
   }
 
   function cloning(id) {
@@ -165,8 +179,9 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
   /** Checks the access, creates the project and starts its clone; never waits for the clone. */
   async function start({ name, repo }) {
     const access = await projects.checkAccess(repo, { git });
-    const reachable = access.status === 'reachable';
-    const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir, ...(reachable ? {} : { cloneError: accessReason(access) }) });
+    const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir, ...(access.status === 'reachable' ? {} : { cloneError: accessReason(access) }) });
+    // a folder of repos/ that already is a clone (a removed project imported again) needs no access
+    const reachable = access.status === 'reachable' || p.status === 'ready';
     states.set(p.id, { projectId: p.id, status: 'cloning', jobs: Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), cli: null });
     if (!reachable) noAccess(p.id, access);
     checkCli(p.id, p.repo);
@@ -200,11 +215,14 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
     const w = workOf(projectId);
     checkCli(projectId, p.repo);
     if (s.status === 'failed') {
-      if (s.code === 'no-access') {
-        const access = await projects.checkAccess(p.repo, { git });
-        if (access.status !== 'reachable') { noAccess(projectId, access); return status(projectId); }
+      // a project already cloned (its folder was kept) goes on without the access check and the clone
+      if (p.status !== 'ready') {
+        if (s.code === 'no-access') {
+          const access = await projects.checkAccess(p.repo, { git });
+          if (access.status !== 'reachable') { noAccess(projectId, access); return status(projectId); }
+        }
+        await projects.retryClone(projectsDir, projectId, { git });
       }
-      await projects.retryClone(projectsDir, projectId, { git });
       cloning(projectId);
     } else if (!w.free && !w.paid && ['ready', 'analyzed'].includes(s.status)) {
       const failed = (job) => s.jobs[job].status === 'failed';
@@ -227,6 +245,7 @@ module.exports = (ctx) => {
     const archRoot = path.join(ws.root, 'architecture');
     const jobs = {
       facts: ({ projectId, folder }) => projectMap.mapFacts({ folder, archRoot, projectId }),
+      // { refused } (an interview already running, the Oracle's budget) fails the job, so Retry runs it again
       profile: ({ projectId }) => ctx.workflowInterview({ projectId }),
       projectMap: ({ projectId, folder }) => projectMap.analyzeMap({ folder, archRoot, projectId, mock: simulation.simulationOnly(), oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
       // the Product Owner's turn comes from the analyser front (ctx.refactorPriorityOptions); without it, the simulated ranking
