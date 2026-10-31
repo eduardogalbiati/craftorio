@@ -411,14 +411,34 @@
       '<h3>' + esc(it.title[lang]) + '</h3>' + (it.summary[lang] ? '<p class="msum">' + esc(it.summary[lang]) + '</p>' : '') +
       '<div class="wc-foot mwhen">' + milestoneWhen(it) + '</div></a>';
   }
+  // What GitHub and git say (scripts/site-data.js writes them at build time; absent on a local build
+  // without a token): the state of each item's issue and its pull requests, the backlog label's open
+  // issues, and the commit activity. A private repository's issues are named, never linked.
+  var GH = null, ACT = null;
+  async function loadExtras() {
+    var j = function (f) { return getText(ROOT + f).then(function (r) { return r ? JSON.parse(r.text) : null; }).catch(function () { return null; }); };
+    var r = await Promise.all([j('github.json'), j('activity.json')]);
+    GH = r[0]; ACT = r[1];
+  }
+  function ghIssue(it) { var m = String(it.issue || '').match(/#(\d+)/); return GH && m ? GH.issues[m[1]] || null : null; }
+  function refHtml(it) {
+    if (!it.issue) return '';
+    var g = ghIssue(it);
+    return '<span class="ref">' + (g ? '<i class="st st-' + g.state + '" title="Issue ' + g.state + ' on GitHub"></i>' : '') + esc(it.issue.split(/\s/)[0]) + '</span>';
+  }
+  function lastPr(it) {
+    var g = ghIssue(it), pr = g && g.prs && g.prs[0];
+    return pr ? 'PR #' + pr.number + ' ' + pr.state : '';
+  }
   function itemCard(it) {
     if (it.kind === 'milestone') return milestoneCard(it);
     var cur = it.stages[it.here];
     var foot = ['Created ' + (shortDate(it.created) || '—')];
     if (it.group === 'shipped') { foot.push('shipped in <b>' + esc(it.release) + '</b>'); if (it.lead != null) foot.push(days(it.lead) + ' from intent to release'); }
     else { if (cur.days != null) foot.push(days(cur.days) + ' in ' + SHORT[it.here]); if (it.target) foot.push('target <b>' + esc(it.target) + '</b>'); }
+    if (lastPr(it)) foot.push(esc(lastPr(it)));
     return '<a class="wcard g-' + it.group + '" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
-      '<div class="wc-top"><span class="gtag">' + GROUPS[it.group] + (it.group === 'shipped' ? '' : ' · ' + SHORT[it.here]) + '</span>' + (it.issue ? '<span class="ref">' + esc(it.issue) + '</span>' : '') + '</div>' +
+      '<div class="wc-top"><span class="gtag">' + GROUPS[it.group] + (it.group === 'shipped' ? '' : ' · ' + SHORT[it.here]) + '</span>' + refHtml(it) + '</div>' +
       '<h3>' + esc(it.title[lang]) + '</h3>' + flowDots(it) +
       '<div class="wc-foot">' + foot.join(' · ') + '</div></a>';
   }
@@ -533,6 +553,16 @@
     return box;
   }
 
+  // Commits per week as bars, the last one the current week; the numbers say the rest.
+  function activityTile(a) {
+    var max = Math.max.apply(null, a.weeks.map(function (w) { return w.commits; }).concat([1]));
+    var fmt = function (n) { return Number(n).toLocaleString('en'); };
+    return '<div class="stat wide span3 act"><dt>Activity</dt><dd>' + fmt(a.commits30) + '<small>commits in the last 30 days · ' + fmt(a.merges30) + ' pull requests merged · last commit ' + esc(shortDate(day(a.last))) + '</small></dd>' +
+      '<div class="spark" role="img" aria-label="Commits per week, last ' + a.weeks.length + ' weeks">' + a.weeks.map(function (w) {
+        return '<span title="Week of ' + esc(shortDate(day(w.start))) + ': ' + fmt(w.commits) + ' commits"><i style="height:' + Math.max(w.commits ? 6 : 2, Math.round(w.commits / max * 100)) + '%"></i></span>';
+      }).join('') + '</div></div>';
+  }
+
   // A project just imported: no item and no release yet. Shows what will fill the page, and from where.
   // Overview as a spine (owner's choice of 2026-10-31): what is ahead on top (the farthest first), today
   // in the middle with what is being built, what shipped below (the releases, newest first, with the
@@ -552,8 +582,14 @@
     var now = items.filter(function (it) { return it.group === 'progress'; });
     var nextStop = items.filter(function (it) { return it.kind === 'milestone' && it.group !== 'shipped' && !isNaN(it.expected) && it.expected >= T; })
       .sort(function (a, b) { return a.expected - b.expected; })[0];
-    if (ahead.length) {
+    var backlog = GH && GH.backlog ? GH.backlog : [];
+    if (ahead.length || backlog.length) {
       sep('Ahead');
+      if (backlog.length) {
+        row('s-backlog', '<span class="n-plan"></span>', '<div class="rcard bcard"><div class="rhead"><b>From the backlog</b><span>' + backlog.length + (backlog.length === 1 ? ' issue' : ' issues') + ' marked for the roadmap</span></div><ul class="blist">' +
+          backlog.slice(0, 6).map(function (b) { var n = '#' + b.number; return '<li><span class="mono">' + (GH.private ? n : '<a href="' + esc(b.url) + '" target="_blank" rel="noopener noreferrer">' + n + '</a>') + '</span> ' + esc(b.title) + '</li>'; }).join('') +
+          (backlog.length > 6 ? '<li class="more">and ' + (backlog.length - 6) + ' more</li>' : '') + '</ul></div>', 'not started');
+      }
       ahead.forEach(function (it) {
         if (it.kind === 'milestone') row('s-mile', '<span class="n-mile"></span>', milestoneCard(it), isNaN(it.expected) ? '' : longDay(it.expected));
         else row('s-plan', '<span class="n-plan"></span>', itemCard(it), isNaN(it.created) ? '' : 'created ' + shortDate(it.created));
@@ -564,9 +600,10 @@
       if (it.kind === 'milestone') return milestoneCard(it);
       var sum = it.summary && it.summary[lang], p = it.plan;
       return '<a class="wcard now g-progress" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
-        '<div class="wc-top"><span class="gtag">In progress · ' + SHORT[it.here] + '</span>' + (it.issue ? '<span class="ref">' + esc(it.issue) + '</span>' : '') + '</div>' +
+        '<div class="wc-top"><span class="gtag">In progress · ' + SHORT[it.here] + '</span>' + refHtml(it) + '</div>' +
         '<h3>' + esc(it.title[lang]) + '</h3>' + (sum ? '<p class="msum">' + esc(sum) + '</p>' : '') + flowDots(it) +
-        (p ? '<div class="pbar"><span><i style="width:' + Math.max(3, Math.round(p.done / p.total * 100)) + '%"></i></span><b>plan: ' + p.done + ' of ' + p.total + ' steps</b></div>' : '') + '</a>';
+        (p ? '<div class="pbar"><span><i style="width:' + Math.max(3, Math.round(p.done / p.total * 100)) + '%"></i></span><b>plan: ' + p.done + ' of ' + p.total + ' steps</b></div>' : '') +
+        (lastPr(it) ? '<div class="wc-foot">' + esc(lastPr(it)) + '</div>' : '') + '</a>';
     }).join('') || '<p class="none">Nothing in progress right now.</p>';
     var todayLine = now.length + ' in progress' + (nextStop ? ' · next stop in ' + daysTo(nextStop.expected) + (daysTo(nextStop.expected) === 1 ? ' day' : ' days') : '');
     rows.push('<div class="srow today"><div class="snode" aria-hidden="true"><span class="n-today"></span></div><div class="smeta"><span class="kicker">Today</span><b>' + esc(longDay(T)) + '</b><span>' + esc(todayLine) + '</span></div><div class="scard">' + nowCards + '</div></div>');
@@ -631,8 +668,8 @@
     var foot = document.createElement('p'); foot.className = 'foot noprint'; main.appendChild(foot);
 
     var names = await listItems();
-    var results = await Promise.all([Promise.all(names.map(function (n) { return loadItem(n).catch(function () { return null; }); })), pair(BASE + 'CHANGELOG.md')]);
-    var items = results[0].filter(Boolean), clog = results[1];
+    var results = await Promise.all([loadExtras(), Promise.all(names.map(function (n) { return loadItem(n).catch(function () { return null; }); })), pair(BASE + 'CHANGELOG.md')]);
+    var items = results[1].filter(Boolean), clog = results[2];
     var order = { progress: 0, planned: 1, shipped: 2 };
     items.sort(function (a, b) { return order[a.group] - order[b.group] || (b.here - a.here) || ((b.released || b.created || 0) - (a.released || a.created || 0)); });
     var tab = ['overview', 'work', 'changelog'].indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : 'overview';
@@ -654,8 +691,9 @@
         '<div class="stat s-progress"><dt>In progress</dt><dd>' + count('progress') + '</dd></div>' +
         '<div class="stat s-planned"><dt>Planned</dt><dd>' + count('planned') + '</dd></div>' +
         '<div class="stat s-shipped"><dt>Shipped</dt><dd>' + count('shipped') + '</dd></div>' +
-        (latest ? '<div class="stat wide"><dt>Latest release</dt><dd>' + esc(latest.version) + '<small>' + shortDate(latest.date) + ' · ' + ago(latest.date) + '</small></dd></div>' : '<div class="stat wide"><dt>Latest release</dt><dd>—<small>No release recorded yet</small></dd></div>') +
-        (med != null ? '<div class="stat wide"><dt>Median lead time</dt><dd>' + days(med) + '<small>intent to release</small></dd></div>' : '') +
+        (latest ? '<div class="stat wide ' + (med != null ? 'span2' : 'span3') + '"><dt>Latest release</dt><dd>' + esc(latest.version) + '<small>' + shortDate(latest.date) + ' · ' + ago(latest.date) + '</small></dd></div>' : '<div class="stat wide ' + (med != null ? 'span2' : 'span3') + '"><dt>Latest release</dt><dd>—<small>No release recorded yet</small></dd></div>') +
+        (med != null ? '<div class="stat wide span1"><dt>Median lead time</dt><dd>' + days(med) + '<small>intent to release</small></dd></div>' : '') +
+        (ACT && ACT.weeks ? activityTile(ACT) : '') +
         '</dl></div>';
       hero.querySelector('h1').textContent = title;
       hero.querySelector('.tagline').textContent = M.tagline || '';
@@ -762,6 +800,15 @@
     draw();
   }
 
+  // The item's issue on GitHub and the pull requests that name it (the item page's left rail).
+  function issueHtml(it) {
+    var g = ghIssue(it);
+    if (!g) return '';
+    var link = function (x, label) { return GH.private ? esc(label) : '<a href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>'; };
+    return '<b class="ihead">On GitHub</b><ul class="hist"><li><span><i class="st st-' + g.state + '"></i>' + link(g, 'Issue #' + g.number) + '</span><span>' + g.state + '</span><span></span></li>' +
+      (g.prs || []).slice(0, 5).map(function (pr) { return '<li><span>' + link(pr, 'PR #' + pr.number) + '</span><span>' + pr.state + '</span><span></span></li>'; }).join('') + '</ul>';
+  }
+
   async function item() {
     var root = document.getElementById('app');
     // ?item= names the item; the last one opened from the list covers a host that drops the query string
@@ -770,6 +817,7 @@
     if (!SAFE.test(name)) { root.innerHTML = '<p class="status-msg">Pick an item on the <a href="' + HOME + '">list</a>.</p>'; return; }
     await listItems().catch(function () { return []; });   // marks the milestones
     var it = await loadItem(name);
+    await loadExtras();
     if (!it) { root.innerHTML = '<p class="status-msg">No markdown found in <code>docs/work/' + esc(name) + '/</code>. <a href="' + HOME + '">All items</a></p>'; return; }
     if (it.kind === 'milestone') { milestonePage(root, it); return; }
     document.title = it.title[lang];
@@ -834,7 +882,7 @@
         drawerEl.appendChild(dtoc);
       });
     });
-    left.insertAdjacentHTML('beforeend', '<div class="loopnote"><b>History</b>' + historyHtml(it) + '</div>');
+    left.insertAdjacentHTML('beforeend', '<div class="loopnote"><b>History</b>' + historyHtml(it) + issueHtml(it) + '</div>');
 
     wire(it, pdf);
   }

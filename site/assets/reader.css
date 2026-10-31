@@ -432,3 +432,19 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
   .srow.today .smeta b{font-size:24px}
 }
 @media (prefers-reduced-motion:reduce){.n-today{animation:none}}
+
+/* from GitHub and git (docs/work/github.json, activity.json) */
+.st{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.st-open{background:var(--ok)}.st-closed{background:#a78bfa}
+.stat.span1{grid-column:span 1}.stat.span2{grid-column:span 2}.stat.span3{grid-column:1 / -1}
+.stat.act{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:4px 18px;align-items:end}
+.stat.act dt{grid-column:1 / -1}
+.spark{display:flex;align-items:flex-end;gap:4px;height:46px}
+.spark span{flex:1;height:100%;display:flex;align-items:flex-end}
+.spark i{display:block;width:100%;border-radius:3px 3px 1px 1px;background:color-mix(in oklab,var(--accent) 70%,var(--paper))}
+.spark span:last-child i{background:var(--accent)}
+.bcard{border-style:dashed}
+.blist{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+.blist .mono{font:12px var(--mono);color:var(--soft)}
+.blist .more{color:var(--soft);font-size:12.5px}
+.loopnote .ihead{margin-top:14px}
