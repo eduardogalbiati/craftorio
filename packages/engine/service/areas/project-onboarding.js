@@ -1,6 +1,7 @@
 // Service area (#640, onboarding step 3 of docs/work/first-project-onboarding/plan.md): the jobs that
 // follow a new project's import, chained by dependency: clone (#639, packages/engine/domains/project/projects.js)
-// → facts → (the Ways of working profile ∥ the project map) → the refactor ranking after the map.
+// → facts → (the Ways of working profile ∥ the project map, its findings added as refactor proposals)
+// → the refactor ranking after the map.
 // The free part (facts and profile, spec R5) runs once the clone is ready; the paid part (project map
 // and ranking) only after onboardingAnalyze ("analyze later" never calls it). The project map and the
 // ranking take the machine-wide slot SLOT (packages/engine/engine/machine-slot.js), so they wait for
@@ -16,10 +17,12 @@
 const path = require('path');
 const Platforms = require('@multiagent/shared/platforms');
 const agents = require('../../domains/agents/agents');
+const arch = require('../../domains/oracle/oracle-architecture');
 const issues = require('../../domains/backlog/issues');
 const priority = require('../../domains/refactor/refactor-priority');
 const projectMap = require('../../domains/project/project-map');
 const projects = require('../../domains/project/projects');
+const proposalsRun = require('../../domains/refactor/refactor-proposals-run');
 const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
 const { clientError } = require('../common');
@@ -247,7 +250,13 @@ module.exports = (ctx) => {
       facts: ({ projectId, folder }) => projectMap.mapFacts({ folder, archRoot, projectId }),
       // { refused } (an interview already running, the Oracle's budget) fails the job, so Retry runs it again
       profile: ({ projectId }) => ctx.workflowInterview({ projectId }),
-      projectMap: ({ projectId, folder }) => projectMap.analyzeMap({ folder, archRoot, projectId, mock: simulation.simulationOnly(), oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
+      // the map's findings become the Refactor tab's proposals, so the ranking (and the review, #642) has them
+      projectMap: async ({ projectId, folder }) => {
+        const out = await projectMap.analyzeMap({ folder, archRoot, projectId, mock: simulation.simulationOnly(), oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) });
+        const saved = arch.listReports(archRoot, projectId).find((r) => r.id === out.report_id);
+        proposalsRun.addFindings({ wsRoot: ws.root, projectId, reportId: out.report_id, findings: saved?.report?.findings });
+        return out;
+      },
       // the Product Owner's turn comes from the analyser front (ctx.refactorPriorityOptions); without it, the simulated ranking
       ranking: ({ projectId }) => priority.rankProject({ refactorRoot: path.join(ws.root, 'refactor'), backlogDir: ws.backlog, projectId, model: null, mock: simulation.simulationOnly() || !ctx.refactorPriorityOptions, options: () => ctx.refactorPriorityOptions?.(projectId) }),
     };

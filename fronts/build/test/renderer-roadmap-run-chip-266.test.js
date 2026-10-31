@@ -105,7 +105,7 @@ test('#266 roadmap bar: the roadmap\'s state dot reads "Running", not "running"'
 
 test('#266 roadmap card: a planned item\'s state pill reads "Planned" with data-status="planned"', () => {
   const box = H.itemEl(render(H.item('a', 'planned', 1, 'Login page', { origin: H.iso(H.NOW - H.HOUR) })), 'a');
-  const pill = H.findEl(box.outer, (e) => e.attrs['data-status'] === 'planned');
+  const pill = H.findEl(box.outer, (e) => e.attrs['data-status'] === 'planned' && e.attrs['data-testid'] !== 'roadmap-item');
   assert.ok(pill, 'the state pill has data-status="planned"');
   assert.equal(H.visibleText(pill.inner), 'Planned');
 });

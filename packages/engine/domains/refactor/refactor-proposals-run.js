@@ -98,10 +98,20 @@ function proposeFindings({ wsRoot, projectId, report, costUsd = null, tokens = n
   const checked = arch.validateReport(report);
   if (checked.error) throw new Error(checked.error);
   const saved = arch.saveReport(stores.architecture, projectId, { date: new Date().toISOString(), head: at?.head || null, branch: at?.branch || null, costUsd, tokens, simulated: !!simulated, report: checked.report });
+  return { report_id: saved.id, ...addFindings({ wsRoot, projectId, reportId: saved.id, findings: checked.report.findings }) };
+}
+
+/**
+ * The findings of a saved report (`reportId`) added to the Refactor tab's proposals, those a proposal
+ * or an open refactor issue already covers dropped with the reason (the propose step's, and the
+ * onboarding's project map, #642) → { added: [{ id, title }], dropped: [{ id, title, status, reason }] }
+ */
+function addFindings({ wsRoot, projectId, reportId, findings }) {
+  const stores = storesOf(wsRoot);
   const issues = openRefactorIssues(stores, projectId).map((i) => ({ number: i.number, files: targetFiles(i) }));
   const added = [];
   const dropped = [];
-  for (const finding of checked.report.findings) {
+  for (const finding of findings || []) {
     const { kind, title, files, evidence, severity, refactor } = finding;
     const key = arch.findingKey(finding);
     const known = proposals.listProposals(stores.refactor, projectId).find((p) => p.source === 'architecture' && p.key === key);
@@ -115,10 +125,10 @@ function proposeFindings({ wsRoot, projectId, report, costUsd = null, tokens = n
       dropped.push({ id: null, title, status: 'issue', issue: issue.number, reason: `the open refactor issue #${issue.number} targets its files` });
       continue;
     }
-    const stored = proposals.addProposal(stores.refactor, projectId, { source: 'architecture', key, reportId: saved.id, kind, title, files, evidence, severity, refactor });
+    const stored = proposals.addProposal(stores.refactor, projectId, { source: 'architecture', key, reportId, kind, title, files, evidence, severity, refactor });
     added.push({ id: stored.id, title: stored.title });
   }
-  return { report_id: saved.id, added, dropped };
+  return { added, dropped };
 }
 
 /**
@@ -185,6 +195,7 @@ async function fileProposals({ wsRoot, projectId, folder, ids, simulated }) {
 }
 
 module.exports = {
+  addFindings,
   fileProposals,
   proposeFindings,
   rankProposals,

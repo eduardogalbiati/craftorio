@@ -194,9 +194,11 @@
   }
 
   function cityBody() {
-    const districts = cur.review.city?.model?.districts || [];
+    const model = cur.review.city?.model;
+    const districts = model?.districts || [];
     if (!districts.length) return `<p class="muted small">${esc(t('onboarding.review_city_empty'))}</p>`;
-    const files = districts.reduce((n, d) => n + (d.buildings?.length || 0), 0);
+    // the city model's buildings (packages/shared/city-model.js), each naming its district
+    const files = Array.isArray(model.buildings) ? model.buildings.length : districts.reduce((n, d) => n + (d.buildings?.length || d.files || 0), 0);
     return `<p>${esc(t('onboarding.review_city', { districts: districts.length, files }))}</p>`;
   }
 

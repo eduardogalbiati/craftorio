@@ -240,12 +240,15 @@ module.exports = (ctx) => {
   ctx.planRefactor = planRefactor;
 
   // #642 the onboarding's review files before any visit to the Backlog: a project just imported has no
-  // cache, so it is synced first (a simulation reads no CLI: an empty backlog, as channels/backlog.js platformTarget)
+  // cache, so it is synced first (a simulation reads no CLI: an empty backlog, as channels/backlog.js platformTarget;
+  // a repository that is no platform URL, a local file:// one, is synced as a simulated <host>/local/<project>)
   async function syncedFirst(p) {
     if (backlog.readBacklog(ctx.ws.backlog, p.id)) return;
     const platform = workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
-    const exec = simulation.simulationOnly() ? { exec: async () => '' } : {};
-    try { await backlog.syncBacklog({ dir: ctx.ws.backlog, project: p, platform, ...exec }); } catch (e) { throw clientError(`Sync the backlog first: ${e.message}`); }
+    const simulated = simulation.simulationOnly();
+    const repo = simulated && p.repo && !backlog.parseRepoUrl(p.repo) ? `https://${backlog.PLATFORMS[platform]?.host || 'github.com'}/local/${path.basename(p.id)}` : p.repo;
+    const exec = simulated ? { exec: async () => '' } : {};
+    try { await backlog.syncBacklog({ dir: ctx.ws.backlog, project: { ...p, repo }, platform, ...exec }); } catch (e) { throw clientError(`Sync the backlog first: ${e.message}`); }
   }
 
   // files `proposal` as an issue when it has none (unchanged without a synced backlog); the stored proposal

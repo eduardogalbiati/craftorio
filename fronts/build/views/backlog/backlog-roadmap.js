@@ -628,10 +628,9 @@
     // the complexity belongs to the issues: the sum of their complexity:n labels
     const foot = `<span class="rm-issues-foot muted" data-testid="roadmap-issues-foot"${size != null ? ` title="${t('backlog_roadmap.the_complexity_is_the_sum_of')}"` : ''}>${plural(issues.length, 'backlog_roadmap.issues_count')}${size != null ? t('backlog_roadmap.complexity_size', { size }) : ''}</span>`;
     const v = runView(x);
-    // the card carries its status id once the item has started or ended (E2E steps count the done,
-    // running and skipped cards); a planned item's id is on its pill only
+    // the card carries its status id (E2E steps count the planned, done, running and skipped cards)
     return `
-      <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item"${status === 'planned' ? '' : ` data-status="${esc(status)}"`} data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
+      <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item" data-status="${esc(status)}" data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
         <div class="rm-item-top">
           <div class="rm-issues"><ul class="rm-titles">${titles}</ul>${foot}<button type="button" class="link-btn small rm-map" data-rm-map-item="${esc(x.id)}" data-testid="show-on-map" title="${t('backlog_roadmap.open_the_project_city_with_the')}">${t('backlog_roadmap.show_on_the_map')}</button></div>
           ${metersHtml(x, x.status === 'running' || !!x.waiting, v?.clock)}

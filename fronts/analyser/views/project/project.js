@@ -74,10 +74,11 @@ function newProjectPage(id) {
 }
 
 // tab: open the page on this tab (the Conflict map links); nextSteps: show the Next steps card (the
-// wizard's Finish, #642)
+// wizard's Finish, #642); while the card is open the page opens on the Overview that leads with it
 function openProjectView(id, { tab = null, nextSteps: withNextSteps = false } = {}) {
   if (withNextSteps) rememberNextSteps(id, 'open');
   if (state.pv?.id !== id) state.pv = newProjectPage(id);
+  if (!tab && nextSteps()[id] === 'open') tab = 'overview';
   if (tab) { state.pv.tab = tab; rememberProjectTab(id, tab); }
   // the header's project follows the page (the page is drawn right after)
   window.CurrentProject?.set(id, { redraw: false });
