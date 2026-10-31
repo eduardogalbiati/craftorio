@@ -550,3 +550,14 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
   .side{order:-1;padding:16px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
 }
 .loopnote .subs b{display:inline;font:inherit;font-weight:600;text-transform:none;letter-spacing:0;margin:0;color:var(--ink)}
+
+/* what an item builds on (depends_on): "After <item>", inside its card block and in the item's side box */
+.deps{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:9px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--soft)}
+.deps>span:first-child{font:500 10.5px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.dchip{display:inline-flex;align-items:center;gap:5px;font-weight:600;text-decoration:none;color:var(--accent);background:var(--wash);border-radius:999px;padding:1px 10px}
+.dchip::before{content:"";width:6px;height:6px;border-radius:50%;border:1.5px solid currentColor;box-sizing:border-box}
+.dchip:hover{text-decoration:underline}
+.deps .why{flex-basis:100%;font-size:12px}
+.cblock .deps .why{display:none}
+.sidebox .deps{padding:0 0 12px;border-top:0}
+.loopnote .deps b{display:inline}

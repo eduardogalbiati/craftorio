@@ -361,6 +361,7 @@
     var shipped = statusCls(deploy.meta.status) === 'ok' || here === 5;
     var group = shipped ? 'shipped' : here < 2 || (here === 2 && statusCls(stages[2].meta.status) !== 'ok') ? 'planned' : 'progress';
     return {
+      deps: first.missing ? [] : window.SdlcOrder.dependsOn(first.meta.depends_on), depHint: first.missing ? '' : (first.hints.depends_on || ''),
       group: group, created: stages[0].at, released: released, release: deploy.meta.release || '', target: first.meta.target || '',
       plan: stages[2].missing ? null : planProgress(stages[2].body),
       summary: { en: first.missing ? '' : firstParagraph(first.body), pt: first.tr ? firstParagraph(first.tr.body) : (first.missing ? '' : firstParagraph(first.body)) },
@@ -383,6 +384,7 @@
     var st = String(M.status || 'planned').toLowerCase();
     var str = function (v) { return typeof v === 'string' ? v : ''; };
     return {
+      deps: window.SdlcOrder.dependsOn(M.depends_on), depHint: fm.hints.depends_on || '',
       kind: 'milestone', name: name, base: base, here: -1, stages: [], issue: '', release: '', target: '', lead: null,
       group: st === 'done' ? 'shipped' : WORKING.test(st) ? 'progress' : 'planned', status: st, after: str(M.after),
       created: M.date ? day(M.date) : NaN, expected: M.expected ? day(M.expected) : NaN, reached: M.reached ? day(M.reached) : NaN,
@@ -527,7 +529,32 @@
     return '<li class="has-kids' + (c.state === 'closed' ? ' done' : '') + '"><details><summary>' + line + '</summary><ul>' + order.map(subLi).join('') + '</ul></details></li>';
   }
   // A card and its folded sub-issues, kept together (the details cannot sit inside the card's link).
-  function cardBlock(it) { return '<div class="cblock">' + itemCard(it) + subsHtml(it) + '</div>'; }
+  function cardBlock(it) { return '<div class="cblock">' + itemCard(it) + depsHtml(it) + subsHtml(it) + '</div>'; }
+  // What an item builds on (`depends_on:`): "After <the item>", linked, the reason as a tooltip.
+  // TITLES maps a folder to its title per language: the list's items, or the item page's lookups.
+  var TITLES = {};
+  function depsHtml(it) {
+    var deps = (it.deps || []).filter(function (d) { return d !== it.name; });
+    if (!deps.length) return '';
+    return '<div class="deps"' + (it.depHint ? ' title="' + esc(it.depHint) + '"' : '') + '><span>After</span>' + deps.map(function (d) {
+      var t = TITLES[d] ? TITLES[d][lang] : d;
+      return '<a class="dchip" href="' + itemHref(d) + '">' + esc(t) + '</a>';
+    }).join('') + (it.depHint ? '<span class="why">' + esc(it.depHint) + '</span>' : '') + '</div>';
+  }
+  // the titles of the items an item depends on, read from their first document
+  async function loadDepTitles(it) {
+    await Promise.all((it.deps || []).map(async function (d) {
+      if (TITLES[d] || !SAFE.test(d)) return;
+      var f = MILESTONES[d] ? 'milestone.md' : 'intent.md';
+      var r = await getText(ROOT + d + '/' + f).catch(function () { return null; });
+      if (!r) return;
+      var fm = frontMatter(r.text), en = typeof fm.meta.title === 'string' ? fm.meta.title : cleanTitle((fm.body.match(/^#\s+(.+)$/m) || [])[1] || d);
+      var pt = en, tn = typeof fm.meta.translation === 'string' ? fm.meta.translation.split(/\s/)[0] : '';
+      var t = TR.test(tn) ? await getText(ROOT + d + '/' + tn).catch(function () { return null; }) : null;
+      if (t) { var tf = frontMatter(t.text); pt = typeof tf.meta.title === 'string' ? tf.meta.title : cleanTitle((tf.body.match(/^#\s+(.+)$/m) || [])[1] || en); }
+      TITLES[d] = { en: en, pt: pt };
+    }));
+  }
   function itemCard(it) {
     if (it.kind === 'milestone') return milestoneCard(it);
     var cur = it.stages[it.here];
@@ -770,6 +797,9 @@
     var items = results[1].filter(Boolean), clog = results[2];
     var order = { progress: 0, planned: 1, shipped: 2 };
     items.sort(function (a, b) { return order[a.group] - order[b.group] || (b.here - a.here) || ((b.released || b.created || 0) - (a.released || a.created || 0)); });
+    // then each item after the items it depends on, in its group (site/assets/order.js)
+    items = window.SdlcOrder.orderByDeps(items, function (it) { return it.group; });
+    items.forEach(function (it) { TITLES[it.name] = it.title; });
     var tab = ['overview', 'work', 'changelog'].indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : 'overview';
     var filter = 'all', query = '';
 
@@ -983,7 +1013,8 @@
         drawerEl.appendChild(dtoc);
       });
     });
-    side.innerHTML = '<div class="sidebox loopnote"><b>History</b>' + historyHtml(it) + issueHtml(it) + '</div>';
+    await loadDepTitles(it);
+    side.innerHTML = '<div class="sidebox loopnote">' + (depsHtml(it) ? '<b>Builds on</b>' + depsHtml(it) : '') + '<b>History</b>' + historyHtml(it) + issueHtml(it) + '</div>';
 
     wire(it, pdf);
   }
