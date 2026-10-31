@@ -216,7 +216,9 @@
     var names = [];
     try {
       var idx = await fetch(ROOT + 'index.json', { cache: 'no-cache' });
-      if (idx.ok && /json/.test(idx.headers.get('content-type') || '')) return (await idx.json()).filter(function (n) { return SAFE.test(n); });
+      if (idx.ok && /json/.test(idx.headers.get('content-type') || '')) {
+        return (await idx.json()).map(function (e) { if (typeof e === 'string') return e; if (e && e.kind === 'milestone') MILESTONES[e.name] = true; return e && e.name; }).filter(function (n) { return SAFE.test(n || ''); });
+      }
     } catch (e) { /* no index: ask the server */ }
     try {
       var r = await fetch(ROOT, { headers: { Accept: 'application/json' }, cache: 'no-cache' });
@@ -240,10 +242,13 @@
   // Each stage file is the English source; its front matter may name a translation beside it
   // (`translation: intent.pt-BR.md`, which says `source: intent.md (English)` back).
   var TR = /^[a-z0-9][a-z0-9._-]*\.md$/i;
+  // the items index.json marks as milestones: their folder has no stage file to ask for
+  var MILESTONES = {};
   async function loadItem(name) {
     var base = ROOT + name + '/';
+    if (MILESTONES[name]) return loadMilestone(name, base);
     var files = await Promise.all(STAGES.map(function (s) { return getText(base + s.f + '.md').catch(function () { return null; }); }));
-    if (!files.some(Boolean)) return null;
+    if (!files.some(Boolean)) return loadMilestone(name, base);
     var stages = await Promise.all(STAGES.map(async function (s, i) {
       var r = files[i];
       if (!r) return { f: s.f, name: s.name, fills: s.fills, missing: true, meta: { status: 'not started' }, hints: {}, body: '', raw: '', file: s.f + '.md' };
@@ -289,6 +294,33 @@
       translated: written.filter(function (s) { return s.tr; }).length, written: written.length,
       updated: dates.length ? Math.max.apply(null, dates) : null
     };
+  }
+  // A milestone (docs/work/<name>/milestone.md, `kind: milestone`): a marker on the project's history,
+  // not an SDLC item, so it has no stages. Front matter: title, summary, status (planned | in progress |
+  // done), after (the item it follows in Next), expected (the day it should be reached), reached (the
+  // day it was: it then shows on the Changelog), date (when it was written), and a translation.
+  async function loadMilestone(name, base) {
+    var r = await getText(base + 'milestone.md').catch(function () { return null; });
+    if (!r) return null;
+    var fm = frontMatter(r.text), M = fm.meta, tn = typeof M.translation === 'string' ? M.translation.split(/\s/)[0] : '';
+    var t = TR.test(tn) ? await getText(base + tn).catch(function () { return null; }) : null, tf = t ? frontMatter(t.text) : null;
+    var st = String(M.status || 'planned').toLowerCase();
+    var str = function (v) { return typeof v === 'string' ? v : ''; };
+    return {
+      kind: 'milestone', name: name, base: base, here: -1, stages: [], issue: '', release: '', target: '', lead: null,
+      group: st === 'done' ? 'shipped' : WORKING.test(st) ? 'progress' : 'planned', status: st, after: str(M.after),
+      created: M.date ? day(M.date) : NaN, expected: M.expected ? day(M.expected) : NaN, reached: M.reached ? day(M.reached) : NaN,
+      title: { en: str(M.title) || name, pt: (tf && str(tf.meta.title)) || str(M.title) || name },
+      summary: { en: str(M.summary), pt: (tf && str(tf.meta.summary)) || str(M.summary) },
+      doc: { en: { meta: M, hints: fm.hints, body: fm.body, raw: r.text, file: 'milestone.md' }, pt: tf ? { meta: tf.meta, hints: tf.hints, body: tf.body, raw: t.text, file: tn } : null }
+    };
+  }
+  // Milestones follow the item they name in `after:`, wherever the list puts it.
+  function placeAfter(list) {
+    var follows = function (m) { return m.kind === 'milestone' && m.after && list.some(function (x) { return x.name === m.after; }); };
+    var out = list.filter(function (x) { return !follows(x); });
+    list.filter(follows).forEach(function (m) { var i = out.findIndex(function (x) { return x.name === m.after; }); out.splice(i + 1, 0, m); });
+    return out;
   }
   // The stage being worked on: the first one with a working status (draft, in progress); else the last
   // one started, moving past it when it is approved (an accepted plan means Build is on, so it stays).
@@ -338,7 +370,24 @@
         (i < 5 && s.days != null ? '<span class="t">' + days(s.days) + '</span>' : '') + '</li>';
     }).join('') + '</ol>';
   }
+  var FLAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>';
+  function longDay(t) { return new Date(t).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }); }
+  // "Expected Thu, Nov 5 · in 5 days", or when it was reached
+  function milestoneWhen(it) {
+    if (it.group === 'shipped') return isNaN(it.reached) ? 'Reached' : 'Reached ' + longDay(it.reached);
+    if (isNaN(it.expected)) return 'No date yet';
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var left = Math.round((it.expected - today.getTime()) / 864e5);
+    return 'Expected <b>' + longDay(it.expected) + '</b> · ' + (left > 1 ? 'in ' + left + ' days' : left === 1 ? 'tomorrow' : left === 0 ? 'today' : (-left) + (left === -1 ? ' day' : ' days') + ' late');
+  }
+  function milestoneCard(it) {
+    return '<a class="wcard mile g-' + it.group + '" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
+      '<div class="wc-top"><span class="gtag mtag">' + FLAG + 'Milestone</span></div>' +
+      '<h3>' + esc(it.title[lang]) + '</h3>' + (it.summary[lang] ? '<p class="msum">' + esc(it.summary[lang]) + '</p>' : '') +
+      '<div class="wc-foot mwhen">' + milestoneWhen(it) + '</div></a>';
+  }
   function itemCard(it) {
+    if (it.kind === 'milestone') return milestoneCard(it);
     var cur = it.stages[it.here];
     var foot = ['Created ' + (shortDate(it.created) || '—')];
     if (it.group === 'shipped') { foot.push('shipped in <b>' + esc(it.release) + '</b>'); if (it.lead != null) foot.push(days(it.lead) + ' from intent to release'); }
@@ -419,9 +468,26 @@
     return out;
   }
   var KIND = { Added: 'add', Changed: 'chg', Fixed: 'fix', Security: 'sec', Removed: 'rem', Deprecated: 'rem' };
-  function changelogHtml(versions) {
+  function changelogHtml(versions, milestones) {
     var box = document.createElement('div'); box.className = 'clog';
+    // milestones on the timeline: an upcoming one (with an expected day) above everything, a reached one
+    // above the first release older than it
+    var marks = (milestones || []).filter(function (m) { return !isNaN(m.reached) || (m.group !== 'shipped' && !isNaN(m.expected)); });
+    var placed = marks.map(function (m) {
+      if (isNaN(m.reached)) return { m: m, at: 0 };
+      var i = versions.findIndex(function (v) { return !isNaN(v.date) && v.date < m.reached; });
+      return { m: m, at: i < 0 ? versions.length : i };
+    });
+    var markHtml = function (m) {
+      var sec = document.createElement('section'); sec.className = 'rel mile' + (m.group === 'shipped' ? ' reached' : ' upcoming');
+      sec.innerHTML = '<div class="rel-side"><span class="ver mver">' + FLAG + 'Milestone</span><span class="rdate">' + (m.group === 'shipped' ? new Date(m.reached).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : 'expected ' + longDay(m.expected)) + '</span></div>' +
+        '<div class="rel-body"><p class="rsum"><a href="' + itemHref(m.name) + '"></a></p>' + (m.summary[lang] ? '<p class="msum"></p>' : '') + '</div>';
+      sec.querySelector('.rsum a').textContent = m.title[lang];
+      if (m.summary[lang]) sec.querySelector('.msum').textContent = m.summary[lang];
+      return sec;
+    };
     versions.forEach(function (v, i) {
+      placed.filter(function (p) { return p.at === i; }).forEach(function (p) { box.appendChild(markHtml(p.m)); });
       var next = versions[i + 1], gap = next && !isNaN(v.date) && !isNaN(next.date) ? Math.round((v.date - next.date) / 864e5) : null;
       var sec = document.createElement('section'); sec.className = 'rel' + (v.version.toLowerCase() === 'unreleased' ? ' unrel' : '') + (v === versions.find(function (x) { return !isNaN(x.date); }) ? ' newest' : '');
       sec.id = 'v-' + slug(v.version);
@@ -438,6 +504,7 @@
       });
       box.appendChild(sec);
     });
+    placed.filter(function (p) { return p.at === versions.length; }).forEach(function (p) { box.appendChild(markHtml(p.m)); });
     return box;
   }
 
@@ -493,7 +560,7 @@
       header.querySelector('.title span').textContent = M.repo || 'docs/work/';
       var versions = clog ? parseChangelog(lang === 'pt' && clog.pt ? clog.pt : clog.en, items) : [];
       var latest = versions.find(function (v) { return !isNaN(v.date); });
-      var count = function (g) { return items.filter(function (it) { return it.group === g; }).length; };
+      var count = function (g) { return items.filter(function (it) { return it.group === g && it.kind !== 'milestone'; }).length; };
       var leads = items.map(function (it) { return it.lead; }).filter(function (x) { return x != null; });
       var med = median(leads);
       hero.innerHTML = '<div class="hero-in"><div class="hero-text">' + (M.kicker ? '<span class="kicker"></span>' : '') + '<h1></h1><p class="tagline"></p><div class="intro"></div>' + (M.generated_by ? '<p class="prov"></p>' : '') + '</div>' +
@@ -517,7 +584,9 @@
 
       // Overview
       var now = items.filter(function (it) { return it.group === 'progress'; }), next = items.filter(function (it) { return it.group === 'planned'; }), done = items.filter(function (it) { return it.group === 'shipped'; });
-      var byTarget = {}; next.forEach(function (it) { (byTarget[it.target || 'Later'] = byTarget[it.target || 'Later'] || []).push(it); });
+      next = placeAfter(next);
+      var groupOf = function (it) { var a = it.kind === 'milestone' && next.find(function (x) { return x.name === it.after; }); return (a ? a.target : it.target) || 'Later'; };
+      var byTarget = {}; next.forEach(function (it) { (byTarget[groupOf(it)] = byTarget[groupOf(it)] || []).push(it); });
       if (!items.length) panes.overview.innerHTML = emptyWork();
       else panes.overview.innerHTML = '<div class="lanes">' +
         '<section class="lane"><header><h2>Now</h2><span>' + now.length + ' in progress</span></header>' + (now.map(itemCard).join('') || '<p class="none">Nothing in progress.</p>') + '</section>' +
@@ -548,7 +617,7 @@
           if (!query) return true;
           return (it.title.en + ' ' + it.title.pt + ' ' + it.name + ' ' + it.issue + ' ' + it.release + ' ' + it.target).toLowerCase().indexOf(query.toLowerCase()) >= 0;
         });
-        panes.work.querySelector('.wlist').innerHTML = shown.map(itemCard).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
+        panes.work.querySelector('.wlist').innerHTML = placeAfter(shown).map(itemCard).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
         bindCards(panes.work);
       }
       panes.work.querySelectorAll('.chip').forEach(function (c) { c.addEventListener('click', function () { filter = c.dataset.f; panes.work.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', x === c); }); list(); }); });
@@ -557,7 +626,7 @@
 
       // Changelog
       panes.changelog.innerHTML = '';
-      if (versions.length) panes.changelog.appendChild(changelogHtml(versions));
+      if (versions.length) panes.changelog.appendChild(changelogHtml(versions, items.filter(function (it) { return it.kind === 'milestone'; })));
       else panes.changelog.innerHTML = '<div class="empty-state"><span class="kicker">Changelog</span><h3>No release recorded yet</h3><p>The <code>release</code> workflow adds each version to <code>CHANGELOG.md</code> when someone ships it at the Ship gate, with the items that went in. A repository that already has tags can generate the history from them, in a run you approve.</p></div>';
 
       bindCards(main);
@@ -593,14 +662,41 @@
   }
 
   // ---------- item ----------
+  // A milestone's page: its one document, with the front matter, the source and the EN/PT switch.
+  function milestonePage(root, it) {
+    var header = bar(it.title[lang], 'docs/work/' + it.name + '/', true);
+    var main = document.createElement('div'); main.className = 'home mpage';
+    function draw() {
+      header.querySelector('.title b').textContent = document.title = it.title[lang];
+      var d = lang === 'pt' && it.doc.pt ? it.doc.pt : it.doc.en, isTr = d !== it.doc.en;
+      var r = render(d.body, { prefix: 'milestone', base: it.base, takeTitle: true });
+      var keys = Object.keys(d.meta).filter(function (k) { return k !== 'kind'; });
+      main.innerHTML = '<article class="panel" lang="' + (isTr ? 'pt-BR' : 'en') + '"><div class="eyebrow">Milestone · ' + esc(d.file) + ' · <span class="kind">' + (isTr ? 'translation' : 'source') + '</span></div><h1></h1>' +
+        '<p class="mwhen big">' + milestoneWhen(it) + '</p>' +
+        (lang === 'pt' && !it.doc.pt ? '<p class="notice" lang="en"><b>Translation missing.</b> No pt-BR translation for this file; showing the English source.</p>' : '') +
+        '<dl class="meta">' + keys.map(function (k) { var v = Array.isArray(d.meta[k]) ? d.meta[k].join(', ') : d.meta[k]; return '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + (d.hints[k] ? '<small>' + esc(d.hints[k]) + '</small>' : '') + '</dd></div>'; }).join('') + '</dl></article>';
+      main.querySelector('h1').textContent = r.title || it.title[lang];
+      r.el.className = 'doc'; main.querySelector('article').appendChild(r.el);
+      var raw = document.createElement('details'); raw.className = 'raw';
+      raw.innerHTML = '<summary>Markdown source: ' + esc(d.file) + ' (what is committed)</summary><pre></pre>';
+      raw.querySelector('pre').textContent = d.raw;
+      main.querySelector('article').appendChild(raw);
+    }
+    header.querySelector('.actions').before(langSwitch(draw));
+    root.appendChild(header); root.appendChild(main);
+    draw();
+  }
+
   async function item() {
     var root = document.getElementById('app');
     // ?item= names the item; the last one opened from the list covers a host that drops the query string
     var params = new URLSearchParams(location.search), name = params.get('item') || store.get('last-item') || '';
     await loadConfig();
     if (!SAFE.test(name)) { root.innerHTML = '<p class="status-msg">Pick an item on the <a href="' + HOME + '">list</a>.</p>'; return; }
+    await listItems().catch(function () { return []; });   // marks the milestones
     var it = await loadItem(name);
     if (!it) { root.innerHTML = '<p class="status-msg">No markdown found in <code>docs/work/' + esc(name) + '/</code>. <a href="' + HOME + '">All items</a></p>'; return; }
+    if (it.kind === 'milestone') { milestonePage(root, it); return; }
     document.title = it.title[lang];
     var header = bar(it.title[lang], 'docs/work/' + it.name + '/', true);
     var flow = document.createElement('nav'); flow.className = 'flow'; flow.setAttribute('aria-label', 'AI-native SDLC stages');
