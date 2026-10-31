@@ -484,3 +484,17 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
 .subs li.has-kids>details>summary .stt::after{content:" ▾";font-size:9px}
 .subs li.has-kids>details[open]>summary .stt::after{content:" ▴"}
 .subs li ul{padding:6px 0 4px 22px;border-left:1px dashed var(--line);margin:6px 0 2px 3px}
+
+/* phone: the spine's cards run to the screen's edge as rows (no side borders, no corners), the Today
+   band is a tinted strip with no frame, and a card inside it drops its own border: one line, not boxes */
+@media (max-width:760px){
+  .spine{--bleed:max(16px,env(safe-area-inset-right,0px))}
+  .spine .scard>.cblock,.spine .scard>.wcard,.spine .scard>.rcard,.wlist>.cblock{border-left:0;border-right:0;border-radius:0;margin-right:calc(-1 * var(--bleed))}
+  .wlist>.cblock{margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)))}
+  .srow.today{border:0;border-radius:0;margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)));margin-right:calc(-1 * var(--bleed));padding:18px var(--bleed) 18px max(16px,env(safe-area-inset-left,0px));border-top:1px solid color-mix(in oklab,var(--accent) 30%,var(--line));border-bottom:1px solid color-mix(in oklab,var(--accent) 30%,var(--line))}
+  .srow.today .scard>.cblock,.srow.today .scard>.wcard{border:0;margin:0 calc(-1 * var(--bleed)) 0 0;background:transparent}
+  .srow.today .scard>.cblock>.wcard{padding-left:0;background:transparent}
+  .srow.today .subs summary,.srow.today .subs ul{padding-left:0}
+  .wlist{gap:0}
+  .wlist>.cblock+.cblock{border-top:0}
+}
