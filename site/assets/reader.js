@@ -393,13 +393,6 @@
       doc: { en: { meta: M, hints: fm.hints, body: fm.body, raw: r.text, file: 'milestone.md' }, pt: tf ? { meta: tf.meta, hints: tf.hints, body: tf.body, raw: t.text, file: tn } : null }
     };
   }
-  // Milestones follow the item they name in `after:`, wherever the list puts it.
-  function placeAfter(list) {
-    var follows = function (m) { return m.kind === 'milestone' && m.after && list.some(function (x) { return x.name === m.after; }); };
-    var out = list.filter(function (x) { return !follows(x); });
-    list.filter(follows).forEach(function (m) { var i = out.findIndex(function (x) { return x.name === m.after; }); out.splice(i + 1, 0, m); });
-    return out;
-  }
   // The plan's Progress table (`## Progress` / `## Progresso`): its rows, and the ones whose Status says done.
   function planProgress(body) {
     var lines = String(body || '').split('\n'), at = lines.findIndex(function (l) { return /^##\s+(progress|progresso)\b/i.test(l); });
@@ -465,7 +458,7 @@
   // in a stage sits on the line that leaves it.
   function flowDots(it) {
     return '<ol class="fdots" aria-label="Stages">' + it.stages.map(function (s, i) {
-      var cls = s.here && it.group !== 'shipped' ? 'here' : i < it.here || (s.here && it.group === 'shipped') ? 'done' : 'todo';
+      var cls = s.here && it.group !== 'shipped' ? (s.missing ? 'next' : 'here') : i < it.here || (s.here && it.group === 'shipped') ? 'done' : 'todo';
       var tip = SHORT[i] + ' · ' + (s.missing ? 'not started' : (s.meta.status || '')) + (isNaN(s.at) ? '' : ' · ' + shortDate(s.at)) + (s.days != null ? ' · ' + days(s.days) + (s.ongoing ? ' so far' : '') : '');
       return '<li class="fd ' + cls + (s.ongoing ? ' ongoing' : '') + '" title="' + esc(tip) + '"><span class="d" aria-hidden="true"></span><span class="l">' + SHORT[i] + '<span class="sr"> ' + (cls === 'done' ? 'done' : cls === 'here' ? 'current' : 'to do') + '</span></span>' +
         (i < 5 && s.days != null ? '<span class="t">' + days(s.days) + '</span>' : '') + '</li>';
@@ -563,7 +556,7 @@
     else { if (cur.days != null) foot.push(days(cur.days) + ' in ' + SHORT[it.here]); if (it.target) foot.push('target <b>' + esc(it.target) + '</b>'); }
     if (lastPr(it)) foot.push(esc(lastPr(it)));
     return '<a class="wcard g-' + it.group + '" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
-      '<div class="wc-top"><span class="gtag">' + GROUPS[it.group] + (it.group === 'shipped' ? '' : ' · ' + SHORT[it.here]) + '</span>' + refHtml(it) + '</div>' +
+      '<div class="wc-top"><span class="gtag">' + GROUPS[it.group] + (it.group === 'shipped' ? '' : ' · ' + (cur.missing ? 'next: ' : '') + SHORT[it.here]) + '</span>' + refHtml(it) + '</div>' +
       '<h3>' + esc(it.title[lang]) + '</h3>' + flowDots(it) +
       '<div class="wc-foot">' + foot.join(' · ') + '</div></a>';
   }
@@ -703,7 +696,7 @@
       rows.push('<div class="srow ' + kind + ' ' + (side % 2 ? 'side-r' : 'side-l') + '"><div class="snode" aria-hidden="true">' + node + '</div><div class="scard">' + card + '</div><div class="smeta">' + (meta || '') + '</div></div>');
     }
     var sep = function (label) { rows.push('<div class="ssep"><span>' + label + '</span></div>'); };
-    var ahead = placeAfter(items.filter(function (it) { return it.group === 'planned'; })).reverse();
+    var ahead = items.filter(function (it) { return it.group === 'planned'; }).reverse();
     var now = items.filter(function (it) { return it.group === 'progress'; });
     var nextStop = items.filter(function (it) { return it.kind === 'milestone' && it.group !== 'shipped' && !isNaN(it.expected) && it.expected >= T; })
       .sort(function (a, b) { return a.expected - b.expected; })[0];
@@ -799,6 +792,10 @@
     items.sort(function (a, b) { return order[a.group] - order[b.group] || (b.here - a.here) || ((b.released || b.created || 0) - (a.released || a.created || 0)); });
     // then each item after the items it depends on, in its group (site/assets/order.js)
     items = window.SdlcOrder.orderByDeps(items, function (it) { return it.group; });
+    // a milestone is the last stop of its group's roadmap (the top of the spine's Ahead)
+    items = items.map(function (it, i) { return { it: it, i: i }; }).sort(function (a, b) {
+      return order[a.it.group] - order[b.it.group] || (a.it.kind === 'milestone') - (b.it.kind === 'milestone') || a.i - b.i;
+    }).map(function (x) { return x.it; });
     items.forEach(function (it) { TITLES[it.name] = it.title; });
     var tab = ['overview', 'work', 'changelog'].indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : 'overview';
     var filter = 'all', query = '';
@@ -858,7 +855,7 @@
           if (!query) return true;
           return (it.title.en + ' ' + it.title.pt + ' ' + it.name + ' ' + it.issue + ' ' + it.release + ' ' + it.target).toLowerCase().indexOf(query.toLowerCase()) >= 0;
         });
-        panes.work.querySelector('.wlist').innerHTML = placeAfter(shown).map(cardBlock).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
+        panes.work.querySelector('.wlist').innerHTML = shown.map(cardBlock).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
         bindCards(panes.work);
       }
       panes.work.querySelectorAll('.chip').forEach(function (c) { c.addEventListener('click', function () { filter = c.dataset.f; panes.work.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', x === c); }); list(); }); });
@@ -1020,7 +1017,9 @@
   }
 
   function wire(it, pdfBtn) {
-    var current = it.stages[it.here].f, links = [], targets = [], ticking = false, idxOn = 0;
+    // the page opens on the current stage, or on the last written one when the current has no document yet
+    var opening = it.stages.slice(0, it.here + 1).reverse().find(function (st) { return !st.missing; }) || it.stages[it.here];
+    var current = opening.f, links = [], targets = [], ticking = false, idxOn = 0;
     function key() { return current + (lang === 'pt' ? '@pt' : ''); }
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var mobile = function () { return window.innerWidth <= 760; };
