@@ -44,3 +44,10 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
   runs on any engine whatever fronts it ships. The day a front ships a workflow of its own, its
   `engine/` could register the steps that workflow needs (`fronts.md`, "What stays in the engine
   kernel"), and a one-front engine would refuse a workflow whose steps no served front provides.
+- First project onboarding (#628, epic; phases #629-#634): a four-step wizard, ways of working as
+  Local or Local + remote with CI as its own axis, feature / fix / release workflows, a per-project
+  work model aligned with Anthropic's AI-native SDLC, and last a Monitor menu group. Intent accepted
+  and spec signed off on 2026-10-31: the artifacts are in
+  [docs/work/first-project-onboarding/](../work/first-project-onboarding/spec.md), the proposal with
+  the options in [docs/first-project-onboarding-proposal-2026-10/](../first-project-onboarding-proposal-2026-10/README.md).
+  The implementing run records the decisions in decisions.md.
