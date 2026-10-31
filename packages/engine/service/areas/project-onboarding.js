@@ -14,6 +14,7 @@
 // its jobs run loses its state; no error of a job escapes the chain.
 
 const path = require('path');
+const Platforms = require('@multiagent/shared/platforms');
 const agents = require('../../domains/agents/agents');
 const issues = require('../../domains/backlog/issues');
 const priority = require('../../domains/refactor/refactor-priority');
@@ -37,11 +38,8 @@ function accessReason(access) {
 }
 
 // 'github' | 'gitlab' (a platform with a CLI) from the repository's URL, null for another host
-function providerOf(repo) {
-  const parsed = issues.parseRepoUrl(repo);
-  const platform = parsed && issues.platformOfHost(parsed.host);
-  return issues.PLATFORMS[platform]?.cli ? platform : null;
-}
+// (the registry's rule, the one the wizard shows: packages/shared/platforms/index.js)
+const providerOf = (repo) => Platforms.platformOfRepoUrl(repo)?.id || null;
 
 // the cli part of the state from what the check answered
 function cliState(provider, found) {

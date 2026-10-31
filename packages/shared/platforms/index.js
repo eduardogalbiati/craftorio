@@ -6,6 +6,9 @@
 // - resolvePlatform(name): the adapter, or an error naming the unknown platform;
 // - findPlatform(name): the adapter or null; platformOrDefault(name): the adapter or GitHub's;
 // - platformOfUrl(url): the adapter an issue, pull request or merge request URL belongs to, or null;
+// - parseRepoUrl(url): a repository URL (https, ssh, scp form) → { host, path: 'owner/repo' } or null;
+// - platformOfRepoUrl(url): the adapter of a repository URL's host (github.com, gitlab.com), or null
+//   (another host, a self-hosted server): the engine's onboarding and the wizard read the provider here (#641);
 // - requestRef(name, number): "PR #12" / "MR !12";
 // - rawFileUrl(name, repo, file): a public raw read of one file, GitLab's form for an unknown host.
 // Browser: window.Platforms (loads after the adapters); Node: module.exports.
@@ -34,6 +37,22 @@
     return PLATFORMS.find((p) => p.parseIssueUrl(url) || p.parseTargetUrl(url)?.kind === 'pr') || null;
   }
 
+  // https://host/owner/repo(.git), ssh://git@host/owner/repo.git, git@host:owner/repo.git
+  // → { host, path: 'owner/repo' } (GitLab paths may have subgroups), or null
+  function parseRepoUrl(url) {
+    const s = String(url || '').trim().replace(/[?#].*$/, '');
+    const m = s.match(/^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i) || s.match(/^[\w.-]+@([\w.-]+):(.+)$/);
+    if (!m) return null;
+    const repoPath = m[2].replace(/\/+$/, '').replace(/\.git$/i, '');
+    if (!repoPath.includes('/')) return null;
+    return { host: m[1].toLowerCase(), path: repoPath };
+  }
+
+  function platformOfRepoUrl(url) {
+    const parsed = parseRepoUrl(url);
+    return (parsed && PLATFORMS.find((p) => p.host === parsed.host)) || null;
+  }
+
   // "PR #12" / "MR !12" (GitHub's terms when the platform is unknown)
   function requestRef(name, number) {
     const r = platformOrDefault(name).request;
@@ -46,7 +65,7 @@
     return (findPlatform(name) || findPlatform('gitlab')).rawFileUrl(repo, file);
   }
 
-  const api = { DEFAULT_PLATFORM, findPlatform, platformOfUrl, platformOrDefault, PLATFORMS, rawFileUrl, requestRef, resolvePlatform };
+  const api = { DEFAULT_PLATFORM, findPlatform, parseRepoUrl, platformOfRepoUrl, platformOfUrl, platformOrDefault, PLATFORMS, rawFileUrl, requestRef, resolvePlatform };
   if (node) module.exports = api;
   else root.Platforms = api;
 })(typeof window !== 'undefined' ? window : globalThis);

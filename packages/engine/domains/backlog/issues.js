@@ -20,18 +20,8 @@ const PLATFORMS = {
 const { DEFAULT_PLATFORM } = Platforms;
 const MAX_ISSUES = 300;
 
-/**
- * https://host/owner/repo(.git), ssh://git@host/owner/repo.git, git@host:owner/repo.git
- * → { host, path: 'owner/repo' } (GitLab paths may have subgroups), or null.
- */
-function parseRepoUrl(url) {
-  const s = String(url || '').trim().replace(/[?#].*$/, '');
-  const m = s.match(/^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i) || s.match(/^[\w.-]+@([\w.-]+):(.+)$/);
-  if (!m) return null;
-  const repoPath = m[2].replace(/\/+$/, '').replace(/\.git$/i, '');
-  if (!repoPath.includes('/')) return null;
-  return { host: m[1].toLowerCase(), path: repoPath };
-}
+// a repository URL → { host, path: 'owner/repo' } or null (the registry's, shared with the renderer: #641)
+const { parseRepoUrl } = Platforms;
 
 // The platform a well-known host belongs to (self-hosted hosts: unknown).
 const platformOfHost = (host) => Object.keys(PLATFORMS).find((p) => PLATFORMS[p].host === host) || null;

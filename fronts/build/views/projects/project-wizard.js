@@ -10,8 +10,12 @@
 //   data-part="projectMap" | "ranking" before the click, wizard-analyze, wizard-skip) and review (a placeholder:
 //   step 5). Navigation: wizard-back, wizard-next, wizard-close (Esc too).
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
-//   (api.retryOnboarding); the gh / glab warning wizard-cli-warning data-error="cli-missing" | "cli-signed-out"
-//   (the import goes on) with Open Setup.
+//   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
+//   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
+//   "cli-signed-out" (the import goes on) with Open Setup, on the repository and the analysis steps.
+// - the provider (its label, its CLI) is the adapter of window.Platforms.platformOfRepoUrl, the engine's rule too;
+//   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus
+//   back to what opened it.
 // - #onboarding-tray (data-testid="onboarding-tray"): one tray-item per imported project (data-project,
 //   data-status = the engine's status), its name, and when failed the reason and Retry; it follows
 //   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads) and stays when the wizard closes.
@@ -21,7 +25,6 @@
 
 (function () {
   const M = window.OnboardingModel;
-  const PROVIDERS = { github: 'GitHub', gitlab: 'GitLab' };
   const JOBS = ['facts', 'profile', 'projectMap', 'ranking'];
   const PAID = ['projectMap', 'ranking'];
   // the engine's statuses past the clone: the repository step goes on to the analysis by itself
@@ -32,11 +35,14 @@
   let tray = null;
   // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy }
   let cur = null;
+  let opener = null; // the element that had the focus when the wizard opened
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
 
-  const providerOf = (url) => (/gitlab/i.test(url || '') ? 'gitlab' : /github/i.test(url || '') ? 'github' : null);
-  const money = (n) => (n > 0 && n < 0.01 ? '< $0.01' : `$${Number(n).toFixed(2)}`);
+  const platformOfRepo = (url) => window.Platforms?.platformOfRepoUrl?.(url) || null;
+  const platformById = (id) => window.Platforms?.findPlatform?.(id) || null;
+  const usd = (n) => (window.I18n?.formatCost ? window.I18n.formatCost(n) : `$${Number(n).toFixed(2)}`);
+  const money = (n) => (n > 0 && n < 0.01 ? `< ${usd(0.01)}` : usd(n));
   const costText = (n) => (n == null ? t('onboarding.cost_not_known') : money(n));
   const statusText = (s) => t(`onboarding.status_${s}`);
   const canNext = () => M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy;
@@ -63,20 +69,22 @@
 
   function errorBlock(o) {
     const code = o.code || 'failed';
-    const provider = PROVIDERS[o.cli?.provider || providerOf(cur.model.repository)] || '';
+    const provider = (platformById(o.cli?.provider) || platformOfRepo(cur.model.repository))?.label || '';
     const signIn = code === 'no-access' && provider
       ? `<button type="button" class="btn" data-act="setup">${esc(t('onboarding.sign_in', { provider }))}</button>` : '';
+    const edit = code === 'no-access' && cur.model.step === 'repository'
+      ? `<button type="button" class="btn ghost" data-act="edit-repo" data-testid="wizard-edit-repo">${esc(t('onboarding.edit_repo'))}</button>` : '';
     return `<div class="wizard-alert error" role="alert" data-testid="wizard-error" data-error="${esc(code)}">
         <strong>${esc(t(code === 'no-access' ? 'onboarding.no_access' : code === 'clone-failed' ? 'onboarding.clone_failed' : 'onboarding.failed'))}</strong>
         <p>${esc(o.reason || t('onboarding.no_reason'))}</p>
         <p class="muted small">${esc(t(code === 'no-access' ? 'onboarding.no_access_hint' : 'onboarding.failed_hint'))}</p>
-        <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry">${esc(t('onboarding.retry'))}</button>${signIn}</div>
+        <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry">${esc(t('onboarding.retry'))}</button>${signIn}${edit}</div>
       </div>`;
   }
 
   function cliWarning(cli) {
     if (!cli || !['missing', 'signed-out'].includes(cli.status)) return '';
-    const name = cli.provider === 'gitlab' ? 'glab' : 'gh';
+    const name = platformById(cli.provider)?.cli || cli.provider || '';
     return `<div class="wizard-alert warn" data-testid="wizard-cli-warning" data-error="cli-${esc(cli.status)}">
         <strong>${esc(t(cli.status === 'missing' ? 'onboarding.cli_missing' : 'onboarding.cli_signed_out', { cli: name }))}</strong>
         <p>${esc(cli.reason || '')}</p>
@@ -88,7 +96,7 @@
   function repositoryStep() {
     const o = cur.onboarding;
     const locked = cur.projectId ? ' readonly' : '';
-    const provider = PROVIDERS[providerOf(cur.model.repository)] || '';
+    const provider = platformOfRepo(cur.model.repository)?.label || '';
     const status = o ? `<div class="card wizard-import" data-testid="wizard-import-status">
         <div class="wizard-import-head"><strong>${esc(cur.model.name)}</strong><span class="badge status-${esc(o.status)}">${esc(statusText(o.status))}</span></div>
         <span class="muted small wizard-url" title="${esc(cur.model.repository)}">${esc(cur.model.repository)}</span>
@@ -131,7 +139,7 @@
       const s = jobs[id]?.status || 'waiting';
       return `<li><span>${esc(t(`onboarding.job_${id}`))}</span><span class="badge job-${esc(s)}">${esc(t(`onboarding.job_status_${s}`))}</span></li>`;
     }).join('');
-    const actions = started ? `<p class="muted small">${esc(t('onboarding.analysis_running'))}</p>`
+    const actions = started ? `<p class="muted small">${esc(t(o.status === 'analyzed' ? 'onboarding.analysis_done' : 'onboarding.analysis_running'))}</p>`
       : `<div class="wizard-actions">
           <button type="button" class="btn primary" data-act="analyze" data-testid="wizard-analyze"${cur.busy ? ' disabled' : ''}>${esc(t('onboarding.start_analysis'))}</button>
           <button type="button" class="btn ghost" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>
@@ -140,6 +148,7 @@
       <ul class="wizard-jobs">${rows}</ul>
       ${started ? '' : costBlock()}
       ${o.status === 'failed' ? errorBlock(o) : ''}
+      ${cliWarning(o.cli)}
       ${actions}`;
   }
 
@@ -247,6 +256,12 @@
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
     else if (act === 'analyze' && cur.projectId) await call(() => api.analyzeOnboarding(cur.projectId));
     else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); render(); }
+    else if (act === 'edit-repo') {
+      // a new import from the same fields; the failed one stays in the tray with its Retry
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined };
+      render();
+      document.getElementById('wizard-repo')?.focus?.();
+    }
     else if (act === 'setup') openSetup();
   }
 
@@ -256,20 +271,31 @@
     if (!cur || (id !== 'wizard-repo' && id !== 'wizard-name')) return;
     cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: String(e.target.value || '') };
     const provider = document.getElementById('wizard-provider');
-    if (provider) provider.textContent = PROVIDERS[providerOf(cur.model.repository)] || '';
+    if (provider) provider.textContent = platformOfRepo(cur.model.repository)?.label || '';
     const nextBtn = document.getElementById('wizard-next');
     if (nextBtn) nextBtn.disabled = !canNext();
   }
 
+  // Tab stays inside the dialog (diff-viewer.js's trapFocus)
+  function trapFocus(e) {
+    const list = [...(root.querySelectorAll?.('button:not([disabled]), input, select, [tabindex="0"]') || [])].filter((x) => x.offsetParent !== null);
+    if (!list.length) return;
+    const i = list.indexOf(document.activeElement);
+    const to = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : (i + 1) % list.length;
+    e.preventDefault();
+    list[to].focus({ preventScroll: true });
+  }
+
   function onKey(e) {
     if (e.key === 'Escape') close();
+    else if (e.key === 'Tab') trapFocus(e);
     else if (e.key === 'Enter' && e.target?.tagName === 'INPUT') next();
   }
 
   function open() {
+    opener = document.activeElement || null;
     if (!root) {
       root = document.createElement('div');
-      root.id = 'project-wizard';
       root.setAttribute('id', 'project-wizard');
       root.setAttribute('data-testid', 'project-wizard');
       root.setAttribute('role', 'dialog');
@@ -293,6 +319,9 @@
     if (!root) return;
     root.hidden = true;
     root.innerHTML = '';
+    const back = opener;
+    opener = null;
+    if (back?.isConnected !== false) back?.focus?.();
   }
 
   // ---- the progress tray -----------------------------------------------------------------------
@@ -300,7 +329,6 @@
   function renderTray() {
     if (!tray) {
       tray = document.createElement('aside');
-      tray.id = 'onboarding-tray';
       tray.setAttribute('id', 'onboarding-tray');
       tray.setAttribute('data-testid', 'onboarding-tray');
       tray.setAttribute('aria-live', 'polite');
