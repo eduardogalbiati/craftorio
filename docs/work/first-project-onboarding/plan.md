@@ -76,5 +76,5 @@ Filled in by the Code & Build workflows at each step: the run, the commit and th
 | 3. Jobs and channels | done | 20261031-153207-02654e57 | 966d1595, local merge into main |
 | 4. Wizard in the UI | done | 20261031-162314-a4a4f350 | 30387301, local merge into main |
 | 5. Review and Next steps | done | 20261031-172436-27d42531 | 7d2dc763, local merge into main |
-| 6. Setup and Projects | pending | — | — |
+| 6. Setup and Projects | done | 20261031-190527-a05ce99e | d75195af, local merge into main |
 | 7. Seed, E2E, i18n, docs | pending | — | — |
