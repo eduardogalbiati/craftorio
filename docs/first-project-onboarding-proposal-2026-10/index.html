@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Project Onboarding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: proposta longa em uma coluna de leitura (~900px) com índice fixo à esquerda no desktop;
+   as telas mock saem da coluna e ocupam a largura toda, sempre no tema escuro do app (o único dele). */
+:root{
+  --bg:#f5f6fa; --paper:#ffffff; --ink:#1a1d27; --soft:#5b6275; --line:#dfe2ea;
+  --accent:#3b55d4; --accent-wash:#e8ecfc; --rec:#137a4b; --rec-wash:#e3f4ea; --warn:#9a6a00; --warn-wash:#fbf1d6; --con:#b0332b;
+  --display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  /* app tokens (packages/ui-kit/style.css), fixos: as mocks mostram o app */
+  --a-bg:#0e1014; --a-panel:#151820; --a-panel2:#1b1f29; --a-border:#262b37; --a-text:#e6e8ee; --a-muted:#8a91a3;
+  --a-accent:#7c9cff; --a-green:#4ade80; --a-yellow:#facc15; --a-red:#f87171; --a-purple:#c084fc; --a-info:#7dd3fc;
+  /* tokens do projeto de exemplo (demo-app): claro, teal */
+  --p-bg:#f7f8f7; --p-surface:#ffffff; --p-ink:#13201d; --p-muted:#5f6e6a; --p-line:#e1e7e5; --p-brand:#0f766e; --p-brand-wash:#d9f0ec; --p-amber:#b45309;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1117; --paper:#161922; --ink:#e7e9f0; --soft:#9aa1b4; --line:#2a2f3c;
+  --accent:#8fa6ff; --accent-wash:#1e2540; --rec:#5fd497; --rec-wash:#13291e; --warn:#f0c64a; --warn-wash:#2c2510; --con:#f2867d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1117; --paper:#161922; --ink:#e7e9f0; --soft:#9aa1b4; --line:#2a2f3c;
+  --accent:#8fa6ff; --accent-wash:#1e2540; --rec:#5fd497; --rec-wash:#13291e; --warn:#f0c64a; --warn-wash:#2c2510; --con:#f2867d; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.6;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;font-size:13px}
+nav.toc b{display:block;font-family:var(--display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);margin-bottom:8px}
+nav.toc a{display:block;color:var(--soft);text-decoration:none;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent);border-left-color:var(--accent);outline:none}
+main{min-width:0}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)} nav.toc{display:none}}
+
+h1,h2,h3,h4{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(34px,5vw,52px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:clamp(25px,3vw,32px);font-weight:700;margin-top:72px;padding-top:24px;border-top:1px solid var(--line)}
+h3{font-size:20px;font-weight:700;margin-top:36px}
+h4{font-size:16px;font-weight:700}
+p{margin:10px 0;max-width:72ch}
+.lede{font-size:18px;color:var(--soft);max-width:66ch}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:var(--accent-wash);padding:1px 5px;border-radius:4px}
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+
+.tldr{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-top:28px}
+.tldr ol{margin:8px 0 0;padding-left:20px}
+.tldr li{margin:6px 0}
+.answer{margin-top:16px;background:var(--accent-wash);border-radius:12px;padding:18px 22px}
+.answer h3{margin-top:0;font-size:18px}
+
+figure{margin:18px 0 0}
+figure img{display:block;border-radius:8px;border:1px solid var(--line)}
+figcaption{font-size:13px;color:var(--soft);margin-top:8px;max-width:80ch}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+
+/* camadas */
+.layers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px;margin-top:16px}
+.layer{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;position:relative}
+.layer .n{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.layer h4{margin:4px 0}
+.layer p{font-size:13.5px;color:var(--soft);margin:4px 0 0}
+.layer.base{border-color:var(--accent)}
+
+/* fluxo */
+.flow{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;counter-reset:st}
+.flow a{flex:1 1 150px;min-width:0;text-decoration:none;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;position:relative}
+.flow a:hover,.flow a:focus-visible{border-color:var(--accent);outline:none}
+.flow a .k{font-family:var(--mono);font-size:11.5px;color:var(--accent)}
+.flow a b{display:block;font-size:14px;line-height:1.3;margin:2px 0}
+.flow a span.d{font-size:12px;color:var(--soft)}
+.flow a.today{background:transparent;border-style:dashed}
+
+.step{margin-top:56px}
+.step-head{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.step-num{font-family:var(--display);font-weight:700;font-size:44px;line-height:1;color:var(--accent)}
+.step-head h3{margin:0;font-size:24px}
+
+/* decisões */
+.decision{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-top:18px}
+.d-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.d-id{font-family:var(--mono);font-size:12px;font-weight:500;background:var(--accent-wash);color:var(--accent);padding:2px 7px;border-radius:5px}
+.d-q{color:var(--soft);font-size:14px;margin:6px 0 12px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px}
+.opt{border:1px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13.5px;line-height:1.5}
+.opt b{display:block;font-size:14px;margin-bottom:4px}
+.opt .pro{color:var(--ink)} .opt .pro::before{content:"+ ";color:var(--rec);font-weight:600}
+.opt .con{color:var(--soft)} .opt .con::before{content:"− ";color:var(--con);font-weight:600}
+.opt p{margin:3px 0}
+.opt.rec{border:1.5px solid var(--rec);background:var(--rec-wash)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:2px}
+.tag.r{background:var(--rec);color:var(--paper)}
+.tag.l{background:var(--warn-wash);color:var(--warn)}
+.why{font-size:14px;margin:12px 0 0;max-width:none}
+.why b{color:var(--rec)}
+
+/* telas mock: frame */
+.screen{margin-top:18px;overflow-x:auto;border-radius:12px;border:1px solid var(--line);background:#07080b}
+.screen-cap{font-size:13px;color:var(--soft);margin-top:8px}
+.app{min-width:980px;background:var(--a-bg);color:var(--a-text);font-family:var(--body);font-size:12.5px;line-height:1.45;border-radius:11px;overflow:hidden}
+.app *{box-sizing:border-box}
+.a-top{display:flex;align-items:center;gap:14px;height:44px;padding:0 14px;border-bottom:1px solid var(--a-border)}
+.a-brand{font-weight:600;font-size:13px}.a-brand em{font-style:normal;color:var(--a-accent)}
+.a-sel{border:1px solid var(--a-border);border-radius:6px;padding:4px 10px;color:var(--a-text);min-width:150px;display:flex;justify-content:space-between;gap:8px}
+.a-sel::after{content:"▾";color:var(--a-muted)}
+.a-sp{flex:1}
+.a-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--a-border);background:transparent;color:var(--a-text);border-radius:6px;padding:5px 10px;font:inherit;font-weight:500;white-space:nowrap}
+.a-btn.p{background:var(--a-accent);border-color:var(--a-accent);color:#0b0e18}
+.a-btn.s{padding:3px 8px;font-size:11.5px}
+.a-body{display:grid;grid-template-columns:168px minmax(0,1fr)}
+.a-side{border-right:1px solid var(--a-border);padding:10px 8px;min-height:440px}
+.a-grp{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--a-muted);margin:12px 6px 4px}
+.a-item{padding:5px 8px;border-radius:6px;color:var(--a-text);display:flex;justify-content:space-between;align-items:center}
+.a-item.on{background:var(--a-panel2)}
+.a-item.new{outline:1.5px dashed var(--a-accent);outline-offset:-1px}
+.a-badge{font-size:9.5px;font-weight:600;letter-spacing:.05em;padding:1px 5px;border-radius:4px;background:rgba(124,156,255,.16);color:var(--a-accent)}
+.a-badge.lab{background:rgba(192,132,252,.16);color:var(--a-purple)}
+.a-main{padding:18px 22px;min-width:0}
+.a-h1{font-size:18px;font-weight:700;margin:0}
+.a-help{color:var(--a-muted);margin:4px 0 14px;max-width:80ch}
+.a-panel{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;padding:12px 14px}
+.a-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.a-muted{color:var(--a-muted)}
+.a-mono{font-family:var(--mono);font-size:11.5px}
+.a-pill{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid var(--a-border);color:var(--a-muted)}
+.a-pill.g{color:var(--a-green);border-color:rgba(74,222,128,.35)}
+.a-pill.y{color:var(--a-yellow);border-color:rgba(250,204,21,.35)}
+.a-pill.b{color:var(--a-accent);border-color:rgba(124,156,255,.4)}
+.a-tabs{display:flex;gap:16px;border-bottom:1px solid var(--a-border);margin-bottom:14px}
+.a-tabs span{padding:6px 2px;color:var(--a-muted)}
+.a-tabs span.on{color:var(--a-text);border-bottom:2px solid var(--a-accent)}
+.a-empty{border:1px dashed var(--a-border);border-radius:10px;padding:26px;text-align:center}
+.a-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;text-align:left}
+.a-steps .a-panel b{display:block;margin-bottom:4px}
+.a-field{border:1px solid var(--a-border);background:var(--a-panel2);border-radius:6px;padding:6px 9px;color:var(--a-muted)}
+.a-chk{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.a-chk i{flex:none;width:13px;height:13px;border:1px solid var(--a-muted);border-radius:3px;margin-top:2px}
+.a-chk i.on{background:var(--a-accent);border-color:var(--a-accent)}
+.a-radio i{border-radius:50%}
+
+/* biblioteca do kit */
+.kit{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px}
+.kit-nav .a-item{font-size:12px}
+.sw{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.sw div{border:1px solid var(--a-border);border-radius:6px;overflow:hidden;font-size:10.5px}
+.sw div span{display:block;height:34px}
+.sw div p{margin:0;padding:4px 6px;color:var(--a-muted);font-family:var(--mono);font-size:10px}
+.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.comp{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;overflow:hidden}
+.comp .stage{background:var(--p-bg);padding:14px;min-height:78px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-family:var(--body)}
+.comp .meta{padding:7px 10px;display:flex;justify-content:space-between;gap:6px;align-items:center}
+.comp.gap{border-style:dashed;border-color:rgba(250,204,21,.45)}
+
+/* componentes do projeto de exemplo */
+.pb{border:0;border-radius:8px;padding:7px 13px;font:500 12px var(--body);background:var(--p-brand);color:#fff}
+.pb.ghost{background:transparent;color:var(--p-brand);box-shadow:inset 0 0 0 1px var(--p-brand)}
+.pin{border:1px solid var(--p-line);border-radius:8px;padding:6px 9px;background:#fff;color:var(--p-muted);font-size:12px;min-width:120px}
+.pchip{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--p-brand-wash);color:var(--p-brand);font-weight:600}
+.pchip.am{background:#fdecd7;color:var(--p-amber)}
+.pcard{background:#fff;border:1px solid var(--p-line);border-radius:10px;padding:9px 12px;color:var(--p-ink);font-size:11px;min-width:110px}
+.pcard b{display:block;font-size:17px}
+
+/* galeria */
+.gal{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.thumb{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;overflow:hidden}
+.thumb .t{height:112px;background:var(--p-bg);padding:8px;display:grid;grid-template-rows:12px 1fr;gap:6px}
+.thumb .t .bar{background:var(--p-surface);border:1px solid var(--p-line);border-radius:3px}
+.thumb .t .bd{display:grid;gap:5px}
+.thumb .t .bd i{display:block;background:var(--p-surface);border:1px solid var(--p-line);border-radius:3px}
+.thumb .t .bd i.br{background:var(--p-brand-wash);border-color:transparent}
+.thumb .m{padding:8px 10px}
+.thumb .m b{display:block;font-size:12.5px}
+.thumb.newc{display:flex;align-items:center;justify-content:center;border-style:dashed;color:var(--a-muted);min-height:170px;flex-direction:column;gap:6px}
+
+/* editor */
+.win{min-width:1100px}
+.win-bar{height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#0a0b0f;border-bottom:1px solid var(--a-border);color:var(--a-muted);font-size:11.5px}
+.dots{display:flex;gap:6px}.dots i{width:10px;height:10px;border-radius:50%;background:#3a3f4c}
+.ed{display:grid;grid-template-columns:176px minmax(0,1fr) 330px;min-height:560px}
+.ed-left{border-right:1px solid var(--a-border);padding:10px}
+.ed-left .a-item{font-size:12px}
+.layer-tree{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--a-muted);line-height:1.8}
+.layer-tree .s{color:var(--a-accent)}
+.ed-center{background:#1a1d24;display:flex;flex-direction:column;min-width:0}
+.ed-tools{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--a-border);flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--a-border);border-radius:6px;overflow:hidden}
+.seg span{padding:3px 9px;font-size:11.5px;color:var(--a-muted)}
+.seg span.on{background:var(--a-panel2);color:var(--a-text)}
+.canvas-area{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:18px;overflow:hidden;position:relative}
+.ed-right{border-left:1px solid var(--a-border);display:flex;flex-direction:column;min-width:0}
+.chat-h{padding:10px 12px;border-bottom:1px solid var(--a-border);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.chat{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.msg{border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5}
+.msg.me{background:var(--a-panel2);align-self:flex-end;max-width:92%}
+.msg.ai{background:var(--a-panel);border:1px solid var(--a-border)}
+.msg .who{font-size:10.5px;color:var(--a-muted);margin-bottom:3px;display:flex;justify-content:space-between;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;border:1px solid rgba(124,156,255,.4);color:var(--a-accent);border-radius:5px;padding:1px 6px;margin:2px 3px 2px 0;font-family:var(--mono)}
+.chip.img{border-color:var(--a-border);color:var(--a-muted)}
+.chip.img i{width:16px;height:11px;border-radius:2px;background:linear-gradient(135deg,#0f766e,#9ad8cf)}
+.compose{border-top:1px solid var(--a-border);padding:10px 12px}
+.compose .a-field{min-height:52px;margin:6px 0;color:var(--a-text)}
+.diffline{font-family:var(--mono);font-size:10.5px;color:var(--a-muted);margin-top:5px}
+.diffline .add{color:var(--a-green)} .diffline .del{color:var(--a-red)}
+
+/* canvas: a tela do projeto (demo-app) */
+.pf{width:640px;background:var(--p-bg);border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.45);color:var(--p-ink);font-family:var(--body);overflow:hidden}
+.pf-nav{display:flex;align-items:center;gap:16px;background:var(--p-surface);border-bottom:1px solid var(--p-line);padding:9px 14px;font-size:11.5px}
+.pf-nav b{color:var(--p-brand);font-size:13px}
+.pf-nav span{color:var(--p-muted)}
+.pf-nav span.on{color:var(--p-ink);font-weight:600}
+.pf-body{padding:14px}
+.pf-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.pf-head h5{margin:0;font-size:16px;font-family:var(--body)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}
+.ptable{background:var(--p-surface);border:1px solid var(--p-line);border-radius:10px;overflow:hidden;font-size:11px}
+.ptable div{display:grid;grid-template-columns:70px 1fr 80px 70px;padding:7px 11px;border-top:1px solid var(--p-line);gap:6px}
+.ptable div:first-child{border-top:0;color:var(--p-muted);font-weight:600;background:#fbfcfb}
+[data-mid]{cursor:pointer;position:relative}
+.canvas-area [data-mid]:hover{outline:1px dashed #7c9cff;outline-offset:2px}
+.canvas-area [data-mid].picked{outline:2px solid #7c9cff;outline-offset:2px}
+.canvas-area [data-mid].picked::after{content:attr(data-label);position:absolute;left:-2px;top:-20px;background:#7c9cff;color:#0b0e18;font:500 9.5px var(--mono);padding:1px 5px;border-radius:3px;white-space:nowrap;z-index:2}
+
+/* versões */
+.tl{display:flex;gap:10px;overflow:hidden}
+.tl .v{flex:0 0 112px;border:1px solid var(--a-border);border-radius:7px;background:var(--a-panel);overflow:hidden}
+.tl .v .t{height:62px;background:var(--p-bg);padding:5px;display:grid;grid-template-rows:7px 1fr;gap:4px}
+.tl .v .t i{display:block;background:#fff;border:1px solid var(--p-line);border-radius:2px}
+.tl .v .t i.br{background:var(--p-brand-wash)}
+.tl .v p{margin:0;padding:5px 7px;font-size:10.5px}
+.tl .v.on{border-color:var(--a-accent)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.cmp .side{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;padding:10px}
+.mini{background:var(--p-bg);border-radius:5px;padding:9px;display:grid;gap:6px}
+.mini .r{display:flex;gap:6px}
+.mini i{display:block;height:26px;flex:1;background:#fff;border:1px solid var(--p-line);border-radius:4px}
+.mini i.hl{outline:2px solid var(--a-yellow);outline-offset:1px}
+.mini i.br{background:var(--p-brand-wash)}
+
+/* arquitetura */
+.arch{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:stretch;margin-top:14px;min-width:820px}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px}
+.box h4{font-size:14px;margin-bottom:6px}
+.box ul{margin:0;padding-left:16px;color:var(--soft)}
+.box.hot{border-color:var(--accent)}
+.arrowrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;min-width:820px;font-family:var(--mono);font-size:11.5px;color:var(--soft);margin-top:6px}
+.scroll{overflow-x:auto}
+
+/* custos e fases */
+table.t{border-collapse:collapse;width:100%;font-size:14px;margin-top:12px}
+table.t th,table.t td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);font-weight:600}
+table.t td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:var(--mono);font-size:13px}
+.phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:16px}
+.phase{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.phase .k{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.phase h4{font-size:18px}
+.phase ul{margin:4px 0;padding-left:18px;font-size:13.5px}
+.phase li{margin:3px 0}
+.phase .done{font-size:13px;color:var(--soft);border-top:1px solid var(--line);padding-top:8px;margin-top:auto}
+.phase.mvp{border:1.5px solid var(--accent)}
+.files{font-family:var(--mono);font-size:12.5px;line-height:1.7}
+.files .new{color:var(--rec)} .files .chg{color:var(--warn)}
+.qa{display:grid;gap:10px;margin-top:14px}
+.q{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.q b{display:block}
+.q p{margin:4px 0 0;font-size:14px}
+.q .def{color:var(--rec);font-weight:600}
+.rules{columns:2 300px;column-gap:24px;margin-top:10px;font-size:14px}
+.rules li{break-inside:avoid;margin:5px 0}
+.note{font-size:13px;color:var(--soft);border-left:3px solid var(--line);padding-left:12px;margin-top:14px}
+@media (prefers-reduced-motion:no-preference){.canvas-area [data-mid]{transition:outline-color .12s}}
+</style>
+<style>.md{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px}.md table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0;display:block;overflow-x:auto}.md th,.md td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}.md img{border:1px solid var(--line);border-radius:8px}.md h2{margin-top:56px}.md h3{margin-top:32px}.md li{margin:4px 0}</style>
+</head>
+<body>
+<main class="md">
+<h1>First project onboarding: proposal</h1>
+<p><strong>Status:</strong> proposal, waiting for the owner&#39;s decisions · <strong>Epic:</strong> #ISSUE · <strong>Date:</strong> 2026-10-31 · <a href="README.pt-BR.md">Português</a></p>
+<p>Adding the first project is the first thing anyone does in the app. It has to be simple, and it has to leave the project ready for the whole flow. This proposal turns today&#39;s &quot;New project&quot; dialog into a four-step wizard:</p>
+<ol>
+<li>Choose to create or import.</li>
+<li>Import a repository (or create one).</li>
+<li>Analyze the project and pick its workflows.</li>
+<li>Review and finish.</li>
+</ol>
+<p>The clone and the analyses run in the background. At the end the project has its city, a refactor backlog and three default workflows: <strong>feature</strong>, <strong>fix</strong> and <strong>release</strong> (hotfix is fix&#39;s urgent mode). The proposal also reorganizes the bundled workflows: 15 become 11 (the Planning ones are left for the next proposal).</p>
+<p>The same proposal as a page with all the mock screens: <a href="README.md">index.html</a> (<a href="index.pt-BR.html">pt-BR</a>). Open it locally; GitHub shows HTML as source.</p>
+<p>Nothing here is built yet. The decisions are recommendations until the owner confirms them; then they go to <a href="../agents/decisions.md">docs/agents/decisions.md</a>.</p>
+<h2>Contents</h2>
+<ul>
+<li><a href="#the-recommendations">The recommendations</a></li>
+<li><a href="#where-we-are-today">Where we are today</a></li>
+<li><a href="#end-to-end-flow">End-to-end flow</a></li>
+<li><a href="#what-runs-in-the-background">What runs in the background</a></li>
+<li><a href="#workflows-the-default-set-and-the-reorganization">Workflows: the default set and the reorganization</a></li>
+<li><a href="#alignment-with-anthropics-ai-native-sdlc">Alignment with Anthropic&#39;s AI-native SDLC</a></li>
+<li><a href="#automatic-screenshots-of-the-project">Automatic screenshots of the project</a></li>
+<li><a href="#monitor-production-errors-become-intents">Monitor: production errors become intents</a></li>
+<li><a href="#cost-of-real-model-calls">Cost of real-model calls</a></li>
+<li><a href="#phased-plan">Phased plan</a></li>
+<li><a href="#files-and-areas">Files and areas</a></li>
+<li><a href="#open-questions">Open questions</a></li>
+<li><a href="#hard-rules-check">Hard rules check</a></li>
+<li><a href="#how-to-contribute">How to contribute</a></li>
+</ul>
+<h2>The recommendations</h2>
+<ol>
+<li><strong>One wizard, two doors.</strong> The same flow opens as the last step of Setup and from Projects › New project. Setup loses its Workflows step: workflows are now chosen per project.</li>
+<li><strong>Step 1</strong> has two big cards, &quot;Create new project&quot; and &quot;Import a repository&quot;. GitHub and GitLab share the import card (the provider comes from the URL or a selector); smaller links cover any git URL and a local folder.</li>
+<li><strong>Step 2</strong> checks the repository with <code>git ls-remote</code>, and the clone starts in the background as soon as you go on. A tray shows its progress in the next steps.</li>
+<li><strong>Step 3:</strong> the <strong>Ways of working</strong> profile comes free from the git history. The model analyses (city + architecture, refactor proposals) come checked, with their total cost on screen, and run only on the click.</li>
+<li><strong>Workflows are suggested by rules</strong> from the profile (#487&#39;s <code>workflow-compose.js</code> already does most of it). Each suggestion shows why, and a selector changes it.</li>
+<li><strong>Ways of working revisited.</strong> Solo or team leaves the profile: the flow is the same. The main axis is <strong>Local</strong> (merge locally, push main) or <strong>Local + remote</strong> (pull requests on GitHub/GitLab, followed there). <strong>CI</strong> is a separate axis: none, on releases only (e.g. macOS, Linux and Windows builds on a tag), or on pull requests and releases.</li>
+<li><strong>Tests by kind of work.</strong> With an E2E suite, feature writes the E2E tests first (as today&#39;s local hero does) and fix implements with unit tests and runs E2E after. Without E2E, both implement and then write the unit tests. The strategy comes from the analysis (the E2E suite, the order of the CI jobs), and the wizard asks when there is an E2E suite.</li>
+<li><strong>The bundled workflows go from 15 to 11</strong>, with three defaults per project (<code>feature</code>, <code>fix</code>, <code>release</code>; hotfix is fix&#39;s urgent mode) and aliases for the old names. The Planning workflows stay as they are for now.</li>
+<li><strong>Aligned with Anthropic&#39;s AI-native SDLC.</strong> Code &amp; Build covers Build, Test and Deploy. At onboarding the project picks a work model (Light, Standard or Full): which artifacts (<code>intent.md</code>, <code>spec.md</code>, <code>plan.md</code>, <code>REVIEW.md</code>) each item produces. Markdown and HTML are committed to the repository, keeping the history.</li>
+<li><strong>Automatic screenshots.</strong> The analysis detects how to run the project&#39;s front, and &quot;Next steps&quot; offers to prioritize a spike on the project&#39;s roadmap to find how to capture its screens in a sandbox.</li>
+<li><strong>Last, a Monitor.</strong> A new menu group polls production errors (status 500, error logs), groups them, and each new group becomes an intent in the Inbox with its diagnosis; a fix runs only on your click and stops at the gate.</li>
+<li><strong>Nothing goes to the roadmap by itself.</strong> At the end, a &quot;Next steps&quot; card offers to add chosen refactors and to capture the first idea.</li>
+</ol>
+<h2>Where we are today</h2>
+<p>The pieces for a good onboarding exist, but they are scattered. Setup only opens the generic project dialog. The analysis, the city and the refactor backlog sit in tabs and buttons of the project&#39;s page, to be found later.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><img src="images/setup-project.jpg" alt="Setup › First project"></td>
+<td><img src="images/new-project.jpg" alt="New project"></td>
+</tr>
+<tr>
+<td><strong>Setup › First project</strong> (#319): the 4th step, after Agents, Try it safely and Workflows. It lists the projects and opens the New project dialog.</td>
+<td><strong>New project</strong>: name, description, git URL, folder and 15 workflow checkboxes, before the app knows the project. The clone runs <em>inside</em> Create (<code>createProject</code> awaits <code>git clone</code> into <code>&lt;workspace&gt;/repos/&lt;owner&gt;-&lt;repo&gt;</code>).</td>
+</tr>
+<tr>
+<td><img src="images/wow.jpg" alt="Ways of working"></td>
+<td><img src="images/setup-workflows.jpg" alt="Setup › Workflows"></td>
+</tr>
+<tr>
+<td><strong>Ways of working</strong> (#487): a button on the project page&#39;s header, drawer <code>project-ways-of-working.js</code>. It reads commits, merges, tags, CI and scripts, builds a profile and composes intake + development + release from the fragments.</td>
+<td><strong>Setup › Workflows</strong>: asks you to pick among the bundled workflows before any project exists.</td>
+</tr>
+<tr>
+<td><img src="images/city.jpg" alt="Architecture › City"></td>
+<td><img src="images/refactor.jpg" alt="Refactor"></td>
+</tr>
+<tr>
+<td><strong>Architecture › City</strong> (#373): made by the <code>project-map</code> workflow (the cartographer&#39;s plan, validated by rules, then the Oracle&#39;s analysis) in one run.</td>
+<td><strong>Refactor</strong> (#357): proposals from the architecture findings, ranked by the Product Owner, each with &quot;Add to roadmap&quot;, plus the cadence.</td>
+</tr>
+</tbody></table>
+<p>Reused as they are:</p>
+<ul>
+<li><code>createProject</code> and the <code>.multiagent/project.yaml</code> manifest (#486);</li>
+<li>the <code>ways-of-working</code> seed and its existing deterministic path (what simulation mode runs);</li>
+<li><code>workflow-compose.js</code> and the step fragments (#487);</li>
+<li><code>project-map</code> (#372, #381);</li>
+<li><code>refactor:prioritize</code> and <code>refactor:addToRoadmap</code> (#357, #435);</li>
+<li>Setup&#39;s ▶ Install / ▶ Sign in buttons.</li>
+</ul>
+<h2>End-to-end flow</h2>
+<ol start="0">
+<li>Entry: Setup or Projects (<strong>D1</strong>).</li>
+<li>Choose: create or import (<strong>D2</strong>).</li>
+<li>Import: repository, name, background clone (<strong>D3</strong>, <strong>D4</strong>).
+2b. Or create new: folder, repository, three questions (<strong>D5</strong>).</li>
+<li>Analysis and workflows (<strong>D6</strong>, <strong>D7</strong>, <strong>D13</strong>, <strong>D14</strong>, <strong>D8</strong>), with the workflow set (<strong>D9</strong>, <strong>D10</strong>).
+3b. The work model, aligned with Anthropic&#39;s AI-native SDLC (<strong>D15</strong>, <strong>D16</strong>).</li>
+<li>Review and finish (<strong>D11</strong>).</li>
+<li>Then the roadmap: you choose what goes in (<strong>D12</strong>).
+5b. Automatic screenshots: a spike in the project, from &quot;Next steps&quot; (<strong>D19</strong>).</li>
+<li>Last phase: the Monitor, production errors become intents (<strong>D17</strong>, <strong>D18</strong>).</li>
+</ol>
+<h3>0 · Entry</h3>
+<p>Setup keeps Agents and Try it safely, and its third step becomes the whole wizard. The same wizard opens from Projects › New project, the header&#39;s project selector and the empty Home.</p>
+<p><strong>D1. Where the flow lives</strong></p>
+<ul>
+<li><strong>Recommended:</strong> its own wizard, used by Setup and by Projects. One flow to maintain and test. Setup goes from 4 steps to 3, and the old dialog stays for <strong>Edit project</strong> only.</li>
+<li>Alternatives:<ul>
+<li>Setup only: the second project goes back to the old dialog.</li>
+<li>Improving today&#39;s dialog: one screen cannot hold a background clone, the analysis and a review.</li>
+</ul>
+</li>
+</ul>
+<h3>1 · Choose</h3>
+<p><img src="images/mock-1.jpg" alt="Mock 1: two big cards"></p>
+<p><strong>D2. Which sources show</strong></p>
+<ul>
+<li><strong>Recommended:</strong> two cards, with GitHub and GitLab together in &quot;Import a repository&quot;. They differ little in the app (<code>gh</code> or <code>glab</code>, the same git URL): one card, the provider detected from the URL, and a GitHub | GitLab selector for the repository list. Any git URL and a local folder stay as smaller links.</li>
+<li>Alternatives:<ul>
+<li>Four equal cards: dilutes the decision.</li>
+<li>Separate GitHub and GitLab cards: two near-identical screens to maintain, and three cards dilute the first choice.</li>
+</ul>
+</li>
+</ul>
+<h3>2 · Import</h3>
+<p>You give the repository (a URL or <code>owner/repo</code> on GitHub or GitLab, with <code>gh repo list</code> or <code>glab repo list</code> suggestions when that CLI is signed in; pasting a URL picks the provider) and the project name, prefilled from the repo. On <strong>Next</strong> the app checks access with <code>git ls-remote</code> and starts the clone in the background. You move on to step 3.</p>
+<p><img src="images/mock-2.jpg" alt="Mock 2: Import a repository"></p>
+<p><strong>D3. How the clone happens</strong></p>
+<ul>
+<li><strong>Recommended:</strong> a background job with a progress tray, and a full clone. The project is created as <code>status: cloning</code>; an error shows in the tray with Retry. A blobless partial clone (<code>--filter=blob:none</code>) is a later optimization, measured on big repositories.</li>
+<li>Alternatives:<ul>
+<li>Synchronous, as today: a big repository blocks the screen for minutes.</li>
+<li>Shallow (<code>--depth</code>): Ways of working and the city need the history.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D4. No <code>gh</code>/<code>glab</code>, no sign-in or no access</strong></p>
+<ul>
+<li><strong>Recommended:</strong> check on Next and offer the fix right there.<ul>
+<li>A public repository clones over HTTPS without <code>gh</code>.</li>
+<li>A private one with no access turns the <code>ls-remote</code> error into &quot;Sign in to GitHub&quot; or &quot;Sign in to GitLab&quot;, following the URL (Setup&#39;s ▶ runs <code>gh auth login</code> or <code>glab auth login</code> in the terminal dock), then &quot;Try again&quot;.</li>
+<li>With no <code>gh</code> at all, the card says issues and PRs will be unavailable, and the import goes on.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Require <code>gh</code> up front: blocks public and local-only users.</li>
+<li>Let the clone fail: the problem shows up minutes later.</li>
+</ul>
+</li>
+<li><strong>GitHub and GitLab take the same path:</strong> only the CLI behind the list and the sign-in changes.</li>
+</ul>
+<h3>2b · Create new</h3>
+<p>With no code there is nothing to analyze. The wizard creates the repository and replaces the analysis with three questions: the ones Ways of working asks when the history cannot answer them (where changes land: local, or local + remote pull requests; CI: none, on releases, or on pull requests and releases; how you release).</p>
+<p><img src="images/mock-3.jpg" alt="Mock 3: Create new project"></p>
+<p><strong>D5. What &quot;Create new project&quot; creates</strong></p>
+<ul>
+<li><strong>Recommended:</strong> a local git repository: <code>git init</code>, a README and <code>.gitignore</code>, and a first commit on <code>main</code>. &quot;Also create a private repository on GitHub | GitLab&quot; (<code>gh repo create --private</code> or <code>glab repo create --private</code>) is offered only when that provider&#39;s CLI is signed in, and creating a remote always needs its explicit click.</li>
+<li>Alternatives:<ul>
+<li>An empty folder (today, with no URL): no git, so the workflows (worktrees, local merge) cannot run.</li>
+<li>A stack template: choosing a stack is a product decision, better as the first roadmap item, done by the feature workflow.</li>
+</ul>
+</li>
+</ul>
+<h3>3 · Analysis and workflows</h3>
+<p>While the clone runs, step 3 shows what can be analyzed and what each item costs. The suggested workflows on the right update as results arrive: first from the free profile, then refined by the model analysis.</p>
+<p><img src="images/mock-4.jpg" alt="Mock 4: analysis and suggested workflows"></p>
+<p><strong>D6. Automatic or optional analysis</strong></p>
+<ul>
+<li><strong>Recommended:</strong> what is free always runs. What costs comes checked, with the total shown, and runs on the click.<ul>
+<li>Clone, facts and the git profile cost nothing and unlock the workflow suggestion.</li>
+<li>&quot;Skip, analyze later&quot; leaves everything to the Architecture and Refactor tabs.</li>
+<li>The Ways of working seed already has a deterministic path (what simulation runs). It is always used, and the model is called only for the fields left <code>null</code>, such as a release style with no clear tags.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Everything automatic: spends money without asking.</li>
+<li>Nothing at onboarding: misses the point (a city, a backlog and real suggestions at the end).</li>
+</ul>
+</li>
+</ul>
+<p><strong>D7. What runs alongside the clone</strong></p>
+<ul>
+<li><strong>Recommended:</strong> a chain by dependency, in the service.<ul>
+<li>Nothing reads the repository before the clone ends.</li>
+<li>Then the profile and <code>project-map</code> run in parallel, and the refactor ranking waits for the findings.</li>
+<li>It respects the machine&#39;s slots (#367) and calls what exists: <code>createProject</code>, <code>architecture-facts</code>, <code>workflows:interview</code> and the <code>project-map</code> run, which still shows in Runs.</li>
+</ul>
+</li>
+<li>Alternative: an &quot;onboarding&quot; bundled workflow. It would show in Runs, but it is a workflow for things that are not agents (clone, facts).</li>
+</ul>
+<p><strong>D13. The axes of a way of working</strong>
+Today the Ways of working profile (#487) has team (solo or team), merge (local or PR), release, commands, CI and languages.</p>
+<ul>
+<li><strong>Recommended:</strong> mode and CI as the axes; team leaves.<ul>
+<li><strong>Local:</strong> the run merges into the local base, and the workflow&#39;s last step pushes main, with no remote PR. The project&#39;s auto-push (the Backlog toggle) leaves the app.</li>
+<li><strong>Local + remote:</strong> the run opens the pull request on GitHub/GitLab and follows it there (review, CI when it runs on PRs, merge).</li>
+<li><strong>CI:</strong> none, on releases only (e.g. macOS, Linux and Windows builds when a tag is pushed), or on pull requests and releases. This covers GitHub Free with no actions on PRs.</li>
+<li>CI is read from the CI files&#39; triggers (<code>on: pull_request</code>, <code>on: push: tags</code>, <code>release</code> on GitHub; <code>rules</code> / <code>only: tags</code> on GitLab). With no CI, the wizard writes nothing: &quot;Set up release CI&quot; shows up in the next steps.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Keep solo/team: both run the same flow, so the question decides nothing.</li>
+<li>CI inside the mode (remote = with CI): wrong for someone who works locally and wants CI on releases only.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D14. The test strategy of feature and fix</strong>
+Today <code>ai-development-local-hero</code> writes the tests before the code and serves both features and fixes.</p>
+<ul>
+<li><strong>Recommended:</strong> follow the suite the project has.<ul>
+<li><strong>With E2E:</strong> feature writes the E2E scenarios first and implements until they pass (today&#39;s local hero); fix implements with unit tests and runs E2E after.</li>
+<li><strong>Unit only:</strong> feature and fix implement and then write the unit tests, the flow many companies use.</li>
+<li>The analysis reads the E2E suite and the order of the CI jobs; with E2E, the wizard asks &quot;Write the E2E tests first for features?&quot; (default yes).</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Always tests first: odd for fixes and for teams on the usual flow; without E2E it is unit-only test-first.</li>
+<li>Always code first: loses what works well today for features with E2E.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D8. How the workflow suggestion comes from the analysis</strong></p>
+<ul>
+<li><strong>Recommended:</strong> rules on the profile (<code>composeWorkflowSet</code>, #487). Deterministic, testable, and it explains why with the profile&#39;s evidence.</li>
+<li>Alternatives:<ul>
+<li>A model picks the workflows: expensive and hard to test, and there are few choices anyway.</li>
+<li>Always the same set: ignores the analysis.</li>
+</ul>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Profile field</th>
+<th>Affects</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mode: local | remote</code></td>
+<td>feature, fix</td>
+<td>local → merge into the local base and, as the workflow&#39;s last step, push main; remote → branch, PR on GitHub/GitLab, followed and merged there</td>
+</tr>
+<tr>
+<td><code>ci: none | release | pr+release</code></td>
+<td>feature, release</td>
+<td>pr+release → remote feature waits for the PR&#39;s CI (<code>pr-pipeline</code>&#39;s &quot;watch CI&quot;); release → the release pushes the tag, waits for the CI run and shows its builds; none → the local suite only, and &quot;Set up release CI&quot; in the next steps</td>
+</tr>
+<tr>
+<td><code>tests: unit | unit+e2e</code> (<code>e2eCommand</code>)</td>
+<td>feature, fix</td>
+<td>unit+e2e → feature with E2E first, fix with E2E after; unit → both implement, then write unit tests. Read from configs (Playwright, Cypress…), <code>e2e</code> scripts and the order of the CI jobs</td>
+</tr>
+<tr>
+<td><code>release: milestone | per-merge | train | rc-stable</code></td>
+<td>release, fix (hotfix mode)</td>
+<td>with tags → a hotfix branches from the last tag and ships as a patch; per-merge → from main</td>
+</tr>
+<tr>
+<td><code>testCommand</code>, <code>checkCommand</code></td>
+<td>all three</td>
+<td>go into the prompts and suite steps</td>
+</tr>
+<tr>
+<td><code>languages</code></td>
+<td>all three</td>
+<td>pick the <code>*-js</code>, <code>*-python</code>, <code>*-go</code>… skills</td>
+</tr>
+</tbody></table>
+<h2>What runs in the background</h2>
+<p>For a medium repository:</p>
+<ol>
+<li>The user fills step 2.</li>
+<li>The clone runs (free) while the user works on step 3.</li>
+<li>Facts (free), then the Ways of working profile: git first (free), then the model only for null fields.</li>
+<li><code>project-map</code> runs from the end of the clone: the plan, the rules, then the analysis (model).</li>
+<li>The Product Owner ranks the refactor proposals once the findings exist (model).</li>
+<li>The user reviews and finishes; the review shows &quot;still analyzing&quot; for what is left.</li>
+</ol>
+<p>The project page fills in by itself, with a notification when the city and the backlog are ready.</p>
+<h2>Workflows: the default set and the reorganization</h2>
+<p>Today there are <strong>15 workflows</strong> and <strong>6 pipelines</strong> bundled. The owner uses one in practice: <code>ai-development-local-hero</code>, the real name of &quot;AI Local Hero&quot; (tests first, local merge, no push), for features and fixes alike. There are three development variants, two release workflows and two analysis workflows that overlap. The proposal: <strong>11 workflows</strong>, with three defaults per project. The Planning workflows (<code>writer-reviewer</code>, <code>ai-arena</code>, <code>issue-tracker</code>) stay as they are: the next proposal, a writing flow with manual review, reorganizes them.</p>
+<p><strong>D9. The workflows every project gets</strong></p>
+<ul>
+<li><strong>Recommended:</strong> feature, fix and release, with hotfix as fix&#39;s urgent mode (from the last tag). Make, fix, ship. It separates what the local hero mixes today (features and fixes in one flow) and matches Discovery&#39;s bug/hotfix fast lane. Fix is the only new workflow.</li>
+<li>Alternative: #487&#39;s intake + development + release. It is already built, but it has no fix path, and intake (filing an issue) is better as a Planning tool than as a project workflow.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Proposed</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ai-development-local-hero</code></td>
+<td><strong><code>feature</code></strong> variant &quot;E2E first&quot; (the default with an E2E suite), local or remote; single or multi-model review. Its use for fixes moves to <code>fix</code></td>
+<td>base</td>
+</tr>
+<tr>
+<td><code>software-development-local-hero</code></td>
+<td><code>feature</code> / <code>fix</code> variant &quot;code first&quot;: implement, then write the unit tests</td>
+<td>becomes a variant</td>
+</tr>
+<tr>
+<td><code>software-development</code></td>
+<td><code>feature</code> / <code>fix</code> mode <code>remote</code> (PR, CI, preview, deploy; from <code>pr-pipeline</code>)</td>
+<td>becomes a variant</td>
+</tr>
+<tr>
+<td><code>multi-model-review</code></td>
+<td><code>feature</code> option &quot;review: multi-model&quot;</td>
+<td>becomes an option</td>
+</tr>
+<tr>
+<td>(none)</td>
+<td><strong><code>fix</code></strong>: implement with unit tests, run E2E after (when there is a suite), merge; hotfix mode branches from the last tag and prepares the patch</td>
+<td>new</td>
+</tr>
+<tr>
+<td><code>release</code></td>
+<td><strong><code>release</code></strong> with the milestone / per-merge / train / rc-stable styles (<code>release-pipeline</code>), waiting for the release CI when there is one</td>
+<td>kept</td>
+</tr>
+<tr>
+<td><code>e2e-release</code></td>
+<td><code>release</code>&#39;s E2E step</td>
+<td>becomes a step</td>
+</tr>
+<tr>
+<td><code>project-map</code></td>
+<td><strong><code>analyze-project</code></strong>: city, architecture and refactor proposals in one run (what onboarding calls)</td>
+<td>merged</td>
+</tr>
+<tr>
+<td><code>refactor-proposals</code></td>
+<td><code>analyze-project</code> with &quot;since: last tag&quot;</td>
+<td>becomes a mode</td>
+</tr>
+<tr>
+<td><code>refactor</code></td>
+<td><strong><code>refactor</code></strong></td>
+<td>kept</td>
+</tr>
+<tr>
+<td><code>backlog-refresh</code></td>
+<td><strong><code>backlog-refresh</code></strong></td>
+<td>kept</td>
+</tr>
+<tr>
+<td><code>test-batch</code></td>
+<td><strong><code>test-backfill</code></strong> (a candidate to become an optional release step later)</td>
+<td>renamed</td>
+</tr>
+<tr>
+<td><code>run-retrospective</code></td>
+<td><strong><code>retrospective</code></strong></td>
+<td>renamed</td>
+</tr>
+<tr>
+<td><code>writer-reviewer</code>, <code>ai-arena</code>, <code>issue-tracker</code></td>
+<td>unchanged for now (next proposal)</td>
+<td>kept</td>
+</tr>
+</tbody></table>
+<p>Pipelines, 6 → 5:</p>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Proposed</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>issue-to-roadmap</code></td>
+<td>kept</td>
+</tr>
+<tr>
+<td><code>enrich-save-develop</code></td>
+<td>kept; its development step points to <code>feature</code> (through the alias)</td>
+</tr>
+<tr>
+<td><code>rfc-to-issues</code></td>
+<td>kept (Planning, next proposal)</td>
+</tr>
+<tr>
+<td><code>release-then-refactors</code></td>
+<td>kept: release → analyze-project (since last tag) → roadmap</td>
+</tr>
+<tr>
+<td><code>ai-arena-write-review</code></td>
+<td>kept (Planning, next proposal)</td>
+</tr>
+<tr>
+<td><code>develop-to-retrospective</code></td>
+<td>removed; feature gets &quot;retrospective after&quot; as an option</td>
+</tr>
+</tbody></table>
+<p><strong>D10. Renaming without breaking existing users</strong></p>
+<ul>
+<li><strong>Recommended:</strong> aliases in the workflow loader, with variants passed as inputs. An old name resolves to the new one with its variant&#39;s inputs (<code>software-development</code> → <code>feature</code> with <code>mode: remote</code>). Manifests, <code>settings.hiddenWorkflows</code>, roadmap items and the run history keep working. The alias table lives for two releases.</li>
+<li>Alternatives:<ul>
+<li>Rename at once: breaks repository manifests and saved roadmaps.</li>
+<li>Keep all 15 and hide some: reduces nothing that has to be maintained.</li>
+</ul>
+</li>
+<li><strong>Where a project&#39;s workflows live:</strong> by default the project only references bundled variants (in its JSON, in the workspace), and nothing is written to the repository at onboarding. &quot;Customize&quot; writes to <code>.multiagent/</code>, as Ways of working&#39;s &quot;Write to the repository&quot; does today, uncommitted.</li>
+</ul>
+<h2>Alignment with Anthropic&#39;s AI-native SDLC</h2>
+<p>In August 2026 Anthropic published the <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">AI-native SDLC playbook</a>: six stages in a loop, each ending in a version-controlled artifact a person approves and the next stage reads. The app already has most of the pieces; what is missing is treating the documents as stage artifacts, with a format and a place set per project.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Artifact (approver)</th>
+<th>In the app today</th>
+<th>Missing</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Plan</td>
+<td><code>intent.md</code>: problem, outcome, affected users and systems, constraints, open questions (product owner)</td>
+<td>Inbox and Discovery (Triage/Shape), clarity, Grill me</td>
+<td>the card&#39;s document in the intent format</td>
+</tr>
+<tr>
+<td>Design</td>
+<td><code>spec.md</code>: requirements + design, concerns (product owner; tech lead when riskier)</td>
+<td>Discovery Define, Write &amp; Review, AI Arena, Mockups (#625)</td>
+<td>a spec format: the write doc flow</td>
+</tr>
+<tr>
+<td><strong>Build</strong></td>
+<td><code>plan.md</code> + code (the engineer accepts the plan)</td>
+<td><strong>Code &amp; Build</strong>: feature and fix, the developer&#39;s brief, AGENTS.md, skills, capabilities, worktrees, roadmap</td>
+<td>the brief as a versioned <code>plan.md</code></td>
+</tr>
+<tr>
+<td><strong>Test</strong></td>
+<td>evidence: tests, build, screenshot diffs, evals (code owner)</td>
+<td>test writer, E2E first, suite, base check, screenshots with axe (#387)</td>
+<td>evals of skills and workflows in CI</td>
+</tr>
+<tr>
+<td><strong>Deploy</strong></td>
+<td><code>REVIEW.md</code> + PR (code owner, release manager)</td>
+<td>review with the <code>code-review</code> rules, remote mode with PRs, release with the Ship gate and release CI</td>
+<td>a per-project <code>REVIEW.md</code></td>
+</tr>
+<tr>
+<td>Maintain</td>
+<td>a new <code>intent.md</code> from an incident or anomaly (service owner)</td>
+<td>Night watch, analyze-project, backlog-refresh, ci-failure-triage, dependency audit</td>
+<td>findings entering as an Inbox card, closing the loop</td>
+</tr>
+</tbody></table>
+<p><strong>Code &amp; Build covers Build and Test, plus Deploy</strong> (the release with Ship, the release CI and the PR in remote mode). Plan and Design are Plan &amp; Design; Maintain is spread across Night watch, Refactor and the Oracle.</p>
+<p><img src="images/mock-5.jpg" alt="Mock 5: how work is documented"></p>
+<p><strong>D15. A work model per project</strong></p>
+<ul>
+<li><strong>Recommended:</strong> Light / Standard / Full, per kind of work. The project picks at onboarding; feature uses Standard, fix uses Light, and an item can step up. The app&#39;s existing gates approve artifacts: the Discovery commit approves intent and spec, the developer&#39;s gate approves the plan.<ul>
+<li>Light: an issue, then feature or fix.</li>
+<li>Standard: <code>intent.md</code> → <code>spec.md</code> → <code>plan.md</code> → code.</li>
+<li>Full: Standard + <code>REVIEW.md</code> + evals of the project&#39;s skills and workflows.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Always the full model: heavy for fixes and small projects.</li>
+<li>Not now: the documents stay scattered (issue, card, brief), with no loop.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D16. Where the artifacts live</strong></p>
+<ul>
+<li><strong>Decided by the owner:</strong> markdown <strong>and</strong> HTML committed to the project&#39;s repository, in <code>docs/work/&lt;item&gt;/</code> (with the before/after images, compressed). As in the playbook, they are versioned with the change and readable by any agent and anyone who clones the repository. The HTML (the reviewed page) keeps the history, and later a small front can browse the intents and validate them. They are the feature&#39;s and the issue&#39;s data, not the user&#39;s workspace data.</li>
+<li>Alternatives:<ul>
+<li>Only the markdown in the repository: loses the reviewed page&#39;s history and the browsing front.</li>
+<li>Only in the workspace: gone for anyone who clones; outside agents cannot read them.</li>
+</ul>
+</li>
+<li><strong>Scope:</strong> this proposal only records the choice at onboarding and the default path. Generating and reviewing the documents is the write doc flow; the browsing front comes later. The run writes and commits these files at its usual gate; onboarding never writes to the repository.</li>
+</ul>
+<h3>4 · Review</h3>
+<p><img src="images/mock-6.jpg" alt="Mock 6: review"></p>
+<p>The refactor backlog shows each file&#39;s score (0–100) and quadrant, as on the Facts view.</p>
+<p><strong>D11. Does the review wait for the analyses?</strong></p>
+<ul>
+<li><strong>Recommended:</strong> no. Finish works at any time, and what is left arrives on the project page with a notification.</li>
+<li>Alternative: wait for everything, which keeps the user watching a bar for minutes.</li>
+</ul>
+<h3>5 · Then the roadmap</h3>
+<p><img src="images/mock-7.jpg" alt="Mock 7: Next steps"></p>
+<p><strong>D12. How the project reaches the roadmap</strong></p>
+<ul>
+<li><strong>Recommended:</strong> the user picks in &quot;Next steps&quot;.<ul>
+<li>It reuses <code>refactor:file</code> + <code>refactor:addToRoadmap</code> (#357, #435) and the cadence.</li>
+<li>With no release CI, a &quot;Set up release CI&quot; card (macOS, Linux and Windows builds on a tag) adds a roadmap item that the feature workflow does with the <code>ci-pipeline-gh</code> / <code>ci-pipeline-gl</code> skills.</li>
+<li>Nothing starts without a click, and the roadmap stays stopped until Start.</li>
+</ul>
+</li>
+<li>Alternative: the PO builds an initial roadmap by itself. That costs money and makes decisions without the owner.</li>
+</ul>
+<h2>Automatic screenshots of the project</h2>
+<p>The people who plan, write and review are often not technical: they clone the repository, but setting the application up to run is painful, so they take screenshots by hand. In this app it already works (<code>npm run screenshot</code> and the workflows&#39; <code>screenshots</code> step); the idea is to offer the same to the project being added, starting with a <strong>spike in the user&#39;s project</strong>.</p>
+<p><strong>D19. How the project gets automatic screenshots</strong></p>
+<ul>
+<li><strong>Recommended:</strong> a spike on the project&#39;s roadmap, from &quot;Next steps&quot;.<ul>
+<li>Step 3 already detects the signals (Storybook, Playwright, mocks, the Local preview run command); the &quot;Investigate screenshots&quot; card puts a spike on the project&#39;s roadmap if the user wants.</li>
+<li>The spike runs in the project, read-only plus sandboxed tries (sample data, no network, no real secrets): it tries a generic capture through Local preview and evaluates a harness that follows the app&#39;s <code>screenshot</code> contract.</li>
+<li>Its result is a findings document (in the project&#39;s work model) and a proposed &quot;Set up screenshots&quot; item, which the user approves like any item.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Implement the harness straight away: writes code in the project without knowing the path works; expensive when it fails.</li>
+<li>Only a generic capture, no code in the project: breaks with login, empty data and external APIs.</li>
+</ul>
+</li>
+<li><strong>Meanwhile:</strong> in the write doc flow the owner can paste or attach screenshots in the chat of the iterations (#130&#39;s pasted images), and the writer uses the project&#39;s screenshot command once it exists.</li>
+</ul>
+<h2>Monitor: production errors become intents</h2>
+<p>The last piece of the SDLC loop (Maintain), and the last phase of the plan. The app listens to the running project&#39;s errors, such as 500 responses and error logs, groups what repeats and proposes a fix. The app has no monitor like this today; it comes as a new menu group, <strong>Monitor</strong>, next to the Night watch.</p>
+<p><img src="images/mock-8.jpg" alt="Mock 8: Monitor › Errors"></p>
+<p><strong>D17. How errors reach the app</strong></p>
+<ul>
+<li><strong>Recommended:</strong> polling connected sources (Sentry, Datadog, CloudWatch, GCP Logging, or a log URL / file with a filter such as status 500 or level error). Outgoing connections only, so it works in the .exe without exposing anything. Grouping (route + message + file:line) and deduplication run with no model. The sources&#39; tokens live in the system keychain (Electron&#39;s <code>safeStorage</code>), never in a workspace file.</li>
+<li>Alternatives:<ul>
+<li>A webhook received by the app: immediate, but it needs a public URL. Later, through the engine server, after the security review (#466–#470).</li>
+<li>An agent reading logs on its own: expensive and unpredictable for what a filter does; the model only diagnoses.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D18. What happens with a new error</strong></p>
+<ul>
+<li><strong>Recommended:</strong> the diagnosis becomes an intent, and a fix runs only on a click.<ul>
+<li>A read-only Oracle turn crosses the stack trace with the code and writes the diagnosis as <code>intent.md</code> in an Inbox card (the playbook&#39;s Maintain).</li>
+<li>&quot;Propose fix&quot; starts the <code>fix</code> workflow, which stops at the human gate like any run.</li>
+<li>Ask me / On / Off modes, like Discovery&#39;s column automations (#259), with a daily cap.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>An automatic fix up to the merge: it would cross the human gate, which AGENTS.md forbids.</li>
+<li>Only listing errors: no loop, one more dashboard.</li>
+</ul>
+</li>
+</ul>
+<h2>Cost of real-model calls</h2>
+<p>These are orders of magnitude, not measured. All development runs on the mock provider (<code>MULTIAGENT_SIMULATION_ONLY=1</code>). The wizard shows the total before the click, and it counts toward the daily budget (#206).</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>When</th>
+<th>Model</th>
+<th>Estimate</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Check access, clone, facts</td>
+<td>always</td>
+<td>none</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Ways of working profile from git</td>
+<td>always</td>
+<td>none</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Ways of working: fields git cannot settle</td>
+<td>only when one is null</td>
+<td>Oracle</td>
+<td>$0.05–0.30</td>
+</tr>
+<tr>
+<td>City: the cartographer&#39;s plan</td>
+<td>checked by default</td>
+<td>workflow default</td>
+<td>$0.30–1.00</td>
+</tr>
+<tr>
+<td>Architecture analysis (findings)</td>
+<td>with the city</td>
+<td>Oracle</td>
+<td>~$0.50</td>
+</tr>
+<tr>
+<td>Refactor ranking by the PO</td>
+<td>checked by default</td>
+<td>PO default</td>
+<td>$0.10–0.30</td>
+</tr>
+<tr>
+<td>Monitor: polling, grouping, deduplication</td>
+<td>every few minutes</td>
+<td>none</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Monitor: diagnosis of a new error group</td>
+<td>Ask me by default, at most 5 a day</td>
+<td>Oracle</td>
+<td>$0.10–0.50</td>
+</tr>
+<tr>
+<td>Create new project (with or without GitHub)</td>
+<td>path 2b</td>
+<td>none</td>
+<td>$0</td>
+</tr>
+</tbody></table>
+<p>A typical import with everything checked costs about $1–2. The ~$0.50 for the architecture analysis is the app&#39;s own estimate (from the <code>release-then-refactors</code> pipeline); the other figures are guesses to confirm on the first real run, announced first.</p>
+<h2>Phased plan</h2>
+<p><strong>Phase 1: MVP, the wizard with what exists</strong></p>
+<ul>
+<li>The 4-step wizard (Setup and Projects) with the source cards.</li>
+<li>Import from GitHub or GitLab in the same card, with the <code>ls-remote</code> check, the background clone and the progress tray.</li>
+<li>Step 3: the free profile + <code>project-map</code> + the refactor ranking, with the cost shown.</li>
+<li>Suggestions among today&#39;s workflows (local hero / software-development / release) through the compose rules.</li>
+<li>A non-blocking review and the &quot;Next steps&quot; card.</li>
+<li>Setup without its Workflows step.</li>
+<li>Done when: going from an empty Home to a project with a city, a backlog and workflows works fully simulated, with the access errors covered.</li>
+</ul>
+<p><strong>Phase 2: the feature / fix / release set</strong></p>
+<ul>
+<li>The new <code>fix</code> workflow (a <code>fix-pipeline</code> fragment) with its hotfix mode.</li>
+<li><code>feature</code> with the local / remote modes, the E2E first / code first variants and its options.</li>
+<li><code>release</code> with the E2E step and the wait for the release CI when there is one.</li>
+<li>Remove the project&#39;s auto-push and add a &quot;push main&quot; step at the end of feature and fix in Local mode (closes #617).</li>
+<li>Ways of working revisited: <code>team</code> leaves the profile, <code>merge</code> becomes <code>mode: local | remote</code>, <code>ci</code> becomes <code>none | release | pr+release</code> read from the CI triggers, and <code>tests</code> / <code>e2eCommand</code> are added.</li>
+<li>Aliases for the old names; #487&#39;s compose generates feature/fix/release.</li>
+<li>Done when: an old project, with its manifest and saved roadmap, runs the same through the new names.</li>
+</ul>
+<p><strong>Phase 3: reorganize the rest (not Planning)</strong></p>
+<ul>
+<li><code>analyze-project</code>, <code>test-backfill</code>, <code>retrospective</code>.</li>
+<li>Pipelines from 6 to 5.</li>
+<li>The workflow docs and README rewritten.</li>
+<li>Done when: 11 bundled workflows and the whole suite green.</li>
+</ul>
+<p><strong>Phase 4: create new and other sources</strong></p>
+<ul>
+<li>&quot;Create new project&quot; with <code>git init</code> and an optional remote on GitHub or GitLab (<code>gh</code> / <code>glab repo create</code>).</li>
+<li>A partial clone for big repositories, if measurements call for it.</li>
+<li>Done when: a new project is born with a local and a remote repository and runs its first feature.</li>
+</ul>
+<p><strong>Phase 5: later, the SDLC loop</strong></p>
+<ul>
+<li>The work model picked at onboarding takes effect: intent and spec in Discovery (the write doc format), <code>plan.md</code> instead of the developer&#39;s brief, all committed in <code>docs/work/&lt;item&gt;/</code>.</li>
+<li>A per-project <code>REVIEW.md</code> read by the review.</li>
+<li>Night watch and analyze-project findings enter the Inbox as intents.</li>
+<li>Evals of skills and workflows in CI; a front to browse the intents.</li>
+<li>Done when: an item goes from intent to release with its artifacts in the repository, and a Night watch finding comes back as an intent.</li>
+</ul>
+<p><strong>Phase 6: last, the Monitor</strong></p>
+<ul>
+<li>A new menu group, <strong>Monitor</strong>: Errors and the Night watch.</li>
+<li>Polling connectors (Sentry, Datadog, CloudWatch, GCP, log URL / file) with their tokens in the system keychain.</li>
+<li>Grouping and deduplication with no model; the diagnosis becomes <code>intent.md</code> in the Inbox.</li>
+<li>&quot;Propose fix&quot; starts the <code>fix</code> workflow; Ask me / On / Off modes with a daily cap.</li>
+<li>A webhook through the engine server, after the security review.</li>
+<li>Done when: a simulated 500 becomes an Inbox card with its diagnosis, and the proposed fix stops at the gate.</li>
+</ul>
+<h2>Files and areas</h2>
+<p><strong>New</strong></p>
+<ul>
+<li><code>fronts/build/views/projects/project-wizard.js</code> and <code>project-wizard.css</code></li>
+<li><code>packages/shared/onboarding-model.js</code> (steps, rules, the cost sum)</li>
+<li><code>packages/engine/service/areas/project-onboarding.js</code> (jobs: clone → facts → analyses)</li>
+<li><code>packages/engine/service/channels/onboarding.js</code></li>
+<li>Workflows: <code>workflows/feature.yaml</code>, <code>fix.yaml</code>, <code>analyze-project.yaml</code></li>
+<li><code>fragments/fix-pipeline.yaml</code></li>
+<li><code>scripts/screenshot/views/onboarding.js</code></li>
+<li><code>features/onboarding.feature</code></li>
+<li><code>packages/shared/work-model.js</code> (Light / Standard / Full, the artifact paths)</li>
+<li><code>fronts/monitor/</code> (a new front: <code>views/errors</code>, <code>engine/domains/error-sources</code>, the connectors) and <code>packages/ui-kit/nav-groups.js</code> (the Monitor group)</li>
+</ul>
+<p><strong>Changed</strong></p>
+<ul>
+<li><code>fronts/build/views/projects/projects.js</code> (New project opens the wizard)</li>
+<li><code>packages/ui-kit/setup.js</code> and <code>packages/shared/setup-model.js</code></li>
+<li><code>fronts/analyser/views/project/project.js</code> (the Next steps card)</li>
+<li><code>packages/engine/domains/project/projects.js</code> (background clone, status, <code>git init</code>, <code>gh</code>/<code>glab repo create</code>; <code>autoPush</code> removed)</li>
+<li><code>packages/engine/service/areas/local-push.js</code> and <code>fronts/build/views/backlog/backlog.js</code> (the auto-push removed; the manual Push stays)</li>
+<li><code>packages/engine/service/areas/workflow-interview.js</code> (free profile, the model only for nulls)</li>
+<li><code>packages/engine/domains/workflow/workflow-compose.js</code></li>
+<li>The workflow loader (the alias table)</li>
+<li><code>workflows/release.yaml</code> and <code>pipelines/*.yaml</code></li>
+<li><code>seeds/ways-of-working/seed.md</code> (profile: mode, ci and tests; no team)</li>
+<li><code>packages/shared/i18n/*</code></li>
+<li><code>docs/readme/040-workflows.md</code> and <code>docs/agents/engine.md</code></li>
+<li><code>docs/agents/decisions.md</code>, once decided</li>
+</ul>
+<h2>Open questions</h2>
+<p>Each has a recommended default.</p>
+<ul>
+<li><strong>Q-1.</strong> Does Setup&#39;s Workflows step go away? Default: <strong>yes</strong>. Definitions stays for hiding workflows.</li>
+<li><strong>Q-2.</strong> A private repository with no <code>gh</code> or <code>glab</code>? Default: <strong>offer the URL&#39;s provider sign-in on Next</strong>. A working git credential helper is fine too.</li>
+<li><strong>Q-3.</strong> Does onboarding write files to the user&#39;s repository? Default: <strong>no</strong>. &quot;Customize&quot; writes to <code>.multiagent/</code>, uncommitted.</li>
+<li><strong>Q-4.</strong> Do the model analyses come checked? Default: <strong>yes, with the total shown and &quot;Skip, analyze later&quot;</strong>. In simulation mode everything is simulated.</li>
+<li><strong>Q-5.</strong> Does &quot;Create new project&quot; create a remote repository by default? Default: <strong>only with <code>gh</code> or <code>glab</code> signed in, private, and unchecked the first time</strong>.</li>
+<li><strong>Q-6.</strong> How long do old names keep working? Default: <strong>two releases</strong>, with a notice in Start and a line in the release notes.</li>
+<li><strong>Q-7.</strong> Monorepo: several projects in one repository? Default: <strong>one project per repository for now</strong>.</li>
+<li><strong>Q-8.</strong> Where does a fix in hotfix mode branch from? Default: <strong>the last tag when releases use tags; main otherwise</strong>.</li>
+<li><strong>Q-9.</strong> Does onboarding put anything on the roadmap by itself? Default: <strong>no</strong>, only the &quot;Next steps&quot; card.</li>
+<li><strong>Q-10.</strong> In Local mode, is main pushed after every merge? <strong>Decided by the owner: yes, as the workflow&#39;s last step</strong>, after the merge into main. The project&#39;s auto-push (the Backlog toggle and the push after each <code>merge: local</code>) leaves the app. That also ends the race between Ship and the auto-push (#617): each workflow does its own push. When the push is refused because origin moved, the step updates main and tries again, and a conflict goes back to the run&#39;s developer, as the manual push does today.</li>
+<li><strong>Q-11.</strong> Does onboarding write the CI files? Default: <strong>no</strong>. &quot;Set up release CI&quot; becomes a roadmap item, done by the feature workflow with <code>ci-pipeline-gh</code> / <code>ci-pipeline-gl</code>, with its gate and review like any change.</li>
+<li><strong>Q-12.</strong> Which work model comes checked? Default: <strong>Standard for feature, Light for fix</strong>; Full only when the project has CI and wants evals.</li>
+<li><strong>Q-13.</strong> Where do the artifacts live in the repository? Default: <strong><code>docs/work/&lt;item&gt;/</code></strong> (markdown, HTML and images), configurable; Ways of working detects a folder already in use (<code>docs/rfcs</code>, <code>adr/</code>).</li>
+<li><strong>Q-14.</strong> Which error sources first? Default: <strong>Sentry and a log URL / file with a filter</strong>; Datadog, CloudWatch and GCP later, as asked for.</li>
+<li><strong>Q-15.</strong> Does the Monitor diagnose on its own? Default: <strong>Ask me</strong>, at most 5 diagnoses a day; fix runs off until you turn them on.</li>
+<li><strong>Q-16.</strong> Does the &quot;Investigate screenshots&quot; card always show? Default: <strong>only when the project has a front end</strong> and no screenshot command yet; with Storybook or Playwright, the card says what it found.</li>
+</ul>
+<h2>Hard rules check</h2>
+<p>How the proposal follows <a href="../../AGENTS.md">AGENTS.md</a>:</p>
+<ul>
+<li>The app stays in English; what the agents write follows Settings › Language.</li>
+<li>The workspace is the product: clones go in <code>&lt;workspace&gt;/repos/</code>, new projects in <code>&lt;workspace&gt;/projects/</code>, analyses in <code>&lt;workspace&gt;/architecture/</code>.</li>
+<li>Agents run unattended and record assumptions. The user answers the three questions in the wizard.</li>
+<li>Onboarding starts no development run and answers no gate. The roadmap only gets what the user picks.</li>
+<li>Actions that reach outside (creating a GitHub repository, signing in to <code>gh</code>) need an explicit click.</li>
+<li>Automated checks run simulated only, with <code>npm run screenshot</code> and the mock provider.</li>
+<li>Every real action shows its cost first.</li>
+</ul>
+<h2>How to contribute</h2>
+<ol>
+<li>Read <a href="../../AGENTS.md">AGENTS.md</a> and the topic docs for your area, especially <a href="../agents/engine.md">engine.md</a>, <a href="../agents/renderer.md">renderer.md</a>, <a href="../agents/storage.md">storage.md</a> and <a href="../agents/testing.md">testing.md</a>, plus <a href="../agents/seeds.md">seeds.md</a> for Ways of working.</li>
+<li>Comment on the epic (#ISSUE) before picking a phase. The phases become sub-issues once the owner confirms the decisions.</li>
+<li>Phase 1 needs no workflow changes. Phases 2 and 3 change bundled workflows and need the alias table first.</li>
+<li>Work on a branch and open a PR. Never run real models in checks: the mock provider for tests, <code>npm run screenshot</code> for screens.</li>
+</ol>
+
+</main>
+</body>
+</html>

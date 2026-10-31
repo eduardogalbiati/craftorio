@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Primeiro Projeto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: proposta longa em uma coluna de leitura (~900px) com índice fixo à esquerda no desktop;
+   as telas mock saem da coluna e ocupam a largura toda, sempre no tema escuro do app (o único dele). */
+:root{
+  --bg:#f5f6fa; --paper:#ffffff; --ink:#1a1d27; --soft:#5b6275; --line:#dfe2ea;
+  --accent:#3b55d4; --accent-wash:#e8ecfc; --rec:#137a4b; --rec-wash:#e3f4ea; --warn:#9a6a00; --warn-wash:#fbf1d6; --con:#b0332b;
+  --display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  /* app tokens (packages/ui-kit/style.css), fixos: as mocks mostram o app */
+  --a-bg:#0e1014; --a-panel:#151820; --a-panel2:#1b1f29; --a-border:#262b37; --a-text:#e6e8ee; --a-muted:#8a91a3;
+  --a-accent:#7c9cff; --a-green:#4ade80; --a-yellow:#facc15; --a-red:#f87171; --a-purple:#c084fc; --a-info:#7dd3fc;
+  /* tokens do projeto de exemplo (demo-app): claro, teal */
+  --p-bg:#f7f8f7; --p-surface:#ffffff; --p-ink:#13201d; --p-muted:#5f6e6a; --p-line:#e1e7e5; --p-brand:#0f766e; --p-brand-wash:#d9f0ec; --p-amber:#b45309;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1117; --paper:#161922; --ink:#e7e9f0; --soft:#9aa1b4; --line:#2a2f3c;
+  --accent:#8fa6ff; --accent-wash:#1e2540; --rec:#5fd497; --rec-wash:#13291e; --warn:#f0c64a; --warn-wash:#2c2510; --con:#f2867d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1117; --paper:#161922; --ink:#e7e9f0; --soft:#9aa1b4; --line:#2a2f3c;
+  --accent:#8fa6ff; --accent-wash:#1e2540; --rec:#5fd497; --rec-wash:#13291e; --warn:#f0c64a; --warn-wash:#2c2510; --con:#f2867d; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.6;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;font-size:13px}
+nav.toc b{display:block;font-family:var(--display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);margin-bottom:8px}
+nav.toc a{display:block;color:var(--soft);text-decoration:none;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent);border-left-color:var(--accent);outline:none}
+main{min-width:0}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)} nav.toc{display:none}}
+
+h1,h2,h3,h4{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(34px,5vw,52px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:clamp(25px,3vw,32px);font-weight:700;margin-top:72px;padding-top:24px;border-top:1px solid var(--line)}
+h3{font-size:20px;font-weight:700;margin-top:36px}
+h4{font-size:16px;font-weight:700}
+p{margin:10px 0;max-width:72ch}
+.lede{font-size:18px;color:var(--soft);max-width:66ch}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:var(--accent-wash);padding:1px 5px;border-radius:4px}
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+
+.tldr{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-top:28px}
+.tldr ol{margin:8px 0 0;padding-left:20px}
+.tldr li{margin:6px 0}
+.answer{margin-top:16px;background:var(--accent-wash);border-radius:12px;padding:18px 22px}
+.answer h3{margin-top:0;font-size:18px}
+
+figure{margin:18px 0 0}
+figure img{display:block;border-radius:8px;border:1px solid var(--line)}
+figcaption{font-size:13px;color:var(--soft);margin-top:8px;max-width:80ch}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+
+/* camadas */
+.layers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px;margin-top:16px}
+.layer{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;position:relative}
+.layer .n{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.layer h4{margin:4px 0}
+.layer p{font-size:13.5px;color:var(--soft);margin:4px 0 0}
+.layer.base{border-color:var(--accent)}
+
+/* fluxo */
+.flow{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;counter-reset:st}
+.flow a{flex:1 1 150px;min-width:0;text-decoration:none;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;position:relative}
+.flow a:hover,.flow a:focus-visible{border-color:var(--accent);outline:none}
+.flow a .k{font-family:var(--mono);font-size:11.5px;color:var(--accent)}
+.flow a b{display:block;font-size:14px;line-height:1.3;margin:2px 0}
+.flow a span.d{font-size:12px;color:var(--soft)}
+.flow a.today{background:transparent;border-style:dashed}
+
+.step{margin-top:56px}
+.step-head{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.step-num{font-family:var(--display);font-weight:700;font-size:44px;line-height:1;color:var(--accent)}
+.step-head h3{margin:0;font-size:24px}
+
+/* decisões */
+.decision{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-top:18px}
+.d-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.d-id{font-family:var(--mono);font-size:12px;font-weight:500;background:var(--accent-wash);color:var(--accent);padding:2px 7px;border-radius:5px}
+.d-q{color:var(--soft);font-size:14px;margin:6px 0 12px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px}
+.opt{border:1px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13.5px;line-height:1.5}
+.opt b{display:block;font-size:14px;margin-bottom:4px}
+.opt .pro{color:var(--ink)} .opt .pro::before{content:"+ ";color:var(--rec);font-weight:600}
+.opt .con{color:var(--soft)} .opt .con::before{content:"− ";color:var(--con);font-weight:600}
+.opt p{margin:3px 0}
+.opt.rec{border:1.5px solid var(--rec);background:var(--rec-wash)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:2px}
+.tag.r{background:var(--rec);color:var(--paper)}
+.tag.l{background:var(--warn-wash);color:var(--warn)}
+.why{font-size:14px;margin:12px 0 0;max-width:none}
+.why b{color:var(--rec)}
+
+/* telas mock: frame */
+.screen{margin-top:18px;overflow-x:auto;border-radius:12px;border:1px solid var(--line);background:#07080b}
+.screen-cap{font-size:13px;color:var(--soft);margin-top:8px}
+.app{min-width:980px;background:var(--a-bg);color:var(--a-text);font-family:var(--body);font-size:12.5px;line-height:1.45;border-radius:11px;overflow:hidden}
+.app *{box-sizing:border-box}
+.a-top{display:flex;align-items:center;gap:14px;height:44px;padding:0 14px;border-bottom:1px solid var(--a-border)}
+.a-brand{font-weight:600;font-size:13px}.a-brand em{font-style:normal;color:var(--a-accent)}
+.a-sel{border:1px solid var(--a-border);border-radius:6px;padding:4px 10px;color:var(--a-text);min-width:150px;display:flex;justify-content:space-between;gap:8px}
+.a-sel::after{content:"▾";color:var(--a-muted)}
+.a-sp{flex:1}
+.a-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--a-border);background:transparent;color:var(--a-text);border-radius:6px;padding:5px 10px;font:inherit;font-weight:500;white-space:nowrap}
+.a-btn.p{background:var(--a-accent);border-color:var(--a-accent);color:#0b0e18}
+.a-btn.s{padding:3px 8px;font-size:11.5px}
+.a-body{display:grid;grid-template-columns:168px minmax(0,1fr)}
+.a-side{border-right:1px solid var(--a-border);padding:10px 8px;min-height:440px}
+.a-grp{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--a-muted);margin:12px 6px 4px}
+.a-item{padding:5px 8px;border-radius:6px;color:var(--a-text);display:flex;justify-content:space-between;align-items:center}
+.a-item.on{background:var(--a-panel2)}
+.a-item.new{outline:1.5px dashed var(--a-accent);outline-offset:-1px}
+.a-badge{font-size:9.5px;font-weight:600;letter-spacing:.05em;padding:1px 5px;border-radius:4px;background:rgba(124,156,255,.16);color:var(--a-accent)}
+.a-badge.lab{background:rgba(192,132,252,.16);color:var(--a-purple)}
+.a-main{padding:18px 22px;min-width:0}
+.a-h1{font-size:18px;font-weight:700;margin:0}
+.a-help{color:var(--a-muted);margin:4px 0 14px;max-width:80ch}
+.a-panel{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;padding:12px 14px}
+.a-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.a-muted{color:var(--a-muted)}
+.a-mono{font-family:var(--mono);font-size:11.5px}
+.a-pill{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid var(--a-border);color:var(--a-muted)}
+.a-pill.g{color:var(--a-green);border-color:rgba(74,222,128,.35)}
+.a-pill.y{color:var(--a-yellow);border-color:rgba(250,204,21,.35)}
+.a-pill.b{color:var(--a-accent);border-color:rgba(124,156,255,.4)}
+.a-tabs{display:flex;gap:16px;border-bottom:1px solid var(--a-border);margin-bottom:14px}
+.a-tabs span{padding:6px 2px;color:var(--a-muted)}
+.a-tabs span.on{color:var(--a-text);border-bottom:2px solid var(--a-accent)}
+.a-empty{border:1px dashed var(--a-border);border-radius:10px;padding:26px;text-align:center}
+.a-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;text-align:left}
+.a-steps .a-panel b{display:block;margin-bottom:4px}
+.a-field{border:1px solid var(--a-border);background:var(--a-panel2);border-radius:6px;padding:6px 9px;color:var(--a-muted)}
+.a-chk{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.a-chk i{flex:none;width:13px;height:13px;border:1px solid var(--a-muted);border-radius:3px;margin-top:2px}
+.a-chk i.on{background:var(--a-accent);border-color:var(--a-accent)}
+.a-radio i{border-radius:50%}
+
+/* biblioteca do kit */
+.kit{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px}
+.kit-nav .a-item{font-size:12px}
+.sw{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.sw div{border:1px solid var(--a-border);border-radius:6px;overflow:hidden;font-size:10.5px}
+.sw div span{display:block;height:34px}
+.sw div p{margin:0;padding:4px 6px;color:var(--a-muted);font-family:var(--mono);font-size:10px}
+.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.comp{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;overflow:hidden}
+.comp .stage{background:var(--p-bg);padding:14px;min-height:78px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-family:var(--body)}
+.comp .meta{padding:7px 10px;display:flex;justify-content:space-between;gap:6px;align-items:center}
+.comp.gap{border-style:dashed;border-color:rgba(250,204,21,.45)}
+
+/* componentes do projeto de exemplo */
+.pb{border:0;border-radius:8px;padding:7px 13px;font:500 12px var(--body);background:var(--p-brand);color:#fff}
+.pb.ghost{background:transparent;color:var(--p-brand);box-shadow:inset 0 0 0 1px var(--p-brand)}
+.pin{border:1px solid var(--p-line);border-radius:8px;padding:6px 9px;background:#fff;color:var(--p-muted);font-size:12px;min-width:120px}
+.pchip{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--p-brand-wash);color:var(--p-brand);font-weight:600}
+.pchip.am{background:#fdecd7;color:var(--p-amber)}
+.pcard{background:#fff;border:1px solid var(--p-line);border-radius:10px;padding:9px 12px;color:var(--p-ink);font-size:11px;min-width:110px}
+.pcard b{display:block;font-size:17px}
+
+/* galeria */
+.gal{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.thumb{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;overflow:hidden}
+.thumb .t{height:112px;background:var(--p-bg);padding:8px;display:grid;grid-template-rows:12px 1fr;gap:6px}
+.thumb .t .bar{background:var(--p-surface);border:1px solid var(--p-line);border-radius:3px}
+.thumb .t .bd{display:grid;gap:5px}
+.thumb .t .bd i{display:block;background:var(--p-surface);border:1px solid var(--p-line);border-radius:3px}
+.thumb .t .bd i.br{background:var(--p-brand-wash);border-color:transparent}
+.thumb .m{padding:8px 10px}
+.thumb .m b{display:block;font-size:12.5px}
+.thumb.newc{display:flex;align-items:center;justify-content:center;border-style:dashed;color:var(--a-muted);min-height:170px;flex-direction:column;gap:6px}
+
+/* editor */
+.win{min-width:1100px}
+.win-bar{height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#0a0b0f;border-bottom:1px solid var(--a-border);color:var(--a-muted);font-size:11.5px}
+.dots{display:flex;gap:6px}.dots i{width:10px;height:10px;border-radius:50%;background:#3a3f4c}
+.ed{display:grid;grid-template-columns:176px minmax(0,1fr) 330px;min-height:560px}
+.ed-left{border-right:1px solid var(--a-border);padding:10px}
+.ed-left .a-item{font-size:12px}
+.layer-tree{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--a-muted);line-height:1.8}
+.layer-tree .s{color:var(--a-accent)}
+.ed-center{background:#1a1d24;display:flex;flex-direction:column;min-width:0}
+.ed-tools{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--a-border);flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--a-border);border-radius:6px;overflow:hidden}
+.seg span{padding:3px 9px;font-size:11.5px;color:var(--a-muted)}
+.seg span.on{background:var(--a-panel2);color:var(--a-text)}
+.canvas-area{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:18px;overflow:hidden;position:relative}
+.ed-right{border-left:1px solid var(--a-border);display:flex;flex-direction:column;min-width:0}
+.chat-h{padding:10px 12px;border-bottom:1px solid var(--a-border);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.chat{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.msg{border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5}
+.msg.me{background:var(--a-panel2);align-self:flex-end;max-width:92%}
+.msg.ai{background:var(--a-panel);border:1px solid var(--a-border)}
+.msg .who{font-size:10.5px;color:var(--a-muted);margin-bottom:3px;display:flex;justify-content:space-between;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;border:1px solid rgba(124,156,255,.4);color:var(--a-accent);border-radius:5px;padding:1px 6px;margin:2px 3px 2px 0;font-family:var(--mono)}
+.chip.img{border-color:var(--a-border);color:var(--a-muted)}
+.chip.img i{width:16px;height:11px;border-radius:2px;background:linear-gradient(135deg,#0f766e,#9ad8cf)}
+.compose{border-top:1px solid var(--a-border);padding:10px 12px}
+.compose .a-field{min-height:52px;margin:6px 0;color:var(--a-text)}
+.diffline{font-family:var(--mono);font-size:10.5px;color:var(--a-muted);margin-top:5px}
+.diffline .add{color:var(--a-green)} .diffline .del{color:var(--a-red)}
+
+/* canvas: a tela do projeto (demo-app) */
+.pf{width:640px;background:var(--p-bg);border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.45);color:var(--p-ink);font-family:var(--body);overflow:hidden}
+.pf-nav{display:flex;align-items:center;gap:16px;background:var(--p-surface);border-bottom:1px solid var(--p-line);padding:9px 14px;font-size:11.5px}
+.pf-nav b{color:var(--p-brand);font-size:13px}
+.pf-nav span{color:var(--p-muted)}
+.pf-nav span.on{color:var(--p-ink);font-weight:600}
+.pf-body{padding:14px}
+.pf-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.pf-head h5{margin:0;font-size:16px;font-family:var(--body)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}
+.ptable{background:var(--p-surface);border:1px solid var(--p-line);border-radius:10px;overflow:hidden;font-size:11px}
+.ptable div{display:grid;grid-template-columns:70px 1fr 80px 70px;padding:7px 11px;border-top:1px solid var(--p-line);gap:6px}
+.ptable div:first-child{border-top:0;color:var(--p-muted);font-weight:600;background:#fbfcfb}
+[data-mid]{cursor:pointer;position:relative}
+.canvas-area [data-mid]:hover{outline:1px dashed #7c9cff;outline-offset:2px}
+.canvas-area [data-mid].picked{outline:2px solid #7c9cff;outline-offset:2px}
+.canvas-area [data-mid].picked::after{content:attr(data-label);position:absolute;left:-2px;top:-20px;background:#7c9cff;color:#0b0e18;font:500 9.5px var(--mono);padding:1px 5px;border-radius:3px;white-space:nowrap;z-index:2}
+
+/* versões */
+.tl{display:flex;gap:10px;overflow:hidden}
+.tl .v{flex:0 0 112px;border:1px solid var(--a-border);border-radius:7px;background:var(--a-panel);overflow:hidden}
+.tl .v .t{height:62px;background:var(--p-bg);padding:5px;display:grid;grid-template-rows:7px 1fr;gap:4px}
+.tl .v .t i{display:block;background:#fff;border:1px solid var(--p-line);border-radius:2px}
+.tl .v .t i.br{background:var(--p-brand-wash)}
+.tl .v p{margin:0;padding:5px 7px;font-size:10.5px}
+.tl .v.on{border-color:var(--a-accent)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.cmp .side{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;padding:10px}
+.mini{background:var(--p-bg);border-radius:5px;padding:9px;display:grid;gap:6px}
+.mini .r{display:flex;gap:6px}
+.mini i{display:block;height:26px;flex:1;background:#fff;border:1px solid var(--p-line);border-radius:4px}
+.mini i.hl{outline:2px solid var(--a-yellow);outline-offset:1px}
+.mini i.br{background:var(--p-brand-wash)}
+
+/* arquitetura */
+.arch{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:stretch;margin-top:14px;min-width:820px}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px}
+.box h4{font-size:14px;margin-bottom:6px}
+.box ul{margin:0;padding-left:16px;color:var(--soft)}
+.box.hot{border-color:var(--accent)}
+.arrowrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;min-width:820px;font-family:var(--mono);font-size:11.5px;color:var(--soft);margin-top:6px}
+.scroll{overflow-x:auto}
+
+/* custos e fases */
+table.t{border-collapse:collapse;width:100%;font-size:14px;margin-top:12px}
+table.t th,table.t td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);font-weight:600}
+table.t td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:var(--mono);font-size:13px}
+.phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:16px}
+.phase{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.phase .k{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.phase h4{font-size:18px}
+.phase ul{margin:4px 0;padding-left:18px;font-size:13.5px}
+.phase li{margin:3px 0}
+.phase .done{font-size:13px;color:var(--soft);border-top:1px solid var(--line);padding-top:8px;margin-top:auto}
+.phase.mvp{border:1.5px solid var(--accent)}
+.files{font-family:var(--mono);font-size:12.5px;line-height:1.7}
+.files .new{color:var(--rec)} .files .chg{color:var(--warn)}
+.qa{display:grid;gap:10px;margin-top:14px}
+.q{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.q b{display:block}
+.q p{margin:4px 0 0;font-size:14px}
+.q .def{color:var(--rec);font-weight:600}
+.rules{columns:2 300px;column-gap:24px;margin-top:10px;font-size:14px}
+.rules li{break-inside:avoid;margin:5px 0}
+.note{font-size:13px;color:var(--soft);border-left:3px solid var(--line);padding-left:12px;margin-top:14px}
+@media (prefers-reduced-motion:no-preference){.canvas-area [data-mid]{transition:outline-color .12s}}
+</style>
+</head>
+<body>
+<style>
+/* extras da proposta de onboarding */
+.stepper{display:flex;gap:6px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--a-border);flex-wrap:wrap}
+.stepper span{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--a-border);color:var(--a-muted);font-size:11.5px}
+.stepper span i{font-style:normal;width:16px;height:16px;border-radius:50%;background:var(--a-panel2);display:inline-flex;align-items:center;justify-content:center;font-size:10px}
+.stepper span.on{border-color:var(--a-accent);color:var(--a-text)} .stepper span.on i{background:var(--a-accent);color:#0b0e18}
+.stepper span.ok{color:var(--a-text)} .stepper span.ok i{background:rgba(74,222,128,.2);color:var(--a-green)}
+.wiz{min-width:980px;background:var(--a-bg);color:var(--a-text);font-family:var(--body);font-size:12.5px;line-height:1.45;border-radius:11px;overflow:hidden}
+.wiz-body{padding:22px 26px;min-height:330px}
+.wiz-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--a-border)}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.bigc{border:1px solid var(--a-border);background:var(--a-panel);border-radius:12px;padding:22px;display:flex;flex-direction:column;gap:8px;min-height:190px}
+.bigc.sel{border-color:var(--a-accent);box-shadow:0 0 0 1px var(--a-accent) inset}
+.bigc .ico{width:38px;height:38px;border-radius:10px;background:var(--a-panel2);display:flex;align-items:center;justify-content:center;font-size:19px;color:var(--a-accent)}
+.bigc b{font-size:15px}
+.bigc ul{margin:4px 0 0;padding-left:16px;color:var(--a-muted)}
+.lbl{font-size:11.5px;color:var(--a-muted);margin:12px 0 4px}
+.inp{border:1px solid var(--a-border);background:var(--a-panel2);border-radius:6px;padding:7px 10px;color:var(--a-text)}
+.inp.focus{border-color:var(--a-accent)}
+.sugg{border:1px solid var(--a-border);border-radius:6px;margin-top:4px;background:var(--a-panel)}
+.sugg div{padding:6px 10px;display:flex;justify-content:space-between;border-top:1px solid var(--a-border)}
+.sugg div:first-child{border-top:0}
+.tray{display:flex;align-items:center;gap:10px;background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;padding:8px 12px;font-size:11.5px}
+.bar{flex:1;height:5px;background:var(--a-panel2);border-radius:3px;overflow:hidden;min-width:80px}
+.bar i{display:block;height:100%;background:var(--a-accent)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px}
+.job{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;align-items:start;padding:8px 0;border-top:1px solid var(--a-border)}
+.job:first-of-type{border-top:0}
+.st{width:14px;height:14px;border-radius:50%;margin-top:2px;border:2px solid var(--a-border)}
+.st.ok{background:var(--a-green);border-color:var(--a-green)} .st.run{border-color:var(--a-accent);border-top-color:transparent} .st.q{border:2px solid var(--a-muted);opacity:.5;background:transparent}
+.flowc{border:1px solid var(--a-border);background:var(--a-panel);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.flowc .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.flowc .why{color:var(--a-muted);font-size:11.5px;margin-top:4px}
+.city-mini{height:120px;border-radius:8px;background:radial-gradient(ellipse at 50% 60%,#1d2433,#0e1014 70%);position:relative;overflow:hidden}
+.city-mini i{position:absolute;bottom:30px;width:14px;border-radius:2px 2px 0 0}
+.rf{display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--a-border)}
+.rf:first-child{border-top:0}
+/* linha do tempo do segundo plano */
+.gantt{min-width:760px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:6px 12px;font-size:13px;margin-top:12px}
+.gantt .lane{position:relative;height:24px;background:var(--paper);border:1px solid var(--line);border-radius:6px}
+.gantt .lane b{position:absolute;top:3px;bottom:3px;border-radius:4px;font:500 11px var(--mono);color:#fff;display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden}
+.g-free{background:#2f7d5b} .g-model{background:#5468d4} .g-user{background:#a07a12}
+.gantt .lab{color:var(--soft);display:flex;align-items:center}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--soft);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+/* mapeamento de workflows */
+.map{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:8px 6px;align-items:center;margin-top:14px;min-width:720px}
+.wf{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:7px 10px;font-size:13px}
+.wf code{background:none;padding:0;font-weight:500}
+.wf small{display:block;color:var(--soft);font-size:12px;line-height:1.4}
+.wf.new{border-color:var(--accent)}
+.wf.gone{opacity:.65;border-style:dashed}
+.arr{text-align:center;color:var(--soft);font-family:var(--mono)}
+.act{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;padding:1px 5px;border-radius:4px;margin-left:6px}
+.act.k{background:var(--rec-wash);color:var(--rec)} .act.m{background:var(--accent-wash);color:var(--accent)} .act.n{background:var(--warn-wash);color:var(--warn)} .act.d{background:var(--line);color:var(--soft)}
+.groupt{grid-column:1/-1;font-family:var(--display);font-weight:700;font-size:15px;margin-top:12px}
+.rules-t td:first-child{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Índice">
+  <b>Proposta</b>
+  <a href="#resumo">Resumo</a>
+  <a href="#hoje">Onde estamos hoje</a>
+  <a href="#fluxo">Fluxo ponta a ponta</a>
+  <a href="#e0">0 · Entrada</a>
+  <a href="#e1">1 · Escolha</a>
+  <a href="#e2">2 · Importar</a>
+  <a href="#e2b">2b · Criar novo</a>
+  <a href="#e3">3 · Análise e fluxos</a>
+  <a href="#fundo">O que roda em segundo plano</a>
+  <a href="#workflows">Workflows: antigo → novo</a>
+  <a href="#sdlc">AI-native SDLC</a>
+  <a href="#e4">4 · Revisão</a>
+  <a href="#e5">5 · Depois: roadmap</a>
+  <a href="#screenshots">Screenshots automáticos</a>
+  <a href="#monitor">Monitor (depois)</a>
+  <a href="#custos">Custos</a>
+  <a href="#plano">Plano faseado</a>
+  <a href="#arquivos">Arquivos e áreas</a>
+  <a href="#perguntas">Perguntas em aberto</a>
+  <a href="#regras">Regras do AGENTS.md</a>
+</nav>
+
+<main>
+<header id="resumo">
+  <div class="eyebrow">Proposta de produto · Onboarding · 31 out 2026 · <a href="index.html">English</a> · <a href="README.pt-BR.md">README</a></div>
+  <h1>Primeiro Projeto</h1>
+  <p class="lede">O cadastro do primeiro projeto é a primeira coisa que alguém faz no app. A proposta transforma o diálogo "New project" de hoje num assistente de quatro etapas: escolher, importar ou criar, analisar e escolher os fluxos, revisar. O clone e as análises rodam em segundo plano, e no fim o projeto já tem cidade, backlog de refatoração e três fluxos padrão: feature, fix e release (o hotfix é um modo do fix).</p>
+
+  <div class="tldr">
+    <h4>Recomendações em uma lista</h4>
+    <ol>
+      <li><b>Um assistente, duas portas:</b> o mesmo fluxo abre como último passo do Setup e em Projects › New project. O passo "Workflows" do Setup some, porque os fluxos passam a ser escolhidos por projeto.</li>
+      <li><b>Etapa 1:</b> dois cards grandes, "Create new project" e "Import a repository". GitHub e GitLab ficam juntos no mesmo card (o provedor sai da URL ou de um seletor); links menores para outra URL git e pasta local.</li>
+      <li><b>Etapa 2:</b> o repositório é validado com <code>git ls-remote</code> e o clone começa em segundo plano assim que você avança. Uma bandeja mostra o progresso nas etapas seguintes.</li>
+      <li><b>Etapa 3:</b> o perfil do <b>Ways of working</b> sai de graça da história do git; as análises com modelo (cidade + arquitetura, propostas de refatoração) vêm marcadas, com o custo somado na tela, e só rodam no clique.</li>
+      <li><b>Formas de trabalho revisitadas:</b> solo ou time sai do perfil (o fluxo é o mesmo). O eixo principal é <b>Local</b> (merge local e push no main) ou <b>Local + remoto</b> (PRs no GitHub/GitLab, acompanhados lá). <b>CI</b> vira um eixo à parte: nenhum, só na release (builds para macOS, Linux e Windows) ou nos PRs e na release.</li>
+      <li><b>Fluxos sugeridos por regra</b>, a partir do perfil (o <code>workflow-compose.js</code> do #487 já faz quase tudo), cada um com o "porquê" e um seletor para trocar.</li>
+      <li><b>Workflows bundled: de 15 para 11</b> (os de Planning ficam para a próxima proposta), com os três padrão por projeto (<code>feature</code>, <code>fix</code>, <code>release</code>; hotfix é o modo urgente do fix) e aliases para os nomes antigos.</li>
+      <li><b>Testes por tipo de trabalho:</b> com suíte E2E, a feature escreve o E2E primeiro (como o local hero de hoje) e o fix implementa com unitário e roda o E2E depois. Sem E2E, os dois implementam e depois escrevem o unitário. A estratégia sai da análise (suíte E2E, ordem dos jobs no CI), e o assistente pergunta quando há E2E.</li>
+      <li><b>Alinhado ao AI-native SDLC da Anthropic:</b> o Code &amp; Build cobre Build, Test e Deploy. No onboarding, o projeto escolhe o modelo de trabalho (Leve, Padrão ou Completo): quais artefatos (<code>intent.md</code>, <code>spec.md</code>, <code>plan.md</code>, <code>REVIEW.md</code>) cada item gera. Markdown e HTML são commitados no repositório, com o histórico.</li>
+      <li><b>Screenshots automáticos:</b> a análise detecta como rodar o front do projeto, e o "Next steps" oferece priorizar um spike no roadmap do projeto para achar o jeito de capturar as telas em sandbox.</li>
+      <li><b>Por último, um Monitor:</b> um grupo novo no menu lê erros de produção (status 500, logs de erro) por polling, agrupa, e cada grupo novo vira um intent no Inbox com o diagnóstico; o fix só roda com o seu clique e para no gate.</li>
+      <li><b>Nada vai para o roadmap sozinho:</b> no fim, um cartão "Next steps" oferece adicionar refatorações escolhidas e capturar a primeira ideia.</li>
+    </ol>
+  </div>
+</header>
+
+<h2 id="hoje">Onde estamos hoje</h2>
+<p>Capturas reais do <code>main</code> com dados simulados (<code>npm run screenshot</code>). As peças para um bom onboarding já existem, mas estão espalhadas: o Setup só abre o diálogo genérico de projeto, e a análise, a cidade e a refatoração ficam escondidas em abas e botões da página do projeto, para descobrir depois.</p>
+<div class="shots">
+  <figure><img src="images/setup-project.jpg" alt="Passo First project do Setup" loading="lazy"><figcaption><b>Setup › First project</b> (#319): o 4º passo, depois de Agents, Try it safely e Workflows. Só lista os projetos e abre o diálogo New project; o Finish abre o Start no primeiro workflow marcado.</figcaption></figure>
+  <figure><img src="images/new-project.jpg" alt="Diálogo New project" loading="lazy"><figcaption><b>New project</b>: nome, descrição, URL git, pasta e 15 caixas de workflow, tudo numa tela, antes de conhecer o projeto. O clone acontece <i>dentro</i> do Create (<code>createProject</code> espera o <code>git clone</code> em <code>&lt;workspace&gt;/repos/&lt;owner&gt;-&lt;repo&gt;</code>).</figcaption></figure>
+  <figure><img src="images/wow.jpg" alt="Gaveta Ways of working" loading="lazy"><figcaption><b>Ways of working</b> (#487): o nome real do "Way of Work". Botão no cabeçalho da página do projeto, gaveta <code>project-ways-of-working.js</code>. Lê commits, merges, tags, CI e scripts, monta o perfil e compõe intake + desenvolvimento + release a partir dos fragments.</figcaption></figure>
+  <figure><img src="images/setup-workflows.jpg" alt="Passo Workflows do Setup" loading="lazy"><figcaption><b>Setup › Workflows</b>: pede para escolher entre os workflows bundled antes de existir qualquer projeto. Os não marcados vão para <code>settings.hiddenWorkflows</code>.</figcaption></figure>
+  <figure><img src="images/city.jpg" alt="Aba Architecture, vista City" loading="lazy"><figcaption><b>Architecture › City</b> (#373): a cidade do projeto, feita pelo workflow <code>project-map</code> (o cartógrafo escreve o plano, regras validam, depois o Oracle analisa), tudo num run só.</figcaption></figure>
+  <figure><img src="images/refactor.jpg" alt="Aba Refactor" loading="lazy"><figcaption><b>Refactor</b> (#357): as propostas vindas dos achados da análise de arquitetura, ranqueadas pelo Product Owner, com "Add to roadmap" por linha e a cadência automática.</figcaption></figure>
+</div>
+<p class="note">O que a proposta reaproveita sem mudar: <code>createProject</code> e o manifesto <code>.multiagent/project.yaml</code> (#486), o seed <code>ways-of-working</code> e o caminho determinístico que ele já tem no modo simulado, <code>workflow-compose.js</code> e os fragments (#487), o <code>project-map</code> (#372, #381), o <code>refactor:prioritize</code> e o <code>refactor:addToRoadmap</code> (#357, #435), e os botões ▶ Install / ▶ Sign in do Setup.</p>
+
+<h2 id="fluxo">Fluxo ponta a ponta</h2>
+<p>Do primeiro clique ao roadmap. Os passos com decisão têm cartões com opções, prós e contras e a recomendação em verde.</p>
+<div class="flow">
+  <a href="#e0"><span class="k">0 · D1</span><b>Entrada</b><span class="d">Setup ou Projects</span></a>
+  <a href="#e1"><span class="k">1 · D2</span><b>Escolha</b><span class="d">criar ou importar</span></a>
+  <a href="#e2"><span class="k">2 · D3 D4</span><b>Importar</b><span class="d">repo, nome, clone em fundo</span></a>
+  <a href="#e2b"><span class="k">2b · D5</span><b>Criar novo</b><span class="d">pasta, repo, perguntas</span></a>
+  <a href="#e3"><span class="k">3 · D6 D7 D13 D8</span><b>Análise e fluxos</b><span class="d">perfil, cidade, refactor</span></a>
+  <a href="#workflows"><span class="k">D9 D10 D14</span><b>Conjunto de fluxos</b><span class="d">feature, fix, release</span></a>
+  <a href="#sdlc"><span class="k">D15 D16</span><b>Modelo de trabalho</b><span class="d">intent, spec, plan</span></a>
+  <a href="#e4"><span class="k">4 · D11</span><b>Revisão</b><span class="d">cidade, backlog, concluir</span></a>
+  <a href="#e5"><span class="k">5 · D12</span><b>Roadmap</b><span class="d">você decide o que entra</span></a>
+  <a href="#screenshots"><span class="k">D19</span><b>Screenshots</b><span class="d">spike no projeto</span></a>
+  <a href="#monitor"><span class="k">6 · D17 D18</span><b>Monitor</b><span class="d">erros viram intents (depois)</span></a>
+</div>
+
+<!-- 0 -->
+<section class="step" id="e0">
+  <div class="step-head"><span class="step-num">0</span><h3>Entrada: onde o assistente abre</h3></div>
+  <p>Hoje o Setup tem quatro passos e o último só abre o diálogo de projeto. A proposta deixa o Setup com <b>Agents</b> e <b>Try it safely</b>, e o terceiro passo passa a ser o assistente inteiro. O mesmo assistente abre em Projects › New project, no seletor de projeto do header e no Home vazio.</p>
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D1</span><h4>Onde vive o fluxo de cadastro</h4></div>
+    <div class="opts">
+      <div class="opt rec"><b>A · Assistente próprio, usado pelo Setup e por Projects <span class="tag r">Recomendado</span></b><p class="pro">Um fluxo só para manter e testar; o primeiro projeto e o décimo passam pelo mesmo caminho.</p><p class="pro">Tira do Setup o passo Workflows, escolhido antes de existir projeto.</p><p class="con">O Setup muda de forma (de 4 para 3 passos).</p></div>
+      <div class="opt"><b>B · Só dentro do Setup</b><p class="pro">Mais simples na primeira vez.</p><p class="con">O segundo projeto volta ao diálogo antigo; dois fluxos divergindo.</p></div>
+      <div class="opt"><b>C · Melhorar o diálogo New project atual</b><p class="pro">Menos código novo.</p><p class="con">Uma tela só não comporta clone em fundo, análise e revisão sem virar um formulário enorme.</p></div>
+    </div>
+    <p class="why"><b>Recomendação:</b> A. O diálogo atual fica só para <b>Edit project</b>.</p>
+  </div>
+</section>
+
+<!-- 1 -->
+<section class="step" id="e1">
+  <div class="step-head"><span class="step-num">1</span><h3>Escolha: criar ou importar</h3></div>
+  <div class="screen"><div class="wiz">
+    <div class="stepper"><span class="on"><i>1</i>Start</span><span><i>2</i>Repository</span><span><i>3</i>Analysis &amp; workflows</span><span><i>4</i>Review</span><span class="a-sp" style="border:0"></span></div>
+    <div class="wiz-body">
+      <h5 class="a-h1">Add a project</h5>
+      <p class="a-help">A project is the code the agents work on. You can change everything later.</p>
+      <div class="big">
+        <div class="bigc"><div class="ico">＋</div><b>Create new project</b><span class="a-muted">Start from an empty repository.</span><ul><li>A git repository in your workspace</li><li>Optionally a private GitHub repository</li><li>Three questions pick its workflows</li></ul></div>
+        <div class="bigc sel"><div class="ico">⤓</div><b>Import a repository</b><span class="a-muted">An existing repository on GitHub or GitLab.</span><ul><li>Cloned into your workspace in the background</li><li>Its history shows how you work today</li><li>City and refactor backlog ready at the end</li></ul></div>
+      </div>
+      <p class="a-muted" style="margin-top:14px">Other sources: <span style="color:var(--a-accent)">Any git URL</span> · <span style="color:var(--a-accent)">A folder on this computer</span></p>
+    </div>
+    <div class="wiz-foot"><span class="a-btn">Cancel</span><span class="a-btn p">Next</span></div>
+  </div></div>
+  <p class="screen-cap">Mock 1. Etapa 1 com os dois cards grandes. Textos da interface em inglês, como todo o app.</p>
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D2</span><h4>Quais origens aparecem</h4></div>
+    <div class="opts">
+      <div class="opt rec"><b>A · Dois cards, GitHub e GitLab juntos <span class="tag r">Recomendado</span></b><p class="pro">A escolha principal fica óbvia: criar ou importar.</p><p class="pro">GitHub e GitLab mudam pouco no app (<code>gh</code> ou <code>glab</code>, a mesma URL git): um card só, o provedor detectado pela URL, com um seletor GitHub | GitLab para a lista de repos.</p><p class="pro">Outra URL e pasta local seguem como links menores.</p><p class="con">Os links menores podem passar despercebidos.</p></div>
+      <div class="opt"><b>B · Quatro cards do mesmo tamanho</b><p class="pro">Tudo igualmente visível.</p><p class="con">Dilui a decisão da primeira tela.</p></div>
+      <div class="opt"><b>C · Cards separados para GitHub e GitLab</b><p class="pro">Cada marca visível.</p><p class="con">Duas telas quase iguais para manter; três cards diluem a primeira escolha.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="step" id="e2">
+  <div class="step-head"><span class="step-num">2</span><h3>Importar: repositório e nome, clone em segundo plano</h3></div>
+  <p>Você informa o repositório (URL ou <code>owner/repo</code>, do GitHub ou do GitLab, com a lista do <code>gh repo list</code> ou do <code>glab repo list</code> quando o CLI está logado; colar uma URL escolhe o provedor sozinho) e o nome do projeto, preenchido a partir do repo. Em <b>Next</b> o app valida o acesso com <code>git ls-remote</code> (um segundo) e começa o clone em segundo plano. Você já vai para a etapa 3.</p>
+  <div class="screen"><div class="wiz">
+    <div class="stepper"><span class="ok"><i>✓</i>Start</span><span class="on"><i>2</i>Repository</span><span><i>3</i>Analysis &amp; workflows</span><span><i>4</i>Review</span></div>
+    <div class="wiz-body">
+      <div class="a-row" style="justify-content:space-between"><h5 class="a-h1">Import a repository</h5><span class="a-row"><span class="seg"><span class="on">GitHub</span><span>GitLab</span></span><span class="a-pill g">gh signed in as eduardo</span><span class="a-pill">glab not signed in</span></span></div>
+      <div class="lbl">Repository</div>
+      <div class="inp focus">acme/shop</div>
+      <div class="sugg"><div><span>acme/shop</span><span class="a-muted">private · updated 2 days ago</span></div><div><span>acme/shop-mobile</span><span class="a-muted">private · updated 3 weeks ago</span></div><div><span>acme/website</span><span class="a-muted">public · updated 1 month ago</span></div></div>
+      <div class="lbl">Project name</div>
+      <div class="inp">Shop</div>
+      <p class="a-muted a-mono" style="margin:10px 0 0">Will be cloned into &lt;workspace&gt;/repos/acme-shop · main · 4,812 commits</p>
+    </div>
+    <div class="wiz-foot"><span class="a-btn">Back</span><span class="a-btn p">Next: clone and continue</span></div>
+  </div></div>
+  <p class="screen-cap">Mock 2. Etapa 2. O número de commits vem do <code>ls-remote</code> + API, antes do clone.</p>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D3</span><h4>Como o clone acontece</h4></div>
+    <div class="opts">
+      <div class="opt"><b>A · Síncrono, como hoje</b><p class="pro">Nada novo.</p><p class="con">Um repo grande prende a tela por minutos; o usuário não sabe o que está acontecendo.</p></div>
+      <div class="opt rec"><b>B · Job em segundo plano com bandeja de progresso <span class="tag r">Recomendado</span></b><p class="pro">O usuário escolhe análises e fluxos enquanto clona.</p><p class="pro">O projeto é criado como <code>status: cloning</code>; um erro aparece na bandeja com "Retry".</p><p class="con">Um job novo no serviço, com estado e eventos.</p></div>
+      <div class="opt"><b>C · Clone raso (<code>--depth</code>) e depois completar</b><p class="pro">Começa mais rápido.</p><p class="con">O Ways of working e a cidade precisam da história: raso quebra a evidência.</p></div>
+    </div>
+    <p class="why"><b>Recomendação:</b> B com clone completo. Clone parcial sem blobs (<code>--filter=blob:none</code>) é uma otimização para depois, medida em repos grandes.</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D4</span><h4>Sem <code>gh</code>, sem login ou sem acesso</h4></div>
+    <div class="opts">
+      <div class="opt rec"><b>A · Validar no Next e oferecer o conserto ali <span class="tag r">Recomendado</span></b><p class="pro">Repo público: clona por HTTPS sem <code>gh</code>.</p><p class="pro">Repo privado sem acesso: o erro do <code>ls-remote</code> vira "Sign in to GitHub" ou "Sign in to GitLab" (o ▶ do Setup roda <code>gh auth login</code> no terminal), depois "Try again".</p><p class="pro">Sem <code>gh</code>: o card avisa que issues e PRs ficam indisponíveis, mas o import segue.</p><p class="con">Um caminho de erro a mais para testar.</p></div>
+      <div class="opt"><b>B · Exigir <code>gh</code> logado antes de tudo</b><p class="pro">Simples.</p><p class="con">Bloqueia repos públicos e quem trabalha só local.</p></div>
+      <div class="opt"><b>C · Deixar o clone falhar</b><p class="pro">Nenhum código novo.</p><p class="con">O usuário descobre o problema minutos depois, na bandeja.</p></div>
+    </div>
+    <p class="why"><b>GitHub e GitLab, o mesmo caminho:</b> o conserto oferecido segue o provedor da URL (<code>gh auth login</code> ou <code>glab auth login</code>), e o resto do fluxo não muda.</p>
+  </div>
+</section>
+
+<!-- 2b -->
+<section class="step" id="e2b">
+  <div class="step-head"><span class="step-num">2b</span><h3>Criar novo: pasta, repositório e três perguntas</h3></div>
+  <p>Sem código, não há o que analisar. O assistente cria o repositório e troca a análise por três perguntas, as mesmas que o Ways of working faz quando a história não responde.</p>
+  <div class="screen"><div class="wiz">
+    <div class="stepper"><span class="ok"><i>✓</i>Start</span><span class="on"><i>2</i>Repository</span><span><i>3</i>Workflows</span><span><i>4</i>Review</span></div>
+    <div class="wiz-body two">
+      <div>
+        <h5 class="a-h1">Create new project</h5>
+        <div class="lbl">Project name</div><div class="inp focus">Field Notes</div>
+        <div class="lbl">Starts with</div>
+        <div class="a-chk a-radio"><i class="on"></i><div><b>README and .gitignore</b><div class="a-muted">A first commit on main.</div></div></div>
+        <div class="a-chk a-radio"><i></i><div><b>Empty</b><div class="a-muted">git init only.</div></div></div>
+        <div class="a-chk" style="margin-top:12px"><i class="on"></i><div><b>Also create a private repository on <span class="a-sel" style="display:inline-flex;min-width:96px;padding:1px 8px">GitHub</span></b><div class="a-muted">eduardo/field-notes, pushed after the first commit. GitLab works the same way with glab.</div></div></div>
+        <p class="a-muted a-mono" style="margin:10px 0 0">&lt;workspace&gt;/projects/field-notes</p>
+      </div>
+      <div>
+        <h5 class="a-h1" style="font-size:14px">How will you work on it?</h5>
+        <div class="lbl">Where changes land</div><div class="a-row"><span class="a-pill b">Local: merge here, push main</span><span class="a-pill">Local + remote: pull requests on GitHub</span></div>
+        <div class="lbl">CI</div><div class="a-row"><span class="a-pill">None</span><span class="a-pill b">On releases: build macOS, Linux, Windows</span><span class="a-pill">On pull requests and releases</span></div>
+        <div class="lbl">How you release</div><div class="a-row"><span class="a-pill b">Milestones (tags)</span><span class="a-pill">Every merge</span><span class="a-pill">Release train</span><span class="a-pill">RC → stable</span></div>
+        <p class="a-muted" style="margin-top:12px">Change them any time in Ways of working. Setting up CI is offered as a next step.</p>
+      </div>
+    </div>
+    <div class="wiz-foot"><span class="a-btn">Back</span><span class="a-btn p">Next</span></div>
+  </div></div>
+  <p class="screen-cap">Mock 3. O caminho "Create new project".</p>
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D5</span><h4>O que "Create new project" cria</h4></div>
+    <div class="opts">
+      <div class="opt"><b>A · Só uma pasta vazia (como hoje sem URL)</b><p class="pro">Nada novo.</p><p class="con">Sem git, os workflows (worktrees, merge local) não funcionam.</p></div>
+      <div class="opt rec"><b>B · Repo git local + remoto opcional (GitHub ou GitLab) <span class="tag r">Recomendado</span></b><p class="pro"><code>git init</code>, README e <code>.gitignore</code>, primeiro commit em <code>main</code>.</p><p class="pro">"Also create a private repository on GitHub | GitLab" via <code>gh repo create --private</code> ou <code>glab repo create --private</code>, oferecido só com o CLI do provedor logado.</p><p class="con">Criar repo remoto é uma ação para fora: precisa do clique explícito.</p></div>
+      <div class="opt"><b>C · Template de stack (Node, Python…)</b><p class="pro">Projeto pronto para rodar.</p><p class="con">Escolher stack é decisão de produto; melhor como o primeiro item do roadmap ("Scaffold the app"), feito pelo fluxo feature.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="step" id="e3">
+  <div class="step-head"><span class="step-num">3</span><h3>Análise e fluxos</h3></div>
+  <p>Enquanto o clone roda, a etapa 3 mostra o que pode ser analisado e o custo de cada item. Os fluxos sugeridos aparecem à direita e se atualizam conforme os resultados chegam: primeiro com o perfil de graça, depois refinados pela análise com modelo.</p>
+  <div class="screen"><div class="wiz">
+    <div class="stepper"><span class="ok"><i>✓</i>Start</span><span class="ok"><i>✓</i>Repository</span><span class="on"><i>3</i>Analysis &amp; workflows</span><span><i>4</i>Review</span></div>
+    <div class="wiz-body two">
+      <div>
+        <h5 class="a-h1" style="font-size:14px">Analyze Shop</h5>
+        <p class="a-muted" style="margin:4px 0 8px">Read-only. Nothing is written to the repository.</p>
+        <div class="job"><span class="st ok"></span><div><b>Clone</b><div class="a-muted">acme/shop · 4,812 commits</div></div><span class="a-mono a-muted">free</span></div>
+        <div class="job"><span class="st ok"></span><div><b>Facts</b><div class="a-muted">languages, test and check commands, CI</div></div><span class="a-mono a-muted">free</span></div>
+        <div class="job"><span class="st ok"></span><div><b>Ways of working profile</b><div class="a-muted">from the git history: pull requests on GitHub, tags every ~2 weeks, CI on tags only</div></div><span class="a-mono a-muted">free</span></div>
+        <div class="job"><span class="st run"></span><div><span class="a-chk" style="margin:0"><i class="on"></i><b>City and architecture</b></span><div class="a-muted">project-map: the city plan, then the Oracle's analysis</div></div><span class="a-mono">~$0.80–1.50</span></div>
+        <div class="job"><span class="st q"></span><div><span class="a-chk" style="margin:0"><i class="on"></i><b>Refactor backlog</b></span><div class="a-muted">findings → proposals, ranked by the Product Owner</div></div><span class="a-mono">~$0.10–0.30</span></div>
+        <div class="tray" style="margin-top:12px"><span>Real models · estimated total</span><span class="a-sp"></span><b class="a-mono">$0.90–1.80</b><span class="a-btn s">Skip, analyze later</span></div>
+      </div>
+      <div>
+        <h5 class="a-h1" style="font-size:14px">Suggested workflows</h5>
+        <p class="a-muted" style="margin:4px 0 8px">From how Shop is worked on today. Change any of them.</p>
+        <div class="flowc"><div class="h"><b>feature</b><span class="a-sel" style="min-width:190px">Remote PRs · E2E first</span></div><div class="why">Why: 92% of the changes reached main through pull requests merged on GitHub, and there is an E2E suite (playwright.config.ts). The E2E scenarios are written before the code.</div></div>
+        <div class="flowc"><div class="h"><b>fix</b><span class="a-sel" style="min-width:190px">Code + unit, then E2E · remote PR</span></div><div class="why">Why: the CI runs unit before E2E, the usual order here. Hotfix mode: from the last tag (v2.7.0), shipped as v2.7.1.</div></div>
+        <div class="flowc"><div class="h"><b>release</b><span class="a-sel" style="min-width:190px">Milestone · tag + notes</span></div><div class="why">Why: a tag every 13 days on average over the last 6 months. Suite: npm test, E2E: npx playwright test.</div></div>
+        <div class="flowc"><div class="h"><b>CI</b><span class="a-sel" style="min-width:190px">On releases only</span></div><div class="why">Why: .github/workflows/release.yml runs on tags (builds for macOS, Linux and Windows); no workflow runs on pull requests. The release waits for that run and shows its builds.</div></div>
+        <p class="a-muted" style="font-size:11.5px">More workflows (refactor, backlog-refresh, writer-reviewer…) are always available in Start.</p>
+      </div>
+    </div>
+    <div class="wiz-foot"><div class="tray" style="flex:1;max-width:420px"><span>Cloning acme/shop</span><div class="bar"><i style="width:100%"></i></div><span class="a-pill g">done</span></div><div class="a-row"><span class="a-btn">Back</span><span class="a-btn p">Analyze and continue</span></div></div>
+  </div></div>
+  <p class="screen-cap">Mock 4. Etapa 3. O botão com o custo só aparece com análises com modelo marcadas; sem elas ele diz "Continue". No modo simulado tudo é simulado e custa $0.</p>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D6</span><h4>Análise automática ou opcional</h4></div>
+    <div class="opts">
+      <div class="opt"><b>A · Tudo automático</b><p class="pro">Zero cliques.</p><p class="con">Gasta dinheiro sem pedir; o AGENTS.md pede custo explícito.</p></div>
+      <div class="opt rec"><b>B · O que é grátis roda sempre; o que custa vem marcado, com o total, e roda no clique <span class="tag r">Recomendado</span></b><p class="pro">Clone, fatos e o perfil do git não custam nada e destravam a sugestão de fluxos.</p><p class="pro">"Skip, analyze later" deixa tudo para as abas Architecture e Refactor.</p><p class="con">Um clique a mais que no A.</p></div>
+      <div class="opt"><b>C · Nada no cadastro</b><p class="pro">Cadastro instantâneo.</p><p class="con">Perde o objetivo: terminar com cidade, backlog e fluxos sugeridos de verdade.</p></div>
+    </div>
+    <p class="why"><b>Ways of working com modelo:</b> o seed já tem um caminho determinístico (é o que roda no modo simulado). A proposta usa esse caminho sempre e só chama o modelo para os campos que ficaram <code>null</code>, como o estilo de release sem tags claras.</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D7</span><h4>O que roda junto com o clone</h4></div>
+    <div class="opts">
+      <div class="opt rec"><b>A · Pipeline encadeado por dependência <span class="tag r">Recomendado</span></b><p class="pro">Nada lê o repo antes de o clone terminar; depois, perfil e <code>project-map</code> correm em paralelo, e o ranking da refatoração espera os achados.</p><p class="pro">Respeita os slots da máquina (#367).</p><p class="con">Um orquestrador pequeno de jobs no serviço.</p></div>
+      <div class="opt"><b>B · Um workflow "onboarding" bundled</b><p class="pro">Aparece em Runs como qualquer run.</p><p class="con">Um workflow para coisas que não são agentes (clone, fatos); mais pesado de mudar.</p></div>
+    </div>
+    <p class="why"><b>Recomendação:</b> A no serviço, chamando o que já existe: <code>createProject</code>, <code>architecture-facts</code>, <code>workflows:interview</code> e o run do <code>project-map</code>, que continua aparecendo em Runs. Veja a <a href="#fundo">linha do tempo</a>.</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D13</span><h4>Os eixos da forma de trabalho</h4></div>
+    <p class="d-q">Revisão do perfil do Ways of working (#487). Hoje ele tem time (solo ou time), merge (local ou PR), release, comandos, CI e linguagens.</p>
+    <div class="opts">
+      <div class="opt rec"><b>A · Modo (Local ou Local + remoto) e CI como eixos; time sai <span class="tag r">Recomendado</span></b><p class="pro"><b>Local:</b> o run mescla na base local e o último passo do workflow faz push do main, sem PR remoto. O auto-push do projeto (o botão do Backlog) sai do app.</p><p class="pro"><b>Local + remoto:</b> o run abre o PR no GitHub/GitLab e acompanha por lá (revisão, CI quando roda no PR, merge).</p><p class="pro"><b>CI:</b> nenhum, só na release (ex.: builds para macOS, Linux e Windows ao criar a tag) ou nos PRs e na release. Cobre o caso do GitHub Free sem actions nos PRs.</p><p class="con">Muda o modelo do perfil e o compose (fase 2).</p></div>
+      <div class="opt"><b>B · Manter solo/time</b><p class="pro">Nada muda.</p><p class="con">Solo e time rodam o mesmo fluxo; a pergunta não decide nada.</p></div>
+      <div class="opt"><b>C · CI dentro do modo (remoto = com CI)</b><p class="pro">Uma pergunta a menos.</p><p class="con">Errado para quem trabalha local e quer CI só na release.</p></div>
+    </div>
+    <p class="why"><b>Como o CI é lido:</b> pelos gatilhos dos arquivos de CI (<code>on: pull_request</code>, <code>on: push: tags</code>, <code>release</code> no GitHub; <code>rules</code> / <code>only: tags</code> no GitLab). Sem CI, o assistente não escreve nada: oferece "Set up release CI" nos próximos passos.</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D14</span><h4>A estratégia de testes de feature e fix</h4></div>
+    <p class="d-q">Hoje o <code>ai-development-local-hero</code> escreve os testes antes do código e serve tanto para feature quanto para fix.</p>
+    <div class="opts">
+      <div class="opt rec"><b>A · Pela suíte que o projeto tem <span class="tag r">Recomendado</span></b><p class="pro"><b>Com E2E:</b> a feature escreve os cenários E2E primeiro e implementa até passarem (o local hero de hoje); o fix implementa com unitário e roda o E2E depois.</p><p class="pro"><b>Só unitário:</b> feature e fix implementam e depois escrevem o unitário, o fluxo que muitas empresas usam.</p><p class="pro">A análise lê a suíte E2E e a ordem dos jobs no CI; com E2E, o assistente pergunta "Write the E2E tests first for features?" (padrão sim).</p><p class="con">Duas variantes por fluxo para manter (as duas já existem hoje em workflows separados).</p></div>
+      <div class="opt"><b>B · Sempre testes primeiro</b><p class="pro">Um caminho só.</p><p class="con">Estranho para fix e para quem trabalha no fluxo tradicional; sem E2E, o "teste primeiro" vira só unitário.</p></div>
+      <div class="opt"><b>C · Sempre código primeiro</b><p class="pro">Familiar.</p><p class="con">Perde o que funciona bem hoje para features com E2E.</p></div>
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D8</span><h4>Como a sugestão de fluxos sai da análise</h4></div>
+    <div class="opts">
+      <div class="opt rec"><b>A · Regras sobre o perfil <span class="tag r">Recomendado</span></b><p class="pro">O <code>composeWorkflowSet</code> do #487 já mapeia time, merge, release, comandos e linguagens para o conjunto.</p><p class="pro">Determinístico, testável, explica o porquê com a evidência do perfil.</p><p class="con">Casos raros caem no padrão (e o usuário troca).</p></div>
+      <div class="opt"><b>B · Um modelo escolhe os fluxos</b><p class="pro">Flexível.</p><p class="con">Caro, difícil de testar, e as escolhas são poucas.</p></div>
+      <div class="opt"><b>C · Sempre o mesmo conjunto padrão</b><p class="pro">Simples.</p><p class="con">Ignora a análise que o dono quer usar.</p></div>
+    </div>
+    <div class="scroll"><table class="t rules-t">
+      <thead><tr><th>Campo do perfil</th><th>Afeta</th><th>Regra</th></tr></thead>
+      <tbody>
+        <tr><td>mode: local | remote</td><td>feature, fix</td><td>local → merge na base local e, como último passo do workflow, push do main; remote → branch, PR no GitHub/GitLab, acompanhamento e merge por lá</td></tr>
+        <tr><td>release: milestone | per-merge | train | rc-stable</td><td>release, fix (modo hotfix)</td><td>com tags → o hotfix sai da última tag e vira patch; per-merge → sai de main</td></tr>
+        <tr><td>tests: unit | unit+e2e (e2eCommand)</td><td>feature, fix</td><td>unit+e2e → feature com E2E primeiro, fix com E2E depois; unit → os dois implementam e depois escrevem o unitário. Lido de configs (Playwright, Cypress…), scripts <code>e2e</code> e da ordem dos jobs no CI</td></tr>
+        <tr><td>testCommand, checkCommand</td><td>os três</td><td>vão nos prompts e nos passos de suíte; sem comando de teste, o feature avisa e usa "tests first" para criar a suíte</td></tr>
+        <tr><td>ci: none | release | pr+release</td><td>feature, release</td><td>pr+release → o feature remoto espera o CI do PR (o passo "watch CI" do <code>pr-pipeline</code>); release → a release faz push da tag, espera o run de CI e mostra os builds; none → só a suíte local, e "Set up release CI" aparece nos próximos passos</td></tr>
+        <tr><td>languages</td><td>os três</td><td>escolhem as skills <code>*-js</code>, <code>*-python</code>, <code>*-go</code>…</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- fundo -->
+<h2 id="fundo">O que roda em segundo plano</h2>
+<p>Exemplo de um repo médio importado. Verde é grátis (máquina), azul usa modelo real (só depois do clique), âmbar é o usuário preenchendo o assistente. Os tempos são ilustrativos.</p>
+<div class="scroll"><div class="gantt">
+  <span class="lab">Usuário</span><div class="lane"><b class="g-user" style="left:0;width:16%">etapa 2</b><b class="g-user" style="left:17%;width:30%">etapa 3: escolhe análises e fluxos</b><b class="g-user" style="left:72%;width:27%">etapa 4: revisa e conclui</b></div>
+  <span class="lab">Clone</span><div class="lane"><b class="g-free" style="left:16%;width:22%">git clone</b></div>
+  <span class="lab">Fatos</span><div class="lane"><b class="g-free" style="left:38%;width:6%">facts</b></div>
+  <span class="lab">Perfil Ways of working</span><div class="lane"><b class="g-free" style="left:44%;width:6%">git</b><b class="g-model" style="left:50%;width:8%">campos null</b></div>
+  <span class="lab">Cidade + arquitetura</span><div class="lane"><b class="g-model" style="left:47%;width:34%">project-map: plano → regras → análise</b></div>
+  <span class="lab">Backlog de refactor</span><div class="lane"><b class="g-model" style="left:81%;width:12%">PO ranqueia</b></div>
+</div></div>
+<div class="legend"><span><i class="g-free"></i>grátis, sem modelo</span><span><i class="g-model"></i>modelo real, após o clique</span><span><i class="g-user"></i>usuário no assistente</span></div>
+<p class="note">O usuário pode concluir antes de tudo terminar: a revisão mostra "still analyzing" e a página do projeto se completa sozinha, com uma notificação quando a cidade e o backlog ficarem prontos.</p>
+
+<!-- workflows -->
+<h2 id="workflows">Workflows: o conjunto padrão e a reorganização</h2>
+<p>Hoje são <b>15 workflows</b> e <b>6 pipelines</b> bundled. O dono usa na prática um só, o <code>ai-development-local-hero</code> (nome real do "AI Local Hero": testes primeiro, merge local, sem push). Existem três variações de desenvolvimento, dois de release e dois de análise que fazem quase a mesma coisa. A proposta: <b>11 workflows</b>, com três padrão por projeto. Os workflows de Planning (writer-reviewer, ai-arena, issue-tracker) ficam como estão: serão reorganizados na próxima proposta, a do fluxo de escrita com revisão manual.</p>
+
+<div class="decision">
+  <div class="d-head"><span class="d-id">D9</span><h4>Quais fluxos todo projeto recebe</h4></div>
+  <div class="opts">
+    <div class="opt rec"><b>A · feature, fix, release (hotfix como modo do fix) <span class="tag r">Recomendado</span></b><p class="pro">É o ciclo de vida do código: fazer, consertar, entregar; o hotfix é o fix urgente, que sai da última tag.</p><p class="pro">Separa o que hoje o local hero mistura (feature e fix no mesmo fluxo).</p><p class="pro">Bate com o fast lane de bug/hotfix do Discovery.</p><p class="con">O fix é o único workflow novo.</p></div>
+    <div class="opt"><b>B · intake + desenvolvimento + release (o conjunto do #487)</b><p class="pro">Já implementado.</p><p class="con">Sem caminho de urgência; o intake (issue) é melhor como ferramenta do Planning do que como fluxo do projeto.</p></div>
+  </div>
+</div>
+
+<div class="scroll"><div class="map">
+  <div class="groupt">Fluxos do projeto (os 3 padrão)</div>
+  <div class="wf"><code>ai-development-local-hero</code><small>testes primeiro, merge local</small></div><span class="arr">→</span><div class="wf new"><code>feature</code><span class="act m">base</span><small>variante <b>E2E first</b> (o padrão quando há suíte E2E), <b>local</b> ou <b>remote</b>; review simples ou multi-modelo. Hoje é usado também para fix: isso passa para o <code>fix</code></small></div>
+  <div class="wf gone"><code>software-development-local-hero</code><small>implementa sem testes primeiro, merge local</small></div><span class="arr">→</span><div class="wf new"><code>feature</code> / <code>fix</code><span class="act d">vira variante</span><small>"code first": implementa e depois escreve o unitário (o fluxo padrão de muitas empresas)</small></div>
+  <div class="wf gone"><code>software-development</code><small>PR/MR, CI, preview, deploy, GitHub e GitLab</small></div><span class="arr">→</span><div class="wf new"><code>feature</code><span class="act d">vira variante</span><small>variante <b>remote</b>, a partir do fragment <code>pr-pipeline</code></small></div>
+  <div class="wf gone"><code>multi-model-review</code><small>vários modelos revisam o mesmo diff</small></div><span class="arr">→</span><div class="wf new"><code>feature</code><span class="act d">vira opção</span><small>"review: multi-model"; também disponível sozinho pelo Start como modo de revisão</small></div>
+  <div class="wf" style="border-style:dotted"><span class="a-muted">(não existe)</span></div><span class="arr">→</span><div class="wf new"><code>fix</code><span class="act n">novo</span><small>implementa com unitário, roda o E2E depois (se houver), mescla; modo <b>hotfix</b>: sai da última tag e prepara o patch</small></div>
+  <div class="wf"><code>release</code><small>suíte inteira + E2E, Ship ou Hold</small></div><span class="arr">→</span><div class="wf new"><code>release</code><span class="act k">mantém</span><small>estilos milestone / per-merge / train / rc-stable (fragment <code>release-pipeline</code>)</small></div>
+  <div class="wf gone"><code>e2e-release</code><small>só a suíte E2E antes da release</small></div><span class="arr">→</span><div class="wf new"><code>release</code><span class="act d">vira passo</span><small>o passo E2E da release</small></div>
+
+  <div class="groupt">Planning (fica para a próxima proposta)</div>
+  <div class="wf"><code>writer-reviewer</code><small>um escritor, um revisor</small></div><span class="arr">→</span><div class="wf new"><code>writer-reviewer</code><span class="act k">mantém</span><small>sem mudança agora</small></div>
+  <div class="wf"><code>ai-arena</code><small>até 5 modelos escrevem e se criticam</small></div><span class="arr">→</span><div class="wf new"><code>ai-arena</code><span class="act k">mantém</span><small>sem mudança agora</small></div>
+  <div class="wf"><code>issue-tracker</code><small>pedido → issue triada</small></div><span class="arr">→</span><div class="wf new"><code>issue-tracker</code><span class="act k">mantém</span><small>sem mudança agora</small></div>
+
+  <div class="groupt">Manutenção</div>
+  <div class="wf"><code>project-map</code><small>cidade + análise de arquitetura</small></div><span class="arr">→</span><div class="wf new"><code>analyze-project</code><span class="act m">une</span><small>cidade, arquitetura e propostas de refatoração num run: é o que o onboarding chama</small></div>
+  <div class="wf gone"><code>refactor-proposals</code><small>propostas depois de uma release</small></div><span class="arr">→</span><div class="wf new"><code>analyze-project</code><span class="act d">vira modo</span><small>"since: last tag" (o pipeline release-then-refactors usa esse modo)</small></div>
+  <div class="wf"><code>refactor</code><small>uma refatoração segura</small></div><span class="arr">→</span><div class="wf new"><code>refactor</code><span class="act k">mantém</span><small></small></div>
+  <div class="wf"><code>backlog-refresh</code><small>revisa issues contra o código</small></div><span class="arr">→</span><div class="wf new"><code>backlog-refresh</code><span class="act k">mantém</span><small></small></div>
+  <div class="wf"><code>test-batch</code><small>testes que faltam no que mesclou</small></div><span class="arr">→</span><div class="wf new"><code>test-backfill</code><span class="act m">renomeia</span><small>candidato a virar passo opcional da release numa fase seguinte</small></div>
+
+  <div class="groupt">AI</div>
+  <div class="wf"><code>run-retrospective</code><small>melhora skills e workflows a partir de um run</small></div><span class="arr">→</span><div class="wf new"><code>retrospective</code><span class="act m">renomeia</span><small></small></div>
+</div></div>
+
+<h3>Pipelines: de 6 para 5</h3>
+<div class="scroll"><table class="t">
+  <thead><tr><th>Hoje</th><th>Proposta</th></tr></thead>
+  <tbody>
+    <tr><td><code>issue-to-roadmap</code></td><td><b>mantém</b>: issue → Product Owner coloca no roadmap</td></tr>
+    <tr><td><code>enrich-save-develop</code></td><td><b>mantém</b>; o passo de desenvolvimento passa a apontar para <code>feature</code> (pelo alias)</td></tr>
+    <tr><td><code>rfc-to-issues</code></td><td><b>mantém</b> (Planning, próxima proposta)</td></tr>
+    <tr><td><code>release-then-refactors</code></td><td><b>mantém</b>: release → analyze-project (since last tag) → roadmap</td></tr>
+    <tr><td><code>ai-arena-write-review</code></td><td><b>mantém</b> (Planning, próxima proposta)</td></tr>
+    <tr><td><code>develop-to-retrospective</code></td><td>removido; o feature ganha "retrospective after" como opção</td></tr>
+  </tbody>
+</table></div>
+
+<div class="decision">
+  <div class="d-head"><span class="d-id">D10</span><h4>Como renomear sem quebrar quem já usa</h4></div>
+  <div class="opts">
+    <div class="opt rec"><b>A · Aliases no carregador + variantes por input <span class="tag r">Recomendado</span></b><p class="pro">O nome antigo resolve para o novo com os inputs da variante (<code>software-development</code> → <code>feature</code> com <code>mode: remote</code>).</p><p class="pro">Manifestos, <code>settings.hiddenWorkflows</code>, itens do roadmap e o histórico de runs continuam funcionando.</p><p class="con">A tabela de aliases fica por duas versões e depois sai.</p></div>
+    <div class="opt"><b>B · Renomear de uma vez</b><p class="pro">Código limpo.</p><p class="con">Quebra manifestos de repositórios e o roadmap salvo.</p></div>
+    <div class="opt"><b>C · Manter os 15 e só esconder</b><p class="pro">Nenhuma migração.</p><p class="con">Não reduz nada que precisa ser mantido; só esconde.</p></div>
+  </div>
+  <p class="why"><b>Onde os fluxos do projeto ficam:</b> por padrão o projeto só referencia as variantes bundled (no JSON do projeto, no workspace); nada é escrito no repositório no cadastro. "Customize" escreve em <code>.multiagent/</code>, como o "Write to the repository" do Ways of working faz hoje, sem commit.</p>
+</div>
+
+<!-- sdlc -->
+<h2 id="sdlc">Alinhamento com o AI-native SDLC da Anthropic</h2>
+<p>A Anthropic publicou em agosto de 2026 o <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">AI-native SDLC playbook</a>: seis etapas em loop, cada uma terminando num artefato versionado que uma pessoa aprova e que a etapa seguinte lê. O app já tem quase todas as peças; o que falta é tratar os documentos como artefatos de etapa, com formato e lugar definidos por projeto.</p>
+<style>
+.loop{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:14px;min-width:900px}
+.lp{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:6px}
+.lp .h{font-family:var(--display);font-weight:700;font-size:15px}
+.lp code{font-size:12px}
+.lp .who{color:var(--soft);font-size:12px}
+.lp .app{border-top:1px solid var(--line);padding-top:6px}
+.lp .gap{color:var(--warn);font-size:12.5px}
+.lp.cb{border:1.5px solid var(--accent)}
+.lp .tagcb{font-family:var(--mono);font-size:10.5px;color:var(--accent);text-transform:uppercase;letter-spacing:.05em}
+.back{min-width:900px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--soft);margin-top:6px;border:1px dashed var(--line);border-radius:8px;padding:6px}
+</style>
+<div class="scroll">
+<div class="loop">
+  <div class="lp"><span class="tagcb">Plan &amp; Design</span><span class="h">Plan</span><code>intent.md</code><span class="who">problema, resultado, afetados, restrições, perguntas · aprova: product owner</span><div class="app"><b>No app:</b> Inbox e Discovery (Triage/Shape), clarity, Grill me</div><span class="gap">Falta: o documento do card no formato de intent</span></div>
+  <div class="lp"><span class="tagcb">Plan &amp; Design</span><span class="h">Design</span><code>spec.md</code><span class="who">requisitos + design, pontos de atenção · aprova: product owner, tech lead se o risco é maior</span><div class="app"><b>No app:</b> Discovery Define, Write &amp; Review, AI Arena, Mockups (#625)</div><span class="gap">Falta: formato de spec; é o write doc</span></div>
+  <div class="lp cb"><span class="tagcb">Code &amp; Build</span><span class="h">Build</span><code>plan.md</code> + código<span class="who">arquivos, ordem, riscos, prova · aprova: engenheiro aceita o plano</span><div class="app"><b>No app:</b> feature e fix, o brief do desenvolvedor, AGENTS.md, skills, capabilities, worktrees, roadmap</div><span class="gap">Falta: o brief virar <code>plan.md</code> versionado</span></div>
+  <div class="lp cb"><span class="tagcb">Code &amp; Build</span><span class="h">Test</span>evidência<span class="who">testes, build, diff de screenshots, evals · aprova: code owner</span><div class="app"><b>No app:</b> test writer, E2E primeiro, suíte, base check, screenshots com axe (#387)</div><span class="gap">Falta: evals de skills e workflows no CI</span></div>
+  <div class="lp cb"><span class="tagcb">Code &amp; Build</span><span class="h">Deploy</span><code>REVIEW.md</code> + PR<span class="who">política de revisão · aprova: code owner, release manager</span><div class="app"><b>No app:</b> review com as rules do <code>code-review</code>, modo remote com PR, release com o gate do Ship e CI na release</div><span class="gap">Falta: <code>REVIEW.md</code> por projeto</span></div>
+  <div class="lp"><span class="tagcb">Night watch · Analyser</span><span class="h">Maintain</span>novo <code>intent.md</code><span class="who">incidente ou anomalia vira intent · triagem: service owner</span><div class="app"><b>No app:</b> Night watch, analyze-project, backlog-refresh, ci-failure-triage, dependency audit</div><span class="gap">Falta: achados entrarem como card no Inbox</span></div>
+</div>
+<div class="back">↺ Maintain gera um novo intent, que volta para o Plan</div>
+</div>
+<p><b>O Code &amp; Build cobre Build e Test inteiros, mais Deploy</b> (a release com o Ship, o CI na release e o PR no modo remote). Plan e Design são o Plan &amp; Design; o Maintain está espalhado entre Night watch, Refactor e o Oracle.</p>
+
+<div class="screen"><div class="wiz">
+  <div class="stepper"><span class="ok"><i>✓</i>Start</span><span class="ok"><i>✓</i>Repository</span><span class="on"><i>3</i>Analysis &amp; workflows</span><span><i>4</i>Review</span></div>
+  <div class="wiz-body two" style="min-height:0">
+    <div>
+      <h5 class="a-h1" style="font-size:14px">How work on Shop is documented</h5>
+      <p class="a-muted" style="margin:4px 0 8px">Each step leaves a file the next step reads, and a person approves it.</p>
+      <div class="a-chk a-radio"><i></i><div><b>Light</b><div class="a-muted">An issue, then feature or fix. Nothing else is written.</div></div></div>
+      <div class="a-chk a-radio"><i class="on"></i><div><b>Standard</b><div class="a-muted">intent.md → spec.md → plan.md → code. Recommended for features.</div></div></div>
+      <div class="a-chk a-radio"><i></i><div><b>Full</b><div class="a-muted">Standard + REVIEW.md + evals of the project's skills and workflows.</div></div></div>
+    </div>
+    <div>
+      <h5 class="a-h1" style="font-size:14px">Where the files live</h5>
+      <div class="lbl">In the repository</div><div class="inp">docs/work/&lt;item&gt;/intent.md + intent.html · spec.md + spec.html · plan.md</div>
+      <p class="a-muted" style="margin:8px 0 0">Written by the run, committed with its change, approved at its gate. The markdown and its reviewable page are both committed, so the history stays in the repository.</p>
+      <div class="a-row" style="margin-top:10px"><span class="a-pill b">fix: issue only</span><span class="a-pill b">feature: Standard</span><span class="a-pill">release: notes</span></div>
+    </div>
+  </div>
+</div></div>
+<p class="screen-cap">Mock 5. O modelo de trabalho do projeto, na etapa 3. Fix fica leve por padrão; feature segue o Padrão.</p>
+
+<div class="decision">
+  <div class="d-head"><span class="d-id">D15</span><h4>Modelo de trabalho por projeto</h4></div>
+  <div class="opts">
+    <div class="opt rec"><b>A · Leve / Padrão / Completo, por tipo de trabalho <span class="tag r">Recomendado</span></b><p class="pro">O projeto escolhe no onboarding; feature usa Padrão, fix usa Leve, e cada item pode subir de nível.</p><p class="pro">Os gates que o app já tem passam a aprovar artefatos: o commit do Discovery aprova o intent e o spec, o gate do desenvolvedor aprova o plano.</p><p class="con">Mais uma escolha no onboarding (com padrão pronto).</p></div>
+    <div class="opt"><b>B · Sempre o modelo completo</b><p class="pro">Fiel ao playbook.</p><p class="con">Pesado para fix e projetos pequenos; vira burocracia.</p></div>
+    <div class="opt"><b>C · Não adotar agora</b><p class="pro">Nada novo.</p><p class="con">Os documentos continuam soltos (issue, card, brief), sem o loop que o dono quer.</p></div>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="d-head"><span class="d-id">D16</span><h4>Onde os artefatos ficam</h4></div>
+  <div class="opts">
+    <div class="opt rec"><b>A · Markdown e HTML commitados no repositório <span class="tag r">Decidido pelo dono</span></b><p class="pro">Como no playbook: versionado junto com a mudança, lido por qualquer agente e por quem clona o repo.</p><p class="pro">O HTML (a página para ler e revisar, com os screenshots de antes e depois) vai junto: fica o histórico, e depois um front pode navegar pelos intents e validar cada um.</p><p class="pro">São dados da feature e da issue, não dados do usuário no workspace.</p><p class="con">O repo cresce com as imagens: elas ficam em JPEG comprimido, numa pasta por item.</p></div>
+    <div class="opt"><b>B · Só o markdown no repo, HTML só no app</b><p class="pro">Repo menor.</p><p class="con">Perde o histórico da página revisada e o front de navegação.</p></div>
+    <div class="opt"><b>C · Só no workspace</b><p class="pro">Não toca o repositório.</p><p class="con">Some para quem clona; agentes de fora não leem.</p></div>
+  </div>
+  <p class="why"><b>Escopo:</b> esta proposta só registra a escolha no onboarding e o caminho padrão (<code>docs/work/&lt;item&gt;/</code>, markdown + HTML + imagens). Gerar e revisar os documentos é o fluxo de write doc; o front que navega pelos intents fica para depois. O run escreve e commita esses arquivos com o gate de sempre; o onboarding nunca escreve no repositório.</p></p>
+</div>
+
+<!-- 4 -->
+<section class="step" id="e4">
+  <div class="step-head"><span class="step-num">4</span><h3>Revisão e conclusão</h3></div>
+  <p>Um resumo de uma tela: o perfil, os três fluxos escolhidos, a cidade (miniatura, com "Open the city") e o topo do backlog de refatoração. O que ainda está rodando aparece como tal. <b>Finish</b> funciona a qualquer momento.</p>
+  <div class="screen"><div class="wiz">
+    <div class="stepper"><span class="ok"><i>✓</i>Start</span><span class="ok"><i>✓</i>Repository</span><span class="ok"><i>✓</i>Analysis &amp; workflows</span><span class="on"><i>4</i>Review</span></div>
+    <div class="wiz-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+      <div class="a-panel"><b>Shop</b><div class="a-muted a-mono" style="margin-top:2px">acme/shop · &lt;workspace&gt;/repos/acme-shop</div>
+        <div class="lbl">How Shop is worked on</div><div class="a-row"><span class="a-pill">local + remote PRs</span><span class="a-pill">CI on releases</span><span class="a-pill">milestones</span><span class="a-pill">JS, Python</span></div>
+        <div class="lbl">Workflows</div>
+        <div style="line-height:1.9"><span class="a-pill b">feature</span> remote PR · E2E first<br><span class="a-pill b">fix</span> unit, then E2E<br><span class="a-pill b">release</span> milestone</div></div>
+      <div class="a-panel"><div class="a-row" style="justify-content:space-between"><b>City</b><span class="a-btn s">Open the city</span></div>
+        <div class="city-mini" style="margin-top:8px"><i style="left:28%;height:46px;background:#f87171"></i><i style="left:34%;height:30px;background:#facc15"></i><i style="left:40%;height:60px;background:#7c9cff"></i><i style="left:46%;height:22px;background:#4ade80"></i><i style="left:52%;height:38px;background:#4ade80"></i><i style="left:58%;height:52px;background:#7c9cff"></i><i style="left:64%;height:26px;background:#facc15"></i><i style="left:70%;height:34px;background:#4ade80"></i></div>
+        <div class="a-muted" style="margin-top:6px">212 files · 5 zones · 3 in the Danger Zone</div></div>
+      <div class="a-panel"><div class="a-row" style="justify-content:space-between"><b>Refactor backlog</b><span class="a-pill y">ranking…</span></div>
+        <div style="margin-top:6px"><div class="rf"><span class="a-pill">1</span><span style="flex:1">Split checkout.js</span><span class="a-mono" title="Score 0-100, as on Facts">82</span><span class="a-pill" style="color:var(--a-red);border-color:rgba(248,113,113,.4)">Danger Zone</span></div><div class="rf"><span class="a-pill">2</span><span style="flex:1">Duplicated price rules (api/, web/)</span><span class="a-mono">67</span><span class="a-pill" style="color:var(--a-red);border-color:rgba(248,113,113,.4)">Danger Zone</span></div><div class="rf"><span class="a-pill">3</span><span style="flex:1">Tests for payments/refund.py</span><span class="a-mono">41</span><span class="a-pill" style="color:var(--a-yellow);border-color:rgba(250,204,21,.35)">Cowboy Code</span></div></div>
+        <div class="a-muted" style="margin-top:6px">7 proposals · nothing added to the roadmap</div></div>
+    </div>
+    <div class="wiz-foot"><span class="a-btn">Back</span><span class="a-btn p">Finish</span></div>
+  </div></div>
+  <p class="screen-cap">Mock 6. A revisão. O ranking do PO ainda roda e preenche a lista sozinho.</p>
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D11</span><h4>A revisão espera as análises?</h4></div>
+    <div class="opts">
+      <div class="opt rec"><b>A · Não bloqueia <span class="tag r">Recomendado</span></b><p class="pro">Finish a qualquer momento; o que falta chega na página do projeto, com notificação.</p><p class="con">A primeira visita à cidade pode estar vazia por alguns minutos.</p></div>
+      <div class="opt"><b>B · Espera tudo terminar</b><p class="pro">A revisão é sempre completa.</p><p class="con">Prende o usuário minutos olhando uma barra.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="step" id="e5">
+  <div class="step-head"><span class="step-num">5</span><h3>Depois: o que vai para o roadmap</h3></div>
+  <p>O assistente fecha na página do projeto com um cartão "Next steps". O usuário escolhe. Nada começa a rodar por conta própria, e os gates humanos dos fluxos continuam onde estão.</p>
+  <div class="screen"><div class="app" style="padding:18px 22px">
+    <div class="a-row" style="justify-content:space-between"><h5 class="a-h1">Shop</h5><div class="a-row"><span class="a-btn">Ways of working</span><span class="a-btn p">Start workflow</span></div></div>
+    <div class="a-panel" style="margin-top:12px">
+      <div class="a-row" style="justify-content:space-between"><b style="font-size:13.5px">Next steps</b><span class="a-muted">Shop is ready · 3 workflows · city and refactor backlog done</span></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px">
+        <div class="a-panel" style="background:var(--a-panel2)"><b>Add refactors to the roadmap</b><div class="a-chk"><i class="on"></i><span>Split checkout.js</span></div><div class="a-chk"><i class="on"></i><span>Duplicated price rules</span></div><div class="a-chk"><i></i><span>Tests for refund.py</span></div><span class="a-btn s" style="margin-top:6px">File and add 2</span></div>
+        <div class="a-panel" style="background:var(--a-panel2)"><b>Capture the first idea</b><p class="a-muted" style="margin:4px 0 8px">A line in the Inbox; Discovery shapes it into issues.</p><span class="a-btn s">Open Inbox</span></div>
+        <div class="a-panel" style="background:var(--a-panel2)"><b>Keep refactoring</b><p class="a-muted" style="margin:4px 0 8px">Add a refactor to the roadmap every 10 runs.</p><span class="a-btn s">Turn on</span></div>
+        <div class="a-panel" style="background:var(--a-panel2)"><b>Set up release CI</b><p class="a-muted" style="margin:4px 0 8px">Builds for macOS, Linux and Windows when you tag a release. A feature run writes the workflow.</p><span class="a-btn s">Add to roadmap</span></div>
+        <div class="a-panel" style="background:var(--a-panel2)"><b>Investigate screenshots</b><p class="a-muted" style="margin:4px 0 8px">A spike finds how to run Shop's front in a sandbox and capture its screens (Storybook found). Its findings propose the setup.</p><span class="a-btn s">Add spike to roadmap</span></div>
+      </div>
+    </div>
+  </div></div>
+  <p class="screen-cap">Mock 7. O cartão "Next steps" na página do projeto, depois do Finish. "Investigate screenshots" prioriza um spike no roadmap do projeto.</p>
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D12</span><h4>Como o projeto chega ao roadmap</h4></div>
+    <div class="opts">
+      <div class="opt rec"><b>A · O usuário escolhe no "Next steps" <span class="tag r">Recomendado</span></b><p class="pro">Reaproveita <code>refactor:file</code> + <code>refactor:addToRoadmap</code> (#357, #435) e a cadência.</p><p class="pro">Nada começa sem clique; o roadmap continua parado até Start.</p><p class="con">Mais um cartão na página do projeto (some quando dispensado).</p></div>
+      <div class="opt"><b>B · O PO monta um roadmap inicial sozinho</b><p class="pro">Projeto "pronto para a noite".</p><p class="con">Custo e decisões sem o dono; vai contra "o usuário decide o que vai para o roadmap".</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- screenshots -->
+<h2 id="screenshots">Screenshots automáticos do projeto</h2>
+<p>Quem escreve o plan, o write e o review muitas vezes não é técnico: clona o repositório, mas configurar a aplicação para rodar é doloroso, e acaba tirando screenshot na mão. Neste app isso já funciona (<code>npm run screenshot</code> e o passo <code>screenshots</code> dos workflows); a ideia é oferecer o mesmo para o projeto que está sendo cadastrado, começando por um <b>spike no projeto do usuário</b>.</p>
+<div class="decision">
+  <div class="d-head"><span class="d-id">D19</span><h4>Como o projeto ganha screenshots automáticos</h4></div>
+  <div class="opts">
+    <div class="opt rec"><b>A · Um spike no roadmap do projeto, a partir do "Next steps" <span class="tag r">Recomendado</span></b><p class="pro">A etapa 3 já detecta sinais (Storybook, Playwright, mocks, o comando de run do Local preview); o cartão "Investigate screenshots" coloca um spike no roadmap do projeto, se o usuário quiser.</p><p class="pro">O spike roda no projeto, só-leitura mais tentativas em sandbox (dados de exemplo, sem rede, sem segredos reais): tenta a captura genérica pelo Local preview e avalia um harness no contrato <code>screenshot</code> do app.</p><p class="pro">O resultado é um documento de achados (no modelo de trabalho do projeto) e uma proposta de item "Set up screenshots", que o usuário aprova como qualquer item.</p><p class="con">Um run a mais antes da captura automática existir no projeto.</p></div>
+    <div class="opt"><b>B · Implementar o harness direto</b><p class="pro">Mais rápido quando dá certo.</p><p class="con">Escreve código no projeto sem saber se o caminho funciona; caro quando falha.</p></div>
+    <div class="opt"><b>C · Só captura genérica, sem código no projeto</b><p class="pro">Nada muda no repositório.</p><p class="con">Quebra com login, dados vazios e APIs externas.</p></div>
+  </div>
+  <p class="why"><b>Enquanto isso:</b> no fluxo de write doc, o dono pode colar ou anexar screenshots no chat das iterações (o mecanismo de imagens coladas do #130), e o writer usa o comando de screenshot do projeto quando ele existir.</p>
+</div>
+
+<!-- monitor -->
+<h2 id="monitor">Monitor: erros de produção viram intents</h2>
+<p>A última peça do loop do SDLC (o Maintain): o app passa a ouvir os erros do projeto rodando, como respostas 500 e logs de erro, agrupa o que se repete e propõe um fix. Hoje o app não tem esse tipo de monitor; ele entra como um grupo novo do menu, <b>Monitor</b>, junto do Night watch. É a última fase do plano.</p>
+<style>
+.mon{display:grid;grid-template-columns:168px minmax(0,1fr)}
+.errrow{display:grid;grid-template-columns:70px minmax(0,1fr) 90px 90px auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--a-border)}
+.errrow:first-of-type{border-top:0}
+.code5{font-family:var(--mono);font-size:11px;color:var(--a-red);border:1px solid rgba(248,113,113,.4);border-radius:5px;padding:1px 6px;text-align:center}
+.spark{height:18px;display:flex;align-items:flex-end;gap:2px}
+.spark i{width:5px;background:var(--a-red);opacity:.7;border-radius:1px}
+</style>
+<div class="screen"><div class="app">
+  <div class="a-top"><span class="a-brand">Multiagent <em>Orchestrator</em></span><span class="a-muted">Project</span><span class="a-sel">Shop</span><span class="a-sp"></span><span class="a-btn">Oracle</span></div>
+  <div class="mon">
+    <div class="a-side" style="min-height:360px">
+      <div class="a-item">Home</div>
+      <div class="a-grp">Plan &amp; Design</div><div class="a-item">Inbox</div><div class="a-item">Discovery</div>
+      <div class="a-grp">Code &amp; Build</div><div class="a-item">Projects</div><div class="a-item">Backlog</div><div class="a-item">Roadmap</div>
+      <div class="a-grp">Monitor</div><div class="a-item on new">Errors <span class="a-badge">NEW</span></div><div class="a-item">Night watch</div>
+    </div>
+    <div class="a-main">
+      <div class="a-row" style="justify-content:space-between"><h5 class="a-h1">Errors</h5><div class="a-row"><span class="a-pill g">Sentry · polled 2 min ago</span><span class="a-pill">api logs · every 5 min</span><span class="a-btn s">Sources…</span></div></div>
+      <p class="a-help">Production errors of Shop, grouped. A new group gets a diagnosis and becomes an intent in the Inbox; a fix run starts only when you say so.</p>
+      <div class="a-panel">
+        <div class="errrow"><span class="code5">500</span><div><b>POST /api/checkout</b><div class="a-muted a-mono">TypeError: cannot read 'total' of undefined · checkout.js:412</div></div><div class="spark"><i style="height:4px"></i><i style="height:6px"></i><i style="height:12px"></i><i style="height:18px"></i><i style="height:15px"></i></div><span class="a-muted">212 · 1h</span><span class="a-row"><span class="a-pill y">intent in Inbox</span><span class="a-btn s">Propose fix</span></span></div>
+        <div class="errrow"><span class="code5">500</span><div><b>GET /api/orders/:id</b><div class="a-muted a-mono">timeout after 30s · db pool exhausted</div></div><div class="spark"><i style="height:2px"></i><i style="height:3px"></i><i style="height:2px"></i><i style="height:9px"></i><i style="height:5px"></i></div><span class="a-muted">31 · 1h</span><span class="a-row"><span class="a-pill b">fix run · waiting for you</span></span></div>
+        <div class="errrow"><span class="code5">ERR</span><div><b>worker: refund-sync</b><div class="a-muted a-mono">payments/refund.py:88 KeyError 'currency'</div></div><div class="spark"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></div><span class="a-muted">6 · 24h</span><span class="a-row"><span class="a-pill">new</span><span class="a-btn s">Diagnose</span></span></div>
+      </div>
+      <p class="a-muted a-mono" style="margin-top:10px">Automation: diagnose new groups (Ask me) · fix runs (Off) · at most 5 diagnoses a day · daily budget</p>
+    </div>
+  </div>
+</div></div>
+<p class="screen-cap">Mock 8. Monitor › Errors. Cada grupo de erro novo vira um intent no Inbox; "Propose fix" começa um run do fluxo fix, que para no gate de sempre.</p>
+
+<div class="decision">
+  <div class="d-head"><span class="d-id">D17</span><h4>Como os erros chegam ao app</h4></div>
+  <div class="opts">
+    <div class="opt rec"><b>A · Polling de fontes conectadas <span class="tag r">Recomendado</span></b><p class="pro">O app busca, de tempos em tempos: Sentry, Datadog, CloudWatch, GCP Logging ou uma URL / arquivo de log com filtro (status 500, nível error).</p><p class="pro">Só conexões de saída: funciona no .exe, sem expor nada.</p><p class="con">Atraso de alguns minutos; um conector por fonte.</p></div>
+    <div class="opt"><b>B · Webhook recebido pelo app</b><p class="pro">Na hora.</p><p class="con">Precisa de uma URL pública para o desktop: só pelo servidor do engine, e depois da revisão de segurança (#466–#470).</p></div>
+    <div class="opt"><b>C · Agente lendo logs por conta própria</b><p class="pro">Flexível.</p><p class="con">Caro e imprevisível para algo que um filtro resolve; o modelo entra só no diagnóstico.</p></div>
+  </div>
+  <p class="why"><b>Recomendação:</b> A, com o agrupamento (rota + mensagem + arquivo:linha) e a deduplicação feitos sem modelo. Os tokens das fontes ficam no cofre do sistema (o <code>safeStorage</code> do Electron), nunca em arquivo do workspace. Webhook vem depois, pelo servidor do engine.</p>
+</div>
+
+<div class="decision">
+  <div class="d-head"><span class="d-id">D18</span><h4>O que acontece com um erro novo</h4></div>
+  <div class="opts">
+    <div class="opt rec"><b>A · Diagnóstico vira intent; fix só com clique <span class="tag r">Recomendado</span></b><p class="pro">Um turno só-leitura do Oracle cruza o stack trace com o código e escreve o diagnóstico como <code>intent.md</code> num card do Inbox (o Maintain do playbook).</p><p class="pro">"Propose fix" começa o fluxo <code>fix</code>, que para no gate humano como qualquer run.</p><p class="pro">Modos Ask me / On / Off, como as automações das colunas do Discovery (#259), com teto diário.</p><p class="con">Um card por grupo novo: o teto e a deduplicação evitam enxurrada.</p></div>
+    <div class="opt"><b>B · Fix automático até o merge</b><p class="pro">Mais rápido.</p><p class="con">Atravessaria o gate humano: proibido pelo AGENTS.md.</p></div>
+    <div class="opt"><b>C · Só listar os erros</b><p class="pro">Barato.</p><p class="con">Não fecha o loop; vira mais um dashboard.</p></div>
+  </div>
+</div>
+
+<h2 id="custos">Custos de chamadas reais</h2>
+<p>Ordem de grandeza, sem medição. Todo o desenvolvimento roda no provedor simulado (<code>MULTIAGENT_SIMULATION_ONLY=1</code>), sem custo. O assistente mostra o total antes do clique e conta no orçamento diário (#206).</p>
+<div class="scroll"><table class="t">
+  <thead><tr><th>Item</th><th>Quando</th><th>Modelo</th><th>Estimativa</th></tr></thead>
+  <tbody>
+    <tr><td>Validar acesso, clonar, fatos</td><td>sempre</td><td>nenhum</td><td class="num">$0</td></tr>
+    <tr><td>Perfil do Ways of working pelo git</td><td>sempre</td><td>nenhum</td><td class="num">$0</td></tr>
+    <tr><td>Ways of working: campos que o git não responde</td><td>só quando algum ficou null</td><td>Oracle</td><td class="num">$0.05–0.30</td></tr>
+    <tr><td>Cidade: plano do cartógrafo</td><td>marcado por padrão</td><td>padrão do workflow</td><td class="num">$0.30–1.00</td></tr>
+    <tr><td>Análise de arquitetura (achados)</td><td>junto da cidade</td><td>Oracle</td><td class="num">~$0.50</td></tr>
+    <tr><td>Ranking da refatoração pelo PO</td><td>marcado por padrão</td><td>padrão do PO</td><td class="num">$0.10–0.30</td></tr>
+    <tr><td>Monitor: polling, agrupamento, deduplicação</td><td>a cada poucos minutos</td><td>nenhum</td><td class="num">$0</td></tr>
+    <tr><td>Monitor: diagnóstico de um grupo de erro novo</td><td>Ask me por padrão, até 5 por dia</td><td>Oracle</td><td class="num">$0.10–0.50</td></tr>
+    <tr><td>Create new project (com ou sem GitHub)</td><td>caminho 2b</td><td>nenhum</td><td class="num">$0</td></tr>
+  </tbody>
+</table></div>
+<p class="note">Um import típico com tudo marcado fica em torno de $1–2. A análise de arquitetura (~$0.50) é a estimativa que o próprio app mostra no pipeline <code>release-then-refactors</code>; os outros valores são chutes a confirmar no primeiro run real, avisado antes.</p>
+
+<h2 id="plano">Plano faseado</h2>
+<div class="phases">
+  <div class="phase mvp"><span class="k">Fase 1 · MVP</span><h4>Assistente com o que já existe</h4><ul><li>O assistente de 4 etapas (Setup e Projects), com os cards de origem.</li><li>Import do GitHub ou do GitLab no mesmo card, com validação (<code>ls-remote</code>), clone em segundo plano e a bandeja de progresso.</li><li>Etapa 3 com perfil grátis + <code>project-map</code> + ranking da refatoração, mostrando o custo.</li><li>Sugestão dos fluxos de hoje (local hero / software-development / release) pelas regras do compose.</li><li>Revisão não bloqueante e o cartão "Next steps".</li><li>Setup sem o passo Workflows.</li></ul><p class="done">Pronto quando: do Home vazio ao projeto com cidade, backlog e fluxos, tudo no simulado, com os erros de acesso cobertos.</p></div>
+  <div class="phase"><span class="k">Fase 2</span><h4>O conjunto feature / fix / release</h4><ul><li>Workflow <code>fix</code> novo (fragment <code>fix-pipeline</code>), com o modo hotfix.</li><li><code>feature</code> com as variantes local / remote, E2E first / code first e as opções.</li><li><code>release</code> com o passo E2E e a espera pelo CI da release quando ele existe.</li><li>Remover o auto-push do projeto e pôr o passo "push main" no fim de feature e fix no modo Local (fecha o #617).</li><li>Ways of working revisitado: <code>team</code> sai do perfil, <code>merge</code> vira <code>mode: local | remote</code>, <code>ci</code> vira <code>none | release | pr+release</code> lido dos gatilhos dos workflows de CI.</li><li>Aliases para os nomes antigos; o compose do #487 passa a gerar feature/fix/release.</li></ul><p class="done">Pronto quando: um projeto antigo, com manifesto e roadmap salvos, roda igual pelos nomes novos.</p></div>
+  <div class="phase"><span class="k">Fase 3</span><h4>Reorganizar o resto</h4><ul><li><code>analyze-project</code>, <code>test-backfill</code>, <code>retrospective</code>.</li><li>Pipelines de 6 para 5.</li><li>Docs e README de workflows reescritos.</li></ul><p class="done">Pronto quando: 11 workflows bundled e a suíte inteira verde.</p></div>
+  <div class="phase"><span class="k">Fase 4</span><h4>Criar novo e outras origens</h4><ul><li>"Create new project" com <code>git init</code> e remoto opcional no GitHub ou no GitLab (<code>gh</code> / <code>glab repo create</code>).</li><li>Clone parcial para repos grandes, se as medições pedirem.</li></ul><p class="done">Pronto quando: um projeto novo nasce com repo local e remoto e roda o primeiro feature.</p></div>
+  <div class="phase"><span class="k">Fase 5 · depois</span><h4>O loop do SDLC</h4><ul><li>O modelo de trabalho do onboarding passa a valer: intent e spec no Discovery (formato do write doc), <code>plan.md</code> no lugar do brief do desenvolvedor, tudo commitado em <code>docs/work/&lt;item&gt;/</code>.</li><li><code>REVIEW.md</code> por projeto lido pelo review.</li><li>Achados do Night watch e do analyze-project entram como intent no Inbox.</li><li>Evals de skills e workflows no CI; um front para navegar pelos intents.</li></ul><p class="done">Pronto quando: um item vai de intent a release com os artefatos no repo, e um achado do Night watch volta como intent.</p></div>
+  <div class="phase"><span class="k">Fase 6 · última</span><h4>Monitor</h4><ul><li>Grupo novo no menu, <b>Monitor</b>: Errors e Night watch.</li><li>Conectores de polling (Sentry, Datadog, CloudWatch, GCP, URL/arquivo de log) com os tokens no cofre do sistema.</li><li>Agrupamento e deduplicação sem modelo; diagnóstico vira <code>intent.md</code> no Inbox.</li><li>"Propose fix" começa o fluxo <code>fix</code>; modos Ask me / On / Off com teto diário.</li><li>Webhook pelo servidor do engine, depois da revisão de segurança.</li></ul><p class="done">Pronto quando: um 500 simulado vira um card no Inbox com o diagnóstico, e o fix proposto para no gate.</p></div>
+</div>
+
+<h3 id="arquivos">Arquivos e áreas que mudam</h3>
+<p style="font-size:14px"><span style="color:var(--rec)">verde</span> = novo, <span style="color:var(--warn)">âmbar</span> = alterado.</p>
+<div class="grid2">
+<div class="files">
+<b>Assistente (UI)</b><br>
+<span class="new">fronts/build/views/projects/project-wizard.js · .css</span><br>
+<span class="new">packages/shared/onboarding-model.js</span> (etapas, regras, soma de custo)<br>
+<span class="chg">fronts/build/views/projects/projects.js</span> (New project abre o assistente)<br>
+<span class="chg">packages/ui-kit/setup.js</span> (3 passos; o último é o assistente)<br>
+<span class="chg">packages/shared/setup-model.js</span><br>
+<span class="chg">fronts/analyser/views/project/project.js</span> (cartão Next steps)<br>
+<span class="chg">packages/shared/i18n/*</span><br><br>
+<b>Serviço e domínio</b><br>
+<span class="new">packages/engine/service/areas/project-onboarding.js</span> (jobs: clone → fatos → análises)<br>
+<span class="new">packages/engine/service/channels/onboarding.js</span><br>
+<span class="chg">packages/engine/domains/project/projects.js</span> (clone em fundo, status, git init, gh/glab repo create; sai o <code>autoPush</code>)<br>
+<span class="chg">packages/engine/service/areas/local-push.js, fronts/build/views/backlog/backlog.js</span> (sai o auto-push; o Push manual fica)<br>
+<span class="chg">packages/engine/service/areas/workflow-interview.js</span> (perfil grátis + modelo só nos nulls)<br>
+<span class="chg">seeds/ways-of-working/seed.md</span> (perfil: mode e ci, sem team)<br>
+</div>
+<div class="files">
+<b>Workflows</b><br>
+<span class="new">workflows/feature.yaml · fix.yaml · analyze-project.yaml</span><br>
+<span class="new">fragments/fix-pipeline.yaml</span><br>
+<span class="chg">packages/engine/domains/workflow/workflow-compose.js</span> (feature/fix/release)<br>
+<span class="chg">o carregador de workflows</span> (tabela de aliases)<br>
+<span class="chg">workflows/release.yaml, pipelines/*.yaml</span><br>
+<br>
+<b>Testes, telas e docs</b><br>
+<span class="new">scripts/screenshot/views/onboarding.js</span><br>
+<span class="new">fronts/monitor/</span> (front novo: views/errors, engine/domains/error-sources, conectores)<br>
+<span class="chg">packages/ui-kit/nav-groups.js</span> (grupo Monitor)<br>
+<span class="new">packages/shared/work-model.js</span> (Leve / Padrão / Completo, caminhos dos artefatos)<br>
+<span class="new">features/onboarding.feature</span><br>
+<span class="chg">scripts/screenshot/views/setup.js</span><br>
+<span class="chg">docs/readme/040-workflows.md, docs/agents/engine.md</span><br>
+<span class="chg">docs/agents/decisions.md</span> (depois das decisões)
+</div>
+</div>
+
+<h2 id="perguntas">Perguntas em aberto, com o padrão recomendado</h2>
+<div class="qa">
+  <div class="q"><b>Q1. O passo Workflows do Setup some?</b><p><span class="def">Padrão: sim.</span> Os fluxos passam a ser escolhidos por projeto; Definitions continua para quem quer esconder workflows.</p></div>
+  <div class="q"><b>Q2. Repo privado sem <code>gh</code> ou <code>glab</code>?</b><p><span class="def">Padrão: oferecer "Sign in" do provedor da URL no Next</span> (o ▶ do Setup roda <code>gh auth login</code> ou <code>glab auth login</code>); um git credential helper que já funcione também vale.</p></div>
+  <div class="q"><b>Q3. O cadastro escreve arquivos no repositório do usuário?</b><p><span class="def">Padrão: não.</span> Os fluxos ficam referenciados no workspace; "Customize" escreve em <code>.multiagent/</code> sem commit.</p></div>
+  <div class="q"><b>Q4. As análises com modelo vêm marcadas?</b><p><span class="def">Padrão: sim, com o total visível e "Skip, analyze later".</span> No modo simulado tudo é simulado.</p></div>
+  <div class="q"><b>Q5. "Create new project" cria repo remoto por padrão?</b><p><span class="def">Padrão: só com o <code>gh</code> ou o <code>glab</code> logado, privado</span>, e a caixa vem desmarcada na primeira vez.</p></div>
+  <div class="q"><b>Q6. Por quanto tempo os nomes antigos funcionam?</b><p><span class="def">Padrão: duas versões, com aviso no Start</span> e uma linha nas notas de release.</p></div>
+  <div class="q"><b>Q7. Monorepo: vários projetos no mesmo repositório?</b><p><span class="def">Padrão: um projeto por repositório por enquanto</span>; subpasta fica para depois.</p></div>
+  <div class="q"><b>Q8. De onde o fix em modo hotfix sai?</b><p><span class="def">Padrão: da última tag quando a release usa tags; senão de main.</span></p></div>
+  <div class="q"><b>Q9. O onboarding coloca algo no roadmap sozinho?</b><p><span class="def">Padrão: não.</span> Só o cartão "Next steps".</p></div>
+  <div class="q"><b>Q10. No modo Local, o push no main é a cada merge?</b><p><span class="def">Decidido pelo dono: sim, como último passo do workflow</span>, depois do merge no main. O auto-push do projeto (o botão do Backlog e o push depois de cada <code>merge: local</code>) sai do app. Isso também acaba com a corrida entre o Ship e o auto-push (#617): cada workflow faz o próprio push. Se o push for recusado porque o origin andou, o passo atualiza o main e tenta de novo, e um conflito volta para o desenvolvedor do run, como o push manual faz hoje.</p></div>
+  <div class="q"><b>Q11. O onboarding escreve os arquivos de CI?</b><p><span class="def">Padrão: não.</span> "Set up release CI" vira um item do roadmap, feito pelo fluxo feature com as skills <code>ci-pipeline-gh</code> / <code>ci-pipeline-gl</code>, com gate e revisão como qualquer mudança.</p></div>
+  <div class="q"><b>Q12. Qual modelo de trabalho vem marcado?</b><p><span class="def">Padrão: Standard para feature, Light para fix</span>; Full só quando o projeto já tem CI e quer evals.</p></div>
+  <div class="q"><b>Q13. Onde ficam os artefatos no repositório?</b><p><span class="def">Padrão: <code>docs/work/&lt;item&gt;/</code></span> (markdown, HTML e imagens), configurável; o Ways of working detecta uma pasta já usada (<code>docs/rfcs</code>, <code>adr/</code>).</p></div>
+  <div class="q"><b>Q14. Quais fontes de erro primeiro?</b><p><span class="def">Padrão: Sentry e uma URL/arquivo de log com filtro</span>; Datadog, CloudWatch e GCP depois, conforme a demanda.</p></div>
+  <div class="q"><b>Q15. O Monitor diagnostica sozinho?</b><p><span class="def">Padrão: Ask me</span>, com teto de 5 diagnósticos por dia; fix runs desligados até você ligar.</p></div>
+  <div class="q"><b>Q16. O cartão "Investigate screenshots" aparece sempre?</b><p><span class="def">Padrão: só quando o projeto tem front</span> e ainda não tem comando de screenshot; com Storybook ou Playwright, o cartão diz o que encontrou.</p></div>
+</div>
+
+<h2 id="regras">Como a proposta respeita as regras do AGENTS.md</h2>
+<ul class="rules">
+  <li><b>App em inglês:</b> o assistente, os workflows e as skills em inglês; o que os agentes escrevem segue Settings › Language.</li>
+  <li><b>O workspace é o produto:</b> clones em <code>&lt;workspace&gt;/repos/</code>, projetos novos em <code>&lt;workspace&gt;/projects/</code>, análises em <code>&lt;workspace&gt;/architecture/</code>.</li>
+  <li><b>Agentes sem supervisão:</b> as análises registram suposições; quem responde às três perguntas é o usuário, no assistente.</li>
+  <li><b>Gates humanos intocados:</b> o onboarding não começa run de desenvolvimento nem responde gate; o roadmap só recebe o que o usuário escolhe.</li>
+  <li><b>Ações para fora com clique:</b> criar repo no GitHub e logar no <code>gh</code> só com clique explícito.</li>
+  <li><b>Checagens só simuladas:</b> o assistente é testado com <code>npm run screenshot</code> e o provedor mock.</li>
+  <li><b>Custo explícito:</b> total antes do clique, orçamento diário.</li>
+  <li><b>Listas compartilhadas:</b> o novo conjunto de workflows entra pelo header de cada arquivo e pelos docs gerados, não por listas editadas à mão.</li>
+</ul>
+</main>
+</div>
+</body>
+</html>
