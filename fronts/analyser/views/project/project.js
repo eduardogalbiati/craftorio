@@ -9,7 +9,10 @@
 // selected tab is remembered per project. The page is the header's project: opening
 // one makes it the app's project, and choosing another in the header switches the page to it.
 // No sidebar entry of its own: Projects stays lit (`menu`). The header's "Ways of working" opens the
-// interview drawer (project-ways-of-working.js, #487).
+// interview drawer (project-ways-of-working.js, #487). After the new-project wizard's Finish (#642, spec
+// R11) the Overview leads with the Next steps card (project-next-steps: next-step-refactors → the Roadmap,
+// next-step-idea → the Inbox, next-step-cadence → the Refactor tab; next-steps-dismiss), remembered per
+// project in localStorage multiagent.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
 // (view-registry.js); uses app.js globals ($, esc, state, api, errMsg, showView, openDrawer,
@@ -27,6 +30,41 @@ function rememberProjectTab(id, tab) {
   try { localStorage.setItem(PV_TABS_KEY, JSON.stringify({ ...projectTabs(), [id]: tab })); } catch { /* storage unavailable */ }
 }
 
+// #642: the Next steps card of the projects the wizard finished: { <projectId>: 'open' | 'dismissed' }
+const PV_NEXT_STEPS_KEY = 'multiagent.nextSteps';
+// [id, i18n key of its label, of its line]: spec R11 for this phase (release CI, screenshots come later)
+const PV_NEXT_STEPS = [['refactors', 'project.next_steps_refactors', 'project.next_steps_refactors_text'], ['idea', 'project.next_steps_idea', 'project.next_steps_idea_text'], ['cadence', 'project.next_steps_cadence', 'project.next_steps_cadence_text']];
+function nextSteps() {
+  try { return JSON.parse(localStorage.getItem(PV_NEXT_STEPS_KEY) || '{}') || {}; } catch { return {}; }
+}
+function rememberNextSteps(id, value) {
+  try { localStorage.setItem(PV_NEXT_STEPS_KEY, JSON.stringify({ ...nextSteps(), [id]: value })); } catch { /* storage unavailable */ }
+}
+
+function nextStepsMarkup(id) {
+  if (nextSteps()[id] !== 'open') return '';
+  const entry = ([step, label, line]) => `<li data-testid="next-step-${step}">
+      <button type="button" class="link-btn" data-next-step="${step}">${esc(t(label))}</button>
+      <span class="muted small">${esc(t(line))}</span>
+    </li>`;
+  return `<section class="card pr-next-steps" data-testid="project-next-steps">
+      <header class="pr-next-steps-head"><h3>${esc(t('project.next_steps_title'))}</h3>
+        <button type="button" class="btn ghost sm" data-testid="next-steps-dismiss" data-next-steps-dismiss aria-label="${esc(t('project.next_steps_dismiss'))}">×</button></header>
+      <ul class="pr-next-steps-list">${PV_NEXT_STEPS.map(entry).join('')}</ul>
+    </section>`;
+}
+
+// an entry of the card leads to its screen (the card stays until dismissed)
+function onNextStepClick(step) {
+  if (step === 'refactors') showView('roadmap');
+  else if (step === 'idea') showView('inbox');
+  else if (step === 'cadence' && state.pv) {
+    state.pv.tab = 'refactor';
+    rememberProjectTab(state.pv.id, state.pv.tab);
+    renderProjectView();
+  }
+}
+
 function newProjectPage(id) {
   const tab = projectTabs()[id];
   return {
@@ -35,8 +73,10 @@ function newProjectPage(id) {
   };
 }
 
-// tab: open the page on this tab (the Conflict map links)
-function openProjectView(id, { tab = null } = {}) {
+// tab: open the page on this tab (the Conflict map links); nextSteps: show the Next steps card (the
+// wizard's Finish, #642)
+function openProjectView(id, { tab = null, nextSteps: withNextSteps = false } = {}) {
+  if (withNextSteps) rememberNextSteps(id, 'open');
   if (state.pv?.id !== id) state.pv = newProjectPage(id);
   if (tab) { state.pv.tab = tab; rememberProjectTab(id, tab); }
   // the header's project follows the page (the page is drawn right after)
@@ -104,6 +144,7 @@ function renderProjectView() {
   }
   if (pv.tab === 'refactor') window.ProjectRefactor?.show(pv.id, $('#project-refactor'));
   if (pv.tab !== 'overview') return;
+  $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv.id);
   $('#project-info').innerHTML = `
     <dl class="kv">
       <dt>${t('project.folder')}</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? t('project.not_found') : ''}</dd>
@@ -119,8 +160,15 @@ function renderProjectView() {
   });
 }
 
-// the page's delegated clicks: a tab, then the Conflict map tab's controls and rows
+// the page's delegated clicks: the Next steps card, a tab, then the Conflict map tab's controls and rows
 function onProjectPageClick(e) {
+  const step = e.target.closest('[data-next-step]');
+  if (step) { onNextStepClick(step.dataset.nextStep); return; }
+  if (e.target.closest('[data-next-steps-dismiss]') && state.pv) {
+    rememberNextSteps(state.pv.id, 'dismissed');
+    renderProjectView();
+    return;
+  }
   const tab = e.target.closest('[data-pv-tab]');
   if (tab && state.pv) {
     state.pv.tab = tab.dataset.pvTab;
@@ -141,6 +189,7 @@ registerView({
         <div id="project-head" class="page-head"></div>
         <div id="project-tabs" class="tabs page-tabs" role="tablist" aria-label="${t('project.project')}"></div>
         <div id="project-panel-overview" role="tabpanel" aria-label="${t('project.overview')}" data-testid="project-overview">
+          <div id="project-next-steps-box"></div>
           <div id="project-info" class="pr-head-info"></div>
           <div id="project-workflows"></div>
           <div class="pr-toolbar">

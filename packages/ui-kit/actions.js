@@ -9,7 +9,7 @@
 //   Actions.has(name)              whether a shipped front registered it (to hide a button, to fall back)
 //   Actions.call(name, ...args)    calls it and answers what it returned; undefined when nobody offers it
 //   Actions.reset()                for tests: forgets every action
-// The actions the fronts offer today: openProject(id, { tab }) (the project's page), showProjects()
+// The actions the fronts offer today: openProject(id, { tab, nextSteps }) (the project's page), showProjects()
 // (the Projects screen), showWorkflowDefinition(file) (Workflows › Definitions at a file),
 // openArtifactsAt({ projectId, runId, path, mock }) (the Artifacts screen at a file), agentCard(agent,
 // opts) (an agent's card markup). Browser: window.Actions; Node: module.exports (tested without a DOM).

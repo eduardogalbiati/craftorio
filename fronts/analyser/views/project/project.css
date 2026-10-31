@@ -4,6 +4,13 @@
 .pr-head-info p { margin: 0 0 4px; }
 .pr-head-info .kv { margin-top: 6px; }
 #project-info { margin-bottom: 10px; }
+/* #642: the Next steps card after the new-project wizard */
+.pr-next-steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.pr-next-steps-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pr-next-steps-head h3 { margin: 0; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+.pr-next-steps-head .btn { min-width: 24px; min-height: 24px; }
+.pr-next-steps-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.pr-next-steps-list li { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 /* #354: the Conflict map tab (project-conflict-map.js) and its link on the Roadmap and Analytics */
 .pcm-controls { flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .pcm-row { cursor: pointer; }

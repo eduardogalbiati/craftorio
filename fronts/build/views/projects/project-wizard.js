@@ -7,8 +7,14 @@
 //   step, the current one aria-current="step"), then the step: start (wizard-source-import / wizard-source-new),
 //   repository (#wizard-repo, #wizard-name, #wizard-provider read from the URL, wizard-import-status once
 //   api.startOnboarding answered), analysis (the jobs, wizard-cost with wizard-cost-total and the paid parts
-//   data-part="projectMap" | "ranking" before the click, wizard-analyze, wizard-skip) and review (a placeholder:
-//   step 5). Navigation: wizard-back, wizard-next, wizard-close (Esc too).
+//   data-part="projectMap" | "ranking" before the click, wizard-analyze, wizard-skip) and review (#642, spec
+//   R10): wizard-review with wizard-review-city / -backlog / -refactors, each data-state="ready" | "pending"
+//   (its analysis still running: words say so), one wizard-review-refactor data-refactor="<id>" per proposal
+//   with its file's score and quadrant and an unchecked wizard-review-refactor-pick, and the idea field
+//   wizard-review-idea. Navigation: wizard-back, wizard-next, wizard-close (Esc too), and on the review
+//   wizard-finish (never disabled, never waits): it closes the wizard on the project's page with its Next steps
+//   card (openProject with nextSteps, project.js), then sends the picked refactors to the roadmap as planned
+//   items and the idea to the Inbox.
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
 //   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
 //   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
@@ -20,8 +26,10 @@
 //   data-status = the engine's status), its name, and when failed the reason and Retry; it follows
 //   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads) and stays when the wizard closes.
 // Channels: onboarding:start / analyze / retry (packages/engine/service/channels/onboarding.js),
-// architecture:estimate (the project map's cost; the ranking has no estimate yet: not known).
-// Uses app.js globals (esc, t, showToast, errMsg) and window.Setup (packages/ui-kit/setup.js).
+// architecture:estimate (the project map's cost; the ranking has no estimate yet: not known), and for the
+// review architecture:city / facts, refactor:proposals, the backlog, the refactor's roadmap item
+// (api.addRefactorToRoadmap, never runNow) and the discovery card (api.createDiscoveryCard, an Inbox idea).
+// Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.Setup (packages/ui-kit/setup.js).
 
 (function () {
   const M = window.OnboardingModel;
@@ -33,8 +41,10 @@
 
   let root = null;
   let tray = null;
-  // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy }
+  // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy, and the
+  // review's: review { backlog, city, facts, proposals } (undefined: not read yet), reading, picked, idea }
   let cur = null;
+  const freshReview = () => ({ review: {}, reading: new Set(), picked: new Set(), idea: '' });
   let opener = null; // the element that had the focus when the wizard opened
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
@@ -152,10 +162,61 @@
       ${actions}`;
   }
 
+  const jobDone = (id) => cur.onboarding?.jobs?.[id]?.status === 'done';
+
+  function reviewSection(id, title, ready, body, pendingKey) {
+    return `<section class="card wizard-review-section" data-testid="wizard-review-${id}" data-state="${ready ? 'ready' : 'pending'}">
+        <h3>${esc(t(title))}</h3>
+        ${ready ? body() : `<p class="muted small">${esc(t(pendingKey))}</p>`}
+      </section>`;
+  }
+
+  function cityBody() {
+    const districts = cur.review.city?.model?.districts || [];
+    if (!districts.length) return `<p class="muted small">${esc(t('onboarding.review_city_empty'))}</p>`;
+    const files = districts.reduce((n, d) => n + (d.buildings?.length || 0), 0);
+    return `<p>${esc(t('onboarding.review_city', { districts: districts.length, files }))}</p>`;
+  }
+
+  function backlogBody() {
+    const issues = cur.review.backlog?.issues || [];
+    if (!issues.length) return `<p class="muted small">${esc(t('onboarding.review_backlog_empty'))}</p>`;
+    return `<ul class="wizard-review-list">${issues.map((i) => `<li><span class="mono muted">#${esc(i.number)}</span> <span class="wizard-review-name" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
+  }
+
+  // each proposal with its file's score and quadrant (the Facts view's), and its pick for the roadmap
+  function refactorsBody() {
+    const proposals = cur.review.proposals || [];
+    if (!proposals.length) return `<p class="muted small">${esc(t('onboarding.review_refactors_empty'))}</p>`;
+    const files = cur.review.facts?.model?.files || [];
+    const row = (p) => {
+      const target = p.target || p.targetFiles?.[0] || '';
+      const f = files.find((x) => x.file === target);
+      const score = Number.isFinite(f?.score) ? `<span class="badge">${esc(t('onboarding.review_score', { score: f.score }))}</span>` : '';
+      const quadrant = f?.quadrant ? `<span class="badge${f.quadrant === 'Danger Zone' ? ' warn' : ''}">${esc(f.quadrant)}</span>` : '';
+      return `<li class="wizard-review-refactor" data-testid="wizard-review-refactor" data-refactor="${esc(p.id)}">
+          <label class="check"><input type="checkbox" data-testid="wizard-review-refactor-pick" data-refactor="${esc(p.id)}" aria-label="${esc(p.title)}"${cur.picked.has(p.id) ? ' checked' : ''}>
+            <span class="wizard-review-name" title="${esc(p.title)}">${esc(p.title)}</span></label>
+          <span class="mono muted small wizard-review-name" title="${esc(target)}">${esc(target)}</span>
+          <span class="wizard-review-badges">${score}${quadrant}</span>
+        </li>`;
+    };
+    return `<ul class="wizard-review-list">${proposals.map(row).join('')}</ul>`;
+  }
+
+  // what the analyses found so far (each section pending until its analysis and its read are done)
   function reviewStep() {
+    const r = cur.review;
     const later = cur.model.analyzeLater ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
-    return `<div class="card"><strong>${esc(t('onboarding.review_title', { name: cur.model.name }))}</strong>
-        <p class="muted">${esc(t('onboarding.review_text'))}</p>${later}</div>`;
+    return `<div class="wizard-review" data-testid="wizard-review">
+        <p class="muted"><strong>${esc(t('onboarding.review_title', { name: cur.model.name }))}</strong> ${esc(t('onboarding.review_text'))}</p>${later}
+        ${reviewSection('city', 'onboarding.review_city_title', jobDone('projectMap') && r.city !== undefined, cityBody, 'onboarding.review_pending_city')}
+        ${reviewSection('backlog', 'onboarding.review_backlog_title', r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
+        ${reviewSection('refactors', 'onboarding.review_refactors_title', jobDone('ranking') && r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors')}
+        <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
+          <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
+          <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
+      </div>`;
   }
 
   const BODY = { analysis: analysisStep, repository: repositoryStep, review: reviewStep, start: startStep };
@@ -168,6 +229,8 @@
       || (step === 'analysis' && ['analyzing', 'analyzed'].includes(cur.onboarding?.status));
     const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${canNext() ? '' : ' disabled'}>${esc(t('onboarding.next'))}</button>` : '';
     const back = step === 'start' ? '' : `<button type="button" class="btn ghost" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
+    // Finish never waits: not disabled by an analysis still running nor by a call in flight
+    const finish = step === 'review' ? `<button type="button" class="btn primary" data-act="finish" data-testid="wizard-finish">${esc(t('onboarding.finish'))}</button>` : '';
     root.innerHTML = `<div class="wizard-panel" tabindex="-1">
         <header class="wizard-head">
           <h2 id="project-wizard-title">${esc(t('onboarding.title'))}</h2>
@@ -175,7 +238,7 @@
         </header>
         ${stepper()}
         <section class="wizard-body">${BODY[step]()}</section>
-        <footer class="wizard-foot">${back}<span class="wizard-spacer"></span>${next}</footer>
+        <footer class="wizard-foot">${back}<span class="wizard-spacer"></span>${next}${finish}</footer>
       </div>`;
   }
 
@@ -189,8 +252,43 @@
     if (cur && cur.projectId === state.projectId) {
       cur.onboarding = state;
       if (cur.model.step === 'repository' && CLONED.includes(state.status)) toAnalysis();
+      if (cur.model.step === 'review') loadReview(); // an analysis done meanwhile: read what it made
       render();
     }
+  }
+
+  // The review's reads, without waiting: each one once its analysis is done (the backlog at once);
+  // a failed read counts as answered with nothing
+  function loadReview() {
+    const pid = cur.projectId;
+    if (!pid) return;
+    const reads = [['backlog', 'getBacklog', true], ['city', 'architectureCity', jobDone('projectMap')],
+      ['facts', 'architectureFacts', jobDone('ranking')], ['proposals', 'refactorProposals', jobDone('ranking')]];
+    for (const [key, method, due] of reads) {
+      if (!due || cur.review[key] !== undefined || cur.reading.has(key)) continue;
+      cur.reading.add(key);
+      const answer = (value) => {
+        if (!cur || cur.projectId !== pid) return;
+        cur.reading.delete(key);
+        cur.review[key] = value ?? null;
+        render();
+      };
+      Promise.resolve(api[method]?.(pid)).then(answer, () => answer(null));
+    }
+  }
+
+  // Finish: the project's page at once (with its Next steps card), then the chosen refactors to the
+  // roadmap as planned items (no runNow: nothing starts) and the idea to the Inbox, in the background
+  function finish() {
+    const pid = cur.projectId;
+    const picked = [...cur.picked];
+    const idea = cur.idea.trim();
+    close();
+    if (!pid) return;
+    window.Actions.call('openProject', pid, { nextSteps: true });
+    const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
+    for (const id of picked) Promise.resolve(api.addRefactorToRoadmap(pid, id)).catch(failed);
+    if (idea) Promise.resolve(api.createDiscoveryCard(pid, idea.slice(0, 200), idea, 'idea')).catch(failed);
   }
 
   function toAnalysis() {
@@ -238,6 +336,7 @@
     }
     if (cur.model.step === 'repository') toAnalysis();
     else cur.model = M.next(cur.model);
+    if (cur.model.step === 'review') loadReview();
     render();
   }
 
@@ -255,10 +354,11 @@
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
     else if (act === 'analyze' && cur.projectId) await call(() => api.analyzeOnboarding(cur.projectId));
-    else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); render(); }
+    else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); loadReview(); render(); }
+    else if (act === 'finish') finish();
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
-      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined };
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }
@@ -268,7 +368,14 @@
   // typing updates the model and the parts that depend on it, never the whole markup (the caret stays)
   function onInput(e) {
     const id = e.target?.id || e.target?.dataset?.testid;
-    if (!cur || (id !== 'wizard-repo' && id !== 'wizard-name')) return;
+    if (!cur) return;
+    if (e.target?.dataset?.testid === 'wizard-review-refactor-pick') {
+      const pick = e.target.dataset.refactor;
+      if (e.target.checked) cur.picked.add(pick); else cur.picked.delete(pick);
+      return;
+    }
+    if (id === 'wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
+    if (id !== 'wizard-repo' && id !== 'wizard-name') return;
     cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: String(e.target.value || '') };
     const provider = document.getElementById('wizard-provider');
     if (provider) provider.textContent = platformOfRepo(cur.model.repository)?.label || '';
@@ -278,7 +385,7 @@
 
   // Tab stays inside the dialog (diff-viewer.js's trapFocus)
   function trapFocus(e) {
-    const list = [...(root.querySelectorAll?.('button:not([disabled]), input, select, [tabindex="0"]') || [])].filter((x) => x.offsetParent !== null);
+    const list = [...(root.querySelectorAll?.('button:not([disabled]), input, select, textarea, [tabindex="0"]') || [])].filter((x) => x.offsetParent !== null);
     if (!list.length) return;
     const i = list.indexOf(document.activeElement);
     const to = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : (i + 1) % list.length;
@@ -308,7 +415,7 @@
       root.addEventListener('keydown', onKey);
       document.body.appendChild(root);
     }
-    cur = { model: M.initialState(), projectId: null, onboarding: null, estimate: undefined, busy: false };
+    cur = { model: M.initialState(), projectId: null, onboarding: null, estimate: undefined, busy: false, ...freshReview() };
     root.hidden = false;
     render();
     root.querySelector('.wizard-panel')?.focus?.();
