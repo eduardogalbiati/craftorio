@@ -359,7 +359,7 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
 
 /* a milestone: a marker on the project's history, not an SDLC item (no stages) */
 .wcard.mile{border-style:dashed;border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:linear-gradient(120deg,var(--wash),var(--paper) 70%)}
-.mtag{display:inline-flex;align-items:center;gap:5px;background:var(--ink);color:var(--paper)}
+.wcard.mile .mtag{display:inline-flex;align-items:center;gap:5px;background:var(--ink);color:var(--paper);border:0}
 .mtag svg,.mver svg{width:12px;height:12px}
 .msum{margin:2px 0 6px;font-size:14px;color:var(--soft);line-height:1.5}
 .mwhen{color:var(--ink)}
