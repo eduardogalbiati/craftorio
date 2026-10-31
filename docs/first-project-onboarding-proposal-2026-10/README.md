@@ -1,6 +1,6 @@
 # First project onboarding: proposal
 
-**Status:** proposal, waiting for the owner's decisions · **Epic:** #ISSUE · **Date:** 2026-10-31 · [Português](README.pt-BR.md)
+**Status:** decided on 2026-10-31 (intent accepted, spec signed off: [docs/work/first-project-onboarding/](../work/first-project-onboarding/spec.md)) · **Epic:** #628 · **Date:** 2026-10-31 · [Português](README.pt-BR.md)
 
 Adding the first project is the first thing anyone does in the app. It has to be simple, and it has to leave the project ready for the whole flow. This proposal turns today's "New project" dialog into a four-step wizard:
 
@@ -465,6 +465,6 @@ How the proposal follows [AGENTS.md](../../AGENTS.md):
 ## How to contribute
 
 1. Read [AGENTS.md](../../AGENTS.md) and the topic docs for your area, especially [engine.md](../agents/engine.md), [renderer.md](../agents/renderer.md), [storage.md](../agents/storage.md) and [testing.md](../agents/testing.md), plus [seeds.md](../agents/seeds.md) for Ways of working.
-2. Comment on the epic (#ISSUE) before picking a phase. The phases become sub-issues once the owner confirms the decisions.
+2. Comment on the epic (#628) before picking a phase. The phases become sub-issues once the owner confirms the decisions.
 3. Phase 1 needs no workflow changes. Phases 2 and 3 change bundled workflows and need the alias table first.
 4. Work on a branch and open a PR. Never run real models in checks: the mock provider for tests, `npm run screenshot` for screens.

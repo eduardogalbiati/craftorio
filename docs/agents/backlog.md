@@ -44,12 +44,10 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
   runs on any engine whatever fronts it ships. The day a front ships a workflow of its own, its
   `engine/` could register the steps that workflow needs (`fronts.md`, "What stays in the engine
   kernel"), and a one-front engine would refuse a workflow whose steps no served front provides.
-- First project onboarding (#ISSUE, epic): a four-step wizard (import or create, a background clone,
-  the Ways of working profile with the city and refactor analysis, suggested feature / fix /
-  release workflows, a review), ways of working as Local or Local + remote with CI as its own axis,
-  the bundled workflows cut from 15 to 11 with aliases (Planning left for a later proposal), and a
-  per-project work model aligned with Anthropic's AI-native SDLC (intent, spec, plan committed in the repo),
-  and last a Monitor menu group where production errors become intents. The
-  proposal, its decisions D1-D19 and the phased plan:
-  [docs/first-project-onboarding-proposal-2026-10/](../first-project-onboarding-proposal-2026-10/README.md)
-  (also in pt-BR). Waiting for the owner's decisions.
+- First project onboarding (#628, epic; phases #629-#634): a four-step wizard, ways of working as
+  Local or Local + remote with CI as its own axis, feature / fix / release workflows, a per-project
+  work model aligned with Anthropic's AI-native SDLC, and last a Monitor menu group. Intent accepted
+  and spec signed off on 2026-10-31: the artifacts are in
+  [docs/work/first-project-onboarding/](../work/first-project-onboarding/spec.md), the proposal with
+  the options in [docs/first-project-onboarding-proposal-2026-10/](../first-project-onboarding-proposal-2026-10/README.md).
+  The implementing run records the decisions in decisions.md.

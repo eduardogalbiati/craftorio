@@ -1,6 +1,6 @@
 # Onboarding do primeiro projeto: proposta
 
-**Status:** proposta, aguardando as decisões do dono · **Épico:** #ISSUE · **Data:** 2026-10-31 · [English](README.md)
+**Status:** decidida em 2026-10-31 (intent aceito, spec assinado: [docs/work/first-project-onboarding/](../work/first-project-onboarding/spec.md)) · **Épico:** #628 · **Data:** 2026-10-31 · [English](README.md)
 
 Cadastrar o primeiro projeto é a primeira coisa que alguém faz no app. Tem que ser simples e deixar o projeto pronto para o fluxo completo. A proposta transforma o diálogo "New project" de hoje num assistente de quatro etapas:
 
@@ -465,6 +465,6 @@ Como a proposta segue o [AGENTS.md](../../AGENTS.md):
 ## Como contribuir
 
 1. Leia o [AGENTS.md](../../AGENTS.md) e os docs de tópico da sua área, principalmente [engine.md](../agents/engine.md), [renderer.md](../agents/renderer.md), [storage.md](../agents/storage.md) e [testing.md](../agents/testing.md), além do [seeds.md](../agents/seeds.md) para o Ways of working.
-2. Comente no épico (#ISSUE) antes de pegar uma fase. As fases viram sub-issues quando o dono confirmar as decisões.
+2. Comente no épico (#628) antes de pegar uma fase. As fases viram sub-issues quando o dono confirmar as decisões.
 3. A fase 1 não mexe em workflows. As fases 2 e 3 mudam workflows bundled e precisam da tabela de aliases antes.
 4. Trabalhe numa branch e abra um PR. Nunca rode modelos reais nas checagens: provedor mock para os testes, `npm run screenshot` para as telas.
