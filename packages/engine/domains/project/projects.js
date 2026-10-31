@@ -6,10 +6,15 @@
 // #486: a project keeps its workflow set (`workflows: [{ name, origin, category? }]`) and its
 // `defaultWorkflow` (a name, used instead of Settings' default for its new items); projectManifest
 // reads a repository's `.multiagent/project.yaml` before the project is created.
+// #639: the clone is a background job: a project has a `status` (`cloning | ready | failed`, none = ready),
+// `cloneError` the reason of a failed clone; a `cloning` record no job of this process runs (the app closed
+// during the clone) reads `failed`; retryClone clones a failed one again; checkAccess runs `git ls-remote`.
 
 const fs = require('fs');
 const path = require('path');
-const { execGit, repoNameFromUrl } = require('../workspace/workspace');
+const { execFile } = require('child_process');
+const { execGit, gitAuthArgs, repoNameFromUrl } = require('../workspace/workspace');
+const { childEnv, PLATFORM_CLIS } = require('../../engine/child-env');
 const { cleanConfig } = require('../local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow
 const { firstBuild } = require('@multiagent/shared/default-workflow');
@@ -24,9 +29,46 @@ function slugify(name) {
 
 const metaFile = (dir, id) => path.join(dir, `${id}.json`);
 
+// #639: the clones this process runs, by project file; a new process starts with none
+const jobs = new Map();
+const jobKey = (dir, id) => path.resolve(metaFile(dir, id));
+const INTERRUPTED = 'The clone was interrupted before it ended.';
+
 function readProject(dir, id) {
   const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
-  return { ...p, id, exists: isDir(p.folder), isGit: isDir(path.join(p.folder || '', '.git')) };
+  const orphan = p.status === 'cloning' && !jobs.has(jobKey(dir, id));
+  const status = orphan ? 'failed' : (p.status || 'ready');
+  return { ...p, id, status, ...(orphan ? { cloneError: p.cloneError || INTERRUPTED } : {}), exists: isDir(p.folder), isGit: isDir(path.join(p.folder || '', '.git')) };
+}
+
+// #639: merges `patch` into the saved record (keeps what an edit changed meanwhile); null fields are dropped
+function patchMeta(dir, id, patch) {
+  const next = { ...JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8')), ...patch };
+  for (const k of Object.keys(patch)) if (patch[k] == null) delete next[k];
+  fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
+}
+
+// #639: the clone job: ends the record in ready (with the clone's manifest when no workflow was checked) or failed
+function startClone(dir, id, { git, defaultWorkflow = null }) {
+  const key = jobKey(dir, id);
+  const job = (async () => {
+    const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
+    try {
+      await git(['clone', p.repo, p.folder], path.dirname(p.folder));
+      const patch = { status: 'ready', cloneError: null };
+      if (!cleanWorkflows(p.workflows).length) {
+        const workflows = cleanWorkflows((await projectManifest({ folder: p.folder }))?.workflows?.map((w) => ({ ...w, origin: 'manifest' })));
+        if (workflows.length) Object.assign(patch, { workflows, defaultWorkflow: cleanWorkflowName(defaultWorkflow) || firstBuild(workflows) });
+      }
+      patchMeta(dir, id, patch);
+    } catch (e) {
+      try { patchMeta(dir, id, { status: 'failed', cloneError: String(e?.message || e) }); } catch { /* the project was removed */ }
+    } finally {
+      jobs.delete(key);
+    }
+  })();
+  jobs.set(key, job);
+  return job;
 }
 
 function listProjects(dir) {
@@ -41,8 +83,9 @@ function listProjects(dir) {
 }
 
 /**
- * Creates a project. If `repo` is given and the folder is not a git repository,
- * clones the repository into it (the folder must be empty or not exist).
+ * Creates a project. If `repo` is given and the folder is not a git repository, it returns at once
+ * with status 'cloning' and clones the repository into it in the background (the folder must be
+ * empty or not exist; #639); otherwise the project is 'ready' at once.
  * @param {{ name: string, folder?: string, repo?: string, description?: string }} data
  * @param {{ git?: Function, reposDir?: string }} opts reposDir: <workspace>/repos
  */
@@ -58,12 +101,10 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
   const defaultFolder = repo && reposDir ? path.join(reposDir, repoNameFromUrl(repo)) : path.join(dir, id);
   const folder = path.resolve(data.folder?.trim() || defaultFolder);
 
-  let cloned = false;
-  if (repo && !isDir(path.join(folder, '.git'))) {
+  const cloned = !!repo && !isDir(path.join(folder, '.git'));
+  if (cloned) {
     if (isDir(folder) && fs.readdirSync(folder).length) throw new Error(`The folder ${folder} is not empty and is not a git repository; cannot clone into it.`);
     fs.mkdirSync(path.dirname(folder), { recursive: true });
-    await git(['clone', repo, folder], path.dirname(folder));
-    cloned = true;
   } else {
     fs.mkdirSync(folder, { recursive: true });
     if (!repo && isDir(path.join(folder, '.git'))) repo = await git(['remote', 'get-url', 'origin'], folder).then((s) => s.trim() || null, () => null);
@@ -74,13 +115,52 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
   // until the owner turns the setting off; the project dialog's own choice wins
   const ignoreInstallScripts = typeof data.ignoreInstallScripts === 'boolean' ? data.ignoreInstallScripts : cloned;
   // #486: the workflows checked in Create Project's Workflows block, and the project's default;
-  // none checked for a repository just cloned (its manifest could not be read before): the clone's manifest
-  let workflows = cleanWorkflows(data.workflows);
-  if (!workflows.length && cloned) workflows = cleanWorkflows((await projectManifest({ folder }))?.workflows?.map((w) => ({ ...w, origin: 'manifest' })));
+  // none checked for a repository being cloned (its manifest could not be read before): the clone job reads it
+  const workflows = cleanWorkflows(data.workflows);
   const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuild(workflows) : null;
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
+  const project = { name, description: data.description?.trim() || '', folder, repo, status: cloned ? 'cloning' : 'ready', ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
+  if (cloned) startClone(dir, id, { git, defaultWorkflow: data.defaultWorkflow });
   return readProject(dir, id);
+}
+
+/** #639: clones a 'failed' project again: removes the partial folder and returns at once as 'cloning'. */
+async function retryClone(dir, id, { git = execGit } = {}) {
+  const p = readProject(dir, id);
+  if (p.status !== 'failed') throw new Error('Only a project whose clone failed can retry it.');
+  if (!p.repo) throw new Error('The project has no repository to clone.');
+  fs.rmSync(p.folder, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(p.folder), { recursive: true });
+  patchMeta(dir, id, { status: 'cloning', cloneError: null });
+  startClone(dir, id, { git });
+  return readProject(dir, id);
+}
+
+/**
+ * #639: whether `repo` can be cloned, from `git ls-remote` (never clones).
+ * @returns {Promise<{ status: 'reachable' | 'no-access' | 'no-network', message?: string }>}
+ */
+async function checkAccess(repo, { git = lsRemote } = {}) {
+  try {
+    await git(['ls-remote', String(repo || '').trim(), 'HEAD']);
+    return { status: 'reachable' };
+  } catch (e) {
+    const message = String(e?.message || e);
+    // the network first: an SSH host that cannot be resolved also says "Could not read from remote repository"
+    if (/Could not resolve host|Failed to connect|Couldn't connect|Connection (timed out|refused)|Network is unreachable|No such host/i.test(message)) return { status: 'no-network', message };
+    return { status: 'no-access', message };
+  }
+}
+
+// #639: git ls-remote with the allowlisted environment of the platform CLIs (their tokens), no prompt
+function lsRemote(args, cwd) {
+  const env = { ...childEnv(process.env, { platforms: PLATFORM_CLIS }), GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' };
+  return new Promise((resolve, reject) => {
+    execFile('git', [...gitAuthArgs(), ...args], { cwd, env, windowsHide: true, timeout: 30000 }, (err, stdout, stderr) => {
+      if (err) reject(new Error(String(stderr || err.message).trim()));
+      else resolve(stdout);
+    });
+  });
 }
 
 function updateProject(dir, id, patch) {
@@ -205,12 +285,14 @@ function removeProject(dir, id) {
 
 
 module.exports = {
+  checkAccess,
   createProject,
   listProjects,
   projectDefaultWorkflow,
   projectManifest,
   readProject,
   removeProject,
+  retryClone,
   slugify,
   updateProject,
 };
