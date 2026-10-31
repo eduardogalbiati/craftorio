@@ -288,6 +288,8 @@
     var group = shipped ? 'shipped' : here < 2 || (here === 2 && statusCls(stages[2].meta.status) !== 'ok') ? 'planned' : 'progress';
     return {
       group: group, created: stages[0].at, released: released, release: deploy.meta.release || '', target: first.meta.target || '',
+      plan: stages[2].missing ? null : planProgress(stages[2].body),
+      summary: { en: first.missing ? '' : firstParagraph(first.body), pt: first.tr ? firstParagraph(first.tr.body) : (first.missing ? '' : firstParagraph(first.body)) },
       issue: first.meta.issue || '', lead: !isNaN(released) && !isNaN(stages[0].at) ? (released - stages[0].at) / DAY : null,
       name: name, base: base, stages: stages, here: here,
       title: { en: (!first.missing && h1(first.body)) || name, pt: (first.tr && h1(first.tr.body)) || (!first.missing && h1(first.body)) || name },
@@ -321,6 +323,29 @@
     var out = list.filter(function (x) { return !follows(x); });
     list.filter(follows).forEach(function (m) { var i = out.findIndex(function (x) { return x.name === m.after; }); out.splice(i + 1, 0, m); });
     return out;
+  }
+  // The plan's Progress table (`## Progress` / `## Progresso`): its rows, and the ones whose Status says done.
+  function planProgress(body) {
+    var lines = String(body || '').split('\n'), at = lines.findIndex(function (l) { return /^##\s+(progress|progresso)\b/i.test(l); });
+    if (at < 0) return null;
+    var rows = [], col = -1;
+    for (var i = at + 1; i < lines.length && !/^##\s/.test(lines[i]); i++) {
+      if (!/^\s*\|/.test(lines[i])) { if (rows.length || col >= 0) { if (lines[i].trim()) break; } continue; }
+      var cells = lines[i].trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); });
+      if (col < 0) { col = cells.findIndex(function (c) { return /^status$/i.test(c); }); continue; }
+      if (cells.every(function (c) { return /^:?-+:?$/.test(c); })) continue;
+      rows.push(cells);
+    }
+    if (col < 0 || !rows.length) return null;
+    var done = rows.filter(function (r) { return /^(done|feito|merged|shipped|ok|✓|✅)/i.test(r[col] || ''); }).length;
+    return { done: done, total: rows.length };
+  }
+  // The first plain paragraph of a document (after its headings), as a one-line summary.
+  function firstParagraph(body) {
+    var para = String(body || '').split(/\n\s*\n/).map(function (b) { return b.trim(); })
+      .find(function (b) { return b && !/^(#|\||!|>|-|\*|\d+\.|```)/.test(b); }) || '';
+    para = para.replace(/\s+/g, ' ').replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+    return para.length > 220 ? para.slice(0, 217).replace(/\s+\S*$/, '') + '…' : para;
   }
   // The stage being worked on: the first one with a working status (draft, in progress); else the last
   // one started, moving past it when it is approved (an accepted plan means Build is on, so it stays).
@@ -509,6 +534,67 @@
   }
 
   // A project just imported: no item and no release yet. Shows what will fill the page, and from where.
+  // Overview as a spine (owner's choice of 2026-10-31): what is ahead on top (the farthest first), today
+  // in the middle with what is being built, what shipped below (the releases, newest first, with the
+  // items each one carried). One vertical line; the rows alternate sides on a wide screen.
+  function spine(items, versions) {
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var T = today.getTime(), DAY = 864e5;
+    var daysTo = function (t) { return Math.round((t - T) / DAY); };
+    var ago = function (t) { var d = -daysTo(t); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago'; };
+    var side = 0, rows = [];
+    function row(kind, node, card, meta) {
+      side++;
+      rows.push('<div class="srow ' + kind + ' ' + (side % 2 ? 'side-r' : 'side-l') + '"><div class="snode" aria-hidden="true">' + node + '</div><div class="scard">' + card + '</div><div class="smeta">' + (meta || '') + '</div></div>');
+    }
+    var sep = function (label) { rows.push('<div class="ssep"><span>' + label + '</span></div>'); };
+    var ahead = placeAfter(items.filter(function (it) { return it.group === 'planned'; })).reverse();
+    var now = items.filter(function (it) { return it.group === 'progress'; });
+    var nextStop = items.filter(function (it) { return it.kind === 'milestone' && it.group !== 'shipped' && !isNaN(it.expected) && it.expected >= T; })
+      .sort(function (a, b) { return a.expected - b.expected; })[0];
+    if (ahead.length) {
+      sep('Ahead');
+      ahead.forEach(function (it) {
+        if (it.kind === 'milestone') row('s-mile', '<span class="n-mile"></span>', milestoneCard(it), isNaN(it.expected) ? '' : longDay(it.expected));
+        else row('s-plan', '<span class="n-plan"></span>', itemCard(it), isNaN(it.created) ? '' : 'created ' + shortDate(it.created));
+      });
+    }
+    // today: the date on one side, what is being built on the other
+    var nowCards = now.map(function (it) {
+      if (it.kind === 'milestone') return milestoneCard(it);
+      var sum = it.summary && it.summary[lang], p = it.plan;
+      return '<a class="wcard now g-progress" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
+        '<div class="wc-top"><span class="gtag">In progress · ' + SHORT[it.here] + '</span>' + (it.issue ? '<span class="ref">' + esc(it.issue) + '</span>' : '') + '</div>' +
+        '<h3>' + esc(it.title[lang]) + '</h3>' + (sum ? '<p class="msum">' + esc(sum) + '</p>' : '') + flowDots(it) +
+        (p ? '<div class="pbar"><span><i style="width:' + Math.max(3, Math.round(p.done / p.total * 100)) + '%"></i></span><b>plan: ' + p.done + ' of ' + p.total + ' steps</b></div>' : '') + '</a>';
+    }).join('') || '<p class="none">Nothing in progress right now.</p>';
+    var todayLine = now.length + ' in progress' + (nextStop ? ' · next stop in ' + daysTo(nextStop.expected) + (daysTo(nextStop.expected) === 1 ? ' day' : ' days') : '');
+    rows.push('<div class="srow today"><div class="snode" aria-hidden="true"><span class="n-today"></span></div><div class="smeta"><span class="kicker">Today</span><b>' + esc(longDay(T)) + '</b><span>' + esc(todayLine) + '</span></div><div class="scard">' + nowCards + '</div></div>');
+    // shipped: unreleased work on main, then the releases (and the milestones reached between them)
+    var reached = items.filter(function (it) { return it.kind === 'milestone' && !isNaN(it.reached); });
+    if (versions.length || reached.length) sep('Shipped');
+    var dated = versions.filter(function (v) { return !isNaN(v.date); });
+    versions.forEach(function (v) {
+      var bullets = []; v.sections.forEach(function (sec) { sec.html.querySelectorAll('li').forEach(function (li) { bullets.push(li.textContent.replace(/\s+/g, ' ').trim()); }); });
+      var counts = v.sections.map(function (sec) { return '<span>' + sec.html.querySelectorAll('li').length + ' ' + esc(sec.name.toLowerCase()) + '</span>'; }).join('');
+      var carried = items.filter(function (it) { return it.release && it.release === v.version; }).map(function (it) { return '<a class="ichip" href="' + itemHref(it.name) + '">' + esc(it.title[lang]) + '</a>'; }).join('');
+      var text = v.summary || bullets.slice(0, 2).join(' ');
+      if (isNaN(v.date)) {
+        // what is on main: its changes themselves, not the section's generic summary
+        row('s-unrel', '<span class="n-unrel"></span>', '<div class="rcard"><div class="rhead"><b>Not released yet</b><span>on main</span></div>' + (bullets.length ? '<ul class="rlist">' + bullets.slice(0, 3).map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul>' : '') + '<div class="rcounts">' + counts + '</div></div>', 'next release');
+        return;
+      }
+      reached.filter(function (m) { return m.reached >= v.date && !m.placed; }).forEach(function (m) { m.placed = true; row('s-mile s-reached', '<span class="n-mile"></span>', milestoneCard(m), ago(m.reached)); });
+      var prev = dated[dated.indexOf(v) + 1], gap = prev ? Math.round((v.date - prev.date) / DAY) : null;
+      row('s-rel' + (v === dated[0] ? ' s-newest' : ''), '<span class="n-rel"></span>',
+        '<div class="rcard"><div class="rhead"><b>' + esc(v.version) + '</b><span>' + shortDate(v.date) + (gap != null ? ' · ' + gap + ' days after ' + esc(prev.version) : '') + '</span></div>' +
+        (text ? '<p>' + esc(text) + '</p>' : '') + (carried ? '<div class="rcarried">' + carried + '</div>' : '') + '<div class="rcounts">' + counts + '</div></div>', ago(v.date));
+    });
+    reached.filter(function (m) { return !m.placed; }).forEach(function (m) { row('s-mile s-reached', '<span class="n-mile"></span>', milestoneCard(m), ago(m.reached)); });
+    reached.forEach(function (m) { delete m.placed; });
+    return '<div class="spine">' + rows.join('') + '</div>' + (versions.length ? '<p class="spine-more"><button type="button" class="linkbtn" data-goto="changelog">Read the full changelog →</button></p>' : '');
+  }
+
   function emptyWork() {
     var steps = [['Plan', 'intent.md', 'Grill me or Write doc turns an idea into an intent; a person accepts it.'],
       ['Design', 'spec.md', 'The spec, signed off at its gate.'], ['Build', 'plan.md', 'The plan, then the runs: commits and PRs fill its progress.'],
@@ -583,19 +669,8 @@
       tabs.querySelectorAll('[role=tab]').forEach(function (b) { b.addEventListener('click', function () { select(b.dataset.tab, true); }); });
 
       // Overview
-      var now = items.filter(function (it) { return it.group === 'progress'; }), next = items.filter(function (it) { return it.group === 'planned'; }), done = items.filter(function (it) { return it.group === 'shipped'; });
-      next = placeAfter(next);
-      var groupOf = function (it) { var a = it.kind === 'milestone' && next.find(function (x) { return x.name === it.after; }); return (a ? a.target : it.target) || 'Later'; };
-      var byTarget = {}; next.forEach(function (it) { (byTarget[groupOf(it)] = byTarget[groupOf(it)] || []).push(it); });
-      if (!items.length) panes.overview.innerHTML = emptyWork();
-      else panes.overview.innerHTML = '<div class="lanes">' +
-        '<section class="lane"><header><h2>Now</h2><span>' + now.length + ' in progress</span></header>' + (now.map(itemCard).join('') || '<p class="none">Nothing in progress.</p>') + '</section>' +
-        '<section class="lane"><header><h2>Next</h2><span>' + next.length + ' planned</span></header>' + (Object.keys(byTarget).sort().map(function (t) { return '<h5 class="tgt">' + (t === 'Later' ? 'No target yet' : 'Target ' + esc(t)) + '</h5>' + byTarget[t].map(itemCard).join(''); }).join('') || '<p class="none">Nothing planned.</p>') + '</section>' +
-        '</div><div class="shipped-row">' + stageChart(items) +
-        (latest ? '<aside class="latest"><span class="kicker">Latest release</span><h3>' + esc(latest.version) + '</h3><p class="ldate">' + new Date(latest.date).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) + '</p><p class="lsum"></p><ul>' +
-          latest.sections.map(function (s) { return '<li><b>' + s.html.querySelectorAll('li').length + '</b> ' + esc(s.name.toLowerCase()) + '</li>'; }).join('') + '</ul><button type="button" class="linkbtn" data-goto="changelog">Read the changelog →</button></aside>' : '') + '</div>' +
-        (done.length ? '<section class="lane recent"><header><h2>Recently shipped</h2><span>' + done.length + ' items</span></header><div class="grid2">' + done.slice(0, 4).map(itemCard).join('') + '</div></section>' : '');
-      if (latest && items.length) panes.overview.querySelector('.lsum').textContent = latest.summary;
+      if (!items.length && !versions.length) panes.overview.innerHTML = emptyWork();
+      else panes.overview.innerHTML = spine(items, versions) + (stageChart(items) ? '<div class="shipped-row solo">' + stageChart(items) + '</div>' : '');
       panes.overview.querySelectorAll('[data-goto]').forEach(function (b) { b.addEventListener('click', function () { select(b.dataset.goto, true); window.scrollTo({ top: tabs.offsetTop - 70, behavior: 'smooth' }); }); });
       var tip = document.createElement('div'); tip.className = 'ctip'; tip.hidden = true; panes.overview.appendChild(tip);
       panes.overview.querySelectorAll('.seg').forEach(function (seg) {
