@@ -3,7 +3,7 @@ item: first-project-onboarding
 issue: "#629 (phase 1 of epic #628)"
 stage: build
 scope: phase 1 (MVP): the wizard with what exists; phases 2–6 get their own plan.md
-status: draft             # in review (plan mode) → accepted by the engineer before any code
+status: accepted          # accepted by the owner (engineer / tech lead) on 2026-10-31
 spec: spec.md (signed off)
 date: 2026-10-31
 translation: plan.pt-BR.md
