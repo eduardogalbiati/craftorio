@@ -61,11 +61,13 @@
     const e2e = profile.tests === 'unit+e2e';
     if (profile.mode === 'local') {
       add(DEFAULT, 'Local project: develops and merges on your machine');
-      if (e2e) add('software-development-local-hero', 'Unit and end-to-end tests: the local workflow with the e2e checks');
+      // R7: unit tests only = implement, then write the unit tests
+      if (!e2e) add('software-development-local-hero', 'Unit tests: implements first, then writes the unit tests');
     } else {
       add('software-development', 'Remote repository: develops through a pull request');
-      if (e2e) add('e2e-release', 'End-to-end tests: runs them before a release');
     }
+    // e2e-release runs in a worktree of the local base, so it fits both modes
+    if (e2e) add('e2e-release', 'End-to-end tests: runs them before a release');
     if (profile.ci !== 'none') add('release', 'CI builds releases: prepares and publishes a release');
     return { suggestions: out, defaulted: false };
   }
