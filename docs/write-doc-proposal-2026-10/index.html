@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Write Doc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: proposta longa em uma coluna de leitura (~900px) com índice fixo à esquerda no desktop;
+   as telas mock saem da coluna e ocupam a largura toda, sempre no tema escuro do app (o único dele). */
+:root{
+  --bg:#f5f6fa; --paper:#ffffff; --ink:#1a1d27; --soft:#5b6275; --line:#dfe2ea;
+  --accent:#3b55d4; --accent-wash:#e8ecfc; --rec:#137a4b; --rec-wash:#e3f4ea; --warn:#9a6a00; --warn-wash:#fbf1d6; --con:#b0332b;
+  --display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  /* app tokens (packages/ui-kit/style.css), fixos: as mocks mostram o app */
+  --a-bg:#0e1014; --a-panel:#151820; --a-panel2:#1b1f29; --a-border:#262b37; --a-text:#e6e8ee; --a-muted:#8a91a3;
+  --a-accent:#7c9cff; --a-green:#4ade80; --a-yellow:#facc15; --a-red:#f87171; --a-purple:#c084fc; --a-info:#7dd3fc;
+  /* tokens do projeto de exemplo (demo-app): claro, teal */
+  --p-bg:#f7f8f7; --p-surface:#ffffff; --p-ink:#13201d; --p-muted:#5f6e6a; --p-line:#e1e7e5; --p-brand:#0f766e; --p-brand-wash:#d9f0ec; --p-amber:#b45309;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1117; --paper:#161922; --ink:#e7e9f0; --soft:#9aa1b4; --line:#2a2f3c;
+  --accent:#8fa6ff; --accent-wash:#1e2540; --rec:#5fd497; --rec-wash:#13291e; --warn:#f0c64a; --warn-wash:#2c2510; --con:#f2867d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1117; --paper:#161922; --ink:#e7e9f0; --soft:#9aa1b4; --line:#2a2f3c;
+  --accent:#8fa6ff; --accent-wash:#1e2540; --rec:#5fd497; --rec-wash:#13291e; --warn:#f0c64a; --warn-wash:#2c2510; --con:#f2867d; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.6;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;font-size:13px}
+nav.toc b{display:block;font-family:var(--display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);margin-bottom:8px}
+nav.toc a{display:block;color:var(--soft);text-decoration:none;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent);border-left-color:var(--accent);outline:none}
+main{min-width:0}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)} nav.toc{display:none}}
+
+h1,h2,h3,h4{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(34px,5vw,52px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:clamp(25px,3vw,32px);font-weight:700;margin-top:72px;padding-top:24px;border-top:1px solid var(--line)}
+h3{font-size:20px;font-weight:700;margin-top:36px}
+h4{font-size:16px;font-weight:700}
+p{margin:10px 0;max-width:72ch}
+.lede{font-size:18px;color:var(--soft);max-width:66ch}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:var(--accent-wash);padding:1px 5px;border-radius:4px}
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+
+.tldr{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-top:28px}
+.tldr ol{margin:8px 0 0;padding-left:20px}
+.tldr li{margin:6px 0}
+.answer{margin-top:16px;background:var(--accent-wash);border-radius:12px;padding:18px 22px}
+.answer h3{margin-top:0;font-size:18px}
+
+figure{margin:18px 0 0}
+figure img{display:block;border-radius:8px;border:1px solid var(--line)}
+figcaption{font-size:13px;color:var(--soft);margin-top:8px;max-width:80ch}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+
+/* camadas */
+.layers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px;margin-top:16px}
+.layer{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;position:relative}
+.layer .n{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.layer h4{margin:4px 0}
+.layer p{font-size:13.5px;color:var(--soft);margin:4px 0 0}
+.layer.base{border-color:var(--accent)}
+
+/* fluxo */
+.flow{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;counter-reset:st}
+.flow a{flex:1 1 150px;min-width:0;text-decoration:none;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;position:relative}
+.flow a:hover,.flow a:focus-visible{border-color:var(--accent);outline:none}
+.flow a .k{font-family:var(--mono);font-size:11.5px;color:var(--accent)}
+.flow a b{display:block;font-size:14px;line-height:1.3;margin:2px 0}
+.flow a span.d{font-size:12px;color:var(--soft)}
+.flow a.today{background:transparent;border-style:dashed}
+
+.step{margin-top:56px}
+.step-head{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.step-num{font-family:var(--display);font-weight:700;font-size:44px;line-height:1;color:var(--accent)}
+.step-head h3{margin:0;font-size:24px}
+
+/* decisões */
+.decision{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-top:18px}
+.d-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.d-id{font-family:var(--mono);font-size:12px;font-weight:500;background:var(--accent-wash);color:var(--accent);padding:2px 7px;border-radius:5px}
+.d-q{color:var(--soft);font-size:14px;margin:6px 0 12px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px}
+.opt{border:1px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13.5px;line-height:1.5}
+.opt b{display:block;font-size:14px;margin-bottom:4px}
+.opt .pro{color:var(--ink)} .opt .pro::before{content:"+ ";color:var(--rec);font-weight:600}
+.opt .con{color:var(--soft)} .opt .con::before{content:"− ";color:var(--con);font-weight:600}
+.opt p{margin:3px 0}
+.opt.rec{border:1.5px solid var(--rec);background:var(--rec-wash)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:2px}
+.tag.r{background:var(--rec);color:var(--paper)}
+.tag.l{background:var(--warn-wash);color:var(--warn)}
+.why{font-size:14px;margin:12px 0 0;max-width:none}
+.why b{color:var(--rec)}
+
+/* telas mock: frame */
+.screen{margin-top:18px;overflow-x:auto;border-radius:12px;border:1px solid var(--line);background:#07080b}
+.screen-cap{font-size:13px;color:var(--soft);margin-top:8px}
+.app{min-width:980px;background:var(--a-bg);color:var(--a-text);font-family:var(--body);font-size:12.5px;line-height:1.45;border-radius:11px;overflow:hidden}
+.app *{box-sizing:border-box}
+.a-top{display:flex;align-items:center;gap:14px;height:44px;padding:0 14px;border-bottom:1px solid var(--a-border)}
+.a-brand{font-weight:600;font-size:13px}.a-brand em{font-style:normal;color:var(--a-accent)}
+.a-sel{border:1px solid var(--a-border);border-radius:6px;padding:4px 10px;color:var(--a-text);min-width:150px;display:flex;justify-content:space-between;gap:8px}
+.a-sel::after{content:"▾";color:var(--a-muted)}
+.a-sp{flex:1}
+.a-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--a-border);background:transparent;color:var(--a-text);border-radius:6px;padding:5px 10px;font:inherit;font-weight:500;white-space:nowrap}
+.a-btn.p{background:var(--a-accent);border-color:var(--a-accent);color:#0b0e18}
+.a-btn.s{padding:3px 8px;font-size:11.5px}
+.a-body{display:grid;grid-template-columns:168px minmax(0,1fr)}
+.a-side{border-right:1px solid var(--a-border);padding:10px 8px;min-height:440px}
+.a-grp{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--a-muted);margin:12px 6px 4px}
+.a-item{padding:5px 8px;border-radius:6px;color:var(--a-text);display:flex;justify-content:space-between;align-items:center}
+.a-item.on{background:var(--a-panel2)}
+.a-item.new{outline:1.5px dashed var(--a-accent);outline-offset:-1px}
+.a-badge{font-size:9.5px;font-weight:600;letter-spacing:.05em;padding:1px 5px;border-radius:4px;background:rgba(124,156,255,.16);color:var(--a-accent)}
+.a-badge.lab{background:rgba(192,132,252,.16);color:var(--a-purple)}
+.a-main{padding:18px 22px;min-width:0}
+.a-h1{font-size:18px;font-weight:700;margin:0}
+.a-help{color:var(--a-muted);margin:4px 0 14px;max-width:80ch}
+.a-panel{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;padding:12px 14px}
+.a-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.a-muted{color:var(--a-muted)}
+.a-mono{font-family:var(--mono);font-size:11.5px}
+.a-pill{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid var(--a-border);color:var(--a-muted)}
+.a-pill.g{color:var(--a-green);border-color:rgba(74,222,128,.35)}
+.a-pill.y{color:var(--a-yellow);border-color:rgba(250,204,21,.35)}
+.a-pill.b{color:var(--a-accent);border-color:rgba(124,156,255,.4)}
+.a-tabs{display:flex;gap:16px;border-bottom:1px solid var(--a-border);margin-bottom:14px}
+.a-tabs span{padding:6px 2px;color:var(--a-muted)}
+.a-tabs span.on{color:var(--a-text);border-bottom:2px solid var(--a-accent)}
+.a-empty{border:1px dashed var(--a-border);border-radius:10px;padding:26px;text-align:center}
+.a-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;text-align:left}
+.a-steps .a-panel b{display:block;margin-bottom:4px}
+.a-field{border:1px solid var(--a-border);background:var(--a-panel2);border-radius:6px;padding:6px 9px;color:var(--a-muted)}
+.a-chk{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.a-chk i{flex:none;width:13px;height:13px;border:1px solid var(--a-muted);border-radius:3px;margin-top:2px}
+.a-chk i.on{background:var(--a-accent);border-color:var(--a-accent)}
+.a-radio i{border-radius:50%}
+
+/* biblioteca do kit */
+.kit{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px}
+.kit-nav .a-item{font-size:12px}
+.sw{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.sw div{border:1px solid var(--a-border);border-radius:6px;overflow:hidden;font-size:10.5px}
+.sw div span{display:block;height:34px}
+.sw div p{margin:0;padding:4px 6px;color:var(--a-muted);font-family:var(--mono);font-size:10px}
+.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.comp{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;overflow:hidden}
+.comp .stage{background:var(--p-bg);padding:14px;min-height:78px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-family:var(--body)}
+.comp .meta{padding:7px 10px;display:flex;justify-content:space-between;gap:6px;align-items:center}
+.comp.gap{border-style:dashed;border-color:rgba(250,204,21,.45)}
+
+/* componentes do projeto de exemplo */
+.pb{border:0;border-radius:8px;padding:7px 13px;font:500 12px var(--body);background:var(--p-brand);color:#fff}
+.pb.ghost{background:transparent;color:var(--p-brand);box-shadow:inset 0 0 0 1px var(--p-brand)}
+.pin{border:1px solid var(--p-line);border-radius:8px;padding:6px 9px;background:#fff;color:var(--p-muted);font-size:12px;min-width:120px}
+.pchip{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--p-brand-wash);color:var(--p-brand);font-weight:600}
+.pchip.am{background:#fdecd7;color:var(--p-amber)}
+.pcard{background:#fff;border:1px solid var(--p-line);border-radius:10px;padding:9px 12px;color:var(--p-ink);font-size:11px;min-width:110px}
+.pcard b{display:block;font-size:17px}
+
+/* galeria */
+.gal{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.thumb{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;overflow:hidden}
+.thumb .t{height:112px;background:var(--p-bg);padding:8px;display:grid;grid-template-rows:12px 1fr;gap:6px}
+.thumb .t .bar{background:var(--p-surface);border:1px solid var(--p-line);border-radius:3px}
+.thumb .t .bd{display:grid;gap:5px}
+.thumb .t .bd i{display:block;background:var(--p-surface);border:1px solid var(--p-line);border-radius:3px}
+.thumb .t .bd i.br{background:var(--p-brand-wash);border-color:transparent}
+.thumb .m{padding:8px 10px}
+.thumb .m b{display:block;font-size:12.5px}
+.thumb.newc{display:flex;align-items:center;justify-content:center;border-style:dashed;color:var(--a-muted);min-height:170px;flex-direction:column;gap:6px}
+
+/* editor */
+.win{min-width:1100px}
+.win-bar{height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#0a0b0f;border-bottom:1px solid var(--a-border);color:var(--a-muted);font-size:11.5px}
+.dots{display:flex;gap:6px}.dots i{width:10px;height:10px;border-radius:50%;background:#3a3f4c}
+.ed{display:grid;grid-template-columns:176px minmax(0,1fr) 330px;min-height:560px}
+.ed-left{border-right:1px solid var(--a-border);padding:10px}
+.ed-left .a-item{font-size:12px}
+.layer-tree{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--a-muted);line-height:1.8}
+.layer-tree .s{color:var(--a-accent)}
+.ed-center{background:#1a1d24;display:flex;flex-direction:column;min-width:0}
+.ed-tools{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--a-border);flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--a-border);border-radius:6px;overflow:hidden}
+.seg span{padding:3px 9px;font-size:11.5px;color:var(--a-muted)}
+.seg span.on{background:var(--a-panel2);color:var(--a-text)}
+.canvas-area{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:18px;overflow:hidden;position:relative}
+.ed-right{border-left:1px solid var(--a-border);display:flex;flex-direction:column;min-width:0}
+.chat-h{padding:10px 12px;border-bottom:1px solid var(--a-border);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.chat{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.msg{border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5}
+.msg.me{background:var(--a-panel2);align-self:flex-end;max-width:92%}
+.msg.ai{background:var(--a-panel);border:1px solid var(--a-border)}
+.msg .who{font-size:10.5px;color:var(--a-muted);margin-bottom:3px;display:flex;justify-content:space-between;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;border:1px solid rgba(124,156,255,.4);color:var(--a-accent);border-radius:5px;padding:1px 6px;margin:2px 3px 2px 0;font-family:var(--mono)}
+.chip.img{border-color:var(--a-border);color:var(--a-muted)}
+.chip.img i{width:16px;height:11px;border-radius:2px;background:linear-gradient(135deg,#0f766e,#9ad8cf)}
+.compose{border-top:1px solid var(--a-border);padding:10px 12px}
+.compose .a-field{min-height:52px;margin:6px 0;color:var(--a-text)}
+.diffline{font-family:var(--mono);font-size:10.5px;color:var(--a-muted);margin-top:5px}
+.diffline .add{color:var(--a-green)} .diffline .del{color:var(--a-red)}
+
+/* canvas: a tela do projeto (demo-app) */
+.pf{width:640px;background:var(--p-bg);border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.45);color:var(--p-ink);font-family:var(--body);overflow:hidden}
+.pf-nav{display:flex;align-items:center;gap:16px;background:var(--p-surface);border-bottom:1px solid var(--p-line);padding:9px 14px;font-size:11.5px}
+.pf-nav b{color:var(--p-brand);font-size:13px}
+.pf-nav span{color:var(--p-muted)}
+.pf-nav span.on{color:var(--p-ink);font-weight:600}
+.pf-body{padding:14px}
+.pf-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.pf-head h5{margin:0;font-size:16px;font-family:var(--body)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}
+.ptable{background:var(--p-surface);border:1px solid var(--p-line);border-radius:10px;overflow:hidden;font-size:11px}
+.ptable div{display:grid;grid-template-columns:70px 1fr 80px 70px;padding:7px 11px;border-top:1px solid var(--p-line);gap:6px}
+.ptable div:first-child{border-top:0;color:var(--p-muted);font-weight:600;background:#fbfcfb}
+[data-mid]{cursor:pointer;position:relative}
+.canvas-area [data-mid]:hover{outline:1px dashed #7c9cff;outline-offset:2px}
+.canvas-area [data-mid].picked{outline:2px solid #7c9cff;outline-offset:2px}
+.canvas-area [data-mid].picked::after{content:attr(data-label);position:absolute;left:-2px;top:-20px;background:#7c9cff;color:#0b0e18;font:500 9.5px var(--mono);padding:1px 5px;border-radius:3px;white-space:nowrap;z-index:2}
+
+/* versões */
+.tl{display:flex;gap:10px;overflow:hidden}
+.tl .v{flex:0 0 112px;border:1px solid var(--a-border);border-radius:7px;background:var(--a-panel);overflow:hidden}
+.tl .v .t{height:62px;background:var(--p-bg);padding:5px;display:grid;grid-template-rows:7px 1fr;gap:4px}
+.tl .v .t i{display:block;background:#fff;border:1px solid var(--p-line);border-radius:2px}
+.tl .v .t i.br{background:var(--p-brand-wash)}
+.tl .v p{margin:0;padding:5px 7px;font-size:10.5px}
+.tl .v.on{border-color:var(--a-accent)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.cmp .side{background:var(--a-panel);border:1px solid var(--a-border);border-radius:8px;padding:10px}
+.mini{background:var(--p-bg);border-radius:5px;padding:9px;display:grid;gap:6px}
+.mini .r{display:flex;gap:6px}
+.mini i{display:block;height:26px;flex:1;background:#fff;border:1px solid var(--p-line);border-radius:4px}
+.mini i.hl{outline:2px solid var(--a-yellow);outline-offset:1px}
+.mini i.br{background:var(--p-brand-wash)}
+
+/* arquitetura */
+.arch{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:stretch;margin-top:14px;min-width:820px}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px}
+.box h4{font-size:14px;margin-bottom:6px}
+.box ul{margin:0;padding-left:16px;color:var(--soft)}
+.box.hot{border-color:var(--accent)}
+.arrowrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;min-width:820px;font-family:var(--mono);font-size:11.5px;color:var(--soft);margin-top:6px}
+.scroll{overflow-x:auto}
+
+/* custos e fases */
+table.t{border-collapse:collapse;width:100%;font-size:14px;margin-top:12px}
+table.t th,table.t td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);font-weight:600}
+table.t td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:var(--mono);font-size:13px}
+.phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:16px}
+.phase{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.phase .k{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.phase h4{font-size:18px}
+.phase ul{margin:4px 0;padding-left:18px;font-size:13.5px}
+.phase li{margin:3px 0}
+.phase .done{font-size:13px;color:var(--soft);border-top:1px solid var(--line);padding-top:8px;margin-top:auto}
+.phase.mvp{border:1.5px solid var(--accent)}
+.files{font-family:var(--mono);font-size:12.5px;line-height:1.7}
+.files .new{color:var(--rec)} .files .chg{color:var(--warn)}
+.qa{display:grid;gap:10px;margin-top:14px}
+.q{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.q b{display:block}
+.q p{margin:4px 0 0;font-size:14px}
+.q .def{color:var(--rec);font-weight:600}
+.rules{columns:2 300px;column-gap:24px;margin-top:10px;font-size:14px}
+.rules li{break-inside:avoid;margin:5px 0}
+.note{font-size:13px;color:var(--soft);border-left:3px solid var(--line);padding-left:12px;margin-top:14px}
+@media (prefers-reduced-motion:no-preference){.canvas-area [data-mid]{transition:outline-color .12s}}
+</style>
+<style>.md{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px}.md table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0;display:block;overflow-x:auto}.md th,.md td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}.md img{border:1px solid var(--line);border-radius:8px}.md h2{margin-top:56px}.md h3{margin-top:32px}.md li{margin:4px 0}</style>
+</head>
+<body>
+<main class="md">
+<h1>Write Doc: proposal</h1>
+<p><strong>Status:</strong> proposal, waiting for the owner&#39;s decisions · <strong>Epic:</strong> #636 · <strong>Date:</strong> 2026-10-31 · <a href="README.pt-BR.md">Português</a></p>
+<p>This proposal turns the way the proposals of this series were written (<a href="../project-mockups-proposal-2026-10/README.md">Project mockups</a>, <a href="../first-project-onboarding-proposal-2026-10/README.md">First project onboarding</a>) into a feature of the app.</p>
+<ul>
+<li>Every work item gets <strong>one living document</strong> in <code>docs/work/&lt;item&gt;/</code>, from the intent to monitoring, along the six stages of the AI-native SDLC.</li>
+<li>A writer drafts Plan (<code>intent.md</code>) and Design (<code>spec.md</code>) in markdown, with screenshots of &quot;before&quot; and mock screens of &quot;after&quot;.</li>
+<li>You iterate like in an editor: select a passage and say, in the chat beside it, what to fix. A reviewer comments, and a person approves.</li>
+<li>The workflows fill in the rest: Build, Test, Deploy and Maintain.</li>
+</ul>
+<p>It also covers the reorganization of the Planning workflows that the onboarding proposal left out.</p>
+<p>The same proposal as a page, with a clickable editor mock: <a href="README.md">index.html</a> (<a href="index.pt-BR.html">pt-BR</a>). Open it locally; GitHub shows HTML as source.</p>
+<p>Nothing here is built yet. The decisions are recommendations until the owner confirms them; then they go to <a href="../agents/decisions.md">docs/agents/decisions.md</a>.</p>
+<h2>Contents</h2>
+<ul>
+<li><a href="#the-recommendations">The recommendations</a></li>
+<li><a href="#where-we-are-today">Where we are today</a></li>
+<li><a href="#the-format-one-living-document-per-item">The format: one living document per item</a></li>
+<li><a href="#end-to-end-flow">End-to-end flow</a></li>
+<li><a href="#the-planning-workflows-old--new">The Planning workflows: old → new</a></li>
+<li><a href="#architecture">Architecture</a></li>
+<li><a href="#cost-of-real-model-calls">Cost of real-model calls</a></li>
+<li><a href="#phased-plan">Phased plan</a></li>
+<li><a href="#files-and-areas">Files and areas</a></li>
+<li><a href="#open-questions">Open questions</a></li>
+<li><a href="#hard-rules-check">Hard rules check</a></li>
+<li><a href="#how-to-contribute">How to contribute</a></li>
+</ul>
+<h2>The recommendations</h2>
+<ol>
+<li><p><strong>One living document per item</strong> (the owner&#39;s decision), in <code>docs/work/&lt;item&gt;/</code>, from the intent to monitoring, along the six stages of the AI-native SDLC.</p>
+<ul>
+<li><strong>Plan</strong> (<code>intent.md</code>) and <strong>Design</strong> (<code>spec.md</code>) are written here and approved by a person.</li>
+<li><strong>Build</strong> (<code>plan.md</code>, with its Progress table), <strong>Test</strong>, <strong>Deploy</strong> and <strong>Maintain</strong> are filled in by the workflows and the Monitor.</li>
+</ul>
+</li>
+<li><p><strong>Markdown is the only source.</strong> The writer generates and edits markdown only, never HTML. Reading is done by the document reader (prototyped in a separate session), which renders the <code>.md</code> on the fly with JavaScript; no rendered HTML is generated or committed. <strong>Dependency:</strong> this proposal uses that reader and does not propose a renderer of its own. The validated layout:</p>
+<ul>
+<li>the six stages at the top, horizontal and fixed, with their status and the current stage marked;</li>
+<li>on the left, the open stage&#39;s contents: it follows the scroll, keeps the current section in view and scrolls smoothly on click; requirements R1… are items;</li>
+<li>the wide document in the centre, with the front matter&#39;s metadata at the top and the original markdown at the end;</li>
+<li>on a phone: ☰ plus the current section as a tab, and a drawer with the full contents.</li>
+</ul>
+</li>
+<li><p><strong>One screen, Plan &amp; Design › Documents</strong>, replacing Write &amp; Review and AI Arena. &quot;Several writers&quot; becomes an option of the draft.</p>
+</li>
+<li><p><strong>One workflow, <code>write-doc</code></strong>, run once for the intent and once for the spec: evidence → draft → <strong>editing with you</strong> → review → <strong>approval</strong>. Both human steps are gates that no automation crosses.</p>
+</li>
+<li><p><strong>Two document types:</strong></p>
+<ul>
+<li><code>intent-writing</code>: problem, outcome, users and systems, constraints, questions.</li>
+<li><code>spec-writing</code>, with this series&#39; format: requirements R1…Rn, before/after, decisions with options and a recommendation, phases, costs, questions with defaults.</li>
+</ul>
+</li>
+<li><p><strong>Selection → agent:</strong> every markdown heading becomes a stable anchor. The chat sends the file, the section, the exact passage and its context, and the writer rewrites that section only. No more &quot;fix item 3 of D7&quot;.</p>
+</li>
+<li><p><strong>Screenshots without running anything:</strong> whoever writes only names the screens. The app uses, in this order:</p>
+<ul>
+<li>the project&#39;s screenshot command, when there is one;</li>
+<li>a capture through Run App;</li>
+<li>a manual attachment.</li>
+</ul>
+<p>The &quot;after&quot; comes from the same command on the run&#39;s branch, the Mockups proposal&#39;s screens (#625), or pasted images. The writer never writes HTML.</p>
+</li>
+<li><p><strong>Images in the chat:</strong> in any iteration you can paste or attach a screenshot in the chat (the #130 mechanism), and it goes to the writer with the selection.</p>
+</li>
+<li><p><strong>Review by request:</strong> each request becomes a commit linked to its message. Clicking the message shows only what the AI changed in that turn, in red and green inside the document. A queue of unreviewed changes says what is left to validate.</p>
+</li>
+<li><p><strong>The reviewer comments, it does not rewrite:</strong> its notes are anchored to sections, and you pick which to apply.</p>
+</li>
+<li><p><strong>The SDLC gates in the app:</strong> &quot;Accept intent&quot; and &quot;Sign off spec&quot; are human gates that change the front matter and commit (the tech lead signs the higher-risk points). After the sign-off come &quot;Create epic and phase issues&quot; and the handoff to the Build through <code>plan.md</code>, which the engineer accepts before any code.</p>
+</li>
+<li><p><strong>An English source, with the translation next to it:</strong> each artifact has its source in English (<code>intent.md</code>, <code>spec.md</code>…) and a Portuguese translation beside it (<code>intent.pt-BR.md</code>…); the front matter links the pair (<code>translation:</code> in the source, <code>source:</code> in the translation). The writer edits the English first, then updates the translation. A request made in Portuguese on a passage of the translation is applied to the source and propagated. The reader has an EN / PT selector.</p>
+</li>
+</ol>
+<h2>Where we are today</h2>
+<p>Both document flows today start from a prompt and end in a markdown file that you accept or send back whole. There is no way to point at a passage, and nothing ties the document to what gets built afterwards.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><img src="images/duo.jpg" alt="Write &amp; Review"></td>
+<td><img src="images/arena.jpg" alt="AI Arena"></td>
+</tr>
+<tr>
+<td><strong>Write &amp; Review</strong> (<code>writer-reviewer.yaml</code>): prompt + goal. The writer writes, the reviewer scores 0–10 and sends notes until the threshold, and the supervisor checks and asks what to do.</td>
+<td><strong>AI Arena</strong> (<code>ai-arena.yaml</code>): up to five models write the same document and critique blindly; a synthesizer merges, and another family verifies.</td>
+</tr>
+<tr>
+<td><img src="images/artifacts.jpg" alt="Artifacts"></td>
+<td><img src="images/gate.jpg" alt="Gate with evidence"></td>
+</tr>
+<tr>
+<td><strong>Artifacts</strong>: run documents show as sanitized markdown (marked + DOMPurify, no forms). Good for reading, not for editing or pointing.</td>
+<td><strong>A gate with evidence</strong>: development runs keep <em>original</em> and <em>modified</em> screenshot pairs in <code>evidence/</code>. The same mechanism gives a document its &quot;before&quot;.</td>
+</tr>
+</tbody></table>
+<p>The pain behind the request, in the owner&#39;s words: to fix something in these proposals, they had to find the spot and quote the section number in the chat. And after several requests, they could not tell what the AI had changed.</p>
+<h2>The format: one living document per item</h2>
+<p>This is the owner&#39;s decision. Each work item has <strong>one document</strong>, from the intent to monitoring, organized along the six stages of Anthropic&#39;s <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">AI-native SDLC playbook</a>: Plan → Design → Build → Test → Deploy → Maintain. Each stage ends in a versioned artifact that a person approves.</p>
+<p>Everything is committed in <code>docs/work/&lt;item&gt;/</code>: each stage&#39;s markdown and the before and after images in <code>images/</code>. No HTML is committed: the document reader renders the <code>.md</code> files on the fly. Write doc <strong>writes</strong> Plan and Design; the workflows fill in the rest.</p>
+<p><img src="images/living-doc.jpg" alt="The validated layout: stages at the top, contents on the left, wide document in the centre"></p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>File</th>
+<th>Filled by</th>
+<th>Approved by</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Plan</td>
+<td><code>intent.md</code>: problem, expected outcome, affected users and systems, constraints, open questions</td>
+<td><strong>write-doc</strong> (writer + you)</td>
+<td>the product owner</td>
+</tr>
+<tr>
+<td>Design</td>
+<td><code>spec.md</code>: requirements R1…Rn and the design, with the decisions and points of attention</td>
+<td><strong>write-doc</strong> (writer + you + reviewer)</td>
+<td>the owner / tech lead</td>
+</tr>
+<tr>
+<td>Build</td>
+<td><code>plan.md</code>: files that change, order, risks, proof, and the <strong>Progress</strong> table</td>
+<td>the feature/fix workflow: the plan at the start, then a line per run, commit and PR</td>
+<td>the developer&#39;s gate</td>
+</tr>
+<tr>
+<td>Test</td>
+<td><code>test.md</code>: the evidence</td>
+<td>the runs: suite, E2E, original/modified screenshots, axe</td>
+<td>the code owner</td>
+</tr>
+<tr>
+<td>Deploy</td>
+<td><code>deploy.md</code>: the review and the release</td>
+<td>each PR&#39;s review (against the project&#39;s <code>REVIEW.md</code>) and the <code>release</code> workflow with the Ship</td>
+<td>the code owner; the owner gives the Ship</td>
+</tr>
+<tr>
+<td>Maintain</td>
+<td><code>maintain.md</code>: incidents and post-mortems</td>
+<td>the Monitor and the Night watch: an incident lands here, produces a post-mortem and a <strong>new intent</strong></td>
+<td>the service owner; the product owner for product findings</td>
+</tr>
+</tbody></table>
+<p>Each <code>.md</code> has a front matter and the playbook&#39;s sections:</p>
+<pre><code>---
+item: first-project-onboarding
+stage: design
+status: draft         # draft → signed off
+intent: intent.md     # the previous artifact
+translation: spec.pt-BR.md
+approver: Eduardo Galbiati (product owner)
+date: 2026-10-31
+---
+</code></pre>
+<ul>
+<li><strong>intent.md:</strong> Problem · Expected outcome · Affected users and systems · Constraints · Open questions.</li>
+<li><strong>spec.md:</strong> Requirements (each as <code>**R1. Title.**</code>) · Design · Points of attention · Questions.</li>
+<li><strong>plan.md:</strong> Files that change · Order of work · Risks · Proof · Progress.</li>
+</ul>
+<p>The source is always in English; the Portuguese translation sits next to it (<code>spec.pt-BR.md</code>, with <code>source: spec.md</code> in its front matter) with the same content. The reader switches between the two with its EN / PT selector.</p>
+<p><strong>D15. The document&#39;s format and lifecycle</strong></p>
+<ul>
+<li><strong>The owner&#39;s decision:</strong> one living document per item, with markdown as the only source, read through the document reader.<ul>
+<li>The item&#39;s history is in one committed place, and a future front can browse the intents and validate each one.</li>
+<li>The agent writes markdown only. The reader renders it on the fly with the same layout for every document (light/dark theme, accent, export to PDF, a home page with every item), which simplifies safety (D5) and the lint.</li>
+<li>The workflows fill in the stages nobody writes: <code>plan.md</code>&#39;s Progress table, the evidence, the review, the release, the incidents.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Markdown plus committed rendered HTML: two sources that drift, and every edit becomes two diffs.</li>
+<li>An agent-written HTML per proposal (the earlier design): one format per document, agent HTML to isolate, and nothing ties the proposal to what was built.</li>
+<li>Intent and spec only: the document dies at approval.</li>
+</ul>
+</li>
+<li><strong>What this proposal delivers:</strong> the <code>.md</code> format, the editor on top of the reader, and the writing of Plan and Design.</li>
+<li><strong>Left for later:</strong> the workflows filling in Build, Test and Deploy (phase 4), the Monitor feeding Maintain (phase 5), and the front that browses intents.</li>
+</ul>
+<h2>End-to-end flow</h2>
+<p><code>write-doc</code> runs once for <code>intent.md</code> and once for <code>spec.md</code>, with the same seven steps:</p>
+<ol>
+<li>New item (<strong>D1</strong>, <strong>D2</strong>, <strong>D3</strong>).</li>
+<li>Evidence: before and after screenshots (<strong>D4</strong>).</li>
+<li>Draft: one writer or several.</li>
+<li><strong>Edit with you</strong>: selection + chat (<strong>D5</strong>–<strong>D9</strong>). A human gate.</li>
+<li>Review: anchored notes (<strong>D10</strong>).</li>
+<li><strong>Approval</strong>: Accept intent / Sign off spec, human gates (<strong>D16</strong>).</li>
+<li>Next stage (<strong>D12</strong>): intent → spec → epic and phase issues → Build.</li>
+</ol>
+<p>The Planning reorganization is <strong>D11</strong>, storage <strong>D13</strong>, cost <strong>D14</strong>, the living document <strong>D15</strong> and the SDLC gates <strong>D16</strong>.</p>
+<h3>1 · New item</h3>
+<p>The <strong>Documents</strong> screen lists the header project&#39;s items with each one&#39;s stage, read from the repository&#39;s <code>docs/work/</code> and the runs in progress. &quot;New item&quot; starts with the intent; once the intent is approved, the same item offers &quot;Write the spec&quot;. &quot;Several writers&quot; turns on the Arena mode for the draft.</p>
+<p><img src="images/mock-1.jpg" alt="Mock 1: Documents and New item"></p>
+<p><strong>D1. Where the feature lives</strong></p>
+<ul>
+<li><strong>Recommended:</strong> one Documents screen, replacing Write &amp; Review and AI Arena. &quot;Write a document&quot; is also offered on a Discovery card.</li>
+<li>Alternatives:<ul>
+<li>A third screen next to the two: three screens for one idea.</li>
+<li>Only inside a Discovery card: not every item starts from a card.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D2. The source and the page</strong></p>
+<ul>
+<li><strong>Recommended (the owner&#39;s decision):</strong> markdown only; the reader renders it on the fly.<ul>
+<li><p>The writer generates and edits only the stage&#39;s <code>.md</code>, with its front matter (<code>item</code>, <code>stage</code>, <code>status</code>, <code>approver</code>, <code>date</code> and the link to the previous artifact).</p>
+</li>
+<li><p>The reader (a dependency) renders with JavaScript, in the app and outside it; no HTML is generated or committed. Text diffs stay clean.</p>
+</li>
+<li><p>The editor depends on the reader exposing each block&#39;s position in the <code>.md</code> (D6).</p>
+</li>
+<li><p><strong>Markdown conventions:</strong></p>
+<ul>
+<li>the playbook&#39;s sections per stage;</li>
+<li>requirements as <code>**R1. Title.**</code>, which become contents items;</li>
+<li>a decision inside Design as <code>### D3 · title</code>, with its options and a <code>**Recommended:**</code> line;</li>
+<li>an image as <code>![Before: New project](images/before-new-project.png)</code>.</li>
+</ul>
+<p>The lint checks all of them.</p>
+</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Markdown plus generated, committed HTML: opens without JavaScript, but two sources, and the HTML ages.</li>
+<li>Agent-written HTML: a different layout every time, and agent HTML to isolate.</li>
+<li>A Google Docs-style editor: the owner said explicitly they do not want it.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D3. Document types</strong></p>
+<ul>
+<li><strong>Recommended:</strong> <code>intent-writing</code> and <code>spec-writing</code>.<ul>
+<li>The intent covers the problem, the expected outcome, the affected users and systems, the constraints and the open questions.</li>
+<li>The spec carries this series&#39; format. RFC, PRD and design sketch become spec templates.</li>
+</ul>
+</li>
+<li>Alternative: a single <code>product-proposal</code> skill, which mixes what the product owner approves (the intent) with what the team approves (the spec).</li>
+</ul>
+<h3>2 · Evidence: before and after screenshots</h3>
+<p>Whoever writes a plan or a proposal is often not technical and cannot run the project&#39;s app to take screenshots. So capture is a machine step before the draft: the writer only says which screens it wants, and the app takes the images.</p>
+<table>
+<thead>
+<tr>
+<th>Order</th>
+<th>Source</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><strong>The project&#39;s screenshot command</strong>: this app&#39;s <code>npm run screenshot</code>, or a project&#39;s own command (<code>.multiagent/screenshot.yaml</code>)</td>
+<td>the base, with simulated data (<code>--ref &lt;base&gt;</code>)</td>
+<td>the same command on the run&#39;s branch</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>A capture through Run App</strong>: the local preview starts the front in a sandbox, and a headless browser takes the requested URLs</td>
+<td>today&#39;s screens</td>
+<td>the run&#39;s branch</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>A manual attachment</strong>: images pasted or attached (#130), in &quot;New item&quot; or in the editing chat</td>
+<td>what you paste</td>
+<td>what you paste</td>
+</tr>
+</tbody></table>
+<p><strong>D4. Where the images come from</strong></p>
+<ul>
+<li><strong>Recommended:</strong> the most faithful source available, in that order. The app picks it and says which one it used for each image. People who are not technical never run anything: they name the screens, or paste an image.<ul>
+<li>A project with no screenshot command gets one through onboarding&#39;s &quot;Investigate screenshots&quot; card, which puts a spike on that project&#39;s own roadmap.</li>
+<li>Until then, the manual attachment covers it.</li>
+</ul>
+</li>
+<li><strong>The &quot;after&quot;</strong> comes from the same screenshot command on the run&#39;s branch, the Mockups proposal&#39;s screens (#625) when it exists, or pasted images. The writer never writes HTML; it only references the images from the markdown. All images are files in <code>docs/work/&lt;item&gt;/images/</code>.</li>
+<li>Alternatives:<ul>
+<li>Pasted images only: back to depending on someone who can run the app.</li>
+<li>The writer runs whatever it wants: costly and fragile.</li>
+</ul>
+</li>
+</ul>
+<h3>3 · Draft</h3>
+<p>With one writer, the draft is one long turn. It reads the code (read-only), the evidence and the skill, and writes the stage&#39;s markdown (<code>intent.md</code> or <code>spec.md</code>), pointing to the images in <code>images/</code>. With several writers, it is today&#39;s Arena mode. A machine lint checks the markdown (front matter, the playbook&#39;s sections, requirements R1…, a recommendation in every decision, images that exist) before you see it.</p>
+<h3>4 · Edit with you</h3>
+<p>On the validated layout: the stages at the top, the contents on the left, the document rendered by the reader in the centre and the writer&#39;s chat on the right. You select a passage and write what you want. The writer rewrites that section of the markdown only, and it shows as changed. You can also paste or attach a screenshot in the chat (#130).</p>
+<p><strong>The document and the chat together:</strong> the chat takes the right side, the space that is the wide document&#39;s in the reader. The document narrows down to a minimum reading width (about 70 characters per line). Below that, the contents become the ☰ with the current section as a tab, as on a phone, and the chat can collapse to a thin bar to get back to full reading. The &quot;Selected&quot; chip and the change marks stay visible in both modes.</p>
+<p><img src="images/mock-2.jpg" alt="Mock 2: the editor"></p>
+<p><strong>D5. Showing the document safely</strong></p>
+<ul>
+<li><strong>Recommended:</strong> the reader, in an isolated <code>iframe</code>, over sanitized markdown.<ul>
+<li>The agent writes markdown only. The reader renders it with the sanitizer (marked + DOMPurify, no forms, no raw HTML in the markdown); the only JavaScript that runs is the reader&#39;s own.</li>
+<li>In the editor, the reader opens in an <code>iframe sandbox=&quot;allow-scripts&quot;</code> with an opaque origin, served on <code>doc://</code> with a CSP that allows no network and no <code>window.api</code>. The selection comes out through <code>postMessage</code>, already mapped to the <code>.md</code> (D6).</li>
+<li>The editor depends on the reader&#39;s contract (source positions, selection events).</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Agent-written HTML: agent code inside the app, and against the markdown-only decision.</li>
+<li>A renderer of the editor&#39;s own: two renderers for the same markdown, which drift; the reader already exists.</li>
+</ul>
+</li>
+</ul>
+<p><strong>D6. How the selection reaches the writer</strong></p>
+<ul>
+<li><strong>Recommended:</strong> the selection happens on the rendered page. The reader tags each block with its source lines in the <code>.md</code> (for example <code>data-src=&quot;41-52&quot;</code>), and every heading and every <code>R1</code>, <code>D3</code> becomes an anchor such as <code>spec-r2</code>. The chat sends the file, the anchor, the lines, the passage, 200 characters before and after, and the version. The writer returns the new section of the markdown only; the app swaps the lines, records the version, and the reader shows it again.</li>
+<li>Alternatives:<ul>
+<li>Pins on an image (Findings #361): text is not an image.</li>
+<li>Section numbers in the chat: today&#39;s pain.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Selecting in the translation (a point of attention):</strong> when you select a passage in <code>spec.pt-BR.md</code>, the request applies to the source.</p>
+<ul>
+<li>The source and the translation share the same headings and anchors (<code>spec-r2</code> in both), so the section is exact.</li>
+<li>Inside the section, the app aligns blocks by order (the translation&#39;s 3rd paragraph is the source&#39;s 3rd). It sends the writer the Portuguese passage, the matching English block and the whole section in both languages.</li>
+<li>The writer fixes the source first, then the translation, in the same commit.</li>
+<li>If the alignment fails (the translation has one block more or less), the app says so and sends the whole section.</li>
+</ul>
+<pre><code class="language-json">{ &quot;item&quot;: &quot;first-project-onboarding&quot;, &quot;file&quot;: &quot;spec.pt-BR.md&quot;, &quot;source&quot;: &quot;spec.md&quot;, &quot;version&quot;: 9,
+  &quot;anchor&quot;: &quot;spec-r2&quot;, &quot;lines&quot;: [41, 52],
+  &quot;quote&quot;: &quot;starts the clone in the background&quot;,
+  &quot;before&quot;: &quot;…On Next the app checks access with git ls-remote and &quot;,
+  &quot;after&quot;: &quot;, so you move on to step 3 while it runs.&quot;,
+  &quot;message&quot;: &quot;Make clear the clone is full, not shallow, and why.&quot; }
+</code></pre>
+<p><strong>D7. Apply now or collect comments</strong></p>
+<ul>
+<li><strong>Recommended:</strong> apply now by default, with &quot;Queue&quot; to collect several requests into one cheaper turn.</li>
+<li>Alternative: batched comments only, which loses the quick conversation.</li>
+</ul>
+<p><strong>D8. How the chat becomes agent turns</strong></p>
+<ul>
+<li><strong>Recommended:</strong> a human editing gate inside the run, using the writer&#39;s session. A new step, <code>human_edit</code>:<ul>
+<li>The run waits for you, and each request is a turn of the writer in the same session (persistent, with a handoff note and <code>fresh_after_idle: 55m</code>).</li>
+<li>Only your &quot;Send to review&quot; ends it.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>A chat outside the run: splits the history.</li>
+<li>A new run per request: loses context and costs more.</li>
+</ul>
+</li>
+</ul>
+<h4>Review only what the AI changed in each request</h4>
+<p>After many requests, it is hard to know what changed so you can revalidate it. So each request is linked to the exact change it caused.</p>
+<ul>
+<li>Clicking a chat message opens that turn&#39;s change, in red and green inside the rendered document.</li>
+<li>A queue of unreviewed changes shows what is left to validate. <strong>Mark reviewed</strong> takes a change off the queue, and <strong>Undo this change</strong> reverts that turn only.</li>
+<li>The approval gate shows how many changes are still unreviewed.</li>
+</ul>
+<p><img src="images/mock-3.jpg" alt="Mock 3: changes by request"></p>
+<p><strong>D9. Versions and review by request</strong></p>
+<ul>
+<li><strong>Recommended:</strong> one commit per request, linked to its message, with a review queue.<ul>
+<li>Each request (yours, or a reviewer note you applied) becomes a commit on the run&#39;s branch, with the stage&#39;s English source and its translation in <code>docs/work/&lt;item&gt;/</code>, and the message id in the commit.</li>
+<li>Clicking the message shows that turn&#39;s diff, inline and only in the sections it touched.</li>
+<li>Approval merges the branch like any run (local merge or PR, per the project).</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>Only &quot;Diff vN → vM&quot;: it mixes several requests.</li>
+<li>Today&#39;s <code>drafts/vN</code> copies: no diff and no link to the request.</li>
+</ul>
+</li>
+</ul>
+<h3>5 · Review</h3>
+<p>&quot;Send to review&quot; calls the reviewer. It scores against the skill&#39;s rubric and the goal, and returns notes anchored to sections, with Apply / Edit / Dismiss on each.</p>
+<p><img src="images/mock-4.jpg" alt="Mock 4: review with anchored notes"></p>
+<p><strong>D10. What the reviewer does</strong></p>
+<ul>
+<li><strong>Recommended:</strong> it scores and comments, and you decide. &quot;Auto-apply notes&quot; is an option, off by default.</li>
+<li>Alternatives:<ul>
+<li>Today&#39;s writer ↔ reviewer loop: it rewrites what you already fixed.</li>
+<li>No reviewer: loses the rubric check.</li>
+</ul>
+</li>
+</ul>
+<h3>6 · Approval: Accept intent and Sign off spec</h3>
+<p>After the review, the run stops at the stage&#39;s <code>human_approval</code> gate.</p>
+<ul>
+<li>For the intent, the button is <strong>Accept intent</strong>, and the product owner approves.</li>
+<li>For the spec, it is <strong>Sign off spec</strong>, given by the owner. The points the spec marks as higher risk (for example renaming workflows or removing the auto-push) also need the tech lead.</li>
+<li>Approving changes the <code>.md</code>&#39;s front matter (<code>status: accepted</code> or <code>signed off</code>, with the approver and the date) and commits it on the run&#39;s branch.</li>
+<li>The other answers are Back to editing and Stop. No automation answers the gate.</li>
+</ul>
+<p><img src="images/mock-5.jpg" alt="Mock 5: the spec sign-off gate"></p>
+<p><strong>D16. The SDLC gates as steps of the app</strong></p>
+<p>This is the flow the onboarding item followed by hand after the owner&#39;s review: intent accepted, spec signed off (with the tech lead on the risky points), the artifacts committed in a docs PR, an epic with one sub-issue per phase, and the Build starting from <code>plan.md</code>.</p>
+<ul>
+<li><strong>Recommended:</strong> the gates inside the app.<ul>
+<li><strong>Accept intent</strong> and <strong>Sign off spec</strong> are human gates that change the front matter (status, approver, date) and commit; the points marked in the spec need the tech lead.</li>
+<li>After the sign-off, <strong>Create epic and phase issues</strong>: the Product Owner proposes the epic and one sub-issue per phase, from the spec&#39;s requirements and phases. The epic carries the SDLC status at the top and links to the artifacts. The owner reviews before anything is filed.</li>
+<li><strong>The handoff to the Build is <code>plan.md</code>:</strong> the feature workflow writes the plan, and it stays <code>draft</code> until the engineer accepts it (plan mode), before any code. The implementation then fills in the Progress table.</li>
+<li>Creating issues and opening PRs still need the owner&#39;s click.</li>
+</ul>
+</li>
+<li>Alternatives:<ul>
+<li>The gates outside the app, by hand (as today): the front matter, the epic and the docs PR depend on someone remembering.</li>
+<li>Approval only, without changing the front matter: the document does not show who approved or when.</li>
+</ul>
+</li>
+<li><strong>Outside the sign-off:</strong> recording the signed decisions in <code>docs/agents/decisions.md</code> is left to the run that implements them, as an epic task, because the log has an entry limit.</li>
+</ul>
+<h3>7 · Next stage</h3>
+<p><strong>D12. What approval opens</strong></p>
+<ul>
+<li>An accepted intent → the item offers &quot;Write the spec&quot;.</li>
+<li>A signed-off spec → &quot;Create epic and phase issues&quot; (D16), which replaces <code>rfc-to-issues</code>, and &quot;Start the Build&quot;, which writes <code>plan.md</code> for the engineer to accept.</li>
+<li><strong>Already in the repository:</strong> the artifacts (intent, spec, plan, and empty test, deploy and maintain files) go to <code>docs/work/&lt;item&gt;/</code> in a docs PR or a local merge, the project&#39;s way.</li>
+<li>Discovery card: an attachment and a new version of the card&#39;s document. Save to an issue: today&#39;s &quot;Save to issue&quot;.</li>
+<li><strong>Languages:</strong> the source is always in English, and the Portuguese translation is updated with every request, in the same commit.</li>
+</ul>
+<h2>The Planning workflows: old → new</h2>
+<p><strong>D11.</strong> 3 workflows and 3 pipelines become 2 workflows and 2 pipelines.</p>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Proposed</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>writer-reviewer</code></td>
+<td><strong><code>write-doc</code></strong>: evidence → draft → editing with you → review with notes → approval, for <code>intent.md</code> or <code>spec.md</code></td>
+<td>base</td>
+</tr>
+<tr>
+<td><code>ai-arena</code></td>
+<td><code>write-doc</code> with <code>writers: 2–5</code> in the draft</td>
+<td>becomes a mode</td>
+</tr>
+<tr>
+<td><code>issue-tracker</code></td>
+<td><strong><code>issue</code></strong>, with a &quot;from a spec&quot; input</td>
+<td>renamed</td>
+</tr>
+<tr>
+<td>pipeline <code>ai-arena-write-review</code></td>
+<td><code>write-doc</code> with writers 2–5</td>
+<td>absorbed</td>
+</tr>
+<tr>
+<td>pipeline <code>rfc-to-issues</code></td>
+<td><strong><code>spec-to-issues</code></strong>: write-doc (spec) → issue (validated)</td>
+<td>renamed</td>
+</tr>
+<tr>
+<td>pipeline <code>enrich-save-develop</code></td>
+<td><strong><code>enrich-issue</code></strong>: write-doc with <code>issue-writing</code> on the issue → Save to issue → feature</td>
+<td>renamed</td>
+</tr>
+</tbody></table>
+<h2>Architecture</h2>
+<pre><code>Documents screen ──► the document reader (iframe sandbox=&quot;allow-scripts&quot;, opaque origin, doc://, no network) renders the .md
+      │ selection + request                         ▲ new version (markdown → page)
+      ▼                                             │
+Run write-doc: capture (machine) → draft (writer / Arena) → human_edit (you) → review → human_approval (approver)
+      │ writer turn                                 ▲ rewritten markdown section
+      ▼                                             │
+Writer / reviewer: any CLI, reads the project, writes only docs/work/&lt;item&gt;/&lt;stage&gt;.md and images/, in the run&#39;s worktree
+</code></pre>
+<p><strong>D13. Storage</strong> (the owner&#39;s decision)</p>
+<ul>
+<li>The artifacts are data of the feature and the issue, not the user&#39;s. They are committed to the project&#39;s repository in <code>docs/work/&lt;item&gt;/</code>.</li>
+<li>The run writes and commits on its branch, and approval merges it through the usual gate.</li>
+<li>What belongs to the run (chat, notes, costs) stays in the workspace run folder.</li>
+</ul>
+<pre><code>&lt;project repo&gt;/docs/work/&lt;item&gt;/      (committed; item = issue or card)
+  intent.md          Plan (English source), approved by the product owner
+  intent.pt-BR.md    the translation, with source: intent.md
+  spec.md            Design (English source), approved by the owner
+  spec.pt-BR.md      the translation, with source: spec.md
+  plan.md            Build: the plan and the Progress table (workflows)
+  test.md            Test: the evidence (runs)
+  deploy.md          Deploy: review and release (PRs, Ship)
+  maintain.md        Maintain: incidents and post-mortems (Monitor)
+  images/            before-*.png, after-*.png
+
+&lt;workspace&gt;/runs/&lt;run&gt;/                (run data)
+  chat.jsonl, notes.json, evidence/
+</code></pre>
+<p>What changes in the engine:</p>
+<ul>
+<li><strong>A <code>human_edit</code> step:</strong> a gate that accepts requests while it waits. It sits in the protected list, so no automation answers it.</li>
+<li><strong>A capture step</strong> (machine): the project&#39;s screenshot command, else Run App&#39;s capture, into <code>images/</code>; pasted images take the same path.</li>
+<li><strong>A document lint</strong> (machine): front-matter, the skill&#39;s required sections, unique anchors, a &quot;Recommended&quot; line in every decision, images that exist.</li>
+<li><strong>No new renderer:</strong> the editor and the workflows use the document reader.</li>
+</ul>
+<p><strong>The editor is the common base of the app&#39;s artifact editors</strong> (the owner&#39;s decision). The Mockups (epic #625), which come later, reuse it and swap only the renderer. What is shared: selection on the rendered output, the side chat (<code>agent-chat.js</code>), the map from a selection to the source passage, one commit per request with its diff, the &quot;unreviewed&quot; queue and the review gate. The renderer is the editor&#39;s extension point, with a small interface:</p>
+<ul>
+<li><code>render(source)</code>: draw the source;</li>
+<li><code>mapSelection(selection)</code>: turn a selection into the source passage (file, lines, quote);</li>
+<li><code>applyDiff(diff)</code>: show a request&#39;s change on the rendered output.</li>
+</ul>
+<p>Write doc brings the markdown renderer (the document reader); the Mockups add a screen renderer (a sandboxed iframe with a <code>data-mid</code> inspector) as the second consumer.</p>
+<h2>Cost of real-model calls</h2>
+<p><strong>D14.</strong> These are orders of magnitude, not measured. All development runs on the mock provider (<code>MULTIAGENT_SIMULATION_ONLY=1</code>). Every action shows its cost first and counts toward the daily budget (#206).</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Default model</th>
+<th>Estimate</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Evidence capture, lint, diff, versions</td>
+<td>none</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Intent draft</td>
+<td>Opus</td>
+<td>$0.30–1.00</td>
+</tr>
+<tr>
+<td>Spec draft with one writer</td>
+<td>Opus</td>
+<td>$1.00–3.00</td>
+</tr>
+<tr>
+<td>Spec draft with several writers (Arena)</td>
+<td>mixed families</td>
+<td>$3.00–10.00</td>
+</tr>
+<tr>
+<td>An edit request on one section (prompt cache)</td>
+<td>Opus or Sonnet</td>
+<td>$0.05–0.40</td>
+</tr>
+<tr>
+<td>Review with notes</td>
+<td>Sonnet</td>
+<td>$0.20–0.60</td>
+</tr>
+<tr>
+<td>First translation (pt-BR) of an intent or spec</td>
+<td>Sonnet</td>
+<td>$0.30–1.00</td>
+</tr>
+<tr>
+<td>Updating the translation after a request (the section only)</td>
+<td>Sonnet</td>
+<td>$0.02–0.10</td>
+</tr>
+</tbody></table>
+<p>An item like the ones in this series (an intent, a spec, ~20 edit requests, two reviews) would cost about $5–12. These are guesses to confirm on the first real run, announced first.</p>
+<h2>Phased plan</h2>
+<p><strong>Phase 0: spike, the editor on the reader</strong></p>
+<ul>
+<li><code>poc/doc-editor.html</code>, opening the onboarding example in the reader prototype with the chat beside it.</li>
+<li><code>poc/doc-editor.html</code>, opening the onboarding example.</li>
+<li>Selection → the payload with file, anchor, passage and context. No model.</li>
+</ul>
+<p><strong>Phase 1: MVP, write-doc for intent and spec</strong></p>
+<ul>
+<li>The <code>intent-writing</code> and <code>spec-writing</code> skills and the markdown lint; the reader as a dependency.</li>
+<li>The <code>write-doc</code> workflow: one writer, <code>human_edit</code>, a reviewer with notes, <code>human_approval</code>.</li>
+<li>The Documents screen and the editor: selection, chat with images, versions, review by request.</li>
+<li>The files in <code>docs/work/&lt;item&gt;/</code>, merged on approval. Evidence capture through this app&#39;s <code>npm run screenshot</code>.</li>
+<li>Mock-provider scenarios, a screenshot seed and an E2E feature.</li>
+<li>Done when: an item goes from the intent to an approved spec, all simulated.</li>
+</ul>
+<p><strong>Phase 2: Arena and the reorganization</strong></p>
+<ul>
+<li>The &quot;several writers&quot; mode.</li>
+<li>Aliases (<code>writer-reviewer</code>, <code>ai-arena</code> → <code>write-doc</code>; <code>issue-tracker</code> → <code>issue</code>).</li>
+<li><code>spec-to-issues</code> and <code>enrich-issue</code>. The old screens leave the menu.</li>
+</ul>
+<p><strong>Phase 3: handoffs and other projects</strong></p>
+<ul>
+<li>More translation languages than Portuguese, if someone asks.</li>
+<li>Captures through a project&#39;s screenshot command or Run App.</li>
+<li>&quot;Write a document&quot; on a Discovery card; &quot;Split into issues&quot;.</li>
+</ul>
+<p><strong>Phase 4: the living document in Build, Test and Deploy</strong></p>
+<ul>
+<li>The feature/fix workflow writes <code>plan.md</code> and adds a Progress line per run, commit and PR.</li>
+<li>Runs record the evidence in <code>test.md</code>, and the review and the release with the Ship go in <code>deploy.md</code>.</li>
+<li>Done when: an item goes from the intent to the release with all six stages filled in.</li>
+</ul>
+<p><strong>Phase 5: later</strong></p>
+<ul>
+<li>The Monitor and the Night watch record incidents in <code>maintain.md</code>, write the post-mortem and open a new intent.</li>
+<li>A front to browse the intents.</li>
+<li>Interactive mocks in an opaque origin.</li>
+</ul>
+<h2>Files and areas</h2>
+<p><strong>New</strong></p>
+<ul>
+<li>Plan front:<ul>
+<li><code>fronts/plan/views/docs/docs.js</code> and <code>docs.css</code></li>
+<li><code>fronts/plan/views/docs/doc-editor.js</code> (iframe, selection, stages rail)</li>
+<li><code>fronts/plan/engine/channels/docs.js</code></li>
+<li><code>fronts/plan/engine/domains/docs.js</code> (lists the repository&#39;s <code>docs/work/</code> and the runs in progress)</li>
+</ul>
+</li>
+<li>Shared:<ul>
+<li><code>packages/shared/doc-model.js</code> (the selection payload, the pure lint)</li>
+<li>The document reader (a dependency: source positions and selection events)</li>
+</ul>
+</li>
+<li>Engine: the <code>human_edit</code> step, in the protected gates</li>
+<li>Workflows and skills:<ul>
+<li><code>workflows/write-doc.yaml</code></li>
+<li><code>skills/intent-writing/</code>, <code>skills/spec-writing/</code></li>
+<li><code>pipelines/spec-to-issues.yaml</code>, <code>pipelines/enrich-issue.yaml</code></li>
+</ul>
+</li>
+<li>Tests and docs:<ul>
+<li><code>scripts/screenshot/views/docs.js</code></li>
+<li><code>features/docs.feature</code></li>
+<li><code>docs/agents/renderer/documents.md</code></li>
+</ul>
+</li>
+</ul>
+<p><strong>Changed</strong></p>
+<ul>
+<li><code>fronts/plan/views/duo</code> and <code>fronts/plan/views/arena</code></li>
+<li><code>fronts/plan/views/discovery/discovery.js</code></li>
+<li><code>packages/ui-kit/agent-chat.js</code> (the selection chip)</li>
+<li><code>apps/desktop/host/main.js</code> (<code>doc://</code>) and <code>window-guards.js</code></li>
+<li><code>workflows/issue-tracker.yaml</code> → <code>issue</code></li>
+<li>The workflow loader (aliases)</li>
+<li><code>docs/agents/engine/gates-and-run-end.md</code> and <code>docs/agents/worktrees.md</code></li>
+<li><code>docs/agents/decisions.md</code>, once decided</li>
+</ul>
+<h2>Open questions</h2>
+<p>Each has a recommended default.</p>
+<ul>
+<li><strong>Q-1.</strong> Name: Documents, Write doc or Work items? Default: <strong>a &quot;Documents&quot; screen and a <code>write-doc</code> workflow</strong>.</li>
+<li><strong>Q-2.</strong> Does AI Arena keep its own screen? Default: <strong>no</strong>; it becomes &quot;Several writers (AI Arena)&quot; in the draft.</li>
+<li><strong>Q-3.</strong> May the markdown contain raw HTML? Default: <strong>no</strong>; the reader strips raw HTML, and the only JavaScript that runs is the reader&#39;s.</li>
+<li><strong>Q-4.</strong> Do edits apply at once? Default: <strong>yes</strong>, with &quot;Queue&quot;.</li>
+<li><strong>Q-5.</strong> Does the reviewer rewrite by itself? Default: <strong>no</strong>; &quot;Auto-apply notes&quot; is off by default.</li>
+<li><strong>Q-6.</strong> Languages? Default: <strong>an English source and a pt-BR translation</strong>, with the translation&#39;s language taken from Settings › Language.</li>
+<li><strong>Q-7.</strong> The writer&#39;s model? Default: <strong>Opus for the draft and the same session for editing</strong>; Sonnet for review and translation.</li>
+<li><strong>Q-8.</strong> The item folder&#39;s name? Default: <strong><code>docs/work/&lt;issue&gt;-&lt;slug&gt;/</code></strong>, or <code>card-&lt;id&gt;-&lt;slug&gt;</code> until there is an issue.</li>
+<li><strong>Q-9.</strong> Can other people comment? Default: <strong>not at first</strong>.</li>
+</ul>
+<h2>Hard rules check</h2>
+<p>How the proposal follows <a href="../../AGENTS.md">AGENTS.md</a>:</p>
+<ul>
+<li>The app stays in English, and so does each artifact&#39;s source, with its translation next to it.</li>
+<li>What belongs to the user and the run stays in the workspace. Approved artifacts are data of the feature and live in the project&#39;s repository (the owner&#39;s decision).</li>
+<li><code>human_edit</code> and <code>human_approval</code> end only with a person. The Supervisor and the Night watch never answer them.</li>
+<li>Agents run unattended in the draft and the review and record their assumptions; only a person talks to the writer, in the editing step.</li>
+<li>The writer and the reviewer read the project and write only in <code>docs/work/&lt;item&gt;/</code>, in the run&#39;s worktree; a machine step refuses changes elsewhere.</li>
+<li>The agent writes markdown only. The reader renders it sanitized, in an opaque-origin iframe with no network and no <code>window.api</code>, and the window never navigates.</li>
+<li>Automated checks run simulated only, and every real action shows its cost first.</li>
+</ul>
+<h2>How to contribute</h2>
+<ol>
+<li>Read <a href="../../AGENTS.md">AGENTS.md</a> and the topic docs for your area, especially <a href="../agents/renderer.md">renderer.md</a>, <a href="../agents/engine.md">engine.md</a>, <a href="../agents/storage.md">storage.md</a> and <a href="../agents/testing.md">testing.md</a>.</li>
+<li>Comment on the epic (#636) before picking a phase.</li>
+<li>Start with phase 0. It needs no engine change and no model call.</li>
+<li>Work on a branch and open a PR. Never run real models in checks.</li>
+</ol>
+
+</main>
+</body>
+</html>
