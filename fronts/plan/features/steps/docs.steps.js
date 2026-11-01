@@ -166,10 +166,13 @@ When('I ask the writer {string} about the selected passage', async ({ e2e }, req
   await input.fill(request);
   const send = chat(page).getByTestId('agent-chat-send');
   await expect(send).toBeEnabled();
+  const replies = chat(page).locator('[data-testid="agent-chat-message"][data-role="agent"]');
+  const before = await replies.count();
   await send.click();
   await expect(chat(page).getByTestId('agent-chat-messages')).toContainText(request);
-  // the writer's turn is over when the chat takes a new request
-  await expect(send).toBeEnabled({ timeout: RUN_TIMEOUT });
+  // the writer's turn is over when its reply joins the conversation; Send stays off after a request
+  // until a passage is selected again (the selection is used up by the change)
+  await expect(replies).toHaveCount(before + 1, { timeout: RUN_TIMEOUT });
 });
 
 // ---- the changes by request and the unreviewed queue ------------------------------------------------
