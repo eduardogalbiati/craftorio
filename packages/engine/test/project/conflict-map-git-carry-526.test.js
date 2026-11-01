@@ -82,7 +82,8 @@ test('#526 the git fallback gives the same lines when a hub file is deleted and 
   for (const [, line, text] of lines) assert.equal(head[line - 1], text);
 });
 
-test('#526 the git fallback gives the same lines when the window reaches past the first-parent log of the hub files', async (t) => {
+test('#526 the git fallback gives the same lines when the window reaches past the first-parent log of the hub files', { timeout: 240000 }, async (t) => {
+  // about 150 git commands build the repository: under the loaded suite this took 108 s
   const repo = tmpRepo(t);
   repo.commit('c0', { 'list.js': 'm0\nmid\ns0\n' });
   // 30 merged branches: 60 commits (the window keeps the newest 50) and 30 merges on the main line
