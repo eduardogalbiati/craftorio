@@ -46,7 +46,7 @@ test('each bundled workflow declares its outputs: contract', () => {
   assert.deepEqual(outputsOf('writer-reviewer.yaml'), ['document', 'issue']);
   assert.deepEqual(outputsOf('ai-arena.yaml'), ['document']);
   assert.deepEqual(outputsOf('feature.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
-  assert.deepEqual(outputsOf('run-retrospective.yaml'), ['findings']);
+  assert.deepEqual(outputsOf('retrospective.yaml'), ['findings']);
 });
 test('loadWorkflow rejects a transition to an unknown step', () => {
   const tmp = path.join(os.tmpdir(), `wf-invalid-${process.pid}.yaml`);
@@ -224,7 +224,7 @@ test('loadWorkflow validates groups: known steps, one group per step, unique nam
   }
 });
 test('the bundled workflows group every step', () => {
-  for (const f of ['feature.yaml', 'fix.yaml', 'release.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'run-retrospective.yaml', 'backlog-refresh.yaml']) {
+  for (const f of ['feature.yaml', 'fix.yaml', 'release.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'retrospective.yaml', 'backlog-refresh.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', f));
     assert.ok(wf.groups?.length, `${f} has groups`);
     assert.deepEqual(wf.groups.flatMap((g) => g.steps).sort(), wf.steps.map((s) => s.id).sort(), f);

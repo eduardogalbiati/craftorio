@@ -45,7 +45,7 @@ test('#235 po:ask with ai-development-local-hero.yaml chosen and an Economy cost
   const groups = out.message.answer?.groups || [];
   assert.ok(groups.length >= 1);
   for (const g of groups) {
-    assert.equal(g.workflow, AI_DEV, 'no test-batch.yaml stage');
+    assert.equal(g.workflow, AI_DEV, 'no test-backfill.yaml stage');
     assert.equal(g.cost, undefined, `group "${g.name}" carries no Cost step`);
   }
   assert.doesNotMatch(out.message.text, /Economy|Generous/);

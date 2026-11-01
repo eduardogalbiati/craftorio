@@ -41,7 +41,7 @@ agents use. A second five-step slider sits under Speed ↔ Quality in both place
 |---|---|---|---|---|---|
 | max complexity per group | 8 | 7 | the Speed ↔ Quality step's | 5 | 4 |
 | grouping | issues of one area or files packed into one run ("grouped to pay the run overhead once") | the same | as Speed ↔ Quality plans | as Speed ↔ Quality plans | as Speed ↔ Quality plans |
-| `unit_tests` | run existing, then a `test-batch` item after the stage | write and run | write and run | write and run | write and run |
+| `unit_tests` | run existing, then a `test-backfill` item after the stage | write and run | write and run | write and run | write and run |
 | `e2e_tests` | write | write | write | write | write and run |
 | `screenshots` | off | changed screens | changed screens | all | all |
 | agents | cheaper models and a medium effort where the workflow has an input for them | the same | the workflow's | the workflow's | the workflow's |
@@ -50,8 +50,8 @@ When the two sliders disagree, cost wins: the group cap is the Cost step's (Spee
 fewer, larger runs); the runs per stage stay the calibration's. The orchestrator applies the step to
 every planned group, whatever the model wrote: it packs a stage's groups that share an area (name,
 files, epic or topic label) within the cap, sets `unit_tests`, `e2e_tests` and `screenshots` when the
-group's workflow declares them, and at Economy adds a stage with one `test-batch` item for the issues
-that ran with their existing tests only (a test-batch item may name issues another item holds, and
+group's workflow declares them, and at Economy adds a stage with one `test-backfill` item for the issues
+that ran with their existing tests only (a test-backfill item may name issues another item holds, and
 runs even when they are closed). An input a workflow does not declare is not adjustable: the group
 says so (the bundled development workflows have no model or effort input, so "agents: not
 adjustable"), and no workflow is edited. Each group, and the roadmap item added from it, carries a

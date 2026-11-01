@@ -372,39 +372,64 @@ Recommendation: run untrusted repositories only in a VM, a container or with Cod
 #470 for what is filtered).
 
 <!-- generated:workflows -->
-## Software development flow (`workflows/software-development.yaml`)
+## Feature (`workflows/feature.yaml`)
 
-| Stage | Agent | Model | What it does | Skills |
-|---|---|---|---|---|
-| Build & Test | Developer | Opus 5.5 | Implements and fixes everything the other agents report, in production code only: it never writes or runs the test suite and says what to test in `test_notes`. Always branches from a freshly fetched `origin/<base_branch>`. Handoff session: each fix round starts fresh from its handoff note | `long-commands`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log` |
-| | Code Review | Codex gpt-6-luna | Reviews the diff on correctness, spec and standards, plus a reuse pass (a rule or mapping that already exists elsewhere is major); requests changes only for blocker/major | `code-review` |
-| | Test Writer | Sonnet 5 | Owns the tests: writes/updates them (from the developer's `test_notes`) and runs the full suite, the only full run before CI; production-code failures go back to the developer. | `unit-test-writer-<language>` |
-| | Evidence | Sonnet 5 | After the build, collects what shows the change working, picked by the kind of change: UI screenshots before/after (in the run's `screenshots/` folder, shown in Artifacts), HTTP requests with their responses, CLI output or log lines of a simulated run. Local and simulated only; never blocks, the verifier uses it | `implementation-evidence` |
-| | Builder | Sonnet 5 | Build + dependency audit, no test suite; a broken build or a high/critical production vulnerability goes back to the developer | `build-audit-<language>` |
-| | Verifier | Sonnet 5 | Proves the change does what the task asked: same command on the base and on the branch (no full suite); `not_verified` goes back to the developer, `inconclusive` does not block | `claim-verification` |
-| CI/CD | CI Pusher | Sonnet 5 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit. Posts the evidence step's screenshots on the PR/MR (one comment, before/after) | `ci-pipeline-<platform>`, `pr-screenshots-<platform>` |
-| | PR Babysitter | Opus 4.8 | **/goal** PR/MR mergeable with **/loop**; actionable comments → developer (replies with the hash), doubtful ones → human | `pr-babysitter-<platform>`, `decision-log` |
-| | Deployer | Sonnet 5 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
+Code & Build (#630, #631). The development workflow: one issue (or several in one branch) from the
+acceptance tests to the merge. It replaces `software-development`, its two local heroes and
+`multi-model-review`: those old names still run, as `feature.yaml` with the inputs of the old
+variant (`packages/shared/default-workflow.js`, `ALIASES`).
 
-Two inputs choose the skills:
-- `language`: `js`, `python`, `go`, `java`, `csharp` or `rust`, or several, main one first
-  (`js,rust` for a repository that mixes them, #340). With several, the test writer and the builder
-  load the skills of each language whose files the run changed (a JS-only change gets only the JS
-  skills); before anything changed (acceptance tests written first), all of them. The Start panel
-  shows one toggle per language and preselects every language found in the project's files.
-- `git_platform`: `gh` (GitHub, `gh` CLI) or `gl` (GitLab, `glab` CLI). This also picks the merge
-  command at the approval gate.
+acceptance tests → red check → Warm Up → develop → code review → suite → build → evidence → verify → merge
 
-Only the test writer writes tests. The developer has `edits_tests: false`: after each of its turns
-(the `develop` step and every fix delegated to it) the engine checks what the turn changed (its
-new commits, base excluded, and uncommitted files) against the workflow's `tests_paths` (default:
-the usual test folders and file names of every language, e.g. `**/test/**`, `*.test.*`,
-`*_test.go`, `test_*.py`, `*Tests.cs`, `**/src/test/**`), and sends the turn back with the list of
-files, twice at most before the step fails. Claude also gets them as `Edit(...)` deny rules.
+| Stage | Agent | What it does | Skills |
+|---|---|---|---|
+| Acceptance tests | Test Writer (Opus 5.5) | The issue's tests from its criteria, not from the implementation, on the run's branch; with `test_order: e2e_first`, its E2E scenarios too. It gets the project's code → tests map (`test_map: true`). A task with nothing testable goes straight to develop | `unit-test-writer-<language>`, `e2e-test-writer-<language>` |
+| Red check | (no agent) | Runs exactly those files once (`expect: red`). A test already green is reported to the developer; a file that cannot run goes back to the test writer once. The existing tests related to them come from the code → tests graph | |
+| Warm Up | Mapper (the developer's model) | Before the first develop turn only, maps per issue the files and lines to change, the conventions and the tests to run (#301, #304); a failed Warm Up goes on without a map | `code-mapping` |
+| Develop | Developer (Opus 5.5 or Fable 5.1) | Implements until the acceptance tests pass; the engine refuses a turn that changes one (`protect_files`), while the developer may add its own internal tests | `long-commands`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log` |
+| Code review | Code Review (Opus 5.5) | The diff on correctness, spec, standards and reuse; with `review: multi_model`, a second independent reviewer on another model in parallel | `code-review` |
+| Suite | (no agent) | `scope: affected`: the test files the change reaches each round, then the whole suite once when they pass | |
+| Build, evidence, verify | Builder, Evidence, Verifier | Build and dependency audit; what shows the change working (screenshots, requests, CLI output); the claims proven on the base and on the branch | `build-audit-<language>`, `implementation-evidence`, `claim-verification` |
 
-Human gates: a doubtful PR/MR comment (fix / justify / ignore) and the merge, which produces
-the production release. Agents never talk to each other: the orchestrator (engine) hands
-failures to the developer and returns the result to the agent that asked.
+The inputs that choose the run:
+- `mode`: `local` (default) merges the run's branch into the local `base_branch` and pushes it (push
+  main); `remote` pushes the branch, opens a PR/MR and waits for its CI (`git_platform`: `gh` or `gl`);
+  the team merges it on the platform.
+- `validation`: `auto` (default) goes from the developer straight to the review; `validated` stops at
+  `developer_check` so you try the change first (an old `mode: auto | validated` still means this).
+- `test_order`: `e2e_first` (default) writes the issue's E2E scenarios with the acceptance tests;
+  `code_first` writes unit tests only.
+- `review`: `single` (default) or `multi_model` (what `multi-model-review.yaml` did).
+- `retrospective` (#631, off by default): when the run ends, `retrospective.yaml` analyses it (what the
+  old `develop-to-retrospective` pipeline did; one more model call).
+- `language`: `js`, `python`, `go`, `java`, `csharp` or `rust`, or several, main one first (#340);
+  `developer_model` and `developer_effort` (#286); `unit_tests` and `e2e_tests` (#203).
+
+Local mode:
+
+<!-- generated:local-hero -->
+- Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
+- **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history). The run's worktree and branch are then removed.
+- **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (`behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix stops at the `merge_blocked` gate (retry / stop).
+- **Merge conflicts in test files** (#380): a protected test file that only combines both sides is accepted; a test conflict that needs new or changed test lines is handed to the test writer, then the developer finishes the rebase.
+- **E2E scenarios** (#143): the test writer writes end-to-end BDD scenarios only when the issue has user-visible behaviour, at most 3 per issue, and runs only the run's ones by their issue tag (`@issue-<n>`); the full E2E suite belongs to the release workflow.
+- **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) in both modes. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
+- **Suite red outside the change** (#396, input `suite_red_outside_change`): *Ask* (default) = a red suite opens `test_failed` as before; *Continue* = a suite whose failures are all outside the change goes on to the build and the merge, the run marked **Not tested green** (Run screen, chat, `summary.json` `tested`). A failure in the change still opens the gate.
+- **Validation**: the input `validation: auto | validated` (the old `mode: auto | validated`, #630). In `auto` nothing waits for you (the run merges locally by itself); in `validated` the run stops at `developer_check` after the developer so you try the change (Run locally, Open the worktree) and approve it or ask for changes before the review and the tests. `human_review` offers Run locally too.
+- **Context limit**: `orchestrator.limits.max_total_context: 20M`. Past 20M tokens of context the run pauses before its next agent turn; choose **Continue** (another 20M) or **Stop**.
+- **Issues close when you push**: commits end with `Closes #<n>` for the run's issues, so GitHub closes them when you push the base branch. Until then the Backlog shows them in **Merged locally** (a "not pushed" badge), not in Done: Done means closed on GitHub/GitLab.
+- **Push from the Backlog**: when the project's local base has commits that `origin/<base>` hasn't (checked with a fetch on every Backlog sync and after every local merge), a bar above the issues says how many and which issues they close. **Push…** lists the commits, then runs `git push origin <base>` in the project's repository (the clone under `<workspace>/repos/`, not your own checkout): never forced, never another branch. The Backlog syncs afterwards, so the closed issues move to Done. The sidebar's Backlog item and the project's page show the count of commits not pushed; the run's chat and its notification say "merged locally, not pushed yet".
+- **When `origin` moved** (a PR merged meanwhile), the push is rejected: **Update and push** runs `git pull --rebase origin <base>` where the base is checked out (a temporary worktree when it is checked out nowhere), then pushes. A conflict undoes the update (the local base keeps every local commit), lists the files, and offers **Resolve in a run**: a run of the local workflow whose developer merges `origin/<base>` into the local commits and resolves the conflict; after review, tests and the local merge, **Push** goes through as a fast-forward. The run calls the agents' CLIs (real cost) unless simulated.
+- **Auto-push** (per project, off by default): the checkbox on the Backlog's bar pushes the base after every successful local merge; a rejected push only notifies you.
+- Or push yourself: `git push origin main` from the repository.
+<!-- /generated:local-hero -->
+
+Engine options behind it: `orchestrator.worktree.remote: false`, a transition with `merge: local` and `on_error`, and `orchestrator.limits.max_total_context` (see `docs/agents/worktrees.md` and `docs/agents/engine.md`).
+
+Human gates: `developer_check` in validated mode, a doubtful PR/MR comment in remote mode, and the
+gates a run cannot get past alone (`merge_blocked`, `verify_failed`, `check_failed`). Agents never talk
+to each other: the orchestrator (engine) hands failures to the developer and returns the result to
+the agent that asked.
 
 **Modes: automatic or validated** (input `mode`, in the Start drawer next to the task, the
 Backlog's **Assign to a workflow** dialog and the Workflows screen; remembered per workflow and
@@ -465,7 +490,7 @@ the workflow's default). The test step is the largest cost of a run (about half 
   the evidence, the verification and the merge always run. Nothing off is reported as tested: the
   run's Details show a badge per input ("Unit tests: Off", the source on hover: workflow default or
   chosen for this run), and the gates and the verifier get the same sentence. To test later, all
-  together: the `test-batch` workflow.
+  together: the `test-backfill` workflow.
 - Your own defaults: change `default:` of these inputs in the workspace copy of the workflow. A
   copy changed only in its inputs' defaults still gets the app's new versions (your values kept).
 
@@ -729,56 +754,19 @@ starts from the agent's latest handoff note, instead of carrying 200k+ tokens of
 other agents keep one conversation (`persistent`) up to `max_context: 150k`. Each agent may only
 use what its `capabilities` declare (e.g. the CI pusher: read, `git`, `gh`, `glab`; no edits, no web).
 
-## Software development, local hero (`workflows/software-development-local-hero.yaml`)
+## Fix (`workflows/fix.yaml`)
 
-The same develop → code review → test → build → verify pipeline as `software-development`, for working fast on your machine without GitHub or GitLab: no push, no PR/MR, no CI, no preview, no deploy.
-
-<!-- generated:local-hero -->
-- **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) as `software-development`. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
-- **Suite red outside the change** (#396, input `suite_red_outside_change`): *Ask* (default) = a red suite opens `test_failed` as before; *Continue* = a suite whose failures are all outside the change goes on to the build and the merge, the run marked **Not tested green** (Run screen, chat, `summary.json` `tested`). A failure in the change still opens the gate.
-- Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
-- **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
-- **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`; findings on untouched code are not blocking), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (the developer answers `behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
-- **E2E scenarios for the Dev/QA** (#143): the test writer writes end-to-end BDD scenarios (Given/When/Then, skill `e2e-test-writer-<language>`) only when the issue has user-visible behaviour, at most 3 per issue, and runs only the run's ones by their issue tag (`@issue-<n>`); the full E2E suite belongs to the release workflow. With no merge approval, the run's summary lists them with their status, steps and screenshots; `developer_check` and `verify_failed` (the gate before the merge when the verification keeps failing) list them too.
-- **Modes**: the same `mode: auto | validated` as `software-development`. In `auto` nothing waits for you (the run merges locally by itself); in `validated` the run stops at `developer_check` after the developer so you try the change (Run locally, Open the worktree) and approve it or ask for changes before the review and the tests. `human_review` offers Run locally too.
-- **Context limit**: `orchestrator.limits.max_total_context: 20M`. Past 20M tokens of context the run pauses before its next agent turn; choose **Continue** (another 20M) or **Stop**.
-- **Issues close when you push**: commits end with `Closes #<n>` for the run's issues, so GitHub closes them when you push the base branch. Until then the Backlog shows them in **Merged locally** (a "not pushed" badge), not in Done: Done means closed on GitHub/GitLab.
-- **Push from the Backlog**: when the project's local base has commits that `origin/<base>` hasn't (checked with a fetch on every Backlog sync and after every local merge), a bar above the issues says how many and which issues they close. **Push…** lists the commits, then runs `git push origin <base>` in the project's repository (the clone under `<workspace>/repos/`, not your own checkout): never forced, never another branch. The Backlog syncs afterwards, so the closed issues move to Done. The sidebar's Backlog item and the project's page show the count of commits not pushed; the run's chat and its notification say "merged locally, not pushed yet".
-- **When `origin` moved** (a PR merged meanwhile), the push is rejected: **Update and push** runs `git pull --rebase origin <base>` where the base is checked out (a temporary worktree when it is checked out nowhere), then pushes. A conflict undoes the update (the local base keeps every local commit), lists the files, and offers **Resolve in a run**: a run of the local workflow whose developer merges `origin/<base>` into the local commits and resolves the conflict; after review, tests and the local merge, **Push** goes through as a fast-forward. The run calls the agents' CLIs (real cost) unless simulated.
-- **Auto-push** (per project, off by default): the checkbox on the Backlog's bar pushes the base after every successful local merge; a rejected push only notifies you.
-- Or push yourself: `git push origin main` from the repository.
-<!-- /generated:local-hero -->
-
-Engine options behind it: `orchestrator.worktree.remote: false`, a transition with `merge: local` and `on_error`, and `orchestrator.limits.max_total_context` (see `docs/agents/worktrees.md` and `docs/agents/engine.md`).
-
-## AI Development, local hero (`workflows/ai-development-local-hero.yaml`)
-
-The local-hero pipeline with the tests written **first** (#220): acceptance tests → red check → Warm Up → develop → code review → suite → build → verify → local merge. No push, no PR/MR, no CI.
-
-- **Acceptance tests before the code**: the test writer (Opus 5.5) writes the tests of the issue from its criteria, not from the implementation, on the run's branch. It gets the project's code → tests map (`test_map: true`) to put them where they belong. A task with nothing testable goes straight to develop.
-- **Red first, really**: the orchestrator runs exactly those files once (a suite step with `files` and `expect: red`, no agent). A test already green before any code is reported to the developer (it guards existing behaviour or is wrong); a file that cannot run goes back to the test writer once. The existing tests related to them come from the code → tests graph and are given to the developer, not guessed.
-- **Warm Up** (#301): before the first develop turn only, a read-only agent (the mapper, skill `code-mapping`, on the developer's model and effort) maps per issue the files and line numbers to change, how they connect, the conventions and the tests to run for each file (#304: direct, then transitive, from the code → tests map, as a `run-tests` block). The developer reads only what the map names and the test step runs the map's tests; a Warm Up that fails or times out goes on to develop without a map.
-- **Affected suite** (#304): the suite step runs with `scope: affected`: each round the test files the change reaches (plus the ones that failed before), then the whole suite once when they pass. The Run screen's suite card and Analytics › Run's suite rounds show the scope and why each file ran.
-- **Locked for the developer**: the engine refuses a developer turn that changes an acceptance test (`protect_files`), while the developer may add its own internal tests; the reviewer checks the files are unchanged too.
-- **Merge conflicts in test files** (#380): when the local merge conflicts, Merge & Resolve rebases the branch. A protected test file that only combines both sides (every line from the branch's or the base's version, nothing either side added dropped) is accepted. A test conflict that needs new or changed test lines is left in the rebase and handed to the test writer, then the developer finishes the rebase: the developer still never writes tests.
-- `unit_tests` defaults to `run_existing` (the suite after the review, no second test-writer step) and `e2e_tests` to `off`. Reviewer and test writer run on Claude Opus 5.5.
-- **Developer model and effort** per run: `developer_model` (Opus 5.5 or Fable 5.1, 3x turn timeout from the workflow's `models`; any agent's model can also be chosen in the Start drawer's Agents, #262) and `developer_effort` (#286: `default` passes no `--effort`, the CLI's own effort for the model; `low` to `xhigh` are passed as `--effort`, `xhigh` doubles the turn timeout). The reviewer runs at `effort: high`, passed through the providers' `effort_args`. The Product Owner's Cost step leaves the developer's effort alone.
-
-## E2E release (`workflows/e2e-release.yaml`)
-
-Code & Build. Runs the project's whole end-to-end BDD suite once, before a release, in its own
-worktree of the local base: one feature file at a time within `time_budget_minutes`, each
-scenario's result and screenshots recorded in the run. A failed scenario goes to the developer
-with its screenshots and what changed since the last green E2E run (commits, issues, runs), then
-to review and the failed scenarios again, at most `max_rounds`, then a human gate. Green with
-nothing fixed: the tested commit is recorded as the last green E2E (`refs/multiagent/e2e-last-green`,
-a local ref). Green after fixes: you approve, then the fix merges into the local base. Development
-runs only write their issue's scenarios and check that they parse ("written, run at release"); they
-never wait for this workflow. It never pushes, tags or publishes.
+Code & Build (#630). A bug from its reproduction to the merge: reproduce → develop → code review →
+suite → verify → merge. The developer first gets one command that shows the bug for the reported
+reason (a failing regression test when it can), then fixes the root cause with the regression test
+that failed before it (skill `bug-diagnosis`). `mode` works as in Feature: `local` merges into the
+local base and pushes it, `remote` opens a PR/MR and waits for its CI. `hotfix` marks the urgent lane:
+the smallest change, meant for a patch release from the last tag.
 
 ## Release (`workflows/release.yaml`)
 
-Code & Build. Decides "this set is good, ship it" (#260): the work of many runs merges into the
+Code & Build (#630: the old `e2e-release.yaml` name still runs it; the whole E2E suite is part of
+every release). Decides "this set is good, ship it" (#260): the work of many runs merges into the
 local base one after another, and a release run checks their sum. For a Node project (a
 `package.json`), it first writes the release's version (a semver such as `1.2.0` or `v1.2.0`) into
 `package.json` and the root of its lockfile and commits it on the run's branch, so the suites check
@@ -870,18 +858,20 @@ shows in `scripts/screenshot.js` captures unless that setting is on.
 - **Settings › General › Findings** lists the saved findings with their status: Saved, Sent
   (waiting in the Product Owner's inbox) or Filed.
 
-## Test batch (`workflows/test-batch.yaml`)
+## Test backfill (`workflows/test-backfill.yaml`)
 
-Code & Build (#203). Write features first and test them later, all together: for runs made with
-unit or E2E tests off, it covers a range of local commits (since `since`, else since the last green
-batch, `refs/multiagent/test-batch-last-green`, a local ref; or the commits that close the run's
-issues) in its own worktree of the local base. One test writer session writes the missing unit tests
-(and E2E scenarios when `e2e_tests` is on) on the branch `test-batch-<run_id>`; the orchestrator runs
-the whole suite once per round (`suite` step, no agent) and sends the failing tests back to the test
-writer, at most `max_rounds`, then a human gate. A failure caused by the production code goes to the
-developer; then you approve the merge (nothing reviewed the fix). Green: the branch merges into the
-local base and the commit becomes the last green batch. Start it by hand, from the Backlog or as a
-roadmap item (e.g. the last item of a stage). It never pushes, tags or publishes.
+Code & Build (#203, #631; the old `test-batch.yaml` name still runs it). Write features first and test
+them later, all together: for runs made with unit or E2E tests off, it covers a range of local commits
+(since `since`, else since the last green backfill, `refs/multiagent/test-batch-last-green`, a local
+ref; or the commits that close the run's issues) in its own worktree of the local base. One test
+writer session writes the missing unit tests (and E2E scenarios when `e2e_tests` is on) on the branch
+`test-batch-<run_id>`; the orchestrator runs the whole suite once per round (`suite` step, no agent)
+and sends the failing tests back to the test writer, at most `max_rounds`, then a human gate. A
+failure caused by the production code goes to the developer; then you approve the merge (nothing
+reviewed the fix). Green: the branch merges into the local base and the commit becomes the last green
+backfill. Start it by hand, from the Backlog or as a roadmap item: the Product Owner's Cost step
+(Economy) follows the untested issues of a stage with a `test-backfill.yaml` item. It never pushes,
+tags or publishes.
 
 ## Refactor (`workflows/refactor.yaml`)
 
@@ -911,33 +901,6 @@ mix structural and behavioural changes in one commit):
 Green: the branch merges into the local base (`merge: local`, never pushed). The run's
 `summary.json` records the target's `before` and `after` figures with its cost, so a month of refactor
 runs can be compared with `run_analysis` (#184).
-
-## Refactor proposals (`workflows/refactor-proposals.yaml`)
-
-Monitor & Improve (#378). The Architecture tab's analysis (#356) and the Refactor tab's proposals
-(#357) as a workflow, so a pipeline can suggest refactors after a release. Inputs: `project_path`,
-an optional `since` (a tag or a commit), `limit` (the issues to file, default 5) and `mode`
-(`auto` or `validated`).
-
-1. **Facts** (no agent): the Architecture facts at the project's default branch and the files changed
-   since `since`; the analyst's prompt is #356's, focused on the Danger Zone and those files.
-2. **Analysis** (the analyst, read-only, the one real model call): #356's report, with the
-   Architecture tab's own schema (`output_schema: architecture_report`).
-3. **Proposals** (no agent): the findings become Refactor tab proposals; a finding that matches an
-   open or dismissed proposal, or an open `refactor` issue, is dropped and the run names it.
-4. **Ranking**: #357's Product Owner ranking, saved as the Refactor tab saves it; the run's new
-   proposals in rank order, the top `limit` kept.
-5. **Gate** (validated mode only): the ranked proposals; dismiss the ones to drop on the Refactor
-   tab, then approve to file the others.
-6. **File**: #357's "File as issue" for each kept proposal, with the `refactor` label and the
-   Refactor workflow named (a simulation previews, no `gh`).
-
-Outputs: `issues` (the filed issues, for a pipeline's `product_owner` or `queue` target) and `report`
-(the analysis). `release.yaml` declares `previous_version` (the tag before the release) and
-`commit` (the shipped commit), so the bundled pipeline **`pipelines/release-then-refactors.yaml`**
-runs a release, then the refactor proposals since its previous tag (`since` ← `previous_version`),
-then the Product Owner places the filed issues in the roadmap. The release's gates and Ship stay
-human; the analysis is one real model call (about $0.50, estimated like the Architecture tab's).
 
 ## AI Arena (`workflows/ai-arena.yaml`)
 
@@ -969,16 +932,6 @@ Its format comes from the skill in the `document_skill` input (default `prd-writ
 tech spec and so on, create a skill with the structure and the rubric and pass its name. The
 contenders are five slots (`contender_1` … `contender_5`) set by the inputs `contender_N_provider`,
 `_model` and `_effort`; provider `none` leaves a slot out (the agent's `enabled`).
-
-## Multi-model code review (`workflows/multi-model-review.yaml`)
-
-Reviews an existing branch without changing anything or posting to the PR/MR.
-
-| Stage | Who | What it does |
-|---|---|---|
-| review | Opus 5.5, Sonnet 5, gpt-6-luna **in parallel** | Each reviews the diff with `code-review` (`review/<agent>.json`) |
-| blast_radius | Sonnet 5 | `blast-radius`: consumers outside the diff and the key safety fact, proven by running code |
-| judge | Opus 5.5 (own session) | `review-synthesis`: reads the diff, merges and verifies the anonymized findings into act on / consider / noted / dismissed, with a verdict (`review.md`) |
 
 ## Writer & Reviewer (`workflows/writer-reviewer.yaml`)
 
@@ -1080,34 +1033,55 @@ the gate. The run never merges (`metadata.merges: false`): as a roadmap stage it
 succeeds. The Backlog suggests it every 24 hours (see the Backlog screen). Run folder:
 `refresh.json`, `report.md`, `applied-safe.json` / `applied-scope.json`, `bodies/<n>.md`.
 
-## Run retrospective (`workflows/run-retrospective.yaml`)
+## Retrospective (`workflows/retrospective.yaml`)
 
-Monitor & Improve. Given a `run_id` (default `latest`: the most recent run of another workflow;
-an id with no run folder is refused before the run starts), reads that run's `events.jsonl`, sessions,
-`decisions.tsv` and `summary.json` with the `run-retrospective` skill, and proposes
-evidence-backed edits to skills and workflows (`retrospective.md`, also copied into the analyzed
-run's folder). It only proposes; a human applies.
+Monitor & Improve (#631; the old `run-retrospective.yaml` name still runs it). Given a `run_id`
+(default `latest`: the most recent run of another workflow; an id with no run folder is refused before
+the run starts), reads that run's `events.jsonl`, sessions, `decisions.tsv` and `summary.json` with the
+`run-retrospective` skill, and proposes evidence-backed edits to skills and workflows
+(`retrospective.md`, also copied into the analyzed run's folder; the `findings` output). It only
+proposes; a human applies. Feature's `retrospective` input chains it on the run that just ended.
 
-## Project map (`workflows/project-map.yaml`)
+## Analyze project (`workflows/analyze-project.yaml`)
 
-Plan & Design, started from a project's Architecture tab ("Analyze this project", its estimate
-next to it: one click, no confirmation) or by hand from Workflows. The `facts` step counts the
-tracked files by folder and by file-name pattern, lists the manifests and reads #371's folder
-city with its edges (no model). The cartographer (skill `project-map`, read-only on the project:
-it never edits code, docs or agent instructions) answers a city plan: zones, districts, landmarks
-and ports as path rules. `validate` runs the city model's validator (schema, duplicate ids,
-unknown zones, at least 95% of the drawn files in a district); a failing plan goes back to the
-cartographer with the report at most twice, then the run fails and nothing is saved. A valid plan
-is saved at once by `save` (`<workspace>/architecture/<project id>/city-plan.json`; the plan it
-replaces goes to `city-plan-history/`): there is no gate by default (#381). In validated mode
-(the input `mode`), the gate shows the plan's zones and districts and its validation first (on a
-refresh: the districts added and removed, the coverage before and after), and only an approval
-saves. Then `analyze` (the input `analyze`, on by default) runs the Oracle's architecture
-analysis of the project (one Oracle turn in its daily budget, saved as the Architecture tab's
-reports are; a refusal fails the run with the reason, the plan stays saved). A refresh starts
-from the saved plan and keeps its zone and district ids and the names the owner saw. The tab
-advises a refresh, without starting one, when more than 5% of the drawn files match no district
-or a new top-level folder appears.
+Monitor & Improve (#372, #378, #631: the old `project-map.yaml` and `refactor-proposals.yaml` names
+still run it). The project's city, its architecture analysis and its refactor proposals in one
+workflow, started from a project's Architecture tab ("Analyze this project", its estimate next to it:
+one click, no confirmation), by hand from Workflows or by a pipeline. Inputs: `repo_path`,
+`project_id`, `mode` (`auto` or `validated`), `analyze` (on by default), `since` and `limit` (the
+issues to file, default 5).
+
+**The map** (without `since`). The `facts` step counts the tracked files by folder and by file-name
+pattern, lists the manifests and reads #371's folder city with its edges (no model). The cartographer
+(skill `project-map`, read-only on the project) answers a city plan: zones, districts, landmarks and
+ports as path rules. `validate` runs the city model's validator (schema, duplicate ids, unknown zones,
+at least 95% of the drawn files in a district); a failing plan goes back to the cartographer with the
+report at most twice, then the run fails and nothing is saved. A valid plan is saved at once
+(`<workspace>/architecture/<project id>/city-plan.json`; the plan it replaces goes to
+`city-plan-history/`). In validated mode the gate shows the plan's zones and districts and its
+validation first, and only an approval saves. Then `analyze` runs the Oracle's architecture analysis
+of the project (one Oracle turn in its daily budget, saved as the Architecture tab's reports are). A
+refresh starts from the saved plan and keeps its ids and names. The tab advises a refresh when more
+than 5% of the drawn files match no district or a new top-level folder appears.
+
+**The refactor proposals** (with `since`, a tag or a commit: the "since the last tag" mode, what
+`refactor-proposals.yaml` did). The map is skipped:
+1. **Facts** (no agent): the Architecture facts at the project's default branch and the files changed
+   since `since`.
+2. **Analysis** (the analyst, read-only, the one real model call): #356's report, with the
+   Architecture tab's own schema.
+3. **Proposals** (no agent): the findings become Refactor tab proposals; one that matches an open or
+   dismissed proposal, or an open `refactor` issue, is dropped and the run names it.
+4. **Ranking**: #357's Product Owner ranking; the top `limit` kept.
+5. **Gate** (validated mode only): dismiss the ones to drop on the Refactor tab, then approve.
+6. **File**: "File as issue" for each kept proposal, with the `refactor` label (a simulation previews,
+   no `gh`).
+
+Outputs: `issues` (the filed issues, for a pipeline's `product_owner` or `queue` target) and `report`.
+The bundled pipeline **`pipelines/release-then-refactors.yaml`** runs a release, then this workflow
+since the release's previous tag (`since` ← `previous_version`), then the Product Owner places the
+filed issues in the roadmap. The release's gates and Ship stay human; the analysis is one real model
+call (about $0.50, estimated like the Architecture tab's).
 
 ## Visual builder
 
@@ -1633,7 +1607,7 @@ agents use. A second five-step slider sits under Speed ↔ Quality in both place
 |---|---|---|---|---|---|
 | max complexity per group | 8 | 7 | the Speed ↔ Quality step's | 5 | 4 |
 | grouping | issues of one area or files packed into one run ("grouped to pay the run overhead once") | the same | as Speed ↔ Quality plans | as Speed ↔ Quality plans | as Speed ↔ Quality plans |
-| `unit_tests` | run existing, then a `test-batch` item after the stage | write and run | write and run | write and run | write and run |
+| `unit_tests` | run existing, then a `test-backfill` item after the stage | write and run | write and run | write and run | write and run |
 | `e2e_tests` | write | write | write | write | write and run |
 | `screenshots` | off | changed screens | changed screens | all | all |
 | agents | cheaper models and a medium effort where the workflow has an input for them | the same | the workflow's | the workflow's | the workflow's |
@@ -1642,8 +1616,8 @@ When the two sliders disagree, cost wins: the group cap is the Cost step's (Spee
 fewer, larger runs); the runs per stage stay the calibration's. The orchestrator applies the step to
 every planned group, whatever the model wrote: it packs a stage's groups that share an area (name,
 files, epic or topic label) within the cap, sets `unit_tests`, `e2e_tests` and `screenshots` when the
-group's workflow declares them, and at Economy adds a stage with one `test-batch` item for the issues
-that ran with their existing tests only (a test-batch item may name issues another item holds, and
+group's workflow declares them, and at Economy adds a stage with one `test-backfill` item for the issues
+that ran with their existing tests only (a test-backfill item may name issues another item holds, and
 runs even when they are closed). An input a workflow does not declare is not adjustable: the group
 says so (the bundled development workflows have no model or effort input, so "agents: not
 adjustable"), and no workflow is edited. Each group, and the roadmap item added from it, carries a
@@ -1801,8 +1775,8 @@ chain**. While the run goes, the banner edits or cancels the chain. Chaining nev
 each workflow's gates still wait for you. Simulated runs only chain simulated runs.
 
 Each workflow declares what it hands over (`outputs:`, recorded in `summary.json`): issue-tracker
-`issues`; writer-reviewer `document`, `issue`; ai-arena `document`; software-development and the
-local hero `branch`, `merged_commit`, `issues`, `pr_url`; run-retrospective `findings`. The run
+`issues`; writer-reviewer `document`, `issue`; ai-arena `document`; feature `branch`,
+`merged_commit`, `issues`, `pr_url`; analyze-project `issues`, `report`; retrospective `findings`. The run
 lists and the run chat show "→ then: <workflow>" on a chained run. Engine details:
 [docs/agents/engine/chaining.md](docs/agents/engine/chaining.md).
 

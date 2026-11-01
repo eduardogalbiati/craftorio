@@ -13,7 +13,7 @@ const { loadWorkflow, WorkflowRun } = require('../engine/workflow');
 
 const root = path.join(__dirname, '..', '..', '..');
 const SKILLS = path.join(root, 'skills');
-const WORKFLOWS = ['feature', 'test-batch'];
+const WORKFLOWS = ['feature', 'test-backfill'];
 const body = (id) => skills.resolveSkill([SKILLS], id).body;
 // a `*toolchains` anchor inside a tools list arrives as a nested list
 const toolsOf = (agent) => (agent.capabilities?.tools || []).flat(Infinity).map(String);

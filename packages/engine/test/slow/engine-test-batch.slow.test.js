@@ -1,4 +1,4 @@
-// workflows/test-batch.yaml (#203): writes the tests a run skipped (unit_tests: off/run_existing,
+// workflows/test-backfill.yaml (#203; test-batch.yaml before #631): writes the tests a run skipped (unit_tests: off/run_existing,
 // e2e_tests: off) for a range of local commits in one test writer session, then the orchestrator
 // runs the whole suite once per round (#177, packages/engine/engine/suite-step.js), merging locally when green.
 // These are engine-level mock runs, the way test/engine.test.js checks software-development.
@@ -16,7 +16,7 @@ const root = path.join(__dirname, '..', '..', '..', '..');
 async function runTestBatch({ mockSequences, answers = {}, inputs = {}, issues } = {}) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'test-batch.yaml'),
+    file: path.join(root, 'workflows', 'test-backfill.yaml'),
     inputs: { repo_path: root, ...inputs },
     mock: true,
     runsDir,

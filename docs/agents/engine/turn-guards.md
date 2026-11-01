@@ -20,7 +20,7 @@ Tool timeouts, test inputs, the environment allowlist, the base worktree, depend
   from the workflow's `default` = chosen for this run), and `tests_plan: [{ input, label, value,
   value_label, source }]` in `workflow.started` and the summary (runs.js `testsPlan`, the Run
   screen's badges). The gates and the verifier's prompt show it; nothing off is reported as tested.
-  `test-batch.yaml` writes the skipped tests later, for a range of local commits, in one session.
+  `test-backfill.yaml` writes the skipped tests later, for a range of local commits, in one session.
 - **`env: { passthrough: [NAME, …] }`** (#470, workflow level): child processes get an allowlisted
   environment (`packages/engine/engine/child-env.js`, [capabilities.md](../capabilities.md) "Child
   environment"); these exact variable names are added to the agents', the transition actions' and

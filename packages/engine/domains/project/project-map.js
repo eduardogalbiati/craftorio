@@ -1,4 +1,4 @@
-// The project map workflow (#372, workflows/project-map.yaml): what its machine steps do, read-only
+// The project map workflow (#372, workflows/analyze-project.yaml since #631): what its machine steps do, read-only
 // on the project. The engine's `type: project_map` steps (packages/engine/engine/run/project-map-steps.js) call
 // these with the project's folder and the workspace's architecture folder (<workspace>/architecture).
 // - facts: the cartographer's inputs: the tracked files (`git ls-files`) counted by folder and by

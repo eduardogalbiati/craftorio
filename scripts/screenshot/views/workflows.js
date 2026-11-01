@@ -18,9 +18,9 @@ function demoPipelines(ws, appDir) {
   const tracker = fs.readFileSync(wf('issue-tracker.yaml'), 'utf8');
   fs.writeFileSync(wf('issue-tracker.yaml'), tracker.replace('description: "The issues created:', 'description: "The filed issues:'));
   // the retrospective declares `findings` (#134): the copies rename it instead of adding a second `outputs:`
-  const retro = fs.readFileSync(wf('run-retrospective.yaml'), 'utf8');
-  fs.writeFileSync(wf('weekly-digest.yaml'), retro.replace('name: run-retrospective', 'name: weekly-digest').replace(/description: .*/, 'description: Summarizes the week\'s retrospectives into one digest of what to change first.').replace('\n  findings:\n', '\n  digest:\n'));
-  fs.writeFileSync(wf('release-notes.yaml'), retro.replace('name: run-retrospective', 'name: release-notes').replace('category: monitor', 'category: ops').replace(/description: .*/, 'description: Drafts the release notes of the merged pull requests since the last tag.').replace('\n  findings:\n', '\n  notes:\n'));
+  const retro = fs.readFileSync(wf('retrospective.yaml'), 'utf8');
+  fs.writeFileSync(wf('weekly-digest.yaml'), retro.replace('name: retrospective', 'name: weekly-digest').replace(/description: .*/, 'description: Summarizes the week\'s retrospectives into one digest of what to change first.').replace('\n  findings:\n', '\n  digest:\n'));
+  fs.writeFileSync(wf('release-notes.yaml'), retro.replace('name: retrospective', 'name: release-notes').replace('category: monitor', 'category: ops').replace(/description: .*/, 'description: Drafts the release notes of the merged pull requests since the last tag.').replace('\n  findings:\n', '\n  notes:\n'));
   // the bundled pipelines (#135), one of them edited (modified: Restore default), plus two of the
   // owner's: a valid one and one whose mapping names an output its workflow doesn't declare (refused)
   const dir = path.join(ws.root, 'pipelines');
@@ -123,8 +123,8 @@ function demoRepositoryWorkflows(project, appDir) {
   const git = gitRepo(project.folder);
   const dir = path.join(project.folder, '.multiagent', 'workflows');
   fs.mkdirSync(dir, { recursive: true });
-  const retro = fs.readFileSync(path.join(appDir, 'workflows', 'run-retrospective.yaml'), 'utf8');
-  fs.writeFileSync(path.join(dir, 'issue-intake.yaml'), retro.replace('name: run-retrospective', 'name: issue-intake').replace(/description: .*/, 'description: Turns the week\'s findings into triaged issues for this repository.'));
+  const retro = fs.readFileSync(path.join(appDir, 'workflows', 'retrospective.yaml'), 'utf8');
+  fs.writeFileSync(path.join(dir, 'issue-intake.yaml'), retro.replace('name: retrospective', 'name: issue-intake').replace(/description: .*/, 'description: Turns the week\'s findings into triaged issues for this repository.'));
   fs.writeFileSync(path.join(project.folder, '.multiagent', 'project.yaml'), [
     'version: 1',
     'workflows:',

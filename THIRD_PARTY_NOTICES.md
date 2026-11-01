@@ -32,7 +32,7 @@ project's MIT License (see [LICENSE](LICENSE)); it uses no third-party artwork.
   - skills: `arena-synthesis` (the arena skill), `blast-radius` (blast-radius), `claim-verification`
     (the prove-it-works principle), `decision-log` (show-me-your-work), `design-sketch` (architect),
     `review-synthesis` (interrogate), `run-retrospective` (reflect)
-  - workflows: `run-retrospective.yaml` (reflect); the multi-model review of `feature.yaml`, once
+  - workflows: `retrospective.yaml` (reflect); the multi-model review of `feature.yaml`, once
     `multi-model-review.yaml`, reuses the interrogate and blast-radius skills above
 
 ### cursor/plugins: cursor-team-kit
@@ -49,7 +49,7 @@ project's MIT License (see [LICENSE](LICENSE)); it uses no third-party artwork.
 - Used by:
   - skills: `bug-diagnosis` (diagnosing-bugs), `merge-conflict-resolver` (resolving-merge-conflicts),
     `pr-description` (pr), `run-retrospective` (retro)
-  - workflows: `run-retrospective.yaml` (retro)
+  - workflows: `retrospective.yaml` (retro)
 
 ### KentBeck/ToolSeeds
 

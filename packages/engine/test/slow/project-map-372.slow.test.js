@@ -1,4 +1,4 @@
-// #372: whole simulated runs of the Project map workflow (workflows/project-map.yaml): facts →
+// #372: whole simulated runs of the Project map workflow (workflows/analyze-project.yaml since #631): facts →
 // plan (the mock cartographer) → validate → save → analyze (#381: no gate in the default auto mode,
 // the Oracle's simulated report saved after the plan; the gate only in validated mode), on a git
 // repository in a temp folder and a temp workspace. The cheaper checks are in
@@ -30,7 +30,7 @@ const { Recorder } = require('../../engine/recorder');
 const projects = require('../../domains/project/projects');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'project-map.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'analyze-project.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 function tmp(t, prefix) {

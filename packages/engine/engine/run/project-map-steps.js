@@ -1,5 +1,5 @@
 // @ts-check
-// `type: project_map` (#372,workflows/project-map.yaml): the project map's machine steps, no model
+// `type: project_map` (#372, workflows/analyze-project.yaml since #631): the project map's machine steps, no model
 // call and read-only on the project (packages/engine/domains/project/project-map.js does the work), the same in a simulation.
 // `action` says which:
 // - facts: the cartographer's inputs (the tree counted by folder and file-name pattern, the

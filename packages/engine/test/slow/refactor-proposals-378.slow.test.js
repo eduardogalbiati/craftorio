@@ -1,11 +1,11 @@
-// #378: whole simulated runs of the Refactor proposals workflow (workflows/refactor-proposals.yaml):
+// #378: whole simulated runs of the Refactor proposals workflow (workflows/analyze-project.yaml with `since` since #631):
 // facts → analyze → propose → prioritize → gate (validated mode only) → file, on a git repository in a
 // temp folder and a temp workspace. The cheaper checks (and the contract) are in
 // test/refactor-proposals-workflow-378.test.js. The workflow is loaded inside each run (tests first).
 //
 // Contract assumed by these runs (besides that test's header):
 // - The run is started for a project: WorkflowRun's `projectId` (also given as the input
-//   `project_id`) and the input `project_path` (the project's folder). The workspace is the runs
+//   `project_id`) and the input `repo_path` (the project's folder; `project_path` before #631). The workspace is the runs
 //   folder's parent, so the proposals are those the Refactor tab reads: <workspace>/refactor
 //   (fronts/analyser/engine/channels/refactor.js root()), through packages/engine/domains/refactor/refactor-proposals.js listProposals.
 // - The mock analyst answers from the analyze step's output schema (one finding); a second run on the
@@ -29,7 +29,7 @@ const { validateReport } = require('../../domains/oracle/oracle-architecture');
 const { producedIssues } = require('@multiagent/shared/chain-model');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'refactor-proposals.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'analyze-project.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 function tmp(t, prefix) {
@@ -74,7 +74,7 @@ async function makeProject(t) {
 async function runProposals(ctx, inputs = {}) {
   const run = new WorkflowRun({
     file: WORKFLOW,
-    inputs: { project_path: ctx.repo, project_id: ctx.project.id, ...inputs },
+    inputs: { repo_path: ctx.repo, project_id: ctx.project.id, ...inputs },
     mock: true,
     runsDir: ctx.runsDir,
     projectId: ctx.project.id,
@@ -117,7 +117,7 @@ test('#378 refactor proposals, auto mode: facts since the tag, a valid report, p
   assert.equal(r.finished.status, 'success', r.finished.error);
 
   // facts: the files changed since v1.0.0, not those only committed before it
-  const facts = r.outputOf('facts');
+  const facts = r.outputOf('refactor_facts');
   assert.ok(facts, 'the facts step finished with an output');
   assert.ok(asText(facts).includes('src/changed.js'), 'facts name the file changed since the tag');
   const changedLists = listsHolding(facts, 'src/changed.js');
@@ -125,14 +125,14 @@ test('#378 refactor proposals, auto mode: facts since the tag, a valid report, p
   for (const list of changedLists) assert.equal(holds(list, 'src/old.js'), false, 'src/old.js was only committed before the tag');
 
   // analyze: the Oracle's report format
-  const analyzed = validateReport(r.outputOf('analyze'));
+  const analyzed = validateReport(r.outputOf('refactor_analysis'));
   assert.equal(analyzed.error, undefined, analyzed.error);
 
   // propose: the findings are in the Refactor tab's store
   assert.ok(ctx.stored().length > 0, 'proposals in <workspace>/refactor/<project>/proposals.json');
 
   // auto: nobody answers a gate
-  assert.equal(r.gates.filter((g) => g.step_id === 'gate').length, 0, 'no approval for the gate step in auto mode');
+  assert.equal(r.gates.filter((g) => g.step_id === 'proposals_gate').length, 0, 'no approval for the gate step in auto mode');
 
   // outputs: the filed issues as the pipeline targets read them, and the report
   const issues = r.outputs.issues;
@@ -186,6 +186,6 @@ test('#378 refactor proposals, validated mode: the owner is asked at the gate be
   const ctx = await makeProject(t);
   const r = await runProposals(ctx, { mode: 'validated', since: 'v1.0.0' });
   assert.equal(r.finished.status, 'success', r.finished.error);
-  assert.equal(r.gates.filter((g) => g.step_id === 'gate').length, 1, 'one approval for the gate step');
-  assert.equal(r.visits('gate'), 1);
+  assert.equal(r.gates.filter((g) => g.step_id === 'proposals_gate').length, 1, 'one approval for the gate step');
+  assert.equal(r.visits('proposals_gate'), 1);
 });

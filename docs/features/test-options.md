@@ -17,7 +17,7 @@ the workflow's default). The test step is the largest cost of a run (about half 
   the evidence, the verification and the merge always run. Nothing off is reported as tested: the
   run's Details show a badge per input ("Unit tests: Off", the source on hover: workflow default or
   chosen for this run), and the gates and the verifier get the same sentence. To test later, all
-  together: the `test-batch` workflow.
+  together: the `test-backfill` workflow.
 - Your own defaults: change `default:` of these inputs in the workspace copy of the workflow. A
   copy changed only in its inputs' defaults still gets the app's new versions (your values kept).
 
@@ -35,5 +35,5 @@ least 2 min); a file that passes alone, or hangs or fails on the base too, is re
 change instead of failing "the whole suite".
 
 <!-- section:local-hero -->
-- **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) as `software-development`. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
+- **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) in both modes. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
 - **Suite red outside the change** (#396, input `suite_red_outside_change`): *Ask* (default) = a red suite opens `test_failed` as before; *Continue* = a suite whose failures are all outside the change goes on to the build and the merge, the run marked **Not tested green** (Run screen, chat, `summary.json` `tested`). A failure in the change still opens the gate.

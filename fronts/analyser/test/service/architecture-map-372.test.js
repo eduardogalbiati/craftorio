@@ -49,11 +49,11 @@ async function setup(t, files) {
   return { service, api, projectId: project.id };
 }
 
-test('#372 workflows:list lists project-map.yaml with its cartographer', (t) => {
+test('#372 #631 workflows:list lists analyze-project.yaml with its cartographer', (t) => {
   const { api } = makeService(t);
-  const wf = api['workflows:list']().find((w) => w.file === 'project-map.yaml');
-  assert.ok(wf, 'project-map.yaml is listed');
-  assert.equal(wf.name, 'project-map');
+  const wf = api['workflows:list']().find((w) => w.file === 'analyze-project.yaml');
+  assert.ok(wf, 'analyze-project.yaml is listed');
+  assert.equal(wf.name, 'analyze-project');
   assert.ok(wf.agents.cartographer, 'the cartographer');
   assert.equal(wf.merge, 'none', 'nothing is merged into the project');
 });

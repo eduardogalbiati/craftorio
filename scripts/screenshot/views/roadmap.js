@@ -24,9 +24,9 @@ const {
 // `budget` (#206, --budget): set writes a daily budget of $60 (the top bar's "$X / $60 today"); paused
 // also pauses the roadmap before its next stage, as the budget cap does.
 // Cost (#205): the group of stage 2 was planned at Economy (grouped, existing tests only, no
-// screenshots), so a test-batch item follows it; the UI issue of stage 3 at Generous.
+// screenshots), so a test-backfill item follows it; the UI issue of stage 3 at Generous.
 // `more` (#282, #284, --roadmap states): the running run is in a fix round, the stage "Reports and
-// health" is disabled and the last stage's item is simulated (the test-batch item has no estimate).
+// health" is disabled and the last stage's item is simulated (the test-backfill item has no estimate).
 // `more` parked (#395, --roadmap parked): the item waiting at the developer's gate is parked.
 function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   const states = more === 'states';
@@ -85,7 +85,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
         cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] },
       })] },
       // #260: a cut line after this stage ("Release here"): the last stage waits for the release v0.10
-      { id: 'stage-2-tests', name: 'Test batch', note: '', release: { name: 'v0.10' }, items: [item('item-8', 'test-batch.yaml', [12, 9], {
+      { id: 'stage-2-tests', name: 'Test backfill', note: '', release: { name: 'v0.10' }, items: [item('item-8', 'test-backfill.yaml', [12, 9], {
         inputs: {}, reason: 'Economy: these issues ran with their existing tests only; one test writer session writes their unit tests together, after their stage.',
       })] },
       { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {

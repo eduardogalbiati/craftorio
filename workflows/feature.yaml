@@ -100,7 +100,7 @@
 #   2 rounds, then test_failed. An engine, docs or refactor issue gets no scenario: no e2e step.
 #   build, evidence, verify_change and the local merge always run. Nothing is reported as tested
 #   when it was off: verify_failed and the verifier get `tests_plan` ("Unit tests: Off (workflow
-#   default)"), and the run summary records it. Test later, all together: test-batch.yaml.
+#   default)"), and the run summary records it. Test later, all together: test-backfill.yaml.
 #   suite (no agent, #177), `scope: affected` (#304, as #212): each round runs the test files the
 #   change reaches (import graph since the base, plus the files that failed before), log in
 #   logs/suite-<round>.log; when they pass and the whole suite has not run yet in the run, the
@@ -261,7 +261,7 @@ inputs:
     default: write_and_run
     label: Unit tests
     options: { write_and_run: Write and run, run_existing: Run existing, "off": "Off" }
-    description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-batch workflow)."
+    description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-backfill workflow)."
   e2e_tests:
     type: string
     enum: ["off", write, write_and_run]

@@ -3383,7 +3383,7 @@
   "po.cost_grouping_plan": "as the Speed ↔ Quality step plans",
   "po.cost_steps": "Cost steps",
   "po.cost_unit_tests": "{value}",
-  "po.cost_unit_tests_batch": "{value}, then a test-batch item after each stage",
+  "po.cost_unit_tests_batch": "{value}, then a test-backfill item after each stage",
   "po.e2e_tests": "E2E tests",
   "po.e2e_tests_off": "off",
   "po.e2e_tests_write": "write",

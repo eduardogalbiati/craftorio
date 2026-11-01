@@ -5,7 +5,8 @@ order: 252
 <!-- section:workflows -->
 ## Release (`workflows/release.yaml`)
 
-Code & Build. Decides "this set is good, ship it" (#260): the work of many runs merges into the
+Code & Build (#630: the old `e2e-release.yaml` name still runs it; the whole E2E suite is part of
+every release). Decides "this set is good, ship it" (#260): the work of many runs merges into the
 local base one after another, and a release run checks their sum. For a Node project (a
 `package.json`), it first writes the release's version (a semver such as `1.2.0` or `v1.2.0`) into
 `package.json` and the root of its lockfile and commits it on the run's branch, so the suites check

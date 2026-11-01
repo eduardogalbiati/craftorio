@@ -52,7 +52,7 @@ test('ai-development-local-hero: the replay of its mock run gives the in-memory 
 });
 
 test('test-batch: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('test-batch.yaml'), inputs: { repo_path: root } });
+  const run = await recordedRun(t, { file: bundled('test-backfill.yaml'), inputs: { repo_path: root } });
   assertReplayMatches(run);
 });
 

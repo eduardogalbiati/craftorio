@@ -194,8 +194,8 @@ test('main(--check): a docs/features/ fragment edited without regenerating makes
   + 'main() makes --check pass again', (t) => {
   const tmp = tmpDocsRoot(t);
   fs.mkdirSync(path.join(tmp, 'docs', 'agents'), { recursive: true }); // main() always (re)writes the code map
-  const fragmentPath = path.join(tmp, 'docs', 'features', 'software-development.md');
-  fs.writeFileSync(fragmentPath, read(fragmentPath).replace('Software development flow', 'Changed flow name'));
+  const fragmentPath = path.join(tmp, 'docs', 'features', 'feature.md');
+  fs.writeFileSync(fragmentPath, read(fragmentPath).replace('Feature (`workflows', 'Changed flow name (`workflows'));
 
   assert.equal(main(['--check'], tmp), 1);
   assert.equal(main([], tmp), 0);

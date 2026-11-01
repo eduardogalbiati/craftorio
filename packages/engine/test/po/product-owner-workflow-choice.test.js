@@ -32,7 +32,7 @@ const TEST_INPUTS = {
 const WORKFLOWS = [
   { file: AI_DEV, name: 'ai-development-local-hero', inputs: { task: {}, ...TEST_INPUTS } },
   { file: SW_DEV, name: 'software-development-local-hero', inputs: { task: {}, ...TEST_INPUTS } },
-  { file: 'test-batch.yaml', name: 'test-batch', inputs: { task: {} } },
+  { file: 'test-backfill.yaml', name: 'test-backfill', inputs: { task: {} } },
 ];
 const ISSUES = [
   { number: 1, state: 'open', title: 'Login page', labels: [{ name: 'complexity:2' }], body: 'x'.repeat(200) },
@@ -58,7 +58,7 @@ test('#235 normalizeAnswer: the Cost step (Economy) is not applied to ai-develop
   const out = productOwner.normalizeAnswer(raw, { issues: ISSUES, history: [], workflows: WORKFLOWS, workflow: AI_DEV, cost: ECONOMY });
   assert.ok(out.groups.length >= 1);
   for (const g of out.groups) {
-    assert.equal(g.workflow, AI_DEV, 'no test-batch.yaml stage is added');
+    assert.equal(g.workflow, AI_DEV, 'no test-backfill.yaml stage is added');
     assert.equal(g.cost, undefined, `group "${g.name}" carries no Cost step`);
     assert.equal(g.inputs.unit_tests, undefined, 'the Cost step set no unit_tests');
     assert.equal(g.inputs.e2e_tests, undefined, 'the Cost step set no e2e_tests');
@@ -75,7 +75,7 @@ test('#235 normalizeAnswer: the Cost step (Economy) still applies to software-de
   assert.equal(main.cost?.name, 'Economy');
   assert.equal(main.inputs.unit_tests, 'run_existing');
   assert.equal(main.inputs.screenshots, 'off');
-  assert.ok(out.groups.some((g) => g.workflow === 'test-batch.yaml'), 'a test-batch stage follows the untested issues');
+  assert.ok(out.groups.some((g) => g.workflow === 'test-backfill.yaml'), 'a test-backfill stage follows the untested issues');
 });
 
 test('#235 ask (simulated) with ai-development-local-hero.yaml chosen and an Economy cost: every group on it, and the plan\'s summary names no Cost step (no "Economy" or "Generous")', async (t) => {

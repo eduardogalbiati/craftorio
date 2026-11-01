@@ -62,7 +62,7 @@ async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = 
   return { events, finished, transitions };
 }
 const GROUP = [53, 65, 77].map((n) => ({ number: n, url: `https://github.com/o/r/issues/${n}`, title: `T${n}` }));
-// `type: run` inputs (run-retrospective): "latest", a real id, or refused before the run starts.
+// `type: run` inputs (retrospective): "latest", a real id, or refused before the run starts.
 function runsWith(t, runs) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-input-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -72,7 +72,7 @@ function runsWith(t, runs) {
   }
   return dir;
 }
-const retro = (runsDir, runId) => new WorkflowRun({ file: path.join(root, 'workflows', 'run-retrospective.yaml'), inputs: { run_id: runId }, mock: true, runsDir, skillsDirs: [] });
+const retro = (runsDir, runId) => new WorkflowRun({ file: path.join(root, 'workflows', 'retrospective.yaml'), inputs: { run_id: runId }, mock: true, runsDir, skillsDirs: [] });
 // ---------------------------------------------------------------------------
 // writer-reviewer: the writer and the reviewer are picked at run time (templated agents)
 async function runWriterReviewer({ inputs = {}, mockSequences, answers = {}, feedback = {} } = {}) {

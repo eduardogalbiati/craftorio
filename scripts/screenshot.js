@@ -60,7 +60,7 @@
 //                      automation settings: --click "[data-testid=discovery-column-automation][data-column=shape]")
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
-//   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
+//   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. release-then-refactors.yaml):
 //                      its Run screen shows each stage's run
 //   --then <file>      run: the workflow the run's chain starts when it finishes (#134), set in the
 //                      Start panel; its Run screen offers "Save as pipeline" (--click "[data-chain=save-pipe-open]")

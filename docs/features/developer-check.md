@@ -28,4 +28,4 @@ you at its gates is recorded apart from agent time (`summary.timing.gate_wait_ms
 panel and the Time tooltip).
 
 <!-- section:local-hero order:210 -->
-- **Modes**: the same `mode: auto | validated` as `software-development`. In `auto` nothing waits for you (the run merges locally by itself); in `validated` the run stops at `developer_check` after the developer so you try the change (Run locally, Open the worktree) and approve it or ask for changes before the review and the tests. `human_review` offers Run locally too.
+- **Validation**: the input `validation: auto | validated` (the old `mode: auto | validated`, #630). In `auto` nothing waits for you (the run merges locally by itself); in `validated` the run stops at `developer_check` after the developer so you try the change (Run locally, Open the worktree) and approve it or ask for changes before the review and the tests. `human_review` offers Run locally too.

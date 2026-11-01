@@ -1,4 +1,4 @@
-// The Refactor proposals workflow's work (#378, workflows/refactor-proposals.yaml), the Refactor tab's
+// The Refactor proposals workflow's work (#378, workflows/analyze-project.yaml with `since`, #631), the Refactor tab's
 // rules (#357) run without the tab: each function is one machine step of packages/engine/engine/run/
 // refactor-proposals-steps.js, on the project's folder and the workspace's stores.
 // - facts: the Architecture facts (#356) at the default branch, the files changed since `since` (a tag

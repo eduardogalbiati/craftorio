@@ -37,8 +37,8 @@ test('every bundled workflow needs git and only known CLI ids, sorted, with a bo
   }
 });
 
-test('multi-model workflows need Codex: ai-arena, run-retrospective, feature with the multi-model review', () => {
-  for (const name of ['ai-arena', 'run-retrospective']) {
+test('multi-model workflows need Codex: ai-arena, retrospective, feature with the multi-model review', () => {
+  for (const name of ['ai-arena', 'retrospective']) {
     assert.ok(reqsOf(name).clis.includes('codex'), `${name} needs codex`);
   }
   const wf = loadWorkflow(path.join(WORKFLOWS, 'feature.yaml'));
@@ -58,8 +58,8 @@ test('feature and fix in remote mode need gh or glab (forge)', () => {
   }
 });
 
-test('local workflows need neither Codex, Grok nor a forge CLI: fix, release, test-batch', () => {
-  for (const name of ['fix', 'release', 'test-batch']) {
+test('local workflows need neither Codex, Grok nor a forge CLI: fix, release, test-backfill', () => {
+  for (const name of ['fix', 'release', 'test-backfill']) {
     const r = reqsOf(name);
     assert.equal(r.clis.includes('codex'), false, `${name}: no codex`);
     assert.equal(r.clis.includes('grok'), false, `${name}: no grok`);

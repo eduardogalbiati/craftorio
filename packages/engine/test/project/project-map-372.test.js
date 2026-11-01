@@ -1,4 +1,4 @@
-// #372: the Project map workflow (workflows/project-map.yaml): an agent writes the project's city
+// #372: the Project map workflow (workflows/analyze-project.yaml since #631, the old project-map.yaml): an agent writes the project's city
 // plan (#371's format), validated by rules. Checked here without a whole run: the definition, the
 // read-only cartographer, the skill, the pure functions of the refresh and the validation, the docs.
 // Whole simulated runs are in test/slow/project-map-372.slow.test.js; the Architecture tab's
@@ -54,7 +54,7 @@ const caps = require('../../engine/capabilities');
 const { buildModel } = require('@multiagent/shared/architecture-model');
 
 const root = path.join(__dirname, '..', '..', '..', '..');
-const WORKFLOW = path.join(root, 'workflows', 'project-map.yaml');
+const WORKFLOW = path.join(root, 'workflows', 'analyze-project.yaml');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
 const loadWf = () => loadWorkflow(WORKFLOW);
 const cityModel = () => require('@multiagent/shared/city-model');
@@ -68,7 +68,7 @@ function tmp(t, prefix) {
 
 const stepOf = (wf, id) => {
   const step = wf.steps.find((s) => s.id === id);
-  assert.ok(step, `step "${id}" in workflows/project-map.yaml`);
+  assert.ok(step, `step "${id}" in workflows/analyze-project.yaml`);
   return step;
 };
 const scope = (output) => ({ output, steps: {}, inputs: {}, vars: {} });
@@ -118,9 +118,9 @@ const cityOf = (p, files = FILES) => cityModel().buildCity({ plan: p, facts: fac
 
 // ---------- the workflow definition ----------
 
-test('#372 project-map workflow: the bundled workflow loads and is named project-map', () => {
+test('#372 #631 project-map workflow: the bundled workflow loads and is named analyze-project', () => {
   const wf = loadWf();
-  assert.equal(wf.metadata.name, 'project-map');
+  assert.equal(wf.metadata.name, 'analyze-project');
 });
 
 test('#372 project-map workflow: steps facts → plan → validate → gate → save → analyze, facts first', () => {
@@ -233,9 +233,9 @@ test('#372 project-map workflow: the cartographer is listed on the Agents screen
     fs.copyFileSync(path.join(root, 'workflows', f), path.join(workflowsDir, f));
   }
   const list = agents.listAgents(path.join(tmp(t, 'agents-372-'), 'agents'), { workflowsDir });
-  const cartographer = list.find((x) => x.id === 'workflow:project-map.yaml:cartographer');
-  assert.ok(cartographer, 'workflow:project-map.yaml:cartographer is listed');
-  assert.equal(cartographer.workflow.name, 'project-map');
+  const cartographer = list.find((x) => x.id === 'workflow:analyze-project.yaml:cartographer');
+  assert.ok(cartographer, 'workflow:analyze-project.yaml:cartographer is listed');
+  assert.equal(cartographer.workflow.name, 'analyze-project');
   assert.ok(cartographer.steps.includes('plan'));
   assert.equal(/\bedit\b|\bwrite\b/.test(cartographer.capabilities), false, cartographer.capabilities);
 });
@@ -442,7 +442,7 @@ test('#372 refreshPlan without a current plan (a first map) is the proposal itse
 // ---------- the loader on `type: project_map` steps ----------
 
 function variant(t, from, to) {
-  const text = read('workflows', 'project-map.yaml').replace(/\r\n/g, '\n');
+  const text = read('workflows', 'analyze-project.yaml').replace(/\r\n/g, '\n');
   assert.ok(text.includes(from), `the bundled workflow contains ${JSON.stringify(from)}`);
   const file = path.join(tmp(t, 'pm-wf-'), 'project-map.yaml');
   fs.writeFileSync(file, text.replace(from, to));
@@ -526,13 +526,13 @@ test('#372 refreshSignal: a folder city (no plan yet) never signals a refresh', 
 
 // ---------- docs ----------
 
-test('#372 documented: a workflow README fragment in docs/features and the README names project-map.yaml', () => {
-  const fragment = path.join(root, 'docs', 'features', 'project-map.md');
-  assert.ok(fs.existsSync(fragment), 'docs/features/project-map.md');
+test('#372 #631 documented: a workflow README fragment in docs/features and the README names analyze-project.yaml', () => {
+  const fragment = path.join(root, 'docs', 'features', 'analyze-project.md');
+  assert.ok(fs.existsSync(fragment), 'docs/features/analyze-project.md');
   const text = fs.readFileSync(fragment, 'utf8');
   assert.match(text, /<!-- section:workflows -->/);
-  assert.match(text, /workflows\/project-map\.yaml/);
-  assert.match(read('README.md'), /project-map\.yaml/);
+  assert.match(text, /workflows\/analyze-project\.yaml/);
+  assert.match(read('README.md'), /analyze-project\.yaml/);
 });
 
 // decisions.md already names #372 in #371's entry (the roadmap): the decision itself names the workflow

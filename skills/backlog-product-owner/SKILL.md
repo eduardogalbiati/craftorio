@@ -26,7 +26,7 @@ The prompt holds a backlog report:
 - the **workflows** that take a task, with their inputs.
 
 When the report marks a workflow "chosen by the owner", the workflow is fixed by the owner for this
-plan: give every group that workflow, never another one, and no test-batch stage. The owner's
+plan: give every group that workflow, never another one, and no test-backfill stage. The owner's
 choices for its options are added to every group's inputs by the orchestrator. A workflow that
 writes its tests first (AI Development) has no Cost step: do not name one in the summary.
 

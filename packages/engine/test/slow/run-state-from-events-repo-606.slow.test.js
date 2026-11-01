@@ -60,14 +60,14 @@ function assertReplayMatches(run) {
 test('project-map: the replay of its mock run gives the in-memory state', async (t) => {
   const repo = makeRepo(t);
   const { project, options } = await projectOptions(t, repo);
-  const run = await recordedRun(t, { file: bundled('project-map.yaml'), inputs: { repo_path: repo, project_id: project.id, mode: 'validated' }, options });
+  const run = await recordedRun(t, { file: bundled('analyze-project.yaml'), inputs: { repo_path: repo, project_id: project.id, mode: 'validated' }, options });
   assertReplayMatches(run);
 });
 
 test('refactor-proposals: the replay of its mock run gives the in-memory state', async (t) => {
   const repo = makeRepo(t);
   const { project, options } = await projectOptions(t, repo);
-  const run = await recordedRun(t, { file: bundled('refactor-proposals.yaml'), inputs: { project_path: repo, project_id: project.id, mode: 'validated', since: 'v1.0.0' }, options });
+  const run = await recordedRun(t, { file: bundled('analyze-project.yaml'), inputs: { repo_path: repo, project_id: project.id, mode: 'validated', since: 'v1.0.0' }, options });
   assertReplayMatches(run);
 });
 

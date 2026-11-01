@@ -23,11 +23,11 @@ const FILE = path.join(__dirname, '..', '..', 'shared', 'onboarding-model.js');
 const load = () => require('@multiagent/shared/onboarding-model');
 
 // the workflows bundled today (workflows/*.yaml): the wizard suggests only among these (#630:
-// feature, fix and release replace the old development and release workflows)
+// feature, fix and release replace the old development and release workflows; #631: analyze-project,
+// test-backfill and retrospective)
 const TODAY = [
-  'ai-arena', 'backlog-refresh', 'feature', 'fix', 'issue-tracker', 'project-map',
-  'refactor-proposals', 'refactor', 'release', 'run-retrospective', 'test-batch', 'write-doc',
-  'writer-reviewer',
+  'ai-arena', 'analyze-project', 'backlog-refresh', 'feature', 'fix', 'issue-tracker',
+  'refactor', 'release', 'retrospective', 'test-backfill', 'write-doc', 'writer-reviewer',
 ];
 const DEFAULT = 'feature';
 const ids = (r) => r.suggestions.map((s) => s.id);

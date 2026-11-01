@@ -87,7 +87,7 @@ test('run-retrospective: the replay of its mock run gives the in-memory state', 
   const previous = '20261026-120000-aaaa0606';
   fs.mkdirSync(path.join(runsDir, previous));
   fs.writeFileSync(path.join(runsDir, previous, 'events.jsonl'), `${JSON.stringify({ seq: 1, type: 'workflow.started', workflow: 'writer-reviewer' })}\n`);
-  const run = await recordedRun(t, { file: bundled('run-retrospective.yaml'), inputs: { run_id: previous }, options: { runsDir, skillsDirs: [] } });
+  const run = await recordedRun(t, { file: bundled('retrospective.yaml'), inputs: { run_id: previous }, options: { runsDir, skillsDirs: [] } });
   assertReplayMatches(run);
 });
 
