@@ -23,9 +23,12 @@ function pick(sourceMd, translationMd, lang, src, text) {
 }
 
 const lines = (p) => ({ start: p.lines.start, end: p.lines.end });
+// the onboarding spec as it was when its lines were recorded (7e373d5c), frozen so editing the
+// real document never moves them (#672)
+const FROZEN_SPEC = 'test/fixtures/doc-editor/spec.md';
 
 test('a markdown with CRLF line ends gives the same lines, anchor and a passage without carriage returns', () => {
-  const lf = fs.readFileSync(path.join(ROOT, 'docs/work/first-project-onboarding/spec.md'), 'utf8');
+  const lf = fs.readFileSync(path.join(ROOT, FROZEN_SPEC), 'utf8');
   const crlf = lf.replace(/\r?\n/g, '\r\n');
   const text = 'Two cards: "Create new project" and "Import a repository".';
   const p = selectionPayload({
@@ -87,7 +90,7 @@ test('a heading with accents gets an ASCII anchor from the English heading', () 
 });
 
 test('a selected text that is not in the markdown as written (rendered, without the ** marks) sends the whole block', () => {
-  const md = fs.readFileSync(path.join(ROOT, 'docs/work/first-project-onboarding/spec.md'), 'utf8');
+  const md = fs.readFileSync(path.join(ROOT, FROZEN_SPEC), 'utf8');
   const p = selectionPayload({
     selection: { file: 'spec.md', src: '18-18', text: 'R2. Source. Two cards' },
     source: { file: 'spec.md', markdown: md },

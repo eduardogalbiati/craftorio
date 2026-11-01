@@ -1,7 +1,8 @@
 // views/<view>/: one folder per screen, registering itself with registerView instead of
 // index.html listing its markup and nav entry (#78 moved Settings, Usage and Supervisor; #153 moved
 // dashboard, sessions, projects, project, backlog, artifacts, workflows, agents, skills and
-// analytics; #154 moved run, runchat, duo and arena; #171 added oracle; #256 added inbox; #257 added discovery).
+// analytics; #154 moved run, runchat, duo and arena; #171 added oracle; #256 added inbox; #257 added discovery;
+// #647 added docs).
 // Phase 3 of the reorganisation study (#579) spreads the folders over the UI kit (the shell's
 // screens), the fronts and the app's own page folder: scripts/source-tree.js (pageDirs, pageFile)
 // says where each lives, and the desktop page (apps/desktop/renderer/index.html) still loads every
@@ -21,9 +22,9 @@ const indexHtml = fs.readFileSync(pageFileOf('index.html'), 'utf8');
 const viewIds = pageDirs(ROOT).flatMap((dir) => viewsOf(ROOT, dir));
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-test('views/: all 22 screens have moved into their own folders (#260 added releases, #257 discovery)', () => {
+test('views/: all 23 screens have moved into their own folders (#260 added releases, #257 discovery, #647 docs)', () => {
   assert.deepEqual([...viewIds].sort(), [
-    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'discovery', 'duo', 'inbox', 'nightwatch', 'oracle',
+    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'discovery', 'docs', 'duo', 'inbox', 'nightwatch', 'oracle',
     'project', 'projects', 'releases', 'run', 'runchat', 'sessions', 'settings', 'skills', 'supervisor', 'usage', 'workflows',
   ]);
 });

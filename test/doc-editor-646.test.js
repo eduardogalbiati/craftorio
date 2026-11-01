@@ -25,15 +25,20 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const DIR = 'docs/work/first-project-onboarding';
 const DOCS = ['intent', 'spec', 'plan', 'test', 'deploy', 'maintain'];
+// The recorded selections below name lines of the spec as it was when they were recorded
+// (7e373d5c): its text comes from a frozen copy, so editing the real spec never moves them (#672).
+// The payload still names the real files.
+const FROZEN = { spec: 'test/fixtures/doc-editor' };
 
 const loadModel = () => require('../poc/doc-editor-model.js');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const readDoc = (name, suffix) => read(`${FROZEN[name] || DIR}/${name}${suffix}`);
 
 function pair(name, translationMarkdown) {
-  const source = { file: `${DIR}/${name}.md`, markdown: read(`${DIR}/${name}.md`) };
+  const source = { file: `${DIR}/${name}.md`, markdown: readDoc(name, '.md') };
   const translation = {
     file: `${DIR}/${name}.pt-BR.md`,
-    markdown: translationMarkdown === undefined ? read(`${DIR}/${name}.pt-BR.md`) : translationMarkdown,
+    markdown: translationMarkdown === undefined ? readDoc(name, '.pt-BR.md') : translationMarkdown,
   };
   return { source, translation };
 }
@@ -89,7 +94,7 @@ test('a pt-BR selection hands the aligned English block as the passage', () => {
 
 test('the context is the source text around the passage, at most 200 characters each side', () => {
   const p = select('spec', 'en', '18-18', 'Two cards: "Create new project" and "Import a repository".');
-  const md = read(`${DIR}/spec.md`);
+  const md = readDoc('spec', '.md');
   assert.equal(typeof p.context.before, 'string');
   assert.equal(typeof p.context.after, 'string');
   assert.equal(p.context.before.length > 0 && p.context.before.length <= 200, true, `before: ${p.context.before.length}`);
@@ -114,7 +119,7 @@ test('the version identifies the source text: the same in both languages, new wh
 
 test('blocks of the translation align by order inside the section, not by line number', () => {
   // Two more front matter lines in the translation shift every block by two lines.
-  const shifted = read(`${DIR}/spec.pt-BR.md`).replace('source: spec.md (English)', 'source: spec.md (English)\nreviewer: someone\nnote: shifted');
+  const shifted = readDoc('spec', '.pt-BR.md').replace('source: spec.md (English)', 'source: spec.md (English)\nreviewer: someone\nnote: shifted');
   const paragraph = select('spec', 'pt-BR', '20-20', 'Dois cards', shifted);
   assert.equal(paragraph.anchor, 'spec-r2');
   assert.deepEqual({ start: paragraph.lines.start, end: paragraph.lines.end }, { start: 18, end: 18 });
@@ -125,7 +130,7 @@ test('blocks of the translation align by order inside the section, not by line n
 
 test('when the blocks of a section do not align, the whole source section is sent', () => {
   // The translation's R2 section gets a block the source does not have.
-  const extra = read(`${DIR}/spec.pt-BR.md`).replace('![Etapa 1](images/mock-1.jpg)', 'Um parágrafo a mais, só na tradução.\n\n![Etapa 1](images/mock-1.jpg)');
+  const extra = readDoc('spec', '.pt-BR.md').replace('![Etapa 1](images/mock-1.jpg)', 'Um parágrafo a mais, só na tradução.\n\n![Etapa 1](images/mock-1.jpg)');
   const p = select('spec', 'pt-BR', '18-18', 'Dois cards', extra);
   assert.equal(p.file, `${DIR}/spec.md`);
   assert.equal(p.anchor, 'spec-r2');
@@ -154,8 +159,8 @@ test('a block under a heading takes the heading anchor, the same in both languag
 
 for (const name of DOCS) {
   test(`every section of ${name}.md gives the same payload from either language`, () => {
-    const enMd = read(`${DIR}/${name}.md`);
-    const ptMd = read(`${DIR}/${name}.pt-BR.md`);
+    const enMd = readDoc(name, '.md');
+    const ptMd = readDoc(name, '.pt-BR.md');
     const enHeads = headings(enMd);
     const ptHeads = headings(ptMd);
     assert.equal(enHeads.length > 0, true);
