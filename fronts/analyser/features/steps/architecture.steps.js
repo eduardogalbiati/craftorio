@@ -1354,3 +1354,66 @@ Then('the status badge of the finding {string} reads {string}', async ({ e2e }, 
   await expect(badge).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(badge).toHaveText(new RegExp(`^\\s*${escapeRe(text)}\\s*$`, 'i'));
 });
+
+// ---------- the City's "Analyze this project" reads the project's own folder (#732) ----------
+// The City view's action (fronts/analyser/views/project/project-city-notes.js): the button
+// data-testid="project-city-analyze" (in the "No city plan yet" note, and "Analyze again" in the error
+// note), the run in progress "project-city-analyzing", the failure "project-city-analysis-error"
+// (role alert, "The analysis failed" + the reason + "Analyze again" with its estimate). #732: the
+// action reads the project's folder as the service has it now, not the window's cached project list,
+// so a project the onboarding just created analyses at once; a project with no folder on this machine
+// gets the reason in the interface language with what to do (clone it again, or point its folder from
+// the Overview), and its retry shows no "≈ US$" estimate (a retry that cannot work costs nothing).
+
+// the City mode button by its data-testid, whatever the interface language ("City" / "Cidade")
+When('I switch the Architecture tab to its City view', async ({ e2e }) => {
+  const button = visible(tab(e2e.window).getByTestId('architecture-mode-city')).first();
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
+});
+
+When('I click {string} on the city', async ({ e2e }, label) => {
+  const button = visible(tab(e2e.window).getByTestId('project-city-analyze')).first();
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveText(new RegExp(escapeRe(label), 'i'));
+  await expect(button).toBeEnabled();
+  await button.click();
+});
+
+Then('the city shows no analysis error', async ({ e2e }) => {
+  await expect(visible(tab(e2e.window).getByTestId('project-city-analysis-error'))).toHaveCount(0);
+  await expect(tab(e2e.window)).not.toContainText(/has no folder|n[ãa]o tem pasta/i);
+});
+
+// The project's folder is gone from this machine while its City is on screen (no reload: the window's
+// cached project list still names the folder). The folder is moved aside, so the project entry keeps
+// its path but nothing is there (projects.listProjects reports exists: false).
+When('the folder of the project {string} is gone from this machine', async ({ e2e }, name) => {
+  const project = projectOf(e2e, name);
+  const aside = `${project.folder}-gone-732`;
+  for (let attempt = 0; ; attempt += 1) {
+    try { fs.renameSync(project.folder, aside); break; } catch (e) {
+      if (attempt >= 10 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  expect(fs.existsSync(project.folder), `the folder of "${name}" is gone`).toBe(false);
+});
+
+Then('the city says the analysis failed with {string}, to clone the project again or to point its folder from the {string} tab', async ({ e2e }, reason, overview) => {
+  const note = visible(tab(e2e.window).getByTestId('project-city-analysis-error')).first();
+  await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(note).toHaveAttribute('role', 'alert');
+  await expect(note).toContainText(reason);
+  await expect(note, 'the reason is translated, not the English one').not.toContainText(/has no folder|nothing to analyse/i);
+  await expect(note, 'it says to clone the project again').toContainText(/clon/i);
+  await expect(note, `it says to point the folder from the "${overview}" tab`).toContainText(overview);
+});
+
+Then('the city\'s retry shows no cost estimate in US$', async ({ e2e }) => {
+  const note = visible(tab(e2e.window).getByTestId('project-city-analysis-error')).first();
+  await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(note).not.toContainText(/≈\s*US\$/);
+  await expect(note).not.toContainText(/US\$\s*\d/);
+});

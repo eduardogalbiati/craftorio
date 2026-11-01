@@ -673,3 +673,49 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the "Arquitetura" project tab
     Then the status badge of the finding "Billing module changes in every commit" reads "novo"
     And the status badge of the finding "Discount rule duplicated in the API and the export" reads "mantido"
+
+  # #732: "Analyze this project" on the City reads the project's own folder, not the window's cached
+  # project list. A project the wizard just imported (a local git repository with some code, its file://
+  # URL; the clone done, the analysis skipped, no reload) analyses at once instead of failing with "The
+  # project has no folder". The steps of the wizard are features/steps/onboarding.steps.js's.
+  @issue-732
+  Scenario: A project the wizard just imported is analysed from its City without a "no folder" error
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "city-732"
+    And I go to the next step of the wizard
+    Then the progress tray shows the project "city-732" as ready
+    When I skip the analysis for later
+    Then the wizard is on its "review" step
+    When I finish the wizard
+    Then the project page of "city-732" is open
+    When I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And no project map run has started
+    When I click "Analyze this project" on the city
+    Then the city shows no analysis error
+    And a project map run has started
+
+  # #732: a project whose folder is gone from this machine (moved aside while its City is on screen,
+  # no reload) says why in the interface language and what to do, with no cost estimate on a retry that
+  # cannot work. The saved report gives the action a real estimate (≈ US$ 0.42) before the click.
+  @issue-732
+  Scenario: In Português (Brasil) a project with no folder on this machine says so on its City, with what to do and no estimate
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Projetos" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Arquitetura" project tab
+    And I switch the Architecture tab to its City view
+    Then the Architecture tab shows the project city
+    And the city offers "Analisar este projeto" with a cost estimate in US$
+    When the folder of the project "billing-service" is gone from this machine
+    And I click "Analisar este projeto" on the city
+    Then the city says the analysis failed with "O projeto não tem pasta nesta máquina", to clone the project again or to point its folder from the "Visão geral" tab
+    And the city's retry shows no cost estimate in US$
