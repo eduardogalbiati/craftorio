@@ -164,9 +164,7 @@
   // ("locked while it runs") or ran. Next to it, what the chosen mode does.
   // #630: feature's toggle is its `validation` input (WorkflowInputs.modeInput)
   const modeIn = (x) => WorkflowInputs.modeInput(inputDefs(x), x.inputs);
-  const modeKey = (x) => modeIn(x).key;
   const modeOf = (x) => String(modeIn(x).value ?? modeIn(x).def?.default ?? '');
-  const modeContext = (x) => modeIn(x).context;
   function modeHtml(x, locked) {
     const { def, value: raw } = modeIn(x);
     const values = Array.isArray(def?.enum) ? def.enum.map(String) : raw != null ? [String(raw)] : [];
@@ -297,12 +295,12 @@
     // #287: a refused save keeps what the owner typed, not the stored values
     const x = kept?.id === raw.id ? { ...raw, inputs: kept.inputs, mock: kept.mock } : raw;
     const defs = inputDefs(x);
-    const key = modeKey(x);
+    const key = modeIn(x).key;
     const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
     for (const k of Object.keys(x.inputs || {})) if (k !== key && k !== 'mode' && !defs[k]) fields[k] = {};
     const grid = Object.keys(fields).length
       ? WorkflowInputs.formHtml(fields, {
-        values: x.inputs || {}, context: modeContext(x), autofocus: !adding,
+        values: x.inputs || {}, context: modeIn(x).context, autofocus: !adding,
         id: (k) => `rm-f-${x.id}-${k}`, attrs: (k) => `data-rm-field="${esc(k)}"`,
       })
       : `<p class="small muted">${t('backlog_roadmap.this_workflow_has_no_other_inputs')}</p>`;
@@ -316,7 +314,7 @@
       ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">${t('backlog_roadmap.agents')}${changed ? t('backlog_roadmap.changed_changed_for_this_run', { changed }) : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides, hideLegend: true })}</details>`
       : '';
     return `
-      <div class="rm-form" role="group" aria-label="${t('backlog_roadmap.edit_the_inputs_of_this_item')}"${WorkflowInputs.scopeAttrs(modeContext(x))}>
+      <div class="rm-form" role="group" aria-label="${t('backlog_roadmap.edit_the_inputs_of_this_item')}"${WorkflowInputs.scopeAttrs(modeIn(x).context)}>
         <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
         ${agents}
@@ -1153,11 +1151,11 @@
     if (!lost) return '';
     const x = lost.item;
     const defs = inputDefs(x);
-    const key = modeKey(x);
+    const key = modeIn(x).key;
     const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
     for (const k of Object.keys(x.inputs || {})) if (k !== key && k !== 'mode' && !defs[k]) fields[k] = {};
     const grid = Object.keys(fields).length
-      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: modeContext(x), id: (k) => `rm-lost-${k}` })
+      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: modeIn(x).context, id: (k) => `rm-lost-${k}` })
       : '';
     return `<div class="rm-conflict" role="alert" data-testid="roadmap-save-conflict">
       <p>${esc(lost.reason)}</p>
@@ -1756,9 +1754,8 @@
     const { s, n } = locate(stages, target);
     const item = stages[s]?.items[n];
     if (!item || !editable(item)) return 'handled';
-    item.inputs = { ...item.inputs, [modeKey(item)]: el.dataset.rmMode };
-    // #630: an old `mode: validated` gives way to the validation picked
-    if (modeIn(item).old) delete item.inputs.mode;
+    item.inputs = { ...item.inputs, [modeIn(item).key]: el.dataset.rmMode };
+    if (modeIn(item).old) delete item.inputs.mode; // #630: an old `mode: validated` gives way to the validation picked
     await save(ctx, r, stages, { label: t('backlog_roadmap.changed_the_mode_of_item', { item: numbers(item) }), quiet: true });
     return 'handled';
   }
