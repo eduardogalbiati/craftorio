@@ -96,7 +96,7 @@
         <div class="docs-item-main">
           <b class="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
           <span class="docs-item-meta muted small">
-            ${it.title ? `<span class="mono" title="docs/work/${esc(it.item)}">${esc(it.item)}</span>` : ''}
+            ${it.title ? `<span class="mono" title="${esc(`docs/work/${it.item}`)}">${esc(it.item)}</span>` : ''}
             <span class="badge" title="${t('docs.the_item_s_stage')}">${esc(it.stage || '')}</span>
             ${it.docs.map((d) => `<span class="docs-item-doc" title="${esc(d.file)}">${docLabel(d.doc)} ${statusBadge(d.status)}</span>`).join('')}
           </span>

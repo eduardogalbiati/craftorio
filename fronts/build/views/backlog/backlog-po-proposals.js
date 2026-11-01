@@ -179,7 +179,7 @@
     const action = done
       ? `<span class="badge live">${done.issues.map((i) => (i.number ? `#${i.number}` : esc(i.title))).join(' ')} ${t('backlog_po_proposals.done')}</span>`
       : `<button class="btn sm primary" type="button" data-spec-act="roadmap"${cov.ok ? act(ctx, k, 'roadmap') : ' disabled'} title="${cov.ok ? '' : t('backlog_po_proposals.every_mockup_needs_an_issue')}">${spin(k, 'roadmap')}${t('backlog_po_proposals.add_the_issues_to_the_roadmap')}</button>`;
-    return `<div class="po-sec" data-testid="po-spec-proposal"><div class="sup-h">${t('backlog_po_proposals.issues_from_the_spec')} <span class="mono small" title="docs/work/${esc(spec.item)}">${esc(spec.item)}</span></div>
+    return `<div class="po-sec" data-testid="po-spec-proposal"><div class="sup-h">${t('backlog_po_proposals.issues_from_the_spec')} <span class="mono small" title="${esc(`docs/work/${spec.item}`)}">${esc(spec.item)}</span></div>
         <ul class="po-list small">${spec.issues.map((i) => `<li class="po-split-title" title="${esc(i.title)}">${esc(i.title)}</li>`).join('')}</ul>
         <div class="po-mockup-coverage" data-testid="po-mockup-coverage"><div class="small muted">${t('backlog_po_proposals.mockup_coverage')}</div><ul class="po-list small">${rows}</ul></div>
         <div class="row po-group-actions">${action}${noteHtml(k)}</div>
