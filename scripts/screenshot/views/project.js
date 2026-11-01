@@ -36,6 +36,9 @@
 // (stale: commits since its run), two seeds never run and dependency-map with a tool (runs free); open
 // the result with --click "[data-testid=seed-open-churn-complexity]". --mode seeds-running and
 // seeds-error click Run on quality-gate-report (seeds:run never answers, or fails).
+// #732: --mode no-folder and city-no-folder: the project loses its folder once the tab drew, then
+// Analyze is clicked (the tab's button, or the City view's under "No city plan yet"): the translated
+// "no folder on this machine" message, with no estimate next to the retry.
 // #357: the Refactor tab (refactor) on the Architecture demo: five proposals ranked by the Product
 // Owner (one filed and planned, one done that left the Danger Zone, one not improved, one dismissed:
 // --click "[data-testid=refactor-filter-dismissed]"), the cadence on with "next in 4 runs". Its states,
@@ -404,6 +407,19 @@ async function showArchitecture({ mode, click, js, project, analysis, seedRun })
   if (mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
   // #376: "Show on the map" of release 1.1.2
   if (mode === 'city-release') await js(`ProjectCityRelease.showRelease(${pid}, { from: '1.1.1', to: '1.1.2' })`);
+  if (mode === 'no-folder' || mode === 'city-no-folder') await showNoFolder({ mode, click, js });
+}
+
+// #732: a project really without a folder on this machine (the page's project and the cached list
+// lose it after the tab drew): Analyze shows the translated message, with no estimate on the retry
+async function showNoFolder({ mode, click, js }) {
+  await js('state.pv.project.folder = null; (state.projects || []).forEach((p) => { p.folder = null; })');
+  if (mode === 'city-no-folder') {
+    await click('[data-testid="architecture-mode-city"]');
+    await click('[data-testid="project-city-analyze"]');
+  } else {
+    await click('[data-testid="architecture-analyze"]');
+  }
 }
 
 // #357: "Ask the Product Owner to prioritize" never answers (its state stays on screen) or fails
@@ -426,7 +442,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git', 'prioritizing', 'seeds', 'seeds-error', 'seeds-running'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'prioritizing', 'seeds', 'seeds-error', 'seeds-running'],
   open,
   run: true,
   seed,
