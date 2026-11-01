@@ -22,6 +22,8 @@ const RUNNER = [
   'packages/engine/engine/agent-test-report.js', 'packages/engine/engine/machine-slot.js', 'packages/engine/engine/test-timeouts.js', 'packages/engine/engine/affected-tests.js',
   // #553: the name of the list file's variable (TEST_FILES_ENV)
   'packages/engine/engine/suite-command-line.js',
+  // #695: affected-tests.js reads the tests' file reads and shares the comment remover
+  'packages/engine/engine/source-text.js', 'packages/engine/engine/test-reads.js',
 ];
 
 const PROBE = `const test = require('node:test');
