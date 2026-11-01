@@ -294,9 +294,13 @@ function childBody({ parent, child, index, total, headings = Language.issueHeadi
   const mine = child.tasks.map((k) => tasks[k - 1]).filter(Boolean);
   // #670: the child embeds its own mockups, not its siblings'
   const own = new Set(child.mockups || tasksMockups(parent.body, child.tasks));
-  const embedded = embeddedMockups(parent.body);
-  const body = String(parent.body || '').replace(/\r\n/g, '\n').split('\n')
-    .filter((l) => !embeddedMockups(l).some((m) => embedded.includes(m) && !own.has(m))).join('\n');
+  const foreign = (text) => embeddedMockups(text).some((m) => !own.has(m));
+  // a sibling's image or link leaves the line; a line left empty, or naming a sibling's file as a plain path, goes
+  const body = String(parent.body || '').replace(/\r\n/g, '\n').split('\n').flatMap((l) => {
+    if (!foreign(l)) return [l];
+    const kept = l.replace(/!?\[[^\]]*\]\([^)\s]+[^)]*\)/g, (m) => (foreign(m) ? '' : m)).replace(/[ \t]+$/, '');
+    return kept.trim() && !foreign(kept) ? [kept] : [];
+  }).join('\n');
   // the parent's headings one level down, under "## From #n"
   const context = parentContext(body).replace(/^(#{1,5})(?=\s)/gm, '$1#');
   return [
