@@ -304,12 +304,8 @@ function writeSettings(ws, patch) {
 // https://…, ssh://…, git@host:owner/repo(.git)
 const isGitUrl = (s) => /^(https?|ssh|git):\/\/\S+$/i.test(s || '') || /^[\w.-]+@[\w.-]+:\S+$/.test(s || '');
 
-function repoNameFromUrl(url) {
-  const clean = String(url).trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
-  const parts = clean.split(/[/:]/).filter(Boolean);
-  const name = parts.slice(-2).join('-') || 'repo'; // owner-repo avoids collisions between forks
-  return name.replace(/[^\w.-]/g, '_');
-}
+// the clone's folder name (owner-repo): the onboarding model's rule, shared with the wizard's step 2 (#669)
+const { repoNameFromUrl } = require('@multiagent/shared/onboarding-model');
 
 /**
  * Ensures a local copy of `url` in <workspace>/repos. If already cloned, only fetches.

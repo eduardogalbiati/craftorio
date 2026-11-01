@@ -21,8 +21,10 @@
 
 .wizard-body { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
 .wizard-body p { margin: 0; }
-.wizard-body h2 { margin: 0; font-size: 16px; }
+/* the step's title in sentence case, not the app's uppercase section h2 (mock-1, -2, -4) */
+.wizard-body h2 { margin: 0; font-size: 16px; font-weight: 700; text-transform: none; letter-spacing: normal; color: var(--text); }
 .wizard-body h3 { margin: 0; font-size: 14px; }
+.wizard-column > h3 { font-size: 16px; }
 .wizard-sources { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .wizard-source { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 20px; text-align: left; cursor: pointer; color: var(--text); font: inherit; font-size: 13px; border-width: 1px; }
 .wizard-source:hover:not([disabled]) { border-color: var(--muted); }
@@ -73,7 +75,9 @@
 .wizard-dot.job-failed { background: var(--red); }
 .wizard-dot.job-skipped { background: var(--muted); }
 .wizard-amount { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
-.wizard-cost-total-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-size: 12px; }
+.wizard-job-title { display: inline-flex; align-items: center; gap: 6px; }
+.wizard-job-title input { margin: 0; accent-color: var(--accent); }
+.card.wizard-cost-total-row { flex-direction: row; align-items: center; gap: 10px; padding: 10px 12px; font-size: 12px; text-align: left; }
 .wizard-cost-total-row > span:first-child { flex: 1; }
 .wizard-cost-total-row .wizard-amount { color: var(--text); font-size: 13px; }
 .wizard-workflows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -90,6 +94,8 @@
 .wizard-review-section h4 { margin: 4px 0 0; font-size: 12px; font-weight: 400; color: var(--muted); }
 .wizard-review-section p { margin: 0; font-size: 13px; }
 .wizard-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.wizard-chip { display: inline-flex; align-items: center; max-width: 100%; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--muted); }
+.wizard-chip.accent { border-color: var(--accent); color: var(--accent); font-size: 12px; }
 .wizard-city-bars { display: flex; align-items: flex-end; justify-content: center; gap: 8px; height: 120px; padding: 16px; border-radius: 8px; background: var(--panel-2); }
 .wizard-city-bar { width: 14px; border-radius: 2px; background: var(--accent); }
 .wizard-city-bar:nth-child(3n+1) { background: var(--red); }
@@ -104,6 +110,12 @@
 
 .wizard-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
 .wizard-spacer { flex: 1; }
+.card.wizard-clone-progress { flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px; font-size: 12px; min-width: 0; width: min(420px, 50%); }
+.wizard-bar { flex: 1; min-width: 60px; height: 6px; border-radius: 999px; background: var(--panel-2); position: relative; overflow: hidden; }
+.wizard-bar::after { content: ''; position: absolute; inset: 0 50% 0 0; border-radius: inherit; background: var(--accent); }
+.wizard-bar.job-done::after { right: 0; }
+.wizard-bar.job-failed::after { right: 0; background: var(--red); }
+.wizard-bar.job-waiting::after, .wizard-bar.job-skipped::after { right: 100%; }
 
 @media (max-width: 760px) {
   .wizard-sources, .wizard-columns, .wizard-review-grid, .wizard-review-more { grid-template-columns: minmax(0, 1fr); }

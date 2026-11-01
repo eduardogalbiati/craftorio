@@ -80,9 +80,12 @@ function nextStepsMarkup(pv) {
       ${line ? `<span class="muted small">${esc(t(line, { name: pv.project?.name || '' }))}</span>` : proposals()}
       <button type="button" class="btn sm" data-next-step="${step}"${later ? ' disabled aria-disabled="true"' : ''}>${esc(step === 'refactors' ? fileAndAddLabel(pv) : t(action))}</button>
     </li>`;
+  // mock-7's head: "<name> is ready", then "city and refactor backlog done" once the ranking made proposals
+  const ready = [t('onboarding.next_steps_ready', { name: pv.project?.name || '' })];
+  if (pv.nextStepProposals?.length) ready.push(t('onboarding.next_steps_done'));
   return `<section class="card pr-next-steps" data-testid="project-next-steps">
       <header class="pr-next-steps-head"><h3>${esc(t('onboarding.next_steps_title'))}</h3>
-        <span class="muted small pr-next-steps-ready">${esc(t('onboarding.next_steps_ready', { name: pv.project?.name || '' }))}</span>
+        <span class="muted small pr-next-steps-ready">${esc(ready.join(' · '))}</span>
         <button type="button" class="btn ghost sm" data-testid="next-steps-dismiss" data-next-steps-dismiss aria-label="${esc(t('onboarding.next_steps_dismiss'))}">×</button></header>
       <ul class="pr-next-steps-list">${PV_NEXT_STEPS.map(entry).join('')}</ul>
     </section>`;

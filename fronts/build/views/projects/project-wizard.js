@@ -153,6 +153,10 @@
     return `<span class="badge ${cli.status === 'ok' ? 'cli-ok' : 'cli-off'}">${esc(t(key, { cli: name }))}</span>`;
   }
 
+  // mock-2's line under the fields: where the engine clones the repository (its rule, OnboardingModel.repoNameFromUrl)
+  const cloneInto = () => (cur.model.repository.trim()
+    ? t('onboarding.clone_into', { folder: `<workspace>/repos/${M.repoNameFromUrl(cur.model.repository)}` }) : '');
+
   function repositoryStep() {
     const o = cur.onboarding;
     const locked = cur.projectId ? ' readonly' : '';
@@ -172,6 +176,7 @@
         <label class="wizard-field"><span>${esc(t('onboarding.name_label'))}</span>
           <input id="wizard-name" data-testid="wizard-name" type="text" value="${esc(cur.model.name)}"${locked}></label>
       </div>
+      <p class="mono muted small text-cut" id="wizard-clone-into" data-testid="wizard-clone-into">${esc(cloneInto())}</p>
       ${status}
       ${o?.status === 'failed' ? errorBlock(o) : ''}
       ${o ? cliWarning(o.cli) : ''}`;
@@ -190,9 +195,11 @@
     const row = (id) => {
       const s = jobs[id]?.status || 'waiting';
       const line = id === 'clone' ? cur.model.repository : t(`onboarding.job_${id}_text`);
+      // mock-4's pick of a paid analysis: both run in this phase (shown checked, disabled)
+      const pick = PAID.includes(id) ? `<input type="checkbox" checked disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
       return `<li class="wizard-job"${PAID.includes(id) ? ` data-part="${id}"` : ''}>
           <span class="wizard-dot job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
-          <span class="wizard-job-text"><strong>${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut" title="${esc(line)}">${esc(line)}</span></span>
+          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut" title="${esc(line)}">${esc(line)}</span></span>
           <span class="wizard-amount muted">${esc(amount(id))}</span>
         </li>`;
     };
@@ -314,9 +321,9 @@
     const where = [cur.model.repository, folder].filter(Boolean).join(' · ');
     const languages = [...new Set((cur.review.facts?.model?.files || []).map((f) => f.language).filter(Boolean))];
     const chips = [platformOfRepo(cur.model.repository)?.label, languages.join(', ')].filter(Boolean);
-    const how = chips.length ? `<div class="wizard-chips">${chips.map((c) => `<span class="badge">${esc(c)}</span>`).join('')}</div>`
+    const how = chips.length ? `<div class="wizard-chips">${chips.map((c) => `<span class="wizard-chip">${esc(c)}</span>`).join('')}</div>`
       : `<p class="muted small">${esc(t('onboarding.review_how_pending'))}</p>`;
-    const flows = M.suggestWorkflows(null).suggestions.map((s) => `<span class="badge mono" title="${esc(s.id)}">${esc(s.id)}</span>`).join('');
+    const flows = M.suggestWorkflows(null).suggestions.map((s) => `<span class="wizard-chip accent text-cut" title="${esc(s.id)}">${esc(s.id)}</span>`).join('');
     return `<section class="card wizard-review-section wizard-review-project">
         <h3 id="project-wizard-title" class="text-cut" title="${esc(name)}">${esc(name)}</h3>
         <span class="mono muted small text-cut" title="${esc(where)}">${esc(where)}</span>
@@ -348,6 +355,16 @@
 
   const BODY = { analysis: analysisStep, repository: repositoryStep, review: reviewStep, start: startStep };
 
+  // the analysis step's footer: "Cloning <name>", a bar and the clone job's status (mock-4)
+  function cloneProgress() {
+    const s = jobOf('clone').status || (CLONED.includes(cur.onboarding?.status) ? 'done' : 'running');
+    return `<div class="card wizard-clone-progress" data-testid="wizard-clone-progress">
+        <span class="text-cut" title="${esc(cur.model.name)}">${esc(t('onboarding.cloning_name', { name: cur.model.name }))}</span>
+        <span class="wizard-bar job-${esc(s)}" aria-hidden="true"></span>
+        <span class="badge job-${esc(s)}">${esc(t(`onboarding.job_status_${s}`))}</span>
+      </div>`;
+  }
+
   function render() {
     if (!root || !cur) return;
     const step = cur.model.step;
@@ -363,13 +380,16 @@
       : `<button type="button" class="btn" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
     // Finish never waits: not disabled by an analysis still running nor by a call in flight
     const finish = step === 'review' ? `<button type="button" class="btn primary" data-act="finish" data-testid="wizard-finish">${esc(t('onboarding.finish'))}</button>` : '';
+    // mock-4's footer: the clone's progress on the left, Back beside the step's action on the right
+    const foot = step === 'analysis' ? `${cloneProgress()}<span class="wizard-spacer"></span>${back}${next}${analyze}`
+      : `${back}<span class="wizard-spacer"></span>${next}${analyze}${finish}`;
     root.innerHTML = `<div class="wizard-panel wizard-at-${step}" tabindex="-1">
         <header class="wizard-head">
           ${stepper()}
           <button type="button" class="btn ghost wizard-close" data-act="close" data-testid="wizard-close" aria-label="${esc(t('common.close'))}">×</button>
         </header>
         <section class="wizard-body">${BODY[step]()}</section>
-        <footer class="wizard-foot" data-testid="wizard-footer">${back}<span class="wizard-spacer"></span>${next}${analyze}${finish}</footer>
+        <footer class="wizard-foot" data-testid="wizard-footer">${foot}</footer>
       </div>`;
   }
 
@@ -558,6 +578,8 @@
       b?.setAttribute?.('aria-pressed', String(on === id));
       b?.classList?.toggle?.('active', on === id);
     }
+    const into = document.getElementById('wizard-clone-into');
+    if (into) into.textContent = cloneInto();
     const nextBtn = document.getElementById('wizard-next');
     if (nextBtn) nextBtn.disabled = !canNext();
   }

@@ -10,7 +10,9 @@
 //   for { mode: 'local' | 'remote', ci: 'none' | 'release' | 'pr+release', tests: 'unit' | 'unit+e2e' };
 //   an empty or unknown profile gets the default workflow and defaulted: true;
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
-//   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0.
+//   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
+// - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
+//   cloneRepo and createProject, the wizard's "Will be cloned into" line, #669).
 // The reasons are English for now; the interface language comes with step 7 of the plan.
 // Browser: window.OnboardingModel; Node: module.exports (the tests).
 (function (root) {
@@ -83,6 +85,13 @@
     return { total, parts, unknown };
   }
 
+  function repoNameFromUrl(url) {
+    const clean = String(url).trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
+    const parts = clean.split(/[/:]/).filter(Boolean);
+    const name = parts.slice(-2).join('-') || 'repo'; // owner-repo avoids collisions between forks
+    return name.replace(/[^\w.-]/g, '_');
+  }
+
   const api = {
     DEFAULT,
     STEPS,
@@ -91,6 +100,7 @@
     costSummary,
     initialState,
     next,
+    repoNameFromUrl,
     skipAnalysis,
     suggestWorkflows,
   };
