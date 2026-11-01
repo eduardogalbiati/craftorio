@@ -54,5 +54,16 @@
     window.Actions.call('openProjectModal', null, { fromHeader: true });
   };
 
-  root.CurrentProject = { get: () => current, refresh, set };
+  // #671 the header's project, also before the app's start has listed the projects (a screen opened
+  // first, a seeded screenshot): the list read once, then the same choice as refresh()
+  async function resolve() {
+    if (current && projects.length) return current;
+    try {
+      const list = await api.listProjects();
+      if (!state.projects?.length) state.projects = list;
+      return refresh(list);
+    } catch { return current; }
+  }
+
+  root.CurrentProject = { get: () => current, refresh, resolve, set };
 })(typeof window !== 'undefined' ? window : globalThis);

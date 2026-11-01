@@ -15,21 +15,48 @@
 // spec offers Create epic and phase issues (its list row too: the Backlog's Product Owner proposes them
 // with their mockup coverage, #670) and Start the Build (the Roadmap): nothing is filed or started
 // before that click. A Discovery card's Write a document starts its writer here too (writeDocForCard, #649).
+// #671 the screens follow the spec's mockups (docs/work/write-doc/images/): the list rows show their
+// SDLC stage chain and the pill of their latest document, New item is a side panel (mock-1); the
+// editor has the item's six SDLC steps, the contents with each requirement, the toolbar (Edit / Diff /
+// Preview, EN / PT, Versions, Send to review) and the writer panel (Apply now or Queue, Attach image)
+// (living-doc, mock-2); each change by request is a versioned card whose detail holds Undo this change
+// and Mark reviewed (mock-3); the review shows its score, its rubric checks and the anchored notes with
+// Apply / Edit / Dismiss (mock-4); the approval gate is the sign-off panel (mock-5). Several writers
+// (AI Arena, phase 2) and Screens to capture first (captures, phase 3) are shown disabled. The New item
+// panel, the review and the sign-off markup live in docs-panels.js (DocsPanels); the Diff tab's page of a
+// change (its touched sections, docs:read-at) in docs-diff.js (DocsDiff); the sections with their
+// anchors and the reader's page in docs-page.js (DocsPage).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
-// errMsg, openModal, closeModal, showToast, showView), markdownHtml (artifact-render.js), DocModel
-// (packages/shared/doc-model.js), CurrentProject and AgentChat.
+// errMsg, openModal, closeModal, showToast, showView, confirmDialog), markdownHtml (artifact-render.js),
+// DocModel (packages/shared/doc-model.js), CurrentProject and AgentChat.
 (() => {
   const FILE = 'write-doc.yaml';
   const slugOf = (title) => String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100);
   // the status past the SDLC gate (DocModel.ACCEPTED), read when drawn: the module may load later
   const acceptedStatus = (doc) => window.DocModel?.ACCEPTED?.[doc];
 
+  // #671 the SDLC steps of an item (living-doc.jpg), each with its document; Plan and Design are written here
+  const SDLC = [
+    { name: () => t('docs.step_plan'), doc: 'intent', file: 'intent.md' },
+    { name: () => t('docs.step_design'), doc: 'spec', file: 'spec.md' },
+    { name: () => t('docs.step_build'), doc: null, file: 'plan.md' },
+    { name: () => t('docs.step_test'), doc: null, file: 'test.md' },
+    { name: () => t('docs.step_deploy'), doc: null, file: 'deploy.md' },
+    { name: () => t('docs.step_maintain'), doc: null, file: 'maintain.md' },
+  ];
+  // an item's front matter `stage` (or its latest document) → its SDLC step
+  const STAGE_STEP = { intent: 0, spec: 1, design: 1, build: 2, test: 3, deploy: 4, maintain: 5 };
+  const stepOfDoc = (doc) => SDLC.findIndex((s) => s.doc === doc);
+  // the spec's cost estimates of a first draft (spec.md, Points of attention › Cost)
+  const ESTIMATES = { intent: '$0.30–1.00', spec: '$1.00–3.00' };
+
   // open: the document in the editor { item, doc, data (docs:read), runId, base (the commit the
   // run started from, docs:changes'), gate (the run's waiting approval.requested), changes,
-  // unreviewed, notes (the reviewer's), messages, selection, requesting (a request in flight) }
+  // unreviewed, notes and checks (the reviewer's), messages, selection, requesting (a request in
+  // flight), tab (edit | diff | preview), lang (en | pt), source (the markdown shown), mode (now |
+  // queue), queue (the queued requests), pendingNotes (applied at the next edit gate), changeOpen }
   const docs = { projectId: null, items: [], seq: 0, open: null, chat: null, busy: false, early: [] };
 
-  const docLabel = (doc) => (doc === 'spec' ? t('docs.spec') : t('docs.intent'));
   function statusLabel(status) {
     if (status === 'accepted') return t('docs.status_accepted');
     if (status === 'signed off') return t('docs.status_signed_off');
@@ -40,11 +67,16 @@
   const projectFolder = () => (state.projects || []).find((p) => p.id === docs.projectId)?.folder || null;
   const listError = (msg) => { $('#docs-list-error').textContent = msg || ''; };
   const editorError = (msg) => { const p = $('#docs-editor-error'); if (p) p.textContent = msg || ''; };
+  const fileName = (path) => String(path || '').split('/').pop();
+  const docFile = (doc) => SDLC[stepOfDoc(doc)]?.file || `${doc}.md`;
+
+  // #671 the header's project, also before the app's start has listed the projects
+  const currentProjectId = async () => (await (window.CurrentProject?.resolve?.() ?? window.CurrentProject?.get?.())) || null;
 
   // ---- the list ---------------------------------------------------------------------------------
   async function refresh() {
     const seq = ++docs.seq;
-    docs.projectId = window.CurrentProject?.get() || null;
+    docs.projectId = await currentProjectId();
     let items = [];
     let error = '';
     if (docs.projectId) {
@@ -72,6 +104,27 @@
   // a spec's front matter writes its status `signed off` or `signed-off`
   const signedOff = (status) => String(status || '').replace(/-/g, ' ') === acceptedStatus('spec');
 
+  // #671 the stage chain of a row, "Plan ✓ · Design": the steps up to the item's, done ones checked
+  function stagesHtml(it) {
+    const latest = it.docs[it.docs.length - 1];
+    const at = STAGE_STEP[it.stage] ?? Math.max(0, stepOfDoc(latest?.doc));
+    const current = it.docs.find((d) => d.doc === SDLC[at].doc);
+    const done = (i) => i < at || (i === at && !!current && (current.status === acceptedStatus(current.doc) || signedOff(current.status)));
+    return SDLC.slice(0, at + 1).map((s, i) => `<span class="docs-stage${done(i) ? ' done' : ''}">${s.name()}${done(i) ? ' ✓' : ''}</span>`).join('<span class="docs-sep">·</span>'); // i18n-ignore
+  }
+
+  // #671 the pill of the latest document: "<file> · <state>", "editing" while a writer run has it
+  function pillHtml(it) {
+    const latest = it.docs[it.docs.length - 1];
+    const editing = it.runId && it.runDoc;
+    const doc = editing ? it.runDoc : latest?.doc;
+    if (!doc) return '';
+    const status = editing ? null : latest.status;
+    const tone = editing ? ' editing' : status === 'draft' ? '' : ' done';
+    const file = editing ? docFile(doc) : fileName(latest.file) || docFile(doc);
+    return `<span class="docs-pill${tone}" data-testid="docs-item-pill" title="${esc(latest?.file || file)}">${esc(file)} · ${editing ? t('docs.pill_editing') : statusLabel(status).toLowerCase()}</span>`; // i18n-ignore
+  }
+
   // #670: the Product Owner proposes the epic and one issue per phase of a signed-off spec, each
   // screen task with its mockup, and checks that every mockup in scope has an issue (the Backlog's drawer)
   async function proposeIssues(item) {
@@ -93,14 +146,12 @@
     }
     box.innerHTML = docs.items.map((it) => `
       <div class="docs-item" data-testid="docs-item" data-item="${esc(it.item)}">
-        <div class="docs-item-main">
-          <b class="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
-          <span class="docs-item-meta muted small">
-            ${it.title ? `<span class="mono" title="${esc(`docs/work/${it.item}`)}">${esc(it.item)}</span>` : ''}
-            <span class="badge" title="${t('docs.the_item_s_stage')}">${esc(it.stage || '')}</span>
-            ${it.docs.map((d) => `<span class="docs-item-doc" title="${esc(d.file)}">${docLabel(d.doc)} ${statusBadge(d.status)}</span>`).join('')}
-          </span>
+        <div class="docs-item-main" title="${esc(`docs/work/${it.item}/`)}">
+          <b class="docs-item-title">${esc(it.title || it.item)}</b>
+          <span class="docs-sep muted">·</span>
+          <span class="docs-item-stages muted" data-testid="docs-item-stages">${stagesHtml(it)}</span>
         </div>
+        ${pillHtml(it)}
         <div class="row docs-item-actions">${itemActions(it)}</div>
       </div>`).join('');
   }
@@ -115,23 +166,34 @@
     return undefined;
   }
 
-  // ---- New item ---------------------------------------------------------------------------------
+  // ---- New item (#671: the side panel of mock-1) -------------------------------------------------
+  const estimateText = (doc) => t('docs.estimate', { cost: ESTIMATES[doc] || ESTIMATES.intent });
+
   function openNewItem() {
     $('#docs-new-title').value = '';
+    $('#docs-new-starts').value = 'intent';
+    $('#docs-new-estimate').textContent = estimateText('intent');
     $('#docs-new-error').textContent = '';
-    openModal('#docs-new-modal');
+    $('#docs-new-panel').classList.remove('hidden');
+    $('#docs-list-area').classList.add('docs-with-panel');
     $('#docs-new-title').focus({ preventScroll: true });
+  }
+
+  function closeNewItem() {
+    $('#docs-new-panel').classList.add('hidden');
+    $('#docs-list-area').classList.remove('docs-with-panel');
   }
 
   async function submitNewItem(e) {
     e.preventDefault();
     const title = String($('#docs-new-title').value || '').trim();
+    const doc = $('#docs-new-starts').value === 'spec' ? 'spec' : 'intent';
     const item = slugOf(title);
     if (!docs.projectId) { $('#docs-new-error').textContent = t('docs.choose_a_project_in_the_header'); return; }
     if (!item) { $('#docs-new-error').textContent = t('docs.give_the_item_a_title'); return; }
     if (docs.items.some((it) => it.item === item)) { $('#docs-new-error').textContent = t('docs.an_item_with_this_name_exists', { item }); return; }
-    closeModal('#docs-new-modal');
-    await startDoc(item, 'intent', title);
+    closeNewItem();
+    await startDoc(item, doc, title);
   }
 
   // A new document: the write-doc run that creates its skeleton in the run's worktree (the service, at
@@ -184,8 +246,14 @@
   // ---- the editor ---------------------------------------------------------------------------------
   // runId: the write-doc run in progress on this document (the list's), its waiting gate found again
   async function openDoc(item, doc, runId, { creating = false, projectId = null } = {}) {
-    docs.projectId = projectId || window.CurrentProject?.get() || docs.projectId;
-    docs.open = { item, doc, data: null, runId: runId || null, creating, base: null, gate: null, changes: [], unreviewed: [], notes: [], messages: [], selection: null, problems: [] };
+    docs.projectId = projectId || (await currentProjectId()) || docs.projectId;
+    // opened before the list was read (DocsActions); the writer panel drawn in the saved language
+    if (!docs.items.length && docs.projectId) docs.items = (await api.listDocItems(docs.projectId).catch(() => [])) || [];
+    if (!docs.chat) mountChat();
+    docs.open = {
+      item, doc, data: null, runId: runId || null, creating, base: null, gate: null, changes: [], unreviewed: [], notes: [], checks: [], messages: [], selection: null, problems: [],
+      tab: 'edit', lang: 'en', source: false, mode: 'now', queue: [], pendingNotes: [], changeOpen: null, lastAnchor: null,
+    };
     $('#docs-list-area').classList.add('hidden');
     $('#docs-editor-area').classList.remove('hidden');
     $('#docs-editor').dataset.stage = doc;
@@ -231,59 +299,131 @@
       o.changes = ch.changes || [];
       o.unreviewed = ch.unreviewed || [];
       o.base = o.base || ch.base || null;
+      if (!o.data?.translation && o.lang === 'pt') o.lang = 'en';
     } catch (e) { editorError(errMsg(e)); }
     renderEditor();
   }
 
+  // the changes still in the document, oldest first; the draft is v1, each request the next version
+  const liveChanges = (o) => o.changes.filter((c) => !c.undone);
+  const versionOf = (o) => liveChanges(o).length + 1;
+  const stepName = (doc) => SDLC[stepOfDoc(doc)]?.name() || '';
+
   function renderEditor() {
     const o = docs.open;
     if (!o) return;
-    const status = o.data?.status || 'draft';
-    $('#docs-editor-head').innerHTML = `
-      <button type="button" class="btn sm ghost" data-docs-back>${t('docs.back_to_the_list')}</button>
-      <h2 class="docs-editor-title" title="${esc(o.data?.source?.file || '')}">${esc(o.item)} <span class="muted">· ${docLabel(o.doc)}</span></h2>
-      ${statusBadge(status, 'doc-status')}
-      <span class="mono muted small" title="${esc(o.data?.source?.file || '')}">${esc(o.data?.source?.file || '')}</span>`;
+    renderHead();
+    renderToc();
+    renderToolbar();
     renderReader();
     renderChip();
+    renderQueue();
     renderChanges();
     renderNotes();
     renderGate();
   }
 
-  // The reader's page: the body's blocks as siblings, each with data-src="<start>-<end>" (its lines in
-  // the source), headings without their #; no script runs in it (sandbox without allow-scripts).
-  function readerHtml(md) {
-    const rows = String(md || '').split('\n');
-    const body = (window.DocModel ? window.DocModel.blocks(md || '') : []).map((b) => {
-      const src = `${b.start}-${b.end}`;
-      if (b.heading !== null) {
-        const level = Math.min(6, (rows[b.start - 1].match(/^#+/) || ['##'])[0].length);
-        return `<h${level} data-src="${src}">${esc(b.heading)}</h${level}>`;
-      }
-      const text = rows.slice(b.start - 1, b.end).join('\n');
-      return `<div class="blk" data-src="${src}">${typeof markdownHtml === 'function' ? markdownHtml(text) : esc(text)}</div>`;
-    }).join('\n');
-    let css = '';
-    try {
-      const v = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-      css = `body{background:${v('--panel')};color:${v('--text')};font:13px/1.55 system-ui,sans-serif;margin:16px 20px;max-width:760px}h1,h2,h3{margin:18px 0 6px}.blk>*{margin:0 0 8px}code{font-family:${v('--mono')}}::selection{background:${v('--accent')};color:${v('--bg')}}`; // i18n-ignore
-    } catch { /* the default look */ }
-    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><style>${css}</style></head><body>${body}</body></html>`; // i18n-ignore
+  // #671 the title bar (mock-2) and the item's SDLC steps (living-doc.jpg)
+  function renderHead() {
+    const o = docs.open;
+    const status = o.data?.status || 'draft';
+    const it = docs.items.find((i) => i.item === o.item);
+    const title = it?.title || o.title || o.item;
+    const current = stepOfDoc(o.doc);
+    const has = (doc) => doc && (it?.docs || []).some((d) => d.doc === doc);
+    const steps = SDLC.map((s, i) => {
+      const cur = i === current;
+      const name = `<span class="docs-step-num">${i + 1}</span><span class="docs-step-text"><b>${s.name()}</b><span class="mono small">${s.file}</span></span>${cur ? statusBadge(status, 'doc-status') : ''}`;
+      const inner = !cur && has(s.doc) ? `<button type="button" class="docs-step-open" data-docs-step-open="${s.doc}">${name}</button>` : name;
+      return `<li class="docs-step${cur ? ' current' : ''}${i < current ? ' done' : ''}" data-testid="doc-step"${cur ? ' aria-current="step"' : ''}>${inner}</li>`;
+    }).join('<li class="docs-step-arrow" aria-hidden="true">→</li>'); // i18n-ignore
+    const version = `${esc(docFile(o.doc))} · v${versionOf(o)}${o.gate?.edit ? ` · ${t('docs.pill_editing')}` : ''}`; // i18n-ignore
+    const folder = `docs/work/${o.item}/`; // i18n-ignore
+    $('#docs-editor-head').innerHTML = `
+      <div class="docs-titlebar" data-testid="doc-titlebar">
+        <button type="button" class="btn sm ghost docs-back" data-docs-back aria-label="${t('docs.back_to_the_list')}" title="${t('docs.back_to_the_list')}">←</button>
+        <span class="docs-titlebar-text" title="${esc(title)}">${t('docs.documents')} · ${esc(title)}</span>
+        <span class="mono muted small docs-version" data-testid="doc-version" title="${esc(o.data?.source?.file || '')}">${version}</span>
+      </div>
+      <div class="docs-itemhead">
+        <div class="docs-itemhead-name">
+          <b title="${esc(title)}">${esc(title)}</b>
+          <span class="mono muted small" title="${esc(folder)}">${esc(folder)}</span>
+        </div>
+        <ol class="docs-stepper" data-testid="doc-stepper">${steps}</ol>
+      </div>`; // i18n-ignore
   }
 
+  // the markdown shown in the reader and the contents: the source or, in PT, its translation
+  const shownMarkdown = (o) => (o.lang === 'pt' && o.data?.translation ? o.data.translation.markdown : o.data?.source?.markdown) || '';
+  // the sections of the document with their anchors (docs-page.js)
+  const outline = (md, doc) => DocsPage.outline(md, doc);
+
+  // a review note's anchor ("costs", "#spec-r2") matches a section's id, key or slug
+  const noteKey = (anchor) => String(anchor || '').replace(/^#/, '');
+  const matchesNote = (sec, doc, anchor) => {
+    const a = noteKey(anchor);
+    return a === sec.id || a === sec.key || a === sec.slug || `${doc}-${a}` === sec.id;
+  };
+
+  // #671 the contents (living-doc.jpg): the headings, each requirement as a sub-entry, the markdown
+  // source last; a dot marks the section of the last change and the ones with a review note
+  function renderToc() {
+    const o = docs.open;
+    const box = $('#docs-toc-box');
+    if (!box) return;
+    const list = outline(shownMarkdown(o), o.doc);
+    const entry = (s) => {
+      const note = o.notes.some((n) => matchesNote(s, o.doc, n.anchor));
+      const cls = [s.label ? 'sub' : `h${s.level}`, o.lastAnchor === s.id ? 'changed' : '', note ? 'noted' : ''].filter(Boolean).join(' ');
+      return `<li><button type="button" class="docs-toc-entry ${cls}" data-docs-toc="${esc(s.id)}" title="${esc(s.text)}">${esc(s.text)}</button></li>`;
+    };
+    box.innerHTML = `
+      <nav class="docs-toc" data-testid="doc-toc" aria-label="${t('docs.contents')}">
+        <p class="docs-kicker">${stepName(o.doc)} · ${esc(docFile(o.doc))}</p>
+        <ul class="docs-toc-list">${list.map(entry).join('')}<li><button type="button" class="docs-toc-entry${o.source ? ' active' : ''}" data-docs-toc="source" aria-pressed="${o.source}">${t('docs.markdown_source')}</button></li></ul>
+      </nav>
+      <div class="docs-toc-legend muted small" data-testid="doc-toc-legend">
+        <span><i class="docs-dot changed" aria-hidden="true"></i>${t('docs.changed_in_version', { version: versionOf(o) })}</span>
+        <span><i class="docs-dot noted" aria-hidden="true"></i>${t('docs.has_a_review_note')}</span>
+      </div>`; // i18n-ignore
+  }
+
+  // #671 the toolbar of mock-2: the view tabs, the language, Versions and Send to review (the edit gate)
+  function renderToolbar() {
+    const o = docs.open;
+    const box = $('#docs-toolbar-box');
+    if (!o || !box) return;
+    const g = o.gate;
+    const wait = o.requesting || o.answering ? ' disabled' : '';
+    const tab = (id, label) => `<button type="button" role="tab" class="${o.tab === id ? 'active' : ''}" aria-selected="${o.tab === id}" data-docs-tab="${id}">${label}</button>`;
+    const lang = (id, label, off) => `<button type="button" class="${o.lang === id ? 'active' : ''}" aria-pressed="${o.lang === id}" data-testid="doc-lang-${id}" data-docs-lang="${id}"${off ? ' disabled' : ''}>${label}</button>`;
+    box.innerHTML = `
+      <div class="docs-toolbar" data-testid="doc-toolbar">
+        <div class="seg sm" role="tablist" aria-label="${t('docs.view')}">${tab('edit', t('docs.edit'))}${tab('diff', t('docs.diff'))}${tab('preview', t('docs.preview'))}</div>
+        <div class="seg sm" role="group" aria-label="${t('docs.language')}">${lang('en', 'EN', false)}${lang('pt', 'PT', !o.data?.translation)}</div>
+        <span class="spacer"></span>
+        <button type="button" class="btn sm ghost" data-testid="doc-versions" data-docs-tab="diff" title="${t('docs.versions_help')}">${t('docs.versions')}</button>
+        ${g?.edit ? `<button type="button" class="btn sm primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait}>${t('docs.send_to_review')}</button>` : ''}
+      </div>`; // i18n-ignore
+    $('#docs-editor-body')?.classList.toggle('docs-mode-diff', o.tab === 'diff');
+  }
+
+  // the reader's page (docs-page.js), in a sandboxed iframe without scripts
   function renderReader() {
     const frame = $('#docs-reader');
-    if (!frame) return;
-    frame.srcdoc = readerHtml(docs.open?.data?.source?.markdown);
+    const o = docs.open;
+    if (!frame || !o) return;
+    frame.srcdoc = DocsPage.html(shownMarkdown(o), { doc: o.doc, kicker: `${stepName(o.doc)} · ${docFile(o.doc)} · v${versionOf(o)}`, preview: o.tab === 'preview', source: o.source }); // i18n-ignore
   }
 
-  // A selection on the page: the block it starts in (its data-src) and its text, for the chip.
+  // A selection on the page: the block it starts in (its data-src) and its text, for the chip. Only
+  // the English source in the Edit tab maps back to the lines a request replaces.
   function onReaderSelect() {
     const o = docs.open;
     const doc = $('#docs-reader')?.contentDocument;
     const sel = doc?.getSelection?.();
-    if (!o?.data || !sel || sel.isCollapsed) return;
+    if (!o?.data || !sel || sel.isCollapsed || o.tab !== 'edit' || o.lang !== 'en' || o.source) return;
     const node = sel.getRangeAt(0).startContainer;
     const block = (node.nodeType === 1 ? node : node.parentElement)?.closest('[data-src]');
     if (!block) return;
@@ -302,18 +442,26 @@
     const box = $('#docs-chip');
     const s = docs.open?.selection;
     if (!box) return;
-    box.innerHTML = s ? `
+    box.innerHTML = `<span class="muted small docs-chip-label">${t('docs.selected')}</span>${s ? `
       <span class="docs-chip" data-testid="doc-selection-chip" title="${esc(s.text)}">
         <span class="badge">${esc(s.title || t('docs.selection'))}</span>
         <span class="docs-chip-text">${esc(s.text)}</span>
         <button type="button" class="docs-chip-x" data-docs-unselect aria-label="${t('docs.clear_the_selection')}">×</button>
-      </span>` : `<p class="muted small">${t('docs.select_a_passage_on_the_page')}</p>`;
+      </span>` : `<p class="muted small">${t('docs.select_a_passage_on_the_page')}</p>`}`;
   }
 
   // One request: a writer turn of the edit gate with the selection payload, its answer swapped into
-  // both files as one commit.
+  // both files as one commit. #671: in Queue mode the request waits in the queue instead.
   async function sendRequest(text, attachments) {
     const o = docs.open;
+    if (o?.mode === 'queue') {
+      if (!o.selection) return { ok: false, error: t('docs.select_a_passage_first') };
+      o.queue = [...o.queue, { text, selection: o.selection, attachments: attachments || [] }];
+      o.selection = null;
+      renderChip();
+      renderQueue();
+      return { messages: o.messages };
+    }
     if (!o?.gate?.edit || !o.runId) return { ok: false, error: t('docs.the_writer_is_not_waiting') };
     if (!o.selection) return { ok: false, error: t('docs.select_a_passage_first') };
     const payload = window.DocModel.selectionPayload({ selection: o.selection, source: o.data.source, translation: o.data.translation });
@@ -338,6 +486,8 @@
       if (docs.open !== o) return { messages: o.messages };
       o.problems = done.problems || [];
       o.selection = null;
+      o.lastAnchor = payload.anchor || null;
+      o.changeOpen = null;
       o.messages = [...o.messages, { role: 'agent', text: out.reply || turn.text || '', ts: new Date().toISOString() }];
       o.requesting = false;
       await reload();
@@ -364,29 +514,115 @@
     return out;
   }
 
-  // ---- the changes by request ---------------------------------------------------------------------
+  // ---- #671 the writer panel's queue and controls (mock-2) ---------------------------------------
+  function renderQueue() {
+    const o = docs.open;
+    const box = $('#docs-queue');
+    if (!o || !box) return;
+    const canApply = !!(o.gate?.edit && o.runId && !o.requesting && !o.answering);
+    box.innerHTML = o.queue.length ? `
+      <div class="docs-queue-head"><span class="small muted">${t('docs.queued_requests', { count: o.queue.length })}</span>
+        <button type="button" class="btn sm ghost" data-docs-queue-apply${canApply ? '' : ' disabled'}>${t('docs.apply_queued')}</button></div>
+      <ul class="docs-queue-list">${o.queue.map((q, i) => `
+        <li><span class="docs-queue-text" title="${esc(q.text)}">“${esc(q.text)}”</span>
+          ${q.error ? `<span class="error small docs-queue-error" title="${esc(q.error)}">${esc(q.error)}</span>` : ''}
+          <button type="button" class="docs-chip-x" data-docs-queue-remove="${i}" aria-label="${t('docs.remove_from_queue')}">×</button></li>`).join('')}</ul>` : ''; // i18n-ignore
+    syncMode();
+  }
+
+  // the Apply now / Queue toggle's state
+  function syncMode() {
+    const o = docs.open;
+    const now = $('#docs-mode-now');
+    const queue = $('#docs-mode-queue');
+    if (!o || !now || !queue) return;
+    now.classList.toggle('active', o.mode === 'now');
+    queue.classList.toggle('active', o.mode === 'queue');
+    now.setAttribute('aria-pressed', String(o.mode === 'now'));
+    queue.setAttribute('aria-pressed', String(o.mode === 'queue'));
+  }
+
+  // A request sent without the text box (a queued one, a review note), drawn in the writer's chat;
+  // its answer ({ ok: false, error } on a failure) says whether it was applied
+  async function sendFromView(text, attachments) {
+    const o = docs.open;
+    docs.chat?.update?.({ busy: true });
+    const res = await sendRequest(text, attachments);
+    docs.chat?.update?.({ busy: false, messages: o.messages, error: res?.ok === false ? res.error : '' });
+    return res;
+  }
+
+  // The queued requests sent one by one, from the end of the document up, so that each request's
+  // lines are still where its selection found them; one that fails stays queued with its error
+  async function applyQueue() {
+    const o = docs.open;
+    if (!o?.gate?.edit) return;
+    o.mode = 'now';
+    const start = (q) => Number(String(q.selection?.src || '0').split('-')[0]);
+    const list = [...o.queue].sort((a, b) => start(b) - start(a));
+    for (const q of list) {
+      if (docs.open !== o || !o.gate?.edit) break;
+      o.selection = q.selection;
+      const res = await sendFromView(q.text, q.attachments);
+      if (res?.ok === false) q.error = res.error;
+      else o.queue = o.queue.filter((x) => x !== q);
+    }
+    o.selection = null;
+    renderChip();
+    renderQueue();
+  }
+
+  function attachImages(files) {
+    for (const file of [...(files || [])]) {
+      const r = new FileReader();
+      r.onload = () => docs.chat?.addAttachment({ name: file.name || 'image.png', type: file.type, size: file.size, dataUrl: r.result });
+      r.readAsDataURL(file);
+    }
+  }
+
+  // ---- the changes by request (#671: mock-3) -----------------------------------------------------
+  // the change whose page is open: the one clicked, else the newest unreviewed one, else the newest
+  function openChange(o) {
+    const list = liveChanges(o);
+    return list.find((c) => c.commit === o.changeOpen) || [...list].reverse().find((c) => o.unreviewed.includes(c.commit)) || list[list.length - 1] || null;
+  }
+
   function renderChanges() {
     const o = docs.open;
     const box = $('#docs-changes');
     if (!o || !box) return;
-    const list = o.changes.filter((c) => !c.undone);
-    const pending = list.filter((c) => o.unreviewed.includes(c.commit)).length;
-    box.innerHTML = `
-      <div class="docs-section-head">
-        <h3>${t('docs.changes_by_request')}</h3>
-        <span class="badge${pending ? ' warn' : ''}" data-testid="doc-unreviewed-count">${t('docs.unreviewed_count', { count: pending })}</span>
-      </div>
-      ${list.length ? `<ol class="docs-change-list">${list.map((c) => {
-    const open = o.unreviewed.includes(c.commit);
-    return `
-        <li class="docs-change${open ? ' unreviewed' : ''}" data-testid="doc-change">
-          <span class="docs-change-text" title="${esc(c.subject)}">${esc(c.subject)}</span>
-          <span class="mono muted small" title="${esc(c.commit)}">${esc(String(c.commit).slice(0, 8))}</span>
-          ${open ? `<button type="button" class="btn sm ghost" data-testid="doc-mark-reviewed" data-docs-reviewed="${esc(c.commit)}">${t('docs.mark_reviewed')}</button>` : ''}
-          ${o.runId ? `<button type="button" class="btn sm ghost danger" data-testid="doc-undo-change" data-docs-undo="${esc(c.commit)}" aria-label="${t('docs.undo_this_change')}" title="${t('docs.undo_this_change')}">${t('common.undo')}</button>` : ''}
-        </li>`;
-  }).join('')}</ol>` : `<p class="muted small">${t('docs.no_change_yet')}</p>`}
-      ${o.problems.length ? `<p class="small muted" title="${esc(o.problems.join('\n'))}">${t('docs.lint_problems_count', { count: o.problems.length })}</p>` : ''}`;
+    box.innerHTML = DocsDiff.cards({ list: liveChanges(o), open: openChange(o), unreviewed: o.unreviewed, problems: o.problems });
+    renderDiff();
+  }
+
+  // The Diff tab's page (mock-3): the open change's head and actions, the sections it touched (read
+  // at the change and its parent, docs:read-at, once per change) and the footnote
+  function renderDiff() {
+    const o = docs.open;
+    const box = $('#docs-diff');
+    if (!o || !box) return;
+    const c = openChange(o);
+    if (!c) { box.innerHTML = `<p class="muted small">${t('docs.no_change_yet')}</p>`; return; }
+    o.diffs = o.diffs || {};
+    if (o.tab === 'diff' && !o.diffs[c.commit] && api.readDocAt) {
+      o.diffs[c.commit] = { loading: true };
+      api.readDocAt(docs.projectId, o.item, o.doc, c.commit, o.runId).then(
+        (r) => ({ sections: DocsDiff.compare(r.before, r.after) }),
+        (e) => ({ error: errMsg(e) }),
+      ).then((d) => { o.diffs[c.commit] = d; if (docs.open === o) renderDiff(); });
+    }
+    const v = liveChanges(o).indexOf(c) + 2;
+    box.innerHTML = DocsDiff.panel({
+      doc: o.doc,
+      from: v - 1,
+      to: v,
+      file: fileName((c.files || []).find((f) => /\.md$/.test(f) && !/\.pt-BR\.md$/.test(f)) || docFile(o.doc)),
+      subject: c.subject,
+      commit: c.commit,
+      canUndo: !!o.runId,
+      unreviewed: o.unreviewed.includes(c.commit),
+      diff: o.diffs[c.commit],
+    });
   }
 
   async function undoChange(commit) {
@@ -394,6 +630,7 @@
     const change = o.changes.find((c) => c.commit === commit);
     try {
       await api.undoDocChange(docs.projectId, commit, o.runId);
+      o.changeOpen = null;
       await reload();
       showToast(t('docs.change_undone'), change?.subject || '');
     } catch (e) { editorError(errMsg(e)); }
@@ -405,23 +642,94 @@
     try { await api.markDocReviewed(o.runId, commit); await reload(); } catch (e) { editorError(errMsg(e)); }
   }
 
-  // the reviewer's notes, each anchored to its section
+  // ---- the review (#671: mock-4) -------------------------------------------------------------------
+  // the reviewer's score, its rubric checks and its notes, each anchored to its section
   function renderNotes() {
     const o = docs.open;
     const box = $('#docs-notes');
     if (!o || !box) return;
-    box.classList.toggle('hidden', !o.notes.length);
-    box.innerHTML = o.notes.length ? `
-      <div class="docs-section-head"><h3>${t('docs.review_notes')}</h3>${o.score !== undefined ? `<span class="badge">${esc(o.score)}/10</span>` : ''}</div>
-      <ul class="docs-note-list">${o.notes.map((n) => `
-        <li class="docs-note" data-testid="doc-review-note" data-anchor="${esc(n.anchor)}">
-          <span class="badge${n.severity === 'major' ? ' warn' : ''}">${n.severity === 'major' ? t('docs.major') : t('docs.minor')}</span>
-          <span class="mono small">${esc(n.anchor)}</span>
-          <span class="docs-note-text">${esc(n.text)}</span>
-        </li>`).join('')}</ul>` : '';
+    const html = DocsPanels.review({ score: o.score, checks: o.checks, notes: o.notes, key: noteKey, canApply: !!o.runId });
+    box.classList.toggle('hidden', !html);
+    box.innerHTML = html;
+  }
+
+  // the selection a review note points to: the first block of its section, its quote when it is there
+  function noteSelection(n) {
+    const o = docs.open;
+    const md = o?.data?.source?.markdown;
+    const sec = outline(md || '', o?.doc).find((s) => matchesNote(s, o.doc, n.anchor));
+    if (!sec) return null;
+    const b = sec.blocks.find((x) => x.heading === null) || sec.first;
+    const text = md.split('\n').slice(b.start - 1, b.end).join('\n');
+    return { file: o.data.source.file, src: `${b.start}-${b.end}`, text: n.quote && text.includes(n.quote) ? n.quote : text, title: sec.title || sec.text };
+  }
+
+  const noteRequest = (n) => `Apply the review note on #${noteKey(n.anchor)}: ${n.text}`;
+
+  // the list of notes redrawn, and the sign-off's open notes pill with it
+  function notesChanged() {
+    renderNotes();
+    renderToc();
+    if (docs.open?.gate) renderGate();
+  }
+
+  // Apply: the note as a request (at the approval gate, back to editing first: the note stays, queued,
+  // until the writer has answered it); Edit: the note in the text box to rework; Dismiss: the note
+  // leaves the list
+  async function onNote(action, i) {
+    const o = docs.open;
+    const n = o?.notes[i];
+    if (!n || n.queued) return;
+    if (action === 'apply') {
+      if (o.gate?.edit) return applyNote(n);
+      if (!o.runId) return undefined;
+      n.queued = true;
+      o.pendingNotes.push(n);
+      notesChanged();
+      if (o.gate && !yesNoGate(o.gate)) await answerGate('revise');
+      return undefined;
+    }
+    o.notes = o.notes.filter((x) => x !== n);
+    if (action === 'edit') {
+      o.selection = noteSelection(n);
+      if (docs.chat?.input) docs.chat.input.value = n.text;
+      renderChip();
+      if (o.gate && !o.gate.edit && !yesNoGate(o.gate)) await answerGate('revise');
+    }
+    return notesChanged();
+  }
+
+  // a note sent as a request: it leaves the list once the writer's change is in, else it stays with the error
+  async function applyNote(n) {
+    const o = docs.open;
+    o.mode = 'now';
+    o.selection = noteSelection(n);
+    renderChip();
+    const res = await sendFromView(noteRequest(n));
+    n.queued = false;
+    if (res?.ok === false) editorError(res.error);
+    else o.notes = o.notes.filter((x) => x !== n);
+    notesChanged();
   }
 
   // ---- the gates ----------------------------------------------------------------------------------
+  // #671 the sign-off panel of mock-5: the review and unreviewed pills, the front matter the gate
+  // writes, the next steps (nothing starts before their own click) and its three answers
+  function signoffHtml(o, g, wait) {
+    return DocsPanels.signoff({
+      spec: o.doc === 'spec',
+      file: docFile(o.doc),
+      from: o.data?.status,
+      to: acceptedStatus(o.doc),
+      score: o.score,
+      open: o.notes.length,
+      pending: liveChanges(o).filter((c) => o.unreviewed.includes(c.commit)).length,
+      message: g.message,
+      versions: versionOf(o),
+      wait,
+    });
+  }
+
   function renderGate() {
     const o = docs.open;
     const box = $('#docs-gate');
@@ -432,7 +740,7 @@
     // a request still in flight: its commit lands before the gate is answered
     const wait = o.requesting || o.answering ? ' disabled' : '';
     if (g?.edit) {
-      html = `<button type="button" class="btn primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait}>${t('docs.send_to_review')}</button>`;
+      html = ''; // #671: Send to review is the toolbar's
     } else if (g && yesNoGate(g)) {
       // merge_blocked: the local merge failed, a yes/no gate (try again, stop as failed)
       html = `
@@ -440,10 +748,7 @@
         <button type="button" class="btn primary" data-testid="doc-gate-retry" data-docs-gate="yes"${wait}>${t('docs.retry_the_merge')}</button>
         <button type="button" class="btn ghost" data-testid="doc-gate-stop" data-docs-gate="no"${wait}>${t('docs.stop_as_failed')}</button>`;
     } else if (g) {
-      html = `
-        <p class="muted small docs-gate-message" title="${esc(g.message || '')}">${esc(g.message || '')}</p>
-        <button type="button" class="btn primary" data-testid="doc-gate-accept" data-docs-gate="accept"${wait}>${o.doc === 'spec' ? t('docs.sign_off_spec') : t('docs.accept_intent')}</button>
-        <button type="button" class="btn ghost" data-docs-gate="revise"${wait}>${t('docs.back_to_the_edit')}</button>`;
+      html = signoffHtml(o, g, wait);
     } else if (o.doc === 'spec' && signedOff(status)) {
       html = `
         <button type="button" class="btn primary" data-docs-next="backlog">${t('docs.create_epic_and_phase_issues')}</button>
@@ -454,6 +759,8 @@
       html = `<button type="button" class="btn primary" data-testid="docs-start-writer" data-docs-start>${t('docs.edit_with_the_writer')}</button>`;
     }
     box.innerHTML = html;
+    renderToolbar();
+    renderQueue();
     docs.chat?.refresh?.();
   }
 
@@ -478,20 +785,61 @@
     } catch (e) { editorError(errMsg(e)); } finally { o.answering = false; }
   }
 
+  // #671 Stop at the sign-off gate: the run stops after a confirmation (nothing is signed off)
+  async function stopRun() {
+    const o = docs.open;
+    if (!o?.runId) return;
+    if (!(await confirmDialog(t('docs.stop_the_run'), t('docs.stop_the_run_message'), t('docs.stop')))) return;
+    try { await api.stopRun(o.runId); } catch (e) { editorError(errMsg(e)); }
+  }
+
+  function onTocClick(id) {
+    const o = docs.open;
+    if (id === 'source') { o.source = !o.source; renderToc(); renderReader(); return; }
+    if (o.source) { o.source = false; renderToc(); renderReader(); }
+    $('#docs-reader')?.contentDocument?.getElementById(id)?.scrollIntoView({ block: 'start' });
+  }
+
   function onEditorClick(e) {
     const el = (sel) => e.target.closest(sel);
+    const o = docs.open;
     if (el('[data-docs-back]')) return closeDoc();
-    if (el('[data-docs-unselect]')) { docs.open.selection = null; renderChip(); return docs.chat?.refresh?.(); }
+    if (el('[data-docs-unselect]')) { o.selection = null; renderChip(); return docs.chat?.refresh?.(); }
     const undo = el('[data-docs-undo]');
     if (undo) return undoChange(undo.dataset.docsUndo);
     const reviewed = el('[data-docs-reviewed]');
     if (reviewed) return markReviewed(reviewed.dataset.docsReviewed);
     const gate = el('[data-docs-gate]');
     if (gate) return answerGate(gate.dataset.docsGate);
+    if (el('[data-docs-stop]')) return stopRun();
     if (el('[data-docs-start]')) return startWriter();
     const next = el('[data-docs-next]');
-    if (next?.dataset.docsNext === 'backlog') return proposeIssues(docs.open.item);
+    if (next?.dataset.docsNext === 'backlog') return proposeIssues(o.item);
     if (next) return showView(next.dataset.docsNext);
+    const tab = el('[data-docs-tab]');
+    if (tab) { o.tab = tab.dataset.docsTab; o.selection = o.tab === 'edit' ? o.selection : null; renderToolbar(); renderReader(); renderDiff(); renderChip(); return docs.chat?.refresh?.(); }
+    const lang = el('[data-docs-lang]');
+    if (lang) { o.lang = lang.dataset.docsLang; renderToolbar(); renderToc(); return renderReader(); }
+    const toc = el('[data-docs-toc]');
+    if (toc) return onTocClick(toc.dataset.docsToc);
+    const step = el('[data-docs-step-open]');
+    if (step) {
+      const it = docs.items.find((i) => i.item === o.item);
+      const doc = step.dataset.docsStepOpen;
+      return openDoc(o.item, doc, it?.runId && it.runDoc === doc ? it.runId : null);
+    }
+    const mode = el('[data-docs-mode]');
+    if (mode) { o.mode = mode.dataset.docsMode === 'queue' ? 'queue' : 'now'; syncMode(); return docs.chat?.refresh?.(); }
+    if (el('[data-docs-attach]')) return $('#docs-attach-file')?.click();
+    if (el('[data-docs-queue-apply]')) return applyQueue();
+    const qr = el('[data-docs-queue-remove]');
+    if (qr) { o.queue = o.queue.filter((_, i) => i !== Number(qr.dataset.docsQueueRemove)); return renderQueue(); }
+    for (const action of ['apply', 'edit', 'dismiss']) {
+      const note = el(`[data-docs-note-${action}]`);
+      if (note) return onNote(action, Number(note.getAttribute(`data-docs-note-${action}`)));
+    }
+    const change = el('[data-docs-change]');
+    if (change) { o.changeOpen = change.dataset.docsChange; o.tab = 'diff'; o.selection = null; renderToolbar(); renderChip(); return renderChanges(); }
     return undefined;
   }
 
@@ -510,11 +858,20 @@
       await reload(); // the new document's skeleton, written at the run's first step
     } else if (ev.type === 'step.finished' && ev.step_id === 'review' && ev.output) {
       o.notes = Array.isArray(ev.output.notes) ? ev.output.notes : [];
+      o.checks = Array.isArray(ev.output.checks) ? ev.output.checks : [];
       o.score = ev.output.score;
       renderNotes();
+      renderToc();
     } else if (ev.type === 'approval.requested') {
       o.gate = ev;
       renderGate();
+      renderHead();
+      // the review notes applied at the approval gate: sent now that the writer waits again
+      if (ev.edit && o.pendingNotes.length) {
+        const list = o.pendingNotes;
+        o.pendingNotes = [];
+        for (const n of list) await applyNote(n);
+      }
     } else if (ev.type === 'approval.resolved') {
       if (o.gate?.approval_id === ev.approval_id) o.gate = null;
       renderGate();
@@ -525,18 +882,33 @@
     }
   }
 
+  // #671 the writer panel of mock-2: the selection, Apply now or Queue and Attach image beside Send
   function mountChat() {
     if (!window.AgentChat?.create) return;
     docs.chat = window.AgentChat.create($('#docs-chat'), {
       agent: t('docs.writer'),
       agentId: 'writer',
-      placeholder: t('docs.ask_the_writer_for_a_change'),
+      placeholder: t('docs.say_what_to_change'),
       pasteImages: true,
+      classes: { form: 'docs-chat-form' },
       send: (text, attachments) => sendRequest(text, attachments),
-      canSend: () => !!(docs.open?.gate?.edit && docs.open.selection && !docs.open.answering),
-      inputEnabled: () => !!docs.open?.gate?.edit,
+      canSend: () => !!(docs.open?.selection && !docs.open.answering && (docs.open.mode === 'queue' ? docs.open.data : docs.open.gate?.edit)),
+      inputEnabled: () => !!(docs.open?.mode === 'queue' ? docs.open?.data : docs.open?.gate?.edit),
       emptyHtml: () => `<p class="muted small">${t('docs.the_writer_answers_here')}</p>`,
     });
+    const compose = docs.chat.slot?.('compose');
+    if (compose) compose.innerHTML = '<div id="docs-chip" class="docs-chip-box"></div><div id="docs-queue" class="docs-queue"></div>'; // i18n-ignore
+    const actions = docs.chat.slot?.('actions');
+    if (actions) {
+      actions.innerHTML = `
+        <div class="seg sm docs-mode" role="group" aria-label="${t('docs.when_to_apply')}">
+          <button type="button" id="docs-mode-now" class="active" aria-pressed="true" data-testid="doc-apply-now" data-docs-mode="now">${t('docs.apply_now')}</button>
+          <button type="button" id="docs-mode-queue" aria-pressed="false" data-testid="doc-queue" data-docs-mode="queue">${t('docs.queue')}</button>
+        </div>
+        <button type="button" class="btn sm ghost" data-testid="doc-attach-image" data-docs-attach>${t('docs.attach_image')}</button>
+        <input type="file" id="docs-attach-file" class="hidden" accept="image/*" multiple tabindex="-1" aria-hidden="true" />`;
+      $('#docs-attach-file')?.addEventListener('change', (e) => { attachImages(e.target.files); e.target.value = ''; });
+    }
   }
 
   // One document open in the editor, and a write-doc run followed from its events so far (the
@@ -575,56 +947,50 @@
     },
     markup: () => `
       <section id="view-docs" class="view hidden">
-        <div id="docs-list-area">
-          <div class="page-head">
-            <div>
-              <h1>${t('docs.documents')}</h1>
-              <p class="muted small">${t('docs.the_work_items_of_the_project')}</p>
+        <div id="docs-list-area" class="docs-list-area">
+          <div class="docs-list-main">
+            <div class="page-head">
+              <div>
+                <h1>${t('docs.documents')}</h1>
+                <p class="muted small">${t('docs.proposals_rfcs_and_prds')}</p>
+              </div>
+              <button type="button" id="btn-docs-new" class="btn primary" data-testid="docs-new-item">${t('docs.new_item')}</button>
             </div>
-            <button type="button" id="btn-docs-new" class="btn primary" data-testid="docs-new-item">${t('docs.new_item')}</button>
+            <p id="docs-list-error" class="error small"></p>
+            <div id="docs-list" class="docs-list" data-testid="docs-list"></div>
           </div>
-          <p id="docs-list-error" class="error small"></p>
-          <div id="docs-list" class="docs-list" data-testid="docs-list"></div>
+          ${DocsPanels.newItemPanel(SDLC.filter((s) => s.doc), estimateText('intent'))}
         </div>
         <div id="docs-editor-area" class="hidden">
           <div id="docs-editor" class="docs-editor" data-testid="doc-editor" data-stage="intent">
             <div id="docs-editor-head" class="docs-editor-head"></div>
             <p id="docs-editor-error" class="error small"></p>
-            <div class="docs-editor-body">
-              <iframe id="docs-reader" class="docs-reader" sandbox="allow-same-origin" title="${t('docs.the_document')}"></iframe>
-              <aside class="docs-side">
-                <div id="docs-gate" class="row docs-gate" role="group" aria-label="${t('docs.next_step')}"></div>
-                <div id="docs-chip" class="docs-chip-box"></div>
-                <div id="docs-chat" class="docs-chat"></div>
+            <div id="docs-gate" class="row docs-gate" role="group" aria-label="${t('docs.next_step')}"></div>
+            <div id="docs-editor-body" class="docs-editor-body">
+              <div class="docs-left">
+                <div id="docs-toc-box" class="docs-toc-box"></div>
                 <section id="docs-changes" class="docs-changes" data-testid="doc-changes"></section>
+              </div>
+              <div id="docs-toolbar-box" class="docs-toolbar-box"></div>
+              <iframe id="docs-reader" class="docs-reader" sandbox="allow-same-origin" title="${t('docs.the_document')}"></iframe>
+              <section id="docs-diff" class="docs-diff" data-testid="doc-diff" aria-label="${t('docs.diff')}"></section>
+              <aside class="docs-side">
                 <section id="docs-notes" class="docs-notes hidden"></section>
+                <section class="docs-writer" data-testid="doc-writer-panel">
+                  <div class="docs-section-head"><h3>${t('docs.writer')}</h3></div>
+                  <div id="docs-chat" class="docs-chat"></div>
+                </section>
               </aside>
             </div>
           </div>
         </div>
       </section>`,
-    modals: () => `
-  <div id="docs-new-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="docs-new-heading">
-    <form id="docs-new-form" class="modal-card">
-      <h3 id="docs-new-heading">${t('docs.new_item')}</h3>
-      <p class="muted small">${t('docs.a_new_item_starts_with_its_intent')}</p>
-      <div class="field">
-        <label for="docs-new-title">${t('docs.title')} <span class="req">*</span></label>
-        <input type="text" id="docs-new-title" data-testid="docs-new-item-title" maxlength="100" autocomplete="off" placeholder="${t('docs.what_the_item_is_about')}" />
-      </div>
-      <p id="docs-new-error" class="error small"></p>
-      <div class="modal-actions">
-        <span class="spacer"></span>
-        <button type="button" id="btn-docs-new-cancel" class="btn ghost">${t('common.cancel')}</button>
-        <button type="submit" class="btn primary" data-testid="docs-new-item-start">${t('docs.write_the_intent')}</button>
-      </div>
-    </form>
-  </div>`,
     mount() {
       $('#btn-docs-new').onclick = openNewItem;
       $('#docs-list').onclick = onListClick;
       $('#docs-new-form').onsubmit = submitNewItem;
-      $('#btn-docs-new-cancel').onclick = () => closeModal('#docs-new-modal');
+      $('#btn-docs-new-close').onclick = closeNewItem;
+      $('#docs-new-starts').onchange = (e) => { $('#docs-new-estimate').textContent = estimateText(e.target.value); };
       $('#docs-editor').addEventListener('click', onEditorClick);
       // the page has no script of its own: the selection is read from here
       $('#docs-reader').addEventListener('load', () => {
@@ -633,9 +999,8 @@
         doc?.addEventListener('keyup', () => onReaderSelect());
       });
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && state.view === 'docs' && !$('#docs-new-modal').classList.contains('hidden')) closeModal('#docs-new-modal');
+        if (e.key === 'Escape' && state.view === 'docs' && !$('#docs-new-panel').classList.contains('hidden')) closeNewItem();
       });
-      mountChat();
       api.onEvent?.((ev) => { onRunEvent(ev); });
     },
     show: () => (docs.open ? reload() : refresh()),

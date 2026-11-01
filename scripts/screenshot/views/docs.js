@@ -4,7 +4,7 @@
 // - write-doc: an accepted intent and a draft spec with three requests (one undone);
 // - offline-mode: a draft intent, still the skeleton but for its Problem;
 // - keyboard-shortcuts-for-the-run-log-and-the-command-palette (a long name): a signed-off spec.
-// --mode list (default): the list; editor: write-doc's spec in the editor; changes: the same with
+// --mode list (default): the list with the New item side panel open (#671); editor: write-doc's spec in the editor; changes: the same with
 // the changes by request in view; review: the spec with a simulated reviewer's anchored notes and the
 // Sign off spec gate (DocsActions.follow); sign-off: the signed-off spec offering Create epic and
 // phase issues and Start the Build.
@@ -37,7 +37,7 @@ function demoDocs(appDir, dir) {
   f('write-doc', 'intent', 'Problem', 'Stage documents are written by hand in an editor, far from the app that runs the work.', 'Os documentos de estágio são escritos à mão num editor, longe do app que roda o trabalho.', 'State the problem');
   docs.acceptDoc(dir, { item: 'write-doc', doc: 'intent', approver: 'maintainer' });
   docs.createDoc(dir, { item: 'write-doc', doc: 'spec', title: 'Write doc' });
-  f('write-doc', 'spec', 'Requirements', '**R1.** The Documents screen lists the items of docs/work/ with their stage.', '**R1.** A tela Documentos lista os itens de docs/work/ com o estágio.', 'List the items first');
+  f('write-doc', 'spec', 'Requirements', '**R1. Documents screen.** The Documents screen lists the items of docs/work/ with their stage.\n\n**R2. The living document.** The document is edited by request, one commit each.', '**R1. Tela Documentos.** A tela Documentos lista os itens de docs/work/ com o estágio.\n\n**R2. O documento vivo.** O documento é editado por pedido, um commit cada.', 'List the items first');
   const wrong = f('write-doc', 'spec', 'Design', 'A separate editor window.', 'Uma janela de editor separada.', 'Describe the editor');
   docs.undoChange(dir, { commit: wrong.commit });
   f('write-doc', 'spec', 'Areas of concern', 'The translation must keep the headings in the same order as the source.', 'A tradução precisa manter os títulos na mesma ordem do original.', 'Name the translation risk');
@@ -64,15 +64,23 @@ async function open({ args, click, js, pause }) {
   const mode = args.mode || 'list';
   await click('.nav-item[data-view="docs"]');
   await pause(800);
-  if (mode === 'list') return;
+  // #671 mock-1: the list next to the New item side panel
+  if (mode === 'list') {
+    await click('[data-testid="docs-new-item"]');
+    await pause(300);
+    return;
+  }
   const item = mode === 'sign-off' ? LONG : 'write-doc';
   await js(`await window.DocsActions.openDoc(${JSON.stringify(item)}, 'spec');`);
   if (mode === 'changes') await js('document.querySelector(\'[data-testid="doc-changes"]\')?.scrollIntoView();');
   if (mode === 'review') {
     await js(`await window.DocsActions.follow('demo-write-doc-run', [
-      { type: 'step.finished', step_id: 'review', output: { score: 7, summary: 'Clear requirements; the design is missing.', notes: [
-        { anchor: 'spec-design', severity: 'major', text: 'The design section is still empty: say where the editor lives.' },
-        { anchor: 'spec-requirements', severity: 'minor', text: 'R1 could name the stage values.' },
+      { type: 'step.finished', step_id: 'review', output: { score: 7, summary: 'Clear requirements; the design is missing.', checks: [
+        { name: 'Every requirement is testable', result: 'pass' },
+        { name: 'Every decision has options and a recommendation', result: 'note' },
+      ], notes: [
+        { anchor: 'spec-design', severity: 'major', quote: 'To be written', text: 'The design section is still empty: say where the editor lives.' },
+        { anchor: 'spec-r1', severity: 'minor', quote: 'with their stage', text: 'R1 could name the stage values.' },
       ] } },
       { type: 'approval.requested', approval_id: 'a1', step_id: 'approval', message: 'The reviewer scored the spec 7/10: clear requirements; the design is missing.', choices: [{ id: 'accept' }, { id: 'revise' }, { id: 'stop' }] },
     ]);`);

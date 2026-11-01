@@ -112,12 +112,12 @@ const intentMd = (slug, title, lang) => [
 
 When('I start a new item {string}', async ({ e2e }, title) => {
   const page = e2e.window;
+  // #671: New item is the side panel of mock-1 (no dialog)
   await page.getByTestId('docs-new-item').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await dialog.getByTestId('docs-new-item-title').fill(title);
-  await dialog.getByTestId('docs-new-item-start').click();
-  await expect(dialog).toBeHidden();
+  const panel = page.getByTestId('docs-new-panel');
+  await expect(panel).toBeVisible();
+  await panel.getByTestId('docs-new-item-title').fill(title);
+  await panel.getByTestId('docs-new-item-start').click();
 });
 
 Given('the demo project\'s repository has the item {string} with an accepted intent', async ({ e2e }, title) => {
@@ -252,6 +252,172 @@ Then('no issue was filed and no build was started', async ({ e2e }) => {
   if (e2e.docItem) expect(fs.existsSync(path.join(e2e.docItem.dir, 'plan.md')), 'the Build wrote no plan.md').toBe(false);
   // the Product Owner's proposal is not open either: it waits for "Create epic and phase issues"
   await expect(e2e.window.getByRole('dialog')).toHaveCount(0);
+});
+
+// ---- #671: the screens as in the mockups (docs/work/write-doc/images/mock-1..5.jpg, living-doc.jpg) ----
+// Assumes the data-testids of the #671 contract: docs-item-stages, docs-item-pill (a row's stage chain
+// and status pill); docs-new-panel (the New item side panel) with docs-new-starts-with (a <select>),
+// docs-new-item-title, docs-new-screens, docs-new-writers, docs-new-item-start; doc-stepper with six
+// doc-step (aria-current="step" on the open one); doc-toc; doc-toolbar (tabs by role, doc-lang-en,
+// doc-lang-pt, doc-versions, doc-send-to-review); doc-writer-panel (doc-apply-now, doc-queue,
+// doc-attach-image); doc-review-score, doc-review-note (doc-note-apply, -edit, -dismiss); doc-signoff
+// with doc-signoff-frontmatter, doc-signoff-next and doc-gate-accept / doc-gate-revise / doc-gate-cancel.
+
+const newPanel = (page) => page.getByTestId('docs-new-panel');
+const listOf = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
+const signoff = (page) => editor(page).getByTestId('doc-signoff');
+
+Then('the item {string} shows the stages {string}', async ({ e2e }, title, stages) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(row.getByTestId('docs-item-stages')).toContainText(stages);
+});
+
+Then('the item {string} shows the status of {string}', async ({ e2e }, title, file) => {
+  const pill = item(e2e.window, title).getByTestId('docs-item-pill');
+  await expect(pill).toBeVisible();
+  // "<file> · <state>"
+  await expect(pill).toHaveText(new RegExp(`^\\s*${escapeRe(file)}\\s*·\\s*\\S`));
+});
+
+When('I open the New item panel', async ({ e2e }) => {
+  const page = e2e.window;
+  await page.getByTestId('docs-new-item').click();
+  await expect(newPanel(page)).toBeVisible();
+  await expect(newPanel(page).getByRole('heading', { name: 'New item', exact: true })).toBeVisible();
+});
+
+Then('the New item panel starts with {string}', async ({ e2e }, option) => {
+  const select = newPanel(e2e.window).getByTestId('docs-new-starts-with');
+  await expect(select).toBeVisible();
+  await expect(select.locator('option:checked')).toHaveText(option);
+});
+
+// each asked field: its label, and the control the contract names for it
+const NEW_ITEM_FIELDS = {
+  'What it is about': 'docs-new-item-title',
+  'Screens to capture first': 'docs-new-screens',
+  'Several writers': 'docs-new-writers',
+};
+
+Then('the New item panel asks {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
+  const panel = newPanel(e2e.window);
+  for (const label of [a, b, c]) {
+    await expect(panel.getByText(label, { exact: true })).toBeVisible();
+    const testId = NEW_ITEM_FIELDS[label];
+    if (testId) await expect(panel.getByTestId(testId)).toBeVisible();
+  }
+  await expect(panel.getByTestId('docs-new-writers')).not.toBeChecked();
+  await expect(panel.getByTestId('docs-new-screen-add')).toBeVisible();
+});
+
+Then('the New item panel offers {string}', async ({ e2e }, name) => {
+  const start = newPanel(e2e.window).getByTestId('docs-new-item-start');
+  await expect(start).toHaveAccessibleName(name);
+  await expect(start).toBeVisible();
+});
+
+Then('the Documents screen looks like the baseline {string}', async ({ e2e }, name) => {
+  await expect(e2e.window).toHaveScreenshot(name);
+});
+
+Then('the document\'s stages are {string} with {string} open', async ({ e2e }, names, open) => {
+  const steps = editor(e2e.window).getByTestId('doc-stepper').getByTestId('doc-step');
+  const expected = listOf(names);
+  await expect(steps).toHaveCount(expected.length);
+  for (const [i, name] of expected.entries()) {
+    await expect(steps.nth(i)).toContainText(name);
+    if (name === open) await expect(steps.nth(i)).toHaveAttribute('aria-current', 'step');
+    else await expect(steps.nth(i)).not.toHaveAttribute('aria-current', 'step');
+  }
+});
+
+Then('the contents list {string} and {string}', async ({ e2e }, first, second) => {
+  const toc = editor(e2e.window).getByTestId('doc-toc');
+  for (const entry of [first, second]) await expect(toc.getByText(entry, { exact: true })).toBeVisible();
+});
+
+Then('the toolbar offers the tabs {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
+  const toolbar = editor(e2e.window).getByTestId('doc-toolbar');
+  for (const name of [a, b, c]) await expect(toolbar.getByRole('tab', { name, exact: true })).toBeVisible();
+});
+
+Then('the toolbar switches the language between {string} and {string}', async ({ e2e }, en, pt) => {
+  const toolbar = editor(e2e.window).getByTestId('doc-toolbar');
+  await expect(toolbar.getByTestId('doc-lang-en')).toHaveText(en);
+  await expect(toolbar.getByTestId('doc-lang-pt')).toHaveText(pt);
+});
+
+Then('the toolbar offers {string} and {string}', async ({ e2e }, a, b) => {
+  const toolbar = editor(e2e.window).getByTestId('doc-toolbar');
+  for (const name of [a, b]) await expect(toolbar.getByRole('button', { name, exact: true })).toBeVisible();
+});
+
+const WRITER_CONTROLS = { 'Apply now': 'doc-apply-now', Queue: 'doc-queue', 'Attach image': 'doc-attach-image' };
+
+Then('the writer panel offers {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
+  const panel = editor(e2e.window).getByTestId('doc-writer-panel');
+  await expect(panel).toBeVisible();
+  for (const name of [a, b, c]) {
+    const testId = WRITER_CONTROLS[name];
+    const control = testId ? panel.getByTestId(testId) : panel.getByRole('button', { name, exact: true });
+    await expect(control).toBeVisible();
+    await expect(control).toContainText(name);
+  }
+});
+
+Then('the editor looks like the baseline {string}', async ({ e2e }, name) => {
+  await expect(editor(e2e.window)).toHaveScreenshot(name);
+});
+
+Then('the review shows its score out of 10', async ({ e2e }) => {
+  await expect(editor(e2e.window).getByTestId('doc-review-score')).toHaveText(/^\s*\d+(\.\d+)?\s*\/\s*10\s*$/, { timeout: RUN_TIMEOUT });
+});
+
+const NOTE_ACTIONS = { Apply: 'doc-note-apply', Edit: 'doc-note-edit', Dismiss: 'doc-note-dismiss' };
+
+Then('a review note offers {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
+  const note = editor(e2e.window).getByTestId('doc-review-note').first();
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('#');
+  for (const name of [a, b, c]) {
+    const button = NOTE_ACTIONS[name] ? note.getByTestId(NOTE_ACTIONS[name]) : note.getByRole('button', { name, exact: true });
+    await expect(button).toHaveAccessibleName(name);
+    await expect(button).toBeEnabled();
+  }
+});
+
+Then('the sign-off panel is headed {string}', async ({ e2e }, title) => {
+  await expect(signoff(e2e.window)).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(signoff(e2e.window).getByRole('heading', { name: new RegExp(`^\\s*${escapeRe(title)}\\b`) })).toBeVisible();
+});
+
+Then('the sign-off panel shows the front matter after sign-off {string}', async ({ e2e }, text) => {
+  const panel = signoff(e2e.window);
+  await expect(panel.getByText('Front matter after sign-off', { exact: true })).toBeVisible();
+  await expect(panel.getByTestId('doc-signoff-frontmatter')).toContainText(text);
+});
+
+Then('the sign-off panel proposes {string} and {string}', async ({ e2e }, a, b) => {
+  const next = signoff(e2e.window).getByTestId('doc-signoff-next');
+  for (const name of [a, b]) await expect(next.filter({ hasText: name })).toHaveCount(1);
+});
+
+const GATE_BUTTONS = { 'Sign off spec': 'doc-gate-accept', 'Back to editing': 'doc-gate-revise', Stop: 'doc-gate-cancel' };
+
+Then('the sign-off panel offers {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
+  const panel = signoff(e2e.window);
+  for (const name of [a, b, c]) {
+    const button = GATE_BUTTONS[name] ? panel.getByTestId(GATE_BUTTONS[name]) : panel.getByRole('button', { name, exact: true });
+    await expect(button).toHaveAccessibleName(name);
+    await expect(button).toBeEnabled();
+  }
+});
+
+// the front matter's date is the day of the run: masked so the baseline holds on any day
+Then('the sign-off panel looks like the baseline {string}', async ({ e2e }, name) => {
+  const panel = signoff(e2e.window);
+  await expect(panel).toHaveScreenshot(name, { mask: [panel.getByTestId('doc-signoff-frontmatter')] });
 });
 
 // ---- #696: the list rows on one line (mock-1) and Send to review at the toolbar's right (mock-2) ------

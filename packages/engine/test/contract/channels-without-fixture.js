@@ -62,6 +62,7 @@ module.exports = [
   { channel: 'docs:list', reason: GIT },
   { channel: 'docs:mark-reviewed', reason: GIT },
   { channel: 'docs:read', reason: GIT },
+  { channel: 'docs:read-at', reason: GIT },
   { channel: 'docs:undo', reason: GIT },
   { channel: 'findings:file', reason: GIT },
   { channel: 'findings:save', reason: ATTACHMENT },
