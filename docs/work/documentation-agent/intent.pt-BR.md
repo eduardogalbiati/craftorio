@@ -26,11 +26,11 @@ A página pública (`site/`) lê exatamente esses arquivos: "plan: N of M steps"
 
 ## Resultado esperado
 
-Um passo de **agente de documentação** nos workflows de Code & Build mantém os documentos de cada item em dia, em tempo real, como parte do run que mudou o item. É commitado por esse run, no gate de sempre. Os projetos aderem na hora do cadastro, por uma opção nova no onboarding, **"Add the realtime documentation model"**.
+Um **agente de documentação** mantém os documentos de cada item em dia, em tempo real, como um **fluxo posterior fora do Code & Build**: o encadeamento (`then`) o inicia quando um run de Code & Build termina com sucesso, e ele lê as saídas declaradas desse run (branch, commit do merge, PR, os caminhos das evidências) e as registra. Os workflows `feature`, `fix` e `release` nunca leem nem escrevem em `docs/work/` (decisão do dono, 2026-11-01), então todo workflow, inclusive os do usuário, ganha os documentos sem precisar de um passo próprio. Os projetos aderem na hora do cadastro, por uma opção nova no onboarding, **"Add the realtime documentation model"**.
 
 Ele chega em duas partes:
 
-1. **Com os workflows** (`feature`, `fix`, `release`, depois da #630):
+1. **Depois dos workflows** (encadeado depois de `feature`, `fix`, `release`):
    - `plan.md`: o front matter (`status`, `date`) e a linha da `## Progress` (Status `done`/`pending`, o run, o commit ou PR), depois de cada run de feature ou fix;
    - `test.md`: os resultados da suíte e do E2E e os screenshots de antes e depois do run;
    - `deploy.md`: os achados da revisão e, na release, `release:` e `released:` (que a página precisa para entregue e lead time);
@@ -48,7 +48,8 @@ Ele **não escreve `intent.md` nem `spec.md`**. Isso é do fluxo de write doc (#
   - o dono e quem lê a página pública, que veem o progresso verdadeiro sem ninguém editar arquivos à mão;
   - os contribuidores, que acham o estado de cada item no repositório.
 - **Sistemas:**
-  - os workflows `feature`, `fix` e `release` (um passo final de documentação);
+  - os workflows `feature`, `fix` e `release`: sem mudança, a não ser uma saída `evidence` que declaram para o fluxo posterior;
+  - o encadeamento (`then`), que precisa de um padrão por projeto ou item do roadmap para o fluxo posterior começar sozinho;
   - o assistente de onboarding (uma opção nova no cadastro do projeto);
   - o modelo de trabalho (#633) e o Monitor (#634);
   - o `docs/work/CONVENTIONS.md`, que o agente segue;
@@ -62,7 +63,7 @@ Ele **não escreve `intent.md` nem `spec.md`**. Isso é do fluxo de write doc (#
   - nenhuma automação atravessa um `human_approval`;
   - checagens só em simulação.
 - Segue o `docs/work/CONVENTIONS.md`: primeiro o arquivo em inglês, depois a tradução `.pt-BR.md` ao lado.
-- Escreve no repositório do usuário só pelo run, no gate de sempre. O onboarding nunca escreve.
+- Escreve no repositório do usuário só como um run próprio, mesclado do jeito que o projeto trabalha (local ou PR), nunca dentro de um run de Code & Build. O onboarding nunca escreve.
 - **Custo:** o passo é determinístico onde dá (tabelas, front matter, campos de release) e só chama modelo para o texto corrido (o resumo dos testes, a entrada do changelog). O custo aparece e conta no orçamento diário.
 
 ## Perguntas em aberto
