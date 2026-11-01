@@ -69,6 +69,28 @@ test('#695 a test reading a docs/work path given as one string, or listing docs/
   assert.equal(lines.some((l) => /packages\/core\/test\/lists\.test\.js:3\b/.test(l)), true, lines.join('\n'));
 });
 
+// the shape of the original offender (test/doc-editor-646.test.js before #695): a local helper
+// reading its parameter under the repository root, called with a template naming a docs/work constant
+test('#695 a local read helper called with `${DIR}/spec.md` (DIR under docs/work) fails the check at the call', async (t) => {
+  const root = tmpRoot(t, {
+    'docs/work/x/spec.md': '# Spec\n',
+    'test/helper-read.test.js': [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const ROOT = path.join(__dirname, '..');",
+      "const DIR = 'docs/work/x';",
+      "const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');",
+      'const spec = read(`${DIR}/spec.md`);',
+      '',
+    ].join('\n'),
+  });
+  const lines = await newRuleLines(root);
+  const hit = lines.filter((l) => l.includes('test/helper-read.test.js'));
+  assert.equal(hit.length >= 1, true, lines.join('\n'));
+  assert.equal(hit.some((l) => /test\/helper-read\.test\.js:6\b/.test(l)), true, hit.join('\n'));
+  assert.match(hit[0], /test\/fixtures/);
+});
+
 test('#695 a comment, a fixture key written into a temp folder and production code reading docs/work are no findings', async (t) => {
   const root = tmpRoot(t, {
     'test/comment.test.js': "// the onboarding example lives in docs/work/first-project-onboarding/spec.md\nrequire('assert');\n",

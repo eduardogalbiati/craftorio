@@ -128,6 +128,40 @@ test('#695 runBaseCheck: two causes (two test files) give two issues and a Fix t
   assert.deepEqual(urls, fx.creates().map((c) => c.url).sort());
 });
 
+// A store from before #695: one issue per test. The group's entries share the file and first red
+// commit but hold different issues; one is marked to reopen (red again), one has no issue yet.
+test('#695 runBaseCheck: a group from a store before #695 comments on each of its issues, reopens the marked one and gives the first to the entry without one', async (t) => {
+  const ws = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  writeRoadmapFixture(ws);
+  const at = '2026-11-01T00:00:00.000Z';
+  const entry = (test, issue, extra = {}) => ({ test, file: EDITOR, first_seen: at, last_seen: at, runs: [], issue, first_red_commit: 'ed976c3e', ...extra });
+  const [a, b, c] = editorTests;
+  fs.mkdirSync(path.join(ws, 'backlog', 'base-health'), { recursive: true });
+  fs.writeFileSync(path.join(ws, 'backlog', 'base-health', `${PROJECT}.json`), JSON.stringify({
+    failures: [
+      entry(a, { url: 'https://github.com/o/r/issues/672', number: 672 }),
+      entry(b, { url: 'https://github.com/o/r/issues/673', number: 673 }, { reopen: true }),
+      entry(c, null),
+    ],
+    lastGreen: null,
+    flaky: [],
+  }, null, 2));
+  const fx = fakeExec();
+  commit(f.repo, 'b.txt', 'b\n', 'another merge');
+  const failures = editorFailures().filter((x) => [a, b, c].includes(x.test));
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f), runSuite: suite(failures), exec: fx.exec });
+  assert.equal(fx.creates().length, 0, 'no new issue for a group that has issues');
+  const touching = (n, verb) => fx.updates().filter((x) => x.args.includes(String(n)) && x.args.includes(verb)).length;
+  assert.equal(touching(672, 'comment'), 1, 'one comment on #672');
+  assert.equal(touching(673, 'comment'), 1, 'one comment on #673');
+  assert.equal(touching(673, 'reopen'), 1, '#673 is reopened');
+  assert.equal(touching(672, 'reopen'), 0, '#672 is not reopened');
+  assert.equal(r.issues?.length, 1, 'one result per group');
+  const known = Object.fromEntries(load().knownFailures(ws, PROJECT).map((e) => [e.test, e.issue?.number ?? null]));
+  assert.deepEqual([known[a], known[b], known[c]], [672, 673, 672]);
+});
+
 test('#695 runBaseCheck: a later red check of the same group updates its open issue instead of opening another', async (t) => {
   const ws = tmpWs(t);
   const f = fixture(t, 'canonical');
