@@ -69,8 +69,8 @@ Feature: Bring a project in with a guided wizard
     Then the project wizard closes right away
     And the project page of "review-642" is open
     And the project page shows the Next steps card
-    And the Next steps card offers "roadmap", "idea" and "refactor cadence"
-    And the Next steps card offers neither "release CI" nor "screenshots"
+    And the Next steps card offers "roadmap", "idea" and "Keep refactoring"
+    And the Next steps card shows "release CI" and "screenshots" as coming later
     When I open the "roadmap" entry of the Next steps card
     Then the roadmap shows the refactor I picked as a planned item
     When I open "Inbox" in the sidebar
@@ -107,7 +107,7 @@ Feature: Bring a project in with a guided wizard
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page shows the Next steps card
-    When I open the "refactor cadence" entry of the Next steps card
+    When I open the "Keep refactoring" entry of the Next steps card
     Then the project tab "Refactor" is selected
     When I open "Projects" in the sidebar
     And I open the project "dismiss-642" from the Projects screen

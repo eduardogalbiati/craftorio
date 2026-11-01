@@ -175,7 +175,7 @@ Then('the wizard shows the analysis cost in total and for the project map and th
 Then('the wizard offers to start the analysis', async ({ e2e }) => {
   const analyze = wizard(e2e.window).getByTestId('wizard-analyze');
   await expect(analyze).toBeEnabled();
-  await expect(analyze).toContainText(/Start analysis/i);
+  await expect(analyze).toContainText(/Analyze and continue/i);
 });
 
 When('I skip the analysis for later', async ({ e2e }) => {
@@ -297,9 +297,11 @@ const review = (page) => wizard(page).getByTestId('wizard-review');
 const refactorRows = (page) => review(page).getByTestId('wizard-review-refactors').getByTestId('wizard-review-refactor');
 const projectPage = (page) => page.getByTestId('project-page').filter({ visible: true }).first();
 const nextSteps = (page) => projectPage(page).getByTestId('project-next-steps');
-// an entry of the card: a link or a button whose name says what it does ("roadmap", "idea"…)
-const nextStepsEntry = (page, words) => nextSteps(page).getByRole('link', { name: new RegExp(escapeRe(words), 'i') })
-  .or(nextSteps(page).getByRole('button', { name: new RegExp(escapeRe(words), 'i') }));
+// an entry of the card (mock-7): its title and line say what it does ("roadmap", "idea"…), its button
+// acts ("File and add", "Open Inbox", "Turn on"); the first entry whose text has the words
+const nextStepsEntry = (page, words) => nextSteps(page).getByTestId(/^next-step-/)
+  .filter({ hasText: new RegExp(escapeRe(words), 'i') }).first();
+const nextStepsAction = (page, words) => nextStepsEntry(page, words).getByRole('button').first();
 
 When('I start the analysis in the wizard', async ({ e2e }) => {
   await wizard(e2e.window).getByTestId('wizard-analyze').click();
@@ -356,16 +358,22 @@ Then('the project page does not show the Next steps card', async ({ e2e }) => {
 });
 
 Then('the Next steps card offers {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
-  for (const words of [a, b, c]) await expect(nextStepsEntry(e2e.window, words).first(), `the Next steps entry "${words}"`).toBeVisible();
+  for (const words of [a, b, c]) {
+    await expect(nextStepsEntry(e2e.window, words), `the Next steps entry "${words}"`).toBeVisible();
+    await expect(nextStepsAction(e2e.window, words), `the button of the Next steps entry "${words}"`).toBeEnabled();
+  }
 });
 
-Then('the Next steps card offers neither {string} nor {string}', async ({ e2e }, a, b) => {
-  await expect(nextSteps(e2e.window)).toBeVisible();
-  for (const words of [a, b]) await expect(nextSteps(e2e.window), `no Next steps entry "${words}"`).not.toContainText(new RegExp(escapeRe(words), 'i'));
+// mock-7: what phase 1 does not do yet (release CI, screenshots) stays visible, its button disabled
+Then('the Next steps card shows {string} and {string} as coming later', async ({ e2e }, a, b) => {
+  for (const words of [a, b]) {
+    await expect(nextStepsEntry(e2e.window, words), `the Next steps entry "${words}"`).toBeVisible();
+    await expect(nextStepsAction(e2e.window, words), `the button of the Next steps entry "${words}"`).toBeDisabled();
+  }
 });
 
 When('I open the {string} entry of the Next steps card', async ({ e2e }, words) => {
-  await nextStepsEntry(e2e.window, words).first().click();
+  await nextStepsAction(e2e.window, words).click();
 });
 
 When('I dismiss the Next steps card', async ({ e2e }) => {

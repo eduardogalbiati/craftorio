@@ -336,6 +336,48 @@ test('#669 step 2: the footer holds Back and "Next: clone and continue"', { time
   assert.equal(textOf(byTestId(foot.outer, 'wizard-next')), 'Next: clone and continue');
 });
 
+// mock-2's short form: "owner/repo" typed in the Repository field is imported from the picked provider
+async function pressProvider(app, id) {
+  const el = H.findEl(wizardMarkup(app), (e) => e.attrs.id === `wizard-provider-${id}`);
+  assert.equal(el === null, false, `the provider button #wizard-provider-${id}`);
+  await clickRendered(app, el, ['#project-wizard']);
+  await app.settle(10);
+}
+async function importTyped(app, repo) {
+  await typeInto(app, '#wizard-repo', repo);
+  await typeInto(app, '#wizard-name', NAME);
+  const into = String(existing(app, 'wizard-clone-into')?.textContent || '') || textOf(byTestId(wizardMarkup(app), 'wizard-clone-into'));
+  await press(app, 'wizard-next');
+  const calls = app.callsTo('startOnboarding');
+  assert.equal(calls.length, 1, 'one api.startOnboarding call');
+  return { repo: calls[0][0]?.repo, into };
+}
+
+// the clone's folder is owner-repo (OnboardingModel.repoNameFromUrl)
+test('#669 step 2: "acme/shop" typed with GitHub picked is imported as https://github.com/acme/shop, cloned into repos/acme-shop', { timeout: 20000 }, async () => {
+  const app = await atRepository();
+  await pressProvider(app, 'github');
+  const { repo, into } = await importTyped(app, 'acme/shop');
+  assert.equal(repo, 'https://github.com/acme/shop');
+  assert.match(into, /repos\/acme-shop\b/, `the clone line: "${into}"`);
+});
+
+test('#669 step 2: "acme/shop.git" typed with GitLab picked is imported as https://gitlab.com/acme/shop', { timeout: 20000 }, async () => {
+  const app = await atRepository();
+  await pressProvider(app, 'gitlab');
+  const { repo, into } = await importTyped(app, 'acme/shop.git');
+  assert.equal(repo, 'https://gitlab.com/acme/shop');
+  assert.match(into, /repos\/acme-shop\b/, `the clone line: "${into}"`);
+});
+
+for (const typed of ['file:///C:/code/shop', 'git@gitlab.com:acme/shop.git', 'https://github.com/acme/shop.git']) {
+  test(`#669 step 2: "${typed}" is imported as typed`, { timeout: 20000 }, async () => {
+    const app = await atRepository();
+    const { repo } = await importTyped(app, typed);
+    assert.equal(repo, typed);
+  });
+}
+
 // ---- step 3 (mock-4) --------------------------------------------------------------------------------
 
 test('#669 step 3: "Analyze <name>" and "Read-only. Nothing is written to the repository."', { timeout: 20000 }, async () => {
