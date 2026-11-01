@@ -65,7 +65,8 @@ const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOut
 const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('@multiagent/engine/domains/local/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
   file: wfFile.file,
-  inputs: args.inputs,
+  // #630: an old workflow name brings its variant's inputs, under the given ones
+  inputs: { ...(wfFile.inputs || {}), ...args.inputs },
   attachments: args.attachments,
   mock: args.mock,
   ...(args.mock && args.mockAsks ? { mockSequences: { needs_human: args.mockAsks } } : {}),

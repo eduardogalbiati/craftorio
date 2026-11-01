@@ -10,16 +10,37 @@
 //   #486: the header project's own defaultWorkflow (state.projects) wins over Settings';
 // - firstBuild(set): a project's default without a given one (#486, packages/engine/domains/project/projects.js and the Overview);
 // - projectFirst(list): the pickers' workflows with the header project's set first (#486).
+// - #630: ALIASES / aliasOf(file): the old bundled names (software-development, the local heroes,
+//   multi-model-review, e2e-release) now mean feature.yaml or release.yaml with the inputs of the old
+//   variant; a saved setting, manifest or roadmap naming one still runs (workflows.js resolveWorkflow).
 // Browser: window.DefaultWorkflow; Node: module.exports (packages/engine/domains/po/product-owner.js).
 (function (root) {
-  const LOCAL = 'software-development-local-hero.yaml';
-  const REMOTE = 'software-development.yaml';
+  const LOCAL = 'feature.yaml';
+  const REMOTE = 'feature.yaml';
+
+  // #630: old file name -> { file, inputs } (the inputs go under the run's own inputs)
+  const ALIASES = {
+    'ai-development-local-hero.yaml': { file: 'feature.yaml', inputs: { mode: 'local' } },
+    'e2e-release.yaml': { file: 'release.yaml', inputs: {} },
+    'multi-model-review.yaml': { file: 'feature.yaml', inputs: { review: 'multi_model' } },
+    'software-development-local-hero.yaml': { file: 'feature.yaml', inputs: { mode: 'local' } },
+    'software-development.yaml': { file: 'feature.yaml', inputs: { mode: 'remote' } },
+  };
+
+  /** #630: the alias of an old workflow name (with or without .yaml), or null. */
+  function aliasOf(file) {
+    const name = String(file || '').replace(/^.*[\\/]/, '');
+    const hit = ALIASES[name] || ALIASES[`${name}.yaml`];
+    return hit ? { file: hit.file, inputs: { ...hit.inputs } } : null;
+  }
 
   /** The default among `files` (workflow file names): the setting when it exists, else the fallback. */
   function resolve(setting, files = []) {
     const list = (files || []).map(String);
     const saved = setting ? String(setting) : '';
     if (saved && list.includes(saved)) return { file: saved, missing: null };
+    const aliased = aliasOf(saved)?.file;
+    if (aliased && list.includes(aliased)) return { file: aliased, missing: null };
     const file = [LOCAL, REMOTE].find((f) => list.includes(f)) || list[0] || LOCAL;
     return { file, missing: saved || null };
   }
@@ -49,7 +70,8 @@
     const g = typeof state !== 'undefined' ? state : {};
     const list = (g.workflows || []).filter((w) => !w.error);
     const files = list.map((w) => w.file);
-    const own = project && headerProject(g)?.defaultWorkflow ? `${label(headerProject(g).defaultWorkflow)}.yaml` : null;
+    const named = project && headerProject(g)?.defaultWorkflow ? `${label(headerProject(g).defaultWorkflow)}.yaml` : null;
+    const own = named && !files.includes(named) ? aliasOf(named)?.file || named : named;
     const out = own && files.includes(own) ? { file: own, missing: null } : resolve(g.settings?.defaultWorkflow, files);
     const wf = list.find((w) => w.file === out.file);
     return { ...out, name: wf?.name || out.file, merge: wf?.merge || null };
@@ -68,6 +90,8 @@
   const label = (file) => String(file || '').replace(/\.ya?ml$/i, '');
 
   const api = {
+    aliasOf,
+    ALIASES,
     BUILD,
     LOCAL,
     REMOTE,

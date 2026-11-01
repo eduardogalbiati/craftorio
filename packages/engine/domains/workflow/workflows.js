@@ -10,6 +10,7 @@ const yaml = require('js-yaml');
 const { seedBundle, bundleStatus, restoreBundled } = require('../seed/seed');
 const { MANIFEST_FILE, readManifest } = require('../project/project-manifest');
 const { bundledDir } = require('../workspace/app-root');
+const { aliasOf } = require('@multiagent/shared/default-workflow');
 
 const BUNDLED_WORKFLOWS_DIR = bundledDir('workflows');
 const isWorkflowFile = (f) => /\.ya?ml$/i.test(f);
@@ -113,6 +114,12 @@ function addedGates(srcDir, destDir, file) {
 function resolveWorkflow(file, dirs, { repo = null, preferRepository = false } = {}) {
   if (!file) throw new Error('No workflow file given.');
   if (path.isAbsolute(file)) return { file, dir: null, fallback: false };
+  // #630: an old bundled name (a saved manifest, roadmap or default) runs its new workflow with the
+  // old variant's inputs, unless the project's own manifest declares that name
+  const alias = aliasOf(file);
+  if (alias && !(repo && repositoryEntry(readManifest(repo).workflows, file))) {
+    return { ...resolveWorkflow(alias.file, dirs, { repo, preferRepository }), inputs: alias.inputs, alias: path.basename(String(file)) };
+  }
   const entry = repo ? repositoryEntry(readManifest(repo).workflows, file) : null;
   const edited = entry && !preferRepository ? editedWorkspaceCopy([file, `${file}.yaml`, path.posix.basename(entry.file)], dirs) : null;
   if (edited) return { file: path.join(dirs[0], edited), dir: dirs[0], fallback: false, origin: 'workspace' };

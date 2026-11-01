@@ -111,7 +111,9 @@ function renderWorkflowOptions(preferred) {
     return;
   }
   const values = [...list.map((w) => w.file), ...pipes.map((p) => PIPE + p.file)];
-  const pick = values.includes(preferred) ? preferred : values[0];
+  // #630: a remembered old workflow name picks its new workflow
+  const aliased = window.DefaultWorkflow?.aliasOf?.(preferred)?.file;
+  const pick = values.includes(preferred) ? preferred : values.includes(aliased) ? aliased : values[0];
   sel.value = pick;
   selectWorkflow(pick);
 }
