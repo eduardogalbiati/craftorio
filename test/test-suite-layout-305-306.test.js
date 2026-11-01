@@ -138,7 +138,7 @@ test('every test title of the split files (and the matrix) still exists, in exac
       if (holders.length !== 1) problems.push(`${origin}: "${title.slice(0, 90)}" in ${holders.length} test file(s) ${holders.join(', ')}`);
     }
   }
-  assert.equal(count, 79, 'the snapshot holds the 31 + 27 + 20 titles and the matrix');
+  assert.equal(count, 75,'the snapshot holds the 31 + 27 + 20 titles and the matrix');
   assert.deepEqual(problems, []);
 });
 

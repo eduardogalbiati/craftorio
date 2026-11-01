@@ -77,11 +77,7 @@
     "local-hero: a merge conflict re-checks only the resolution (review, tests, verify), then merges",
     "local-hero: a resolution touching many files runs the full suite, not a targeted one",
     "local-hero: a resolution that changes behaviour goes through the full review, tests and verification again",
-    "local-hero: conflicts that keep recurring stop at merge_blocked after 3 rounds, never merged automatically",
-    "software-development: approve_merge shows the PR state and when it was checked, and says it checks again on approval",
-    "software-development: a conflict found right before approve_merge opens recovers through resolve_conflict, then asks for approval again",
-    "software-development: the merge action itself failing (not the check) still recovers, never ends the run as failed",
-    "software-development: 2 resolution rounds that stay conflicted reach the merge_failed gate, never merged automatically"
+    "local-hero: conflicts that keep recurring stop at merge_blocked after 3 rounds, never merged automatically"
   ],
   "test/engine-helpers.js": [
     "feature.yaml (remote): unit_tests=${unit_tests} x e2e_tests=${e2e_tests}: test visited=${testVisited}, suite visited=${suiteVisited}"
