@@ -17,8 +17,9 @@ test('#327 software-development with agents in pt-BR: every step output parses a
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'language-run-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'software-development.yaml'),
-    inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir, language: () => PT,
+    // #630: software-development is feature.yaml in remote mode (the alias of packages/shared/default-workflow.js)
+    file: path.join(root, 'workflows', 'feature.yaml'),
+    inputs: { task: 'Engine test', repo_path: root, mode: 'remote', check_command: 'node --version' }, mock: true, runsDir, language: () => PT,
   });
   const events = [];
   run.on('event', (ev) => {

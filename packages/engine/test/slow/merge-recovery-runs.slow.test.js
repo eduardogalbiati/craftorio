@@ -1,6 +1,6 @@
 // #99 (scoped re-check after a local merge conflict) and #69 (merge conflicts: re-check before
 // merging and go back in the flow), through mock runs. Split from test/merge-recovery.test.js
-// (#305); software-development's approve_merge path is in merge-recovery-approve-merge.slow.test.js. Covers:
+// (#305). Covers:
 // - packages/engine/engine/workflow.js: `check:` / `precheck:` gates, the recovery route of a failed action
 //   or check (recoverFromActionError / superviseActionError), and the merge queue's cross-run
 //   withdrawal of an open gate.
@@ -176,10 +176,18 @@ async function runLocalHero(t, { mockSequences, answers = {}, patchAgent } = {})
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   const run = new WorkflowRun({ file: LOCAL_HERO, inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir, mockSequences });
-  if (patchAgent) {
-    const original = run.sendToAgent.bind(run);
-    run.sendToAgent = (agentName, prompt, opts) => patchAgent(agentName, prompt, opts, original);
-  }
+  // #380: the mock fills every optional string, so its resolve_merge answer always carries a
+  // test_conflict (handed to the test writer); these scenarios are conflicts in code, not in tests
+  const mocked = run.sendToAgent.bind(run);
+  const original = async (agentName, prompt, opts = {}) => {
+    const reply = await mocked(agentName, prompt, opts);
+    if (opts.stepId !== 'resolve_merge') return reply;
+    const json = /```json\s*([\s\S]*?)```/.exec(reply.text || '');
+    if (!json) return reply;
+    const { test_conflict: _ignored, ...out } = JSON.parse(json[1]);
+    return { ...reply, text: `\`\`\`json\n${JSON.stringify(out)}\n\`\`\`` };
+  };
+  run.sendToAgent = patchAgent ? (agentName, prompt, opts) => patchAgent(agentName, prompt, opts, original) : original;
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
@@ -205,7 +213,7 @@ test('local-hero: a merge conflict re-checks only the resolution (review, tests,
   });
   assert.equal(finished.status, 'success', finished.error);
   assert.deepEqual(sinceMerge(transitions), [
-    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>build', 'build>verify_change', 'verify_change>end',
+    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>build', 'build>verify_change', 'verify_change>push_main', 'push_main>end',
   ]);
 
   const scopedReview = prompt('code_review').at(-1);
@@ -249,7 +257,7 @@ test('local-hero: a resolution that changes behaviour goes through the full revi
   });
   assert.equal(finished.status, 'success', finished.error);
   assert.deepEqual(sinceMerge(transitions), [
-    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>suite', 'suite>build', 'build>evidence', 'evidence>verify_change', 'verify_change>end',
+    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>suite', 'suite>e2e', 'e2e>build', 'build>evidence', 'evidence>verify_change', 'verify_change>push_main', 'push_main>end',
   ]);
   const fullReview = prompt('code_review').at(-1);
   assert.doesNotMatch(fullReview, /Review the RESOLUTION of a merge conflict/);

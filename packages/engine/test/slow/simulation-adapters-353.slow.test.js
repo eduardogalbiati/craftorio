@@ -5,6 +5,8 @@
 // two runs there gave the same 593 events. #465 adds the suite step's two step.log events (the
 // focused round, then the whole suite): 595. #472 adds the run's first log event naming the
 // repository commands it is about to run: 596. #696 adds the suite output's `new_baselines` ([]).
+// #630 removed software-development.yaml (now feature.yaml in remote mode, tests first, the merge
+// left to the team on the platform): re-recorded from feature.yaml (#723), two runs gave 443 events.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

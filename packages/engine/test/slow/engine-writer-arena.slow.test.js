@@ -13,7 +13,7 @@ test('a run input defaults to the latest run of another workflow', (t) => {
   const runsDir = runsWith(t, [
     ['20260927-101010-aaaaaaaa', 'software-development'],
     ['20260928-101010-bbbbbbbb', 'ai-arena'],
-    ['20260929-101010-cccccccc', 'run-retrospective'], // a retrospective itself is skipped
+    ['20260929-101010-cccccccc', 'retrospective'], // a retrospective itself is skipped (#631: retrospective.yaml is named retrospective)
   ]);
   assert.equal(retro(runsDir, undefined).inputs.run_id, '20260928-101010-bbbbbbbb');
   assert.equal(retro(runsDir, 'latest').inputs.run_id, '20260928-101010-bbbbbbbb');
