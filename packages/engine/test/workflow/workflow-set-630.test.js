@@ -123,3 +123,64 @@ test('#630 a default workflow saved under an old name resolves to feature.yaml, 
   assert.equal(r.file, 'feature.yaml');
   assert.equal(Boolean(r.missing), false, `missing: ${JSON.stringify(r.missing)}`);
 });
+
+// ---- the inputs of an old name (runs.js and scripts/run.js go through aliasInputs) ----------------
+
+test('#630 an old run\'s mode validated becomes validation, and the alias\'s mode wins', () => {
+  const { aliasOf, aliasInputs } = defaultWorkflow();
+  const out = aliasInputs(aliasOf('software-development.yaml'), { mode: 'validated', unit_tests: 'run_existing' });
+  assert.deepEqual(out, { mode: 'remote', validation: 'validated', unit_tests: 'run_existing' });
+});
+
+test('#630 an old run\'s mode auto becomes validation auto under a local alias', () => {
+  const { aliasOf, aliasInputs } = defaultWorkflow();
+  const out = aliasInputs(aliasOf('workflows/ai-development-local-hero'), { mode: 'auto' });
+  assert.deepEqual(out, { mode: 'local', validation: 'auto' });
+});
+
+test('#630 an explicit input other than mode wins over the alias\'s inputs', () => {
+  const { aliasOf, aliasInputs } = defaultWorkflow();
+  const out = aliasInputs(aliasOf('multi-model-review.yaml'), { review: 'single' });
+  assert.equal(out.review, 'single');
+});
+
+test('#630 without an alias the given inputs come back unchanged', () => {
+  const { aliasOf, aliasInputs } = defaultWorkflow();
+  assert.equal(aliasOf('feature.yaml'), null);
+  assert.deepEqual(aliasInputs(null, { mode: 'remote' }), { mode: 'remote' });
+});
+
+// ---- feature.yaml code_review: the second reviewer's verdict counts --------------------------------
+
+function reviewGoto(results, inputs) {
+  const { loadWorkflow, evalExpr } = require('../../engine/workflow');
+  const step = loadWorkflow(path.join(WORKFLOWS, 'feature.yaml')).steps.find((s) => s.id === 'code_review');
+  const scope = { output: { results }, steps: {}, inputs, vars: {} };
+  const tr = step.transitions.find((x) => x.when === undefined || evalExpr(x.when, scope));
+  return tr && tr.goto;
+}
+
+const APPROVED = { verdict: 'approved' };
+const CHANGES = { verdict: 'changes_requested' };
+
+test('#630 code_review: only the second reviewer asks for changes, the run goes back to develop', () => {
+  assert.equal(reviewGoto({ reviewer: APPROVED, second_reviewer: CHANGES }, { review: 'multi_model', unit_tests: 'write_and_run' }), 'develop');
+});
+
+test('#630 code_review: both reviewers approve, the run goes on to the tests', () => {
+  assert.equal(reviewGoto({ reviewer: APPROVED, second_reviewer: APPROVED }, { review: 'multi_model', unit_tests: 'write_and_run' }), 'test');
+});
+
+test('#630 code_review: a single review (no second_reviewer in the results) still goes on when approved', () => {
+  assert.equal(reviewGoto({ reviewer: APPROVED }, { review: 'single', unit_tests: 'write_and_run' }), 'test');
+  assert.equal(reviewGoto({ reviewer: CHANGES }, { review: 'single', unit_tests: 'write_and_run' }), 'develop');
+});
+
+test('#630 code_review: the second reviewer runs only with review multi_model', () => {
+  const { loadWorkflow, evalExpr } = require('../../engine/workflow');
+  const step = loadWorkflow(path.join(WORKFLOWS, 'feature.yaml')).steps.find((s) => s.id === 'code_review');
+  const when = step.agent_when?.second_reviewer;
+  assert.equal(typeof when, 'string', 'agent_when.second_reviewer');
+  assert.equal(Boolean(evalExpr(when, { inputs: { review: 'multi_model' }, steps: {}, vars: {} })), true);
+  assert.equal(Boolean(evalExpr(when, { inputs: { review: 'single' }, steps: {}, vars: {} })), false);
+});

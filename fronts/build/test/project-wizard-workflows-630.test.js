@@ -110,7 +110,7 @@ async function emit(app, state) {
 }
 
 // the wizard at step 3 with the profile job done
-async function profiled() {
+async function profiled(state = PROFILED) {
   const app = page();
   await app.boot();
   assert.equal(typeof app.sandbox.ProjectWizard?.open, 'function', 'window.ProjectWizard.open()');
@@ -124,7 +124,7 @@ async function profiled() {
   await emit(app, CLONING);
   await emit(app, READY);
   assert.equal(currentStep(app), 'analysis', 'the wizard went on to the analysis once the clone was ready');
-  await emit(app, PROFILED);
+  await emit(app, state);
   await app.settle(10);
   return app;
 }
@@ -162,6 +162,15 @@ test('#630 step 3: each workflow row has an enabled select with at least two cho
 
 test('#630 step 3: the ways of working profile line says the project works through pull requests', { timeout: 20000 }, async () => {
   const app = await profiled();
+  const line = byTestId(wizardMarkup(app), 'wizard-profile');
+  assert.equal(line === null, false, 'data-testid="wizard-profile"');
+  assert.match(textOf(line), /pull request|\bPR\b|remote/i);
+});
+
+test('#630 step 3: the profile line reads the profile job\'s result when the state has no top-level profile', { timeout: 20000 }, async () => {
+  const { profile, ...jobOnly } = clone(PROFILED);
+  assert.equal(profile === undefined, false, 'the fixture had a top-level profile to drop');
+  const app = await profiled(jobOnly);
   const line = byTestId(wizardMarkup(app), 'wizard-profile');
   assert.equal(line === null, false, 'data-testid="wizard-profile"');
   assert.match(textOf(line), /pull request|\bPR\b|remote/i);

@@ -86,6 +86,15 @@ test('#640 the model fills the fields git leaves null', async (t) => {
   assert.equal(out.profile.release, 'milestone');
 });
 
+test('#630 the model\'s team and merge never enter the profile (evidence only)', async (t) => {
+  simulation(t, '0');
+  const { area, project } = await setup(t);
+  const out = await area.workflowInterview({ projectId: project.id });
+  assert.equal('team' in out.profile, false, `the profile's keys: ${JSON.stringify(Object.keys(out.profile))}`);
+  assert.equal('merge' in out.profile, false, `the profile's keys: ${JSON.stringify(Object.keys(out.profile))}`);
+  assert.equal(out.profile.mode, 'local', 'the model\'s merge: pr does not turn the project remote');
+});
+
 test('#640 under MULTIAGENT_SIMULATION_ONLY=1 the free profile comes back and no model is called', async (t) => {
   simulation(t, '1');
   const { area, project, oracle } = await setup(t);
