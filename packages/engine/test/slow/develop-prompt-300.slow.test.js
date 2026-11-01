@@ -74,7 +74,8 @@ test('develop prompt (#303): no self-review paragraph and no code-review skill; 
     '`<issue>-<screen>-<state>`, `caption` one sentence, `args` the options as a list',
     'never --out, --name, --side, --ref or --caption (the capture sets them)',
     'The engine captures each one, original and modified, before the owner tries the change.',
-    'An empty list when the change has no UI.',
+    // #670: a change under the UI folders always lists its screens
+    'An empty list when the change has no UI; a change to files under the UI folders always lists its screens.',
     'make the screenshot demo data cover the fields the change introduces (ui-conventions skill)',
   ]) assert.ok(flat.includes(line), `the screenshots instructions keep: ${line}`);
 
