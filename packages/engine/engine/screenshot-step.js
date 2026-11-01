@@ -14,12 +14,23 @@
 // context / paste selector matched nothing ("screenshot: nothing matches <selector>") while the
 // modified side was taken: an element the change adds, counted apart in the message, not an error.
 // Each capture waits for the machine-wide screenshot slot (#199): one Electron screenshot at a time.
+// #649 (write-doc in another project): the source of the captures, in this order (captureSource):
+//   1. the project's own command: `npm run screenshot` (package.json), else the `command:` of the
+//      repository's .multiagent/screenshot.yaml, run as `<command> -- <args>` with the same options;
+//   2. Run App: the local preview of .multiagent/local-preview.yaml, captured by `capturePreview`
+//      ({ entry, side, ref, out, name, cwd, config, env, signal, timeoutMs }; the machine gives
+//      packages/engine/engine/preview-capture.js; ref is the base on the original side, null on the modified);
+//   3. a manual attachment: nothing is taken and the reason asks the owner to attach the screenshots.
+// out.source says which one ran ('command' | 'run-app' | 'manual').
 
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
+const yaml = require('js-yaml');
 const evidence = require('../domains/evidence/evidence');
+const { readRepoConfig } = require('../domains/local/local-preview');
 const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
-const { runShim } = require('../domains/machine/shell');
+const { runShim, shQuote } = require('../domains/machine/shell');
 const { readChecks, screenChecks } = require('./ui-review-checks');
 const {
   acquireSlot,
@@ -34,6 +45,9 @@ const RESERVED = ['--caption', '--name', '--out', '--ref', '--side'];
 const NAME = /^[\w.-]+$/;
 // scripts/screenshot.js's last line when a selector matches nothing
 const NOTHING_MATCHES = /^screenshot: nothing matches (.+)$/;
+const NPM_COMMAND = 'npm run screenshot';
+// #649: the screenshot command of a project without a package.json script, committed by its owner
+const SCREENSHOT_FILES = ['.multiagent/screenshot.yaml', '.multiagent/screenshot.yml'];
 
 // "--view run --click \"[data-x] .y\"" → ['--view', 'run', '--click', '[data-x] .y'] (a list stays a list)
 function splitArgs(v) {
@@ -58,21 +72,56 @@ function checkEntry(e, i) {
   return { name, caption: String(e.caption || '').trim() || name, args };
 }
 
-// The project's screenshot command, from the worktree's package.json: 'npm run screenshot' or null
+// #649: the `command:` of the repository's .multiagent/screenshot.yaml, trimmed; null when there is
+// none, it is not valid YAML or it has no command
+function yamlCommand(dir) {
+  for (const rel of SCREENSHOT_FILES) {
+    let doc;
+    try { doc = yaml.load(fs.readFileSync(path.join(dir, rel), 'utf8')); } catch { continue; }
+    const command = typeof doc?.command === 'string' ? doc.command.trim() : '';
+    return command || null;
+  }
+  return null;
+}
+
+// The project's screenshot command: 'npm run screenshot' (a `screenshot` script in the worktree's
+// package.json), else the command of .multiagent/screenshot.yaml (#649), else null
 function screenshotCommand(dir) {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
-    return typeof pkg.scripts?.screenshot === 'string' && pkg.scripts.screenshot.trim() ? 'npm run screenshot' : null;
-  } catch { return null; }
+    if (typeof pkg.scripts?.screenshot === 'string' && pkg.scripts.screenshot.trim()) return 'npm run screenshot';
+  } catch { /* no package.json: another project */ }
+  return yamlCommand(dir);
 }
 
-// Runs `npm run screenshot -- <args>` in cwd → { code, output, timedOut }; never rejects.
+// #649: how the evidence of the worktree is taken → { kind: 'command', command } | { kind: 'run-app',
+// ...the .multiagent/local-preview.yaml config } | { kind: 'manual' } (an invalid preview file too)
+function captureSource(dir) {
+  const command = dir ? screenshotCommand(dir) : null;
+  if (command) return { kind: 'command', command };
+  const preview = readRepoConfig(dir);
+  return preview && !preview.error ? { kind: 'run-app', ...preview } : { kind: 'manual' };
+}
+
+// `<command> -- <args>` for the shell, each argument quoted (cmd.exe on Windows, /bin/sh elsewhere)
+function shellLine(command, args) {
+  const quote = process.platform === 'win32' ? (a) => `"${String(a).replace(/"/g, '\\"')}"` : shQuote;
+  return `${command} -- ${args.map(quote).join(' ')}`;
+}
+
+// The capture's child: `npm run screenshot -- <args>` (through the npm shim), any other command
+// (#649) through the shell → ChildProcess, or { error } when npm is missing
+function spawnShot(command, args, opts) {
+  if (command !== NPM_COMMAND) return spawn(shellLine(command, args), { ...opts, shell: true });
+  const npm = resolveCommand('npm');
+  if (!npm) return { error: 'npm not found in PATH' };
+  return runShim(npm.file, ['run', 'screenshot', '--', ...args], opts);
+}
+
+// Runs `<command> -- <args>` in cwd (default `npm run screenshot`) → { code, output, timedOut }; never rejects.
 // onSpawn(pid): the command's process, watched by the memory guard (#276).
 // logFile (#465): the command's output is appended to it as it comes (the step's live terminal).
-function runShot({ cwd, args, env, timeoutMs, signal, onSpawn, logFile = null }) {
-  const npm = resolveCommand('npm');
-  if (!npm) return Promise.resolve({ code: null, output: 'npm not found in PATH', timedOut: false });
-  const argv = ['run', 'screenshot', '--', ...args];
+function runShot({ cwd, args, env, timeoutMs, signal, onSpawn, logFile = null, command = NPM_COMMAND }) {
   // Electron as Electron (the engine may itself run inside Electron as node)
   const childEnv = { ...env };
   delete childEnv.ELECTRON_RUN_AS_NODE;
@@ -80,7 +129,8 @@ function runShot({ cwd, args, env, timeoutMs, signal, onSpawn, logFile = null })
   return new Promise((resolve) => {
     let child;
     try {
-      child = runShim(npm.file, argv, { cwd, env: childEnv, windowsHide: true, ...OWN_GROUP });
+      child = spawnShot(command, args, { cwd, env: childEnv, windowsHide: true, ...OWN_GROUP });
+      if (child.error) { resolve({ code: null, output: child.error, timedOut: false }); return; }
     } catch (e) {
       resolve({ code: null, output: e.message, timedOut: false });
       return;
@@ -144,13 +194,72 @@ function openShotLog(logFile, runDir, command, onLog) {
   return { line: (text) => fs.appendFileSync(logFile, text), opts: { logFile } };
 }
 
+const MANUAL_REASON = 'the project has no screenshot command (package.json or .multiagent/screenshot.yaml) and no local preview (.multiagent/local-preview.yaml): attach the screenshots by hand';
+
+// Why nothing is captured, in the order the owner fixes it; null: capture
+function skipReason({ valid, mock, runDir, cwd, source }) {
+  if (!valid.length) return 'no valid entry in the developer\'s list';
+  if (mock) return 'simulated run (the app is not captured)';
+  if (!runDir) return 'the run has no folder';
+  if (!cwd || !fs.existsSync(cwd)) return 'the run has no worktree to capture';
+  return source.kind === 'manual' ? MANUAL_REASON : null;
+}
+
+// #649: one Run App capture as a command's result { code, output, timedOut }; a throw is its output
+async function previewShot(capturePreview, opts) {
+  try {
+    await capturePreview(opts);
+    return { code: 0, output: '', timedOut: false };
+  } catch (e) {
+    return { code: null, output: e?.message || String(e), timedOut: false };
+  }
+}
+
+// Each side of each valid entry through take(entry, side, args) → { code, output, timedOut }; the
+// images, errors, new elements and axe findings go into `out`
+async function shootEntries(valid, { dir, base, runDir, label, take, timeoutMs, signal, log, shotLog, out }) {
+  for (const e of valid) {
+    let shot = false;
+    let modified = false;
+    for (const side of base ? ['modified', 'original'] : ['modified']) {
+      const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
+      const t0 = Date.now();
+      log('info', `screenshots: ${label} -- ${args.join(' ')}`);
+      shotLog.line(`$ ${label} -- ${args.join(' ')}\n`);
+      const r = await take(e, side, args);
+      const file = path.join(dir, `${e.name}.${side}.png`);
+      if (r.code === 0 && fs.existsSync(file)) {
+        out.taken++;
+        shot = true;
+        if (side === 'modified') modified = true;
+        out.screenshots.push({ path: path.relative(runDir, file).split(path.sep).join('/'), caption: e.caption, side, duration_ms: Date.now() - t0 });
+        continue;
+      }
+      const error = r.timedOut ? `timed out after ${Math.round(timeoutMs / 1000)} s`
+        : r.code === 0 ? 'the command wrote no image'
+          : `exit ${r.code ?? '?'}: ${lastLine(r.output) || 'no output'}`;
+      // #185: the base has no element the change adds; its modified side was taken, so not an error
+      const missing = side === 'original' && modified && !r.timedOut && r.code !== 0 ? NOTHING_MATCHES.exec(lastLine(r.output)) : null;
+      if (missing) { out.new_elements.push({ name: e.name, side, selector: missing[1].trim(), error }); continue; }
+      out.errors.push({ name: e.name, side, error });
+      // an invalid option (exit 2) fails the same way on the other side; a cancelled run stops here
+      if (r.code === 2 || signal?.aborted) break;
+    }
+    if (shot) out.screens++;
+    out.axe_findings.push(...screenAxeFindings(dir, e.name, modified));
+    if (signal?.aborted) break;
+  }
+}
+
 // entries: the developer's list; cwd: the worktree; base: the ref of the "original" side (none: modified
 // only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable);
 // slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot;
 // onSpawn(pid): each capture's process (the memory guard, #276)
 // logFile (#465): the captures' output, one `$ <command>` line before each; onLog({ path, command }) is
 // called once before the first capture runs (path relative to runDir)
-async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {}, onSpawn = null, logFile, onLog }) {
+// capturePreview (#649): the Run App capture of a project without a screenshot command; none: such a
+// project asks for a manual attachment
+async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {}, onSpawn = null, logFile, onLog, capturePreview = null }) {
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
@@ -174,52 +283,29 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
     else if (valid.some((v) => v.name === c.name)) out.errors.push({ name: c.name, error: 'the same name twice' });
     else valid.push(c);
   });
-  const command = cwd && fs.existsSync(cwd) ? screenshotCommand(cwd) : null;
-  if (!valid.length) out.reason = 'no valid entry in the developer\'s list';
-  else if (mock) out.reason = 'simulated run (the app is not captured)';
-  else if (!runDir) out.reason = 'the run has no folder';
-  else if (!cwd || !fs.existsSync(cwd)) out.reason = 'the run has no worktree to capture';
-  else if (!command) out.reason = 'the project has no screenshot command (a "screenshot" script in package.json)';
+  const found = cwd && fs.existsSync(cwd) ? captureSource(cwd) : { kind: 'manual' };
+  // #649: Run App needs a capture; without one the owner attaches the screenshots
+  const source = found.kind === 'run-app' && !capturePreview ? { kind: 'manual' } : found;
+  out.source = source.kind;
+  out.reason = skipReason({ valid, mock, runDir, cwd, source });
   if (out.reason) return finish();
 
   fs.mkdirSync(dir, { recursive: true });
-  const shotLog = openShotLog(logFile, runDir, command, onLog);
-  for (const e of valid) {
-    let shot = false;
-    let modified = false;
-    for (const side of base ? ['modified', 'original'] : ['modified']) {
-      const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
-      const t0 = Date.now();
-      log('info', `screenshots: ${command} -- ${args.join(' ')}`);
-      shotLog.line(`$ ${command} -- ${args.join(' ')}\n`);
-      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}), ...shotLog.opts }));
-      const file = path.join(dir, `${e.name}.${side}.png`);
-      if (r.code === 0 && fs.existsSync(file)) {
-        out.taken++;
-        shot = true;
-        if (side === 'modified') modified = true;
-        out.screenshots.push({ path: path.relative(runDir, file).split(path.sep).join('/'), caption: e.caption, side, duration_ms: Date.now() - t0 });
-        continue;
-      }
-      const error = r.timedOut ? `timed out after ${Math.round(timeoutMs / 1000)} s`
-        : r.code === 0 ? 'the command wrote no image'
-          : `exit ${r.code ?? '?'}: ${lastLine(r.output) || 'no output'}`;
-      // #185: the base has no element the change adds; its modified side was taken, so not an error
-      const missing = side === 'original' && modified && !r.timedOut && r.code !== 0 ? NOTHING_MATCHES.exec(lastLine(r.output)) : null;
-      if (missing) { out.new_elements.push({ name: e.name, side, selector: missing[1].trim(), error }); continue; }
-      out.errors.push({ name: e.name, side, error });
-      // an invalid option (exit 2) fails the same way on the other side; a cancelled run stops here
-      if (r.code === 2 || signal?.aborted) break;
-    }
-    if (shot) out.screens++;
-    out.axe_findings.push(...screenAxeFindings(dir, e.name, modified));
-    if (signal?.aborted) break;
-  }
+  const label = source.kind === 'command' ? source.command : `Run App ${source.url || source.command}`;
+  const shotLog = openShotLog(logFile, runDir, label, onLog);
+  const take = source.kind === 'command'
+    ? (e, side, args) => withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, command: source.command, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}), ...shotLog.opts }))
+    : (e, side) => withSlot({ signal, onSlotWait, slot }, () => previewShot(capturePreview, {
+      entry: e, side, ref: side === 'original' ? base : null, out: path.join(dir, `${e.name}.${side}.png`), name: e.name,
+      cwd, config: source, env, signal, timeoutMs,
+    }));
+  await shootEntries(valid, { dir, base, runDir, label, take, timeoutMs, signal, log, shotLog, out });
   return finish();
 }
 
 module.exports = {
   captureScreenshots,
+  captureSource,
   checkEntry,
   MAX_SCREENS,
   screenshotCommand,

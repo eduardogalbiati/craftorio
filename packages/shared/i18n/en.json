@@ -2151,6 +2151,7 @@
   "discovery.the_card_s_folder_in_the": "The card's folder in the workspace's discovery/",
   "discovery.the_cards_accepted_in_the_inbox": "The cards accepted in the Inbox, worked on until they are clear enough to commit: Triage → Shape → Define → Ready. Private to this workspace (",
   "discovery.the_night_is_when_agents_work": "The night is when agents work alone: the ready forecast counts in nights of this length.",
+  "discovery.the_writer_drafts_an_intent_from": "The writer drafts an intent from this card in Documents; the document comes back here as a version and an attachment.",
   "discovery.thread": "Thread",
   "discovery.title": "Title",
   "discovery.titles_and_documents": "Titles and documents",
@@ -2166,6 +2167,7 @@
   "discovery.when_a_card_enters": "When a card enters",
   "discovery.why_does_it_go_to_ready": "Why does it go to Ready below the bar? Kept on the card.",
   "discovery.wip_limit_of_title": "WIP limit of {title}",
+  "discovery.write_a_document": "Write a document",
   "discovery.your_answer_enter_sends": "Your answer (Enter sends)",
 
   "discovery_commit.commit_to_the_backlog": "Commit to the backlog",

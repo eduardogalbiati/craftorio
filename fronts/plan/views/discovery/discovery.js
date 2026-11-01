@@ -42,7 +42,7 @@
   const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix']; // the store's (discovery.TYPES)
   const FAST = ['bug', 'hotfix']; // the fast lane's types
   // the runs whose result comes back to a card, by the `source` it is recorded under
-  const SOURCES = { 'ai-arena': 'AI Arena', 'write-review': 'Write & Review' };
+  const SOURCES = { 'ai-arena': 'AI Arena', 'write-doc': 'Write a document', 'write-review': 'Write & Review' };
   // the document type a card's type asks Write & Review and the AI Arena for (else free-form)
   const DOC_SKILL = { prd: 'prd-writing', rfc: 'rfc-writing' };
   const LS_RUNS = 'discovery.runs'; // run id → { projectId, cardId, source }, until the run ends
@@ -879,6 +879,7 @@
       <div class="row dsc-actions" role="group" aria-label="${t('discovery.shape')}">
         <button type="button" class="btn sm" data-testid="card-open-write-review" data-detail="open-write-review" title="${t('discovery.a_writer_and_a_reviewer_work')}">${t('discovery.open_in_write_review')}</button>
         <button type="button" class="btn sm" data-testid="card-open-arena" data-detail="open-arena" title="${t('discovery.several_models_write_from_this_card')}">${t('discovery.open_in_ai_arena')}</button>
+        <button type="button" class="btn sm" data-testid="card-write-doc" data-detail="write-doc" title="${t('discovery.the_writer_drafts_an_intent_from')}">${t('discovery.write_a_document')}</button>
       </div>
       <p class="muted small dsc-actions-hint">${t('discovery.the_card_s_document_is_the')}</p>`;
   }
@@ -1250,8 +1251,7 @@
     else if (act === 'grill-end') endGrill();
     else if (act === 'version-open') openVersion(b.dataset.name);
     else if (act === 'version-restore') restoreVersion(b.dataset.name);
-    else if (act === 'open-write-review') openRunScreen('write-review');
-    else if (act === 'open-arena') openRunScreen('ai-arena');
+    else if (RUN_ACTS[act]) RUN_ACTS[act]();
   }
 
   function onDetailChange(e) {
@@ -1305,19 +1305,19 @@
     window.openDuoForCard({ ...card, prompt: request, goal, skill });
   }
 
+  // #649 "Write a document": the Documents editor writes a new intent named after the card (views/docs/docs.js)
+  function writeDocument() { if (!editBlocks()) window.writeDocForCard({ projectId: dv.openProject, cardId: dv.open.id, title: dv.open.title }).catch((e) => detailError(errMsg(e))); }
+  const RUN_ACTS = { 'open-write-review': () => openRunScreen('write-review'), 'open-arena': () => openRunScreen('ai-arena'), 'write-doc': writeDocument };
+
   const readRuns = () => { try { return JSON.parse(localStorage.getItem(LS_RUNS)) || {}; } catch { return {}; } };
   const writeRuns = (runs) => { try { localStorage.setItem(LS_RUNS, JSON.stringify(runs)); } catch { /* ignore */ } };
 
-  /** The run `runId` was started for a card: `{ projectId, cardId, source }` ('write-review' | 'ai-arena'). */
+  /** The run `runId` was started for a card: `{ projectId, cardId, source }` ('write-review' | 'ai-arena' | 'write-doc'). */
   function runStarted(runId, { projectId, cardId, source }) {
     writeRuns({ ...readRuns(), [runId]: { projectId, cardId, source } });
   }
 
-  function forgetRun(runId) {
-    const runs = readRuns();
-    delete runs[runId];
-    writeRuns(runs);
-  }
+  function forgetRun(runId) { const runs = readRuns(); delete runs[runId]; writeRuns(runs); }
 
   // A card's run ended (`ev`: its workflow.finished): a successful run's document goes back to the
   // card. The link goes once the result is recorded, or when there is nothing to record (the run

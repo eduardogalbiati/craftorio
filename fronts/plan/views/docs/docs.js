@@ -14,7 +14,7 @@
 // off spec changes the front matter and commits (docs:accept) before it answers the gate. A signed-off
 // spec offers Create epic and phase issues (its list row too: the Backlog's Product Owner proposes them
 // with their mockup coverage, #670) and Start the Build (the Roadmap): nothing is filed or started
-// before that click.
+// before that click. A Discovery card's Write a document starts its writer here too (writeDocForCard, #649).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, showToast, showView), markdownHtml (artifact-render.js), DocModel
 // (packages/shared/doc-model.js), CurrentProject and AgentChat.
@@ -151,6 +151,15 @@
     } finally { docs.busy = false; }
   }
 
+  // The write-doc run of a document → its startRun answer { runId }; folder: the project's (none: left out)
+  async function runWriter(projectId, folder, { item, doc, title }) {
+    const inputs = { ...(folder ? { project_path: folder } : {}), item, document: doc, title: title || item };
+    // the run starts from and merges into the project's default branch (main, master, develop…)
+    const hints = await api.projectInputHints?.(projectId).catch(() => null);
+    if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch;
+    return api.startRun({ file: FILE, inputs, mock: !!state.simulationOnly, projectId });
+  }
+
   async function startWriter() {
     const o = docs.open;
     const folder = projectFolder();
@@ -159,11 +168,7 @@
     docs.early = [];
     renderGate();
     try {
-      const inputs = { project_path: folder, item: o.item, document: o.doc, title: o.title || o.item };
-      // the run starts from and merges into the project's default branch (main, master, develop…)
-      const hints = await api.projectInputHints?.(docs.projectId).catch(() => null);
-      if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch;
-      const out = await api.startRun({ file: FILE, inputs, mock: !!state.simulationOnly, projectId: docs.projectId });
+      const out = await runWriter(docs.projectId, folder, o);
       if (docs.open !== o) return;
       o.runId = out.runId;
       // the run's first events may arrive before startRun answers
@@ -543,6 +548,20 @@
       docs.open.runId = runId;
       for (const ev of events) await onRunEvent({ run_id: runId, ...ev });
     },
+  };
+
+  // #649 "Write a document" on a Discovery card (views/discovery/discovery.js): the writer on a new
+  // intent named after the card, opened in this editor; the run is the card's (DiscoveryRuns), so its
+  // document comes back to the card as a version and an attachment when it ends → the run id
+  window.writeDocForCard = async ({ projectId, cardId, title }) => {
+    const item = slugOf(title) || 'card';
+    const folder = (state.projects || []).find((p) => p.id === projectId)?.folder || null;
+    const out = await runWriter(projectId, folder, { item, doc: 'intent', title });
+    window.DiscoveryRuns?.started(out.runId, { projectId, cardId, source: 'write-doc' });
+    showView('docs');
+    await openDoc(item, 'intent', out.runId, { creating: true });
+    if (docs.open) docs.open.title = title;
+    return out.runId;
   };
 
   registerView({

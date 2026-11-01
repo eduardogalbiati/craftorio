@@ -2151,6 +2151,7 @@
   "discovery.the_card_s_folder_in_the": "A pasta do cartão em discovery/ do workspace",
   "discovery.the_cards_accepted_in_the_inbox": "Os cartões aceitos no Inbox, trabalhados até ficarem claros o bastante para confirmar: Triage → Shape → Define → Ready. Privado deste workspace (",
   "discovery.the_night_is_when_agents_work": "A noite é quando os agentes trabalham sozinhos: a previsão de prontos conta em noites desta duração.",
+  "discovery.the_writer_drafts_an_intent_from": "O escritor rascunha uma intenção a partir deste cartão em Documentos; o documento volta para cá como versão e anexo.",
   "discovery.thread": "Conversa",
   "discovery.title": "Título",
   "discovery.titles_and_documents": "Títulos e documentos",
@@ -2166,6 +2167,7 @@
   "discovery.when_a_card_enters": "Quando um cartão entra em",
   "discovery.why_does_it_go_to_ready": "Por que vai para Ready abaixo da barra? Fica guardado no cartão.",
   "discovery.wip_limit_of_title": "Limite de WIP de {title}",
+  "discovery.write_a_document": "Escrever um documento",
   "discovery.your_answer_enter_sends": "Sua resposta (Enter envia)",
 
   "discovery_commit.commit_to_the_backlog": "Confirmar no backlog",

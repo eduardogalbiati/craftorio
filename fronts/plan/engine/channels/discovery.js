@@ -360,8 +360,8 @@ module.exports = (ctx) => {
       schema: { params: onCard({ name: STRING }), result: CARD },
       fn: ({ projectId, cardId, name }) => discovery.restoreVersion(dir(), projectId, cardId, name, { by: owner() }),
     },
-    // the result of a run started from the card (`source`: 'write-review' | 'ai-arena'): the new
-    // document, a version and a thread entry → the card
+    // the result of a run started from the card (`source`: 'write-review' | 'ai-arena' | 'write-doc'):
+    // the new document, a version and a thread entry (write-doc, #649: an .md attachment too) → the card
     {
       channel: 'discovery:record-result',
       method: 'recordDiscoveryResult',

@@ -17,7 +17,7 @@
 // and Define (setWip; a move past it is never refused here: the screen asks), a card's place within
 // its column (moveCard's `index`), and the document's history: versions/ also gets the document a
 // restored version or a run's result replaced (before-restore, before-result) and the result itself
-// (result-<source>: Write & Review, AI Arena), which the thread notes too ({ kind: 'result' }).
+// (result-<source>: Write & Review, AI Arena, Write a document), which the thread notes too ({ kind: 'result' }).
 // The clarity score (#166, packages/engine/domains/discovery/clarity.js): card.json's `clarity` { score, gaps, ts, by, override? }
 // is the rubric's score of the card's text, computed when the card is created and again whenever its
 // document, its acceptance criteria or its type change (the text itself is never touched; a card
@@ -111,7 +111,7 @@ const TEMP_FILE = /\.\d+\.tmp$/;
 // a version of the document: <iso time with - for : and .>-<reason>.md (snapshotVersion)
 const VERSION_FILE = /^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3}Z)-([\w-]+)\.md$/;
 // the runs whose result comes back to a card (recordResult), by the `source` they are recorded under
-const RESULT_SOURCES = { 'ai-arena': 'AI Arena', 'write-review': 'Write & Review' };
+const RESULT_SOURCES = { 'ai-arena': 'AI Arena', 'write-doc': 'Write a document', 'write-review': 'Write & Review' };
 // who scores a card's text when it changes (clarity.by), and who asks in a Grill me interview
 const RUBRIC = 'Clarity rubric';
 const GRILL = 'Grill me';
@@ -623,11 +623,9 @@ function restoreVersion(dir, projectId, id, name, { by = 'owner' } = {}) {
   return load(folder);
 }
 
-/**
- * The result of a run started from the card comes back (`source`: 'write-review' or 'ai-arena'):
- * `text` becomes the document, kept as the version result-<source> (the document it replaces is
- * kept too), and the thread gets an entry { kind: 'result', source, runId }. Returns the card.
- */
+// The result of a run started from the card comes back (`source`: 'write-review', 'ai-arena' or 'write-doc'): `text` becomes the
+// document, kept as the version result-<source> (the document it replaces too), the thread gets an entry { kind: 'result',
+// source, runId }, and a written document (#649, write-doc) is also a .md attachment named after the title. Returns the card.
 function recordResult(dir, projectId, id, { source, text, runId = null, by = 'owner' } = {}) {
   const folder = editableCard(dir, projectId, id);
   if (!Object.hasOwn(RESULT_SOURCES, String(source))) throw new Error(`Unknown result source: ${source} (one of ${Object.keys(RESULT_SOURCES).join(', ')})`);
@@ -635,6 +633,7 @@ function recordResult(dir, projectId, id, { source, text, runId = null, by = 'ow
   keepDocument(dir, projectId, id, 'before-result');
   writeFileAtomic(path.join(folder, 'document.md'), String(text));
   const version = snapshotVersion(dir, projectId, id, `result-${source}`);
+  if (source === 'write-doc') addAttachment(dir, projectId, id, { name: `${String(load(folder).title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'write-doc'}.md`, data: Buffer.from(String(text)) });
   rescore(folder);
   appendConversation(dir, projectId, id, {
     kind: 'result', source, runId: runId ? String(runId) : null, author: String(by || 'owner'), version,

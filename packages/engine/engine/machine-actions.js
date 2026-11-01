@@ -22,6 +22,7 @@ const {
 const { childEnv, PLATFORM_CLIS } = require('./child-env');
 const { runProbe } = require('./probes');
 const { captureScreenshots } = require('./screenshot-step');
+const { capturePreview } = require('./preview-capture');
 const suiteStep = require('./suite-step');
 const { affectedTests, relatedTests } = require('./affected-tests');
 const { shipRelease, writeReleaseVersion } = require('../domains/releases/releases');
@@ -91,7 +92,8 @@ function real() {
       sel.files.sort();
       return sel;
     },
-    captureScreenshots: (opts) => captureScreenshots({ ...opts, mock: false }),
+    // #649: a project without a screenshot command is captured through its local preview (Run App)
+    captureScreenshots: (opts) => captureScreenshots({ capturePreview, ...opts, mock: false }),
     writeReleaseVersion: (opts) => writeReleaseVersion({ ...opts, mock: false }),
     provider: (agent, providers) => providers?.[agent.provider],
     // #414: the run's temp folder (<run>/tmp), created → its path
