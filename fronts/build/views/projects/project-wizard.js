@@ -934,12 +934,14 @@
   // #732: the Projects list (state.projects, read by Analyze, the backlog's pickers, the header) follows the
   // onboarding: read again when a project shows up and at each status change (its clone done: its folder)
   const listedStatus = new Map(); // projectId → the status the list was last read at
+  let listReads = 0; // only the latest read applies: an older answer arriving late never wins
   async function refreshProjectList(ev) {
     if (!ev?.projectId || listedStatus.get(ev.projectId) === ev.status) return;
     listedStatus.set(ev.projectId, ev.status);
+    const read = ++listReads;
     let list;
     try { list = await api.listProjects(); } catch { return; } // the list stays as it was
-    if (!Array.isArray(list)) return;
+    if (read !== listReads || !Array.isArray(list)) return;
     state.projects = list;
     const fresh = list.find((p) => p.id === ev.projectId);
     if (fresh && state.pv?.id === fresh.id && state.pv.project) state.pv.project = { ...state.pv.project, ...fresh };

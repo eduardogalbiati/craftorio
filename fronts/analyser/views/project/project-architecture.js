@@ -132,12 +132,13 @@
     const e = estimateInfo();
     const running = !!cur.mapRun;
     const label = t(cur.mapStarting ? 'project_architecture.starting' : running ? 'project_architecture.analyzing' : 'project_architecture.analyze_this_project');
-    const title = running ? t('project_architecture.run_step', { run: cur.mapRun, step: stepLabel(cur.mapStep) }) : t(hasPlan ? 'project_architecture.analyze_title_refresh' : 'project_architecture.analyze_title', { estimate: e.title });
+    const noFolder = cur.errorKind === 'no-folder'; // #732: no cost on a retry that cannot work, not even in the tooltip
+    const title = running ? t('project_architecture.run_step', { run: cur.mapRun, step: stepLabel(cur.mapStep) }) : t(hasPlan ? 'project_architecture.analyze_title_refresh' : 'project_architecture.analyze_title', { estimate: noFolder ? '' : e.title });
     const progress = running ? `<p class="small" role="status" data-testid="architecture-analyzing" title="${esc(cur.mapRun)}"><span class="badge live">${t('project_architecture.analyzing_this_project')}</span> ${esc(stepLabel(cur.mapStep))}…</p>` : '';
     const error = cur.error ? `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">${t('project_architecture.the_analysis_failed')} ${esc(cur.error)}</div>` : '';
     return `<section class="arch-action" data-testid="architecture-action">
       <div class="row">
-        <button type="button" class="btn primary" data-testid="architecture-analyze" data-arch-analyze ${running || cur.mapStarting ? 'disabled' : ''} title="${esc(title)}">${label}${cur.errorKind === 'no-folder' ? '' : ` <span class="arch-estimate" data-testid="architecture-estimate">${esc(e.text)}</span>`}</button>
+        <button type="button" class="btn primary" data-testid="architecture-analyze" data-arch-analyze ${running || cur.mapStarting ? 'disabled' : ''} title="${esc(title)}">${label}${noFolder ? '' : ` <span class="arch-estimate" data-testid="architecture-estimate">${esc(e.text)}</span>`}</button>
         <span class="small muted">${esc(planText)}</span>
       </div>
       ${progress}${error}${mapAdviceHtml(city?.refresh)}
@@ -152,14 +153,24 @@
     return { running: !!cur.mapRun, step: cur.mapRun ? stepLabel(cur.mapStep) : null, error: cur.error || null, estimate: noFolder ? null : e.text, estimateTitle: noFolder ? null : e.title };
   };
 
-  // #732: the project's own folder: the project page's project (fresh, as the Overview reads it), then
-  // the cached Projects list (stale until the onboarding's clone is listed again), then a fresh read
+  // #732: the project's own folder, read fresh at the click (api.listProjects, which also refreshes
+  // state.projects): a folder the engine says is gone from this machine (exists: false) counts as none.
+  // When that read fails or does not list it: the project page's project (as the Overview reads it),
+  // then the cached Projects list.
+  const folderIfThere = (p) => (p?.folder && p.exists !== false ? p.folder : null);
   async function folderOf(id) {
-    const pv = state.pv?.id === id ? state.pv.project?.folder : null;
-    const cached = (state.projects || []).find((p) => p.id === id)?.folder;
-    if (pv || cached) return pv || cached;
-    if (typeof api.getProject !== 'function') return null;
-    try { return (await api.getProject(id))?.folder || null; } catch { return null; }
+    if (typeof api.listProjects === 'function') {
+      try {
+        const list = await api.listProjects();
+        const fresh = Array.isArray(list) ? list.find((p) => p.id === id) : null;
+        if (fresh) {
+          state.projects = list;
+          return folderIfThere(fresh);
+        }
+      } catch { /* the cached copies below */ }
+    }
+    const pv = state.pv?.id === id ? folderIfThere(state.pv.project) : null;
+    return pv || folderIfThere((state.projects || []).find((p) => p.id === id));
   }
 
   async function analyze() {
@@ -192,7 +203,7 @@
     const c = cur;
     if (!c || !ev) return;
     if (ev.type === 'workflow.started' && !c.mapRun && ev.project_id === c.id && ev.workflow === MAP_NAME) {
-      Object.assign(c, { mapRun: ev.run_id, mapStep: null, error: null });
+      Object.assign(c, { mapRun: ev.run_id, mapStep: null, error: null, errorKind: null });
       render();
       return;
     }
@@ -201,7 +212,7 @@
       c.mapStep = ev.step_id;
       render();
     } else if (ev.type === 'workflow.finished') {
-      Object.assign(c, { mapRun: null, mapStep: null, error: ev.status === 'success' ? null : ev.error || `the run ended ${ev.status}` });
+      Object.assign(c, { mapRun: null, mapStep: null, error: ev.status === 'success' ? null : ev.error || `the run ended ${ev.status}`, errorKind: null });
       c.city?.reload();
       load();
     }
