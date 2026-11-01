@@ -248,6 +248,39 @@ test('roadmap: a Product Owner proposal is added as planned and does not start b
   assert.deepEqual((await api['runs:list']()).runs, []);
 });
 
+test('roadmap: a proposal added to a running roadmap keeps it running and its stages start in their turn (#654)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2], 'roadmap-propose-running');
+  const { gates, finished } = watchRuns(service);
+
+  await api['roadmap:save']({ projectId: p.id, stages: [{ name: 'Stage one', items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] }] });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+  await until(() => api['runs:active']().length === 1);
+  const runId1 = api['runs:active']()[0].runId;
+
+  const data = await api['roadmap:propose']({ projectId: p.id, proposal: { stages: [{ name: 'From the PO', items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] }] } });
+  assert.equal(data.roadmap.state, 'running');
+  assert.equal(data.roadmap.error, null);
+  assert.equal(data.roadmap.stages.length, 2);
+  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[1].items[0].status, 'planned'); // waits for stage 1
+
+  await until(() => gates.has(runId1));
+  api['approval:resolve']({ runId: runId1, id: gates.get(runId1), answer: true });
+  await until(() => finished.has(runId1));
+  // nobody presses Start: the proposed stage starts once stage 1 ends
+  await until(() => api['runs:active']().some((r) => r.issues.some((i) => i.number === 2)));
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.state, 'running');
+  assert.equal(roadmap.stages[1].items[0].status, 'running');
+
+  const runId2 = api['runs:active']()[0].runId;
+  await until(() => gates.has(runId2));
+  api['approval:resolve']({ runId: runId2, id: gates.get(runId2), answer: true });
+  await until(() => api['roadmap:get']({ projectId: p.id }).state === 'done');
+});
+
 test('roadmap: assigning a planned issue elsewhere removes it from the roadmap', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

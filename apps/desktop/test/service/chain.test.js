@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeService, roadmapIssue, until, untilTrue } = require('@multiagent/engine/test/service/helpers');
+const { ISSUE_WORKFLOW, makeService, roadmapIssue, until, untilTrue } = require('@multiagent/engine/test/service/helpers');
 
 // Stands for the issue-tracker -> software-development-local-hero pair: an `issues` output of
 // created issues (number, url, title), a human gate that decides success or failure, and a `task`
@@ -217,4 +217,47 @@ test('a chain to the Product Owner proposes roadmap stages from the run\'s produ
   assert.deepEqual(roadmap.stages[0].items[0].issues.map((i) => i.number), [101]);
   assert.equal(roadmap.stages[0].items[0].status, 'planned');
   assert.equal(started.length, 1, 'only fixture-chain-source ran: the Product Owner never starts a run by itself');
+});
+
+test('a chain to the Product Owner adds its stages to a running roadmap without pausing it, and says the roadmap runs them in their turn (#654)', { timeout: 60000 }, async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  writeFixtures(ws);
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(require('os').tmpdir(), 'chain-po-running-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'chain-po-running', folder });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({
+    projectId: p.id, platform: 'github', repo: 'https://github.com/o/r',
+    issues: [{ ...roadmapIssue(101), body: 'x'.repeat(130) }, { ...roadmapIssue(102), body: 'x'.repeat(130) }],
+  }));
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 2, perProject: null, countSimulations: true } });
+
+  // the roadmap is running: its #102 run waits at its gate while the chain's source run goes on
+  await api['roadmap:save']({ projectId: p.id, stages: [{ name: 'Stage one', items: [{ workflow: 'fixture-issue.yaml', number: 102, mock: true }] }] });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+  await untilTrue(() => api['runs:active']().length === 1);
+  const roadmapRunId = api['runs:active']()[0].runId;
+  t.after(async () => {
+    try { api['run:stop']({ runId: roadmapRunId }); } catch { /* already ended */ }
+    await untilTrue(() => !api['runs:active']().some((r) => r.runId === roadmapRunId));
+  });
+
+  const { runId: runId1 } = await api['run:start']({
+    file: 'fixture-chain-source.yaml', inputs: { task: 'Do the work', repo_path: folder }, mock: true, mockSequences: { number: [101] },
+    then: { action: 'product_owner' },
+  });
+  autoApprove(service, runId1, 'review', 'accept');
+
+  await untilTrue(() => api['chain:get']({ runId: runId1 })?.state === 'done');
+  const chain = api['chain:get']({ runId: runId1 });
+  assert.match(chain.reason, /The Product Owner proposed 1 roadmap stage: the running roadmap runs them in their turn\./);
+  assert.doesNotMatch(chain.reason, /press Start/);
+
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.state, 'running');
+  assert.equal(roadmap.stages.length, 2);
+  assert.deepEqual(roadmap.stages[1].items[0].issues.map((i) => i.number), [101]);
+  assert.equal(roadmap.stages[1].items[0].status, 'planned', 'it waits for stage 1, still running');
 });

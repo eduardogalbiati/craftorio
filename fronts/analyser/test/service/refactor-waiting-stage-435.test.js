@@ -225,6 +225,39 @@ test('#435 Add to roadmap now with runNow lands after the stage in progress, nev
   assert.equal(!!r.stages[at].disabled, false, 'run now: not the waiting stage');
 });
 
+// #654: adding stages keeps the roadmap's state, except a done roadmap given a stage that runs (planned again)
+const doneRoadmap = (w) => fs.writeFileSync(path.join(w.ws.backlog, `${w.projectId}.roadmap.json`), JSON.stringify({
+  state: 'done', simulated: false, error: null, pausedBy: null, scope: null, updatedAt: null,
+  stages: [{ id: 's1', name: 'One', note: '', items: [item(5, 'done')] }],
+}));
+
+test('#654 the waiting stage added to a done roadmap leaves it done: a disabled stage runs nothing', async (t) => {
+  const w = await setup(t);
+  const a = await w.api['refactor:add']({ projectId: w.projectId, target: 'src/part1.js', improvement: 'Split part 1', evidence: 'Part 1 changes with every fix' });
+  proposals.updateProposal(w.refactorRoot, w.projectId, a.id, { issue: 7 });
+  doneRoadmap(w);
+  await w.api['refactor:addToRoadmap']({ projectId: w.projectId, id: a.id });
+  const r = w.roadmap();
+  assert.equal(r.state, 'done');
+  const waiting = waitingStages(r);
+  assert.equal(waiting.length, 1);
+  assert.equal(r.stages.indexOf(waiting[0]), r.stages.length - 1);
+  assert.deepEqual(stageNumbers(waiting[0]), [7]);
+});
+
+test('#654 a run-now Refactor stage added at the end of a done roadmap makes it planned: it waits for Start', async (t) => {
+  const w = await setup(t);
+  const a = await w.api['refactor:add']({ projectId: w.projectId, target: 'src/part1.js', improvement: 'Split part 1', evidence: 'Part 1 changes with every fix' });
+  proposals.updateProposal(w.refactorRoot, w.projectId, a.id, { issue: 7 });
+  doneRoadmap(w);
+  await w.api['refactor:addToRoadmap']({ projectId: w.projectId, id: a.id, runNow: true });
+  const r = w.roadmap();
+  assert.equal(r.state, 'planned');
+  const at = indexOfIssue(r, 7);
+  assert.equal(at, r.stages.length - 1);
+  assert.equal(!!r.stages[at].disabled, false);
+});
+
 test('#435 the cadence keeps its rule: its item is not put in the waiting stage, which stays last', async (t) => {
   const w = await setup(t);
   const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt')]);
