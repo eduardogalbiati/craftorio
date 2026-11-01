@@ -179,6 +179,14 @@ module.exports = (ctx) => {
       schema: { params: args({ runId: RUN_ID, commit: SHA }, ['runId', 'commit']), result: OBJECT },
       fn: ({ runId, commit }) => { docs.markReviewed(runDir(runId), commit); return { commit }; },
     },
+    // #671 the source before a change by request and at it, for the Diff tab's sections
+    {
+      channel: 'docs:read-at',
+      method: 'readDocAt',
+      params: ['projectId', 'item', 'doc', 'commit', 'runId'],
+      schema: { params: onDoc({ commit: SHA }, ['commit']), result: OBJECT },
+      fn: ({ projectId, item, doc, commit, runId }) => docs.readAt(dirOf(projectId, runId), { item, doc, commit }),
+    },
     // the SDLC gate: Accept intent / Sign off spec, the front matter of both languages, one commit
     {
       channel: 'docs:accept',

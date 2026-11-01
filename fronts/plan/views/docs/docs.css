@@ -65,10 +65,9 @@
 .docs-toolbar-box { grid-column: 2; grid-row: 1; min-width: 0; }
 .docs-reader { grid-column: 2; grid-row: 2; width: 100%; height: calc(100vh - 250px); min-height: 360px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
 .docs-side { grid-column: 3; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.docs-mode-diff .docs-left { display: contents; }
-.docs-mode-diff .docs-toc-box { grid-column: 1; grid-row: 1 / span 2; }
-.docs-mode-diff .docs-changes { grid-column: 2; grid-row: 2; }
-.docs-mode-diff .docs-reader { display: none; }
+.docs-diff { grid-column: 2; grid-row: 2; display: none; flex-direction: column; gap: 8px; min-width: 0; }
+.docs-mode-diff .docs-toc-box, .docs-mode-diff .docs-reader { display: none; }
+.docs-mode-diff .docs-diff { display: flex; }
 
 .docs-toc-box { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .docs-kicker { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
@@ -108,9 +107,26 @@
 .docs-change.open { border-color: var(--accent); }
 .docs-change-top { display: flex; align-items: center; gap: 8px; }
 .docs-change-text, .docs-note-text { min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.docs-change-detail { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
-.docs-change-detail p { margin: 0; font-size: 12px; }
-.docs-change-actions, .docs-note-actions { gap: 6px; flex-wrap: wrap; }
+.docs-change { cursor: pointer; }
+.docs-change-detail { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.docs-change-detail > p { margin: 0; font-size: 12px; }
+.docs-note-actions { gap: 6px; flex-wrap: wrap; }
+.docs-queue-error { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the Diff tab's page of one change: the touched sections highlighted, their neighbours greyed out */
+.docs-diff-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.docs-diff-title { min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-diff-page { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); max-height: calc(100vh - 300px); overflow: auto; }
+.docs-diff-page:empty { display: none; }
+.docs-diff-sec { position: relative; padding: 10px 12px; border-radius: var(--radius); }
+.docs-diff-sec.touched { border-left: 3px solid var(--yellow); background: color-mix(in srgb, var(--yellow) 10%, transparent); }
+.docs-diff-sec.same { opacity: .55; }
+.docs-diff-sec h4 { margin: 0 0 4px; padding-right: 80px; font-size: 13px; }
+.docs-diff-sec p { margin: 0; }
+.docs-diff-anc { position: absolute; top: 10px; right: 12px; font: 11px var(--mono); color: var(--muted); }
+.docs-diff-body { font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.docs-diff-body ins { text-decoration: none; background: color-mix(in srgb, var(--green) 22%, transparent); }
+.docs-diff-body del { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
 
 .docs-notes { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
 .docs-check { display: flex; align-items: center; gap: 8px; font-size: 12px; }
@@ -137,5 +153,5 @@
 }
 @media (max-width: 900px) {
   .docs-list-area.docs-with-panel, .docs-editor-body { grid-template-columns: 1fr; }
-  .docs-left, .docs-toolbar-box, .docs-reader, .docs-side, .docs-mode-diff .docs-toc-box, .docs-mode-diff .docs-changes { grid-column: 1; grid-row: auto; }
+  .docs-left, .docs-toolbar-box, .docs-reader, .docs-diff, .docs-side { grid-column: 1; grid-row: auto; }
 }

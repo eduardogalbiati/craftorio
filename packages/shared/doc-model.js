@@ -15,8 +15,8 @@
 //   - version: a hash of the source markdown (FNV-1a, 32 bits, hex), the same from both languages.
 // - blocks(markdown): [{ start, end, heading }], the runs of non-empty lines (a heading is a block on
 //   its own, a fenced code block is one block whatever its empty lines), front matter left out; 1-based.
-// - sections(markdown, blocks): [{ key, title, label, slug, blocks }], a new one at each heading and
-//   each labelled paragraph.
+// - sections(markdown, blocks): [{ key, title, label, name, slug, blocks }], a new one at each heading
+//   and each labelled paragraph; name: the bold text after the label ("**R1. Documents.**" → Documents).
 // - lintDoc({ kind: 'intent' | 'spec', markdown, exists? }): { ok, problems: [{ rule, message, line? }] },
 //   rules front-matter, section (the playbook's sections, English source only), requirements (R1, R2…
 //   in order), recommended (a decision without its **Recommended:** line), image (a missing file).
@@ -36,6 +36,8 @@
   const CONTEXT = 200;
   const HEADING = /^(#{1,6}) /;
   const LABEL = /^\*\*([RD]\d+)\./;
+  // the label and its bold name, "**R1. Documents screen.**"
+  const LABEL_NAME = new RegExp(`${LABEL.source}\\s*([^*]*?)\\.?\\s*\\*\\*`);
   const FENCE = /^\s*(```|~~~)/;
   const SECTIONS = {
     intent: ['Problem', 'Proposed outcome', 'Affected users and systems', 'Constraints', 'Open questions'],
@@ -116,7 +118,8 @@
         } else if (label) key = label.toLowerCase();
         seen[key] = (seen[key] || 0) + 1;
         if (seen[key] > 1) key = `${key}-${seen[key]}`;
-        current = { key, title: block.heading, label: label ? label.toLowerCase() : null, slug: headingSlug, blocks: [] };
+        const name = label ? ((rows[block.start - 1].text.match(LABEL_NAME) || [])[2] || '').trim() || null : null;
+        current = { key, title: block.heading, label: label ? label.toLowerCase() : null, name, slug: headingSlug, blocks: [] };
         out.push(current);
       }
       current.blocks.push(block);

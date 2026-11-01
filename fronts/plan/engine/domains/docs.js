@@ -17,6 +17,7 @@
 //   request, newest last; undoChange(dir, { commit }) → { commit }: a revert with the `Doc-Undo:` trailer;
 // - unreviewed(dir, runDir, { base? }) / markReviewed(runDir, commit): the changes not undone and not
 //   marked, the marks in <runDir>/docs-reviewed.json;
+// - readAt(dir, { item, doc, commit }) → { file, before, after }: the source at the change's parent and at it;
 // - acceptDoc(dir, { item, doc, approver?, date? }) → { commit, status }: intent → accepted, spec →
 //   signed off, approver and date in both front matters, one commit, the bodies unchanged; already
 //   accepted: HEAD, no commit;
@@ -251,6 +252,15 @@ function undoChange(dir, { commit: sha }) {
   return { commit: commit(dir, changed, `${subject}\n\nDoc-Undo: ${full}`) };
 }
 
+// #671 the source markdown before a change and at it (the editor's Diff tab, mock-3); '' where the file
+// did not exist
+function readAt(dir, { item, doc, commit: sha }) {
+  if (!COMMIT.test(String(sha ?? ''))) throw new Error('Not a commit.');
+  const f = files(dir, item, doc);
+  const at = (rev) => gitOrNull(dir, ['show', `${rev}:${f.source}`]) || '';
+  return { item, doc, commit: sha, file: f.source, before: at(`${sha}^`), after: at(sha) };
+}
+
 const reviewedFile = (runDir) => path.join(runDir, REVIEWED_FILE);
 function reviewedSet(runDir) {
   try { return new Set(JSON.parse(fs.readFileSync(reviewedFile(runDir), 'utf8')).commits || []); } catch { return new Set(); }
@@ -301,6 +311,7 @@ module.exports = {
   listChanges,
   listItems,
   markReviewed,
+  readAt,
   readDoc,
   undoChange,
   unreviewed,

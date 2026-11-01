@@ -44,8 +44,9 @@
   }
 
   // the reviewer's score, its rubric checks and its notes (`key` the anchor a note shows), each with
-  // Apply / Edit / Dismiss; '' before the review
-  function review({ score, checks, notes, key }) {
+  // Apply / Edit / Dismiss; '' before the review. A note applied at the approval gate stays, queued,
+  // until the writer has answered it; Apply is off without a run to send it to (`canApply`)
+  function review({ score, checks, notes, key, canApply = true }) {
     if (!notes.length && !checks.length && score === undefined) return '';
     const result = (r) => {
       if (r === 'pass') return `<span class="docs-pill done">${t('docs.check_pass')}</span>`;
@@ -58,11 +59,11 @@
         <li class="docs-check" data-testid="doc-review-check"><span class="docs-check-name" title="${esc(c.name)}">${esc(c.name)}</span>${result(c.result)}</li>`).join('')}</ul>` : ''}
       <ul class="docs-note-list">${notes.map((n, i) => `
         <li class="docs-note${n.severity === 'major' ? ' major' : ''}" data-testid="doc-review-note" data-anchor="${esc(n.anchor)}">
-          <div class="docs-note-top"><b class="mono">#${esc(key(n.anchor))}</b><span class="muted small">${t('docs.reviewer')}</span></div>
+          <div class="docs-note-top"><b class="mono">#${esc(key(n.anchor))}</b><span class="muted small">${t('docs.reviewer')}</span>${n.queued ? `<span class="docs-pill editing" data-testid="doc-note-queued">${t('docs.note_queued')}</span>` : ''}</div>
           ${n.quote ? `<blockquote class="docs-note-quote">“${esc(n.quote)}”</blockquote>` : ''}
           <p class="docs-note-text">${esc(n.text)}</p>
           <div class="row docs-note-actions">
-            <button type="button" class="btn sm primary" data-testid="doc-note-apply" data-docs-note-apply="${i}">${t('docs.apply')}</button>
+            <button type="button" class="btn sm primary" data-testid="doc-note-apply" data-docs-note-apply="${i}"${canApply && !n.queued ? '' : ' disabled'}>${t('docs.apply')}</button>
             <button type="button" class="btn sm ghost" data-testid="doc-note-edit" data-docs-note-edit="${i}">${t('docs.edit')}</button>
             <button type="button" class="btn sm ghost" data-testid="doc-note-dismiss" data-docs-note-dismiss="${i}">${t('docs.dismiss')}</button>
           </div>

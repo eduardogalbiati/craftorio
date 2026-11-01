@@ -23,7 +23,8 @@
 // and Mark reviewed (mock-3); the review shows its score, its rubric checks and the anchored notes with
 // Apply / Edit / Dismiss (mock-4); the approval gate is the sign-off panel (mock-5). Several writers
 // (AI Arena, phase 2) and Screens to capture first (captures, phase 3) are shown disabled. The New item
-// panel, the review and the sign-off markup live in docs-panels.js (DocsPanels).
+// panel, the review and the sign-off markup live in docs-panels.js (DocsPanels); the Diff tab's page of a
+// change (its touched sections, docs:read-at) in docs-diff.js (DocsDiff).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, showToast, showView, confirmDialog), markdownHtml (artifact-render.js),
 // DocModel (packages/shared/doc-model.js), CurrentProject and AgentChat.
@@ -62,24 +63,14 @@
     return esc(status || '');
   }
   const statusBadge = (status, testid = '') => `<span class="badge${status === 'draft' ? '' : ' docs-done'}"${testid ? ` data-testid="${testid}"` : ''}>${statusLabel(status)}</span>`;
-  // the lower-case state of a list pill ("spec.md · draft")
-  function pillState(status) {
-    if (status === 'accepted') return t('docs.pill_accepted');
-    if (signedOff(status)) return t('docs.pill_signed_off');
-    if (status === 'draft') return t('docs.pill_draft');
-    return esc(status || '');
-  }
   const projectFolder = () => (state.projects || []).find((p) => p.id === docs.projectId)?.folder || null;
   const listError = (msg) => { $('#docs-list-error').textContent = msg || ''; };
   const editorError = (msg) => { const p = $('#docs-editor-error'); if (p) p.textContent = msg || ''; };
   const fileName = (path) => String(path || '').split('/').pop();
   const docFile = (doc) => SDLC[stepOfDoc(doc)]?.file || `${doc}.md`;
 
-  // #671 the header's project, also before the app's start has listed the projects (as backlog.js)
-  const currentProjectId = async () => window.CurrentProject?.get() || api.listProjects().then((list) => {
-    if (!state.projects?.length) state.projects = list;
-    return window.CurrentProject?.refresh(list) || null;
-  }, () => null);
+  // #671 the header's project, also before the app's start has listed the projects
+  const currentProjectId = async () => (await (window.CurrentProject?.resolve?.() ?? window.CurrentProject?.get?.())) || null;
 
   // ---- the list ---------------------------------------------------------------------------------
   async function refresh() {
@@ -130,7 +121,7 @@
     const status = editing ? null : latest.status;
     const tone = editing ? ' editing' : status === 'draft' ? '' : ' done';
     const file = editing ? docFile(doc) : fileName(latest.file) || docFile(doc);
-    return `<span class="docs-pill${tone}" data-testid="docs-item-pill" title="${esc(latest?.file || file)}">${esc(file)} · ${editing ? t('docs.pill_editing') : pillState(status)}</span>`; // i18n-ignore
+    return `<span class="docs-pill${tone}" data-testid="docs-item-pill" title="${esc(latest?.file || file)}">${esc(file)} · ${editing ? t('docs.pill_editing') : statusLabel(status).toLowerCase()}</span>`; // i18n-ignore
   }
 
   // #670: the Product Owner proposes the epic and one issue per phase of a signed-off spec, each
@@ -364,19 +355,16 @@
 
   // the markdown shown in the reader and the contents: the source or, in PT, its translation
   const shownMarkdown = (o) => (o.lang === 'pt' && o.data?.translation ? o.data.translation.markdown : o.data?.source?.markdown) || '';
-  // a requirement's name: the bold text after its label, "**R1. Documents screen.**"
-  const labelName = (row) => ((/^\*\*[RD]\d+\.\s*([^*]*?)\.?\s*\*\*/.exec(row) || [])[1] || '').trim();
-
   // The sections of the document with their anchors (the rule of DocModel's selection anchors:
-  // <doc>-<label key> for a requirement, <doc>-<heading slug> for a heading)
+  // <doc>-<label key> for a requirement, <doc>-<heading slug> for a heading); a requirement shows its
+  // label and its name ("R1 · Documents screen")
   function outline(md, doc) {
     if (!window.DocModel || !md) return [];
     const rows = md.split('\n');
     return window.DocModel.sections(md).filter((s) => s.title !== null || s.label).map((s) => {
       const first = s.blocks[0];
-      const label = s.label ? (rows[first.start - 1].match(/^\*\*([RD]\d+)\./) || [])[1] : null;
       const level = s.title !== null ? Math.min(6, (rows[first.start - 1].match(/^#+/) || ['##'])[0].length) : 7;
-      return { ...s, id: s.label ? `${doc}-${s.key}` : `${doc}-${s.slug}`, level, text: label ? [label, labelName(rows[first.start - 1])].filter(Boolean).join(' · ') : s.title, first }; // i18n-ignore
+      return { ...s, id: s.label ? `${doc}-${s.key}` : `${doc}-${s.slug}`, level, text: s.label ? [s.label.toUpperCase(), s.name].filter(Boolean).join(' · ') : s.title, first }; // i18n-ignore
     });
   }
 
@@ -573,6 +561,7 @@
         <button type="button" class="btn sm ghost" data-docs-queue-apply${canApply ? '' : ' disabled'}>${t('docs.apply_queued')}</button></div>
       <ul class="docs-queue-list">${o.queue.map((q, i) => `
         <li><span class="docs-queue-text" title="${esc(q.text)}">“${esc(q.text)}”</span>
+          ${q.error ? `<span class="error small docs-queue-error" title="${esc(q.error)}">${esc(q.error)}</span>` : ''}
           <button type="button" class="docs-chip-x" data-docs-queue-remove="${i}" aria-label="${t('docs.remove_from_queue')}">×</button></li>`).join('')}</ul>` : ''; // i18n-ignore
     syncMode();
   }
@@ -589,21 +578,33 @@
     queue.setAttribute('aria-pressed', String(o.mode === 'queue'));
   }
 
+  // A request sent without the text box (a queued one, a review note), drawn in the writer's chat;
+  // its answer ({ ok: false, error } on a failure) says whether it was applied
+  async function sendFromView(text, attachments) {
+    const o = docs.open;
+    docs.chat?.update?.({ busy: true });
+    const res = await sendRequest(text, attachments);
+    docs.chat?.update?.({ busy: false, messages: o.messages, error: res?.ok === false ? res.error : '' });
+    return res;
+  }
+
   // The queued requests sent one by one, from the end of the document up, so that each request's
-  // lines are still where its selection found them
+  // lines are still where its selection found them; one that fails stays queued with its error
   async function applyQueue() {
     const o = docs.open;
-    if (!o?.gate?.edit || !docs.chat) return;
+    if (!o?.gate?.edit) return;
     o.mode = 'now';
     const start = (q) => Number(String(q.selection?.src || '0').split('-')[0]);
     const list = [...o.queue].sort((a, b) => start(b) - start(a));
     for (const q of list) {
       if (docs.open !== o || !o.gate?.edit) break;
-      o.queue = o.queue.filter((x) => x !== q);
       o.selection = q.selection;
-      for (const a of q.attachments) docs.chat.addAttachment(a);
-      await docs.chat.ask(q.text);
+      const res = await sendFromView(q.text, q.attachments);
+      if (res?.ok === false) q.error = res.error;
+      else o.queue = o.queue.filter((x) => x !== q);
     }
+    o.selection = null;
+    renderChip();
     renderQueue();
   }
 
@@ -616,36 +617,29 @@
   }
 
   // ---- the changes by request (#671: mock-3) -----------------------------------------------------
+  // the change whose page is open: the one clicked, else the newest unreviewed one, else the newest
+  function openChange(o) {
+    const list = liveChanges(o);
+    return list.find((c) => c.commit === o.changeOpen) || [...list].reverse().find((c) => o.unreviewed.includes(c.commit)) || list[list.length - 1] || null;
+  }
+
   function renderChanges() {
     const o = docs.open;
     const box = $('#docs-changes');
     if (!o || !box) return;
     const list = liveChanges(o);
     const pending = list.filter((c) => o.unreviewed.includes(c.commit)).length;
-    // the change whose detail is open: the one clicked, else the newest unreviewed one
-    const open = list.find((c) => c.commit === o.changeOpen) || [...list].reverse().find((c) => o.unreviewed.includes(c.commit)) || null;
+    const open = openChange(o);
     const card = (c, i) => {
       const unreviewed = o.unreviewed.includes(c.commit);
-      const v = i + 2;
-      const file = fileName((c.files || []).find((f) => /\.md$/.test(f) && !/\.pt-BR\.md$/.test(f)) || docFile(o.doc));
-      const detail = c === open ? `
-          <div class="docs-change-detail" data-testid="doc-change-detail">
-            <p class="docs-change-detail-head"><b>v${v - 1} → v${v}</b> · <span class="mono">${esc(file)}</span></p>
-            <p class="docs-change-request">“${esc(c.subject)}”</p>
-            <div class="row docs-change-actions">
-              ${o.runId ? `<button type="button" class="btn sm ghost" data-testid="doc-undo-change" data-docs-undo="${esc(c.commit)}">${t('docs.undo_this_change')}</button>` : ''}
-              ${unreviewed && o.runId ? `<button type="button" class="btn sm primary" data-testid="doc-mark-reviewed" data-docs-reviewed="${esc(c.commit)}">${t('docs.mark_reviewed')}</button>` : ''}
-            </div>
-            <p class="muted small">${t('docs.only_the_sections_this_request_touched')}</p>
-          </div>` : '';
       return `
         <li class="docs-change${unreviewed ? ' unreviewed' : ''}${c === open ? ' open' : ''}" data-testid="doc-change" data-docs-change="${esc(c.commit)}">
           <div class="docs-change-top">
-            <b>v${v}</b>
+            <b>v${i + 2}</b>
             <span class="docs-pill${unreviewed ? ' editing' : ' done'}" data-testid="doc-change-state">${unreviewed ? t('docs.change_unreviewed') : t('docs.change_reviewed')}</span>
           </div>
           <span class="docs-change-text" title="${esc(c.subject)}">“${esc(c.subject)}”</span>
-          <span class="mono muted small" title="${esc(c.commit)}">${esc(String(c.commit).slice(0, 8))}</span>${detail}
+          <span class="mono muted small" title="${esc(c.commit)}">${esc(String(c.commit).slice(0, 8))}</span>
         </li>`; // i18n-ignore
     };
     box.innerHTML = `
@@ -655,6 +649,37 @@
       </div>
       ${list.length ? `<ol class="docs-change-list">${list.map(card).reverse().join('')}</ol>` : `<p class="muted small">${t('docs.no_change_yet')}</p>`}
       ${o.problems.length ? `<p class="small muted" title="${esc(o.problems.join('\n'))}">${t('docs.lint_problems_count', { count: o.problems.length })}</p>` : ''}`;
+    renderDiff();
+  }
+
+  // The Diff tab's page (mock-3): the open change's head and actions, the sections it touched (read
+  // at the change and its parent, docs:read-at, once per change) and the footnote
+  function renderDiff() {
+    const o = docs.open;
+    const box = $('#docs-diff');
+    if (!o || !box) return;
+    const c = openChange(o);
+    if (!c) { box.innerHTML = `<p class="muted small">${t('docs.no_change_yet')}</p>`; return; }
+    o.diffs = o.diffs || {};
+    if (o.tab === 'diff' && !o.diffs[c.commit] && api.readDocAt) {
+      o.diffs[c.commit] = { loading: true };
+      api.readDocAt(docs.projectId, o.item, o.doc, c.commit, o.runId).then(
+        (r) => ({ sections: DocsDiff.compare(r.before, r.after) }),
+        (e) => ({ error: errMsg(e) }),
+      ).then((d) => { o.diffs[c.commit] = d; if (docs.open === o) renderDiff(); });
+    }
+    const v = liveChanges(o).indexOf(c) + 2;
+    box.innerHTML = DocsDiff.panel({
+      doc: o.doc,
+      from: v - 1,
+      to: v,
+      file: fileName((c.files || []).find((f) => /\.md$/.test(f) && !/\.pt-BR\.md$/.test(f)) || docFile(o.doc)),
+      subject: c.subject,
+      commit: c.commit,
+      canUndo: !!o.runId,
+      unreviewed: o.unreviewed.includes(c.commit),
+      diff: o.diffs[c.commit],
+    });
   }
 
   async function undoChange(commit) {
@@ -680,7 +705,7 @@
     const o = docs.open;
     const box = $('#docs-notes');
     if (!o || !box) return;
-    const html = DocsPanels.review({ score: o.score, checks: o.checks, notes: o.notes, key: noteKey });
+    const html = DocsPanels.review({ score: o.score, checks: o.checks, notes: o.notes, key: noteKey, canApply: !!o.runId });
     box.classList.toggle('hidden', !html);
     box.innerHTML = html;
   }
@@ -698,32 +723,50 @@
 
   const noteRequest = (n) => `Apply the review note on #${noteKey(n.anchor)}: ${n.text}`;
 
-  // Apply: the note as a request (at the approval gate, back to editing first, then sent); Edit: the
-  // note in the text box to rework; Dismiss: the note leaves the list
+  // the list of notes redrawn, and the sign-off's open notes pill with it
+  function notesChanged() {
+    renderNotes();
+    renderToc();
+    if (docs.open?.gate) renderGate();
+  }
+
+  // Apply: the note as a request (at the approval gate, back to editing first: the note stays, queued,
+  // until the writer has answered it); Edit: the note in the text box to rework; Dismiss: the note
+  // leaves the list
   async function onNote(action, i) {
     const o = docs.open;
     const n = o?.notes[i];
-    if (!n) return;
-    o.notes = o.notes.filter((x) => x !== n);
+    if (!n || n.queued) return;
     if (action === 'apply') {
-      if (o.gate?.edit) await applyNote(n);
-      else { o.pendingNotes.push(n); if (o.gate && !yesNoGate(o.gate)) await answerGate('revise'); }
-    } else if (action === 'edit') {
+      if (o.gate?.edit) return applyNote(n);
+      if (!o.runId) return undefined;
+      n.queued = true;
+      o.pendingNotes.push(n);
+      notesChanged();
+      if (o.gate && !yesNoGate(o.gate)) await answerGate('revise');
+      return undefined;
+    }
+    o.notes = o.notes.filter((x) => x !== n);
+    if (action === 'edit') {
       o.selection = noteSelection(n);
       if (docs.chat?.input) docs.chat.input.value = n.text;
       renderChip();
       if (o.gate && !o.gate.edit && !yesNoGate(o.gate)) await answerGate('revise');
     }
-    renderNotes();
-    renderToc();
+    return notesChanged();
   }
 
+  // a note sent as a request: it leaves the list once the writer's change is in, else it stays with the error
   async function applyNote(n) {
     const o = docs.open;
     o.mode = 'now';
     o.selection = noteSelection(n);
     renderChip();
-    await docs.chat?.ask(noteRequest(n));
+    const res = await sendFromView(noteRequest(n));
+    n.queued = false;
+    if (res?.ok === false) editorError(res.error);
+    else o.notes = o.notes.filter((x) => x !== n);
+    notesChanged();
   }
 
   // ---- the gates ----------------------------------------------------------------------------------
@@ -831,7 +874,7 @@
     if (next?.dataset.docsNext === 'backlog') return proposeIssues(o.item);
     if (next) return showView(next.dataset.docsNext);
     const tab = el('[data-docs-tab]');
-    if (tab) { o.tab = tab.dataset.docsTab; o.selection = o.tab === 'edit' ? o.selection : null; renderToolbar(); renderReader(); renderChip(); return docs.chat?.refresh?.(); }
+    if (tab) { o.tab = tab.dataset.docsTab; o.selection = o.tab === 'edit' ? o.selection : null; renderToolbar(); renderReader(); renderDiff(); renderChip(); return docs.chat?.refresh?.(); }
     const lang = el('[data-docs-lang]');
     if (lang) { o.lang = lang.dataset.docsLang; renderToolbar(); renderToc(); return renderReader(); }
     const toc = el('[data-docs-toc]');
@@ -853,7 +896,7 @@
       if (note) return onNote(action, Number(note.getAttribute(`data-docs-note-${action}`)));
     }
     const change = el('[data-docs-change]');
-    if (change) { o.changeOpen = change.dataset.docsChange; return renderChanges(); }
+    if (change) { o.changeOpen = change.dataset.docsChange; o.tab = 'diff'; o.selection = null; renderToolbar(); renderChip(); return renderChanges(); }
     return undefined;
   }
 
@@ -987,6 +1030,7 @@
               </div>
               <div id="docs-toolbar-box" class="docs-toolbar-box"></div>
               <iframe id="docs-reader" class="docs-reader" sandbox="allow-same-origin" title="${t('docs.the_document')}"></iframe>
+              <section id="docs-diff" class="docs-diff" data-testid="doc-diff" aria-label="${t('docs.diff')}"></section>
               <aside class="docs-side">
                 <section id="docs-notes" class="docs-notes hidden"></section>
                 <section class="docs-writer" data-testid="doc-writer-panel">
