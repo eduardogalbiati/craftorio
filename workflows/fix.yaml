@@ -59,7 +59,7 @@ inputs:
     label: "Hotfix"
     type: boolean
     default: false
-    description: "An urgent fix: the smallest change, from the last release tag, shipped as a patch release."
+    description: "An urgent fix: the smallest change, meant for a patch release from the last tag. For now it guides the agents only: the run still starts from the base branch, and the patch is released with the release workflow."
   git_platform:
     label: "Git platform"
     type: string
@@ -100,10 +100,11 @@ defaults:
 orchestrator:
   provider: claude
   model: claude-sonnet-5
+  # #630: the local <base> in Local mode (no fetch), the fetched origin/<base> in Remote mode
   worktree:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
-    remote: false
+    remote: "{{ inputs.mode == 'remote' }}"
   supervisor:
     enabled: true
     on_call: true

@@ -18,15 +18,19 @@ const path = require('path');
 const yaml = require('js-yaml');
 const registry = require('@multiagent/shared/providers');
 const { PLATFORMS } = require('@multiagent/shared/platforms');
+const { PROFILE, PROFILE_LABELS } = require('@multiagent/shared/onboarding-model');
 const { MANIFEST_FILE } = require('../project/project-manifest');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
 
 // #630 (spec R6): local merges into the local base and pushes main as the workflow's last step;
 // remote opens a pull request. ci: what the CI runs on. tests: E2E first when the project has an E2E suite.
-const MODES = ['local', 'remote'];
-const CI_STYLES = ['none', 'release', 'pr+release'];
-const TEST_STYLES = ['unit', 'unit+e2e'];
+// The values and their labels: the onboarding's profile (packages/shared/onboarding-model.js).
+const MODES = PROFILE.mode;
+const CI_STYLES = PROFILE.ci;
+const TEST_STYLES = PROFILE.tests;
+// a profile field's choices for a question: [{ value, label }]
+const profileChoices = (field) => Object.entries(PROFILE_LABELS[field]).map(([value, label]) => ({ value, label }));
 const RELEASE_STYLES = ['milestone', 'per-merge', 'train', 'rc-stable'];
 const REVIEW_LEVELS = ['light', 'standard', 'strict'];
 // review rounds before the change goes on to the escalation gate, and the reviewer's effort
@@ -107,13 +111,13 @@ function openQuestions(profile) {
     out.push({ id: 'release', label: 'Release style', question: 'How the project releases: no tag history settles it.', type: 'choice', options: choice([['milestone', 'Milestone'], ['per-merge', 'Per merge'], ['train', 'Release train'], ['rc-stable', 'Release candidate, then stable']]), default: remote ? 'train' : 'milestone' });
   }
   if (!modeOf(profile)) {
-    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, or through pull requests.', type: 'choice', options: choice([['local', 'Local: merge, then push main'], ['remote', 'Remote: pull requests']]), default: 'local' });
+    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, or through pull requests.', type: 'choice', options: profileChoices('mode'), default: 'local' });
   }
   if (!CI_STYLES.includes(profile?.ci)) {
-    out.push({ id: 'ci', label: 'CI', question: 'What the project\'s CI runs on: no CI file settles it.', type: 'choice', options: choice([['none', 'No CI: the local suite only'], ['release', 'On releases only'], ['pr+release', 'On pull requests and releases']]), default: 'none' });
+    out.push({ id: 'ci', label: 'CI', question: 'What the project\'s CI runs on: no CI file settles it.', type: 'choice', options: profileChoices('ci'), default: 'none' });
   }
   if (!TEST_STYLES.includes(profile?.tests)) {
-    out.push({ id: 'tests', label: 'Tests', question: 'Does the project have an E2E suite the feature workflow writes first?', type: 'choice', options: choice([['unit', 'Unit tests'], ['unit+e2e', 'Unit and E2E']]), default: 'unit' });
+    out.push({ id: 'tests', label: 'Tests', question: 'Does the project have an E2E suite the feature workflow writes first?', type: 'choice', options: profileChoices('tests'), default: 'unit' });
   }
   return out;
 }

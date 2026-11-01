@@ -371,13 +371,14 @@ models:
 orchestrator:
   provider: claude
   model: claude-sonnet-5
-  # One git worktree per run: <workspace>/worktrees/<run_id>, detached at the LOCAL <base>
-  # (remote: false: no fetch). Removed when the run succeeds (its branch is deleted once merged
-  # into the local <base>), kept otherwise so "resume from step" continues there.
+  # One git worktree per run: <workspace>/worktrees/<run_id>, detached at the LOCAL <base> in Local
+  # mode (remote false: no fetch), at the fetched origin/<base> in Remote mode (#630: the PR starts
+  # from what the remote has). Removed when the run succeeds (in Local mode its branch is deleted
+  # once merged into the local <base>), kept otherwise so "resume from step" continues there.
   worktree:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
-    remote: false
+    remote: "{{ inputs.mode == 'remote' }}"
   # AI supervisor: called when a step fails; explains it and picks a recovery the engine
   # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
   # On call: gates with kind: escalation and stalls (the same answer 3 visits in a row, refused
@@ -458,7 +459,7 @@ agents:
       worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
       this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local
       merges that were never pushed. Work on the run's branch: the test writer creates it with the
-      acceptance tests (if the worktree is still detached, create it: `git switch -c <branch>`). Never fetch, pull or branch from origin, and never push: the
+      acceptance tests (if the worktree is still detached, create it: `git switch -c <branch>`). Never fetch, pull or branch from origin, and never push, except in the push main step: the
       orchestrator merges your branch into the local {{ inputs.base_branch }} after approval.
       The engine gives the worktree its dependencies (linked from a shared cache, installed
       once per lockfile): never run `npm ci` and never delete `node_modules`. Adding a package
@@ -921,9 +922,16 @@ steps:
       {% endif %}
       {% endif %}
       {% set review = steps.code_review.output.results.reviewer if steps.code_review.output and steps.code_review.output.results else none %}
+      {% set second = steps.code_review.output.results.second_reviewer if steps.code_review.output and steps.code_review.output.results else none %}
+      {% if (review and review.verdict == 'changes_requested') or (second and second.verdict == 'changes_requested') %}
       {% if review and review.verdict == 'changes_requested' %}
       The reviewer requested these changes (iteration {{ loop.iteration }}):
       {{ review.findings | to_yaml }}
+      {% endif %}
+      {% if second and second.verdict == 'changes_requested' %}
+      The second reviewer (multi-model review) requested these changes (iteration {{ loop.iteration }}):
+      {{ second.findings | to_yaml }}
+      {% endif %}
       Fix the blocking items, make a new commit and answer each one.
       A finding that needs no production change (it asks for tests or screenshots, which the
       test writer owns, or you disagree with it): answer it in `summary` with the reason, make no
@@ -1607,8 +1615,9 @@ steps:
       # code findings, with the blocking UI findings when there are, go back to develop in one turn;
       # the UI is sent back once (vars.ui_review_returned), like evidence did before #151;
       # vars.ui_review_sent: this round shows develop the blocking UI findings (set first, from the
-      # flag before this round)
-      - when: "output.results.reviewer.verdict == 'changes_requested'"
+      # flag before this round). #630: with review multi_model, the second reviewer's changes_requested
+      # sends it back too (both verdicts must approve)
+      - when: "output.results.reviewer.verdict == 'changes_requested' or output.results.second_reviewer.verdict == 'changes_requested'"
         goto: develop
         set:
           ui_review_sent: "{% if (output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes' %}yes{% else %}no{% endif %}"

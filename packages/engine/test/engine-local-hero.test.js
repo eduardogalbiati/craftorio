@@ -13,7 +13,9 @@ const { root } = require('./engine-helpers');
 
 test('local hero workflow: no CI/PR/deploy, a local worktree, an automatic merge with a resolution path, a 40M context limit', () => {
   const wf = loadWorkflow(path.join(root, 'workflows', 'feature.yaml'));
-  assert.equal(wf.orchestrator.worktree.remote, false);
+  // #630: local (no fetch) in Local mode, the fetched origin/<base> in Remote mode
+  assert.equal(render(String(wf.orchestrator.worktree.remote), { inputs: { mode: 'local' } }), 'false');
+  assert.equal(render(String(wf.orchestrator.worktree.remote), { inputs: { mode: 'remote' } }), 'true');
   assert.equal(wf.orchestrator.limits.max_total_context, '40M');
   const ids = wf.steps.map((s) => s.id);
   // #630: feature's Remote mode has ci / ci_failed / pr_review (and the ci_pusher); Local mode merges, then push_main

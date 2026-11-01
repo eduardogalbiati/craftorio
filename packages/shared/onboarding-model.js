@@ -11,6 +11,8 @@
 //   'unit' | 'unit+e2e' }, each with its reason and its selector (the value the profile picks among
 //   choices [{ value, label }]); an empty or unknown profile gets the default profile's and
 //   defaulted: true; ciChoice(profile) is step 3's CI row, profileLine(profile) the profile in one line;
+//   PROFILE (each field's values) and PROFILE_LABELS (value → label) are the one list of the profile's
+//   mode / ci / tests (the engine's workflow-compose.js reads them too);
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
 //   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
 // - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
@@ -56,9 +58,19 @@
 
   const validProfile = (p) => !!p && Object.keys(PROFILE).every((k) => PROFILE[k].includes(p[k]));
 
+  // #630 (spec R6): the profile's fields, value → label: the interview's questions
+  // (packages/engine/domains/workflow/workflow-compose.js openQuestions), step 3's CI row and profileLine
+  const PROFILE_LABELS = {
+    mode: { local: 'Local: merge, then push main', remote: 'Remote: pull requests' },
+    ci: {
+      none: 'No CI: the local suite only',
+      release: 'On releases only',
+      'pr+release': 'On pull requests and releases',
+    },
+    tests: { unit: 'Unit tests', 'unit+e2e': 'Unit and E2E' },
+  };
   // #630 (spec R7, mock-4): each suggested workflow's selector, value → label, and the value the
   // profile picks; the CI row is the profile's ci itself (ciChoice)
-  const LANDS = { local: 'Local merge', remote: 'Remote PRs' };
   const CHOICES = {
     feature: {
       'remote-e2e': 'Remote PRs · E2E first',
@@ -78,11 +90,7 @@
       train: 'Release train · tag + notes',
       'rc-stable': 'Release candidate, then stable',
     },
-    ci: {
-      none: 'No CI: the local suite only',
-      release: 'On releases only',
-      'pr+release': 'On pull requests and releases',
-    },
+    ci: PROFILE_LABELS.ci,
   };
   const DEFAULT_PROFILE = { mode: 'local', ci: 'none', tests: 'unit' };
   const choicesOf = (kind) => Object.entries(CHOICES[kind]).map(([value, label]) => ({ value, label }));
@@ -130,9 +138,7 @@
   function profileLine(profile) {
     const p = validProfile(profile) ? profile : null;
     if (!p) return '';
-    const ci = { none: 'no CI', release: 'CI on tags only', 'pr+release': 'CI on pull requests and tags' }[p.ci];
-    const lands = p.mode === 'remote' ? 'pull requests' : 'local merges, then push main';
-    return `${lands} · ${p.tests === 'unit+e2e' ? 'unit and E2E tests' : 'unit tests'} · ${ci}`;
+    return Object.keys(PROFILE).map((k) => PROFILE_LABELS[k][p[k]]).join(' · ');
   }
 
   function costSummary(analyses) {
@@ -155,7 +161,8 @@
 
   const api = {
     DEFAULT,
-    LANDS,
+    PROFILE,
+    PROFILE_LABELS,
     STEPS,
     back,
     canGoNext,
