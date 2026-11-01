@@ -171,6 +171,44 @@ test('#387 native controls: a bare select, date or datetime field in a changed s
   assert.deepEqual(nativeControlFindings('<div class="select" role="combobox" tabindex="0">7 days</div><input type="text">'), []);
 });
 
+// #670: an issue's mockups are the specification of its screens. The ui_reviewer compares each
+// screenshot with its mockup; mockupFindings(comparison, { screen, mockup }) turns that comparison
+// ({ differences: [{ element, problem }] }) into ui_findings: each difference one blocking finding
+// (rule and source 'mockup', convention naming the mockup). No mockup: no finding (reviewed as today).
+test('#670 mockup: a screenshot missing an element of its mockup is a blocking finding in the ui_findings shape', () => {
+  const { mockupFindings } = checks();
+  const found = mockupFindings(
+    { differences: [{ element: 'Export button', problem: 'the mockup has an Export button in the toolbar; the screenshot has none' }] },
+    { screen: 'facts.modified.png', mockup: 'mock-1.jpg' },
+  );
+  assert.equal(found.length, 1);
+  assert.equal(found[0].blocking, true);
+  assert.equal(found[0].element, 'Export button');
+  assert.equal(found[0].screenshot, 'facts.modified.png');
+  assert.equal(found[0].rule, 'mockup');
+  assert.equal(found[0].source, 'mockup');
+  assert.equal(found[0].baseline, false);
+  assert.match(found[0].convention, /mock-1\.jpg/);
+  const items = codeReview().output_schema.properties.ui_findings.items;
+  assert.deepEqual(validateSchema(found[0], items), []);
+});
+
+test('#670 mockup: every difference from the mockup is its own blocking finding', () => {
+  const found = checks().mockupFindings(
+    { differences: [{ element: 'Title', problem: 'the text differs' }, { element: 'Search icon', problem: 'missing' }] },
+    { screen: 'home.modified.png', mockup: 'mock-2.png' },
+  );
+  assert.deepEqual(found.map((f) => [f.element, f.blocking]), [['Title', true], ['Search icon', true]]);
+});
+
+test('#670 mockup: an issue without mockups has no mockup finding, and its screen checks are as today', () => {
+  const { mockupFindings, screenChecks } = checks();
+  assert.deepEqual(mockupFindings({ differences: [{ element: 'Title', problem: 'differs' }] }, { screen: 'home.modified.png', mockup: null }), []);
+  assert.deepEqual(mockupFindings(null, { screen: 'home.modified.png' }), []);
+  const html = '<select id="period"><option>7 days</option></select>';
+  assert.deepEqual(screenChecks({ modified: { html }, screen: 'home.modified.png' }).map((f) => f.rule), ['native-control']);
+});
+
 test('#387 screenshots: a shared large-project fixture gives production-like volume', () => {
   const { largeProjectFixture } = require('../../../scripts/screenshot/helpers');
   const data = largeProjectFixture();

@@ -104,6 +104,59 @@ test('checkSplit accepts an owner-edited proposal only when every task of the pa
   assert.throws(() => poSplit.checkSplit(good, bigIssue({ state: 'closed' })), /closed/);
 });
 
+// ---- #670: a spec's mockups follow the screen tasks into the children ---------------------------------
+// A screen task names its mockup (a file name with an image or .html extension, e.g. `mock-1.jpg`); the
+// parent embeds the mockups. A split child carries `mockups`: the base names of the mockups its tasks
+// name. normalizeSplit fills them from the tasks; checkSplit refuses a child that takes a screen task
+// without its mockup (like a task given twice) and returns each child's `mockups`; childBody embeds only
+// the child's own mockups.
+
+const MOCK_BODY = [
+  '## Tasks',
+  '',
+  '- [ ] The home screen matches `mock-1.jpg`: layout, icons, texts, controls, order',
+  '- [ ] The settings screen matches `mock-2.jpg`: layout, icons, texts, controls, order',
+  '- [ ] Store the settings in packages/engine/settings.js',
+  '',
+  '## Mockups',
+  '',
+  '![mock-1.jpg](https://github.com/o/r/assets/mock-1.jpg)',
+  '![mock-2.jpg](https://github.com/o/r/assets/mock-2.jpg)',
+].join('\n');
+const mockIssue = (extra = {}) => ({ number: 70, state: 'open', title: 'Home and settings', body: MOCK_BODY, labels: [{ name: 'complexity:4' }], ...extra });
+
+test('#670 normalizeSplit: each child gets the mockups of the screen tasks it takes', () => {
+  const raw = { children: [{ title: 'Home', tasks: [1, 3], stage: 1 }, { title: 'Settings', tasks: [2], stage: 2 }] };
+  const out = poSplit.normalizeSplit(raw, mockIssue(), { complexity: 4 });
+  assert.deepEqual(out.children.map((c) => ({ title: c.title, mockups: c.mockups })), [
+    { title: 'Home', mockups: ['mock-1.jpg'] },
+    { title: 'Settings', mockups: ['mock-2.jpg'] },
+  ]);
+});
+
+test('#670 checkSplit: a child with its screen tasks\' mockups passes and keeps them', () => {
+  const split = { parent: 'umbrella', children: [
+    { title: 'Home', tasks: [1, 3], mockups: ['mock-1.jpg'], complexity: 2, stage: 1 },
+    { title: 'Settings', tasks: [2], mockups: ['mock-2.jpg'], complexity: 2, stage: 2 },
+  ] };
+  const checked = poSplit.checkSplit(split, mockIssue());
+  assert.deepEqual(checked.children.map((c) => c.mockups), [['mock-1.jpg'], ['mock-2.jpg']]);
+});
+
+test('#670 checkSplit: a child with a screen task and no mockup is refused, like a task given twice', () => {
+  const split = { parent: 'umbrella', children: [
+    { title: 'Home', tasks: [1, 3], mockups: ['mock-1.jpg'], complexity: 2, stage: 1 },
+    { title: 'Settings', tasks: [2], mockups: [], complexity: 2, stage: 2 },
+  ] };
+  assert.throws(() => poSplit.checkSplit(split, mockIssue()), /mock-2\.jpg/);
+});
+
+test('#670 childBody: a child embeds the mockups of its own tasks, not its sibling\'s', () => {
+  const body = poSplit.childBody({ parent: mockIssue(), child: { title: 'Home', tasks: [1, 3], mockups: ['mock-1.jpg'], reason: '' }, index: 0, total: 2 });
+  assert.match(body, /!\[mock-1\.jpg\]\(https:\/\/github\.com\/o\/r\/assets\/mock-1\.jpg\)/);
+  assert.doesNotMatch(body, /!\[mock-2\.jpg\]/);
+});
+
 // ---- fileSplit: nothing is filed without the owner's click -------------------------------------------
 
 const SPLIT = { issue: 50, parent: 'umbrella', children: [

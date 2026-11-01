@@ -116,3 +116,62 @@ Feature: Backlog Product Owner
     Given the Product Owner's next answer takes a while
     When I ask the Product Owner "Which issues should go first?"
     Then every split and epic button of the Product Owner's answer is disabled while it answers
+
+  # #670: a signed-off spec's mockups (its images) reach the issues. "Create epic and phase issues" on
+  # the item opens the Product Owner's proposal (one issue per phase of the spec), which first shows
+  # which issue covers each mockup; a mockup in scope with no issue blocks the proposal, a mockup of a
+  # later phase is listed as such. The spec's mockups and the phases naming them are seeded.
+  @issue-670
+  Scenario: Every mockup of the spec is covered by an issue and the proposal can go to the roadmap
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with a signed-off spec and these mockups
+      | mockup     | phase   |
+      | mock-1.jpg | Phase 1 |
+      | mock-2.jpg | Phase 1 |
+      | mock-3.jpg | Phase 2 |
+    When I open "Documents" in the sidebar
+    And I choose "Create epic and phase issues" on the item "Export runs as CSV"
+    Then the Product Owner's proposal shows the mockup coverage
+      | mockup     | issue   |
+      | mock-1.jpg | Phase 1 |
+      | mock-2.jpg | Phase 1 |
+      | mock-3.jpg | Phase 2 |
+    And the proposal says no mockup is missing an issue
+    And the proposal can be added to the roadmap
+
+  @issue-670
+  Scenario: A mockup in scope with no issue blocks the proposal
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with a signed-off spec and these mockups
+      | mockup     | phase   |
+      | mock-1.jpg | Phase 1 |
+      | mock-2.jpg | Phase 1 |
+      | mock-3.jpg | Phase 2 |
+      | mock-4.jpg |         |
+    When I open "Documents" in the sidebar
+    And I choose "Create epic and phase issues" on the item "Export runs as CSV"
+    Then the Product Owner's proposal shows the mockup coverage
+      | mockup     | issue   |
+      | mock-1.jpg | Phase 1 |
+      | mock-2.jpg | Phase 1 |
+      | mock-3.jpg | Phase 2 |
+    And the proposal says "mock-4.jpg has no issue"
+    And the proposal cannot be added to the roadmap
+
+  @issue-670
+  Scenario: Mockups of a later phase are listed as later phases and do not block the proposal
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with a signed-off spec and these mockups
+      | mockup     | phase   |
+      | mock-1.jpg | Phase 1 |
+      | mock-2.jpg | Phase 1 |
+      | mock-5.jpg | Later   |
+    When I open "Documents" in the sidebar
+    And I choose "Create epic and phase issues" on the item "Export runs as CSV"
+    Then the Product Owner's proposal shows the mockup coverage
+      | mockup     | issue   |
+      | mock-1.jpg | Phase 1 |
+      | mock-2.jpg | Phase 1 |
+    And the proposal lists "mock-5.jpg" as a later phase
+    And the proposal says no mockup is missing an issue
+    And the proposal can be added to the roadmap
