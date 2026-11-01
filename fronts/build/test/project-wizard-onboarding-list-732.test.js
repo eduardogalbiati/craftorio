@@ -24,10 +24,14 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 
 // the service's list, changed by the test as the onboarding goes (what api.listProjects answers now)
 function page(initial) {
-  const service = { projects: initial };
+  // service.next: a one-shot answer for the next read (a promise the test resolves when it wants)
+  const service = { projects: initial, next: null };
   const app = loadApp({
     api: {
-      listProjects: async () => clone(service.projects),
+      listProjects: async () => {
+        if (service.next) { const n = service.next; service.next = null; return clone(await n()); }
+        return clone(service.projects);
+      },
       onboardingStatus: async () => clone(CLONING),
       architectureEstimate: async () => null,
     },
@@ -64,4 +68,22 @@ test('#732 when the clone is done state.projects gets the project\'s folder', as
   service.projects = [{ id: PID, name: 'New one', repo: 'https://github.com/o/new', folder: FOLDER }];
   await emit(app, READY);
   assert.equal(cachedFolder(app, PID), FOLDER, 'state.projects has the folder now');
+});
+
+test('#732 a late answer of an older read never replaces a newer list in state.projects', async () => {
+  const { app, service } = page([]);
+  await app.boot();
+  await app.settle(10);
+  const older = [{ id: PID, name: 'New one', repo: 'https://github.com/o/new', folder: null }];
+  const newer = [{ id: PID, name: 'New one', repo: 'https://github.com/o/new', folder: FOLDER }];
+  let answerOlder;
+  service.next = () => new Promise((resolve) => { answerOlder = () => resolve(older); });
+  await emit(app, CLONING); // the project created: its read is still pending
+  assert.equal(typeof answerOlder, 'function', 'the first event read the list');
+  service.next = async () => newer;
+  await emit(app, READY); // the clone done: this read answers first
+  assert.equal(cachedFolder(app, PID), FOLDER, 'the newer list is in state.projects');
+  answerOlder();
+  await app.settle(10);
+  assert.equal(cachedFolder(app, PID), FOLDER, 'the older answer, arriving last, does not bring the list back');
 });

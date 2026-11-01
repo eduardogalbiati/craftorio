@@ -3,8 +3,8 @@
 // (state.projects), which the onboarding does not refresh, so a project with a folder got "The project
 // has no folder: there is nothing to analyse.". Now:
 // - the folder is the project's own: a project absent from state.projects, or there without its folder,
-//   whose project page holds it (state.pv.project, as the Overview reads it; or api.getProject) starts
-//   the analyze-project run on that folder;
+//   whose project page holds it (state.pv.project, as the Overview reads it) starts the analyze-project
+//   run on that folder; a fresh api.listProjects at the click wins (a folder with exists: false is none);
 // - a project really without a folder gets a translated message (pt-BR "O projeto não tem pasta nesta
 //   máquina…", saying to clone again or point the folder from the Overview), in both catalogs, and no
 //   cost estimate ("≈ US$") next to the "Analyze again" of that error.
@@ -33,8 +33,9 @@ const factsModel = () => buildModel({
 });
 
 // projects: state.projects (the cached list); pvProject: the project page's own project (state.pv.project);
-// fresh: what a fresh read of the project answers (api.getProject)
-function loadWindow({ projects, pvProject, fresh = pvProject, estimate = { usd: 0.4, basis: 3 } }) {
+// fresh: what a fresh read of the project answers (api.getProject); apiExtra: more of the api (e.g. a
+// listProjects the action reads fresh at the click)
+function loadWindow({ projects, pvProject, fresh = pvProject, estimate = { usd: 0.4, basis: 3 }, apiExtra = {} }) {
   const calls = { startRun: [] };
   const api = {
     architectureFacts: async () => ({ state: 'ok', model: factsModel(), exclude: [], gate: [] }),
@@ -46,6 +47,7 @@ function loadWindow({ projects, pvProject, fresh = pvProject, estimate = { usd: 
     getProject: async (id) => (fresh && fresh.id === id ? JSON.parse(JSON.stringify(fresh)) : null),
     startRun: async (spec) => { calls.startRun.push(spec); return { runId: 'run-1' }; },
     onEvent: () => () => {},
+    ...apiExtra,
   };
   const sandbox = {
     console, setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask, Promise,
@@ -72,7 +74,8 @@ function loadWindow({ projects, pvProject, fresh = pvProject, estimate = { usd: 
   const box = dom.document.createElement('div');
   dom.document.body.appendChild(box);
   const click = (el) => el.dispatchEvent(new dom.classes.MouseEvent('click', { bubbles: true, cancelable: true }));
-  return { PA: sandbox.ProjectArchitecture, box, calls, click };
+  const cachedFolders = () => JSON.stringify((sandbox.state.projects || []).map((p) => [p.id, p.folder ?? null]));
+  return { PA: sandbox.ProjectArchitecture, box, calls, click, cachedFolders };
 }
 
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r)); };
@@ -188,4 +191,61 @@ test('#732 the "no folder" error on the City view shows no cost estimate next to
   assert.match(card, /pasta nesta máquina/, 'the error card shows the translated message');
   assert.equal(/≈\s*US\$/.test(card), false, 'no "≈ US$" estimate next to the retry of a folder error');
   assert.equal(w.calls.startRun.length, 0);
+});
+
+// --- review round 1: the fresh read at the click (api.listProjects) ---
+
+test('#732 the fresh project list says the folder is gone from this machine (exists: false): translated message, no run, no estimate', async (t) => {
+  inLanguage(t, 'pt-BR');
+  const gone = { ...WITH_FOLDER, exists: false };
+  const w = loadWindow({
+    projects: [{ ...WITH_FOLDER }], pvProject: { ...WITH_FOLDER },
+    apiExtra: { listProjects: async () => [JSON.parse(JSON.stringify(gone))] },
+  });
+  w.PA.show('p1', w.box);
+  await settle();
+  w.click(q(w.box, 'architecture-mode-city'));
+  await settle();
+  w.click(q(w.box, 'project-city-analyze'));
+  await settle();
+  const card = text(q(w.box, 'project-city-analysis-error'));
+  assert.match(card, /O projeto não tem pasta nesta máquina/, 'the fresh read wins over the cached copies that still hold the folder');
+  assert.equal(/≈\s*US\$/.test(card), false, 'no estimate next to the retry');
+  assert.equal(w.calls.startRun.length, 0, 'no run on a folder that is gone');
+});
+
+test('#732 the fresh project list gives the folder the cached copies lack: the run starts on it and state.projects is updated', async (t) => {
+  inLanguage(t, 'en');
+  const w = loadWindow({
+    projects: [], pvProject: { ...NO_FOLDER },
+    apiExtra: { listProjects: async () => [{ ...WITH_FOLDER, exists: true }] },
+  });
+  await analyzeFacts(w);
+  assertStartedOnFolder(w);
+  assert.equal(w.cachedFolders(), JSON.stringify([['p1', FOLDER]]), 'state.projects holds the fresh list');
+});
+
+test('#732 when the fresh read fails, the project page\'s own project gives the folder', async (t) => {
+  inLanguage(t, 'en');
+  const w = loadWindow({
+    projects: [], pvProject: { ...WITH_FOLDER },
+    apiExtra: { listProjects: async () => { throw new Error('ipc down'); } },
+  });
+  await analyzeFacts(w);
+  assertStartedOnFolder(w);
+});
+
+test('#732 a "no folder" error is cleared, and the estimate comes back, when an analysis run starts from elsewhere', async (t) => {
+  inLanguage(t, 'en');
+  const w = loadWindow({ projects: [{ ...NO_FOLDER }], pvProject: { ...NO_FOLDER } });
+  await analyzeFacts(w);
+  assert.equal(q(w.box, 'architecture-state-error') === null, false, 'the "no folder" error is shown');
+  assert.equal(q(w.box, 'architecture-estimate') === null, true, 'no estimate on the button while that error stands');
+  w.PA.onRunEvent({ type: 'workflow.started', run_id: 'run-ext', project_id: 'p1', workflow: 'analyze-project' });
+  await settle();
+  assert.equal(q(w.box, 'architecture-state-error') === null, true, 'the error is gone once a run started');
+  w.PA.onRunEvent({ type: 'workflow.finished', run_id: 'run-ext', status: 'success' });
+  await settle();
+  assert.equal(q(w.box, 'architecture-state-error') === null, true, 'no error after the run');
+  assert.match(text(q(w.box, 'architecture-estimate')), /US\$/, 'the estimate is back on the button');
 });
