@@ -102,11 +102,11 @@ function report({ proposals, unfinished, dangerScores, hotSpots }) {
  * `mock`: mockPriority. Otherwise one read-only Claude Code turn in `folder`, recorded in the Product
  * Owner's usage; an answer that does not validate is refused with its errors (no ranking saved).
  */
-async function prioritize({ proposals, unfinished = [], dangerScores = {}, hotSpots = [], mock, backlogDir, projectId, folder, agent, skillsDirs, resolveCommand, budget, language = null }) {
+async function prioritize({ proposals, unfinished = [], dangerScores = {}, hotSpots = [], mock, backlogDir, projectId, folder, agent, skillsDirs, resolveCommand, budget, language = null, onItem, signal }) {
   if (mock) return { ...mockPriority({ proposals, unfinished, dangerScores }), model: 'simulated', costUsd: 0 };
   const productOwner = require('../po/product-owner');
   productOwner.checkBudget(budget);
-  const res = await runPriorityTurn({ data: report({ proposals, unfinished, dangerScores, hotSpots }), folder, agent, skillsDirs, resolveCommand, language });
+  const res = await runPriorityTurn({ data: report({ proposals, unfinished, dangerScores, hotSpots }), folder, agent, skillsDirs, resolveCommand, language, onItem, signal });
   productOwner.recordUsage(backlogDir, { projectId, model: agent.model, tokens: res.usage, costUsd: res.costUsd || 0, sessionId: res.providerSessionId || null });
   const { extractJson } = require('../../engine/run/outputs');
   let errs;
@@ -154,7 +154,7 @@ async function rankProject({ refactorRoot, backlogDir, projectId, model, mock, o
 }
 
 // One read-only Claude Code turn, as product-owner.js callAgent runs them
-async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand, language }) {
+async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand, language, onItem, signal }) {
   const fs = require('fs');
   const { render } = require('../../engine/run/templates');
   const { runTurn } = require('../../engine/providers');
@@ -177,6 +177,7 @@ async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand
   return runTurn({
     provider, model: agent.model, effort: agent.effort && agent.effort !== 'default' ? agent.effort : undefined, prompt, cwd: folder, extraArgs,
     timeoutMs: 15 * 60e3, render, hint: { stepId: STEP_ID, visit: 1, agent: 'product-owner', schema: PRIORITY_SCHEMA },
+    onItem: onItem || (() => {}), signal, // #728: the caller's progress and cancel reach the turn
   });
 }
 

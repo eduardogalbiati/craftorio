@@ -444,7 +444,8 @@ function runCli(opts, parser) {
     // child is the CLI itself
     if (child.pid) opts.onSpawn?.({ pid: child.pid, shim: !!resolved.shell });
 
-    const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId, error: null };
+    // #728: a fresh turn (no session resumed) owes nothing to an earlier total under the same CLI session id
+    const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId, error: null, ...(providerSessionId ? {} : { turnTotalBefore: 0 }) };
     let stderr = '';
     let done = false;
 
@@ -798,7 +799,8 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
 // the limits before anything runs (checkAttachments); see "Image attachments" above.
 async function runTurn(opts) {
   if (opts.provider.type !== 'mock') refuseReal(`the ${opts.provider.type} provider`);
-  opts = { ...opts, attachments: checkAttachments(opts.attachments) };
+  // #728: a caller without an onItem (the refactor ranking did) must never crash the turn
+  opts = { ...opts, attachments: checkAttachments(opts.attachments), onItem: opts.onItem || (() => {}) };
   const adapter = registry.byType(opts.provider.type);
   if (!adapter) throw new Error(`Unknown provider: ${opts.provider.type}`);
   return adapter.cli ? runCli(opts, adapter.parse) : runMock(opts);
