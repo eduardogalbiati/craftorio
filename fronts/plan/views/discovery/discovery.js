@@ -1319,19 +1319,19 @@
 
   function forgetRun(runId) { const runs = readRuns(); delete runs[runId]; writeRuns(runs); }
 
-  // A card's run ended (`ev`: its workflow.finished): a successful run's document goes back to the
-  // card. The link goes once the result is recorded, or when there is nothing to record (the run
-  // failed, its card is gone); after another failure it stays, tried again when the board opens.
+  // A card's run ended (`ev`: its workflow.finished): its document goes to the card once (marked before
+  // it is read: the live event and the catch-up may both come). The link goes once it is recorded or
+  // there is nothing to record (failed run, card gone); after another failure it stays for the next visit.
   async function runEnded(runId, ev) {
     const link = readRuns()[runId];
     if (!link || dv.recording.has(runId)) return;
-    const text = String(ev.outputs?.document ?? (await writtenDoc(link, ev)) ?? '');
-    if (ev.status !== 'success' || !text.trim()) {
-      forgetRun(runId);
-      return;
-    }
     dv.recording.add(runId);
     try {
+      const text = String(ev.outputs?.document ?? (await writtenDoc(link, ev)) ?? '');
+      if (ev.status !== 'success' || !text.trim()) {
+        forgetRun(runId);
+        return;
+      }
       await api.recordDiscoveryResult(link.projectId, link.cardId, link.source, text, runId);
       forgetRun(runId);
     } catch (e) {
