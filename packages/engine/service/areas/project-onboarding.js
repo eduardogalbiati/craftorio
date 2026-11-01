@@ -8,23 +8,31 @@
 // other heavy work on the machine. The state of each project is kept in memory:
 //   { projectId, status: cloning | ready | analyzing | analyzed | failed, code?: no-access | clone-failed,
 //     reason?, jobs: { clone, facts, profile, projectMap, ranking: { status: waiting | running | done | failed | skipped, error? } },
-//     cli: { provider: github | gitlab, status: checking | ok | missing | signed-out, reason? } | null }
+//     cli: { provider: github | gitlab, status: checking | ok | missing | signed-out, reason? } | null,
+//     remote?: { provider, status: creating | created | missing | signed-out | failed, url?, reason? } }
+// #632 (spec R4): create() makes a new project instead of importing one: git init on main, README and
+// .gitignore in a first commit, then its private remote only when asked and gh / glab is signed in (`remote`);
+// it is ready at once, nothing is cloned, and the three answers are its profile (jobs.profile.profile).
 // and every change is pushed as `onboarding:changed` (channels/onboarding.js). A refused access check or
 // a failed clone ends `failed` with a readable reason; onboardingRetry runs again what failed (the
 // access check and the clone, a failed job) and always checks gh / glab again. A project removed while
 // its jobs run loses its state; no error of a job escapes the chain.
 
+const fs = require('fs');
 const path = require('path');
+const OnboardingModel = require('@multiagent/shared/onboarding-model');
 const Platforms = require('@multiagent/shared/platforms');
 const agents = require('../../domains/agents/agents');
 const arch = require('../../domains/oracle/oracle-architecture');
 const issues = require('../../domains/backlog/issues');
+const { execShim } = require('../../domains/machine/shell');
 const priority = require('../../domains/refactor/refactor-priority');
 const projectMap = require('../../domains/project/project-map');
 const projects = require('../../domains/project/projects');
 const proposalsRun = require('../../domains/refactor/refactor-proposals-run');
 const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
+const { execGit } = require('../../domains/workspace/workspace');
 const { resolveCommandAsync } = require('../../engine/providers');
 const {
   clientError,
@@ -78,14 +86,53 @@ async function machineRepos(provider) {
   return out.ok ? platform.parseRepos(out.out) : [];
 }
 
+// #632: runs a command in `cwd` → { ok, out } (stdout and stderr), never rejects
+const runIn = (file, args, cwd, timeout) => new Promise((resolve) => {
+  execShim(file, args, { cwd, windowsHide: true, timeout }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() }));
+});
+
+// #632 (spec R4): the private repository of a new project, created by its platform's CLI from its folder
+// (the adapter's repoCreateCommand, never public), then origin set and main pushed when it has a commit
+// → { ok, url } | { ok: false, error }. The system boundary the tests replace.
+async function machineRemote(provider, { name, folder }) {
+  const platform = Platforms.findPlatform(provider);
+  if (!platform?.cli || typeof platform.repoCreateCommand !== 'function') return { ok: false, error: `No CLI creates repositories on ${provider}.` };
+  // a simulated run never publishes anything outside the machine
+  if (simulation.simulationOnly()) return { ok: false, error: `Simulation only: no repository is created on ${platform.label}.` };
+  const { cli, args } = platform.repoCreateCommand({ name, folder });
+  const r = await resolveCommandAsync(cli);
+  if (!r) return { ok: false, error: `${cli} is not installed.` };
+  const created = await runIn(r.file, args, folder, 60000);
+  const url = (created.out.match(/https:\/\/\S+/g) || []).slice(-1)[0]?.replace(/\.git$/, '') || null;
+  if (!created.ok || !url) return { ok: false, error: created.out || `${cli} did not create the repository.` };
+  try {
+    await execGit(['remote', 'get-url', 'origin'], folder).catch(() => execGit(['remote', 'add', 'origin', `${url}.git`], folder));
+    const committed = await execGit(['rev-parse', '--verify', '--quiet', 'HEAD'], folder).then(() => true, () => false);
+    if (committed) await execGit(['push', '-u', 'origin', 'main'], folder, { timeout: 60000 });
+  } catch (e) {
+    return { ok: false, url, error: `The repository ${url} was created, but main was not pushed: ${String(e?.message || e)}` };
+  }
+  return { ok: true, url };
+}
+
+// #632: git's identity for the first commit when this machine has none (a fresh install), as -c options
+async function identityArgs(git, folder) {
+  const email = await git(['config', 'user.email'], folder).then((s) => String(s).trim(), () => '');
+  return email ? [] : ['-c', 'user.name=Multiagent', '-c', 'user.email=multiagent@localhost'];
+}
+
+const README = (name) => `# ${name}\n`;
+const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Store', 'Thumbs.db', 'dist/', 'build/', 'coverage/', '*.log', ''].join('\n');
+
 /**
  * The onboarding of new projects: { start, status, analyze, retry } (the state is documented above).
  * git: projects.js's git (ls-remote and clone); cli(provider) → { installed, signedIn };
  * jobs: { facts, profile, projectMap, ranking }, each async ({ projectId, folder, facts }) => result;
  * slotsDir: the machine slots' folder (default: the machine's); pollMs: the slot's poll (default:
- * acquireSlot's); emit(event, state).
+ * acquireSlot's); emit(event, state); #632: remote(provider, { name, folder }) → { ok, url?, error? } creates
+ * a new project's private repository (default: gh / glab, machineRemote).
  */
-function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs }) {
+function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote }) {
   const states = new Map();
   // per project: { wanted (analyze was asked), facts (the facts job's promise), free, paid (the running parts), cli }
   const work = new Map();
@@ -258,7 +305,56 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
     return status(projectId);
   }
 
-  return { analyze, retry, start, status };
+  // #632: the answers of the three questions, each among its values (onboarding-model.js CREATE_ANSWERS)
+  function cleanAnswers(answers) {
+    const a = { ...OnboardingModel.CREATE_DEFAULTS, ...(answers && typeof answers === 'object' ? answers : {}) };
+    for (const [k, values] of Object.entries(OnboardingModel.CREATE_ANSWERS)) {
+      if (!values.includes(a[k])) throw clientError(`The answer ${k} must be one of: ${values.join(', ')}.`);
+    }
+    return { mode: a.mode, ci: a.ci, release: a.release };
+  }
+
+  /**
+   * #632 (spec R4): creates a new project in <projectsDir>/<slug>: git init on main, with README.md and
+   * .gitignore in a first commit (starts 'readme', the default) or nothing more ('empty'); then, only when
+   * asked and its CLI is signed in, its private remote. Nothing is cloned; the state is ready at once,
+   * with the answers as its profile. A remote that fails leaves the local project.
+   */
+  async function create({ name, starts = 'readme', remote: wanted = null, answers } = {}) {
+    if (typeof name !== 'string' || !name.trim()) throw clientError('The project name is missing.');
+    if (!['readme', 'empty'].includes(starts)) throw clientError('The project starts with readme or empty.');
+    const provider = wanted?.provider || null;
+    if (provider && !Platforms.findPlatform(provider)?.cli) throw clientError(`No CLI creates repositories on ${provider}.`);
+    const profile = { ...cleanAnswers(answers), tests: 'unit' };
+    const p = await projects.createProject(projectsDir, { name }, { git });
+    const folder = p.folder;
+    await git(['init'], folder);
+    await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], folder);
+    if (starts === 'readme') {
+      fs.writeFileSync(path.join(folder, 'README.md'), README(name.trim()));
+      fs.writeFileSync(path.join(folder, '.gitignore'), GITIGNORE);
+      await git(['add', 'README.md', '.gitignore'], folder);
+      await git([...(await identityArgs(git, folder)), 'commit', '-m', 'Initial commit'], folder);
+    }
+    const waiting = Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }]));
+    states.set(p.id, { projectId: p.id, status: 'ready', jobs: { ...waiting, clone: { status: 'skipped' }, profile: { status: 'done', profile } }, cli: null });
+    change(p.id, {});
+    if (provider) {
+      const found = await Promise.resolve().then(() => cli(provider)).catch(() => null);
+      const c = cliState(provider, found);
+      if (c.status !== 'ok') {
+        change(p.id, { remote: { provider, status: c.status, reason: c.reason } });
+      } else {
+        change(p.id, { remote: { provider, status: 'creating' } });
+        const out = await Promise.resolve().then(() => remote(provider, { name: p.id, folder })).catch((e) => ({ ok: false, error: String(e?.message || e) }));
+        if (out?.url) projects.updateProject(projectsDir, p.id, { repo: out.url });
+        change(p.id, { remote: out?.ok ? { provider, status: 'created', url: out.url } : { provider, status: 'failed', reason: String(out?.error || 'The repository was not created.'), ...(out?.url ? { url: out.url } : {}) } });
+      }
+    }
+    return status(p.id);
+  }
+
+  return { analyze, create, retry, start, status };
 }
 
 module.exports = (ctx) => {
@@ -291,6 +387,7 @@ module.exports = (ctx) => {
   return {
     onboardingAccounts: () => cliAccounts(),
     onboardingAnalyze: ({ projectId }) => onboarding().analyze(projectId),
+    onboardingCreate: (data) => onboarding().create(data),
     onboardingRepos: ({ provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
     onboardingStart: (data) => onboarding().start(data),
@@ -300,5 +397,6 @@ module.exports = (ctx) => {
 
 module.exports.cliAccounts = cliAccounts;
 module.exports.createOnboarding = createOnboarding;
+module.exports.machineRemote = machineRemote;
 module.exports.machineRepos = machineRepos;
 module.exports.SLOT = SLOT;

@@ -188,6 +188,8 @@ module.exports = {
   'notifications:read': { arg: { ids: [] }, invalid: { arg: { ids: 'all' } } },
   // #640: a repository no git reaches: the onboarding ends failed (no-access) and nothing is cloned
   'onboarding:analyze': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #632: a new project, git init only, no remote
+  'onboarding:create': { arg: () => ({ name: unique('Contract create'), starts: 'empty', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone' } }), invalid: { arg: { name: 42 } } },
   'onboarding:retry': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'onboarding:start': { arg: () => ({ name: unique('Contract onboarding'), repo: UNREACHABLE_REPO }), invalid: { arg: { name: 'No repository' } } },
   'onboarding:status': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },

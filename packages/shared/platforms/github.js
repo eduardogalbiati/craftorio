@@ -118,6 +118,8 @@
       try { list = JSON.parse(s.slice(s.indexOf('['), s.lastIndexOf(']') + 1)); } catch { return []; }
       return Array.isArray(list) ? list.map((r) => ({ name: r.nameWithOwner, private: !!r.isPrivate, updatedAt: r.updatedAt || null })).filter((r) => typeof r.name === 'string' && r.name) : [];
     },
+    // #632: a new project's private repository, from its local folder (origin is added; never --public)
+    repoCreateCommand: ({ name, folder }) => cmd(['repo', 'create', name, '--private', '--source', folder, '--remote', 'origin']),
 
     // ---- URLs
     // https://host/owner/repo/issues/12 → { host, repo, number }, or null

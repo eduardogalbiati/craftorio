@@ -100,6 +100,8 @@
       try { list = JSON.parse(s.slice(s.indexOf('['), s.lastIndexOf(']') + 1)); } catch { return []; }
       return Array.isArray(list) ? list.map((r) => ({ name: r.path_with_namespace, private: r.visibility !== 'public', updatedAt: r.last_activity_at || null })).filter((r) => typeof r.name === 'string' && r.name) : [];
     },
+    // #632: a new project's private repository (run in its folder; never --public)
+    repoCreateCommand: ({ name }) => cmd(['repo', 'create', name, '--private']),
 
     // ---- URLs
     // https://host/group/sub/project/-/issues/7 → { host, repo, number }, or null

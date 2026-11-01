@@ -33,7 +33,7 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
 
 1. **start** (mock-1): "Add a project", two cards with an icon (`wizard-card-icon`) and three points:
    import a repository (`wizard-source-import`, picked when the wizard opens); create new
-   (`wizard-source-new`) is disabled, "soon" (phase 4). Other sources (`wizard-other-sources`): Any git
+   (`wizard-source-new`, #632, the create step below in place of step 2). Other sources (`wizard-other-sources`): Any git
    URL (`wizard-source-git-url`, the URL field of step 2) and A folder on this computer
    (`wizard-source-folder`, a folder pick, then step 2 with its `file://` URL).
 2. **repository** (mock-2): `#wizard-repo`, `#wizard-name`, the GitHub / GitLab toggle (`#wizard-provider`,
@@ -48,6 +48,16 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
    the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A
    missing or signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
+   **Create new** (#632, mock-3, step 2 with the Create card): on the left the name (`wizard-new-name`),
+   what it starts with (`wizard-new-starts` radios: README and .gitignore with a first commit on `main`, or
+   Empty, `git init` only), the private remote's checkbox (`wizard-new-remote`, unchecked, disabled without a
+   signed-in gh / glab) with its platform (`wizard-new-remote-provider`) and hint (`wizard-new-remote-hint`),
+   and the folder `<workspace>/projects/<slug>` (`wizard-new-folder`, `slugify` of the onboarding model).
+   On the right the three questions (`wizard-question` `data-question="mode | ci | release"`, one
+   `wizard-chip` per answer, `CREATE_ANSWERS` / `CREATE_DEFAULTS` of the model). Next calls
+   `onboarding:create` (the engine's `create` in `project-onboarding.js`: the local repository, then the
+   remote only when asked and signed in; a failed remote leaves `remote.status = 'failed'` and the local
+   project). The project is ready at once, the stepper's third pill reads "Workflows" and step 3 follows.
 3. **analysis** (mock-4): on the left the jobs from the clone on with their status and the cost before the
    click (`wizard-cost`, `wizard-cost-total`, one `data-part` per paid analysis, `wizard-skip`); on the
    right the suggested workflows, disabled (chosen in a later phase). The footer shows the clone's

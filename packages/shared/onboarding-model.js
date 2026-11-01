@@ -16,7 +16,10 @@
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
 //   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
 // - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
-//   cloneRepo and createProject, the wizard's "Will be cloned into" line, #669).
+//   cloneRepo and createProject, the wizard's "Will be cloned into" line, #669);
+// - #632 "Create new project" (source 'new'): its repository step needs only the name; CREATE_ANSWERS
+//   (mode / ci / release, each field's values) and CREATE_DEFAULTS are its three questions, slugify(name)
+//   the new project's id and folder name (<workspace>/projects/<slug>).
 // The reasons are English for now; the interface language comes with step 7 of the plan.
 // Browser: window.OnboardingModel; Node: module.exports (the tests).
 (function (root) {
@@ -39,7 +42,9 @@
   function canGoNext(s) {
     const step = STEPS[stepIndex(s)];
     if (step.id === 'review') return false;
-    return step.needs.every((k) => filled(s?.[k]));
+    // #632: a new project (source 'new') has no repository to give, only its name
+    const needs = step.id === 'repository' && s?.source === 'new' ? ['name'] : step.needs;
+    return needs.every((k) => filled(s?.[k]));
   }
 
   function next(s) {
@@ -93,6 +98,10 @@
     ci: PROFILE_LABELS.ci,
   };
   const DEFAULT_PROFILE = { mode: 'local', ci: 'none', tests: 'unit' };
+  // #632 (spec R4, mock-3): the three answers of "Create new project", each field's values in the wizard's
+  // order, and the ones picked by default
+  const CREATE_ANSWERS = { mode: PROFILE.mode, ci: PROFILE.ci, release: Object.keys(CHOICES.release) };
+  const CREATE_DEFAULTS = { mode: 'local', ci: 'release', release: 'milestone' };
   const choicesOf = (kind) => Object.entries(CHOICES[kind]).map(([value, label]) => ({ value, label }));
 
   // feature, fix and release, always (spec D9), each with its reason from the profile's rules (R7);
@@ -159,7 +168,17 @@
     return name.replace(/[^\w.-]/g, '_');
   }
 
+  // #632: a new project's id and folder name, the engine's rule (packages/engine/domains/project/projects.js
+  // slugify): "Field Notes" → field-notes
+  function slugify(name) {
+    const s = String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return s || 'project';
+  }
+
   const api = {
+    CREATE_ANSWERS,
+    CREATE_DEFAULTS,
     DEFAULT,
     PROFILE,
     PROFILE_LABELS,
@@ -173,6 +192,7 @@
     profileLine,
     repoNameFromUrl,
     skipAnalysis,
+    slugify,
     suggestWorkflows,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

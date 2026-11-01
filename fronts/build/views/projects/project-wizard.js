@@ -8,7 +8,7 @@
 //   (wizard-steps, one wizard-step-pill data-step="<id>" per step reading "<n> <label>", the current one
 //   aria-current="step", the done ones a check), the step with its own heading (#project-wizard-title), and
 //   the footer over a divider (wizard-footer). The steps: start ("Add a project": wizard-source-import, selected
-//   when the wizard opens, and wizard-source-new, disabled until a later phase, each with its
+//   when the wizard opens, and wizard-source-new (#632: Create new project, below), each with its
 //   wizard-card-icon and three points; wizard-other-sources with wizard-source-git-url, step 2's URL field,
 //   and wizard-source-folder, api.pickFolder() then step 2 with the folder's file:// URL), repository (the
 //   GitHub / GitLab toggle #wizard-provider read from the URL, the gh / glab badges wizard-cli-account
@@ -30,6 +30,14 @@
 //   card (openProject with nextSteps, project.js), then sends the picked refactors to the roadmap as planned
 //   items (refactor:addToRoadmap with `file`: filed as issues first) and the idea to the Inbox; an analysis
 //   still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
+// - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
+//   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
+//   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform
+//   wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), the folder line
+//   wizard-new-folder (<workspace>/projects/<slug>, OnboardingModel.slugify); then the three questions
+//   wizard-question data-question="mode" | "ci" | "release" with their wizard-chip buttons (aria-pressed on the
+//   pick, OnboardingModel.CREATE_ANSWERS / CREATE_DEFAULTS). Next (api.createOnboarding) creates it, ready at
+//   once: step 3 ("Workflows") without the clone; a private repository not made shows wizard-remote-warning.
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
 //   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
 //   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
@@ -40,7 +48,7 @@
 // - #onboarding-tray (data-testid="onboarding-tray"): one tray-item per imported project (data-project,
 //   data-status = the engine's status), its name, and when failed the reason and Retry; it follows
 //   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads) and stays when the wizard closes.
-// Channels: onboarding:start / analyze / retry (packages/engine/service/channels/onboarding.js),
+// Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
 // architecture:estimate (the project map's cost; the ranking has no estimate yet: not known), and for the
 // review architecture:city / facts, refactor:proposals, the backlog, the refactor's roadmap item
 // (api.addRefactorToRoadmap, never runNow) and the discovery card (api.createDiscoveryCard, an Inbox idea).
@@ -82,8 +90,10 @@
 
   function stepper() {
     const at = M.STEPS.findIndex((s) => s.id === cur.model.step);
+    // #632 (mock-3): a new project has no analysis to run, its step 3 is its workflows
+    const label = (s) => (s.id === 'analysis' && cur.model.source === 'new' ? t('onboarding.step_analysis_new') : t(`onboarding.step_${s.id}`));
     const pill = (s, i) => `<li data-step="${s.id}" data-testid="wizard-step-pill" class="wizard-step${i < at ? ' done' : ''}"${i === at ? ' aria-current="step"' : ''}>
-        <span class="wizard-step-num">${i < at ? ICON.check : i + 1}</span> ${esc(t(`onboarding.step_${s.id}`))}</li>`;
+        <span class="wizard-step-num">${i < at ? ICON.check : i + 1}</span> ${esc(label(s))}</li>`;
     return `<ol class="wizard-steps" data-testid="wizard-steps">${M.STEPS.map(pill).join('')}</ol>`;
   }
 
@@ -101,8 +111,8 @@
     return `<h2 id="project-wizard-title">${esc(t('onboarding.start_title'))}</h2>
       <p class="muted">${esc(t('onboarding.start_line'))}</p>
       <div class="wizard-sources">
-        <button type="button" class="card wizard-source" data-act="source-new" data-testid="wizard-source-new" aria-pressed="false" aria-disabled="true" disabled>
-          ${sourceCard('new', ICON.plus, ` <span class="badge">${esc(t('onboarding.soon'))}</span>`)}
+        <button type="button" class="card wizard-source${picked('new')}" data-act="source-new" data-testid="wizard-source-new" aria-pressed="${cur.model.source === 'new'}">
+          ${sourceCard('new', ICON.plus, '')}
         </button>
         <button type="button" class="card wizard-source${picked('import')}" data-act="source-import" data-testid="wizard-source-import" aria-pressed="${cur.model.source === 'import'}">
           ${sourceCard('import', ICON.download, '')}
@@ -193,6 +203,11 @@
 
   // the badges and the list arrive after the step is drawn: only their own parts change (the caret stays)
   function refreshAccounts() {
+    // #632: the create step's box and platforms follow the sign-in; a render unless the name is being typed
+    if (cur.model.step === 'repository' && cur.model.source === 'new') {
+      if (document.activeElement?.id === 'wizard-new-name') refreshCreate(); else render();
+      return;
+    }
     const badges = document.getElementById('wizard-cli-badges');
     if (badges) badges.innerHTML = cliBadges();
     const list = document.getElementById('wizard-repo-slot');
@@ -252,6 +267,89 @@
       ${o ? cliWarning(o.cli) : ''}`;
   }
 
+  // #632 (mock-3): Create new project. The accounts signed in with gh / glab, the platform the private
+  // repository goes to (the owner's pick, else the first signed in), the new project's slug and folder
+  const signedIn = () => (cur.accounts || []).filter((a) => a.signedIn && providers().includes(a.provider));
+  const remoteProvider = () => cur.remoteProvider || signedIn()[0]?.provider || providers()[0];
+  const newSlug = () => M.slugify(cur.model.name);
+  const newFolder = () => `<workspace>/projects/${newSlug()}`; // i18n-ignore
+  // the answer's i18n key: pr+release → onboarding.new_ci_pr_release
+  const answerLabel = (q, v) => t(`onboarding.new_${q}_${String(v).replace(/[^a-z0-9]+/gi, '_')}`);
+
+  // under the box: the repository it makes (<account>/<slug>), or how to sign in when no CLI is
+  function remoteHint() {
+    if (!signedIn().length) return t('onboarding.new_remote_hint_none', { clis: providers().map((id) => platformById(id)?.cli || id).join(' / ') });
+    const on = remoteProvider();
+    const account = signedIn().find((a) => a.provider === on)?.account;
+    const other = platformById(providers().find((id) => id !== on));
+    return t('onboarding.new_remote_hint', { repo: account ? `${account}/${newSlug()}` : newSlug(), other: other?.label || '', cli: other?.cli || '' });
+  }
+
+  // the platforms to pick, the ones not signed in disabled; the app's select markup when loaded
+  function remoteSelect(locked) {
+    const ins = signedIn().map((a) => a.provider);
+    const options = providers().map((id) => [id, platformById(id)?.label || id, { disabled: !ins.includes(id) }]);
+    const attrs = `id="wizard-new-remote-provider" data-testid="wizard-new-remote-provider" aria-label="${esc(t('onboarding.provider_label'))}"${locked || !ins.length ? ' disabled' : ''}`;
+    return window.Select ? window.Select.markup(attrs, options, remoteProvider())
+      : `<select ${attrs}>${options.map(([v, l, x]) => `<option value="${esc(v)}"${v === remoteProvider() ? ' selected' : ''}${x.disabled ? ' disabled' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  }
+
+  // one question of the right column: its title and its chips, the picked one aria-pressed
+  function question(q, locked) {
+    const chip = (v) => `<button type="button" class="wizard-chip" data-act="answer" data-question="${q}" data-value="${esc(v)}" data-testid="wizard-chip" aria-pressed="${cur.answers[q] === v}"${locked}>${esc(answerLabel(q, v))}</button>`;
+    return `<div class="wizard-question" data-testid="wizard-question" data-question="${q}" role="group" aria-labelledby="wizard-question-${q}">
+        <span class="wizard-question-title" id="wizard-question-${q}">${esc(t(`onboarding.new_${q}`))}</span>
+        <div class="wizard-chips">${M.CREATE_ANSWERS[q].map(chip).join('')}</div>
+      </div>`;
+  }
+
+  function createStep() {
+    // once created (Back from step 3), the step shows what was sent
+    const locked = cur.projectId ? ' disabled' : '';
+    const starts = (v) => `<label class="wizard-choice"><input type="radio" name="wizard-new-starts" data-testid="wizard-new-starts" value="${v}"${cur.starts === v ? ' checked' : ''}${locked}>
+          <span><strong>${esc(t(`onboarding.new_${v}`))}</strong><span class="muted small">${esc(t(`onboarding.new_${v}_text`))}</span></span></label>`;
+    return `<div class="wizard-columns">
+        <div class="wizard-column">
+          <h2 id="project-wizard-title">${esc(t('onboarding.new_title'))}</h2>
+          <label class="wizard-field"><span>${esc(t('onboarding.name_label'))}</span>
+            <input id="wizard-new-name" data-testid="wizard-new-name" type="text" value="${esc(cur.model.name)}"${cur.projectId ? ' readonly' : ''}></label>
+          <fieldset class="wizard-starts"><legend>${esc(t('onboarding.new_starts'))}</legend>${['readme', 'empty'].map(starts).join('')}</fieldset>
+          <div class="wizard-remote">
+            <label class="wizard-choice"><input type="checkbox" id="wizard-new-remote" data-testid="wizard-new-remote"${cur.remote ? ' checked' : ''}${locked || !signedIn().length ? ' disabled' : ''}>
+              <strong>${esc(t('onboarding.new_remote'))}</strong></label>
+            ${remoteSelect(locked)}
+            <p class="muted small wizard-remote-hint" id="wizard-new-remote-hint" data-testid="wizard-new-remote-hint">${esc(remoteHint())}</p>
+          </div>
+          <p class="mono muted small text-cut" id="wizard-new-folder" data-testid="wizard-new-folder" title="${esc(newFolder())}">${esc(newFolder())}</p>
+          ${cur.onboarding ? remoteWarning(cur.onboarding.remote) : ''}
+        </div>
+        <div class="wizard-column">
+          <h3>${esc(t('onboarding.new_questions'))}</h3>
+          ${Object.keys(M.CREATE_ANSWERS).map((q) => question(q, locked)).join('')}
+          <p class="muted">${esc(t('onboarding.new_answers_line'))}</p>
+        </div>
+      </div>`;
+  }
+
+  // the private repository asked for and not made (gh signed out, the CLI failed): the local project stays
+  function remoteWarning(remote) {
+    if (!remote || ['creating', 'created'].includes(remote.status)) return '';
+    return `<div class="wizard-alert warn" data-testid="wizard-remote-warning" data-error="remote-${esc(remote.status)}">
+        <strong>${esc(t('onboarding.new_remote_failed'))}</strong>
+        <p>${esc(remote.reason || t('onboarding.no_reason'))}</p>
+      </div>`;
+  }
+
+  // the create step's live parts as the name is typed or gh / glab answers (the caret stays)
+  function refreshCreate() {
+    const box = document.getElementById('wizard-new-remote');
+    if (box) box.disabled = !!cur.projectId || !signedIn().length;
+    const hint = document.getElementById('wizard-new-remote-hint');
+    if (hint) hint.textContent = remoteHint();
+    const folder = document.getElementById('wizard-new-folder');
+    if (folder) folder.textContent = newFolder();
+  }
+
   // mock-4's left column: one row per job from the clone on (its status dot, what it reads, its cost), the
   // paid ones data-part, then the estimated total with "Skip, analyze later" before the click
   function costBlock(started) {
@@ -280,7 +378,7 @@
       ? `<span class="muted small">${esc(t('onboarding.cost_partial'))}</span>` : '';
     const skip = started ? '' : `<button type="button" class="btn sm" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>`;
     return `<div class="wizard-cost" data-testid="wizard-cost">
-        <ul class="wizard-jobs">${['clone', ...JOBS].map(row).join('')}</ul>
+        <ul class="wizard-jobs">${(cur.model.source === 'new' ? JOBS : ['clone', ...JOBS]).map(row).join('')}</ul>
         <div class="card wizard-cost-total-row"><span>${esc(t('onboarding.cost_real_models'))}</span>
           <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(loading ? t('onboarding.estimating') : costText(sum.total))}</strong>${skip}</div>
         ${unknown}
@@ -329,6 +427,7 @@
           ${said}
           ${o.status === 'failed' ? errorBlock(o) : ''}
           ${cliWarning(o.cli)}
+          ${remoteWarning(o.remote)}
         </div>
         <div class="wizard-column">${workflowsColumn()}</div>
       </div>`;
@@ -443,7 +542,7 @@
       </div>`;
   }
 
-  const BODY = { analysis: analysisStep, repository: repositoryStep, review: reviewStep, start: startStep };
+  const BODY = { analysis: analysisStep, repository: () => (cur.model.source === 'new' ? createStep() : repositoryStep()), review: reviewStep, start: startStep };
 
   // the analysis step's footer: "Cloning <name>", a bar and the clone job's status (mock-4)
   function cloneProgress() {
@@ -461,7 +560,8 @@
     const started = ['analyzing', 'analyzed'].includes(cur.onboarding?.status);
     // the analysis step offers "Analyze and continue" until the analysis started; review is the last step
     const showNext = step === 'start' || step === 'repository' || (step === 'analysis' && started);
-    const nextLabel = step === 'repository' ? 'onboarding.next_clone' : 'onboarding.next';
+    // #632: a new project is not cloned (mock-3's plain Next)
+    const nextLabel = step === 'repository' && cur.model.source !== 'new' ? 'onboarding.next_clone' : 'onboarding.next';
     const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${canNext() ? '' : ' disabled'}>${esc(t(nextLabel))}</button>` : '';
     const analyze = step === 'analysis' && !started
       ? `<button type="button" class="btn primary" data-act="analyze" data-testid="wizard-analyze"${cur.busy ? ' disabled' : ''}>${esc(t('onboarding.analyze_continue'))}</button>` : '';
@@ -471,7 +571,7 @@
     // Finish never waits: not disabled by an analysis still running nor by a call in flight
     const finish = step === 'review' ? `<button type="button" class="btn primary" data-act="finish" data-testid="wizard-finish">${esc(t('onboarding.finish'))}</button>` : '';
     // mock-4's footer: the clone's progress on the left, Back beside the step's action on the right
-    const foot = step === 'analysis' ? `${cloneProgress()}<span class="wizard-spacer"></span>${back}${next}${analyze}`
+    const foot = step === 'analysis' ? `${cur.model.source === 'new' ? '' : cloneProgress()}<span class="wizard-spacer"></span>${back}${next}${analyze}`
       : `${back}<span class="wizard-spacer"></span>${next}${analyze}${finish}`;
     root.innerHTML = `<div class="wizard-panel wizard-at-${step}" tabindex="-1">
         <header class="wizard-head">
@@ -578,17 +678,26 @@
     if (!canNext()) return;
     if (cur.model.step === 'repository' && !cur.projectId) {
       const name = cur.model.name.trim();
-      const repo = typedRepo();
-      cur.model = { ...cur.model, repository: repo };
+      // #632: a new project is created (ready at once, its private remote only when ticked); else imported
+      const creating = cur.model.source === 'new';
+      let begin;
+      if (creating) {
+        const data = { name, starts: cur.starts, remote: cur.remote && signedIn().length ? { provider: remoteProvider() } : null, answers: { ...cur.answers } };
+        begin = () => api.createOnboarding(data);
+      } else {
+        const repo = typedRepo();
+        cur.model = { ...cur.model, repository: repo };
+        begin = () => api.startOnboarding({ name, repo });
+      }
       cur.busy = true;
       render();
       try {
-        const state = await api.startOnboarding({ name, repo });
+        const state = await begin();
         cur.projectId = state?.projectId || null;
         if (cur.projectId) names.set(cur.projectId, name);
         remember(state);
       } catch (e) {
-        showToast(t('onboarding.start_failed'), errMsg(e));
+        showToast(t(creating ? 'onboarding.new_create_failed' : 'onboarding.start_failed'), errMsg(e));
       } finally {
         cur.busy = false;
         render();
@@ -622,11 +731,41 @@
     if (window.Setup?.open) window.Setup.open();
   }
 
+  // #632: the Create card and the chips of the create step's questions; true when it was one of them
+  function onCreateClick(act, e) {
+    if (act === 'source-new') cur.model = { ...cur.model, source: 'new' };
+    else if (act === 'answer' && !cur.projectId) {
+      const chip = e.target.closest('[data-question]');
+      cur.answers = { ...cur.answers, [chip.dataset.question]: chip.dataset.value };
+    }
+    else return false;
+    render();
+    return true;
+  }
+
+  // #632: the create step's fields (name, starts with, the remote's switch and platform); true when it was one
+  function onCreateInput(e, id) {
+    if (e.target?.dataset?.testid === 'wizard-new-starts') {
+      if (e.target.checked) cur.starts = String(e.target.value || 'readme');
+    }
+    else if (id === 'wizard-new-remote') cur.remote = !!e.target.checked;
+    else if (id === 'wizard-new-remote-provider') { cur.remoteProvider = String(e.target.value || '') || null; refreshCreate(); }
+    else if (id === 'wizard-new-name') {
+      cur.model = { ...cur.model, name: String(e.target.value || '') };
+      refreshCreate();
+      const nextBtn = document.getElementById('wizard-next');
+      if (nextBtn) nextBtn.disabled = !canNext();
+    }
+    else return false;
+    return true;
+  }
+
   async function onClick(e) {
     const act = e.target?.closest?.('[data-act]')?.dataset.act;
     if (!act || !cur) return;
     if (act === 'close' || act === 'cancel') close();
     else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
+    else if (onCreateClick(act, e)) return;
     else if (act === 'source-git-url') toRepository();
     else if (act === 'source-folder') await fromFolder();
     else if (act === 'provider') {
@@ -672,6 +811,7 @@
       cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') };
       return;
     }
+    if (onCreateInput(e, id)) return;
     if (id !== 'wizard-repo' && id !== 'wizard-name') return;
     cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: String(e.target.value || '') };
     // the provider toggle follows the URL (its buttons keep their place: the caret stays)
@@ -720,8 +860,8 @@
       root.addEventListener('focusout', (e) => { if (cur?.stale && e.target?.id === 'wizard-review-idea') { cur.stale = false; render(); } });
       document.body.appendChild(root);
     }
-    // Import is the one source of this phase: selected when the wizard opens (mock-1)
-    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, ...freshReview() };
+    // Import is selected when the wizard opens (mock-1); #632: the create step's choices start at mock-3's
+    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, ...freshReview() };
     root.hidden = false;
     render();
     root.querySelector('.wizard-panel')?.focus?.();

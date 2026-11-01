@@ -58,6 +58,25 @@
 .wizard-repo-item .text-cut { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wizard-repo-item .muted { flex: none; font-size: 12px; }
 
+/* #632: Create new project (mock-3): the radios and the box, each title over its line; the questions' chips */
+.wizard-starts { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wizard-starts legend { padding: 0; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+.wizard-choice { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
+.wizard-choice > span { display: flex; flex-direction: column; gap: 2px; }
+.wizard-choice input { margin: 2px 0 0; accent-color: var(--accent); width: 16px; height: 16px; }
+.wizard-choice input:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.wizard-remote { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.wizard-remote select { width: auto; min-width: 96px; font-size: 13px; }
+.wizard-remote-hint { flex-basis: 100%; margin: 0 0 0 24px; }
+.wizard-question { display: flex; flex-direction: column; gap: 6px; }
+.wizard-question-title { font-size: 12px; color: var(--muted); }
+.wizard-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wizard-chip { min-height: 24px; padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.wizard-chip:hover:not([disabled]) { border-color: var(--muted); color: var(--text); }
+.wizard-chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.wizard-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.wizard-chip[disabled] { cursor: default; }
+
 .wizard-import-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .wizard-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
 .badge.status-cloning, .badge.status-analyzing, .badge.job-running { color: var(--accent); }
