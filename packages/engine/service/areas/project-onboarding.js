@@ -348,7 +348,13 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       throw clientError(`The repository of ${p.name} could not be created: ${String(e?.message || e)}`);
     }
     const waiting = Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }]));
-    states.set(p.id, { projectId: p.id, name: p.name, status: 'ready', jobs: { ...waiting, clone: { status: 'skipped' }, facts: { status: 'skipped' }, profile: { status: 'done', profile } }, cli: null });
+    const jobs = {
+      ...waiting,
+      clone: { status: 'skipped' },
+      facts: { status: 'skipped' },
+      profile: { status: 'done', profile },
+    };
+    states.set(p.id, { projectId: p.id, name: p.name, status: 'ready', jobs, cli: null });
     change(p.id, {});
     if (provider) {
       const found = await Promise.resolve().then(() => cli(provider)).catch(() => null);
