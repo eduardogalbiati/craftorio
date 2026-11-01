@@ -349,3 +349,122 @@ test('#632 channel onboarding:create is createOnboarding(data), calling ctx.onbo
   assert.equal(out.projectId, 'field-notes');
   assert.deepEqual(received, [data]);
 });
+
+// ---- review fixes (66bba2e6) ------------------------------------------------------------------------
+
+test('#632 createProject with fresh refuses a non-empty folder and writes no project', async (t) => {
+  const root = tmp(t);
+  const projectsDir = path.join(root, 'projects');
+  const folder = path.join(projectsDir, 'field-notes');
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, 'notes.txt'), 'mine');
+  const { git } = realGit(root);
+  await assert.rejects(projects.createProject(projectsDir, { name: 'Field Notes' }, { git, fresh: true }), /not empty/);
+  assert.equal(fs.existsSync(path.join(projectsDir, 'field-notes.json')), false);
+  assert.deepEqual(projects.listProjects(projectsDir).map((p) => p.id), []);
+  assert.deepEqual(fs.readdirSync(folder), ['notes.txt']);
+});
+
+test('#632 create() into a non-empty <projects>/<slug> is a client error and leaves the folder as it was', async (t) => {
+  const { ob, projectsDir } = setup(t);
+  const folder = path.join(projectsDir, 'field-notes');
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, 'notes.txt'), 'mine');
+  await assert.rejects(create(ob), (e) => e.status === 400 && /not empty/.test(e.message));
+  assert.deepEqual(projects.listProjects(projectsDir).map((p) => p.id), []);
+  assert.deepEqual(fs.readdirSync(folder), ['notes.txt']);
+  assert.equal(fs.existsSync(path.join(folder, '.git')), false);
+});
+
+// the area with a real git that fails on the git command `failOn` (init, commit)
+function setupFailing(t, failOn) {
+  const root = tmp(t);
+  const real = realGit(root);
+  const git = (args, cwd) => (args.includes(failOn) ? Promise.reject(new Error(`git ${failOn} failed`)) : real.git(args, cwd));
+  const projectsDir = path.join(root, 'projects');
+  const remote = fakeRemote();
+  const ob = loadArea().createOnboarding({
+    projectsDir, reposDir: path.join(root, 'repos'), git, cli: SIGNED_IN, jobs: fakeJobs().jobs,
+    slotsDir: path.join(root, 'locks'), emit: () => {}, remote: remote.remote,
+  });
+  return { ob, projectsDir, remote };
+}
+
+for (const failOn of ['init', 'commit']) {
+  test(`#632 a failing git ${failOn} removes the new project and its folder and creates no remote`, async (t) => {
+    const { ob, projectsDir, remote } = setupFailing(t, failOn);
+    await assert.rejects(create(ob, { remote: { provider: 'github' } }), (e) => e.status === 400 && /could not be created/.test(e.message) && e.message.includes(`git ${failOn} failed`));
+    assert.deepEqual(projects.listProjects(projectsDir).map((p) => p.id), []);
+    assert.equal(fs.existsSync(path.join(projectsDir, 'field-notes.json')), false);
+    assert.equal(fs.existsSync(path.join(projectsDir, 'field-notes')), false);
+    assert.equal(remote.calls.length, 0);
+  });
+}
+
+test('#632 after a failed create the same name can be created again', async (t) => {
+  const root = tmp(t);
+  const real = realGit(root);
+  let fail = true;
+  const git = (args, cwd) => (fail && args.includes('commit') ? Promise.reject(new Error('git commit failed')) : real.git(args, cwd));
+  const projectsDir = path.join(root, 'projects');
+  const ob = loadArea().createOnboarding({
+    projectsDir, reposDir: path.join(root, 'repos'), git, cli: SIGNED_IN, jobs: fakeJobs().jobs,
+    slotsDir: path.join(root, 'locks'), emit: () => {}, remote: fakeRemote().remote,
+  });
+  await assert.rejects(create(ob));
+  fail = false;
+  const state = await create(ob);
+  assert.equal(state.projectId, 'field-notes');
+});
+
+test('#632 the created project skips the facts job (an empty repository) and carries its name', async (t) => {
+  const { ob } = setup(t);
+  const state = await create(ob);
+  assert.equal(state.jobs.facts.status, 'skipped');
+  assert.equal(state.jobs.clone.status, 'skipped');
+  assert.equal(state.name, 'Field Notes');
+});
+
+test('#632 the ready state is pushed with its name before the remote is created, then creating, then created', async (t) => {
+  let seen = null;
+  const { ob, events } = setup(t, {
+    remote: fakeRemote(() => { seen = events.map((e) => e.payload.remote?.status || e.payload.status); return { ok: true, url: 'https://github.com/eduardo/field-notes' }; }),
+  });
+  await create(ob, { remote: { provider: 'github' } });
+  const changed = events.filter((e) => e.event === 'onboarding:changed').map((e) => e.payload);
+  assert.equal(changed[0].status, 'ready');
+  assert.equal(changed[0].name, 'Field Notes');
+  assert.equal(changed[0].remote === undefined, true);
+  assert.deepEqual(seen, ['ready', 'creating'], 'while the remote runs, the wizard was told: ready, then creating');
+  assert.equal(changed.at(-1).remote.status, 'created');
+  assert.equal(changed.at(-1).remote.url, 'https://github.com/eduardo/field-notes');
+});
+
+test('#632 a signed-out CLI explains why no repository was created, naming its login command', async (t) => {
+  const { ob } = setup(t, { cli: async () => ({ installed: true, signedIn: false }) });
+  const state = await create(ob, { remote: { provider: 'github' } });
+  assert.equal(state.remote.status, 'signed-out');
+  assert.match(state.remote.reason, /not signed in/);
+  assert.match(state.remote.reason, /gh auth login/);
+});
+
+test('#632 a missing CLI explains that it is not installed', async (t) => {
+  const { ob } = setup(t, { cli: async () => ({ installed: false, signedIn: false }) });
+  const state = await create(ob, { remote: { provider: 'gitlab' } });
+  assert.equal(state.remote.status, 'missing');
+  assert.match(state.remote.reason, /glab\) is not installed/);
+});
+
+test('#632 machineRemote in a simulated run creates nothing and answers ok: false', async (t) => {
+  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
+  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const folder = tmp(t);
+  for (const provider of ['github', 'gitlab']) {
+    const out = await loadArea().machineRemote(provider, { name: 'field-notes', folder });
+    assert.equal(out.ok, false);
+    assert.match(out.error, /Simulation only/);
+    assert.equal(out.url === undefined, true);
+  }
+  assert.deepEqual(fs.readdirSync(folder), []);
+});

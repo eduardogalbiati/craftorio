@@ -395,3 +395,66 @@ test('#632 Next with an empty name creates nothing and stays on the create step'
   assert.equal(app.callsTo('createOnboarding').length, 0);
   assert.equal(byTestId(wizardMarkup(app), 'wizard-new-name') === null, false, 'still the create step');
 });
+
+// ---- review fixes (66bba2e6): the wizard follows the project while its remote is created --------------
+
+// the page whose api.createOnboarding answers only when the test resolves it
+function pendingPage(accounts) {
+  let answer;
+  const answered = new Promise((resolve) => { answer = resolve; });
+  const app = loadApp({
+    api: {
+      listProjects: async () => [],
+      onboardingAccounts: async () => clone(accounts),
+      onboardingRepos: async () => [],
+      createOnboarding: () => answered,
+      onboardingStatus: async () => clone(CREATED),
+      architectureEstimate: async () => ({ estimate: { usd: 0.9 } }),
+    },
+  });
+  return { app, answer };
+}
+
+const changed = async (app, state) => {
+  for (const fn of app.apiHandlers.onOnboardingChanged || []) fn(clone(state));
+  await app.settle(20);
+};
+const currentStep = (app) => H.findEl(wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-step-pill' && e.attrs['aria-current'] === 'step')?.attrs['data-step'] || null;
+
+async function pendingCreate(name, state) {
+  const { app, answer } = pendingPage([GH_IN, GL_OUT]);
+  await app.boot();
+  app.sandbox.ProjectWizard.open();
+  await app.settle(20);
+  await press(app, 'wizard-source-new');
+  await press(app, 'wizard-next');
+  await typeName(app, name);
+  await tickRemote(app);
+  const pressing = press(app, 'wizard-next'); // waits on api.createOnboarding
+  await app.settle(20);
+  await changed(app, state);
+  return { app, answer, pressing };
+}
+
+test('#632 the wizard adopts the project pushed with the typed name before create() answers, showing its remote being created', { timeout: 20000 }, async () => {
+  const creating = { ...clone(CREATED), name: NAME, remote: { provider: 'github', status: 'creating' } };
+  const { app, answer, pressing } = await pendingCreate(NAME, creating);
+  assert.equal(currentStep(app), 'analysis', 'step 3 while the remote is created');
+  const html = wizardMarkup(app);
+  assert.equal(byTestId(html, 'wizard-remote-creating') === null, false, 'data-testid="wizard-remote-creating"');
+  assert.match(textOf(byTestId(html, 'wizard-remote-creating')), /GitHub/);
+  answer({ ...creating, remote: { provider: 'github', status: 'created', url: 'https://github.com/eduardo/field-notes' } });
+  await pressing;
+  await changed(app, { ...creating, remote: { provider: 'github', status: 'created', url: 'https://github.com/eduardo/field-notes' } });
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-remote-creating') === null, true, 'the creating line is gone');
+  assert.equal(currentStep(app), 'analysis');
+});
+
+test('#632 a project pushed with another name does not move the wizard off the create step', { timeout: 20000 }, async () => {
+  const other = { ...clone(CREATED), projectId: 'other', name: 'Other', remote: { provider: 'github', status: 'creating' } };
+  const { app, answer, pressing } = await pendingCreate(NAME, other);
+  assert.equal(currentStep(app), 'repository');
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-remote-creating') === null, true, 'no creating line');
+  answer({ ...clone(CREATED), name: NAME });
+  await pressing;
+});
