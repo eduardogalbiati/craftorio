@@ -74,7 +74,7 @@ const typeIn = (js, sel, value) => js(`
 // #632 (mock-3): gh signed in as a demo account and glab missing, so Create new project's private remote
 // can be ticked from the start mode (--click); the import modes keep the machine's own answer (its repo list)
 const DEMO_ACCOUNTS = [
-  { provider: 'github', cli: 'gh', installed: true, signedIn: true, account: 'eduardo' },
+  { provider: 'github', cli: 'gh', installed: true, signedIn: true, account: 'octo-demo' },
   { provider: 'gitlab', cli: 'glab', installed: false, signedIn: false },
 ];
 
