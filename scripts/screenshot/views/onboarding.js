@@ -71,8 +71,22 @@ const typeIn = (js, sel, value) => js(`
   el.value = ${JSON.stringify(value)};
   el.dispatchEvent(new Event('input', { bubbles: true }));`);
 
+// #632 (mock-3): gh signed in as a demo account and glab missing, so Create new project's private remote
+// can be ticked from the start mode (--click); the import modes keep the machine's own answer (its repo list)
+const DEMO_ACCOUNTS = [
+  { provider: 'github', cli: 'gh', installed: true, signedIn: true, account: 'eduardo' },
+  { provider: 'gitlab', cli: 'glab', installed: false, signedIn: false },
+];
+
+function stubAccounts() {
+  const { ipcMain } = require('electron');
+  ipcMain.removeHandler('onboarding:accounts');
+  ipcMain.handle('onboarding:accounts', () => DEMO_ACCOUNTS);
+}
+
 async function open({ args, click, js, pause, win }) {
   const mode = args.mode || 'start';
+  if (mode === 'start') stubAccounts();
   await click('.nav-item[data-view="dashboard"]');
   await click('[data-testid="home-empty-create-project"]');
   await waitFor(js, '[data-testid="project-wizard"] [data-step="start"][aria-current="step"]', 10000);
