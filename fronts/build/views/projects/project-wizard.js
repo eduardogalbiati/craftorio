@@ -284,12 +284,16 @@
       </div>`;
   }
 
-  // mock-4's right column: the suggested workflows, shown but not chosen in this phase (disabled)
+  // mock-4's right column: the suggested workflows, shown but not chosen in this phase (disabled); the app's
+  // select (select.js, #383), the same words as text on a page without it (a test's mini DOM)
   function workflowsColumn() {
     const name = cur.model.name;
+    const later = t('onboarding.workflow_later');
+    const pick = window.Select ? window.Select.markup('disabled aria-disabled="true"', [['', later]], '')
+      : `<span class="muted">${esc(later)}</span>`;
     const row = (kind) => `<li class="card wizard-workflow">
         <label class="wizard-workflow-head"><strong>${esc(t(`onboarding.workflow_${kind}`))}</strong>
-          <select disabled aria-disabled="true"><option>${esc(t('onboarding.workflow_later'))}</option></select></label>
+          ${pick}</label>
       </li>`;
     return `<h3>${esc(t('onboarding.workflows_title'))}</h3>
       <p class="muted">${esc(t('onboarding.workflows_line', { name }))}</p>
