@@ -24,7 +24,8 @@
 // Apply / Edit / Dismiss (mock-4); the approval gate is the sign-off panel (mock-5). Several writers
 // (AI Arena, phase 2) and Screens to capture first (captures, phase 3) are shown disabled. The New item
 // panel, the review and the sign-off markup live in docs-panels.js (DocsPanels); the Diff tab's page of a
-// change (its touched sections, docs:read-at) in docs-diff.js (DocsDiff).
+// change (its touched sections, docs:read-at) in docs-diff.js (DocsDiff); the sections with their
+// anchors and the reader's page in docs-page.js (DocsPage).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, showToast, showView, confirmDialog), markdownHtml (artifact-render.js),
 // DocModel (packages/shared/doc-model.js), CurrentProject and AgentChat.
@@ -355,18 +356,8 @@
 
   // the markdown shown in the reader and the contents: the source or, in PT, its translation
   const shownMarkdown = (o) => (o.lang === 'pt' && o.data?.translation ? o.data.translation.markdown : o.data?.source?.markdown) || '';
-  // The sections of the document with their anchors (the rule of DocModel's selection anchors:
-  // <doc>-<label key> for a requirement, <doc>-<heading slug> for a heading); a requirement shows its
-  // label and its name ("R1 · Documents screen")
-  function outline(md, doc) {
-    if (!window.DocModel || !md) return [];
-    const rows = md.split('\n');
-    return window.DocModel.sections(md).filter((s) => s.title !== null || s.label).map((s) => {
-      const first = s.blocks[0];
-      const level = s.title !== null ? Math.min(6, (rows[first.start - 1].match(/^#+/) || ['##'])[0].length) : 7;
-      return { ...s, id: s.label ? `${doc}-${s.key}` : `${doc}-${s.slug}`, level, text: s.label ? [s.label.toUpperCase(), s.name].filter(Boolean).join(' · ') : s.title, first }; // i18n-ignore
-    });
-  }
+  // the sections of the document with their anchors (docs-page.js)
+  const outline = (md, doc) => DocsPage.outline(md, doc);
 
   // a review note's anchor ("costs", "#spec-r2") matches a section's id, key or slug
   const noteKey = (anchor) => String(anchor || '').replace(/^#/, '');
@@ -418,39 +409,12 @@
     $('#docs-editor-body')?.classList.toggle('docs-mode-diff', o.tab === 'diff');
   }
 
-  // The reader's page: the body's blocks as siblings, each with data-src="<start>-<end>" (its lines in
-  // the source), headings without their #; no script runs in it (sandbox without allow-scripts). #671:
-  // the stage and file kicker on top, each heading and requirement with its anchor id, a requirement's
-  // #anchor shown beside it (not selectable); Preview leaves the kicker and the anchors out.
-  function readerHtml(md, { doc = 'doc', kicker = '', preview = false, source = false } = {}) {
-    const rows = String(md || '').split('\n');
-    const ids = new Map(outline(md || '', doc).map((s) => [s.first.start, s]));
-    const body = source ? `<pre class="src">${esc(md || '')}</pre>` : (window.DocModel ? window.DocModel.blocks(md || '') : []).map((b) => {
-      const src = `${b.start}-${b.end}`;
-      const sec = ids.get(b.start);
-      const id = sec ? ` id="${esc(sec.id)}"` : '';
-      if (b.heading !== null) {
-        const level = Math.min(6, (rows[b.start - 1].match(/^#+/) || ['##'])[0].length);
-        return `<h${level}${id} data-src="${src}">${esc(b.heading)}</h${level}>`;
-      }
-      const text = rows.slice(b.start - 1, b.end).join('\n');
-      const anchor = sec?.label && !preview ? `<span class="anc" aria-hidden="true">#${esc(sec.id)}</span>` : '';
-      return `${anchor}<div class="blk${sec?.label ? ' req' : ''}"${id} data-src="${src}">${typeof markdownHtml === 'function' ? markdownHtml(text) : esc(text)}</div>`;
-    }).join('\n');
-    let css = '';
-    try {
-      const v = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-      css = `body{background:${v('--panel')};color:${v('--text')};font:13px/1.55 system-ui,sans-serif;margin:16px 20px;max-width:760px}h1,h2,h3{margin:18px 0 6px}.blk>*{margin:0 0 8px}code{font-family:${v('--mono')}}::selection{background:${v('--accent')};color:${v('--bg')}}.kicker{font:11px ${v('--mono')};letter-spacing:.08em;text-transform:uppercase;color:${v('--accent')};margin:0 0 8px}.anc{float:right;font:11px ${v('--mono')};color:${v('--muted')};user-select:none;margin-left:8px}.req{border-left:2px solid ${v('--border')};padding-left:10px}.src{white-space:pre-wrap;font:12px/1.5 ${v('--mono')}}`; // i18n-ignore
-    } catch { /* the default look */ }
-    const top = kicker && !preview ? `<p class="kicker" aria-hidden="true">${esc(kicker)}</p>` : '';
-    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><style>${css}</style></head><body>${top}${body}</body></html>`; // i18n-ignore
-  }
-
+  // the reader's page (docs-page.js), in a sandboxed iframe without scripts
   function renderReader() {
     const frame = $('#docs-reader');
     const o = docs.open;
     if (!frame || !o) return;
-    frame.srcdoc = readerHtml(shownMarkdown(o), { doc: o.doc, kicker: `${stepName(o.doc)} · ${docFile(o.doc)} · v${versionOf(o)}`, preview: o.tab === 'preview', source: o.source }); // i18n-ignore
+    frame.srcdoc = DocsPage.html(shownMarkdown(o), { doc: o.doc, kicker: `${stepName(o.doc)} · ${docFile(o.doc)} · v${versionOf(o)}`, preview: o.tab === 'preview', source: o.source }); // i18n-ignore
   }
 
   // A selection on the page: the block it starts in (its data-src) and its text, for the chip. Only
@@ -627,28 +591,7 @@
     const o = docs.open;
     const box = $('#docs-changes');
     if (!o || !box) return;
-    const list = liveChanges(o);
-    const pending = list.filter((c) => o.unreviewed.includes(c.commit)).length;
-    const open = openChange(o);
-    const card = (c, i) => {
-      const unreviewed = o.unreviewed.includes(c.commit);
-      return `
-        <li class="docs-change${unreviewed ? ' unreviewed' : ''}${c === open ? ' open' : ''}" data-testid="doc-change" data-docs-change="${esc(c.commit)}">
-          <div class="docs-change-top">
-            <b>v${i + 2}</b>
-            <span class="docs-pill${unreviewed ? ' editing' : ' done'}" data-testid="doc-change-state">${unreviewed ? t('docs.change_unreviewed') : t('docs.change_reviewed')}</span>
-          </div>
-          <span class="docs-change-text" title="${esc(c.subject)}">“${esc(c.subject)}”</span>
-          <span class="mono muted small" title="${esc(c.commit)}">${esc(String(c.commit).slice(0, 8))}</span>
-        </li>`; // i18n-ignore
-    };
-    box.innerHTML = `
-      <div class="docs-section-head">
-        <h3>${t('docs.changes_by_request')}</h3>
-        <span class="badge${pending ? ' warn' : ''}" data-testid="doc-unreviewed-count">${t('docs.unreviewed_count', { count: pending })}</span>
-      </div>
-      ${list.length ? `<ol class="docs-change-list">${list.map(card).reverse().join('')}</ol>` : `<p class="muted small">${t('docs.no_change_yet')}</p>`}
-      ${o.problems.length ? `<p class="small muted" title="${esc(o.problems.join('\n'))}">${t('docs.lint_problems_count', { count: o.problems.length })}</p>` : ''}`;
+    box.innerHTML = DocsDiff.cards({ list: liveChanges(o), open: openChange(o), unreviewed: o.unreviewed, problems: o.problems });
     renderDiff();
   }
 

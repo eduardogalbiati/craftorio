@@ -1,6 +1,7 @@
 // Documents screen (#671, views/docs/docs.js): the Diff tab's page of one change by request (mock-3,
 // spec R11 "only in the sections it touched"). compare(before, after) pairs the sections of the source
 // before the change and at it (DocModel.sections, by key) and diffs each touched one word by word;
+// cards(...) draws the list of changes by request (one versioned card each, mock-3's left column);
 // panel(...) draws the change's head (v<n-1> → v<n>, the file, the request, Undo this change, Mark
 // reviewed), the touched sections highlighted with their insertions and deletions, their neighbours
 // greyed out ("Unchanged in this request") and the footnote. The clicks are docs.js's (data-docs-*).
@@ -103,6 +104,31 @@
     }).join('');
   }
 
+  // the changes by request, newest first: one card per change with its version, its quoted request and
+  // its review state (the open one marked), the unreviewed count, the lint problems after the last one
+  function cards({ list, open, unreviewed, problems }) {
+    const pending = list.filter((c) => unreviewed.includes(c.commit)).length;
+    const card = (c, i) => {
+      const todo = unreviewed.includes(c.commit);
+      return `
+        <li class="docs-change${todo ? ' unreviewed' : ''}${c === open ? ' open' : ''}" data-testid="doc-change" data-docs-change="${esc(c.commit)}">
+          <div class="docs-change-top">
+            <b>v${i + 2}</b>
+            <span class="docs-pill${todo ? ' editing' : ' done'}" data-testid="doc-change-state">${todo ? t('docs.change_unreviewed') : t('docs.change_reviewed')}</span>
+          </div>
+          <span class="docs-change-text" title="${esc(c.subject)}">“${esc(c.subject)}”</span>
+          <span class="mono muted small" title="${esc(c.commit)}">${esc(String(c.commit).slice(0, 8))}</span>
+        </li>`; // i18n-ignore
+    };
+    return `
+      <div class="docs-section-head">
+        <h3>${t('docs.changes_by_request')}</h3>
+        <span class="badge${pending ? ' warn' : ''}" data-testid="doc-unreviewed-count">${t('docs.unreviewed_count', { count: pending })}</span>
+      </div>
+      ${list.length ? `<ol class="docs-change-list">${list.map(card).reverse().join('')}</ol>` : `<p class="muted small">${t('docs.no_change_yet')}</p>`}
+      ${problems.length ? `<p class="small muted" title="${esc(problems.join('\n'))}">${t('docs.lint_problems_count', { count: problems.length })}</p>` : ''}`;
+  }
+
   // the change's head and actions, its page and the footnote
   function panel({ doc, from, to, file, subject, commit, canUndo, unreviewed, diff }) {
     return `
@@ -119,6 +145,7 @@
   }
 
   root.DocsDiff = {
+    cards,
     compare,
     panel,
     words,
