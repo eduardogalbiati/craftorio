@@ -12,9 +12,10 @@
 //   wizard-card-icon and three points; wizard-other-sources with wizard-source-git-url, step 2's URL field,
 //   and wizard-source-folder, api.pickFolder() then step 2 with the folder's file:// URL), repository (the
 //   GitHub / GitLab toggle #wizard-provider read from the URL, the gh / glab badge once the engine answered,
-//   #wizard-repo, #wizard-name, wizard-import-status once api.startOnboarding answered), analysis (the jobs
+//   #wizard-repo, #wizard-name, wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl),
+//   wizard-import-status once api.startOnboarding answered), analysis (the jobs
 //   from the clone on in wizard-cost, with wizard-cost-total and the paid parts data-part="projectMap" |
-//   "ranking" before the click, and wizard-skip; the suggested workflows beside them, disabled in this
+//   "ranking" before the click, checked and locked, wizard-clone-progress in the footer, and wizard-skip; the suggested workflows beside them, disabled in this
 //   phase) and review (#642, spec R10): wizard-review with the project's card, wizard-review-city (Open the
 //   city: Finish, then the project's city) / -refactors / -backlog, each data-state="ready" | "pending"
 //   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
@@ -155,7 +156,7 @@
 
   // mock-2's line under the fields: where the engine clones the repository (its rule, OnboardingModel.repoNameFromUrl)
   const cloneInto = () => (cur.model.repository.trim()
-    ? t('onboarding.clone_into', { folder: `<workspace>/repos/${M.repoNameFromUrl(cur.model.repository)}` }) : '');
+    ? t('onboarding.clone_into', { folder: `<workspace>/repos/${M.repoNameFromUrl(cur.model.repository)}` }) : ''); // i18n-ignore
 
   function repositoryStep() {
     const o = cur.onboarding;

@@ -37,15 +37,18 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    URL (`wizard-source-git-url`, the URL field of step 2) and A folder on this computer
    (`wizard-source-folder`, a folder pick, then step 2 with its `file://` URL).
 2. **repository** (mock-2): `#wizard-repo`, `#wizard-name`, the GitHub / GitLab toggle (`#wizard-provider`,
-   it follows the URL) and the gh / glab badge once the engine checked it. "Next: clone and continue"
+   it follows the URL), the gh / glab badge once the engine checked it, and the line "Will be cloned into
+   <workspace>/repos/<owner-repo>" (`wizard-clone-into`, the engine's own rule `repoNameFromUrl` of
+   `packages/shared/onboarding-model.js`). "Next: clone and continue"
    calls `onboarding:start`; `wizard-import-status` follows the clone. A refused access shows `wizard-error`
    `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
    the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A
    missing or signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
 3. **analysis** (mock-4): on the left the jobs from the clone on with their status and the cost before the
    click (`wizard-cost`, `wizard-cost-total`, one `data-part` per paid analysis, `wizard-skip`); on the
-   right the suggested workflows, disabled (chosen in a later phase). "Analyze and continue"
-   (`wizard-analyze`) is in the footer. Nothing paid starts without the click.
+   right the suggested workflows, disabled (chosen in a later phase). The footer shows the clone's
+   progress (`wizard-clone-progress`) on the left, Back and "Analyze and continue" (`wizard-analyze`) on
+   the right. Nothing paid starts without the click.
 4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on, its workflows),
    the city (`wizard-review-city`, Open the city) and the refactor backlog, then the backlog and an idea
    for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each refactor
@@ -55,7 +58,7 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
 
 The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to
 file and add, the first idea, the refactor cadence, and release CI and screenshots, shown disabled (later
-phases).
+phases). Its heading adds "· city and refactor backlog done" once the refactor proposals are there.
 
 The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`
 and stays when the wizard closes; a failed import keeps its reason and Retry there.
