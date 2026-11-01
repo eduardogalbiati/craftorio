@@ -336,6 +336,7 @@
       return `<li class="docs-step${cur ? ' current' : ''}${i < current ? ' done' : ''}" data-testid="doc-step"${cur ? ' aria-current="step"' : ''}>${inner}</li>`;
     }).join('<li class="docs-step-arrow" aria-hidden="true">→</li>'); // i18n-ignore
     const version = `${esc(docFile(o.doc))} · v${versionOf(o)}${o.gate?.edit ? ` · ${t('docs.pill_editing')}` : ''}`; // i18n-ignore
+    const folder = `docs/work/${o.item}/`; // i18n-ignore
     $('#docs-editor-head').innerHTML = `
       <div class="docs-titlebar" data-testid="doc-titlebar">
         <button type="button" class="btn sm ghost docs-back" data-docs-back aria-label="${t('docs.back_to_the_list')}" title="${t('docs.back_to_the_list')}">←</button>
@@ -345,7 +346,7 @@
       <div class="docs-itemhead">
         <div class="docs-itemhead-name">
           <b title="${esc(title)}">${esc(title)}</b>
-          <span class="mono muted small" title="${esc(`docs/work/${o.item}/`)}">docs/work/${esc(o.item)}/</span>
+          <span class="mono muted small" title="${esc(folder)}">${esc(folder)}</span>
         </div>
         <ol class="docs-stepper" data-testid="doc-stepper">${steps}</ol>
       </div>`; // i18n-ignore
@@ -743,6 +744,8 @@
     const pending = liveChanges(o).filter((c) => o.unreviewed.includes(c.commit)).length;
     const open = o.notes.length;
     const today = new Date().toISOString().slice(0, 10);
+    // the front matter's own keys, as the file spells them
+    const fm = `status: ${esc(o.data?.status || 'draft')} → <span class="docs-fm-new">${esc(acceptedStatus(o.doc) || '')}</span> · approver: ${t('docs.your_git_name')} · date: ${today}`; // i18n-ignore
     const next = spec
       ? [[t('docs.create_epic_and_phase_issues'), t('docs.next_issues_help')], [t('docs.start_the_build'), t('docs.next_build_help')]]
       : [[t('docs.write_the_spec'), t('docs.next_spec_help')]];
@@ -757,7 +760,7 @@
         ${g.message ? `<p class="muted small docs-gate-message" title="${esc(g.message)}">${esc(g.message)}</p>` : ''}
         <div class="docs-signoff-fm">
           <b class="small">${spec ? t('docs.front_matter_after_sign_off') : t('docs.front_matter_after_acceptance')}</b>
-          <code class="docs-signoff-fm-line" data-testid="doc-signoff-frontmatter">status: ${esc(o.data?.status || 'draft')} → <span class="docs-fm-new">${esc(acceptedStatus(o.doc) || '')}</span> · approver: ${t('docs.your_git_name')} · date: ${today}</code>
+          <code class="docs-signoff-fm-line" data-testid="doc-signoff-frontmatter">${fm}</code>
         </div>
         <div class="docs-signoff-next">${next.map(([title, help]) => `
           <div class="docs-next-card" data-testid="doc-signoff-next"><b>${title}</b><p class="muted small">${help}</p></div>`).join('')}</div>
@@ -1010,8 +1013,7 @@
               <div class="field">
                 <label for="docs-new-starts">${t('docs.starts_with')}</label>
                 <select id="docs-new-starts" data-testid="docs-new-starts-with">
-                  <option value="intent">intent.md (${t('docs.step_plan')})</option>
-                  <option value="spec">spec.md (${t('docs.step_design')})</option>
+                  ${SDLC.filter((s) => s.doc).map((s) => `<option value="${s.doc}">${s.file} (${s.name()})</option>`).join('')}
                 </select>
               </div>
               <div class="field">
