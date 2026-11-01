@@ -7,6 +7,7 @@ const {
   clientError,
   requireId,
   requireObject,
+  requireText,
 } = require('../common');
 const {
   ANY,
@@ -183,6 +184,22 @@ module.exports = (ctx) => [
         : typeof answer === 'boolean';
       if (!offered) throw clientError(`Invalid answer for gate ${id}: ${gate.choices ? 'one of its choices' : 'true or false'}.`);
       return run.resolveApproval(id, answer, 'user', feedback, intent || null, Array.isArray(images) ? images : []);
+    },
+  },
+  // #647: the owner's edit request at an open human_edit gate (write-doc's editor): one turn of the
+  // gate's agent with the text (and pasted images); the gate stays open, answers the turn's result
+  {
+    channel: 'run:request-edit',
+    method: 'requestEdit',
+    params: ['runId', 'id', 'text', 'images'],
+    schema: {
+      params: args({ runId: RUN_ID, id: GATE_ID, text: STRING, images: nullable(IMAGES) }, ['runId', 'id', 'text']),
+      result: ANY,
+    },
+    fn: ({ runId, id, text, images }) => {
+      const run = ctx.active.get(requireId(runId, 'run id'));
+      if (!run?.approvals.has(id)) throw clientError(`No open gate ${id} in run ${runId}.`);
+      return run.requestEdit(id, requireText(text, 'request'), { images: Array.isArray(images) ? images : [] });
     },
   },
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers;

@@ -21,8 +21,9 @@ const { createServer } = require('../../server');
 
 // the contract of the full composition on `main` at c682ba6a (the last commit before phase 4): phase 4
 // moves files between packages and never changes a channel, so the shipped compositions keep it. A
-// channel change made on purpose updates this pin with its PR (#642: refactor:addToRoadmap's `file` flag).
-const MAIN_CONTRACT = 'f5451294de56';
+// channel change made on purpose updates this pin with its PR (#642: refactor:addToRoadmap's `file` flag;
+// #647: the docs:* channels and run:request-edit).
+const MAIN_CONTRACT = '0ddb279e5a13';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;
