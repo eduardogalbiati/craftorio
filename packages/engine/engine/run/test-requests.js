@@ -102,7 +102,7 @@ const methods = {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const file = path.join(this.runDir, 'test-map.md');
     const root = this.workingDir(agent);
-    const cache = this.mock ? (this.mockTestMaps ||= new Map()) : null;
+    const cache = this.machine.simulated ? (this.mockTestMaps ||= new Map()) : null;
     let map = cache?.get(root);
     if (!map) {
       try { map = testMap({ root }); } catch (e) { map = { mode: 'none', why: e.message.split('\n')[0], sources: {} }; }
