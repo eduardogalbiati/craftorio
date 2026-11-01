@@ -311,6 +311,14 @@ async function fileIssues(page, name) {
 }
 
 When('I choose {string} in the card\'s panel', async ({ e2e }, action) => {
+  // #649: "Write a document" starts the write-doc writer for the card (card-write-doc)
+  if (action === 'Write a document') {
+    const button = cardDetail(e2e.window).getByTestId('card-write-doc');
+    await expect(button).toHaveAccessibleName(action);
+    await expect(button).toBeEnabled();
+    await button.click();
+    return;
+  }
   const button = cardDetail(e2e.window).getByTestId('discovery-commit');
   await expect(button).toHaveAccessibleName(action);
   await openCommitDialog(e2e.window);
@@ -463,4 +471,25 @@ Then('the Discovery card {string} shows no automation', async ({ e2e }, title) =
   const card = boardCard(e2e.window, title);
   await expect(card).toBeVisible();
   await expect(card.getByTestId('discovery-card-automation')).toHaveCount(0);
+});
+
+// ---- #649: "Write a document" on a card (write-doc phase 3, docs/work/write-doc/spec.md R1) ----------
+// Assumes this data-testid (the developer adds it):
+//   card-write-doc                           in the card's panel: the "Write a document" button; it
+//                                            starts the write-doc writer for the card and opens its
+//                                            editor (the Documents editor, doc-editor, docs.steps.js)
+// When the run ends (the person accepted the document at its gate) the document comes back to the card
+// as a markdown attachment (card-attachments) and as a version of the card (card-versions, one
+// card-version per version, labelled by its source: the writer, "Write a document").
+
+const WRITER_RESULT = 60000; // the simulated run ends and its result reaches the card
+
+Then('the card\'s panel shows the writer\'s document among its attachments', async ({ e2e }) => {
+  const files = cardDetail(e2e.window).getByTestId('card-attachments');
+  await expect(files).toContainText(/\.md\b/i, { timeout: WRITER_RESULT });
+});
+
+Then('the card\'s version history shows a version from the writer', async ({ e2e }) => {
+  const versions = cardDetail(e2e.window).getByTestId('card-versions').getByTestId('card-version');
+  await expect(versions.filter({ hasText: /Write a document|write-doc|writer/i }).first()).toBeVisible({ timeout: WRITER_RESULT });
 });

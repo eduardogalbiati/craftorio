@@ -158,3 +158,18 @@ Feature: Shape accepted ideas on the Discovery board
     And I open the automation settings of the Discovery column "Shape"
     Then the automation settings show the pipeline "AI Arena → Write & Review" in mode "Ask me"
     And the automation mode offers "Ask me", "On" and "Off"
+
+  @issue-649
+  Scenario: "Write a document" on a card runs the writer and brings the document back to the card
+    Given the app is open
+    And the Discovery card "Export runs as CSV" waits in "Shape", 70% clear with about 3 h of work
+    When I open "Discovery" in the sidebar
+    And I open the Discovery card "Export runs as CSV"
+    And I choose "Write a document" in the card's panel
+    Then the writer drafts the intent with the section "Problem"
+    When I send the document to review
+    And I choose "Accept intent" at the approval gate
+    And I open "Discovery" in the sidebar
+    And I open the Discovery card "Export runs as CSV"
+    Then the card's panel shows the writer's document among its attachments
+    And the card's version history shows a version from the writer
