@@ -74,8 +74,9 @@ test('run chat: loops back show as loop lines, gates keep the chosen answer and 
 
 test('run chat: a replayed run shows the same tool calls and thinking as the live one', { timeout: 120000 }, async () => {
   let replay;
-  const live = chatOf(await mockRun(path.join(root, 'workflows', 'software-development.yaml'), {
-    inputs: { task: 'Add a /health endpoint', repo_path: root },
+  // #630: software-development.yaml is gone; feature.yaml in remote mode is its PR flow
+  const live = chatOf(await mockRun(path.join(root, 'workflows', 'feature.yaml'), {
+    inputs: { task: 'Add a /health endpoint', repo_path: root, mode: 'remote' },
     onRecorded: (runDir) => { replay = chatOf(runEvents(runDir, { activity: true })); },
   }));
   const activity = (model) => kinds(model, 'turn').map((t) => [t.agent, t.stepId, t.activity]);

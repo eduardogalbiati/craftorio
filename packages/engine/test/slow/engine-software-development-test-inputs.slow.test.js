@@ -1,5 +1,5 @@
-// software-development whole runs in mock mode (#203): every unit_tests x e2e_tests pair visits the
-// test and suite steps it should. Moved out of test/engine-helpers.js (#305), where it ran again in
+// feature.yaml (remote mode) whole runs in mock mode (#203): every unit_tests x e2e_tests pair visits the
+// test and suite steps it should (#630: was software-development.yaml, removed). Moved out of test/engine-helpers.js (#305), where it ran again in
 // every file requiring the helper.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -9,12 +9,13 @@ const { runSoftwareDevelopment } = require('../engine-helpers');
 
 for (const unit_tests of ['write_and_run', 'run_existing', 'off']) {
   for (const e2e_tests of ['off', 'write', 'write_and_run']) {
-    const testVisited = e2e_tests !== 'off' || unit_tests === 'write_and_run';
+    // #630/#223: the scenarios are written first, at acceptance_tests: only write_and_run visits the test step
+    const testVisited = unit_tests === 'write_and_run';
     const suiteVisited = unit_tests !== 'off';
-    test(`software-development: unit_tests=${unit_tests} x e2e_tests=${e2e_tests}: test visited=${testVisited}, suite visited=${suiteVisited}`, { timeout: 120000 }, async () => {
+    test(`feature.yaml (remote): unit_tests=${unit_tests} x e2e_tests=${e2e_tests}: test visited=${testVisited}, suite visited=${suiteVisited}`, { timeout: 120000 }, async () => {
       const { finished } = await runSoftwareDevelopment({
         inputs: { unit_tests, e2e_tests },
-        mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } },
+        mockSequences: { verdict: ['approved'], tests_status: ['pass'], suite: { suite: ['pass'] } },
       });
       assert.equal(finished.status, 'success', finished.error);
       assert.equal(finished.summary.steps.test.visits > 0, testVisited, 'test step');

@@ -89,7 +89,9 @@ test('ai-development e2e: a UI issue gets its scenarios written first, run by th
     'e2e>build',
     'build>evidence',
     'evidence>verify_change',
-    'verify_change>end',
+    // #630: the local merge is on verify_change; push_main then pushes the local base
+    'verify_change>push_main',
+    'push_main>end',
   ]);
   assert.equal(sent.filter((s) => s.step === 'heal').length, 0, 'no healer turn on a green run');
 });
@@ -167,7 +169,8 @@ test('ai-development e2e: a red scenario healed by a locator fix goes back to th
   assert.equal(heal.length, 1);
   assert.notEqual(heal[0].agent, 'developer', 'the healer is its own agent');
   const fromHeal = sent.findIndex((s) => s.step === 'heal');
-  assert.ok(!sent.slice(fromHeal + 1).some((s) => s.agent === 'developer'), 'a healed locator needs no developer turn');
+  // #630: push_main (after the merge) is the developer's git push, not a fix turn
+  assert.ok(!sent.slice(fromHeal + 1).some((s) => s.agent === 'developer' && s.step !== 'push_main'), 'a healed locator needs no developer turn');
 });
 
 test('ai-development e2e: the healer reads the failure, the trace and the accessibility snapshot, and never weakens an assertion', { timeout: 120000 }, async (t) => {

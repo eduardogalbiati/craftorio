@@ -179,15 +179,27 @@ const runAsync = (args) => new Promise((resolve) => {
   const child = spawn(process.execPath, args, { cwd: root, stdio: agent ? ['ignore', fd, fd] : 'inherit', env: process.env });
   let closed = false;
   // a spawn error may emit both 'error' and 'exit'
-  const done = (code) => {
+  const done = (code, signal = null) => {
     if (closed) return;
     closed = true;
     if (fd != null) fs.closeSync(fd);
-    resolve(code);
+    resolve({ code, signal });
   };
   child.on('error', () => done(null));
-  child.on('exit', (code) => done(code));
+  child.on('exit', (code, signal) => done(code, signal));
 });
+// a group's exit: its code, its signal (#705: a killed runner has no code)
+const runGroup = async (g) => {
+  const { code, signal } = await runAsync(argsOf(g));
+  g.status = code;
+  g.signal = signal;
+};
+
+// a file as the report shows it: relative to the root, forward slashes
+const shown = (file) => {
+  const rel = path.relative(root, file);
+  return (rel.startsWith('..') || path.isAbsolute(rel) ? file : rel).split(path.sep).join('/');
+};
 
 function saySlowest() {
   const times = {};
@@ -197,10 +209,6 @@ function saySlowest() {
   fs.rmSync(timesDir, { recursive: true, force: true });
   const slowest = Object.entries(times).sort((a, b) => b[1] - a[1]).slice(0, 5);
   if (!slowest.length) return;
-  const shown = (file) => {
-    const rel = path.relative(root, file);
-    return (rel.startsWith('..') || path.isAbsolute(rel) ? file : rel).split(path.sep).join('/');
-  };
   say(`\n== Slowest test files (wall time, ${Object.keys(times).length} file(s)) ==`);
   for (const [file, ms] of slowest) say(`  ${(ms / 1000).toFixed(1).padStart(7)} s  ${shown(file)}`);
 }
@@ -210,11 +218,20 @@ const tail = () => {
   try { return fs.readFileSync(humanLog, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-3).join('\n'); } catch { return ''; }
 };
 const COUNTS = ['passed', 'failed', 'skipped', 'todo', 'cancelled'];
+// #705: a group's runner that died says its own files and how it ended, never the log's tail (the
+// slowest-files listing of the other groups)
+function deadGroupError(g) {
+  const how = g.signal ? `signal ${g.signal}` : `exit code ${g.status}`;
+  const list = g.files.map(shown);
+  const files = list.length > 10 ? [...list.slice(0, 10), `... ${list.length - 10} more`] : list;
+  return `the runner of ${g.files.length} file(s) ended (${how}) without its report:\n${files.join('\n')}`;
+}
 // One report from the groups' (#402): counts summed, failures in group order
 function groupsReport() {
   const reports = groups.map((g) => {
     try { return JSON.parse(fs.readFileSync(g.reportFile, 'utf8')); } catch { /* the runner died before reporting */ }
-    return { reporter: REPORTER, passed: 0, failed: 1, skipped: 0, todo: 0, cancelled: 0, duration_ms: 0, failures: [{ test: '(the test runner)', file: '', line: null, error: tail() || `exit ${g.status}`, kind: 'file' }] };
+    const file = g.files.length ? shown(g.files[0]) : '';
+    return { reporter: REPORTER, passed: 0, failed: 1, skipped: 0, todo: 0, cancelled: 0, duration_ms: 0, failures: [{ test: '(the test runner)', file, line: null, error: deadGroupError(g), kind: 'file' }] };
   });
   if (reports.length === 1) return reports[0];
   const report = { reporter: REPORTER, ...Object.fromEntries(COUNTS.map((k) => [k, reports.reduce((n, r) => n + (r[k] || 0), 0)])) };
@@ -242,8 +259,8 @@ function finish(flow) {
 
 async function main() {
   // a concurrency of 1 is one test file at a time: the groups run one after the other
-  if (concurrency < 2) for (const g of groups) g.status = await runAsync(argsOf(g));
-  else await Promise.all(groups.map(async (g) => { g.status = await runAsync(argsOf(g)); }));
+  if (concurrency < 2) for (const g of groups) await runGroup(g);
+  else await Promise.all(groups.map(runGroup));
   unitStatus = groups.every((g) => g.status === 0) ? 0 : 1;
   for (const g of groups.filter((x) => x.specFile)) {
     try { say(fs.readFileSync(g.specFile, 'utf8').trimEnd()); } catch { /* the runner died before reporting */ }

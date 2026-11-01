@@ -1,7 +1,7 @@
 {
-  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events); then #465: a machine step announces its log with step.log, once in red_check and twice in suite (focused round, then the whole suite) (184 events).",
+  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events); then #465: a machine step announces its log with step.log, once in red_check and twice in suite (focused round, then the whole suite) (184 events); then #630 (local mode pushes main): verify_change goes to push_main, a developer turn, then to end, so the sessions close and the run finishes in push_main#1 (201 events, re-recorded by #710).",
   "status": "success",
-  "count": 184,
+  "count": 201,
   "steps": [
     "workflow.started",
     "step.started acceptance_tests",
@@ -36,7 +36,10 @@
     "step.transition evidence>verify_change",
     "step.started verify_change",
     "step.finished verify_change",
-    "step.transition verify_change>end",
+    "step.transition verify_change>push_main",
+    "step.started push_main",
+    "step.finished push_main",
+    "step.transition push_main>end",
     "workflow.finished"
   ],
   "lanes": {
@@ -251,29 +254,52 @@
       "session.stream",
       "session.message_received verify_change",
       "handoff.saved verify_change",
-      "session.updated",
-      "session.closed"
+      "session.updated"
     ],
     "verify_change#1 run": [
       "log",
       "step.finished verify_change",
       "action.executed",
-      "step.transition verify_change>end",
+      "step.transition verify_change>push_main"
+    ],
+    "push_main#1 developer": [
+      "step.started push_main",
+      "session.opened",
+      "session.message_sent push_main",
+      "session.status",
+      "session.stream",
+      "session.stream",
+      "session.stream",
+      "session.stream",
+      "session.stream",
+      "session.stream",
+      "session.stream",
+      "session.stream",
+      "session.message_received push_main",
+      "handoff.saved push_main",
+      "session.closed"
+    ],
+    "push_main#1 run": [
+      "step.finished push_main",
+      "step.transition push_main>end",
       "workflow.finished"
     ],
-    "verify_change#1 orchestrator": [
+    "push_main#1 orchestrator": [
       "session.closed"
     ],
-    "verify_change#1 test_writer": [
+    "push_main#1 test_writer": [
       "session.closed"
     ],
-    "verify_change#1 reviewer": [
+    "push_main#1 reviewer": [
       "session.closed"
     ],
-    "verify_change#1 ui_reviewer": [
+    "push_main#1 ui_reviewer": [
       "session.closed"
     ],
-    "verify_change#1 builder": [
+    "push_main#1 builder": [
+      "session.closed"
+    ],
+    "push_main#1 verifier": [
       "session.closed"
     ]
   }

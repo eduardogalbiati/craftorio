@@ -89,7 +89,9 @@ test('ai-development-local-hero: the normal path runs the acceptance tests, the 
     'suite>build',
     'build>evidence',
     'evidence>verify_change',
-    'verify_change>end',
+    // #630: the local merge is on verify_change; push_main then pushes the local base
+    'verify_change>push_main',
+    'push_main>end',
   ]);
   // the developer is given the acceptance tests the test writer wrote (the mock's placeholder name)
   assert.match(prompts[0], /Acceptance tests \(written before the code, from the task\): \(simulated\) tests_added\./);

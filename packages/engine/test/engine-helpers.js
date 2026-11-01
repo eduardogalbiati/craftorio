@@ -31,14 +31,15 @@ async function runConditionalAction(t, cleanup) {
   await run.start();
   return events.filter((e) => e.type === 'action.executed');
 }
-// Full software-development flow in mock mode. Gates get `answers[step]` (default: approve /
+// Full development flow in mock mode: feature.yaml in Remote mode by default (#630: the old
+// software-development.yaml; the caller's inputs win). Gates get `answers[step]` (default: approve /
 // first choice), like --auto-approve. `answers[step]` (and `feedback[step]`) may be a list, one
 // per visit to that gate (shifted as it is visited again; the last one repeats past the end).
-async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = {}, inputs = {}, issues, file = 'software-development.yaml' }) {
+async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = {}, inputs = {}, issues, file = 'feature.yaml' }) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', file),
-    inputs: { task: 'Engine test', repo_path: root, ...inputs },
+    inputs: { task: 'Engine test', repo_path: root, ...(file === 'feature.yaml' ? { mode: 'remote' } : {}), ...inputs },
     mock: true,
     runsDir,
     mockSequences,

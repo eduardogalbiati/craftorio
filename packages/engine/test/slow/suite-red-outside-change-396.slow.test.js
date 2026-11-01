@@ -77,7 +77,8 @@ test('#396 local hero, policy continue: a suite red only outside the change goes
   assert.ok(!gates.includes('test_failed'), `test_failed never opens: gates ${gates.join(', ')}`);
   assert.ok(transitions.includes('suite>build'), `the suite goes on to build: ${transitions.join(', ')}`);
   assert.ok(!transitions.includes('suite>test_failed'), transitions.join(', '));
-  assert.equal(transitions[transitions.length - 1], 'verify_change>end', 'the run reaches the local merge (verify_change → end)');
+  // #630: the local merge is pushed to main before the end (verify_change → push_main → end)
+  assert.equal(transitions[transitions.length - 1], 'push_main>end', 'the run reaches the local merge (push_main → end)');
   assert.equal(summary.tested, 'not green');
   assert.match(ownRecord(summary), /outside the change/, 'the summary records the failures with their class');
   const [build] = promptsOf('build');
