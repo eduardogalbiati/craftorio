@@ -147,7 +147,7 @@
     box.innerHTML = docs.items.map((it) => `
       <div class="docs-item" data-testid="docs-item" data-item="${esc(it.item)}">
         <div class="docs-item-main" title="${esc(`docs/work/${it.item}/`)}">
-          <b class="docs-item-title">${esc(it.title || it.item)}</b>
+          <b class="docs-item-title" data-testid="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
           <span class="docs-sep muted">·</span>
           <span class="docs-item-stages muted" data-testid="docs-item-stages">${stagesHtml(it)}</span>
         </div>
@@ -395,16 +395,19 @@
     const box = $('#docs-toolbar-box');
     if (!o || !box) return;
     const g = o.gate;
-    const wait = o.requesting || o.answering ? ' disabled' : '';
+    // #696 mock-2: Send to review always ends the toolbar, after Versions; disabled until the edit
+    // gate is open and while a request's commit is pending
+    const wait = !g?.edit || o.requesting || o.answering ? ' disabled' : '';
     const tab = (id, label) => `<button type="button" role="tab" class="${o.tab === id ? 'active' : ''}" aria-selected="${o.tab === id}" data-docs-tab="${id}">${label}</button>`;
     const lang = (id, label, off) => `<button type="button" class="${o.lang === id ? 'active' : ''}" aria-pressed="${o.lang === id}" data-testid="doc-lang-${id}" data-docs-lang="${id}"${off ? ' disabled' : ''}>${label}</button>`;
     box.innerHTML = `
       <div class="docs-toolbar" data-testid="doc-toolbar">
         <div class="seg sm" role="tablist" aria-label="${t('docs.view')}">${tab('edit', t('docs.edit'))}${tab('diff', t('docs.diff'))}${tab('preview', t('docs.preview'))}</div>
         <div class="seg sm" role="group" aria-label="${t('docs.language')}">${lang('en', 'EN', false)}${lang('pt', 'PT', !o.data?.translation)}</div>
-        <span class="spacer"></span>
-        <button type="button" class="btn sm ghost" data-testid="doc-versions" data-docs-tab="diff" title="${t('docs.versions_help')}">${t('docs.versions')}</button>
-        ${g?.edit ? `<button type="button" class="btn sm primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait}>${t('docs.send_to_review')}</button>` : ''}
+        <div class="docs-toolbar-end">
+          <button type="button" class="btn sm ghost" data-testid="doc-versions" data-docs-tab="diff" title="${t('docs.versions_help')}">${t('docs.versions')}</button>
+          <button type="button" class="btn sm primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait}>${t('docs.send_to_review')}</button>
+        </div>
       </div>`; // i18n-ignore
     $('#docs-editor-body')?.classList.toggle('docs-mode-diff', o.tab === 'diff');
   }

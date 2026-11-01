@@ -62,6 +62,7 @@
     'screenshots',
     'suite',
     'test_ids',
+    'visual_baselines',
     'workflow',
   ];
   // Human gates (#41): `decision` (default) is a choice only the person makes (scope, merge, publish);
@@ -96,7 +97,7 @@
 
   // Where a step field applies: every step type, a list of types, or every type except some
   const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-  const NO_AGENT_TYPES = ['check', 'project_map', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids'];
+  const NO_AGENT_TYPES = ['check', 'project_map', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
   // The protected gates: only the person ends them; human_edit (#647) also takes the person's edit
   // requests, each a turn of its named agent, while it waits
   const GATE = ['human_approval', 'human_edit'];
@@ -111,7 +112,7 @@
   const entry = (field, appliesTo, type, message, more = {}) => ({ field, appliesTo, type, template: false, required: false, message, ...more });
   const gateText = (key) => entry(`steps[].${key}`, GATE, 'text', `${key} must be a text (a template), on a human_approval step.`, { template: true });
   const text = (key, types) => entry(`steps[].${key}`, types, 'text', `${key} must be a string (a template).`, { template: true, elsewhere: 'skip' });
-  const folder = (key) => entry(`steps[].${key}`, ['test_ids'], 'non-blank text', `${key} must be a repository-relative folder (a template).`, { template: true, elsewhere: 'skip' });
+  const folder = (key, types = ['test_ids']) => entry(`steps[].${key}`, types,'non-blank text', `${key} must be a repository-relative folder (a template).`, { template: true, elsewhere: 'skip' });
   const noAgent = (key) => entry(`steps[].${key}`, { except: NO_AGENT_TYPES }, 'any', 'a {type} step has no agent.', { present: 'truthy' });
   const amount = (path, message) => entry(`orchestrator.supervisor.${path}`, WORKFLOW, 'amount', message);
   const waitOutput = (key) => entry(`steps[].wait.${key}`, 'all', 'map', `wait.${key} must be a map of output fields, and only applies to the pr_checks and workflow_run probes.`);
@@ -158,8 +159,10 @@
     entry('steps[].files', ['suite'], 'file list', 'files must be a file list: a template or a list of paths.', { template: true, elsewhere: 'skip' }),
     entry('steps[].expect', ['suite'], 'one of', 'expect must be "red", with files (the red check of tests written before the code), or "green" (the green check of tests that pin the current behaviour).', { values: ['red', 'green'], elsewhere: 'skip' }),
     // `type: test_ids` (#246): the test ids the E2E step definitions use and the renderer lacks
-    folder('steps'),
+    folder('steps', ['test_ids', 'visual_baselines']),
     folder('renderer'),
+    // `type: visual_baselines` (#696): the baselines the issues' @visual scenarios use and the checkout lacks
+    text('issues', ['visual_baselines']),
     // `type: release_version` (#325): the release's version into the project's package.json
     text('version', ['release_version']),
     text('dir', ['release_version']),

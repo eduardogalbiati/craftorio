@@ -73,6 +73,7 @@ function missingTestIdLines(missing) {
 module.exports = {
   DEFAULT_RENDERER,
   DEFAULT_STEPS,
+  listFiles,
   missingTestIdLines,
   missingTestIds,
   stepFiles,

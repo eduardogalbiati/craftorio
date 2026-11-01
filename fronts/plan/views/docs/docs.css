@@ -8,14 +8,16 @@
 .docs-list-main { min-width: 0; }
 .docs-list { display: flex; flex-direction: column; gap: 6px; }
 .docs-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
-.docs-item-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
-.docs-item-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* #696 mock-1: a row is one line, "Title · Plan ✓ · Design"; a long title is cut, never the stages */
+.docs-item-main { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+.docs-item-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
 .docs-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.docs-item-stages { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; }
+.docs-item-stages { display: inline-flex; flex-wrap: nowrap; flex-shrink: 0; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
 .docs-stage.done { color: var(--green); }
-.docs-sep { color: var(--muted); }
+.docs-sep { color: var(--muted); flex-shrink: 0; }
 .docs-item-doc { display: inline-flex; align-items: center; gap: 4px; }
-.docs-item-actions { gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.docs-item > .docs-pill { flex-shrink: 0; }
+.docs-item-actions { gap: 6px; flex-shrink: 0; flex-wrap: nowrap; justify-content: flex-end; }
 .badge.docs-done { color: var(--green); }
 .docs-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; font-family: var(--mono); color: var(--muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .docs-pill.editing { border-color: var(--yellow); color: var(--yellow); }
@@ -83,6 +85,8 @@
 .docs-dot.changed { background: var(--yellow); }
 .docs-dot.noted { background: var(--accent); }
 .docs-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* #696 mock-2: Versions and Send to review stay together at the toolbar's right, even when it wraps */
+.docs-toolbar-end { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-left: auto; }
 
 .docs-chip-box:empty, .docs-queue:empty { display: none; }
 .docs-chip { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: var(--radius); min-width: 0; }

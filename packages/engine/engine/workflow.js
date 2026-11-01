@@ -80,13 +80,15 @@ const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || nul
 // project_map (#372): the project map's facts, validation and save; refactor_proposals (#378): the
 // Refactor proposals workflow's facts, proposals, ranking and filing; release_version (#325): never
 // fails the run, the output says what was written; test_ids (#246): the missing test ids; check
-// (#404): the project's rule checks (its command sweeps what it leaves running)
+// (#404): the project's rule checks (its command sweeps what it leaves running); visual_baselines
+// (#696): the missing baselines of the issues' @visual scenarios
 const PLAIN_MACHINE_STEPS = {
   check: 'runCheckStep',
   project_map: 'runProjectMapStep',
   refactor_proposals: 'runRefactorProposalsStep',
   release_version: 'runReleaseVersionStep',
   test_ids: 'runTestIdsStep',
+  visual_baselines: 'runVisualBaselinesStep',
 };
 
 function newRunId() {

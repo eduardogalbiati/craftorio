@@ -590,7 +590,7 @@ agents:
 
 groups:
   - name: Develop
-    steps: [warm_up, develop,testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
+    steps: [warm_up, develop,testid_check, baseline_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
@@ -698,7 +698,8 @@ steps:
         existing step definitions first; new steps go next to the existing ones. Locate by role
         and `data-testid`: a new step may use a `data-testid` that does not exist yet (the
         developer adds it). A visual check (`toHaveScreenshot`) only for the screens the issue
-        changes: the developer creates or updates its baseline with the change.
+        changes: the developer creates or updates its baseline with the change (the orchestrator
+        checks after develop that each one is committed, #696).
       - Check that they parse (the E2E skill's dry run); never start the app or Electron here: the
         orchestrator runs them after the review ({% if inputs.e2e_tests == 'write_and_run' %}{{ tags or '`@issue-<n>`' }} plus the @smoke journeys{% else %}not in this run: the E2E release workflow runs them{% endif %}).
       - List the .feature files and step definition files you wrote or changed in `e2e_files` (the
@@ -918,6 +919,13 @@ steps:
       accessible name the step uses), commit, and answer again in full. Never edit the scenarios or
       their step definitions.
       {% endif %}
+      {% if previous_step == 'baseline_check' and steps.baseline_check.output.status == 'missing' %}
+      The orchestrator checked the visual baselines of the issue's @visual scenarios after your commit (#696):
+      {{ steps.baseline_check.output.message }}
+      Run each update command after your screen matches its mockup, check the PNG it writes under
+      features/__screenshots__/, commit it, and answer again in full. Never edit the scenarios or
+      their step definitions.
+      {% endif %}
       {% if previous_step == 'rule_check' and steps.rule_check.output.status == 'fail' %}
       The orchestrator ran the project's rule checks after your commit (#404), and they fail:
       {{ steps.rule_check.output.message }}
@@ -978,7 +986,9 @@ steps:
       {% endif %}
       {% if inputs.e2e_tests == 'write_and_run' %}The orchestrator runs them, with the @smoke journeys, after the review. When your change
       intentionally changes a screen with a `toHaveScreenshot` baseline, update that baseline on
-      the branch (the reviewer approves it). Their run's screenshots and traces are the evidence of
+      the branch (the reviewer approves it). Every new @visual scenario carries its baseline before
+      the review (`npm run test:e2e:update -- --grep @issue-<n>`, the PNG committed): the orchestrator
+      checks it right after your commit (#696). Their run's screenshots and traces are the evidence of
       the states they cover: in `screenshots`, list only the states no scenario covers.{% else %}They run at release time (E2E release workflow), not in this run.{% endif %}
       {% endif %}
       In `test_notes`, list the tests you added yourself and anything the acceptance tests do not
@@ -1186,6 +1196,9 @@ steps:
       - when: "output.status == 'missing' and (vars.testid_returns or 0) | int < 2"
         goto: develop
         set: { testid_returns: "{{ (vars.testid_returns or 0) | int + 1 }}" }
+      # #696: then the visual baselines of the issue's @visual scenarios
+      - when: "inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
+        goto: baseline_check
       # then develop's own routes after a commit (its output is steps.develop.output here)
       - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
@@ -1198,6 +1211,38 @@ steps:
       - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
         goto: developer_screenshots
       # #404: the project's rule checks before the owner's gate or the review
+      - when: "worktree_dir | check_command(inputs.check_command)"
+        goto: rule_check
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_check
+      - when: "true"
+        goto: code_review
+
+  # #696: the visual baselines of the issue's scenarios, checked by the orchestrator after testid_check
+  # (no agent, no model call): every screenshot name the scenarios tagged @issue-<n> use (a quoted
+  # "….png" in a step, or the static toHaveScreenshot('….png') of the step definition it matches) must
+  # have its PNG under features/__screenshots__/ (packages/engine/engine/visual-baselines.js). A missing
+  # one goes back to the developer with the file and the update command, at most twice in the run;
+  # then the run goes on and the E2E step generates it (new_baselines) for the UI review, never the healer.
+  - id: baseline_check
+    display: Baseline check (scenarios)
+    type: visual_baselines
+    issues: "{% for n in inputs | issue_numbers %}{{ n }}{{ ',' if not loop.last }}{% endfor %}"
+    steps: "{{ (inputs.steps_folders or []) | join('\\n') }}"
+    transitions:
+      - when: "output.status == 'missing' and (vars.baseline_returns or 0) | int < 2"
+        goto: develop
+        set: { baseline_returns: "{{ (vars.baseline_returns or 0) | int + 1 }}" }
+      # then develop's own routes after a commit, as in testid_check
+      - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+      - when: "inputs.screenshots != 'off' and not (steps.develop.output.screenshots or []) | length and (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length and vars.ui_screens_returned != 'yes'"
+        goto: develop
+        set: { ui_screens_returned: "yes" }
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
+        goto: developer_screenshots
+      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
+        goto: developer_screenshots
       - when: "worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
@@ -1447,6 +1492,7 @@ steps:
       Developer summary: {{ steps.develop.output.summary }}
       {% if not steps.develop.output.committed %}The developer made no production change this turn (its summary above says why): review the commits already on the branch (e.g. the test writer's) against the task.{% endif %}
       {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
+      {% if inputs.e2e_tests != 'off' %}A missing baseline of a new @visual scenario (its PNG not under features/__screenshots__/ on the branch) is blocking (#696): name the file and its update command (`npm run test:e2e:update -- --grep @issue-<n>`), never leave it as a note.{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
       This run implements several issues: check the spec axis per issue, and set `issue` (its URL)
@@ -1815,6 +1861,9 @@ steps:
   # holding the machine's screenshot slot, #199; the rest in parallel), log in logs/e2e-<round>.log; a failure keeps its trace and the
   # page's accessibility snapshot under .test-output/e2e/artifacts/. The visual baselines of the
   # screens the issue changes are checked in the same run. Green: no LLM at all. Red: the healer.
+  # #696: a baseline that does not exist yet is not a failure: Playwright writes it (never over an
+  # existing one), the round lists it in output.new_baselines for the UI review and goes on; only a
+  # pixel difference with an existing baseline goes to the healer and the test_failed gate.
   - id: e2e
     display: Run suite (E2E)
     type: suite
