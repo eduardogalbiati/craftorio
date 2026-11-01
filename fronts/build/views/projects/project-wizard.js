@@ -285,13 +285,12 @@
     return t('onboarding.new_remote_hint', { repo: account ? `${account}/${newSlug()}` : newSlug(), other: other?.label || '', cli: other?.cli || '' });
   }
 
-  // the platforms to pick, the ones not signed in disabled; the app's select markup when loaded
+  // the platforms to pick, the ones not signed in disabled; the app's select markup (#383)
   function remoteSelect(locked) {
     const ins = signedIn().map((a) => a.provider);
     const options = providers().map((id) => [id, platformById(id)?.label || id, { disabled: !ins.includes(id) }]);
     const attrs = `id="wizard-new-remote-provider" data-testid="wizard-new-remote-provider" aria-label="${esc(t('onboarding.provider_label'))}"${locked || !ins.length ? ' disabled' : ''}`;
-    return window.Select ? window.Select.markup(attrs, options, remoteProvider())
-      : `<select ${attrs}>${options.map(([v, l, x]) => `<option value="${esc(v)}"${v === remoteProvider() ? ' selected' : ''}${x.disabled ? ' disabled' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    return window.Select.markup(attrs, options, remoteProvider());
   }
 
   // one question of the right column: its title and its chips, the picked one aria-pressed
@@ -402,8 +401,7 @@
     const select = (kind, choices, value) => {
       const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"`;
       const options = choices.map((c) => [c.value, c.label]);
-      return window.Select ? window.Select.markup(attrs, options, value)
-        : `<select ${attrs}>${options.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+      return window.Select.markup(attrs, options, value);
     };
     const row = (kind) => {
       const s = all.find((x) => x.id === kind);

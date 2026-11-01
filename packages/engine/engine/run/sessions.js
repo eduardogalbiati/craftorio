@@ -372,8 +372,11 @@ const methods = {
     const guide = commands && [commands, this.depsGuide()].filter(Boolean).join('\n');
     // node_modules linked from the shared cache (#198): Claude refuses `npm ci` and deleting it
     const depsLinked = !!this.deps?.worktree?.entry;
-    if (turn === 1 && (agent.system_prompt || agentSkills.length || guide)) {
-      const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map((sk) => skillPrompt(sk, agentName))].filter(Boolean).join('\n\n');
+    // a skill both the agent and the step name goes in once, with the step prompt (#720)
+    const stepSkillNames = new Set(stepSkills.map((sk) => sk.name));
+    const systemSkills = agentSkills.filter((sk) => !stepSkillNames.has(sk.name));
+    if (turn === 1 && (agent.system_prompt || systemSkills.length || guide)) {
+      const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...systemSkills.map((sk) => skillPrompt(sk, agentName))].filter(Boolean).join('\n\n');
       parts.push(`<system>\n${system}\n</system>`);
     }
     if (note && continued) {

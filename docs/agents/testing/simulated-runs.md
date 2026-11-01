@@ -52,7 +52,6 @@ bundled workflow's runs, per file and theme (`sd` = software-development, `lh` =
 | `engine-software-development-suite` | sd | 7 | suite → test writer once, pre-existing, blocked → test_failed, 2 retries, run_existing → developer; skills and tests_plan | 40 s |
 | `engine-software-development-test-inputs` | sd | 9 | `unit_tests` × `e2e_tests`: test and suite steps visited or not (#203) | 41 s |
 | `merge-recovery-runs` | fixture, lh | 9 | `check:`/`precheck:` recovery, max_visits cap, two runs racing; lh resolve_merge re-check (#99) | 24 s |
-| `merge-recovery-approve-merge` | sd | 4 | approve_merge PR state; conflict → resolve_conflict → ask again; merge action failing; merge_failed gate (#69) | 41 s |
 | `ai-development-local-hero` | aid | 20 | normal path (full list), acceptance send-back, protected tests, screenshots/ui_reviewer fan-out, #247 change request | 38 s |
 | `ai-development-e2e` | aid | 10 | e2e scope, scenarios first, healer loop, product bug → develop, test_failed gate (#223) | 20 s |
 | `ai-development-warm-up-301-304` | aid | 8 | warm_up once (fix rounds and change requests skip it), mapper failure, affected then whole suite | 16 s |
