@@ -9,7 +9,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { blankComments, readsOf } = require('@multiagent/engine/engine/test-reads');
+const { readsOf } = require('@multiagent/engine/engine/test-reads');
+const { withoutComments } = require('@multiagent/engine/engine/source-text');
 const { sourceDirs } = require('./source-tree');
 
 const LIVE = /^docs\/work(\/|$)/;
@@ -29,7 +30,7 @@ function checkTestFixtures(root) {
   const files = ['test', ...sourceDirs(root).map((d) => `${d}/test`)].flatMap((d) => testFiles(root, d)).sort();
   const out = [];
   for (const file of files) {
-    const text = blankComments(fs.readFileSync(path.join(root, file), 'utf8'));
+    const text = withoutComments(fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n'));
     for (const r of readsOf(file, text)) {
       if (!LIVE.test(r.path)) continue;
       const line = text.slice(0, r.index).split('\n').length;

@@ -12,7 +12,9 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   when a path it reads from disk changes (#695, `packages/engine/engine/test-reads.js`), whatever
   imports the changed file: the first argument of an `fs` read (`readFileSync`, `readdirSync`,
   `existsSync`, …) given as a literal (relative to the repository root), a `path.join` of
-  `__dirname` (or a constant built from it) and literals, or a constant holding one. A read path
+  `__dirname` (or a constant built from it) and literals, a template literal or `+` of literal
+  constants (`${DIR}/spec.md`), or a constant holding one; a local helper that reads its parameter
+  (`const read = (rel) => fs.readFileSync(path.join(ROOT, rel))`) reads what each call passes. A read path
   reaches the file at it and every file under it (a listed folder); a non-literal argument before a
   literal stands for any folders (`path.join(ROOT, dir, 'views')` → `**/views`, so a screen folder
   added under `fronts/plan/views/` selects `apps/desktop/test/view-folders.test.js`); a read that

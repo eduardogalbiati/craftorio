@@ -107,8 +107,9 @@ function issueBody({ file, entries }, { commit, lastGreen, logFile, logText, run
   ].join('\n');
 }
 
-// Files the group's bug issue, or updates the one an entry of it has (a comment naming the tests
-// new to it) → { url, number, action, test, title }; every entry of the group gets that issue
+// Files the group's bug issue, or updates the ones its entries have (a comment naming the tests
+// new to the group) → { url, number, action, test, title }; the entries without an issue get the
+// first one. A store from before #695 holds one issue per test: each of them is still updated.
 async function fileIssue(ws, projectId, group, { platform, repo, exec, ...ctx }) {
   const p = issues.adapterOf(platform);
   const target = issues.cliTargetOrName(platform, repo);
@@ -121,21 +122,26 @@ async function fileIssue(ws, projectId, group, { platform, repo, exec, ...ctx })
   const { entries } = group;
   const title = groupTitle(group);
   const test = group.file || entries[0].test;
-  const open = entries.find((e) => e.issue?.number)?.issue;
-  if (open) {
-    const n = String(open.number);
-    // red again after a green check: the issue (closed with its fix, most likely) is reopened
-    const reopen = entries.some((e) => e.reopen && e.issue?.number === open.number);
-    if (reopen) {
-      const r = p.issueReopenCommand(target, n);
-      await Promise.resolve(exec(r.cli, r.args)).catch(() => { /* already open */ });
+  const known = [...new Map(entries.filter((e) => e.issue?.number).map((e) => [e.issue.number, e.issue])).values()];
+  if (known.length) {
+    const [open] = known;
+    const added = entries.filter((e) => !e.issue?.number).map((e) => e.test);
+    let reopened = false;
+    for (const issue of known) {
+      const n = String(issue.number);
+      // red again after a green check: the issue (closed with its fix, most likely) is reopened
+      const reopen = entries.some((e) => e.reopen && e.issue?.number === issue.number);
+      if (reopen) {
+        const r = p.issueReopenCommand(target, n);
+        await Promise.resolve(exec(r.cli, r.args)).catch(() => { /* already open */ });
+        reopened = true;
+      }
+      const head = `${reopen ? 'Red again on the base.' : 'Still red on the base.'} Last seen: ${at}.${added.length ? `\n\nNewly red: ${added.join('; ')}` : ''}`;
+      const c = p.issueSaveCommand({ target, n, mode: 'comment', file, text: `${head}\n\n${text}` });
+      await exec(c.cli, c.args);
     }
-    const added = entries.filter((e) => e.issue?.number !== open.number).map((e) => e.test);
-    const head = `${reopen ? 'Red again on the base.' : 'Still red on the base.'} Last seen: ${at}.${added.length ? `\n\nNewly red: ${added.join('; ')}` : ''}`;
-    const c = p.issueSaveCommand({ target, n, mode: 'comment', file, text: `${head}\n\n${text}` });
-    await exec(c.cli, c.args);
-    for (const e of entries) { e.issue = open; delete e.reopen; }
-    return { url: open.url, number: open.number, action: reopen ? 'reopened' : 'updated', test, title };
+    for (const e of entries) { if (!e.issue?.number) e.issue = open; delete e.reopen; }
+    return { url: open.url, number: open.number, action: reopened ? 'reopened' : 'updated', test, title };
   }
   // the bug label when the repository has it (GitLab creates a missing one itself)
   let labels = ['bug'];

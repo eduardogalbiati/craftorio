@@ -1,9 +1,10 @@
 // packages/engine/engine/test-reads.js (#695): the paths a test reads from disk, by static analysis.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { blankComments, readPattern, readsOf } = require('../engine/test-reads');
+const { readPattern, readsOf } = require('../engine/test-reads');
+const { withoutComments } = require('../engine/source-text');
 
-const paths = (file, text) => readsOf(file, blankComments(text)).map((r) => r.path);
+const paths = (file, text) => readsOf(file, withoutComments(text)).map((r) => r.path);
 
 test('readsOf: constants built from __dirname, a constant path and a literal read', () => {
   const text = [
@@ -37,4 +38,35 @@ test('readsOf and readPattern: a non-literal folder before a literal is any fold
   assert.equal(readPattern('src/a.js').test('src/a.js'), true);
   assert.equal(readPattern('src/a.js').test('src/a.json'), false);
   assert.deepEqual(paths('test/x.test.js', "fs.readdirSync(path.join(__dirname, dir));\n"), []);
+});
+
+test('readsOf: a local helper reading its parameter reads what each call passes, a template of constants included', () => {
+  const text = [
+    "const ROOT = path.join(__dirname, '..');",
+    "const DIR = 'docs/work/first-project-onboarding';",
+    "const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');",
+    'function list(dir) { return fs.readdirSync(path.join(ROOT, dir)); }',
+    'const spec = read(`${DIR}/spec.md`);',
+    "const other = read(DIR + '/spec.pt-BR.md');",
+    "const views = list('fronts');",
+    'const unknown = read(name);',
+    '',
+  ].join('\n');
+  const reads = readsOf('test/doc.test.js', withoutComments(text));
+  assert.deepEqual(reads.map((r) => r.path), [
+    'docs/work/first-project-onboarding/spec.md',
+    'docs/work/first-project-onboarding/spec.pt-BR.md',
+    'fronts',
+  ]);
+  assert.equal(text.slice(0, reads[0].index).split('\n').length, 5);
+});
+
+test('readsOf: a helper reading a temp folder reads nothing of the repository', () => {
+  const text = [
+    "const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x-'));",
+    "const read = (rel) => fs.readFileSync(path.join(dir, rel), 'utf8');",
+    "read('docs/work/demo/intent.md');",
+    '',
+  ].join('\n');
+  assert.deepEqual(paths('test/x.test.js', text), []);
 });

@@ -51,7 +51,6 @@ const HOW_TO = 'docs/agents/testing.md › code-health.md ("Code health")';
 
 // '<file>:<function name>' -> its complexity when listed; only lower it
 const COMPLEXITY_EXCEPTIONS = {
-  'scripts/layers.js:withoutComments': 27,
   'scripts/run.js:on(event) callback': 32,
   'scripts/screenshot.js:parseArgs': 85,
   'packages/engine/domains/agents/agent-inbox.js:handle': 32,
@@ -96,6 +95,7 @@ const COMPLEXITY_EXCEPTIONS = {
   'packages/engine/engine/run/transitions.js:pollStep': 40,
   'packages/engine/engine/run/turns.js:invokeTurn': 42,
   'packages/engine/engine/screenshot-step.js:captureScreenshots': 34,
+  'packages/engine/engine/source-text.js:withoutComments': 27,
   'packages/engine/engine/suite-step.js:checkOnBase': 27,
   'packages/engine/engine/suite-step.js:parseFailures': 51,
   'packages/engine/engine/suite-step.js:runSuite': 71,

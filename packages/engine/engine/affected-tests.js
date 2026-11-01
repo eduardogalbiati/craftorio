@@ -25,6 +25,10 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const {
+  escapeRegExp,
+  withoutComments,
+} = require('./source-text');
 const { readPattern, readsOf } = require('./test-reads');
 
 const CODE = /\.(c|m)?[jt]sx?$/;
@@ -70,9 +74,8 @@ const read = (root, f) => {
   } catch { return ''; }
 };
 
-// Comments name files without using them (a header that points to README.md): only code counts.
-// A `//` after a quote or a colon (a URL in a string) is kept.
-const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
+// Comments name files without using them (a header that points to README.md): only code counts
+// (withoutComments of source-text.js, the same text the layer rule and test-reads.js see).
 
 // The project's own packages (npm workspaces, or any package.json outside node_modules): name → folder,
 // so an import of `@scope/name/sub` resolves to a project file (`packages/name/sub.js`).
@@ -116,7 +119,7 @@ function names(text, file, uniqueBase) {
   const joined = text.replace(/['"`]\s*,\s*['"`]/g, '/');
   const tail = parts.slice(-2).join('/');
   if (parts.length > 1 && joined.includes(tail)) return true;
-  return uniqueBase && new RegExp(`['"\`/]${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"\`]`).test(text);
+  return uniqueBase && new RegExp(`['"\`/]${escapeRegExp(base)}['"\`]`).test(text);
 }
 
 // #695: the paths the test files read from disk → [{ re (matches a file at or under it), test }]
@@ -137,7 +140,7 @@ const readersOf = (graph, file) => new Set(graph.reads.filter((r) => r.test !== 
 function importGraph(root, files, extra = []) {
   const code = files.filter((f) => CODE.test(f) && !/(^|\/)node_modules\//.test(f));
   const known = new Set([...files, ...extra]);
-  const texts = new Map(code.map((f) => [f, stripComments(read(root, f))]));
+  const texts = new Map(code.map((f) => [f, withoutComments(read(root, f))]));
   const packages = localPackages(root, known);
   const importers = new Map();
   for (const [f, text] of texts) {
@@ -318,7 +321,7 @@ function relatedTests({ root, tests = [] } = {}) {
   if (!graph.code.some(isTest)) { out.why = 'no JS/TS test files: no import graph for this project'; return out; }
   const sources = new Set();
   for (const t of given) {
-    for (const dep of importsOf(t, stripComments(read(root, t)), graph.known, graph.packages)) if (!isTest(dep) && !SUPPORT.test(dep)) sources.add(dep);
+    for (const dep of importsOf(t, withoutComments(read(root, t)), graph.known, graph.packages)) if (!isTest(dep) && !SUPPORT.test(dep)) sources.add(dep);
   }
   out.sources = [...sources].sort();
   const from = reach(graph, out.sources);
