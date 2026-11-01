@@ -24,7 +24,8 @@
 .docs-new-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 14px; position: sticky; top: 0; }
 .docs-new-form { display: flex; flex-direction: column; gap: 12px; }
 .docs-new-head { display: flex; align-items: center; gap: 8px; }
-.docs-new-head h2 { margin: 0; font-size: 14px; flex: 1; }
+.docs-new-head h2 { margin: 0; font-size: 14px; flex: 1; text-transform: none; letter-spacing: normal; }
+.docs-list-main .page-head .btn { white-space: nowrap; flex-shrink: 0; }
 .docs-new-form .field { display: flex; flex-direction: column; gap: 4px; }
 .docs-new-form label, .docs-new-label { font-size: 12px; color: var(--muted); }
 .docs-new-form textarea { resize: vertical; }
@@ -39,11 +40,13 @@
 .docs-titlebar { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .docs-titlebar-text { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .docs-version { margin-left: auto; white-space: nowrap; }
-.docs-itemhead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-width: 0; }
-.docs-itemhead-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.docs-itemhead-name b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.docs-stepper { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1; min-width: 0; }
-.docs-step { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font-size: 12px; }
+.docs-itemhead { display: flex; align-items: center; gap: 16px; min-width: 0; }
+/* #671 living-doc.jpg: a long item name is cut so the six steps stay on one line */
+.docs-itemhead-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 0 1 240px; }
+.docs-itemhead-name b, .docs-itemhead-name span { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-itemhead-name span { font-size: 12px; }
+.docs-stepper { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; }
+.docs-step { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 .docs-step.done { color: var(--green); }
 .docs-step.current { border-color: var(--accent); color: var(--text); background: var(--panel); }
 .docs-step-arrow { color: var(--muted); font-size: 12px; }

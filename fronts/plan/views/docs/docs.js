@@ -75,10 +75,16 @@
   const fileName = (path) => String(path || '').split('/').pop();
   const docFile = (doc) => SDLC[stepOfDoc(doc)]?.file || `${doc}.md`;
 
+  // #671 the header's project, also before the app's start has listed the projects (as backlog.js)
+  const currentProjectId = async () => window.CurrentProject?.get() || api.listProjects().then((list) => {
+    if (!state.projects?.length) state.projects = list;
+    return window.CurrentProject?.refresh(list) || null;
+  }, () => null);
+
   // ---- the list ---------------------------------------------------------------------------------
   async function refresh() {
     const seq = ++docs.seq;
-    docs.projectId = window.CurrentProject?.get() || null;
+    docs.projectId = await currentProjectId();
     let items = [];
     let error = '';
     if (docs.projectId) {
@@ -248,7 +254,10 @@
   // ---- the editor ---------------------------------------------------------------------------------
   // runId: the write-doc run in progress on this document (the list's), its waiting gate found again
   async function openDoc(item, doc, runId, { creating = false, projectId = null } = {}) {
-    docs.projectId = projectId || window.CurrentProject?.get() || docs.projectId;
+    docs.projectId = projectId || (await currentProjectId()) || docs.projectId;
+    // opened before the list was read (DocsActions); the writer panel drawn in the saved language
+    if (!docs.items.length && docs.projectId) docs.items = (await api.listDocItems(docs.projectId).catch(() => [])) || [];
+    if (!docs.chat) mountChat();
     docs.open = {
       item, doc, data: null, runId: runId || null, creating, base: null, gate: null, changes: [], unreviewed: [], notes: [], checks: [], messages: [], selection: null, problems: [],
       tab: 'edit', lang: 'en', source: false, mode: 'now', queue: [], pendingNotes: [], changeOpen: null, lastAnchor: null,
@@ -887,8 +896,7 @@
     }
   }
 
-  // #671 the writer panel of mock-2: the selection above the text box, Apply now or Queue and
-  // Attach image beside Send
+  // #671 the writer panel of mock-2: the selection, Apply now or Queue and Attach image beside Send
   function mountChat() {
     if (!window.AgentChat?.create) return;
     docs.chat = window.AgentChat.create($('#docs-chat'), {
@@ -1006,7 +1014,6 @@
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && state.view === 'docs' && !$('#docs-new-panel').classList.contains('hidden')) closeNewItem();
       });
-      mountChat();
       api.onEvent?.((ev) => { onRunEvent(ev); });
     },
     show: () => (docs.open ? reload() : refresh()),
