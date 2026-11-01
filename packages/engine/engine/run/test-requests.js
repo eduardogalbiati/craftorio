@@ -96,11 +96,18 @@ const methods = {
 
   // The code → tests map of an agent's checkout (#219, a step's `test_map: true`), written to
   // <run_dir>/test-map.md for each turn (the graph of packages/engine/engine/affected-tests.js) → its path.
+  // A mock run builds it once per folder: its agents never change the checkout, and the graph of a
+  // whole repository takes seconds per turn (#705).
   writeTestMap(agentName) {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const file = path.join(this.runDir, 'test-map.md');
-    let map;
-    try { map = testMap({ root: this.workingDir(agent) }); } catch (e) { map = { mode: 'none', why: e.message.split('\n')[0], sources: {} }; }
+    const root = this.workingDir(agent);
+    const cache = this.mock ? (this.mockTestMaps ||= new Map()) : null;
+    let map = cache?.get(root);
+    if (!map) {
+      try { map = testMap({ root }); } catch (e) { map = { mode: 'none', why: e.message.split('\n')[0], sources: {} }; }
+      cache?.set(root, map);
+    }
     fs.mkdirSync(this.runDir, { recursive: true });
     fs.writeFileSync(file, testMapMarkdown(map));
     return file;
