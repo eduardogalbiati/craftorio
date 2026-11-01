@@ -876,6 +876,32 @@ steps:
       disagree with: say why). Keep `screenshots` listing the states to capture: they are taken
       again and the UI Reviewer looks once more.
       {% endif %}
+      {# #670: the issue's mockups are the specification of its screens #}
+      {% set mocks = inputs.task | mockups %}
+      {% if mocks | length %}
+      The issue's mockups are the specification of its screens: the screens you build or change
+      match them (layout, icons, texts, controls, order, states); what this issue's phase does not
+      do yet stays visible and disabled, as in the mockup. Copy each one into
+      `{{ run_dir }}/evidence/mockups/` first (a repository path: copy the file; a link: download
+      it), so you and the UI Reviewer look at the same files:
+      {% for m in mocks %}- `{{ m.file }}`: {{ m.ref }}
+      {% endfor %}
+      List in `screenshots` every screen a mockup shows. The UI Reviewer compares each screenshot
+      with its mockup: every difference is blocking and comes back here; one you made on purpose (a
+      later phase) cites the issue's line that says so in `summary`.
+      {% endif %}
+      {% if previous_step == 'developer_screenshots' and vars.mockup_self_check == 'yes' and steps.developer_screenshots.output %}
+      Before the review, look at your own screenshots next to the mockups: {{ steps.developer_screenshots.output.message }}{% if steps.developer_screenshots.output.dir %},
+      in `{{ run_dir }}/{{ steps.developer_screenshots.output.dir }}` as `<name>.modified.png`{% endif %}.
+      Your turn ends when the tests pass and the screens match the mockups, not on the tests alone:
+      fix each difference on the same branch with a new commit (the screens are taken again), or,
+      when every screen matches, answer with no commit and `no_change: true`.
+      {% endif %}
+      {% if previous_step == 'develop' and vars.ui_screens_returned == 'yes' and not (steps.develop.output.screenshots or []) | length %}
+      Your previous answer changed files under the UI folders but listed no screen in
+      `screenshots`: a UI change always has screenshots. List the states of the screens you changed;
+      a screen the screenshot command cannot reach yet gets its demo data or seed in this run.
+      {% endif %}
       {% set acc = steps.acceptance_tests.output %}
       {# #247: Ask for changes goes through the test writer first (acceptance_tests, then the red check when the criteria changed) #}
       {% if previous_step in ['developer_check', 'acceptance_tests', 'red_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}
@@ -976,7 +1002,8 @@ steps:
       `<issue>-<screen>-<state>`, `caption` one sentence, `args` the options as a list (e.g.
       ["--view", "backlog", "--mode", "roadmap", "--click", "[data-rm-edit]"]), never --out, --name,
       --side, --ref or --caption (the capture sets them). The engine captures each one, original and
-      modified, before the owner tries the change. An empty list when the change has no UI.
+      modified, before the owner tries the change. An empty list when the change has no UI; a
+      change to files under the UI folders always lists its screens.
       Never run `npm run screenshot` yourself: make the demo data cover the change (that is code)
       and list the states; the engine captures them and the evidence step judges them.
       {% endif %}
@@ -1065,6 +1092,15 @@ steps:
         set: { gaps_returned: "yes" }
       - when: "output.left_out | developer_gaps | length"
         goto: requirements_left_out
+      # #670: a UI change always has screenshots: files changed under the UI folders and no screen
+      # listed go back to develop once (vars.ui_screens_returned), not past the capture as "no UI"
+      - when: "output.committed and inputs.screenshots != 'off' and not (output.screenshots or []) | length and (output.files_changed or []) | ui_files(inputs.ui_folders) | length and vars.ui_screens_returned != 'yes'"
+        goto: develop
+        set: { ui_screens_returned: "yes" }
+      # #670: the developer looked at its screenshots next to the mockups and changed nothing: the
+      # same screens go on to the review
+      - when: "not output.committed and previous_step == 'developer_screenshots' and vars.mockup_self_check == 'yes'"
+        goto: developer_screenshots
       # #246: scenarios written first: their test ids are checked right after each commit
       # (testid_check, no model call); it then takes the routes below
       - when: "output.committed and inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
@@ -1153,6 +1189,10 @@ steps:
       # then develop's own routes after a commit (its output is steps.develop.output here)
       - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
+      # #670: a UI change always has screenshots, as in develop's transitions
+      - when: "inputs.screenshots != 'off' and not (steps.develop.output.screenshots or []) | length and (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length and vars.ui_screens_returned != 'yes'"
+        goto: develop
+        set: { ui_screens_returned: "yes" }
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
         goto: developer_screenshots
       - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
@@ -1177,6 +1217,11 @@ steps:
     folder: developer
     base: "{{ inputs.base_branch }}"
     transitions:
+      # #670: an issue with mockups: the developer looks at its screenshots next to them once
+      # before the review (vars.mockup_self_check), and fixes what differs
+      - when: "inputs.task | mockups | length and output.taken and vars.mockup_self_check != 'yes'"
+        goto: develop
+        set: { mockup_self_check: "yes" }
       # #404: the project's rule checks before the owner's gate or the review
       - when: "worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
@@ -1336,6 +1381,18 @@ steps:
       Screenshots: {{ shots.message if shots else 'none taken' }}{% if shots and shots.dir %}, in `{{ run_dir }}/{{ shots.dir }}`
       as `<name>.original.png` (the base) and `<name>.modified.png` (the change){% endif %}.
       {% if shots and (shots.screenshots or []) | length %}{{ shots.screenshots | to_yaml }}{% endif %}
+      {% set mocks = inputs.task | mockups %}
+      {% if mocks | length %}
+      The issue's mockups are the specification of its screens (#670), in
+      `{{ run_dir }}/evidence/mockups/` (else at their path in the worktree, or the link):
+      {% for m in mocks %}- `{{ m.file }}`: {{ m.ref }}
+      {% endfor %}
+      Compare each `<name>.modified.png` with its mockup: layout, icons, texts, controls, order,
+      states. Each difference from the mockup is a blocking UI finding (`rule: mockup`, `source:
+      mockup`, `convention: mockup: <file>`): the run goes back to develop with it, in every mode; it
+      is not a suggestion. A mockup screen with no screenshot is blocking too. A difference the
+      developer says is intended (a later phase) passes only when it cites the issue's line saying so.
+      {% endif %}
       Look at each PNG once, original and modified. When there is no screenshot (a simulated run, a
       failed capture, or no screen listed), review the diff of the styles and markup instead:
       `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} -- {{ (inputs.ui_folders or ['src/renderer/']) | join(' ') }}`.

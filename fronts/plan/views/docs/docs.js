@@ -12,8 +12,9 @@
 // (docs:apply-request). The changes by request list those commits with their unreviewed queue (Mark
 // reviewed, Undo this change); Send to review ends the edit; the approval gate's Accept intent / Sign
 // off spec changes the front matter and commits (docs:accept) before it answers the gate. A signed-off
-// spec offers Create epic and phase issues (the Backlog) and Start the Build (the Roadmap): nothing
-// is filed or started before that click.
+// spec offers Create epic and phase issues (its list row too: the Backlog's Product Owner proposes them
+// with their mockup coverage, #670) and Start the Build (the Roadmap): nothing is filed or started
+// before that click.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, showToast, showView), markdownHtml (artifact-render.js), DocModel
 // (packages/shared/doc-model.js), CurrentProject and AgentChat.
@@ -64,7 +65,20 @@
     const run = (doc) => (it.runId && it.runDoc === doc ? ` data-run="${esc(it.runId)}"` : '');
     const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${doc === 'spec' ? t('docs.open_spec') : t('docs.open_intent')}</button>`);
     if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
+    if (spec && signedOff(spec.status)) open.push(`<button type="button" class="btn sm primary" data-docs-issues data-item="${esc(it.item)}">${t('docs.create_epic_and_phase_issues')}</button>`);
     return open.join('');
+  }
+
+  // a spec's front matter writes its status `signed off` or `signed-off`
+  const signedOff = (status) => String(status || '').replace(/-/g, ' ') === acceptedStatus('spec');
+
+  // #670: the Product Owner proposes the epic and one issue per phase of a signed-off spec, each
+  // screen task with its mockup, and checks that every mockup in scope has an issue (the Backlog's drawer)
+  async function proposeIssues(item) {
+    // the drawer plans for the Backlog's project: this item's, before the Backlog has loaded it
+    window.BacklogActions?.focusProject?.(docs.projectId);
+    showView('backlog');
+    await window.BacklogPO?.ask(`Create the epic and one issue per phase from the signed-off spec docs/work/${item}/spec.md: every screen task names and embeds its mockup.`);
   }
 
   function renderList() {
@@ -80,8 +94,9 @@
     box.innerHTML = docs.items.map((it) => `
       <div class="docs-item" data-testid="docs-item" data-item="${esc(it.item)}">
         <div class="docs-item-main">
-          <b class="docs-item-title" title="${esc(it.item)}">${esc(it.item)}</b>
+          <b class="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
           <span class="docs-item-meta muted small">
+            ${it.title ? `<span class="mono" title="docs/work/${esc(it.item)}">${esc(it.item)}</span>` : ''}
             <span class="badge" title="${t('docs.the_item_s_stage')}">${esc(it.stage || '')}</span>
             ${it.docs.map((d) => `<span class="docs-item-doc" title="${esc(d.file)}">${docLabel(d.doc)} ${statusBadge(d.status)}</span>`).join('')}
           </span>
@@ -93,6 +108,8 @@
   function onListClick(e) {
     const write = e.target.closest('[data-docs-write-spec]');
     if (write) return startDoc(write.dataset.item, 'spec', null);
+    const issues = e.target.closest('[data-docs-issues]');
+    if (issues) return proposeIssues(issues.dataset.item);
     const open = e.target.closest('[data-docs-open]');
     if (open) return openDoc(open.dataset.item, open.dataset.docsOpen, open.dataset.run || null);
     return undefined;
@@ -422,7 +439,7 @@
         <p class="muted small docs-gate-message" title="${esc(g.message || '')}">${esc(g.message || '')}</p>
         <button type="button" class="btn primary" data-testid="doc-gate-accept" data-docs-gate="accept"${wait}>${o.doc === 'spec' ? t('docs.sign_off_spec') : t('docs.accept_intent')}</button>
         <button type="button" class="btn ghost" data-docs-gate="revise"${wait}>${t('docs.back_to_the_edit')}</button>`;
-    } else if (o.doc === 'spec' && status === acceptedStatus('spec')) {
+    } else if (o.doc === 'spec' && signedOff(status)) {
       html = `
         <button type="button" class="btn primary" data-docs-next="backlog">${t('docs.create_epic_and_phase_issues')}</button>
         <button type="button" class="btn" data-docs-next="roadmap">${t('docs.start_the_build')}</button>`;
@@ -468,6 +485,7 @@
     if (gate) return answerGate(gate.dataset.docsGate);
     if (el('[data-docs-start]')) return startWriter();
     const next = el('[data-docs-next]');
+    if (next?.dataset.docsNext === 'backlog') return proposeIssues(docs.open.item);
     if (next) return showView(next.dataset.docsNext);
     return undefined;
   }

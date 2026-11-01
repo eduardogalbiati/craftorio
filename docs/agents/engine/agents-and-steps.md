@@ -33,6 +33,15 @@ fields (references between steps, agents, transitions, groups) are the named rul
   `output.results.ui_reviewer.ui_findings` go back to `develop` in one turn, the UI once
   (`vars.ui_review_returned`), and the fix round is reviewed again before test/suite/E2E/build.
   Its `evidence` step only collects evidence (no `ui_findings`, no way back to develop).
+  Mockups (#670): when the issue embeds or links mockups (the `mockups` template filter,
+  `ui-review-checks.js` `issueMockups`), develop copies them to `evidence/mockups/`, gets its own
+  screenshots back once next to them before the review (`vars.mockup_self_check`), and the
+  `ui_reviewer` compares each `*.modified.png` with its mockup (layout, icons, texts, controls,
+  order, states): every difference is a blocking `ui_findings` entry (rule/source `mockup`,
+  `mockupFindings`) back to develop; an intended one cites the issue's line. No mockup: the review
+  is as before. A UI change always has screenshots: develop changing files under `ui_folders`
+  (the `ui_files` filter) with no `screenshots` goes back to develop once (`vars.ui_screens_returned`)
+  instead of skipping `developer_screenshots`.
 - `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`;
   #473 (SEC-8): the target's real path (its deepest existing parent's realpath, links resolved,
   `canonicalPath` in worktree.js) must be under the run folder, the run's worktree (or base

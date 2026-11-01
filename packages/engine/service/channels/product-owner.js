@@ -11,6 +11,7 @@
 // issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.
 // po:decongest (#150) files one hot spot of an answer's `decongest` as an issue, previewing like po:file.
+// po:file-spec (#670) files the issues an answer proposed from a spec, refused while a mockup in scope has none.
 // po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
 // real answer raises a `po` notice (#149, packages/engine/domains/workspace/notifications.js); a simulated or stopped one does not.
 // po:ask's progress is pushed on chat:progress ('po', the project id) and chat:cancel stops it (#180).
@@ -333,6 +334,21 @@ module.exports = (ctx) => {
         const t = target(projectId);
         const res = await productOwner.fileDecongest({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, index, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
+        });
+        return resync(res, t);
+      },
+    },
+    // #670: the issues an answer proposed from a spec, filed on the owner's click once every mockup
+    // in scope has one (preview like po:file)
+    {
+      channel: 'po:file-spec',
+      method: 'fileProductOwnerSpec',
+      params: ['projectId', 'at', 'preview'],
+      schema: { params: onProject({ at: AT, preview: FLAG }), result: FILED },
+      fn: async ({ projectId, at, preview }) => {
+        const t = target(projectId);
+        const res = await productOwner.fileSpec({
+          backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
         });
         return resync(res, t);
       },

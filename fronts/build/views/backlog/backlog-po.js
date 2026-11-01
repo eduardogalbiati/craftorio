@@ -553,7 +553,7 @@
     }
     // #124 / #138: issues too big for one run, and the epics section
     const msg = po.messages[m];
-    if (msg) parts.push(window.BacklogPoProposals.splitsHtml(proposalsCtx(), msg), window.BacklogPoProposals.epicsHtml(proposalsCtx(), msg));
+    if (msg) parts.push(window.BacklogPoProposals.splitsHtml(proposalsCtx(), msg), window.BacklogPoProposals.epicsHtml(proposalsCtx(), msg), window.BacklogPoProposals.specHtml(proposalsCtx(), msg)); // #670
     return parts.join('');
   }
   const proposalsCtx = () => ({

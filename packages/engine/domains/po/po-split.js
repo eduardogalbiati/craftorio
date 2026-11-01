@@ -10,12 +10,16 @@
 // context, evidence and Decision), then updates the parent: an umbrella task list `- [ ] #n` appended
 // as a dated section, or a comment and the parent closed. Children of a parent in an epic join it.
 // A preview never calls the CLI: it returns the commands it would run.
+// #670: a screen task names its mockup ("matches `mock-1.jpg`", or a mockup the parent embeds as
+// `![mock-1.jpg](url)`); each child carries `mockups`, the ones its tasks name, embeds only those, and
+// checkSplit refuses a child that takes a screen task without its mockup.
 
 const fs = require('fs');
 const path = require('path');
 const backlog = require('../backlog/backlog');
 const epics = require('../backlog/epics');
 const Language = require('@multiagent/shared/language');
+const { MOCKUP_EXTENSIONS } = require('./po-mockups');
 
 const MAX_TASKS = 8;
 const MIN_CHILDREN = 2;
@@ -26,6 +30,11 @@ const PARENT_ACTIONS = ['umbrella', 'close'];
 const TASK_LINE = /^\s*[-*+] \[([ xX])\]\s*(.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*?)\s*#*\s*$/;
 const FILE = /(?:[\w@.-]+\/)+[\w@.-]+\.[a-z]{1,5}\b/gi;
+// #670: a mockup's name (`mock-1.jpg`), the one a task "matches", and an embedded image `![alt](url)`
+const MOCKUP_NAME = `[\\w.-]+(?:${MOCKUP_EXTENSIONS.map((e) => e.replace('.', '\\.')).join('|')})`;
+const MATCHES = new RegExp(`\\bmatches\\s+\`?(${MOCKUP_NAME})\`?`, 'gi');
+const EMBED = /!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g;
+const baseName = (s) => String(s || '').split(/[\\/]/).pop().split(/[?#]/)[0];
 
 /** The parent's task list, in order: [{ n (1-based), text, done, part (the heading above it) }]. */
 function parentTasks(body) {
@@ -38,6 +47,32 @@ function parentTasks(body) {
     if (t) out.push({ n: out.length + 1, text: t[2].trim(), done: t[1] !== ' ', part });
   }
   return out;
+}
+
+// #670: the mockups a body embeds (`![mock-1.jpg](url)`): their base names (the alt text when it is a
+// mockup's name, else the url's file)
+function embeddedMockups(body) {
+  const isName = (s) => new RegExp(`^${MOCKUP_NAME}$`, 'i').test(s);
+  const out = [];
+  for (const m of String(body || '').matchAll(EMBED)) {
+    const name = isName(m[1].trim()) ? m[1].trim() : baseName(m[2]);
+    if (isName(name) && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+// #670: the mockups a task names: the one it "matches", and any the parent embeds that it names
+function mockupsOf(text, embedded = []) {
+  const out = [...String(text || '').matchAll(MATCHES)].map((m) => m[1]);
+  for (const name of embedded) if (String(text || '').includes(name)) out.push(name);
+  return [...new Set(out)];
+}
+
+// #670: the mockups of the given tasks of a parent, in task order
+function tasksMockups(body, ns) {
+  const tasks = parentTasks(body);
+  const embedded = embeddedMockups(body);
+  return [...new Set(ns.flatMap((k) => mockupsOf(tasks[k - 1]?.text, embedded)))];
 }
 
 // The area of the code a task names: the folder of the first file it names (null when it names none).
@@ -141,6 +176,7 @@ function proposeSplit(issue, { complexity = null, history = [] } = {}) {
     children: buckets.map((b, i) => ({
       title: `${shortTitle(issue.title)}: ${b.name}`,
       tasks: b.tasks,
+      mockups: tasksMockups(issue.body, b.tasks),
       complexity: childComplexity(complexity, b.tasks.length, tasks.length),
       stage: kind === 'area' ? 1 : i + 1,
       reason: kind === 'area' ? `The tasks in ${b.name}: another area of the code, so it can run next to the others.`
@@ -204,7 +240,8 @@ function normalizeSplit(raw, issue, { complexity = null, history = [] } = {}) {
     title: issue.title,
     reasons: [...new Set([...signals, ...modelReasons])],
     parent: PARENT_ACTIONS.includes(raw?.parent) ? raw.parent : 'umbrella',
-    children: children.map((c) => ({ ...c, complexity: c.complexity ?? childComplexity(complexity, c.tasks.length, n) })),
+    // #670: each child gets the mockups of the screen tasks it takes
+    children: children.map((c) => ({ ...c, mockups: tasksMockups(issue.body, c.tasks), complexity: c.complexity ?? childComplexity(complexity, c.tasks.length, n) })),
     tasks,
     ...(repaired ? { repaired: true } : {}),
   };
@@ -224,6 +261,8 @@ function checkSplit(split, issue) {
     complexity: Math.max(1, Math.min(5, Number(c?.complexity) || 1)),
     stage: Number.isInteger(Number(c?.stage)) && Number(c.stage) > 0 ? Number(c.stage) : 1,
     reason: String(c?.reason || ''),
+    // #670: the mockups the owner's edit gives the child; without a list, the ones its tasks name
+    mockups: Array.isArray(c?.mockups) ? c.mockups.map(String) : tasksMockups(issue.body, (c?.tasks || []).map(Number)),
   })).filter((c) => c.tasks.length);
   if (children.length < MIN_CHILDREN || children.length > MAX_CHILDREN) throw new Error(`A split has ${MIN_CHILDREN} to ${MAX_CHILDREN} children with tasks (this one has ${children.length}).`);
   if (children.some((c) => !c.title)) throw new Error('Every child needs a title.');
@@ -232,6 +271,11 @@ function checkSplit(split, issue) {
   for (let k = 1; k <= n; k++) if (!all.includes(k)) missing.push(k);
   if (missing.length) throw new Error(`Every task goes to one child: task${missing.length > 1 ? 's' : ''} ${missing.join(', ')} ${missing.length > 1 ? 'have' : 'has'} none.`);
   if (all.length !== n || all.some((k) => k < 1 || k > n)) throw new Error('A task is in two children, or a child names a task the issue does not have.');
+  // #670: a screen task goes with its mockup, like a task goes to exactly one child
+  for (const c of children) {
+    const lacking = tasksMockups(issue.body, c.tasks).filter((m) => !c.mockups.includes(m));
+    if (lacking.length) throw new Error(`"${c.title}" takes a screen task without its mockup: ${lacking.join(', ')}.`);
+  }
   return { issue: issue.number, parent: PARENT_ACTIONS.includes(split?.parent) ? split.parent : 'umbrella', children };
 }
 
@@ -254,8 +298,13 @@ function parentContext(body) {
 function childBody({ parent, child, index, total, headings = Language.issueHeadings() }) {
   const tasks = parentTasks(parent.body);
   const mine = child.tasks.map((k) => tasks[k - 1]).filter(Boolean);
+  // #670: the child embeds its own mockups, not its siblings'
+  const own = new Set(child.mockups || tasksMockups(parent.body, child.tasks));
+  const embedded = embeddedMockups(parent.body);
+  const body = String(parent.body || '').replace(/\r\n/g, '\n').split('\n')
+    .filter((l) => !embeddedMockups(l).some((m) => embedded.includes(m) && !own.has(m))).join('\n');
   // the parent's headings one level down, under "## From #n"
-  const context = parentContext(parent.body).replace(/^(#{1,5})(?=\s)/gm, '$1#');
+  const context = parentContext(body).replace(/^(#{1,5})(?=\s)/gm, '$1#');
   return [
     `Split from #${parent.number} (${parent.title}): part ${index + 1} of ${total}.${child.reason ? ` ${child.reason}` : ''}`,
     '',

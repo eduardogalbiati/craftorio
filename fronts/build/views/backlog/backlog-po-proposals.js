@@ -14,6 +14,9 @@
 // While a split or an epic is filing, only its own proposal is locked and only the button clicked
 // shows a spinner (aria-busy); every other proposal stays usable (#609). The Product Owner's own
 // turn (ctx.busy) still locks them all.
+// Issues from a spec (#670): the issues proposed from docs/work/<item>, then the mockup coverage (each
+// mockup and its issue, each one in scope with no issue, the later phases' ones); Add the issues to the
+// roadmap files them (api.fileProductOwnerSpec) and plans one stage each, disabled while one is missing.
 // Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
 /* global api */
 (() => {
@@ -158,6 +161,31 @@
       </div>`;
   }
 
+  // ---- issues from a spec (#670) ------------------------------------------------------------------------
+  // The spec's issues (one per phase), then the mockup coverage: each mockup with the issue covering it,
+  // each one in scope with no issue (which keeps the proposal off the roadmap), the later phases' ones.
+  const filedSpec = (ctx, msg) => ctx.messages.find((x) => x.specFiled && x.specFiled.at === msg.ts && !x.specFiled.preview)?.specFiled;
+  function specHtml(ctx, msg) {
+    const spec = msg.answer?.spec;
+    if (!spec?.issues?.length) return '';
+    const cov = spec.coverage || { ok: true, covered: [], missing: [], later: [], errors: [] };
+    const k = epicKey(msg, 'spec');
+    const done = filedSpec(ctx, msg);
+    const rows = [
+      ...cov.covered.map((c) => `<li class="po-mockup-row" data-testid="po-mockup-coverage-row"><span class="mono" title="${esc(c.mockup)}">${esc(c.mockup)}</span> <span class="muted small">→</span> <span class="po-split-title" title="${esc(c.issue)}">${esc(c.issue)}</span></li>`),
+      ...(cov.errors || []).map((e) => `<li class="po-mockup-row error" data-testid="po-mockup-missing">${esc(e)}</li>`),
+      ...(cov.later || []).map((f) => `<li class="po-mockup-row muted" data-testid="po-mockup-later"><span class="mono" title="${esc(f)}">${esc(f)}</span> <span class="badge">${t('backlog_po_proposals.later_phase')}</span></li>`),
+    ].join('');
+    const action = done
+      ? `<span class="badge live">${done.issues.map((i) => (i.number ? `#${i.number}` : esc(i.title))).join(' ')} ${t('backlog_po_proposals.done')}</span>`
+      : `<button class="btn sm primary" type="button" data-spec-act="roadmap"${cov.ok ? act(ctx, k, 'roadmap') : ' disabled'} title="${cov.ok ? '' : t('backlog_po_proposals.every_mockup_needs_an_issue')}">${spin(k, 'roadmap')}${t('backlog_po_proposals.add_the_issues_to_the_roadmap')}</button>`;
+    return `<div class="po-sec" data-testid="po-spec-proposal"><div class="sup-h">${t('backlog_po_proposals.issues_from_the_spec')} <span class="mono small" title="docs/work/${esc(spec.item)}">${esc(spec.item)}</span></div>
+        <ul class="po-list small">${spec.issues.map((i) => `<li class="po-split-title" title="${esc(i.title)}">${esc(i.title)}</li>`).join('')}</ul>
+        <div class="po-mockup-coverage" data-testid="po-mockup-coverage"><div class="small muted">${t('backlog_po_proposals.mockup_coverage')}</div><ul class="po-list small">${rows}</ul></div>
+        <div class="row po-group-actions">${action}${noteHtml(k)}</div>
+      </div>`;
+  }
+
   // ---- the owner's clicks -------------------------------------------------------------------------------
   async function fileSplit(ctx, msg, s, roadmap) {
     const key = splitKey(msg, s);
@@ -228,8 +256,43 @@
     }
   }
 
-  // A click in the conversation; true when it was a split's or an epic's.
+  // #670: the spec's issues filed (a preview in developer or simulated mode), then planned in the
+  // roadmap, one stage per issue in the spec's order, with the default workflow
+  async function fileSpecIssues(ctx, msg) {
+    const k = epicKey(msg, 'spec');
+    const simulated = devMode();
+    const count = msg.answer.spec.issues.length;
+    if (!simulated && !await confirmDialog(t('backlog_po_proposals.add_the_issues_to_the_roadmap'), msg.answer.spec.issues.map((i) => i.title).join('\n'), t('backlog_po_proposals.create'))) return;
+    inFlight.set(k, 'roadmap');
+    notes.delete(k);
+    ctx.render();
+    try {
+      const out = await api.fileProductOwnerSpec(ctx.projectId, msg.ts, simulated);
+      ctx.setMessages(out.messages);
+      if (out.backlog) window.BacklogActions.showData(out.backlog);
+      if (out.syncError) notes.set(k, { text: t('backlog_po_proposals.filed_but_the_sync_failed', { error: out.syncError }), error: true });
+      if (out.preview) notes.set(k, { text: t('backlog_po_proposals.preview_issues_planned_in_roadmap') });
+      const workflow = DefaultWorkflow.current().file;
+      const stages = (out.issues || []).filter((i) => i.number).slice(0, count).map((i) => ({
+        name: i.title, note: '', items: [{ workflow, issues: [i.number], inputs: {}, mock: !!state.simulationOnly, reason: `From the spec ${msg.answer.spec.item}.`, origin: msg.ts }],
+      }));
+      if (stages.length) window.BacklogActions.showRoadmap(await api.proposeRoadmap(ctx.projectId, { stages }, false));
+    } catch (e) {
+      notes.set(k, { text: errMsg(e), error: true });
+    } finally {
+      inFlight.delete(k);
+      ctx.render();
+    }
+  }
+
+  // A click in the conversation; true when it was a split's, an epic's or a spec's.
   function onClick(e, ctx) {
+    const specBtn = e.target.closest('[data-spec-act]');
+    if (specBtn?.dataset.specAct) {
+      const specMsg = ctx.messages[Number(specBtn.closest('[data-msg]')?.dataset.msg)];
+      if (specMsg?.answer?.spec && specMsg.answer.spec.coverage?.ok !== false) fileSpecIssues(ctx, specMsg);
+      return true;
+    }
     const b = e.target.closest('[data-split-act], [data-split-parent], [data-split-merge], [data-epic-act]');
     if (!b) return false;
     const msg = ctx.messages[Number(b.closest('[data-msg]')?.dataset.msg)];
@@ -244,7 +307,8 @@
     if (act === 'edit') edits.set(key, clone(current(msg, s)));
     else if (act === 'cancel') edits.delete(key);
     else if (act === 'save' && edit) {
-      const children = edit.children.filter((c) => c.tasks.length && c.title.trim());
+      // #670: a moved task takes its mockup along: the engine gives each child the mockups of its tasks
+      const children = edit.children.filter((c) => c.tasks.length && c.title.trim()).map(({ mockups, ...c }) => c);
       if (children.length < 2) { notes.set(key, { text: 'A split keeps at least two children with tasks and a title.', error: true }); edits.delete(key); } else {
         saved.set(key, { ...edit, children });
         edits.delete(key);
@@ -284,5 +348,11 @@
     return true;
   }
 
-  window.BacklogPoProposals = { epicsHtml, onClick, onInput, splitsHtml };
+  window.BacklogPoProposals = {
+    epicsHtml,
+    onClick,
+    onInput,
+    specHtml,
+    splitsHtml,
+  };
 })();

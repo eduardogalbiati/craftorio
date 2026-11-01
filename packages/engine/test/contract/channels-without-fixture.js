@@ -104,6 +104,7 @@ module.exports = [
   { channel: 'po:discard', reason: ANSWER },
   { channel: 'po:epic', reason: ANSWER },
   { channel: 'po:file', reason: ANSWER },
+  { channel: 'po:file-spec', reason: ANSWER },
   { channel: 'po:request', reason: AGENT },
   { channel: 'po:requestAct', reason: ANSWER },
   { channel: 'po:split', reason: ANSWER },

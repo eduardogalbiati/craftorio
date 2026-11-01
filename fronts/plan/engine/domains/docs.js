@@ -1,8 +1,9 @@
 // Write doc (#647, docs/work/write-doc/spec.md R1, R3, R5, R11, R13): the Documents service, the
 // only code that writes a work item's stage documents (the write-doc agents only read). Plain
 // synchronous functions, the repository folder first; git runs in that folder with its own config.
-// - listItems(dir) → [{ item, stage, docs: [{ doc, file, status, translation }] }] from the front
-//   matter of docs/work/<item>/intent.md and spec.md (stage: the spec's over the intent's); [] without docs/work;
+// - listItems(dir) → [{ item, title?, stage, docs: [{ doc, file, status, translation }] }] from the front
+//   matter of docs/work/<item>/intent.md and spec.md (stage: the spec's over the intent's; title: the
+//   latest document's heading, #670); [] without docs/work;
 // - readDoc(dir, { item, doc }) → { item, doc, status, source: { file, markdown }, translation: { file, markdown } | null };
 // - createDoc(dir, { item, doc, title, date }) → { item, doc, commit }: the playbook's skeleton of the
 //   document and its pt-BR translation (the sections of DocModel's lint, one line each to write), one
@@ -118,14 +119,18 @@ function listItems(dir) {
     if (!entry.isDirectory() || !ITEM.test(entry.name)) continue;
     const docs = [];
     let stage = null;
+    let title = null;
     for (const doc of DOCS) {
       const text = readText(path.join(work, entry.name, `${doc}.md`));
       if (text === null) continue;
       const fm = DocModel.frontMatter(text);
       docs.push({ doc, file: `docs/work/${entry.name}/${doc}.md`, status: fm.status || 'draft', translation: fm.translation || null });
       stage = fm.stage || doc;
+      // #670: the item's title, what the owner named it: the document's heading without "Intent: " / "Spec: "
+      const heading = /^# (?:(?:Intent|Spec): )?(.+)$/m.exec(text);
+      if (heading) title = heading[1].trim();
     }
-    if (docs.length) items.push({ item: entry.name, stage, docs });
+    if (docs.length) items.push({ item: entry.name, ...(title ? { title } : {}), stage, docs });
   }
   return items.sort((a, b) => a.item.localeCompare(b.item));
 }

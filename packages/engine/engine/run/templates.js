@@ -20,6 +20,7 @@ const gateSummary = require('../gate-summary');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
 const testIds = require('../test-ids');
+const uiReviewChecks = require('../ui-review-checks');
 
 // ---------------------------------------------------------------------------
 // Templates and expressions
@@ -175,6 +176,11 @@ tpl.addFilter('ui_files', (files, folders) => {
   const dirs = [].concat(folders ?? testIds.DEFAULT_RENDERER).map(norm).filter(Boolean);
   return [].concat(files ?? []).filter((f) => dirs.some((d) => norm(f) === d || norm(f).startsWith(`${d}/`)));
 });
+
+// The mockups an issue's text embeds or links (#670, packages/engine/engine/ui-review-checks.js):
+// [{ file, ref }]; [] for an issue without mockups, whose screens are reviewed as before.
+//   {% for m in inputs.task | mockups %}- {{ m.file }}: {{ m.ref }}{% endfor %}
+tpl.addFilter('mockups', (text) => uiReviewChecks.issueMockups(text));
 
 // The project's check command of a checkout (#404, packages/engine/engine/check-step.js): the given one (the
 // check_command input), else `npm run check` when its package.json has a `check` script; '' when

@@ -79,9 +79,11 @@ test('ai-development-local-hero (#151): a change with screens to capture takes i
   assert.equal(firstGoto(develop, developScope({ screenshots: [SCREEN] })), 'developer_screenshots');
 });
 
-test('ai-development-local-hero (#151): a change to src/renderer/ takes its screenshots after develop even when the developer listed no screen', () => {
+test('ai-development-local-hero (#151, #670): a change to src/renderer/ with no screen listed goes back to develop once, then takes its screenshots', () => {
   const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
-  assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['src/renderer/views/runs/runs.js'] })), 'developer_screenshots');
+  const scope = developScope({ screenshots: [], files: ['src/renderer/views/runs/runs.js'] });
+  assert.equal(firstGoto(develop, scope), 'develop');
+  assert.equal(firstGoto(develop, { ...scope, vars: { ui_screens_returned: 'yes' } }), 'developer_screenshots');
 });
 
 test('ai-development-local-hero (#151): a change with no UI skips the screenshots and goes straight to the review', () => {
@@ -95,12 +97,13 @@ test('ai-development-local-hero (#151): a change with no UI skips the screenshot
 const REPO_UI = ['packages/ui-kit/', 'fronts/', 'apps/desktop/renderer/', 'apps/web/renderer/'];
 const DEFAULTS = (wf) => Object.fromEntries(Object.entries(wf.inputs).filter(([, v]) => v && 'default' in v).map(([k, v]) => [k, v.default]));
 // the run's state at each step that routes a committed change (develop, testid_check, the two gates
-// answered "continue") and when code_review picks its agents; `inputs` overrides the workflow's defaults
+// answered "continue") and when code_review picks its agents; `inputs` overrides the workflow's defaults.
+// #670: develop was already sent back once for its missing screens (vars.ui_screens_returned)
 function uiScope(wf, { files, inputs = {}, output } = {}) {
   const develop = { committed: true, branch: 'feat', summary: 's', test_notes: 't', left_out: [], issues: [], files_changed: files, screenshots: [] };
   return {
     inputs: { ...DEFAULTS(wf), mode: 'auto', screenshots: 'changed', issues: [], check_command: '', base_branch: 'main', task: 't', ...inputs },
-    vars: {},
+    vars: { ui_screens_returned: 'yes' },
     steps: { develop: { output: develop } },
     output: output || develop,
     choice: 'continue',

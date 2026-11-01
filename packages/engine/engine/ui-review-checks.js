@@ -8,6 +8,8 @@
 //   axeFindings(results, { screen, changed })   axe's `{ violations }` → findings
 //   nativeControlFindings(html, { screen })     a bare <select>, date or datetime-local field → findings
 //   screenChecks({ modified, original, screen }) both checks of one screen, baselines from the original
+//   issueMockups(text)                           the mockups an issue embeds or links (#670), [{ file, ref }]
+//   mockupFindings(comparison, { screen, mockup }) the ui_reviewer's screenshot-vs-mockup differences (#670)
 //   checksPath(png), readChecks(png)             the `<name>.<side>.checks.json` the pass writes
 'use strict';
 
@@ -91,6 +93,43 @@ function screenChecks({ modified = {}, original = null, screen = '' } = {}) {
   ];
 }
 
+// #670: the file kinds that are mockups (any case): the images and HTML of a spec's `docs/work/<item>/`
+const MOCKUP_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.html'];
+const MOCKUP_FILE = new RegExp(`(?:${MOCKUP_EXTENSIONS.map((e) => `\\${e}`).join('|')})$`, 'i');
+const fileOf = (ref) => String(ref || '').split(/[?#]/)[0].split(/[\\/]/).pop();
+
+// #670: the mockups an issue's text embeds or links: `![mock-1.jpg](url)`, `[mock-1.jpg](url)` and
+// the spec's own files (`docs/work/<item>/mock-1.jpg`) → [{ file, ref }] (ref: the url or the
+// repository path), each file once; [] for an issue without mockups (reviewed as before)
+function issueMockups(text) {
+  const out = new Map();
+  const add = (file, ref) => { if (file && MOCKUP_FILE.test(file) && !out.has(file)) out.set(file, { file, ref }); };
+  const s = String(text || '');
+  for (const m of s.matchAll(/!?\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)) {
+    const alt = m[1].trim();
+    add(MOCKUP_FILE.test(alt) ? fileOf(alt) : fileOf(m[2]), m[2]);
+  }
+  for (const m of s.matchAll(/\bdocs\/work\/[\w.\/-]+/g)) add(fileOf(m[0]), m[0]);
+  return [...out.values()];
+}
+
+// #670: an issue's mockups are the specification of its screens. The ui_reviewer's comparison of a
+// screenshot with its mockup ({ differences: [{ element, problem }] }) → one blocking finding per
+// difference; no mockup (an issue without mockups) → none, the screen is reviewed as before
+function mockupFindings(comparison, { screen = '', mockup = null } = {}) {
+  if (!mockup || !comparison) return [];
+  return (comparison.differences || []).filter((d) => d && (d.element || d.problem)).map((d) => ({
+    element: String(d.element || ''),
+    problem: String(d.problem || ''),
+    convention: `mockup: ${mockup} (layout, icons, texts, controls, order, states)`,
+    screenshot: screen,
+    blocking: true,
+    rule: 'mockup',
+    source: 'mockup',
+    baseline: false,
+  }));
+}
+
 // `<name>.<side>.png` → `<name>.<side>.checks.json`, the checks the screenshot pass writes beside it
 const checksPath = (png) => String(png).replace(/\.png$/i, '') + '.checks.json';
 
@@ -106,6 +145,9 @@ module.exports = {
   AXE_RULES,
   axeFindings,
   checksPath,
+  issueMockups,
+  MOCKUP_EXTENSIONS,
+  mockupFindings,
   nativeControlFindings,
   readChecks,
   screenChecks,

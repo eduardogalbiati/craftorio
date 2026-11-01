@@ -8,6 +8,24 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-31** (#670, #669): a spec's mockups are the specification of its screens. The Product
+  Owner's plan and issue turns, when the question names a work item (`docs/work/<item>/`) that has
+  mockups (images or HTML, `po-mockups.js` `findMockups`), get them listed and must write every
+  screen task as "matches `mock-1.jpg`: layout, icons, texts, controls, order", embedded, with what
+  the phase does not do yet "visible and disabled, as in the mockup"; requirement numbers alone are
+  not accepted. A split gives each child the mockups of its tasks and refuses a child whose tasks
+  cite a mockup it lacks (`po-split.js`). Proposing issues from a spec (Documents › Create epic and
+  phase issues) shows the mockup coverage in the PO drawer: a mockup in scope with no issue keeps
+  the proposal off the roadmap ("mock-4.jpg has no issue"), the `## Later phases` ones are listed
+  as later. In ai-development-local-hero (both copies) the developer copies the issue's mockups to
+  `evidence/mockups/`, looks once at its own screenshots next to them before the review, and the
+  UI Reviewer compares each screenshot with its mockup: every difference is a blocking finding
+  (`ui-review-checks.js` `mockupFindings`, rule `mockup`) that goes back to develop, in auto and
+  validated modes alike; an intended difference cites the issue's line. An issue without mockups is
+  reviewed as before. A change under the UI folders with no screen listed goes back to develop once
+  instead of skipping the capture. Why: #638-#644 shipped a wizard that did not look like its
+  approved mockups, and in auto mode nothing compared them before the merge.
+
 - **2026-10-31** (#647, #636, write doc phase 1): the stage documents of a work item
   (`docs/work/<item>/intent.md`, then `spec.md`, each with its `pt-BR` translation, the playbook's
   sections) are written in Plan & Design › Documents with one writer (`workflows/write-doc.yaml`, the
@@ -20,8 +38,8 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   only the changes not marked reviewed. The SDLC gates are the person's: Accept intent and Sign off
   spec change both front matters (status, approver from the repository's git identity, date) in one
   commit; after the sign-off, Create epic and phase issues and Start the Build wait for the owner's
-  click, nothing is filed or started by itself (in phase 1 they open the Backlog and the Roadmap; the
-  proposal from the spec is left for the next phase, listed in the plan). Why: each request stays
+  click, nothing is filed or started by itself (Create epic and phase issues asks the Product Owner
+  for the spec's issues and their mockup coverage since #670; Start the Build opens the Roadmap). Why: each request stays
   a change the person can read, review and undo on its own, and a stage only moves on when its owner
   signs it. Write & Review and AI
   Arena stay in the menu until phase 2. Checked simulated only. Spec and plan:
@@ -255,7 +273,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   belongs to the Product Owner; workflows, skills and runs belong to the Supervisor. The Oracle
   reads everything, diagnoses and proposes, but routes every change to the owning agent. Why: the
   Oracle's changes ended in its own history, made by an agent that does not hold that area's rules.
-- **2026-10-03** (#332, #222, #211, and #47 of 2026-09-29; options of #203, scenarios of #223):
+  (#332, #222, #211, 2026-10-03, and #47 of 2026-09-29; options of #203, scenarios of #223):
   tests are run and judged by the machine, never by a model. E2E tests stay on Playwright + BDD
   (`playwright-bdd`), run deterministically; an LLM only writes and repairs them. Which test
   failures are the run's (and which were already on the base) is decided by the orchestrator

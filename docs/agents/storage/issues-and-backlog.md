@@ -7,7 +7,17 @@ The git platform is the source of truth for issues (#168); who writes the backlo
 GitHub/GitLab own the issues; everything local is a read-only replica, and issue changes are
 never made locally nor flow back from local data to the platform. Only the explicit, previewed
 owner actions write to the platform (Save to issue, create, close, epics: `packages/engine/domains/backlog/backlog.js`,
-`packages/engine/domains/po/po-split.js`, `packages/engine/domains/backlog/epics.js`).
+`packages/engine/domains/po/po-split.js`, `packages/engine/domains/backlog/epics.js`,
+`packages/engine/domains/po/po-file-issues.js`).
+
+- Mockups (#670): an issue the Product Owner writes from a spec, plan or design doc with mockups
+  (`docs/work/<item>/`, `po-mockups.js`) names and embeds the mockup of each screen task
+  ("matches `mock-1.jpg`: layout, icons, texts, controls, order"), never requirement numbers
+  alone. A split's child carries the mockups of its tasks (`po-split.js` `normalizeSplit`,
+  `childBody`), and `checkSplit` refuses a child whose tasks cite a mockup it lacks. A proposal
+  from a spec (`answer.spec`, `po:file-spec` / `fileSpec`) lists every mockup and the issue that
+  covers it (`checkMockupCoverage`); one in scope with no issue blocks it, the `## Later phases`
+  ones are listed as later.
 
 - `backlog/<project>.json`: the sync cache (`syncedAt`, every issue with its PRs/MRs and epic),
   rewritten by each sync (`syncBacklog`); a save to an issue re-reads that one issue into it.
