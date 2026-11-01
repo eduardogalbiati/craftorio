@@ -325,7 +325,7 @@
       ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">${t('backlog_roadmap.agents')}${changed ? t('backlog_roadmap.changed_changed_for_this_run', { changed }) : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides, hideLegend: true })}</details>`
       : '';
     return `
-      <div class="rm-form" role="group" aria-label="${t('backlog_roadmap.edit_the_inputs_of_this_item')}"${WorkflowInputs.scopeAttrs({ mode })}>
+      <div class="rm-form" role="group" aria-label="${t('backlog_roadmap.edit_the_inputs_of_this_item')}"${WorkflowInputs.scopeAttrs(modeContext(x))}>
         <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
         ${agents}

@@ -214,7 +214,7 @@ test('#235 Plan mode shows a workflow select (data-testid="po-workflow") listing
   const html = d.region('po-workflow');
   assert.ok(html, 'a data-testid="po-workflow" select is rendered');
   const options = optionTags(html);
-  assert.deepEqual(options.map((o) => o.value).sort(), [AI_DEV, SW_DEV]);
+  assert.deepEqual(options.map((o) => o.value).sort(), [AI_DEV, SW_DEV].sort());
   for (const o of options) {
     assert.doesNotMatch(o.label, /\.ya?ml$/, `"${o.label}" is a display name, not a file`);
     assert.notEqual(o.label, o.value.replace(/\.yaml$/, ''), `"${o.label}" is a display name, not the slug`);

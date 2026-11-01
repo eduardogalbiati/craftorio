@@ -193,8 +193,8 @@ test('bundled workflows are seeded into the CLI workspace and the workspace copy
   const runs = fs.readdirSync(path.join(wsDir, 'runs'));
   assert.equal(runs.length, 1);
   const started = JSON.parse(fs.readFileSync(path.join(wsDir, 'runs', runs[0], 'events.jsonl'), 'utf8').split('\n')[0]);
-  assert.equal(started.file, 'software-development.yaml');
-  assert.ok(samePath(wfs.resolveWorkflow(started.file, [wfDir]).file, path.join(wfDir, 'software-development.yaml')));
+  assert.equal(started.file, 'feature.yaml');
+  assert.ok(samePath(wfs.resolveWorkflow(started.file, [wfDir]).file, path.join(wfDir, 'feature.yaml')));
 });
 
 test('the supervisor reads a run workflow from the workspace, falling back to the bundled copy', (t) => {

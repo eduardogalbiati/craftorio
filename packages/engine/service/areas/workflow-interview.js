@@ -86,6 +86,7 @@ async function simulatedProfile(project) {
     evidence: {
       team: { numbers: { authors: nAuthors, commits: Number(commits) || 0 }, commits: shas },
       merge: { numbers: { mergeCommits: nMerges }, commits: shas },
+      mode: { numbers: { authors: nAuthors, mergeCommits: nMerges }, commits: shas },
       release: { numbers: { tags: count(tags) }, commits: [] },
     },
     simulated: true,

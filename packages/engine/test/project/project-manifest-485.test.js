@@ -53,9 +53,10 @@ test('#485 parseManifest: a valid manifest gives its version, requires and workf
   assert.equal(own.description, 'Our own local flow');
 });
 
-test('#485 parseManifest: the four categories are intake, solo, team and release', () => {
+// #630: feature and fix join; solo and team stay so an old manifest still reads
+test('#485 parseManifest: the categories are intake, feature, fix, release and the old solo and team', () => {
   const { CATEGORIES } = load();
-  assert.deepEqual([...CATEGORIES].sort(), ['intake', 'release', 'solo', 'team']);
+  assert.deepEqual([...CATEGORIES].sort(), ['feature', 'fix', 'intake', 'release', 'solo', 'team']);
 });
 
 test('#485 parseManifest: invalid YAML is a reported error and declares no workflows', () => {

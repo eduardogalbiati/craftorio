@@ -231,6 +231,16 @@ steps:
   - id: pr_review
     fragment: pr-pipeline
 
+groups:
+  - name: Develop
+    steps: [reproduce, develop]
+  - name: Review
+    steps: [code_review]
+  - name: Validate
+    steps: [suite, verify_change, verify_failed]
+  - name: Merge
+    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_review]
+
 outputs:
   branch:
     value: "{{ steps.develop.output.branch }}"

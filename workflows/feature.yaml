@@ -647,14 +647,16 @@ agents:
       exists: the worktree is on it). Never fetch, pull or push.
 
 groups:
+  - name: Tests
+    steps: [acceptance_tests, red_check]
   - name: Develop
-    steps: [warm_up, develop,testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
+    steps: [warm_up, develop, rule_check, testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, suite, e2e, heal, test_failed, build, build_failed, evidence, verify_change, verify_failed]
+    steps: [test, suite, e2e, heal, check_failed, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Merge
-    steps: [resolve_merge, merge_blocked]
+    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_review]
 
 # -----------------------------------------------------------------------------
 steps:
