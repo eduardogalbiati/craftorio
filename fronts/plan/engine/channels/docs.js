@@ -10,18 +10,9 @@ const path = require('path');
 const docs = require('../domains/docs');
 const projects = require('@multiagent/engine/domains/project/projects');
 const { clientError, gitOut } = require('@multiagent/engine/service/common');
-const {
-  args,
-  INT,
-  listOf,
-  nullable,
-  OBJECT,
-  PROJECT_ID,
-  RUN_ID,
-  shape,
-  STRING,
-  text,
-} = require('@multiagent/engine/service/schemas');
+const schemas = require('@multiagent/engine/service/schemas');
+
+const { args, INT, listOf, nullable, OBJECT, PROJECT_ID, RUN_ID, shape, STRING, text } = schemas;
 
 const ITEM = text(100);
 const DOC = text(20);

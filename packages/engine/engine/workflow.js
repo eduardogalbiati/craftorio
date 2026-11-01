@@ -121,6 +121,9 @@ const testedFailures = (steps) => Object.entries(steps)
 // #396: summary.json's { tested, tested_failures } of a run that went on without a green suite (a
 // transition's `set: { tested: "not green" }`: the owner's policy or Continue at the gate), else {}
 const testedSummary = (ctx) => (ctx.vars?.tested ? { tested: ctx.vars.tested, tested_failures: testedFailures(ctx.steps) } : {});
+// the gates the supervisor on call tries first: an escalation, or one an exhausted loop leads to;
+// never a human_edit gate (#647), which only the person ends
+const supervisedGate = (step, exhausted) => step.type === 'human_approval' && (step.kind === 'escalation' || !!exhausted);
 
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
@@ -556,8 +559,7 @@ class WorkflowRun extends EventEmitter {
       // solve the problem before the person is asked; when it cannot, the gate opens with its
       // diagnosis. A decision gate stays the person's: the supervisor may only send the run back.
       // A human_edit gate (#647) is the person's alone: their requests go to its agent (requestEdit).
-      const supervised = step.type === 'human_approval' && (step.kind === 'escalation' || exhausted);
-      const oc = supervised ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
+      const oc = supervisedGate(step, exhausted) ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
       if (oc?.goto) { exhausted?.refund(); return oc.goto; }
       const routed = oc?.route !== undefined;
       const gate = routed ? { answer: oc.route, feedback: '' } : await this.openGate(step, t0, oc?.diagnosis);
