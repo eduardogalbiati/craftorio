@@ -391,3 +391,39 @@ Then('the Inbox lists the idea {string}', async ({ e2e }, title) => {
   const cards = e2e.window.getByTestId('inbox-list').getByTestId('inbox-card');
   await expect(cards.filter({ hasText: title })).toHaveCount(1, { timeout: LOAD_TIMEOUT });
 });
+
+// #630: step 3 "Analysis & workflows" (docs/work/first-project-onboarding/images/mock-4.jpg) shows the
+// ways of working profile read from the git history and the suggested workflows.
+// - data-testid="wizard-profile": the ways of working profile;
+// - data-testid="wizard-workflow": one row per suggested workflow, data-kind="feature|fix|release|ci",
+//   in that order; inside it wizard-workflow-reason (the "Why: ..." text) and wizard-workflow-select
+//   (an enabled selector to change the workflow).
+const workflowRows = (page) => wizard(page).getByTestId('wizard-workflow');
+
+Then('the wizard suggests the workflows {string}, {string}, {string} and {string}', async ({ e2e }, a, b, c, d) => {
+  const rows = workflowRows(e2e.window);
+  await expect(rows).toHaveCount(4, { timeout: IMPORT_TIMEOUT });
+  const kinds = await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-kind')));
+  expect(kinds).toEqual([a, b, c, d]);
+});
+
+Then('each suggested workflow shows why it is suggested', async ({ e2e }) => {
+  const rows = workflowRows(e2e.window);
+  const count = await rows.count();
+  expect(count, 'suggested workflows').toBeGreaterThan(0);
+  const reasons = wizard(e2e.window).getByTestId('wizard-workflow-reason');
+  await expect(reasons).toHaveCount(count);
+  for (let i = 0; i < count; i++) {
+    await expect(rows.nth(i).getByTestId('wizard-workflow-reason'), `the reason of workflow ${i + 1}`).toHaveText(/\S/);
+  }
+});
+
+Then('I can change the suggested {string} workflow', async ({ e2e }, kind) => {
+  const row = wizard(e2e.window).locator(`[data-testid="wizard-workflow"][data-kind="${kind}"]`);
+  await expect(row).toHaveCount(1);
+  await expect(row.getByTestId('wizard-workflow-select'), `the selector of the "${kind}" workflow`).toBeEnabled();
+});
+
+Then('the wizard shows the ways of working profile', async ({ e2e }) => {
+  await expect(wizard(e2e.window).getByTestId('wizard-profile')).toBeVisible({ timeout: IMPORT_TIMEOUT });
+});

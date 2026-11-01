@@ -407,19 +407,6 @@ test('#669 step 3: the "Suggested workflows" column is shown', { timeout: 20000 
   assert.equal(headings(wizardMarkup(app)).includes('Suggested workflows'), true, `the headings: ${JSON.stringify(headings(wizardMarkup(app)))}`);
 });
 
-// phase 1 does not choose the workflows: each row says so and offers no enabled control
-test('#669 step 3: each suggested workflow reads "Chosen in a later version" and nothing in it can be changed', { timeout: 20000 }, async () => {
-  const app = await atAnalysis();
-  const rows = H.findAll(wizardMarkup(app), (e) => e.name === 'li' && /\bwizard-workflow\b/.test(e.attrs.class || ''));
-  assert.equal(rows.length > 0, true, 'the workflow rows (li.wizard-workflow)');
-  for (const row of rows) {
-    const text = H.visibleText(row.inner);
-    assert.match(text, /Chosen in a later version/, `the row "${text}"`);
-    const enabled = H.findAll(row.inner, (e) => ['select', 'button', 'input'].includes(e.name) && !isDisabled(e)).map((e) => e.name);
-    assert.deepEqual(enabled, [], `no enabled control in the row "${text}"`);
-  }
-});
-
 test('#669 step 3: the footer holds Back and "Analyze and continue"', { timeout: 20000 }, async () => {
   const app = await atAnalysis();
   const foot = footer(app);

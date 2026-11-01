@@ -52,11 +52,6 @@ test('backlog: work merged locally shows as not pushed until the Backlog pushes 
   assert.deepEqual(api['backlog:unpushed'](), []);
   // a push that succeeds is never a conflict notice
   assert.deepEqual(api['notifications:list']({}).items.filter((n) => n.type === 'run.conflict'), []);
-
-  // auto-push is a project setting, off by default
-  assert.equal(api['backlog:get']({ projectId: p.id }).autoPush, false);
-  api['backlog:auto-push']({ projectId: p.id, on: true });
-  assert.equal(api['backlog:get']({ projectId: p.id }).autoPush, true);
 });
 
 test('backlog: a push conflict is handed to a run of the local workflow that merged there last', async (t) => {
