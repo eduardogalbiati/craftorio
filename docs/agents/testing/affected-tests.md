@@ -8,7 +8,16 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   `require` / `import` and lists the test files that import, directly or transitively, a file
   changed since the base (merge-base, uncommitted and untracked files included), plus the test
   files changed themselves. A changed file nothing imports (a workflow YAML, a renderer script a
-  test reads with `fs`) reaches the test files whose code names its path. A shared root
+  test reads with `fs`) reaches the test files whose code names its path. A test is also selected
+  when a path it reads from disk changes (#695, `packages/engine/engine/test-reads.js`), whatever
+  imports the changed file: the first argument of an `fs` read (`readFileSync`, `readdirSync`,
+  `existsSync`, …) given as a literal (relative to the repository root), a `path.join` of
+  `__dirname` (or a constant built from it) and literals, or a constant holding one. A read path
+  reaches the file at it and every file under it (a listed folder); a non-literal argument before a
+  literal stands for any folders (`path.join(ROOT, dir, 'views')` → `**/views`, so a screen folder
+  added under `fronts/plan/views/` selects `apps/desktop/test/view-folders.test.js`); a read that
+  cannot be resolved (a temp folder, an environment variable) adds nothing. A test that reads a
+  folder through a helper makes the read visible in its own code. A shared root
   (`package.json`, a lockfile, `scripts/test.js`) or a project without a JS/TS graph selects the
   whole suite. `node scripts/affected-tests.js --base main` prints the files and why each was
   chosen (`imports packages/engine/domains/roadmap/roadmap.js`); `--files` prints only the paths, for `npm test -- <files>`.

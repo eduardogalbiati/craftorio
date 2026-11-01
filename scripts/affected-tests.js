@@ -1,6 +1,7 @@
 // Affected tests (#212): prints the test files a change can break, from the import graph and the
 // files changed since a base (packages/engine/engine/affected-tests.js, no model). Each file comes with why it
-// was chosen ("imports packages/engine/domains/roadmap/roadmap.js"); a shared root (package.json, ...) or a project without a JS
+// was chosen ("imports packages/engine/domains/roadmap/roadmap.js", "reads fronts/plan/views/docs/docs.js"
+// for a path the test reads from disk, #695); a shared root (package.json, ...) or a project without a JS
 // graph prints "the whole suite". --json prints the whole selection; --files only the paths (one per
 // line, for `npm test -- <files>`).
 //   node scripts/affected-tests.js [--base main] [--root <dir>] [--json | --files]

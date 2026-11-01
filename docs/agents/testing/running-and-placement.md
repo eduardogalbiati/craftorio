@@ -27,6 +27,10 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   `test/` keeps the repository's own tests (scripts, docs, packaging, the test runner), the renderer's
   and the host's until phase 2's desktop package, and their helpers (`mini-dom.js`, …), required as
   `../<helper>`.
+- Tests never read live documents (#695): a document under `docs/work/` is edited by people and
+  docs PRs that run no test, so a test copies it into its `test/fixtures/` and reads the copy.
+  `npm run check`'s `test-fixtures` rule (`scripts/test-fixture-rule.js`) names each test file and
+  line that reads a path under `docs/work/`.
 - Node 24's test reporter is "spec", not TAP: look for `ℹ pass N` / `✖`, not `# pass`.
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
   plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +

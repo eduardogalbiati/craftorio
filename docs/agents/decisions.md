@@ -8,6 +8,14 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-01** (#695): tests never read live documents: a document under `docs/work/` is copied
+  into `test/fixtures/` and the test reads the copy (`npm run check`'s `test-fixtures` rule). A
+  test that reads files from disk runs when those files change: the affected-test selection counts
+  a test's resolved reads (a file, a listed folder) as its dependencies. The base check files one
+  issue per cause (the test file and its first red commit), listing every failing test, and
+  updates an open one instead of opening another. Why: on 2026-11-01 a docs PR moved the sections
+  of a spec two tests read, a new screen folder broke a test that lists them unselected, and the
+  base check filed 20 issues for those 2 causes.
 - **2026-10-31** (#670, #669): a spec's mockups are the specification of its screens. The Product
   Owner's plan and issue turns, when the question names a work item (`docs/work/<item>/`) that has
   mockups (images or HTML, `po-mockups.js` `findMockups`), get them listed and must write every
@@ -230,7 +238,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   the owner resumes a paused run (never the Night watch, the Oracle or the supervisor). Why: Stop cut
   the turn in progress and Pause on the roadmap let the runs in progress go on, so updating the app,
   the CLIs or the issues meant waiting for the runs or losing work.
-- **2026-10-13** (#360): analyses beyond the Architecture tab's fixed one are **analysis seeds**:
+  (#360, same day) Analyses beyond the Architecture tab's fixed one are **analysis seeds**:
   prompts adapted from Kent Beck's ToolSeeds (MIT), bundled in `seeds/<name>/seed.md` and seeded
   into the workspace like skills. The Oracle runs a seed read-only on any project, in one turn of its
   daily budget, after the cost estimate; the result (a self-contained HTML page and a JSON model,

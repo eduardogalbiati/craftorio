@@ -19,7 +19,8 @@ const { pageDirs, pageFile, viewsOf } = require('../../../scripts/source-tree');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const indexHtml = fs.readFileSync(pageFileOf('index.html'), 'utf8');
-const viewIds = pageDirs(ROOT).flatMap((dir) => viewsOf(ROOT, dir));
+// each layer's views/ folder is read here, so a screen folder added under one selects this test (#695)
+const viewIds = pageDirs(ROOT).flatMap((dir) => (fs.existsSync(path.join(ROOT, dir, 'views')) ? viewsOf(ROOT, dir) : []));
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('views/: all 23 screens have moved into their own folders (#260 added releases, #257 discovery, #647 docs)', () => {

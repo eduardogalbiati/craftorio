@@ -4,6 +4,10 @@
 //   Seen by a second run (or already tracked), it files one bug issue, then updates it. This is the
 //   one store of those failures: the engine records each run's (record only), the service files.
 //   A test red again after a green check reopens its issue and gets a fix item again.
+// - #695: one issue per cause, not per test: the failures of one report are grouped by test file and
+//   first red commit, each group files one issue (`Red on the base: <file> (19 tests)`, every test in
+//   its body) or comments on the one an entry of the group has (the newly red tests, last seen); the
+//   "Fix the base" item holds one issue per group.
 // - runBaseCheck: after a merge into the local base (and at once after a merge "not tested green"),
 //   the whole suite runs on a clean detached checkout of the base tip (<workspace>/worktrees/
 //   base-check-<project>), with no agent, in simulation (MULTIAGENT_SIMULATION_ONLY=1), one check at
@@ -59,47 +63,79 @@ const LOG_TAIL_LINES = 60;
 const short = (c) => String(c || '').slice(0, 12) || 'unknown';
 const stamp = (at) => String(at).replace(/[:.]/g, '-');
 
-function issueBody(entry, { commit, lastGreen, logFile, logText, runId }) {
+// #695: one issue per cause, the failures of one test file red since the same commit (no file: the test alone)
+const causeOf = (entry) => (entry.file ? `${normFile(entry.file)}\n${entry.first_red_commit || ''}` : `\n\n${entry.test}`);
+function groupByCause(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = causeOf(entry);
+    if (!groups.has(key)) groups.set(key, { file: entry.file ? normFile(entry.file) : '', entries: [] });
+    groups.get(key).entries.push(entry);
+  }
+  return [...groups.values()];
+}
+
+// `Red on the base: <file> (19 tests)`; one test: `<file> (<test>)`; no file: the test
+function groupTitle({ file, entries }) {
+  if (!file) return `Red on the base: ${entries[0].test}`;
+  return `Red on the base: ${file} (${entries.length > 1 ? `${entries.length} tests` : entries[0].test})`;
+}
+
+function issueBody({ file, entries }, { commit, lastGreen, logFile, logText, runId }) {
   const tail = String(logText || '').split(/\r?\n/).slice(-LOG_TAIL_LINES).join('\n').trim();
+  const [first] = entries;
+  const runs = [...new Set(entries.flatMap((e) => e.runs || []))];
+  const seen = entries.map((e) => e.first_seen).sort()[0];
+  const last = entries.map((e) => e.last_seen).sort().pop();
   return [
-    `The test \`${entry.test}\` in \`${entry.file || '(unknown file)'}\` fails on the base.`,
+    entries.length > 1
+      ? `${entries.length} tests in \`${file}\` fail on the base:`
+      : `The test \`${first.test}\` in \`${file || '(unknown file)'}\` fails on the base.`,
+    ...(entries.length > 1 ? ['', ...entries.map((e) => `- ${e.test}`)] : []),
     '',
     `- Last green commit: ${lastGreen ? short(lastGreen) : 'unknown (no green base check yet)'}`,
-    `- First red commit: ${short(entry.first_red_commit || commit)}`,
-    ...(commit && entry.first_red_commit && commit !== entry.first_red_commit ? [`- Still red at: ${short(commit)}`] : []),
-    `- First seen: ${entry.first_seen}; last seen: ${entry.last_seen}`,
-    `- Runs that counted it as pre-existing: ${entry.runs.length ? entry.runs.join(', ') : 'none yet'}`,
+    `- First red commit: ${short(first.first_red_commit || commit)}`,
+    ...(commit && first.first_red_commit && commit !== first.first_red_commit ? [`- Still red at: ${short(commit)}`] : []),
+    `- First seen: ${seen}; last seen: ${last}`,
+    `- Runs that counted it as pre-existing: ${runs.length ? runs.join(', ') : 'none yet'}`,
     ...(runId ? [`- Seen by run ${runId}`] : []),
-    ...(entry.reason ? ['', '```', entry.reason, '```'] : []),
+    ...(first.reason ? ['', '```', first.reason, '```'] : []),
     ...(logFile ? ['', `Log: ${logFile}`] : []),
     ...(tail ? ['', '```', tail, '```'] : []),
     '',
-    'Filed by the orchestrator (main stays green, #405).',
+    'Filed by the orchestrator (main stays green, #405; one issue per cause, #695).',
   ].join('\n');
 }
 
-// Files the entry's bug issue, or updates the one it has (a comment) → { url, action, test }
-async function fileIssue(ws, projectId, entry, { platform, repo, exec, ...ctx }) {
+// Files the group's bug issue, or updates the one an entry of it has (a comment naming the tests
+// new to it) → { url, number, action, test, title }; every entry of the group gets that issue
+async function fileIssue(ws, projectId, group, { platform, repo, exec, ...ctx }) {
   const p = issues.adapterOf(platform);
   const target = issues.cliTargetOrName(platform, repo);
   const at = new Date().toISOString();
   const dir = path.join(storeDir(ws), slug(projectId));
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${stamp(at)}-issue.md`);
-  const text = issueBody(entry, ctx);
+  const text = issueBody(group, ctx);
   fs.writeFileSync(file, text);
-  if (entry.issue?.number) {
-    const n = String(entry.issue.number);
+  const { entries } = group;
+  const title = groupTitle(group);
+  const test = group.file || entries[0].test;
+  const open = entries.find((e) => e.issue?.number)?.issue;
+  if (open) {
+    const n = String(open.number);
     // red again after a green check: the issue (closed with its fix, most likely) is reopened
-    const reopen = !!entry.reopen;
+    const reopen = entries.some((e) => e.reopen && e.issue?.number === open.number);
     if (reopen) {
       const r = p.issueReopenCommand(target, n);
       await Promise.resolve(exec(r.cli, r.args)).catch(() => { /* already open */ });
     }
-    const c = p.issueSaveCommand({ target, n, mode: 'comment', file, text: `${reopen ? 'Red again on the base.' : 'Still red on the base.'}\n\n${text}` });
+    const added = entries.filter((e) => e.issue?.number !== open.number).map((e) => e.test);
+    const head = `${reopen ? 'Red again on the base.' : 'Still red on the base.'} Last seen: ${at}.${added.length ? `\n\nNewly red: ${added.join('; ')}` : ''}`;
+    const c = p.issueSaveCommand({ target, n, mode: 'comment', file, text: `${head}\n\n${text}` });
     await exec(c.cli, c.args);
-    delete entry.reopen;
-    return { url: entry.issue.url, number: entry.issue.number, action: reopen ? 'reopened' : 'updated', test: entry.test };
+    for (const e of entries) { e.issue = open; delete e.reopen; }
+    return { url: open.url, number: open.number, action: reopen ? 'reopened' : 'updated', test, title };
   }
   // the bug label when the repository has it (GitLab creates a missing one itself)
   let labels = ['bug'];
@@ -107,18 +143,20 @@ async function fileIssue(ws, projectId, entry, { platform, repo, exec, ...ctx })
     const l = p.labelListCommand(target);
     labels = await Promise.resolve(exec(l.cli, l.args)).then((out) => (p.parseLabelNames(out).includes('bug') ? ['bug'] : []), () => []);
   }
-  const c = p.issueCreateCommand({ target, title: `Red on the base: ${entry.test}`.slice(0, 200), labels, file, text });
+  const c = p.issueCreateCommand({ target, title: title.slice(0, 200), labels, file, text });
   const url = String(await exec(c.cli, c.args) || '').match(/https?:\/\/\S+/)?.[0] || null;
   const number = Number(url?.match(/\/issues\/(\d+)/)?.[1]) || null;
-  entry.issue = url ? { url, number } : null;
-  return { url, number, action: 'created', test: entry.test };
+  for (const e of entries) e.issue = url ? { url, number } : null;
+  return { url, number, action: 'created', test, title };
 }
 
 // The fix item, mode auto, in a new stage before the roadmap's current one → the item or null.
 // #527: none for an issue a live run works on (liveRunForIssues); the item is marked source 'base-health'.
+// #695: one issue per group.
 function addFixItem(ws, projectId, filed, workflow, liveRunForIssues) {
   const list = filed.filter((x) => x.number && !liveRunForIssues?.([{ number: x.number }]))
-    .map((x) => ({ number: x.number, title: `Red on the base: ${x.test}`, url: x.url }));
+    .filter((x, i, all) => all.findIndex((y) => y.number === x.number) === i)
+    .map((x) => ({ number: x.number, title: x.title, url: x.url }));
   if (!list.length) return null;
   const stage = roadmaps.insertFrontStage(path.join(ws, 'backlog'), projectId, {
     name: 'Fix the base',
@@ -131,15 +169,15 @@ function addFixItem(ws, projectId, filed, workflow, liveRunForIssues) {
 // Whether `opts` can file issues (setting not off, a platform, a repository and a way to run its CLI)
 const canReport = (opts) => (opts.onRed || 'fix') !== 'off' && !!opts.exec && !!opts.platform && !!(opts.ghRepo || opts.repo) && !!issues.adapterOf(opts.platform);
 
-// Files (or updates) the issues of `entries` and, with onRed 'fix', a fix item for them (none when
-// the roadmap plans their issues already)
+// Files (or updates) the issues of `entries`, one per cause (#695), and, with onRed 'fix', a fix
+// item for them (none when the roadmap plans their issues already)
 async function report(ws, projectId, entries, opts) {
   const { onRed = 'fix' } = opts;
   const repo = opts.ghRepo || opts.repo;
   if (!entries.length || !canReport(opts)) return { issues: [], fixItem: null };
   const filed = [];
-  for (const entry of entries) {
-    try { filed.push(await fileIssue(ws, projectId, entry, { ...opts, repo })); } catch (e) { console.error(`base health: issue for ${entry.test}:`, e.message); }
+  for (const group of groupByCause(entries)) {
+    try { filed.push(await fileIssue(ws, projectId, group, { ...opts, repo })); } catch (e) { console.error(`base health: issue for ${group.file || group.entries[0].test}:`, e.message); }
   }
   const fixItem = onRed === 'fix' && filed.length ? addFixItem(ws, projectId, filed, opts.workflow, opts.liveRunForIssues) : null;
   return { issues: filed.map(({ url, action, test }) => ({ url, action, test })), fixItem };

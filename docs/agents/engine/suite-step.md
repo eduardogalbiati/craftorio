@@ -53,8 +53,12 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   sighting in the store (`flaky: [{ test, file, commit, at }]`), nothing filed or reopened; when
   every failure was green on the re-run the check is `green` (`lastGreen` unchanged). A second
   round that throws, times out or does not start counts as red for its tests; a failure without a
-  file is filed after the first round. A red test files (or updates) its issue with the commit range (the last
-  green check, the first red commit) and the log; a test red again after a green check reopens its
+  file is filed after the first round. The red tests file (or update) one issue per cause (#695):
+  the failures of one test file red since the same first red commit are one group, titled by the
+  file (`Red on the base: test/doc-editor-646.test.js (19 tests)`) and listing every test, with the
+  commit range (the last green check, the first red commit) and the log; a group whose entry has an
+  issue comments on it (the newly red tests, last seen) instead of opening another, and the "Fix
+  the base" item holds one issue per group. A test red again after a green check reopens its
   issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
   adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`;
   none while the roadmap plans that issue already, nor for an issue a live run works on, #527; the

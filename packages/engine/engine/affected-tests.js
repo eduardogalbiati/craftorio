@@ -6,6 +6,10 @@
 // code imports (a workflow YAML, a renderer script the tests read with fs) reaches the test files
 // whose code (not comments) names its path (`'views', 'run', 'run.js'`, `views/run/run.js`, or a
 // basename unique in the project).
+// A test file is also affected when a path it reads from disk changes (#695, test-reads.js): a file
+// it reads, or a file under a folder it lists (`readdirSync(path.join(ROOT, dir, 'views'))` is
+// reached by `fronts/plan/views/docs/docs.js`), whether or not other files import the changed one;
+// a read that cannot be resolved adds nothing.
 // A change to a shared root (package.json, a lockfile, the suite's runner scripts/test.js) selects
 // the whole suite (`mode: 'all'`), and so does a project without a JS/TS graph (other languages).
 // Slow tests (a test/slow/ folder or a `*.slow.test.js` name: whole simulated runs) never join the
@@ -21,6 +25,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { readPattern, readsOf } = require('./test-reads');
 
 const CODE = /\.(c|m)?[jt]sx?$/;
 const TEST = /\.(test|spec)\.(c|m)?[jt]sx?$/;
@@ -114,8 +119,20 @@ function names(text, file, uniqueBase) {
   return uniqueBase && new RegExp(`['"\`/]${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"\`]`).test(text);
 }
 
+// #695: the paths the test files read from disk → [{ re (matches a file at or under it), test }]
+function testReads(texts) {
+  const out = [];
+  for (const [f, text] of texts) {
+    if (!isTest(f)) continue;
+    for (const p of new Set(readsOf(f, text).map((r) => r.path))) out.push({ re: readPattern(p), test: f });
+  }
+  return out;
+}
+const readersOf = (graph, file) => new Set(graph.reads.filter((r) => r.test !== file && r.re.test(file)).map((r) => r.test));
+
 // The project's import graph: { files, code (its JS/TS files), texts (code without comments),
-// importers (file → the files that import it), baseCount (basename → how many files have it) }.
+// importers (file → the files that import it), baseCount (basename → how many files have it),
+// reads (the paths test files read, #695) }.
 // extra: files to know besides the project's (changed files git does not list yet).
 function importGraph(root, files, extra = []) {
   const code = files.filter((f) => CODE.test(f) && !/(^|\/)node_modules\//.test(f));
@@ -131,10 +148,10 @@ function importGraph(root, files, extra = []) {
   }
   const baseCount = new Map();
   for (const f of known) { const b = f.split('/').pop(); baseCount.set(b, (baseCount.get(b) || 0) + 1); }
-  return { files, code, known, texts, importers, baseCount, packages };
+  return { files, code, known, texts, importers, baseCount, packages, reads: testReads(texts) };
 }
 
-// Breadth-first from `seeds` through the files that import them → Map(file → { seed, via, named });
+// Breadth-first from `seeds` through the files that import them → Map(file → { seed, via, named, read });
 // each reached file keeps the seed it came from.
 function reach(graph, seeds) {
   const { texts, importers, baseCount } = graph;
@@ -144,23 +161,29 @@ function reach(graph, seeds) {
   while (queue.length) {
     const f = queue.shift();
     let next = importers.get(f) || new Set();
+    const isSeed = f === from.get(f).seed;
     // a seed nothing imports: the test files that name its path (only tests: a module that
     // names README.md may read another project's)
-    if (!next.size && f === from.get(f).seed) {
+    if (!next.size && isSeed) {
       const unique = baseCount.get(f.split('/').pop()) === 1;
       next = new Set([...texts.keys()].filter((g) => g !== f && isTest(g) && names(texts.get(g), f, unique)));
     }
+    // #695: a seed is also reached by the tests that read it (or list a folder holding it)
+    const readers = isSeed ? readersOf(graph, f) : new Set();
+    if (readers.size) next = new Set([...next, ...readers]);
     for (const g of next) {
       if (from.has(g)) continue;
       const { seed, via, named } = from.get(f);
-      from.set(g, { seed, via: via || (f === seed ? null : f), named: named || !importers.get(f)?.has(g) });
+      const imported = importers.get(f)?.has(g);
+      from.set(g, { seed, via: via || (f === seed ? null : f), named: named || !imported, read: !imported && readers.has(g) });
       queue.push(g);
     }
   }
   return from;
 }
 
-const reasonOf = (r, f) => (r.seed === f ? 'changed' : `${r.named ? 'names' : 'imports'} ${r.seed}${r.via ? ` (through ${r.via})` : ''}`);
+const verbOf = (r) => (r.read ? 'reads' : r.named ? 'names' : 'imports');
+const reasonOf = (r, f) => (r.seed === f ? 'changed' : `${verbOf(r)} ${r.seed}${r.via ? ` (through ${r.via})` : ''}`);
 
 // root: the project folder (a git checkout); base: the ref to compare with; changed: the changed
 // files when already known (else from git).
