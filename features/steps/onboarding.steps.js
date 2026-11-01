@@ -207,6 +207,84 @@ Then('the project wizard is not shown', async ({ e2e }) => {
   await expect(wizard(e2e.window)).toBeHidden();
 });
 
+// ---- #669: step 1 as in docs/work/first-project-onboarding/images/mock-1.jpg -----------------------------
+// - the title is a heading of the wizard, the intro line its own text;
+// - data-testid="wizard-steps": the numbered steps, each a data-testid="wizard-step-pill" reading its
+//   number then its label ("1 Start"), the current one aria-current="step";
+// - each card of step 1 (wizard-source-import / wizard-source-new) holds a data-testid="wizard-card-icon"
+//   and its points as list items; Create new project is disabled (or aria-disabled);
+// - data-testid="wizard-other-sources": "Other sources:" and its links (or buttons) named by the source;
+// - data-testid="wizard-footer": wizard-cancel (Cancel, left) and wizard-next (Next, right).
+
+const sourceCard = (page, title) => wizard(page).locator('[data-testid^="wizard-source-"]').filter({ hasText: title });
+const otherSources = (page) => wizard(page).getByTestId('wizard-other-sources');
+const otherSource = (page, name) => otherSources(page).getByRole('link', { name, exact: true })
+  .or(otherSources(page).getByRole('button', { name, exact: true }));
+const footer = (page) => wizard(page).getByTestId('wizard-footer');
+
+Then("the wizard's title reads {string}", async ({ e2e }, title) => {
+  await expect(wizard(e2e.window).getByRole('heading', { name: title, exact: true })).toBeVisible();
+});
+
+Then('the wizard says {string}', async ({ e2e }, text) => {
+  await expect(wizard(e2e.window).getByText(text, { exact: true })).toBeVisible();
+});
+
+Then("the wizard's steps read {string}, {string}, {string} and {string}, numbered from 1, with {string} current", async ({ e2e }, a, b, c, d, current) => {
+  const pills = wizard(e2e.window).getByTestId('wizard-steps').getByTestId('wizard-step-pill');
+  const labels = [a, b, c, d];
+  await expect(pills).toHaveText(labels.map((label, i) => new RegExp(`^\\s*${i + 1}\\s*${escapeRe(label)}\\s*$`)));
+  for (const label of labels) {
+    const pill = pills.filter({ hasText: label });
+    if (label === current) await expect(pill, `the step "${label}" is current`).toHaveAttribute('aria-current', 'step');
+    else await expect(pill, `the step "${label}" is not current`).not.toHaveAttribute('aria-current', 'step');
+  }
+});
+
+Then("the wizard's {string} card has an icon and the points {string}, {string} and {string}", async ({ e2e }, title, a, b, c) => {
+  const card = sourceCard(e2e.window, title);
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId('wizard-card-icon')).toBeVisible();
+  await expect(card.getByRole('listitem')).toHaveText([a, b, c]);
+});
+
+Then("the wizard's {string} card cannot be chosen", async ({ e2e }, title) => {
+  await expect(sourceCard(e2e.window, title)).toBeDisabled();
+});
+
+Then('the wizard offers the other sources {string} and {string}', async ({ e2e }, a, b) => {
+  await expect(otherSources(e2e.window)).toContainText('Other sources');
+  for (const name of [a, b]) await expect(otherSource(e2e.window, name), `the other source "${name}"`).toBeVisible();
+});
+
+Then("the wizard's footer has {string} on the left and {string} on the right", async ({ e2e }, left, right) => {
+  const page = e2e.window;
+  const bar = footer(page);
+  const leftButton = bar.getByRole('button', { name: left, exact: true });
+  const rightButton = bar.getByRole('button', { name: right, exact: true });
+  await expect(leftButton).toBeVisible();
+  await expect(rightButton).toBeVisible();
+  const [box, l, r] = await Promise.all([bar.boundingBox(), leftButton.boundingBox(), rightButton.boundingBox()]);
+  const middle = box.x + box.width / 2;
+  expect(l.x + l.width, `"${left}" in the footer's left half`).toBeLessThanOrEqual(middle);
+  expect(r.x, `"${right}" in the footer's right half`).toBeGreaterThanOrEqual(middle);
+});
+
+When('I choose the other source {string} in the wizard', async ({ e2e }, name) => {
+  await otherSource(e2e.window, name).click();
+});
+
+Then("the wizard's git URL field is ready to type in", async ({ e2e }) => {
+  const field = wizard(e2e.window).getByTestId('wizard-repo');
+  await expect(field).toBeVisible();
+  await expect(field).toBeEditable();
+  await expect(field).toBeFocused();
+});
+
+When('I cancel the project wizard', async ({ e2e }) => {
+  await wizard(e2e.window).getByTestId('wizard-cancel').click();
+});
+
 // ---- #642: the review, Finish and the project page's "Next steps" card ----------------------------------
 
 // the simulated analysis: the free part, the project map and the refactor ranking, without a model call

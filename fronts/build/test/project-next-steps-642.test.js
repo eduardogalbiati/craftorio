@@ -6,8 +6,8 @@
 // - after Finish the project's page (state.view 'project', its Overview) shows data-testid="project-next-steps",
 //   rendered only while it is shown (no hidden copy: neither a `hidden` attribute nor the `hidden` class);
 // - one entry per card of R11 for this phase, data-testid="next-step-<id>": "refactors" (add chosen
-//   refactors to the roadmap), "idea" (capture the first idea), "cadence" (the refactor cadence); never
-//   "Set up release CI" nor "Investigate screenshots" (later phases);
+//   refactors to the roadmap), "idea" (capture the first idea), "cadence" (the refactor cadence); since
+//   #669 also "release-ci" and "screenshots", shown disabled (later phases, mock-7);
 // - each entry leads to its screen through its button (or the entry itself when it is the button):
 //   refactors → the Roadmap (state.view 'roadmap'), cadence → the project's Refactor tab
 //   (state.pv.tab 'refactor'), idea → the Inbox (state.view 'inbox');
@@ -152,14 +152,13 @@ async function clickIn(app, el) {
 
 // ---- the card ---------------------------------------------------------------------------------------
 
-test('#642 after Finish the project page shows the Next steps card with the refactors, idea and cadence entries, and no release CI nor screenshots', { timeout: 20000 }, async () => {
+// #669: the card follows mock-7, so the later phases' release CI and screenshots entries are shown too
+// (disabled, project-wizard-mockups-669.test.js).
+test('#642 after Finish the project page shows the Next steps card with the refactors, idea and cadence entries', { timeout: 20000 }, async () => {
   const app = await finished();
   assert.equal(String(app.state().view), 'project', 'the project page is open');
   assert.equal(card(app) === null, false, 'data-testid="project-next-steps" is shown');
-  assert.deepEqual(entryIds(app).sort(), ['cadence', 'idea', 'refactors']);
-  const words = H.visibleText(card(app).inner);
-  assert.equal(/release CI/i.test(words), false, `no "Set up release CI": ${words}`);
-  assert.equal(/screenshot/i.test(words), false, `no "Investigate screenshots": ${words}`);
+  assert.deepEqual(entryIds(app).sort(), ['cadence', 'idea', 'refactors', 'release-ci', 'screenshots']);
 });
 
 for (const [id, where, expected, want] of [

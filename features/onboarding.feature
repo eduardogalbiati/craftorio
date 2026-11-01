@@ -167,3 +167,37 @@ Feature: Bring a project in with a guided wizard
     Then the wizard is on its "analysis" step
     And the progress tray shows the project "missing-644" as failed with its reason and a Retry
     And the progress tray shows the project "sample-644" as ready
+
+  # #669: step 1 follows docs/work/first-project-onboarding/images/mock-1.jpg. Create new project stays
+  # disabled (coming soon); its card still shows its icon and its three points.
+  @issue-669
+  Scenario: The wizard's first step shows the numbered steps, both cards with their icon and points, the other sources and Cancel and Next
+    Given the app is open
+    When I open the project wizard
+    Then the wizard's title reads "Add a project"
+    And the wizard says "A project is the code the agents work on. You can change everything later."
+    And the wizard's steps read "Start", "Repository", "Analysis & workflows" and "Review", numbered from 1, with "Start" current
+    And the wizard's "Import a repository" card has an icon and the points "Cloned into your workspace in the background", "Its history shows how you work today" and "City and refactor backlog ready at the end"
+    And the wizard's "Create new project" card has an icon and the points "A git repository in your workspace", "Optionally a private GitHub repository" and "Three questions pick its workflows"
+    And the wizard's "Create new project" card cannot be chosen
+    And the wizard offers the other sources "Any git URL" and "A folder on this computer"
+    And the wizard's footer has "Cancel" on the left and "Next" on the right
+
+  @issue-669
+  Scenario: Any git URL leads to the Repository step's git URL field
+    Given the app is open
+    When I open the project wizard
+    And I choose the other source "Any git URL" in the wizard
+    Then the wizard is on its "repository" step
+    And the wizard's git URL field is ready to type in
+
+  # Cancel returns to the screen the wizard was opened from (Projects › New project).
+  @issue-669
+  Scenario: Cancel closes the wizard and returns to the screen it was opened from
+    Given the app is open
+    When I open "Projects" in the sidebar
+    And I choose New project in the Projects screen's header
+    Then the project wizard is open on its first step
+    When I cancel the project wizard
+    Then the project wizard is not shown
+    And the Projects screen lists the project "demo-app"
