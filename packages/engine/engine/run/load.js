@@ -456,6 +456,8 @@ function loadWorkflow(file) {
   // #286: problems that do not stop a run, shown on the workflow's screen (not enumerable, so
   // nothing that walks the workflow's keys sees it); a templated provider is checked per run
   Object.defineProperty(wf, 'warnings', { value: silentEfforts(wf), enumerable: false, writable: true });
+  // #631: the workflow's name (metadata.name) at the top too, not enumerable like warnings
+  if (!Object.hasOwn(wf, 'name')) Object.defineProperty(wf, 'name', { value: wf.metadata?.name, enumerable: false, writable: true });
   return wf;
 }
 

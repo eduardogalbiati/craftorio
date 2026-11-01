@@ -15,18 +15,24 @@
 //   variant; a saved setting, manifest or roadmap naming one still runs (workflows.js resolveWorkflow);
 //   VALIDATION / oldValidation(given) / aliasInputs(alias, given): an old `mode: auto | validated` is
 //   feature's `validation` (the engine's resolveInputs, the run starts, the renderer's toggle).
+// - #631: project-map and refactor-proposals now mean analyze-project.yaml (refactor-proposals is
+//   its `since` mode), test-batch means test-backfill.yaml, run-retrospective retrospective.yaml.
 // Browser: window.DefaultWorkflow; Node: module.exports (packages/engine/domains/po/product-owner.js).
 (function (root) {
   const LOCAL = 'feature.yaml';
   const REMOTE = 'feature.yaml';
 
-  // #630: old file name -> { file, inputs } (the inputs go under the run's own inputs)
+  // #630, #631: old file name -> { file, inputs } (the inputs go under the run's own inputs)
   const ALIASES = {
     'ai-development-local-hero.yaml': { file: 'feature.yaml', inputs: { mode: 'local' } },
     'e2e-release.yaml': { file: 'release.yaml', inputs: {} },
     'multi-model-review.yaml': { file: 'feature.yaml', inputs: { review: 'multi_model' } },
+    'project-map.yaml': { file: 'analyze-project.yaml', inputs: {} },
+    'refactor-proposals.yaml': { file: 'analyze-project.yaml', inputs: {} },
+    'run-retrospective.yaml': { file: 'retrospective.yaml', inputs: {} },
     'software-development-local-hero.yaml': { file: 'feature.yaml', inputs: { mode: 'local' } },
     'software-development.yaml': { file: 'feature.yaml', inputs: { mode: 'remote' } },
+    'test-batch.yaml': { file: 'test-backfill.yaml', inputs: {} },
   };
 
   /** #630: the alias of an old workflow name (with or without .yaml), or null. */

@@ -1,16 +1,20 @@
 # =============================================================================
-# Workflow: Project map (#372, #381): an agent writes the project's city plan, validated by rules,
-# then the Oracle analyses the project, as one run
+# Workflow: Analyze project (#631: project-map #372 #381 and refactor-proposals #378 in one workflow):
+# the project's city plan and the Oracle's architecture analysis, or, since a tag, the refactors worth
+# doing filed as `refactor` issues
 # -----------------------------------------------------------------------------
-#   facts ─► plan ─► validate ──ok──► save ──► analyze ──► end        (mode: auto, the default)
-#              ▲         │     └─ok, mode validated─► gate ──approved──► save
-#              │         │                                 └─rejected─► end (nothing saved)
-#              └─────────┘ not ok: back with the report, at most 2 times; then invalid (run failed)
+#   facts ─► plan ─► validate ──ok──► save ──► analyze ──► end        (no since: the map, mode auto)
+#     │        ▲         │     └─ok, mode validated─► gate ──approved──► save
+#     │        │         │                                 └─rejected─► end (nothing saved)
+#     │        └─────────┘ not ok: back with the report, at most 2 times; then invalid (run failed)
+#     │
+#     └─since set─► refactor_facts ─► refactor_analysis ─► propose ─► prioritize ──────────► file ─► end
+#                                                                        └─mode validated─► proposals_gate
 #
-# A deterministic scan cannot say what a project's areas are for; placing every file with a model is
-# costly and goes stale with the next commit. So the cartographer writes a short city plan (zones,
-# districts, landmarks and ports as path rules, #371's format) and the deterministic core applies the
-# rules on every draw: a new file lands in its district without another model call.
+# The map (no `since`). A deterministic scan cannot say what a project's areas are for; placing every
+# file with a model is costly and goes stale with the next commit. So the cartographer writes a short
+# city plan (zones, districts, landmarks and ports as path rules, #371's format) and the deterministic
+# core applies the rules on every draw: a new file lands in its district without another model call.
 #   1. facts (no agent): the tracked files counted by folder and by file-name pattern, the manifests,
 #      #371's folder city and its edges, and the plan saved now (project-map/facts.json in the run).
 #   2. plan (the cartographer, read-only on the project, project-map skill): answers the plan only;
@@ -24,20 +28,31 @@
 #   6. analyze (no agent, unless inputs.analyze is off, #381): the Oracle's architecture analysis of
 #      the project (its hotspots and co-changing files), saved as architecture:analyze saves it, in
 #      the Oracle's daily budget; a refusal fails the run with the reason (the plan stays saved).
+# The refactor proposals (`since` set, e.g. a pipeline after a release: its previous tag; the old
+# refactor-proposals workflow):
+#   7. refactor_facts (no agent): the Architecture facts (#356) at the default branch, the files
+#      changed since `since` and the analyst's prompt, focused on the Danger Zone and those files.
+#   8. refactor_analysis (the analyst, read-only, the one model call): #356's report.
+#   9. propose (no agent): the findings become Refactor tab proposals (#357); a finding that matches
+#      an open or dismissed proposal, or an open `refactor` issue, is dropped and named.
+#  10. prioritize (no agent besides the Product Owner's turn): #357's ranking, the top `limit` kept.
+#  11. proposals_gate (human, only with inputs.mode validated): the ranked proposals.
+#  12. file (no agent): #357's "File as issue" for each kept proposal (a simulation previews).
 # Started by "Analyze this project" in the project's Architecture tab (one click, its estimate next to
-# it, no gate), or by hand from Workflows, where validated mode asks before the plan is saved.
+# it, no gate), by the release-then-refactors pipeline (since: the release's previous tag), or by hand.
+# Outputs: `issues` (the filed issues, for a pipeline's product_owner or queue target) and `report`.
 # =============================================================================
 
 apiVersion: multiagent/v1
 kind: Workflow
 
 metadata:
-  name: project-map
-  version: 0.2.0
-  description: "The project's city plan and the Oracle's architecture analysis, as one run: the cartographer reads the repository (read-only) and writes zones, districts, landmarks and ports as path rules; the plan is validated by rules (95% of the files must match a district, back to the cartographer at most twice) and saved (validated mode shows it at a gate first); then the Oracle analyses the project's hotspots. A refresh keeps the ids and the names the owner saw."
-  tags: [architecture, map, read-only]
+  name: analyze-project
+  version: 0.3.0
+  description: "The project's architecture in one workflow: the cartographer reads the repository (read-only) and writes the city plan (zones, districts, landmarks and ports as path rules, validated by rules and saved), then the Oracle analyses the project's hotspots. With `since` (a tag or a commit, e.g. after a release) it suggests refactors instead: the analysis of the files changed since then and the Danger Zone (one real model call), the findings as Refactor tab proposals, ranked by the Product Owner, the top ones filed as `refactor` issues."
+  tags: [architecture, map, refactor, read-only]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
-  category: plan
+  category: monitor
 
 # -----------------------------------------------------------------------------
 inputs:
@@ -50,19 +65,29 @@ inputs:
     label: "Project"
     type: string
     default: ""
-    description: "The project whose plan is written (set by the Architecture tab); empty: the run's project, found from the repository."
+    description: "The project whose plan or proposals are written (set by the Architecture tab); empty: the run's project, found from the repository."
   mode:
     label: "Mode"
     type: string
     enum: [auto, validated]
     default: auto
     options: { auto: Automatic, validated: Validated }
-    description: "Automatic: the validated plan is saved and the analysis follows. Validated: the run shows the plan at a gate and saves it only when you approve."
+    description: "Automatic: the validated plan is saved (the analysis follows), the top proposals are filed. Validated: the run shows the plan, or the proposals, at a gate first."
   analyze:
     label: "Analyse with the Oracle"
     type: boolean
     default: true
     description: "After the plan is saved, the Oracle analyses the project's hotspots and writes its report (one Oracle turn in its daily budget)."
+  since:
+    label: "Since"
+    type: string
+    default: ""
+    description: "A tag or a commit: suggests refactors for the files changed since then (after a release: its previous tag) instead of writing the map. Empty: the map and the Oracle's analysis."
+  limit:
+    label: "Issues to file"
+    type: integer
+    default: 5
+    description: "With since: at most this many of the new proposals, the best ranked, are filed as issues."
 
 # -----------------------------------------------------------------------------
 providers:
@@ -112,6 +137,21 @@ agents:
       project-map skill. You are read-only: never edit, create or delete a file of the project;
       your answer is the plan, and the orchestrator writes it.
 
+  analyst:
+    display: Architecture analyst
+    color: "#3DB8FF"
+    provider: claude
+    # the workflow's defaults; a run can pick another model or effort per agent
+    model: claude-sonnet-5-5
+    effort: medium
+    session: ephemeral
+    # read-only on the project: its answer is the report, the orchestrator stores the proposals
+    capabilities: { tools: [read], web: false }
+    system_prompt: |
+      You are the architecture analyst: you read a repository and report the refactors worth doing,
+      in the Architecture tab's report format. You are read-only: never edit, create or delete a
+      file of the project; your answer is the report, and the orchestrator stores it.
+
 groups:
   - name: Facts
     steps: [facts]
@@ -121,15 +161,22 @@ groups:
     steps: [gate, save]
   - name: Analysis
     steps: [analyze]
+  - name: Proposals
+    steps: [refactor_facts, refactor_analysis, propose, prioritize]
+  - name: Issues
+    steps: [proposals_gate, file]
 
 # -----------------------------------------------------------------------------
 steps:
 
+  # #631: with `since`, the run suggests refactors (the old refactor-proposals) instead of the map
   - id: facts
     display: Facts
     type: project_map
     action: facts
     transitions:
+      - when: "inputs.since"
+        goto: refactor_facts
       - when: "true"
         goto: plan
 
@@ -258,6 +305,93 @@ steps:
     transitions:
       - when: "true"
         goto: end
+
+  # #378 (the old refactor-proposals): the facts since `since` and #356's analysis prompt
+  - id: refactor_facts
+    display: Refactor facts
+    type: refactor_proposals
+    action: facts
+    transitions:
+      - when: "true"
+        goto: refactor_analysis
+
+  # #356's analysis, its prompt and its report schema (named: the Architecture tab's own)
+  - id: refactor_analysis
+    display: Refactor analysis
+    agent: analyst
+    prompt: |
+      {{ steps.refactor_facts.output.prompt }}
+    output_schema: architecture_report
+    transitions:
+      - when: "true"
+        goto: propose
+
+  - id: propose
+    display: Proposals
+    type: refactor_proposals
+    action: propose
+    from: refactor_analysis
+    transitions:
+      - when: "true"
+        goto: prioritize
+
+  - id: prioritize
+    display: Ranking
+    type: refactor_proposals
+    action: prioritize
+    from: propose
+    transitions:
+      - when: "inputs.mode == 'validated'"
+        goto: proposals_gate
+      - when: "true"
+        goto: file
+
+  # validated mode only: the ranked proposals before anything is filed
+  - id: proposals_gate
+    display: Review the proposals
+    type: human_approval
+    summary: |
+      {{ steps.prioritize.output.ranked | length }} new refactor proposal(s), the top {{ steps.prioritize.output.kept | length }} to file; {{ steps.propose.output.dropped | length }} finding(s) dropped as known.
+    message: |
+      New refactor proposals, best first (the first {{ steps.prioritize.output.limit }} are filed):
+      {% for p in steps.prioritize.output.ranked %}- {{ p.rank }}. {{ p.title }} ({{ p.files | join(', ') }}): {{ p.reason }}
+      {% endfor %}
+      {% if steps.propose.output.dropped | length %}Dropped as known:
+      {% for d in steps.propose.output.dropped %}- {{ d.title }}: {{ d.reason }}
+      {% endfor %}{% endif %}
+      To drop one, dismiss it on the project's Refactor tab before you approve: the file step skips
+      dismissed proposals.
+    approve_label: File the issues
+    approve_help: "Files the kept proposals as `refactor` issues (the Refactor workflow named), skipping the ones dismissed since."
+    reject_label: File nothing
+    reject_help: "Ends the run; the proposals stay on the Refactor tab."
+    transitions:
+      - when: "approved"
+        goto: file
+      - when: "rejected"
+        goto: end
+        status: cancelled
+
+  - id: file
+    display: File issues
+    type: refactor_proposals
+    action: file
+    from: prioritize
+    transitions:
+      - when: "true"
+        goto: end
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): a pipeline's product_owner or queue target.
+outputs:
+  issues:
+    type: array
+    description: "The refactor issues filed (with since): number, url, title (a simulation: numbered previews); empty for a map run."
+    value: "{{ (steps.file.output.issues or []) | to_json }}"
+  report:
+    type: object
+    description: "With since: the analysis, #356's architecture report (summary, areas, findings)."
+    value: "{{ steps.refactor_analysis.output | to_json }}"
 
 # -----------------------------------------------------------------------------
 observability:

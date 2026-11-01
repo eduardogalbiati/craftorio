@@ -1,6 +1,6 @@
 // @ts-check
-// `type: refactor_proposals` (#378, workflows/refactor-proposals.yaml): the Refactor proposals
-// workflow's machine steps (packages/engine/domains/refactor/refactor-proposals-run.js does the work). `action` says which:
+// `type: refactor_proposals` (#378; #631: workflows/analyze-project.yaml with `since`): the refactor
+// proposals' machine steps (packages/engine/domains/refactor/refactor-proposals-run.js does the work). `action` says which:
 // - facts: the Architecture facts at the default branch, the files changed since the input `since`
 //   and the analyst's prompt (#356's, focused on the Danger Zone and the changed files);
 // - propose: the `from` step's report (#356's format) saved in the Architecture tab's history with
@@ -10,7 +10,8 @@
 //   the Product Owner from the run's `refactorPriorityOptions` option, the service's), the top
 //   `inputs.limit` of the `from` step's new proposals kept;
 // - file: the `from` step's kept proposals filed as `refactor` issues (a simulation previews them).
-// The project: the run's projectId (or the input project_id); its folder: the input project_path;
+// The project: the run's projectId (or the input project_id); its folder: the input repo_path
+// (#631; project_path, the old refactor-proposals input, still read);
 // the stores: <workspace>/refactor, architecture and backlog (the workspace: the runs folder's parent).
 
 'use strict';
@@ -22,8 +23,8 @@ const methods = {
   // where the step works: { folder, wsRoot, projectId }
   refactorProposalsPlace(step) {
     const projectId = this.projectId || this.ctx.inputs?.project_id || null;
-    const folder = this.ctx.inputs?.project_path || null;
-    if (!projectId || !folder) throw new Error(`Step "${step.id}": refactor proposals need the project (the run's project, or the input project_id) and its folder (the input project_path).`);
+    const folder = this.ctx.inputs?.repo_path || this.ctx.inputs?.project_path || null;
+    if (!projectId || !folder) throw new Error(`Step "${step.id}": refactor proposals need the project (the run's project, or the input project_id) and its folder (the input repo_path).`);
     return { folder, wsRoot: path.dirname(path.dirname(this.runDir)), projectId };
   },
 

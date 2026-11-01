@@ -1,5 +1,5 @@
 # =============================================================================
-# Workflow: Run Retrospective
+# Workflow: Retrospective (#631: the old run-retrospective, still its alias)
 # -----------------------------------------------------------------------------
 #   analyze ──► end
 #
@@ -14,9 +14,9 @@ apiVersion: multiagent/v1
 kind: Workflow
 
 metadata:
-  name: run-retrospective
-  version: 0.4.0
-  description: Analyzes a finished run's logs and proposes evidence-backed improvements to skills and workflows.
+  name: retrospective
+  version: 0.5.0
+  description: Analyzes a finished run's logs and proposes evidence-backed improvements to skills and workflows. feature.yaml's "Retrospective after" option chains it on the run.
   tags: [retro, observability, skills]
   category: monitor
 

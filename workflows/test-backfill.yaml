@@ -1,5 +1,6 @@
 # =============================================================================
-# Workflow: Test batch (#203): write features first, test them later, all together
+# Workflow: Test backfill (#203; #631: the old test-batch, still its alias): write features first,
+# test them later, all together
 # -----------------------------------------------------------------------------
 #   test ──► suite ──(green, tests only)──merge: local──► end  (records the commit as the last green batch)
 #    ▲  │      │
@@ -9,13 +10,14 @@
 #    │  └──(a test fails because of the code)──► developer (delegation) ──► test
 #    └──────────────────────────────────────────────────────────────────┘
 #
-# For runs made with `unit_tests: off` / `run_existing` or `e2e_tests: off` (software-development,
-# software-development-local-hero): this workflow writes the tests they skipped, for a range of
+# For runs made with `unit_tests: off` / `run_existing` or `e2e_tests: off` (feature, fix): this
+# workflow writes the tests they skipped, for a range of
 # local commits, in ONE test writer session, then the orchestrator runs the project's whole suite
 # ONCE per round (step suite, no agent, #177).
 # 1. test:   in its own worktree of the LOCAL base, the test writer lists what to cover: the
 #            commits since `since` (default: the last green test batch, the local ref
-#            `refs/multiagent/test-batch-last-green`; none yet: the last 20 commits) or, when the
+#            `refs/multiagent/test-batch-last-green`, its name kept by #631 so the last green
+#            batch survives the rename; none yet: the last 20 commits) or, when the
 #            run has issues (Backlog, roadmap item), the commits that close them. It writes the
 #            missing unit tests (and the E2E scenarios when `e2e_tests` is on) on the branch
 #            `test-batch-<run_id>`, running only focused tests.
@@ -34,8 +36,8 @@ apiVersion: multiagent/v1
 kind: Workflow
 
 metadata:
-  name: test-batch
-  version: 0.1.0
+  name: test-backfill
+  version: 0.2.0
   description: Writes the missing tests for the work merged locally since the last green batch (or for the given issues) in one test writer session, runs the whole suite once per round without an agent, and merges the tests into the local base. Never pushes.
   tags: [test, batch, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).

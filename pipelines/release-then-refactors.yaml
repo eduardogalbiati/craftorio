@@ -1,13 +1,14 @@
 # Saved pipeline (#135, #378, packages/engine/domains/workflow/pipelines.js): a release, then the refactor proposals of what it
-# changed (since the tag before it), then the Product Owner places the filed refactor issues in the
-# roadmap. The release's gates and its Ship stay human: the next stage starts only after the release
-# run succeeded. The analysis is one real model call (the Architecture tab's estimate, about $0.50).
-name: Release → Refactor proposals
-description: A release, then refactor proposals for what it changed (since the previous tag), then the Product Owner places the filed refactor issues in the roadmap. The analysis is one real model call, about $0.50 (estimated like the Architecture tab's analysis); nothing starts until you press Start on the Backlog.
+# changed (#631: analyze-project with `since`, the tag before it), then the Product Owner places the
+# filed refactor issues in the roadmap. The release's gates and its Ship stay human: the next stage
+# starts only after the release run succeeded. The analysis is one real model call (the Architecture
+# tab's estimate, about $0.50).
+name: Release → Analyze project
+description: A release, then Analyze project suggests refactors for what it changed (since the previous tag), then the Product Owner places the filed refactor issues in the roadmap. The analysis is one real model call, about $0.50 (estimated like the Architecture tab's analysis); nothing starts until you press Start on the Backlog.
 category: monitor
 stages:
   - workflow: release.yaml
-  - workflow: refactor-proposals.yaml
+  - workflow: analyze-project.yaml
     map:
       since: previous_version
     inputs:

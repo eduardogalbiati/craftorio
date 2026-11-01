@@ -10,7 +10,7 @@
 // Saved pipelines (#135) are listed after the workflows (option value `pipe:<file>`): picking one
 // asks for its first stage's inputs (its fixed ones set), shows the whole chain with a cost estimate
 // instead of the ChainPicker, and Start calls api.runPipeline.
-// An analysis workflow (ANALYSIS_WORKFLOWS, refactor-proposals.yaml, #378) shows its model turn's
+// An analysis workflow (ANALYSIS_WORKFLOWS, analyze-project.yaml, #378/#631) shows its model turn's
 // estimate from api.architectureEstimate (#wf-estimate) before the start.
 
 const LS_KEY = 'multiagent.inputs';
@@ -134,10 +134,10 @@ function renderProjectInfo() {
   window.renderAnalysisEstimate?.();
 }
 
-// #378: a workflow whose analysis is a real model call (the Refactor proposals) shows, under its
-// description, the Architecture tab's estimate for the chosen project (api.architectureEstimate: the
-// mean cost of its last real analyses, the workflow's runs included)
-const ANALYSIS_WORKFLOWS = ['refactor-proposals.yaml'];
+// #378: a workflow whose analysis is a real model call (#631: Analyze project, the old Refactor
+// proposals) shows, under its description, the Architecture tab's estimate for the chosen project
+// (api.architectureEstimate: the mean cost of its last real analyses, the workflow's runs included)
+const ANALYSIS_WORKFLOWS = ['analyze-project.yaml'];
 function renderAnalysisEstimate() {
   const el = $('#wf-estimate');
   if (!el) return;

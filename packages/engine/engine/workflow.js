@@ -244,6 +244,9 @@ class WorkflowRun extends EventEmitter {
     this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
+    // #631: feature.yaml's "Retrospective after" (the old develop-to-retrospective pipeline): the
+    // retrospective analyses this run when it ends, unless the run already has a then
+    if (!this.then && [true, 'true'].includes(this.inputs.retrospective)) this.then = chain.normalizeThen({ action: 'workflow', workflow: 'retrospective.yaml', map: { run_id: '@run' } });
     this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
     this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
     // #212: the whole suite passed once in this run (scope: affected stops running it), and the

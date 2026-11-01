@@ -18,7 +18,7 @@
 // ("plan this one cheap"). It sets the largest group (groupCap: cost wins over the calibration), packs
 // groups of one area or files into one run at Economy (packGroups), sets the test, screenshot and
 // agent inputs the group's workflow declares (costInputs; "not adjustable" when it has none) and adds
-// a test-batch stage after each stage with untested issues (testBatchStages). The answer records both
+// a test-backfill stage after each stage with untested issues (testBatchStages). The answer records both
 // steps and the plan's estimated total (#206, packages/engine/domains/usage/cost-estimate.js when the runs are given).
 // Conflict map (#150, packages/engine/domains/project/conflict-map.js): the report's "## Conflict map" lists the files and lines most
 // runs change (the saved map; when missing, the turn runs without it and builds it in the background once
@@ -462,7 +462,7 @@ function calibrateGroups(groups, step) {
 }
 
 // #205: the groups planned with both steps: packed at Economy, given the Cost step's inputs, kept to
-// the calibration's runs per stage and to the combined group cap (cost wins), then a test-batch stage
+// the calibration's runs per stage and to the combined group cap (cost wins), then a test-backfill stage
 // after each stage with untested issues; each with its estimate from the past runs (#206).
 function costedGroups(groups, { level, costLevel, issues, history, workflows, runs, prices }) {
   let out = groups;
@@ -563,14 +563,15 @@ function costInputs(g, step, workflows) {
 
 // Issues whose unit tests a group leaves for later (#203): run existing or off.
 const untested = (g) => ['run_existing', 'off'].includes(g.inputs?.unit_tests);
-const TEST_BATCH = 'test-batch.yaml';
+// #631: test-batch.yaml is now test-backfill.yaml (the old name an alias)
+const TEST_BACKFILL = 'test-backfill.yaml';
 
 /**
- * #205 (Economy): after each stage with untested issues, a stage with one test-batch item for them
- * (the stages after move down). Without the test-batch workflow the groups stay as they are.
+ * #205 (Economy): after each stage with untested issues, a stage with one test-backfill item for them
+ * (the stages after move down). Without the test-backfill workflow the groups stay as they are.
  */
 function testBatchStages(groups, { issues, history, workflows }) {
-  if (!(workflows || []).some((w) => w.file === TEST_BATCH)) return groups;
+  if (!(workflows || []).some((w) => w.file === TEST_BACKFILL)) return groups;
   const stages = [...new Set(groups.map((g) => g.stage))].sort((a, b) => a - b);
   const out = [];
   let next = 1;
@@ -582,7 +583,7 @@ function testBatchStages(groups, { issues, history, workflows }) {
     if (!nums.length) continue;
     const size = sizeGroup(nums, issues, history);
     out.push({
-      name: `Test batch (stage ${next - 1})`, issues: nums, workflow: TEST_BATCH, inputs: {},
+      name: `Test backfill (stage ${next - 1})`, issues: nums, workflow: TEST_BACKFILL, inputs: {},
       reason: 'Economy: these issues ran with their existing tests only; one test writer session writes their unit tests together, after their stage.',
       files: [], stage: next, ...size, estimate: null, warnings: [], testBatch: true,
     });
@@ -1592,7 +1593,7 @@ const TURNS = {
 function workflowSection(workflow, costOff) {
   return [
     `## Workflow: ${workflow} (chosen by the owner)`,
-    `The owner fixed the workflow of this plan: give every group \`${workflow}\`, never another workflow and no test-batch stage. The owner's choices for its options are added to every group's inputs: do not set them yourself.`,
+    `The owner fixed the workflow of this plan: give every group \`${workflow}\`, never another workflow and no test-backfill stage. The owner's choices for its options are added to every group's inputs: do not set them yourself.`,
     ...(costOff ? ['This workflow writes its acceptance tests first and runs them every time: there is no Cost step for this plan; do not name one (no "Economy" or "Generous") in the summary.'] : []),
   ].join('\n');
 }

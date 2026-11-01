@@ -19,7 +19,7 @@
 // Controls: the report picker, the From / To range and the mass-change toggle. States: not a git
 // repository, no commits in the range, never analysed, a report (with "N runs since this analysis")
 // and an error with its message.
-// One action (#381, workflows/project-map.yaml): "Analyze this project" starts the project map run
+// One action (#381, workflows/analyze-project.yaml, #631: the old project-map): "Analyze this project" starts the project map run
 // (run:start, a simulation when the app runs simulations only) with the Oracle's analysis as its
 // last step, no gate; its combined estimate stands next to it (chain:estimate for the map from past
 // real runs, architecture:estimate for the Oracle's turn; "no estimate yet" before the first real
@@ -40,8 +40,8 @@
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
 // fmtUsd (usage-widget.js), showToast, state (projects, simulationOnly). Browser: window.ProjectArchitecture.
 (() => {
-  const MAP_WORKFLOW = 'project-map.yaml';
-  const MAP_NAME = 'project-map';
+  const MAP_WORKFLOW = 'analyze-project.yaml';
+  const MAP_NAME = 'analyze-project';
   const TABLE_ROWS = 40;
   const STALE_RUNS = 5;
   const LIMITS = [
@@ -50,7 +50,7 @@
     'Code moved between files resets both metrics: the new file starts with no history and the old one disappears.',
     'Churn says nothing about bugs unless it is joined with fix commits: a busy file is not a buggy file.',
   ];
-  // what the run is doing, by its step (workflows/project-map.yaml)
+  // what the run is doing, by its step (workflows/analyze-project.yaml, its map steps)
   // the map run's steps: catalog keys project_architecture.step_<id>
   const STEP_LABELS = new Set(['facts', 'plan', 'validate', 'invalid', 'gate', 'save', 'analyze']);
   const MODE_KEY = 'multiagent.architecture.view';

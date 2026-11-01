@@ -82,8 +82,9 @@ const { writeJsonSafe } = require('../workspace/state-file');
 /** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
 /** @typedef {((runId: string) => any) | null} Alive `alive(runId)`: as for `runIsAlive` */
 
-// #205: a test-batch item tests the issues the items before it implemented
-const testsLater = (item) => path.basename(String(item?.workflow || '')) === 'test-batch.yaml';
+// #205: a test-backfill item tests the issues the items before it implemented (#631: and an item
+// saved with the old name test-batch.yaml, its alias)
+const testsLater = (item) => ['test-backfill.yaml', 'test-batch.yaml'].includes(path.basename(String(item?.workflow || '')));
 
 const roadmapFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.roadmap.json`);
 /** @returns {Roadmap} */

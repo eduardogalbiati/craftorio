@@ -14,7 +14,7 @@
 // it, keeping the one it replaces. Neither starts a model call.
 // The project map (#372): architecture:city also says whether to advise "Refresh the map"
 // (CityModel.refreshSignal: never without a saved plan) and names the project map run in progress;
-// the tab starts that workflow itself (run:start, workflows/project-map.yaml), only on a click.
+// the tab starts that workflow itself (run:start, workflows/analyze-project.yaml), only on a click.
 // The agents on the city (#374): architecture:agents reads the project's runs in progress (any app
 // process): each agent session's last file, the run's trail of changed files and its uncommitted
 // files (git, in the run's worktree), and the files two runs change (packages/shared/city-agents.js); with
@@ -91,8 +91,8 @@ const RELEASE = shape({
   state: STRING, from: nullable(STRING), to: nullable(STRING), base: nullable(OBJECT), changes: listOf(OBJECT), commits: listOf(OBJECT),
   tags: listOf(STRING), tagless: { type: 'boolean' }, plan: nullable(OBJECT), error: nullable(STRING),
 }, ['state', 'from', 'to', 'changes', 'commits', 'tags']);
-// the project map workflow (#372): its run writes the project's city plan
-const PROJECT_MAP_WORKFLOW = 'project-map.yaml';
+// the project map workflow (#372; #631: analyze-project, the old project-map): its run writes the project's city plan
+const PROJECT_MAP_WORKFLOW = 'analyze-project.yaml';
 const PROGRESS_TEXT = 160;
 // #374: each run in progress's trail colour on the city, in the order the runs started
 const RUN_COLOURS = ['#e4572e', '#4c9be8', '#3fb68b', '#f2a541', '#9b6ef3', '#e05297'];

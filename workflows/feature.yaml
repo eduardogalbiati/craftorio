@@ -211,6 +211,12 @@ inputs:
     default: single
     options: { single: "Single reviewer", multi_model: "Multi-model" }
     description: "Single reviewer: the code reviewer alone. Multi-model: a second, independent reviewer on another model reviews the same diff in parallel."
+  # #631: the old develop-to-retrospective pipeline; the run chains retrospective.yaml on itself
+  retrospective:
+    label: "Retrospective after"
+    type: boolean
+    default: false
+    description: "When the run ends, the Retrospective workflow analyses it and reports what to change in the workflow first (one more model call)."
   git_platform:
     label: "Git platform"
     type: string
