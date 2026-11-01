@@ -35,7 +35,8 @@ test('the log is seeded with the three standing decisions of the issue', () => {
   assert.ok(/test writer/i.test(tests.text), 'the #47 entry does not name the test writer');
   const writeAndRun = find(/write_and_run/);
   assert.ok(writeAndRun, 'no entry for unit and E2E tests write_and_run by default');
-  assert.equal(writeAndRun.date, '2026-10-03');
+  // its own entry, or folded into a later one that keeps its date (the cap of #360)
+  assert.ok(writeAndRun.date === '2026-10-03' || /\b2026-10-03\b/.test(writeAndRun.text), `the write_and_run entry lost its date (${writeAndRun.date})`);
   const openSource = find(/#313\b/);
   assert.ok(openSource, 'no entry for #313');
   assert.equal(openSource.date, '2026-10-11');
