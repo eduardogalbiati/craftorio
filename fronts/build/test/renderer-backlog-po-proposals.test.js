@@ -15,8 +15,9 @@ const src = fs.readFileSync(pageFileOf('views/backlog/backlog-po-proposals.js'),
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-function loadProposals({ confirmDialog, devMode, splitProductOwnerIssue, proposeRoadmap, workflows } = {}) {
+function loadProposals({ confirmDialog, devMode, splitProductOwnerIssue, proposeRoadmap, workflows, fileProductOwnerSpec } = {}) {
   const proposeCalls = [];
+  const specCalls = [];
   const sandbox = {
     esc,
     state: { workflows: workflows || [], simulationOnly: false, settings: { defaultWorkflow: null } },
@@ -25,6 +26,11 @@ function loadProposals({ confirmDialog, devMode, splitProductOwnerIssue, propose
     confirmDialog: confirmDialog || (async () => true),
     api: {
       splitProductOwnerIssue: splitProductOwnerIssue || (async () => ({ messages: [], children: [] })),
+      // #670: the spec's issues filed; each call recorded as plain strings
+      fileProductOwnerSpec: async (projectId, at, simulated) => {
+        specCalls.push({ projectId, at, simulated });
+        return (fileProductOwnerSpec || (async () => ({ messages: [], issues: [] })))(projectId, at, simulated);
+      },
       // proposal.stages is built inside the vm realm: Array.from (the outer realm's) copies each level
       // so the pushed value is plain outer-realm data assert.deepEqual can compare.
       proposeRoadmap: async (projectId, proposal) => {
@@ -39,7 +45,7 @@ function loadProposals({ confirmDialog, devMode, splitProductOwnerIssue, propose
   vm.createContext(withI18n(sandbox));
   vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195)
   vm.runInContext(src, sandbox);
-  return { BacklogPoProposals: sandbox.window.BacklogPoProposals, sandbox, proposeCalls };
+  return { BacklogPoProposals: sandbox.window.BacklogPoProposals, sandbox, proposeCalls, specCalls };
 }
 
 const WORKFLOWS = [
@@ -373,4 +379,74 @@ test('#609 the Product Owner answering (ctx.busy) still disables every split and
   for (const issue of [81, 82]) for (const attr of SPLIT_ACTS) assert.equal(isDisabled(control(splitCard(splits, issue), attr)), true, `#${issue} ${attr} disabled`);
   const epics = BacklogPoProposals.epicsHtml(ctx, msg);
   for (const key of ['create:0', 'create:1', 'place:E1']) assert.equal(isDisabled(control(epics, `data-epic-act="${key}"`)), true, `${key} disabled`);
+});
+
+// ---- #670: the issues from a spec and their mockup coverage ------------------------------------------
+
+function specMsg(ts, coverage) {
+  return { ts, role: 'po', answer: { spec: { item: 'home-screen', issues: [{ title: 'Phase 1', body: 'matches `mock-1.jpg`' }, { title: 'Phase 2', body: 'matches `mock-2.jpg`' }], coverage } } };
+}
+const COVERED = { ok: true, covered: [{ mockup: 'mock-1.jpg', issue: 'Phase 1' }, { mockup: 'mock-2.jpg', issue: 'Phase 2' }], missing: [], later: ['mock-5.jpg'], errors: [] };
+const UNCOVERED = { ok: false, covered: [{ mockup: 'mock-1.jpg', issue: 'Phase 1' }], missing: ['mock-4.jpg'], later: [], errors: ['mock-4.jpg has no issue'] };
+const count = (html, testid) => (html.match(new RegExp(`data-testid="${testid}"`, 'g')) || []).length;
+function clickSpec(BacklogPoProposals, ctx) {
+  const msgBox = { dataset: { msg: '0' } };
+  const btn = { dataset: { specAct: 'roadmap' } };
+  btn.closest = (sel) => (sel === '[data-spec-act]' ? btn : sel === '[data-msg]' ? msgBox : null);
+  return BacklogPoProposals.onClick({ target: btn }, ctx);
+}
+
+test('#670 specHtml: one coverage row per covered mockup, the later phases\' mockups, and the roadmap button enabled', () => {
+  const { BacklogPoProposals } = loadProposals({ workflows: WORKFLOWS });
+  const msg = specMsg('t670a', COVERED);
+  const html = BacklogPoProposals.specHtml(makeCtx([msg]), msg);
+  assert.equal(count(html, 'po-spec-proposal'), 1);
+  assert.equal(count(html, 'po-mockup-coverage'), 1);
+  assert.equal(count(html, 'po-mockup-coverage-row'), 2);
+  assert.equal(count(html, 'po-mockup-missing'), 0);
+  assert.equal(count(html, 'po-mockup-later'), 1);
+  assert.match(html, /mock-1\.jpg[\s\S]*Phase 1/);
+  assert.match(html, /mock-5\.jpg/);
+  assert.equal(isDisabled(control(html, 'data-spec-act="roadmap"')), false);
+});
+
+test('#670 specHtml: a mockup in scope with no issue shows "mock-4.jpg has no issue" and disables the roadmap button', () => {
+  const { BacklogPoProposals } = loadProposals({ workflows: WORKFLOWS });
+  const msg = specMsg('t670b', UNCOVERED);
+  const html = BacklogPoProposals.specHtml(makeCtx([msg]), msg);
+  assert.equal(count(html, 'po-mockup-missing'), 1);
+  assert.match(html, /mock-4\.jpg has no issue/);
+  assert.equal(isDisabled(control(html, 'data-spec-act="roadmap"')), true);
+});
+
+test('#670 specHtml: an answer without issues from a spec draws nothing', () => {
+  const { BacklogPoProposals } = loadProposals({ workflows: WORKFLOWS });
+  const msg = { ts: 't670c', answer: { text: 'hi' } };
+  assert.equal(BacklogPoProposals.specHtml(makeCtx([msg]), msg), '');
+});
+
+test('#670 the roadmap button files the spec\'s issues, then plans one roadmap stage per filed issue, in order', async () => {
+  const { BacklogPoProposals, proposeCalls, specCalls } = loadProposals({
+    workflows: WORKFLOWS,
+    fileProductOwnerSpec: async () => ({ messages: [], issues: [{ title: 'Phase 1', number: 21 }, { title: 'Phase 2', number: 22 }] }),
+  });
+  const msg = specMsg('t670d', COVERED);
+  const handled = await clickSpec(BacklogPoProposals, makeCtx([msg]));
+  assert.equal(handled, true);
+  await settle();
+  await settle();
+  assert.deepEqual(specCalls.map((c) => [c.projectId, c.at]), [['p1', 't670d']]);
+  assert.equal(proposeCalls.length, 1);
+  assert.deepEqual(proposeCalls[0].stages.map((st) => [st.name, st.items.map((i) => i.issues[0])]), [['Phase 1', [21]], ['Phase 2', [22]]]);
+  assert.deepEqual(proposeCalls[0].stages.map((st) => st.items[0].workflow), ['software-development-local-hero.yaml', 'software-development-local-hero.yaml']);
+});
+
+test('#670 with a mockup in scope uncovered, a click files nothing and plans nothing', async () => {
+  const { BacklogPoProposals, proposeCalls, specCalls } = loadProposals({ workflows: WORKFLOWS });
+  const msg = specMsg('t670e', UNCOVERED);
+  await clickSpec(BacklogPoProposals, makeCtx([msg]));
+  await settle();
+  await settle();
+  assert.equal(specCalls.length, 0);
+  assert.equal(proposeCalls.length, 0);
 });

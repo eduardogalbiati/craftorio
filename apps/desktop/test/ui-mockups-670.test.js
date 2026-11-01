@@ -97,3 +97,80 @@ test('#670 a change without UI files and without screenshots goes on to the revi
     assert.equal(developRoute(wf, worktree, { files_changed: ['packages/engine/x.js'], screenshots: [] }), 'code_review', rel(file));
   }
 });
+
+// ---- the routes after review round 1: any step, with its vars, previous step and other steps' outputs --
+
+const MOCKUP_TASK = 'Home screen\n\n- [ ] The home screen matches `mock-1.jpg`: layout, icons, texts, controls, order\n\n![mock-1.jpg](https://example.com/files/mock-1.jpg)';
+// the step's first matching transition: [goto, set] (set as plain JSON)
+function route(wf, id, { worktree, inputs = {}, vars = {}, steps = {}, output = {}, previous_step } = {}) {
+  const step = wf.steps.find((s) => s.id === id);
+  const ctx = {
+    inputs: { mode: 'auto', screenshots: 'all', ui_folders: ['src/renderer/'], issues: [], e2e_tests: 'off', check_command: '', base_branch: 'main', task: 'A task without mockups.', ...inputs },
+    vars,
+    steps,
+    worktree_dir: worktree,
+    output,
+    previous_step,
+  };
+  const tr = step.transitions.find((x) => x.when === undefined || evalExpr(x.when, ctx));
+  return [tr?.goto ?? null, JSON.parse(JSON.stringify(tr?.set || {}))];
+}
+
+test('#670 develop sends a UI change without screens back once; the second time it goes on to the capture', (t) => {
+  const worktree = emptyDir(t);
+  const output = { committed: true, left_out: [], issues: [], files_changed: ['src/renderer/home.js'], screenshots: [] };
+  for (const { file, wf } of UI_WORKFLOWS) {
+    assert.deepEqual(route(wf, 'develop', { worktree, output }), ['develop', { ui_screens_returned: 'yes' }], rel(file));
+    assert.equal(route(wf, 'develop', { worktree, output, vars: { ui_screens_returned: 'yes' } })[0], 'developer_screenshots', rel(file));
+  }
+});
+
+test('#670 developer_screenshots: an issue with mockups and screens taken goes back to develop once, for its self-check', (t) => {
+  const worktree = emptyDir(t);
+  for (const { file, wf } of UI_WORKFLOWS) {
+    assert.deepEqual(route(wf, 'developer_screenshots', { worktree, inputs: { task: MOCKUP_TASK }, output: { taken: 2 } }), ['develop', { mockup_self_check: 'yes' }], rel(file));
+    assert.equal(route(wf, 'developer_screenshots', { worktree, inputs: { task: MOCKUP_TASK }, output: { taken: 2 }, vars: { mockup_self_check: 'yes' } })[0], 'code_review', rel(file));
+  }
+});
+
+test('#670 developer_screenshots: no mockup in the issue, or no screen taken, goes on to the review as before', (t) => {
+  const worktree = emptyDir(t);
+  for (const { file, wf } of UI_WORKFLOWS) {
+    assert.equal(route(wf, 'developer_screenshots', { worktree, output: { taken: 2 } })[0], 'code_review', rel(file));
+    assert.equal(route(wf, 'developer_screenshots', { worktree, inputs: { task: MOCKUP_TASK }, output: { taken: 0 } })[0], 'code_review', rel(file));
+  }
+});
+
+test('#670 develop changing nothing after its mockup self-check goes back to the same screens, then the review', (t) => {
+  const worktree = emptyDir(t);
+  const output = { committed: false, left_out: [], issues: [] };
+  for (const { file, wf } of UI_WORKFLOWS) {
+    assert.equal(route(wf, 'develop', { worktree, output, previous_step: 'developer_screenshots', vars: { mockup_self_check: 'yes' } })[0], 'developer_screenshots', rel(file));
+    // without the self-check, a turn with no commit does not jump to the screenshots
+    assert.notEqual(route(wf, 'develop', { worktree, output, previous_step: 'developer_screenshots' })[0], 'developer_screenshots', rel(file));
+  }
+});
+
+test('#670 after testid_check, a UI change without screens goes back to develop once (vars.ui_screens_returned)', (t) => {
+  const worktree = emptyDir(t);
+  const steps = { develop: { output: { committed: true, files_changed: ['src/renderer/home.js'], screenshots: [], issues: [] } } };
+  const output = { kind: 'test_ids', status: 'pass', missing: [] };
+  for (const { file, wf } of UI_WORKFLOWS) {
+    assert.deepEqual(route(wf, 'testid_check', { worktree, steps, output }), ['develop', { ui_screens_returned: 'yes' }], rel(file));
+    assert.equal(route(wf, 'testid_check', { worktree, steps, output, vars: { ui_screens_returned: 'yes' } })[0], 'developer_screenshots', rel(file));
+  }
+});
+
+// ---- the `mockups` template filter: the issue's mockups as the prompts see them ----------------------
+
+test('#670 the `mockups` filter lists an issue\'s mockup images and repository HTML mockups, each once', () => {
+  const { render } = require('@multiagent/engine/engine/run/templates');
+  const text = `${MOCKUP_TASK}\n\nAgain: ![mock-1.jpg](https://example.com/files/mock-1.jpg)\nSettings: docs/work/home-screen/mock-2.html\n`;
+  assert.equal(render('{% for m in t | mockups %}{{ m.file }};{% endfor %}', { t: text }), 'mock-1.jpg;mock-2.html;');
+});
+
+test('#670 the `mockups` filter ignores an outside HTML page and text without mockups', () => {
+  const { render } = require('@multiagent/engine/engine/run/templates');
+  assert.equal(render('{{ t | mockups | length }}', { t: 'See [the guide](https://example.com/guide.html) and R1, R2.' }), '0');
+  assert.equal(render('{{ t | mockups | length }}', { t: '' }), '0');
+});

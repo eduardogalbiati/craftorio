@@ -157,6 +157,16 @@ test('#670 childBody: a child embeds the mockups of its own tasks, not its sibli
   assert.doesNotMatch(body, /!\[mock-2\.jpg\]/);
 });
 
+test('#670 childBody: a parent line showing its own and its sibling\'s mockup side by side keeps the child\'s own image, without the sibling\'s', () => {
+  const parent = mockIssue({ body: MOCK_BODY.replace(
+    '![mock-1.jpg](https://github.com/o/r/assets/mock-1.jpg)\n![mock-2.jpg](https://github.com/o/r/assets/mock-2.jpg)',
+    '![mock-1.jpg](https://github.com/o/r/assets/mock-1.jpg) ![mock-2.jpg](https://github.com/o/r/assets/mock-2.jpg)',
+  ) });
+  const body = poSplit.childBody({ parent, child: { title: 'Home', tasks: [1, 3], mockups: ['mock-1.jpg'], reason: '' }, index: 0, total: 2 });
+  assert.match(body, /!\[mock-1\.jpg\]\(https:\/\/github\.com\/o\/r\/assets\/mock-1\.jpg\)/);
+  assert.doesNotMatch(body, /mock-2\.jpg\]\(/);
+});
+
 // ---- fileSplit: nothing is filed without the owner's click -------------------------------------------
 
 const SPLIT = { issue: 50, parent: 'umbrella', children: [

@@ -114,6 +114,22 @@ test('#647 listItems reports an item with its accepted intent and draft spec and
   ]);
 });
 
+test('#670 listItems gives each item the title of its documents\' heading, the spec\'s over the intent\'s', (t) => {
+  const r = repo(t, {
+    'docs/work/demo/intent.md': INTENT.replace('# Intent: demo', '# Intent: Export runs as CSV (draft name)'),
+    'docs/work/demo/spec.md': SPEC.replace('# Spec: demo', '# Spec: Export runs as CSV'),
+    'docs/work/early/intent.md': INTENT.replace('# Intent: demo', '# Intent: Home screen'),
+  });
+  const items = load().listItems(r.dir);
+  assert.deepEqual(items.map((i) => [i.item, i.title]), [['demo', 'Export runs as CSV'], ['early', 'Home screen']]);
+});
+
+test('#670 listItems leaves the title out when no document has a heading', (t) => {
+  const r = repo(t, { 'docs/work/plain/intent.md': `${fm({ item: 'plain', stage: 'intent', status: 'draft' })}\nJust text.\n` });
+  const items = load().listItems(r.dir);
+  assert.deepEqual(items.map((i) => [i.item, i.title === undefined]), [['plain', true]]);
+});
+
 // ---- applyRequest -------------------------------------------------------------------------------
 
 test('#647 applyRequest swaps the lines of the source and its translation', (t) => {
