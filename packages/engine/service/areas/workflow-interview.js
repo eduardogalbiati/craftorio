@@ -34,6 +34,27 @@ const SEED_ID = 'ways-of-working';
 const { git } = seedRuns;
 const count = (out) => (out == null ? 0 : out.split('\n').filter((l) => l.trim()).length);
 
+const readText = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return ''; } };
+
+// #630: what the project's CI checks: none (no CI files), release (main or tags only), pr+release
+// (pull or merge requests too)
+function ciOf(folder) {
+  const dir = path.join(folder, '.github', 'workflows');
+  let text = readText(path.join(folder, '.gitlab-ci.yml'));
+  let found = !!text;
+  try { for (const f of fs.readdirSync(dir)) { found = true; text += readText(path.join(dir, f)); } } catch { /* no GitHub workflows */ }
+  if (!found) return 'none';
+  return /pull_request|merge_request/.test(text) ? 'pr+release' : 'release';
+}
+
+// #630: the package.json script that runs the E2E suite (e2e, test:e2e...), as `npm run <name>`, or null
+function detectE2eCommand(folder) {
+  let scripts = {};
+  try { scripts = JSON.parse(readText(path.join(folder, 'package.json'))).scripts || {}; } catch { return null; }
+  const name = Object.keys(scripts).find((s) => /(^|:)e2e$/.test(s));
+  return name ? `npm run ${name}` : null;
+}
+
 // The profile of a simulated analysis: what git and the project's files tell without a model; no release style
 async function simulatedProfile(project) {
   const folder = project.folder;
@@ -44,18 +65,22 @@ async function simulatedProfile(project) {
     git(folder, ['tag', '--list']),
     git(folder, ['rev-parse', '--short', 'HEAD']),
   ]);
-  const ci = fs.existsSync(path.join(folder, '.github', 'workflows')) ? 'github-actions' : fs.existsSync(path.join(folder, '.gitlab-ci.yml')) ? 'gitlab-ci' : null;
   const nAuthors = count(authors);
   const nMerges = Number(merges) || 0;
   const shas = head ? [head] : [];
+  const e2eCommand = detectE2eCommand(folder);
   return {
     profile: {
       team: nAuthors > 1 ? 'team' : 'solo',
       merge: nMerges > 0 ? 'pr' : 'local',
+      // #630: the ways of working the set is composed from (mode, ci, tests, e2eCommand)
+      mode: nMerges > 0 ? 'remote' : 'local',
       release: null,
       testCommand: detectTestCommand(folder),
       checkCommand: checkCommand(folder),
-      ci,
+      ci: ciOf(folder),
+      tests: e2eCommand ? 'unit+e2e' : 'unit',
+      e2eCommand,
       languages: (detectLanguage(folder) || '').split(',').filter(Boolean),
     },
     evidence: {

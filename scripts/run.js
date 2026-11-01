@@ -31,7 +31,7 @@ const { seedSkills } = require('@multiagent/engine/domains/agents/skills');
 const root = path.join(__dirname, '..');
 
 function parseArgs(argv) {
-  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'software-development.yaml' };
+  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'feature.yaml' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => argv[++i];

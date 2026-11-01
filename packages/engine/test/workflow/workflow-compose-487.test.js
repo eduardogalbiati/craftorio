@@ -15,8 +15,7 @@
 //     release: 'milestone'|'per-merge'|'train'|'rc-stable'|null, testCommand, ci, languages: [] }.
 //   answers: { <question id>: value } override the profile's fields (answers.merge over profile.merge).
 //   facts (the Architecture facts): { languages: [], skills: [] } (the language skills).
-//   The set: one workflow per manifest entry: category `intake`, the development workflow under the
-//     profile's team (`solo` | `team`), and `release`; entries `{ name, file: workflows/<name>.yaml,
+//   The set (#630): one workflow per manifest entry, categories `feature`, `fix` and `release`; entries `{ name, file: workflows/<name>.yaml,
 //     category }` (packages/engine/domains/project/project-manifest.js parseManifest reads them with no error).
 //   The development workflow merges locally (`merge: local` on a transition) for merge=local, and
 //     works through a pull request (waits on a `pr_*` probe, as software-development does, and has no
@@ -68,7 +67,7 @@ function writeSet(t, out) {
   for (const e of manifestParser().parseManifest(out.manifest.yaml).workflows) byCategory[e.category] = path.join(dir, '.multiagent', ...String(e.file).split('/'));
   return byCategory;
 }
-const devFile = (files) => files.solo || files.team;
+const devFile = (files) => files.feature;
 
 // every object of a loaded workflow's steps (nested steps, transitions, wait, recover)
 function* nodes(v) {
@@ -121,17 +120,18 @@ test('#487 composeWorkflowSet returns YAML strings under .multiagent/workflows/<
   }
 });
 
-test('#487 the manifest parses without errors and lists every composed file with an intake, a solo and a release entry', () => {
+// #630: the set is feature / fix / release, whatever the old team answer
+test('#487 the manifest parses without errors and lists every composed file with a feature, a fix and a release entry', () => {
   const out = compose(profileOf());
   const parsed = manifestParser().parseManifest(out.manifest.yaml);
   assert.deepEqual(parsed.errors, []);
-  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['intake', 'release', 'solo']);
+  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['feature', 'fix', 'release']);
   assert.deepEqual(parsed.workflows.map((e) => `.multiagent/${e.file}`).sort(), out.workflows.map((w) => w.path).sort());
 });
 
-test('#487 a team profile files its development workflow under the team category', () => {
+test('#487 a pull-request profile still files its development workflow under the feature category', () => {
   const parsed = manifestParser().parseManifest(compose(profileOf({ team: 'team', merge: 'pr' })).manifest.yaml);
-  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['intake', 'release', 'team']);
+  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['feature', 'fix', 'release']);
 });
 
 test('#487 merge=local composes a development workflow that merges locally and opens no pull request', (t) => {

@@ -485,6 +485,7 @@ agents:
 
   # #630: the multi-model review's second reviewer (inputs.review == 'multi_model'), on another model
   second_reviewer:
+    enabled: "{{ inputs.review == 'multi_model' }}"
     color: "#7C8CFF"
     provider: codex
     model: gpt-6-luna

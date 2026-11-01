@@ -37,20 +37,29 @@ test('every bundled workflow needs git and only known CLI ids, sorted, with a bo
   }
 });
 
-test('multi-model workflows need Codex: ai-arena, multi-model-review, run-retrospective', () => {
-  for (const name of ['ai-arena', 'multi-model-review', 'run-retrospective']) {
+test('multi-model workflows need Codex: ai-arena, run-retrospective, feature with the multi-model review', () => {
+  for (const name of ['ai-arena', 'run-retrospective']) {
     assert.ok(reqsOf(name).clis.includes('codex'), `${name} needs codex`);
   }
+  const wf = loadWorkflow(path.join(WORKFLOWS, 'feature.yaml'));
+  assert.ok(load().workflowRequirements(wf, { review: 'multi_model' }).clis.includes('codex'), 'feature multi_model needs codex');
 });
 
-test('ai-development-local-hero needs only Claude Code and Git, no forge', () => {
-  const r = reqsOf('ai-development-local-hero');
+test('feature in local mode needs only Claude Code and Git, no forge', () => {
+  const r = reqsOf('feature');
   assert.deepEqual(r.clis, ['claude', 'git']);
   assert.equal(r.forge, false);
 });
 
-test('local workflows need neither Codex, Grok nor a forge CLI: software-development-local-hero, e2e-release, test-batch', () => {
-  for (const name of ['software-development-local-hero', 'e2e-release', 'test-batch']) {
+test('feature and fix in remote mode need gh or glab (forge)', () => {
+  for (const name of ['feature', 'fix']) {
+    const wf = loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`));
+    assert.equal(load().workflowRequirements(wf, { mode: 'remote' }).forge, true, `${name}: forge`);
+  }
+});
+
+test('local workflows need neither Codex, Grok nor a forge CLI: fix, release, test-batch', () => {
+  for (const name of ['fix', 'release', 'test-batch']) {
     const r = reqsOf(name);
     assert.equal(r.clis.includes('codex'), false, `${name}: no codex`);
     assert.equal(r.clis.includes('grok'), false, `${name}: no grok`);
@@ -65,8 +74,8 @@ test('writer-reviewer needs its default reviewer CLI, and runs on Claude only wh
   assert.deepEqual(workflowRequirements(wf, { writer_provider: 'claude', reviewer_provider: 'claude' }).clis, ['claude', 'git']);
 });
 
-test('issue-tracker, backlog-refresh and software-development need gh or glab (forge)', () => {
-  for (const name of ['issue-tracker', 'backlog-refresh', 'software-development']) {
+test('issue-tracker and backlog-refresh need gh or glab (forge)', () => {
+  for (const name of ['issue-tracker', 'backlog-refresh']) {
     assert.equal(reqsOf(name).forge, true, `${name}: forge`);
   }
 });
