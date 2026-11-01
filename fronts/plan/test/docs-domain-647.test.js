@@ -238,8 +238,9 @@ test('#647 docs:list is window.api.listDocItems', () => {
 });
 
 // ---- the write-doc run's draft (the service follows the run's events) ---------------------------
-// A lint-clean draft: this repository's own write-doc intent and its translation.
-const OWN = path.join(__dirname, '..', '..', '..', 'docs', 'work', 'write-doc');
+// A lint-clean draft: a frozen copy of this repository's own write-doc intent and its translation
+// (#695: tests never read live documents under docs/work/).
+const OWN = path.join(__dirname, 'fixtures', 'write-doc');
 const DRAFT = {
   source_text: fs.readFileSync(path.join(OWN, 'intent.md'), 'utf8'),
   translation_text: fs.readFileSync(path.join(OWN, 'intent.pt-BR.md'), 'utf8'),

@@ -117,6 +117,72 @@ test('affectedTests: a mention of a changed file in a comment does not select th
   assert.equal(sel.mode, 'affected');
 });
 
+// #695: a path a test reads from disk is a dependency of that test (a file it reads, a directory it
+// lists), resolved from string literals and path.join of literals relative to the repository root.
+test('#695 affectedTests: a folder added under a views directory a test lists selects that test', (t) => {
+  const dir = repo(t, {
+    ...project,
+    'fronts/plan/views/home/home.js': "registerView({ id: 'home' });\n",
+    'apps/desktop/test/view-folders.test.js': [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const ROOT = path.join(__dirname, '..', '..', '..');",
+      "const ids = fs.readdirSync(path.join(ROOT, 'fronts', 'plan', 'views'));",
+      '',
+    ].join('\n'),
+  });
+  write(dir, { 'fronts/plan/views/docs/docs.js': "registerView({ id: 'docs' });\n" });
+  const sel = affectedTests({ root: dir, base: 'main' });
+  assert.equal(sel.mode, 'affected');
+  assert.deepEqual(sel.files, ['apps/desktop/test/view-folders.test.js']);
+});
+
+test('#695 affectedTests: a changed docs/work document selects the test that reads it', (t) => {
+  const dir = repo(t, {
+    ...project,
+    'docs/work/onboarding/spec.md': '# Spec\n',
+    'test/spec-reader.test.js': [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const ROOT = path.join(__dirname, '..');",
+      "const spec = fs.readFileSync(path.join(ROOT, 'docs', 'work', 'onboarding', 'spec.md'), 'utf8');",
+      '',
+    ].join('\n'),
+  });
+  write(dir, { 'docs/work/onboarding/spec.md': '# Spec\n\n## A new section\n' });
+  const sel = affectedTests({ root: dir, base: 'main' });
+  assert.deepEqual(sel.files, ['test/spec-reader.test.js']);
+});
+
+test('#695 affectedTests: a test reading a module\'s text from disk is selected when that module changes, besides its importers', (t) => {
+  const dir = repo(t, {
+    ...project,
+    'test/source-text.test.js': "const fs = require('fs');\nconst path = require('path');\nconst src = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared.js'), 'utf8');\n",
+  });
+  write(dir, { 'src/shared.js': 'exports.shared = 2;\n' });
+  const sel = affectedTests({ root: dir, base: 'main' });
+  assert.deepEqual(sel.files, ['test/chain.test.js', 'test/direct.test.js', 'test/source-text.test.js']);
+});
+
+test('#695 affectedTests: a test whose reads cannot be resolved keeps the import-only selection', (t) => {
+  const dir = repo(t, {
+    ...project,
+    'fronts/plan/views/home/home.js': "registerView({ id: 'home' });\n",
+    'test/dynamic.test.js': "const fs = require('fs');\nconst where = process.env.VIEWS_DIR;\nconst ids = fs.readdirSync(where);\nrequire('../src/other');\n",
+  });
+  write(dir, { 'fronts/plan/views/docs/docs.js': "registerView({ id: 'docs' });\n" });
+  const sel = affectedTests({ root: dir, base: 'main' });
+  assert.equal(sel.mode, 'affected');
+  assert.deepEqual(sel.files, []);
+});
+
+test('#695 affectedTests (this repository): a new screen folder under fronts/plan/views/ selects apps/desktop/test/view-folders.test.js', () => {
+  const root = path.join(__dirname, '..', '..', '..');
+  const sel = affectedTests({ root, base: 'HEAD', changed: ['fronts/plan/views/newscreen/newscreen.js'] });
+  assert.equal(sel.mode, 'affected');
+  assert.equal(sel.files.includes('apps/desktop/test/view-folders.test.js'), true, sel.files.join(', '));
+});
+
 test('affectedTests: a project with no *.test.js files gives mode all (no import graph)', (t) => {
   const dir = repo(t, { 'src/a.js': 'exports.a = 1;\n' });
   write(dir, { 'src/a.js': 'exports.a = 2;\n' });
