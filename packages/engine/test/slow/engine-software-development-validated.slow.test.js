@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const evidence = require('../../domains/evidence/evidence');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
@@ -73,6 +74,30 @@ test('feature.yaml (remote): validated mode — Ask for changes goes through the
   // #630: the feedback reaches a later develop turn (not always the second one: testid_check may send it back first)
   assert.ok(developPrompts.some((p) => /The owner tried your change and asks for these changes/.test(p) && /Use snake_case for the new function\./.test(p)),
     developPrompts.length + ' develop prompts');
+});
+// #715: without screenshots and without a check command, develop's commit reaches the gate straight
+// from testid_check (no developer_screenshots, no rule_check): the second gate still says it is the
+// change request. The repository is a temp git project whose package.json has no `check` script.
+test('feature.yaml (remote): validated mode without screenshots nor rule checks — the gate after a change request says "your change request 1"', { timeout: 120000 }, async (t) => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'validated-no-check-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true, maxRetries: 5 }));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+  git('init', '-q');
+  fs.writeFileSync(path.join(repo, 'package.json'), '{"name":"fx","private":true,"scripts":{}}\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'base');
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    inputs: { validation: 'validated', screenshots: 'off', check_command: '', repo_path: repo },
+    mockSequences: { verdict: ['approved'] },
+    answers: { developer_check: ['changes', 'approve'] },
+    feedback: { developer_check: ['Rename the button.'] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.ok(!transitions.some((x) => /developer_screenshots|rule_check/.test(x)), transitions.join(' '));
+  const gates = events.filter((e) => e.type === 'approval.requested' && e.step_id === 'developer_check');
+  assert.equal(gates.length, 2, transitions.join(' '));
+  assert.match(gates[0].message, /The developer finished the implementation/);
+  assert.match(gates[1].message, /The developer finished your change request 1\b/, transitions.join(' '));
 });
 test('feature.yaml (remote): validated mode — a review fix round does not reopen developer_check; validate_every_round makes it stop again', { timeout: 120000 }, async () => {
   const once = await runSoftwareDevelopment({
