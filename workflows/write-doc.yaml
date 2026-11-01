@@ -1,0 +1,284 @@
+# =============================================================================
+# Workflow: Write doc (#647, docs/work/write-doc/spec.md R5, R6, R10)
+# -----------------------------------------------------------------------------
+#   scope ──► evidence ──► draft ──► edit (you + the writer) ──► review ──► approval (you)
+#                                      ▲                                     │ revise
+#                                      └─────────────────────────────────────┘
+#
+# One run per stage document of a work item (docs/work/<item>/intent.md or spec.md, with its
+# pt-BR translation next to it). The `document` input picks the stage; the writer loads the
+# intent-writing or the spec-writing skill accordingly.
+# 1. scope:    the writer reads the item and lists the screens of the app worth showing.
+# 2. evidence: the project's screenshot command captures them (never blocks: a simulated run or
+#              a failed capture is in the step's message).
+# 3. draft:    the writer writes the first draft and its translation.
+# 4. edit:     a human_edit gate. Each request of the Documents screen (a selection, its text and
+#              pasted images) is a writer turn that answers with the replaced lines; the service
+#              swaps them in both files and makes one commit per request. Only the person ends it
+#              with Send to review.
+# 5. review:   the reviewer anchors its notes to the sections (`anchor`), scored on the skill's rubric.
+# 6. approval: the person accepts (Accept intent / Sign off spec on the Documents screen) or sends
+#              the document back to the edit.
+# The writer keeps one persistent session across the whole run (the requests build on each other)
+# and goes fresh from its handoff note after 55m idle.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: write-doc
+  version: 0.1.0
+  description: A writer drafts the intent or the spec of a work item, you edit it with the writer by selection, a reviewer anchors notes to its sections and you sign it off.
+  tags: [writing, review, documents, sdlc]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  project_path:
+    label: "Project folder"
+    type: string
+    required: true
+    description: The project whose docs/work/ holds the item.
+  item:
+    label: "Work item"
+    type: string
+    required: true
+    description: The item's folder name under docs/work/ (e.g. write-doc).
+  document:
+    label: "Document"
+    type: string
+    enum: [intent, spec]
+    default: intent
+    options: { "intent": "Intent (the problem and the outcome)", "spec": "Spec (the requirements and the design)" }
+    description: The stage document to write.
+  prompt:
+    label: "Prompt"
+    type: string
+    required: false
+    default: ""
+    description: Optional notes for the first draft (what the item is about).
+  writer_provider:
+    label: "Writer CLI"
+    options: { "claude": "Claude", "codex": "Codex", "grok": "Grok" }
+    type: string
+    enum: [claude, codex, grok]
+    default: claude
+    description: CLI of the writer.
+  writer_model:
+    label: "Writer model"
+    type: string
+    default: claude-opus-5-5
+  reviewer_provider:
+    label: "Reviewer CLI"
+    options: { "claude": "Claude", "codex": "Codex", "grok": "Grok" }
+    type: string
+    enum: [claude, codex, grok]
+    default: codex
+    description: CLI of the reviewer.
+  reviewer_model:
+    label: "Reviewer model"
+    type: string
+    default: gpt-6-luna
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"
+  grok:
+    type: grok-cli
+    command: grok
+    args: ["--output-format", "streaming-json", "-m", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    prompt_file_arg: ["--prompt-file", "{{ prompt_file }}"]
+
+x-tools:
+  # the agents only read: the Documents service writes the files and the commits (one per request)
+  read_only: &read_only { tools: [read], web: false }
+
+defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime continues fresh from its handoff note
+  fresh_after_idle: 55m
+  timeout: 20m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-opus-5-5
+  supervisor:
+    enabled: true
+    provider: claude
+    model: claude-opus-5-5
+    max_interventions: 2   # per step; it never answers the edit or the approval
+  limits:
+    max_total_duration: 8h
+    max_total_cost_usd: 20
+
+# -----------------------------------------------------------------------------
+agents:
+  writer:
+    provider: "{{ inputs.writer_provider }}"
+    model: "{{ inputs.writer_model }}"
+    session: persistent   # every request builds on the previous ones
+    fresh_after_idle: 55m
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% else %}intent-writing{% endif %}"]
+    capabilities: *read_only
+    working_dir: "{{ inputs.project_path }}"
+    system_prompt: |
+      You are the writer of the {{ inputs.document }} of the work item `{{ inputs.item }}`
+      (docs/work/{{ inputs.item }}/{{ inputs.document }}.md, English, and its translation
+      {{ inputs.document }}.pt-BR.md). The current folder is the project, read-only for you: the
+      Documents service writes your answers into the files and commits them. Follow your skill's
+      sections and rubric. Nobody answers questions during a turn: state an assumption, and give
+      every open decision its **Recommended:** line.
+
+  reviewer:
+    provider: "{{ inputs.reviewer_provider }}"
+    model: "{{ inputs.reviewer_model }}"
+    session: persistent   # checks whether its previous notes were addressed
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% else %}intent-writing{% endif %}"]
+    capabilities: *read_only
+    working_dir: "{{ inputs.project_path }}"
+    system_prompt: |
+      You review the {{ inputs.document }} of the work item `{{ inputs.item }}` against your
+      skill's rubric. Anchor every note to the section it is about; never rewrite the document.
+
+groups:
+  - name: Draft
+    steps: [scope, evidence, draft]
+  - name: Edit
+    steps: [edit]
+  - name: Review
+    steps: [review, approval]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: scope
+    agent: writer
+    prompt: |
+      Read docs/work/{{ inputs.item }}/ (what exists of it) and the app's screens it is about.
+      {% if inputs.prompt %}The owner's notes: {{ inputs.prompt }}{% endif %}
+      List the screens worth showing in the {{ inputs.document }} as `screenshots` (each with
+      `name`, `caption` and `args`, the options of the project's screenshot command), at most 4;
+      an empty list when no screen matters. `summary`: one sentence on what the item is about.
+    output_schema:
+      type: object
+      required: [summary, screenshots]
+      properties:
+        summary: { type: string }
+        screenshots:
+          type: array
+          items:
+            type: object
+            required: [name, caption, args]
+            properties:
+              name:    { type: string }
+              caption: { type: string }
+              args:    { type: array, items: { type: string } }
+
+  - id: evidence
+    display: Screenshots
+    type: screenshots
+    from: scope
+    folder: write-doc
+
+  - id: draft
+    agent: writer
+    prompt: |
+      Write the first draft of the {{ inputs.document }} of `{{ inputs.item }}`: {{ steps.scope.output.summary }}
+      {% if steps.evidence.output %}Screenshots: {{ steps.evidence.output.message }}{% endif %}
+      Answer with `source_text` (the whole English document, with its front matter: item, stage,
+      status: draft, date), `translation_text` (the same document in Português (Brasil), the same
+      headings order and the same **R1.** / **D1.** labels) and `reply` (one sentence to the owner).
+    output_schema:
+      type: object
+      required: [source_text, translation_text, reply]
+      properties:
+        source_text:      { type: string }
+        translation_text: { type: string }
+        reply:            { type: string }
+
+  # Each request of the Documents screen is a writer turn of this gate (requestEdit): the selection
+  # payload (file, anchor, lines, passage, context, version) and the person's text. The answer's
+  # lines replace the selected section in the source and in its translation, one commit per request.
+  - id: edit
+    type: human_edit
+    agent: writer
+    message: |
+      Edit the {{ inputs.document }} of `{{ inputs.item }}` with the writer: select a passage, ask
+      for a change, undo what you do not want. Send it to review when it reads right.
+    output_schema:
+      type: object
+      required: [source_text, translation_text, reply]
+      properties:
+        source_text:      { type: string }
+        translation_text: { type: string }
+        reply:            { type: string }
+    choices:
+      - { id: send_to_review, label: "Send to review", help: "The reviewer reads the changes you have not reviewed yet and anchors its notes to the sections." }
+      - { id: stop, label: "Stop without review", help: "Ends the run; the commits stay in the project." }
+    transitions:
+      - when: "choice == 'send_to_review'"
+        goto: review
+      - when: "choice == 'stop'"
+        goto: end
+        status: cancelled
+
+  - id: review
+    agent: reviewer
+    prompt: |
+      Review docs/work/{{ inputs.item }}/{{ inputs.document }}.md as it is now in the project
+      (and its translation). Score it from 0 to 10 on your skill's rubric; each note names the
+      `anchor` of its section (e.g. {{ inputs.document }}-r2, {{ inputs.document }}-problem) and
+      what must change, "major" blocks the sign-off, "minor" does not.
+      {% if steps.review.visits > 1 %}Check whether your previous notes were addressed.{% endif %}
+    output_schema:
+      type: object
+      required: [score, summary, notes]
+      properties:
+        score:   { type: number }
+        summary: { type: string }
+        notes:
+          type: array
+          items:
+            type: object
+            required: [anchor, severity, text]
+            properties:
+              anchor:   { type: string }
+              severity: { type: string, enum: [major, minor] }
+              text:     { type: string }
+
+  # The SDLC gate: Accept intent / Sign off spec on the Documents screen change the front matter and
+  # commit (the service, docs:accept), then answer accept here.
+  - id: approval
+    type: human_approval
+    message: |
+      The reviewer scored the {{ inputs.document }} {{ steps.review.output.score }}/10: {{ steps.review.output.summary }}
+      {% if inputs.document == 'spec' %}Sign off the spec{% else %}Accept the intent{% endif %}, or send it back to the edit with the notes.
+    choices:
+      - { id: accept, label: "{% if inputs.document == 'spec' %}Sign off spec{% else %}Accept intent{% endif %}" }
+      - { id: revise, label: "Back to the edit" }
+      - { id: stop,   label: "Stop without accepting" }
+    transitions:
+      - when: "choice == 'accept'"
+        goto: end
+      - when: "choice == 'revise'"
+        goto: edit
+      - when: "choice == 'stop'"
+        goto: end
+        status: cancelled
