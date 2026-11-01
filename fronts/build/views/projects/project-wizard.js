@@ -3,21 +3,30 @@
 // R1-R3, R5): a modal over the page with the steps of OnboardingModel (packages/shared/onboarding-model.js),
 // and the onboarding's progress tray. window.ProjectWizard = { open(), close() } opens it: Projects › New project
 // (projects.js) and the Setup's First project step (#643, packages/ui-kit/setup.js); Edit keeps the old dialog.
-// - #project-wizard (data-testid="project-wizard", role="dialog"): the indicator (one data-step="<id>" per
-//   step, the current one aria-current="step"), then the step: start (wizard-source-import / wizard-source-new),
-//   repository (#wizard-repo, #wizard-name, #wizard-provider read from the URL, wizard-import-status once
-//   api.startOnboarding answered), analysis (the jobs, wizard-cost with wizard-cost-total and the paid parts
-//   data-part="projectMap" | "ranking" before the click, wizard-analyze, wizard-skip) and review (#642, spec
-//   R10): wizard-review with wizard-review-city / -backlog / -refactors, each data-state="ready" | "pending"
+// - #project-wizard (data-testid="project-wizard", role="dialog"), laid out as the spec's mockups (#669,
+//   docs/work/first-project-onboarding/images/mock-1, -2, -4, -6.jpg): the numbered pills over a divider
+//   (wizard-steps, one wizard-step-pill data-step="<id>" per step reading "<n> <label>", the current one
+//   aria-current="step", the done ones a check), the step with its own heading (#project-wizard-title), and
+//   the footer over a divider (wizard-footer). The steps: start ("Add a project": wizard-source-import, selected
+//   when the wizard opens, and wizard-source-new, disabled until a later phase, each with its
+//   wizard-card-icon and three points; wizard-other-sources with wizard-source-git-url, step 2's URL field,
+//   and wizard-source-folder, api.pickFolder() then step 2 with the folder's file:// URL), repository (the
+//   GitHub / GitLab toggle #wizard-provider read from the URL, the gh / glab badge once the engine answered,
+//   #wizard-repo, #wizard-name, wizard-import-status once api.startOnboarding answered), analysis (the jobs
+//   from the clone on in wizard-cost, with wizard-cost-total and the paid parts data-part="projectMap" |
+//   "ranking" before the click, and wizard-skip; the suggested workflows beside them, disabled in this
+//   phase) and review (#642, spec R10): wizard-review with the project's card, wizard-review-city (Open the
+//   city: Finish, then the project's city) / -refactors / -backlog, each data-state="ready" | "pending"
 //   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
 //   | "later" (the analyses were skipped), one wizard-review-refactor data-refactor="<id>" per proposal
 //   with its file's score and quadrant and an unchecked wizard-review-refactor-pick, and the idea field
-//   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation:
-//   wizard-back, wizard-next, wizard-close (Esc too), and on the review
-//   wizard-finish (never disabled, never waits): it closes the wizard on the project's page with its Next steps
+//   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation in the
+//   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next, wizard-analyze
+//   (step 3 before the click: "Analyze and continue") or, on the review, wizard-finish (never disabled,
+//   never waits): it closes the wizard on the project's page with its Next steps
 //   card (openProject with nextSteps, project.js), then sends the picked refactors to the roadmap as planned
 //   items (refactor:addToRoadmap with `file`: filed as issues first) and the idea to the Inbox; an analysis
-//   still running at Finish shows a toast when it ends.
+//   still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
 //   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
 //   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
@@ -38,13 +47,19 @@
   const M = window.OnboardingModel;
   const JOBS = ['facts', 'profile', 'projectMap', 'ranking'];
   const PAID = ['projectMap', 'ranking'];
+  const PROVIDERS = ['github', 'gitlab'];
+  // the suggested workflows' kinds (mock-4); this phase shows them without choosing
+  const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
+  const svg = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const ICON = { check: svg('M3.5 8.5l3 3 6-7'), download: svg('M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10'), plus: svg('M8 3v10M3 8h10') };
   // the engine's statuses past the clone: the repository step goes on to the analysis by itself
   const CLONED = ['ready', 'analyzing', 'analyzed'];
   const ACTIVE = ['cloning', 'analyzing'];
 
   let root = null;
   let tray = null;
-  // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy, and the
+  // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy, provider (the
+  // toggle's pick while the URL names none), and the
   // review's: review { backlog, city, facts, proposals } (undefined: not read yet), reading, picked, idea }
   let cur = null;
   const freshReview = () => ({ review: {}, reading: new Set(), picked: new Set(), idea: '' });
@@ -63,22 +78,36 @@
 
   function stepper() {
     const at = M.STEPS.findIndex((s) => s.id === cur.model.step);
-    return `<ol class="wizard-steps">${M.STEPS.map((s, i) => `<li data-step="${s.id}" class="${i < at ? 'done' : ''}"${i === at ? ' aria-current="step"' : ''}>${esc(t(`onboarding.step_${s.id}`))}</li>`).join('')}</ol>`;
+    const pill = (s, i) => `<li data-step="${s.id}" data-testid="wizard-step-pill" class="wizard-step${i < at ? ' done' : ''}"${i === at ? ' aria-current="step"' : ''}>
+        <span class="wizard-step-num">${i < at ? ICON.check : i + 1}</span> ${esc(t(`onboarding.step_${s.id}`))}</li>`;
+    return `<ol class="wizard-steps" data-testid="wizard-steps">${M.STEPS.map(pill).join('')}</ol>`;
+  }
+
+  // a source card of step 1: its icon, title, line and three points (mock-1)
+  function sourceCard(id, icon, extra) {
+    const points = [1, 2, 3].map((n) => `<li>${esc(t(`onboarding.${id}_point_${n}`))}</li>`).join('');
+    return `<span class="wizard-card-icon" data-testid="wizard-card-icon" aria-hidden="true">${icon}</span>
+          <strong class="wizard-card-title">${esc(t(`onboarding.${id}_title`))}${extra}</strong>
+          <span class="muted">${esc(t(`onboarding.${id}_text`))}</span>
+          <ul class="wizard-points">${points}</ul>`;
   }
 
   function startStep() {
     const picked = (s) => (cur.model.source === s ? ' selected' : '');
-    return `<p class="muted">${esc(t('onboarding.start_intro'))}</p>
+    return `<h2 id="project-wizard-title">${esc(t('onboarding.start_title'))}</h2>
+      <p class="muted">${esc(t('onboarding.start_line'))}</p>
       <div class="wizard-sources">
+        <button type="button" class="card wizard-source" data-act="source-new" data-testid="wizard-source-new" aria-pressed="false" aria-disabled="true" disabled>
+          ${sourceCard('new', ICON.plus, ` <span class="badge">${esc(t('onboarding.soon'))}</span>`)}
+        </button>
         <button type="button" class="card wizard-source${picked('import')}" data-act="source-import" data-testid="wizard-source-import" aria-pressed="${cur.model.source === 'import'}">
-          <strong>${esc(t('onboarding.import_title'))}</strong>
-          <span class="muted small">${esc(t('onboarding.import_text'))}</span>
+          ${sourceCard('import', ICON.download, '')}
         </button>
-        <button type="button" class="card wizard-source" data-act="source-new" data-testid="wizard-source-new" aria-disabled="true" disabled>
-          <strong>${esc(t('onboarding.new_title'))} <span class="badge">${esc(t('onboarding.soon'))}</span></strong>
-          <span class="muted small">${esc(t('onboarding.new_text'))}</span>
-        </button>
-      </div>`;
+      </div>
+      <p class="wizard-other muted" data-testid="wizard-other-sources">${esc(t('onboarding.other_sources'))}
+        <button type="button" class="link-btn" data-act="source-git-url" data-testid="wizard-source-git-url">${esc(t('onboarding.source_git_url'))}</button>
+        <span aria-hidden="true">·</span>
+        <button type="button" class="link-btn" data-act="source-folder" data-testid="wizard-source-folder">${esc(t('onboarding.source_folder'))}</button></p>`;
   }
 
   function errorBlock(o) {
@@ -107,18 +136,38 @@
       </div>`;
   }
 
+  // the provider: read from the URL, else the one picked on the toggle (GitHub by default)
+  const pickedProvider = () => platformOfRepo(cur.model.repository)?.id || cur.provider || PROVIDERS[0];
+
+  // mock-2's GitHub / GitLab toggle: it follows the URL as it is typed (onInput) and picks the hint
+  function providerToggle() {
+    const on = pickedProvider();
+    const b = (id) => `<button type="button" class="${on === id ? 'active' : ''}" id="wizard-provider-${id}" data-act="provider" data-provider="${id}" aria-pressed="${on === id}">${esc(platformById(id)?.label || id)}</button>`;
+    return `<div class="seg wizard-provider" id="wizard-provider" data-testid="wizard-provider" role="group" aria-label="${esc(t('onboarding.provider_label'))}">${PROVIDERS.map(b).join('')}</div>`;
+  }
+
+  // the provider's CLI as the engine found it (gh signed in, glab missing…)
+  function cliBadge(cli) {
+    const name = platformById(cli.provider)?.cli || cli.provider || '';
+    const key = cli.status === 'ok' ? 'onboarding.cli_ok' : cli.status === 'missing' ? 'onboarding.cli_missing' : 'onboarding.cli_signed_out';
+    return `<span class="badge ${cli.status === 'ok' ? 'cli-ok' : 'cli-off'}">${esc(t(key, { cli: name }))}</span>`;
+  }
+
   function repositoryStep() {
     const o = cur.onboarding;
     const locked = cur.projectId ? ' readonly' : '';
-    const provider = platformOfRepo(cur.model.repository)?.label || '';
     const status = o ? `<div class="card wizard-import" data-testid="wizard-import-status">
         <div class="wizard-import-head"><strong>${esc(cur.model.name)}</strong><span class="badge status-${esc(o.status)}">${esc(statusText(o.status))}</span></div>
         <span class="muted small wizard-url" title="${esc(cur.model.repository)}">${esc(cur.model.repository)}</span>
         <span class="small">${esc(t(o.status === 'cloning' ? 'onboarding.import_cloning' : o.status === 'failed' ? 'onboarding.import_failed' : 'onboarding.import_cloned'))}</span>
       </div>` : '';
-    return `<div class="wizard-fields">
-        <label class="wizard-field"><span>${esc(t('onboarding.repo_label'))} <span class="badge" id="wizard-provider" data-testid="wizard-provider">${esc(provider)}</span></span>
-          <input id="wizard-repo" data-testid="wizard-repo" type="text" spellcheck="false" value="${esc(cur.model.repository)}"${locked}>
+    return `<div class="wizard-title-row">
+        <h2 id="project-wizard-title">${esc(t('onboarding.import_title'))}</h2>
+        <div class="wizard-title-side">${providerToggle()}${o?.cli ? cliBadge(o.cli) : ''}</div>
+      </div>
+      <div class="wizard-fields">
+        <label class="wizard-field"><span>${esc(t('onboarding.repo_label'))}</span>
+          <input id="wizard-repo" data-testid="wizard-repo" type="text" spellcheck="false" value="${esc(cur.model.repository)}" placeholder="${esc(t(`onboarding.repo_placeholder_${pickedProvider()}`))}"${locked}>
           <span class="muted small">${esc(t('onboarding.repo_help'))}</span></label>
         <label class="wizard-field"><span>${esc(t('onboarding.name_label'))}</span>
           <input id="wizard-name" data-testid="wizard-name" type="text" value="${esc(cur.model.name)}"${locked}></label>
@@ -128,42 +177,64 @@
       ${o ? cliWarning(o.cli) : ''}`;
   }
 
-  function costBlock() {
+  // mock-4's left column: one row per job from the clone on (its status dot, what it reads, its cost), the
+  // paid ones data-part, then the estimated total with "Skip, analyze later" before the click
+  function costBlock(started) {
+    const jobs = cur.onboarding?.jobs || {};
     const loading = cur.estimate === undefined;
     const sum = M.costSummary(PAID.map((id) => ({ id, estimate: id === 'projectMap' ? cur.estimate : null, checked: true })));
-    const part = (p) => `<li data-part="${p.id}"><span>${esc(t(`onboarding.job_${p.id}`))}</span><span class="wizard-amount">${esc(loading ? t('onboarding.estimating') : costText(p.estimate))}</span></li>`;
+    const amount = (id) => {
+      const p = sum.parts.find((x) => x.id === id);
+      return p ? (loading ? t('onboarding.estimating') : costText(p.estimate)) : t('onboarding.cost_free');
+    };
+    const row = (id) => {
+      const s = jobs[id]?.status || 'waiting';
+      const line = id === 'clone' ? cur.model.repository : t(`onboarding.job_${id}_text`);
+      return `<li class="wizard-job"${PAID.includes(id) ? ` data-part="${id}"` : ''}>
+          <span class="wizard-dot job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
+          <span class="wizard-job-text"><strong>${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut" title="${esc(line)}">${esc(line)}</span></span>
+          <span class="wizard-amount muted">${esc(amount(id))}</span>
+        </li>`;
+    };
     const unknown = !loading && sum.total != null && sum.unknown.length
       ? `<span class="muted small">${esc(t('onboarding.cost_partial'))}</span>` : '';
-    return `<div class="card wizard-cost" data-testid="wizard-cost">
-        <ul class="wizard-cost-parts">
-          <li class="free"><span>${esc(t('onboarding.job_profile'))}</span><span class="badge">${esc(t('onboarding.cost_free'))}</span></li>
-          ${sum.parts.map(part).join('')}
-        </ul>
-        <div class="wizard-cost-total-row"><strong>${esc(t('onboarding.cost_total'))}</strong>
-          <strong data-testid="wizard-cost-total">${esc(loading ? t('onboarding.estimating') : costText(sum.total))}</strong></div>
+    const skip = started ? '' : `<button type="button" class="btn sm" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>`;
+    return `<div class="wizard-cost" data-testid="wizard-cost">
+        <ul class="wizard-jobs">${['clone', ...JOBS].map(row).join('')}</ul>
+        <div class="card wizard-cost-total-row"><span>${esc(t('onboarding.cost_real_models'))}</span>
+          <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(loading ? t('onboarding.estimating') : costText(sum.total))}</strong>${skip}</div>
         ${unknown}
       </div>`;
   }
 
+  // mock-4's right column: the suggested workflows, shown but not chosen in this phase (disabled)
+  function workflowsColumn() {
+    const name = cur.model.name;
+    const row = (kind) => `<li class="card wizard-workflow">
+        <label class="wizard-workflow-head"><strong>${esc(t(`onboarding.workflow_${kind}`))}</strong>
+          <select disabled aria-disabled="true"><option>${esc(t('onboarding.workflow_later'))}</option></select></label>
+      </li>`;
+    return `<h3>${esc(t('onboarding.workflows_title'))}</h3>
+      <p class="muted">${esc(t('onboarding.workflows_line', { name }))}</p>
+      <ul class="wizard-workflows">${WORKFLOW_KINDS.map(row).join('')}</ul>
+      <p class="muted small">${esc(t('onboarding.workflows_more'))}</p>`;
+  }
+
   function analysisStep() {
     const o = cur.onboarding || {};
-    const jobs = o.jobs || {};
     const started = ['analyzing', 'analyzed'].includes(o.status);
-    const rows = JOBS.map((id) => {
-      const s = jobs[id]?.status || 'waiting';
-      return `<li><span>${esc(t(`onboarding.job_${id}`))}</span><span class="badge job-${esc(s)}">${esc(t(`onboarding.job_status_${s}`))}</span></li>`;
-    }).join('');
-    const actions = started ? `<p class="muted small">${esc(t(o.status === 'analyzed' ? 'onboarding.analysis_done' : 'onboarding.analysis_running'))}</p>`
-      : `<div class="wizard-actions">
-          <button type="button" class="btn primary" data-act="analyze" data-testid="wizard-analyze"${cur.busy ? ' disabled' : ''}>${esc(t('onboarding.start_analysis'))}</button>
-          <button type="button" class="btn ghost" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>
-        </div>`;
-    return `<p class="muted">${esc(t('onboarding.analysis_intro'))}</p>
-      <ul class="wizard-jobs">${rows}</ul>
-      ${started ? '' : costBlock()}
-      ${o.status === 'failed' ? errorBlock(o) : ''}
-      ${cliWarning(o.cli)}
-      ${actions}`;
+    const said = started ? `<p class="muted small">${esc(t(o.status === 'analyzed' ? 'onboarding.analysis_done' : 'onboarding.analysis_running'))}</p>` : '';
+    return `<div class="wizard-columns">
+        <div class="wizard-column">
+          <h2 id="project-wizard-title">${esc(t('onboarding.analyze_title', { name: cur.model.name }))}</h2>
+          <p class="muted">${esc(t('onboarding.read_only'))}</p>
+          ${costBlock(started)}
+          ${said}
+          ${o.status === 'failed' ? errorBlock(o) : ''}
+          ${cliWarning(o.cli)}
+        </div>
+        <div class="wizard-column">${workflowsColumn()}</div>
+      </div>`;
   }
 
   const jobOf = (id) => cur.onboarding?.jobs?.[id] || {};
@@ -179,7 +250,8 @@
     return cur.model.analyzeLater && !ACTIVE.includes(cur.onboarding?.status) ? 'later' : 'pending';
   }
 
-  function reviewSection(id, title, job, read, body, pendingKey) {
+  // a card of the review: its head (title, then an action or the pending badge), then its body once ready
+  function reviewSection(id, title, job, read, body, pendingKey, action = '') {
     const state = sectionState(job, read);
     const words = {
       failed: () => t('onboarding.review_section_failed', { error: jobOf(job).error || t('onboarding.no_reason') }),
@@ -187,19 +259,25 @@
       pending: () => t(pendingKey),
       skipped: () => t('onboarding.review_section_skipped'),
     };
+    const badge = state === 'pending' ? `<span class="badge job-running">${esc(t('onboarding.job_status_running'))}</span>` : '';
     return `<section class="card wizard-review-section" data-testid="wizard-review-${id}" data-state="${state}">
-        <h3>${esc(t(title))}</h3>
+        <header class="wizard-review-head"><h3>${esc(t(title))}</h3>${action || badge}</header>
         ${state === 'ready' ? body() : `<p class="muted small">${esc(words[state]())}</p>`}
       </section>`;
   }
 
+  // mock-6's city: a bar per district (its files, the largest first), then the counts in words
   function cityBody() {
     const model = cur.review.city?.model;
     const districts = model?.districts || [];
     if (!districts.length) return `<p class="muted small">${esc(t('onboarding.review_city_empty'))}</p>`;
     // the city model's buildings (packages/shared/city-model.js), each naming its district
-    const files = Array.isArray(model.buildings) ? model.buildings.length : districts.reduce((n, d) => n + (d.buildings?.length || d.files || 0), 0);
-    return `<p>${esc(t('onboarding.review_city', { districts: districts.length, files }))}</p>`;
+    const sizes = districts.map((d) => d.buildings?.length || d.files || 0);
+    const files = Array.isArray(model.buildings) ? model.buildings.length : sizes.reduce((n, s) => n + s, 0);
+    const top = Math.max(1, ...sizes);
+    const bars = sizes.slice(0, 12).map((s, i) => `<span class="wizard-city-bar" style="height: ${Math.max(8, Math.round((s / top) * 100))}%" title="${esc(districts[i].name || districts[i].id || '')}"></span>`).join('');
+    return `<div class="wizard-city-bars" aria-hidden="true">${bars}</div>
+      <p class="muted small">${esc(t('onboarding.review_city', { districts: districts.length, files }))}</p>`;
   }
 
   function backlogBody() {
@@ -213,33 +291,58 @@
     const proposals = cur.review.proposals || [];
     if (!proposals.length) return `<p class="muted small">${esc(t('onboarding.review_refactors_empty'))}</p>`;
     const files = cur.review.facts?.model?.files || [];
-    const row = (p) => {
+    const row = (p, i) => {
       const target = p.target || p.targetFiles?.[0] || '';
       const f = files.find((x) => x.file === target);
-      const score = Number.isFinite(f?.score) ? `<span class="badge">${esc(t('onboarding.review_score', { score: f.score }))}</span>` : '';
+      const score = Number.isFinite(f?.score) ? `<span class="mono" title="${esc(t('onboarding.review_score', { score: f.score }))}">${esc(f.score)}</span>` : '';
       const quadrant = f?.quadrant ? `<span class="${window.ArchitectureModel.quadrantBadge(f.quadrant)}">${esc(f.quadrant)}</span>` : '';
       return `<li class="wizard-review-refactor fit-box" data-testid="wizard-review-refactor" data-refactor="${esc(p.id)}">
+          <span class="wizard-rank" aria-hidden="true">${i + 1}</span>
           <label class="check small"><input type="checkbox" data-testid="wizard-review-refactor-pick" data-refactor="${esc(p.id)}" aria-label="${esc(p.title)}"${cur.picked.has(p.id) ? ' checked' : ''}>
-            <span class="text-cut" title="${esc(p.title)}">${esc(p.title)}</span></label>
-          <span class="mono muted small text-cut" title="${esc(target)}">${esc(target)}</span>
+            <span class="text-cut" title="${esc(`${p.title} · ${target}`)}">${esc(p.title)}</span></label>
           <span class="wizard-review-badges">${score}${quadrant}</span>
         </li>`;
     };
-    return `<ul class="wizard-review-list">${proposals.map(row).join('')}</ul>`;
+    return `<ul class="wizard-review-list">${proposals.map(row).join('')}</ul>
+      <p class="muted small">${esc(t('onboarding.review_proposals', { count: proposals.length }))}</p>`;
   }
 
-  // what the analyses found so far (each section pending until its analysis and its read are done)
+  // mock-6's first card: the project, how it is worked on (what the analyses read so far) and its workflows
+  function projectCard() {
+    const name = cur.model.name;
+    const folder = (typeof state === 'object' && state?.projects?.find?.((p) => p.id === cur.projectId)?.folder) || '';
+    const where = [cur.model.repository, folder].filter(Boolean).join(' · ');
+    const languages = [...new Set((cur.review.facts?.model?.files || []).map((f) => f.language).filter(Boolean))];
+    const chips = [platformOfRepo(cur.model.repository)?.label, languages.join(', ')].filter(Boolean);
+    const how = chips.length ? `<div class="wizard-chips">${chips.map((c) => `<span class="badge">${esc(c)}</span>`).join('')}</div>`
+      : `<p class="muted small">${esc(t('onboarding.review_how_pending'))}</p>`;
+    const flows = M.suggestWorkflows(null).suggestions.map((s) => `<span class="badge mono" title="${esc(s.id)}">${esc(s.id)}</span>`).join('');
+    return `<section class="card wizard-review-section wizard-review-project">
+        <h3 id="project-wizard-title" class="text-cut" title="${esc(name)}">${esc(name)}</h3>
+        <span class="mono muted small text-cut" title="${esc(where)}">${esc(where)}</span>
+        <h4>${esc(t('onboarding.review_how', { name }))}</h4>${how}
+        <h4>${esc(t('onboarding.review_workflows'))}</h4><div class="wizard-chips">${flows}</div>
+      </section>`;
+  }
+
+  // what the analyses found so far (each section pending until its analysis and its read are done): mock-6's
+  // three cards, then the backlog and the idea for the Inbox
   function reviewStep() {
     const r = cur.review;
     const later = cur.model.analyzeLater ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
-    return `<div class="wizard-review" data-testid="wizard-review">
-        <p class="muted"><strong>${esc(t('onboarding.review_title', { name: cur.model.name }))}</strong> ${esc(t('onboarding.review_text'))}</p>${later}
-        ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city')}
-        ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
-        ${reviewSection('refactors', 'onboarding.review_refactors_title', 'ranking', r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors')}
-        <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
-          <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
-          <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
+    const openCity = `<button type="button" class="btn sm" data-act="open-city" data-testid="wizard-open-city">${esc(t('onboarding.open_city'))}</button>`;
+    return `<div class="wizard-review" data-testid="wizard-review">${later}
+        <div class="wizard-review-grid">
+          ${projectCard()}
+          ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city', openCity)}
+          ${reviewSection('refactors', 'onboarding.review_refactors_title', 'ranking', r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors')}
+        </div>
+        <div class="wizard-review-more">
+          ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
+          <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
+            <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
+            <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
+        </div>
       </div>`;
   }
 
@@ -248,21 +351,25 @@
   function render() {
     if (!root || !cur) return;
     const step = cur.model.step;
-    // the analysis step has its own buttons until the analysis started; review is the last step
-    const showNext = step === 'start' || step === 'repository'
-      || (step === 'analysis' && ['analyzing', 'analyzed'].includes(cur.onboarding?.status));
-    const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${canNext() ? '' : ' disabled'}>${esc(t('onboarding.next'))}</button>` : '';
-    const back = step === 'start' ? '' : `<button type="button" class="btn ghost" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
+    const started = ['analyzing', 'analyzed'].includes(cur.onboarding?.status);
+    // the analysis step offers "Analyze and continue" until the analysis started; review is the last step
+    const showNext = step === 'start' || step === 'repository' || (step === 'analysis' && started);
+    const nextLabel = step === 'repository' ? 'onboarding.next_clone' : 'onboarding.next';
+    const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${canNext() ? '' : ' disabled'}>${esc(t(nextLabel))}</button>` : '';
+    const analyze = step === 'analysis' && !started
+      ? `<button type="button" class="btn primary" data-act="analyze" data-testid="wizard-analyze"${cur.busy ? ' disabled' : ''}>${esc(t('onboarding.analyze_continue'))}</button>` : '';
+    const back = step === 'start'
+      ? `<button type="button" class="btn" data-act="cancel" data-testid="wizard-cancel">${esc(t('onboarding.cancel'))}</button>`
+      : `<button type="button" class="btn" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
     // Finish never waits: not disabled by an analysis still running nor by a call in flight
     const finish = step === 'review' ? `<button type="button" class="btn primary" data-act="finish" data-testid="wizard-finish">${esc(t('onboarding.finish'))}</button>` : '';
-    root.innerHTML = `<div class="wizard-panel" tabindex="-1">
+    root.innerHTML = `<div class="wizard-panel wizard-at-${step}" tabindex="-1">
         <header class="wizard-head">
-          <h2 id="project-wizard-title">${esc(t('onboarding.title'))}</h2>
+          ${stepper()}
           <button type="button" class="btn ghost wizard-close" data-act="close" data-testid="wizard-close" aria-label="${esc(t('common.close'))}">×</button>
         </header>
-        ${stepper()}
         <section class="wizard-body">${BODY[step]()}</section>
-        <footer class="wizard-foot">${back}<span class="wizard-spacer"></span>${next}${finish}</footer>
+        <footer class="wizard-foot" data-testid="wizard-footer">${back}<span class="wizard-spacer"></span>${next}${analyze}${finish}</footer>
       </div>`;
   }
 
@@ -317,8 +424,9 @@
 
   // Finish: the project's page at once (with its Next steps card), then the chosen refactors to the
   // roadmap as planned items (filed as issues first, no runNow: nothing starts) and the idea to the
-  // Inbox, in the background; an analysis still running notifies when it ends (remember)
-  function finish() {
+  // Inbox, in the background; an analysis still running notifies when it ends (remember). city: the review's
+  // Open the city finishes the same way, then shows the project's city (its Architecture tab)
+  function finish({ city = false } = {}) {
     const pid = cur.projectId;
     const picked = [...cur.picked];
     const idea = cur.idea.trim();
@@ -327,6 +435,7 @@
     if (!pid) return;
     if (running) finished.add(pid);
     window.Actions.call('openProject', pid, { nextSteps: true });
+    if (city) window.ProjectArchitecture?.openCity?.(pid);
     const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
     for (const id of picked) Promise.resolve(api.addRefactorToRoadmap(pid, id, { file: true })).catch(failed);
     if (idea) Promise.resolve(api.createDiscoveryCard(pid, idea.slice(0, 200), idea, 'idea')).catch(failed);
@@ -381,6 +490,22 @@
     render();
   }
 
+  // step 1's other sources: step 2 with the URL field ready to type in, filled from a picked folder
+  function toRepository(fields = {}) {
+    cur.model = { ...cur.model, ...fields, source: 'import', step: 'repository' };
+    render();
+    document.getElementById('wizard-repo')?.focus?.();
+  }
+
+  // a folder on this computer: its file:// URL (the engine clones it as any git URL) and its name
+  async function fromFolder() {
+    const folder = await api.pickFolder();
+    if (!folder || !cur) return;
+    const slashed = String(folder).replace(/\\/g, '/');
+    const url = `file://${slashed.startsWith('/') ? '' : '/'}${encodeURI(slashed)}`;
+    toRepository({ repository: url, name: cur.model.name || slashed.split('/').filter(Boolean).pop() || '' });
+  }
+
   function openSetup() {
     close();
     if (window.Setup?.open) window.Setup.open();
@@ -389,8 +514,16 @@
   async function onClick(e) {
     const act = e.target?.closest?.('[data-act]')?.dataset.act;
     if (!act || !cur) return;
-    if (act === 'close') close();
+    if (act === 'close' || act === 'cancel') close();
     else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
+    else if (act === 'source-git-url') toRepository();
+    else if (act === 'source-folder') await fromFolder();
+    else if (act === 'provider') {
+      cur.provider = e.target.closest('[data-provider]').dataset.provider;
+      render();
+      document.getElementById('wizard-repo')?.focus?.();
+    }
+    else if (act === 'open-city') finish({ city: true });
     else if (act === 'next') await next();
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
@@ -418,8 +551,13 @@
     if (id === 'wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
     if (id !== 'wizard-repo' && id !== 'wizard-name') return;
     cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: String(e.target.value || '') };
-    const provider = document.getElementById('wizard-provider');
-    if (provider) provider.textContent = platformOfRepo(cur.model.repository)?.label || '';
+    // the provider toggle follows the URL (its buttons keep their place: the caret stays)
+    const on = pickedProvider();
+    for (const id of PROVIDERS) {
+      const b = document.getElementById(`wizard-provider-${id}`);
+      b?.setAttribute?.('aria-pressed', String(on === id));
+      b?.classList?.toggle?.('active', on === id);
+    }
     const nextBtn = document.getElementById('wizard-next');
     if (nextBtn) nextBtn.disabled = !canNext();
   }
@@ -457,7 +595,8 @@
       root.addEventListener('focusout', (e) => { if (cur?.stale && e.target?.id === 'wizard-review-idea') { cur.stale = false; render(); } });
       document.body.appendChild(root);
     }
-    cur = { model: M.initialState(), projectId: null, onboarding: null, estimate: undefined, busy: false, ...freshReview() };
+    // Import is the one source of this phase: selected when the wizard opens (mock-1)
+    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, ...freshReview() };
     root.hidden = false;
     render();
     root.querySelector('.wizard-panel')?.focus?.();

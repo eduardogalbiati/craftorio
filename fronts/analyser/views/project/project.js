@@ -10,9 +10,12 @@
 // one makes it the app's project, and choosing another in the header switches the page to it.
 // No sidebar entry of its own: Projects stays lit (`menu`). The header's "Ways of working" opens the
 // interview drawer (project-ways-of-working.js, #487). After the new-project wizard's Finish (#642, spec
-// R11) the Overview leads with the Next steps card (project-next-steps: next-step-refactors → the Roadmap,
-// next-step-idea → the Inbox, next-step-cadence → the Refactor tab; next-steps-dismiss), remembered per
-// project in localStorage multiagent.nextSteps.
+// R11) the Overview leads with the Next steps card (project-next-steps, as mock-7 of
+// docs/work/first-project-onboarding/images, #669: "<name> is ready" in its head, then a grid of entries:
+// next-step-refactors, the project's proposals with a checkbox each and "File and add <n>" (the checked ones
+// filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence → the
+// Refactor tab, and next-step-release-ci / next-step-screenshots shown disabled (later phases);
+// next-steps-dismiss), remembered per project in localStorage multiagent.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
 // (view-registry.js); uses app.js globals ($, esc, state, api, errMsg, showView, openDrawer,
@@ -36,27 +39,69 @@ function rememberProjectTab(id, tab) { pvRemember(PV_TABS_KEY, id, tab); }
 
 // #642: the Next steps card of the projects the wizard finished: { <projectId>: 'open' | 'dismissed' }
 const PV_NEXT_STEPS_KEY = 'multiagent.nextSteps';
-// [id, i18n key of its label, of its line]: spec R11 for this phase (release CI, screenshots come later)
-const PV_NEXT_STEPS = [['refactors', 'onboarding.next_steps_refactors', 'onboarding.next_steps_refactors_text'], ['idea', 'onboarding.next_steps_idea', 'onboarding.next_steps_idea_text'], ['cadence', 'onboarding.next_steps_cadence', 'onboarding.next_steps_cadence_text']];
+// [id, i18n key of its title, of its line (none: the proposals), of its button, later: shown disabled]: mock-7,
+// spec R11 (release CI and screenshots come in later phases)
+const PV_NEXT_STEPS = [
+  ['refactors', 'onboarding.next_steps_refactors', null, 'onboarding.next_steps_file_add', false],
+  ['idea', 'onboarding.next_steps_idea', 'onboarding.next_steps_idea_text', 'onboarding.open_inbox', false],
+  ['cadence', 'onboarding.next_steps_cadence', 'onboarding.next_steps_cadence_text', 'onboarding.turn_on', false],
+  ['release-ci', 'onboarding.next_steps_release_ci', 'onboarding.next_steps_release_ci_text', 'onboarding.add_to_roadmap', true],
+  ['screenshots', 'onboarding.next_steps_screenshots', 'onboarding.next_steps_screenshots_text', 'onboarding.add_spike', true],
+];
+// the refactor proposals the card lists (the first ones, ranked)
+const PV_NEXT_STEP_PROPOSALS = 5;
 function nextSteps() { return pvStored(PV_NEXT_STEPS_KEY); }
 function rememberNextSteps(id, value) { pvRemember(PV_NEXT_STEPS_KEY, id, value); }
 
-function nextStepsMarkup(id) {
-  if (nextSteps()[id] !== 'open') return '';
-  const entry = ([step, label, line]) => `<li data-testid="next-step-${step}">
-      <button type="button" class="link-btn" data-next-step="${step}">${esc(t(label))}</button>
-      <span class="muted small">${esc(t(line))}</span>
+// the card's proposals, read once per page (null while reading) and drawn when they arrive
+function loadNextStepProposals(pv) {
+  if (nextSteps()[pv.id] !== 'open' || pv.nextStepProposals !== undefined) return;
+  pv.nextStepProposals = null;
+  new Promise((resolve) => resolve(api.refactorProposals?.(pv.id))).then((list) => list, () => []).then((list) => {
+    pv.nextStepProposals = Array.isArray(list) ? list : [];
+    if (state.pv === pv && state.view === 'project') renderProjectView();
+  });
+}
+
+const fileAndAddLabel = (pv) => t('onboarding.next_steps_file_add', { count: pv.nextStepPicked.size });
+
+function nextStepsMarkup(pv) {
+  if (nextSteps()[pv.id] !== 'open') return '';
+  const proposals = () => {
+    const list = pv.nextStepProposals;
+    if (!list) return `<p class="muted small">${esc(t('onboarding.next_steps_reading'))}</p>`;
+    if (!list.length) return `<p class="muted small">${esc(t('onboarding.review_refactors_empty'))}</p>`;
+    return `<ul class="pr-next-step-picks">${list.slice(0, PV_NEXT_STEP_PROPOSALS).map((p) => `<li><label class="check small">
+        <input type="checkbox" data-next-refactor="${esc(p.id)}"${pv.nextStepPicked.has(p.id) ? ' checked' : ''}>
+        <span class="text-cut" title="${esc(p.title)}">${esc(p.title)}</span></label></li>`).join('')}</ul>`;
+  };
+  const entry = ([step, title, line, action, later]) => `<li class="pr-next-step" data-testid="next-step-${step}">
+      <strong>${esc(t(title))}</strong>
+      ${line ? `<span class="muted small">${esc(t(line, { name: pv.project?.name || '' }))}</span>` : proposals()}
+      <button type="button" class="btn sm" data-next-step="${step}"${later ? ' disabled aria-disabled="true"' : ''}>${esc(step === 'refactors' ? fileAndAddLabel(pv) : t(action))}</button>
     </li>`;
   return `<section class="card pr-next-steps" data-testid="project-next-steps">
       <header class="pr-next-steps-head"><h3>${esc(t('onboarding.next_steps_title'))}</h3>
+        <span class="muted small pr-next-steps-ready">${esc(t('onboarding.next_steps_ready', { name: pv.project?.name || '' }))}</span>
         <button type="button" class="btn ghost sm" data-testid="next-steps-dismiss" data-next-steps-dismiss aria-label="${esc(t('onboarding.next_steps_dismiss'))}">×</button></header>
       <ul class="pr-next-steps-list">${PV_NEXT_STEPS.map(entry).join('')}</ul>
     </section>`;
 }
 
-// an entry of the card leads to its screen (the card stays until dismissed)
+// an entry of the card leads to its screen (the card stays until dismissed); File and add first files the
+// checked proposals and adds them to the roadmap as planned items (as the wizard's Finish does)
 function onNextStepClick(step) {
-  if (step === 'refactors') showView('roadmap');
+  if (step === 'refactors') {
+    const pv = state.pv;
+    const failed = (e) => showToast(t('onboarding.next_steps_add_failed'), errMsg(e));
+    for (const id of pv?.nextStepPicked || []) Promise.resolve(api.addRefactorToRoadmap(pv.id, id, { file: true })).catch(failed);
+    // the added ones leave the card's list (never added twice)
+    if (pv) {
+      pv.nextStepProposals = (pv.nextStepProposals || []).filter((p) => !pv.nextStepPicked.has(p.id));
+      pv.nextStepPicked = new Set();
+    }
+    showView('roadmap');
+  }
   else if (step === 'idea') showView('inbox');
   else if (step === 'cadence' && state.pv) {
     state.pv.tab = 'refactor';
@@ -69,6 +114,7 @@ function newProjectPage(id) {
   const tab = projectTabs()[id];
   return {
     id, project: state.projects.find((p) => p.id === id) || null, runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map(),
+    nextStepProposals: undefined, nextStepPicked: new Set(),
     tab: PV_TABS.some(([t]) => t === tab) ? tab : 'overview',
   };
 }
@@ -145,7 +191,8 @@ function renderProjectView() {
   }
   if (pv.tab === 'refactor') window.ProjectRefactor?.show(pv.id, $('#project-refactor'));
   if (pv.tab !== 'overview') return;
-  $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv.id);
+  loadNextStepProposals(pv);
+  $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv);
   $('#project-info').innerHTML = `
     <dl class="kv">
       <dt>${t('project.folder')}</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? t('project.not_found') : ''}</dd>
@@ -163,6 +210,16 @@ function renderProjectView() {
 
 // the page's delegated clicks: the Next steps card, a tab, then the Conflict map tab's controls and rows
 function onProjectPageClick(e) {
+  // a proposal's checkbox of the card: its count on File and add (the box keeps its own checked state)
+  const pick = e.target.closest('[data-next-refactor]');
+  if (pick && state.pv) {
+    const picked = state.pv.nextStepPicked;
+    const id = pick.dataset.nextRefactor;
+    if (picked.has(id)) picked.delete(id); else picked.add(id);
+    const button = $('#project-next-steps-box [data-next-step="refactors"]');
+    if (button) button.textContent = fileAndAddLabel(state.pv);
+    return;
+  }
   const step = e.target.closest('[data-next-step]');
   if (step) { onNextStepClick(step.dataset.nextStep); return; }
   if (e.target.closest('[data-next-steps-dismiss]') && state.pv) {
