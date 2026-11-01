@@ -16,6 +16,55 @@ function writeDocButton(page, detail) {
   return btn;
 }
 
+// ---- a write-doc run has no `document` output: the document is read back from the project ----------
+const startLink = (page, runId, link) => page.sandbox.DiscoveryRuns.started(runId, link);
+const WD_LINK = (cardId) => ({ projectId: P, cardId, source: 'write-doc', item: 'export-runs', doc: 'intent' });
+const INTENT = { item: 'export-runs', doc: 'intent', source: { file: 'docs/work/export-runs/intent.md', markdown: '# Export runs\n\nThe intent.' } };
+
+test('a write-doc run that ends without a document output brings back the document read from the project', async () => {
+  const c = card({ title: 'Export runs', type: 'prd', column: 'shape', document: 'As CSV.' });
+  const page = await openBoard({ cards: [c], api: { readDoc: async () => INTENT } });
+  startLink(page, 'run-wd', WD_LINK(c.id));
+  finished(page, { run_id: 'run-wd', status: 'success', outputs: {} });
+  await settle(40);
+  assert.deepEqual(page.callsTo('readDoc'), [[P, 'export-runs', 'intent']]);
+  assert.deepEqual(page.callsTo('recordDiscoveryResult'), [[P, c.id, 'write-doc', '# Export runs\n\nThe intent.', 'run-wd']]);
+});
+
+test('a write-doc run whose document cannot be read records nothing on the card and does not break the board', async () => {
+  const c = card({ title: 'Export runs', type: 'prd', column: 'shape', document: 'As CSV.' });
+  const page = await openBoard({ cards: [c], api: { readDoc: async () => { throw new Error('no such document'); } } });
+  startLink(page, 'run-wd', WD_LINK(c.id));
+  finished(page, { run_id: 'run-wd', status: 'success', outputs: {} });
+  await settle(40);
+  assert.equal(page.callsTo('readDoc').length, 1);
+  assert.equal(page.callsTo('recordDiscoveryResult').length, 0);
+});
+
+test('a failed write-doc run reads no document and records nothing', async () => {
+  const c = card({ title: 'Export runs', type: 'prd', column: 'shape', document: 'As CSV.' });
+  const page = await openBoard({ cards: [c], api: { readDoc: async () => INTENT } });
+  startLink(page, 'run-wd', WD_LINK(c.id));
+  finished(page, { run_id: 'run-wd', status: 'failed', outputs: {} });
+  await settle(40);
+  assert.equal(page.callsTo('readDoc').length, 0);
+  assert.equal(page.callsTo('recordDiscoveryResult').length, 0);
+});
+
+test('a write-doc run that ends twice while its document is being read (the live event and the catch-up) records it once', async () => {
+  const c = card({ title: 'Export runs', type: 'prd', column: 'shape', document: 'As CSV.' });
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const page = await openBoard({ cards: [c], api: { readDoc: async () => { await gate; return INTENT; } } });
+  startLink(page, 'run-wd', WD_LINK(c.id));
+  finished(page, { run_id: 'run-wd', status: 'success', outputs: {} });
+  finished(page, { run_id: 'run-wd', status: 'success', outputs: {} });
+  await settle(10);
+  release();
+  await settle(40);
+  assert.equal(page.callsTo('recordDiscoveryResult').length, 1);
+});
+
 test('an opened card offers "Write a document"', async () => {
   const c = card({ title: 'Export runs', type: 'prd', column: 'shape', document: 'As CSV.' });
   const page = await openBoard({ cards: [c] });

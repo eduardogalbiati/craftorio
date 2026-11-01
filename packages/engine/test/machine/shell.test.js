@@ -85,6 +85,43 @@ test('runShim: a Windows .cmd shim gets every argument unchanged (quotes, %VAR%,
   assert.deepEqual(warnings.filter((w) => w.code === 'DEP0190').map((w) => w.message), []);
 });
 
+// ---- quoteArg: one argument of a cmd.exe command line (#649: { once: true } for a line parsed once) ----
+
+test('quoteArg: escapes cmd.exe metacharacters three times by default and once with { once: true }', () => {
+  const { quoteArg } = shell();
+  assert.equal(quoteArg('a b'), '^^^"a^^^ b^^^"');
+  assert.equal(quoteArg('a b', { once: true }), '^"a^ b^"');
+  assert.equal(quoteArg('100%', { once: true }), '^"100^%^"');
+  assert.equal(quoteArg('x&y', { once: true }), '^"x^&y^"');
+  assert.equal(quoteArg('a^b', { once: true }), '^"a^^b^"');
+  assert.equal(quoteArg('!go!', { once: true }), '^"^!go^!^"');
+  assert.equal(quoteArg('say "hi"', { once: true }), '^"say^ \\^"hi\\^"^"');
+  assert.equal(quoteArg('', { once: true }), '^"^"');
+});
+
+test('quoteArg: refuses a line break, which cmd.exe cannot carry inside an argument', () => {
+  const { quoteArg } = shell();
+  assert.throws(() => quoteArg('one\ntwo', { once: true }));
+  assert.throws(() => quoteArg('one\rtwo'));
+});
+
+test('cmdLine: still escapes each argument for a shim line parsed twice (unchanged by #649)', () => {
+  const { cmdLine } = shell();
+  assert.equal(cmdLine('npm.cmd', ['run', 'a b']), 'npm.cmd ^^^"run^^^" ^^^"a^^^ b^^^"');
+});
+
+test('quoteArg { once: true }: a cmd.exe line parsed once gives the child every argument unchanged', { skip: process.platform !== 'win32' && 'cmd.exe lines run on Windows only' }, async (t) => {
+  const { spawn } = require('child_process');
+  const f = fixture(t);
+  const { quoteArg } = shell();
+  const args = ARGS.filter((a) => a !== '');
+  const line = `"${process.execPath}" "${f.js}" ${args.map((a) => quoteArg(a, { once: true })).join(' ')}`;
+  const r = await collect(spawn(line, { cwd: f.dir, shell: true, windowsHide: true }));
+  assert.equal(r.code, 0, r.err);
+  assert.doesNotMatch(r.out, /^injected/m);
+  assert.deepEqual(JSON.parse(r.out).args, args);
+});
+
 // ---- no args array together with a shell option, anywhere in src/ and scripts/ -------------------
 
 const REPO = path.join(__dirname, '..', '..', '..', '..');

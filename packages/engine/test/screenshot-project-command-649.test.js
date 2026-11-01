@@ -158,6 +158,87 @@ test('captureScreenshots: without a screenshot command, Run App (capturePreview)
   assert.equal(previews.find((p) => p.side === 'modified').ref, null);
 });
 
+test('captureScreenshots: every Run App capture of a step shares one session, released once at the end', async (t) => {
+  const { captureScreenshots } = load();
+  const cwd = projectWithPreview(t);
+  const runDir = tmpDir(t, 'run-');
+  const sessions = [];
+  let released = 0;
+  const capturePreview = async ({ out, session }) => {
+    sessions.push(session);
+    session.release = async () => { released++; };
+    fs.writeFileSync(out, 'PNG');
+  };
+  const entries = [...ONE_ENTRY, { name: '649-settings', caption: 'Settings', args: ['--path', '/settings'] }];
+  const result = await captureScreenshots({ entries, cwd, runDir, folder: 'writer', round: 1, base: 'main', env: {}, mock: false, capturePreview });
+  assert.equal(result.taken, 4, result.message);
+  assert.equal(sessions.length, 4);
+  assert.equal(sessions.every((s) => s === sessions[0]), true, 'one session for the step');
+  assert.equal(released, 1);
+});
+
+test('captureScreenshots: the Run App session is released even when the capture loop throws', async (t) => {
+  const { captureScreenshots } = load();
+  const cwd = projectWithPreview(t);
+  const runDir = tmpDir(t, 'run-');
+  let released = 0;
+  const capturePreview = async ({ out, session }) => {
+    session.release = async () => { released++; };
+    fs.writeFileSync(out, 'PNG');
+  };
+  let logs = 0;
+  // the second capture's log line throws, after the first capture made the session's worktree
+  const log = () => { if (++logs === 2) throw new Error('log broke'); };
+  await assert.rejects(
+    captureScreenshots({ entries: ONE_ENTRY, cwd, runDir, folder: 'writer', round: 1, base: 'main', env: {}, mock: false, capturePreview, log }),
+    /log broke/,
+  );
+  assert.equal(released, 1);
+});
+
+test('captureScreenshots: a Run App capture that fails is the side\'s error with its message, never a throw', async (t) => {
+  const { captureScreenshots } = load();
+  const cwd = projectWithPreview(t);
+  const runDir = tmpDir(t, 'run-');
+  const capturePreview = async ({ side, out }) => {
+    if (side === 'original') throw new Error('port 5173 of http://localhost:5173 is already in use');
+    fs.writeFileSync(out, 'PNG');
+  };
+  const result = await captureScreenshots({ entries: ONE_ENTRY, cwd, runDir, folder: 'writer', round: 1, base: 'main', env: {}, mock: false, capturePreview });
+  assert.equal(result.taken, 1);
+  assert.deepEqual(result.errors.map((e) => e.side), ['original']);
+  assert.match(result.errors[0].error, /already in use/);
+});
+
+// ---- the yaml command, really run: the arguments reach it unchanged ---------------------------------
+
+test('captureScreenshots: the yaml command gets every argument unchanged through the shell (spaces, quotes, %, &, ^, !, |, <>)', async (t) => {
+  const { captureScreenshots } = load();
+  const cwd = tmpDir(t, 'proj-real-');
+  const seen = path.join(cwd, 'argv.json');
+  // shoot.js records its arguments and writes the image the step asks for
+  write(cwd, 'shoot.js', [
+    "const fs = require('fs'); const path = require('path');",
+    'const a = process.argv.slice(2); const v = (n) => a[a.indexOf(n) + 1];',
+    `fs.appendFileSync(${JSON.stringify(seen)}, JSON.stringify(a) + '\\n');`,
+    "fs.writeFileSync(path.join(v('--out'), v('--name') + '.' + v('--side') + '.png'), 'PNG');",
+  ].join('\n'));
+  write(cwd, '.multiagent/screenshot.yaml', `command: ${JSON.stringify(`"${process.execPath}" shoot.js`)}\n`);
+  const runDir = tmpDir(t, 'run-');
+  const odd = ['--view', 'two words', 'say "hi"', '100%', '%PATH%', 'x & echo injected', 'a^b', '!bang!', 'a|b', 'a<b>c'];
+  const slot = async () => ({ token: 'test', release() {} });
+  const result = await captureScreenshots({
+    entries: [{ name: '649-odd', caption: 'Odd args', args: odd }], cwd, runDir, folder: 'writer', round: 1, env: process.env, mock: false, slot, timeoutMs: 60000,
+  });
+  assert.equal(result.source, 'command');
+  assert.equal(result.taken, 1, result.message);
+  const got = fs.readFileSync(seen, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(got.length, 1, 'the command ran once and nothing else was injected');
+  // `<command> -- <args>`: node hands the `--` after the script to it
+  const args = got[0][0] === '--' ? got[0].slice(1) : got[0];
+  assert.deepEqual(args.slice(0, odd.length), odd);
+});
+
 // ---- the manual fallback ----------------------------------------------------------------------------
 
 test('captureScreenshots: no command and no local preview asks for a manual attachment (no throw, nothing taken)', async (t) => {
