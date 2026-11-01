@@ -711,15 +711,74 @@ test('itemAction refuses an item whose run is alive (alive(runId), #112), naming
 
 // ---- propose (the Product Owner's roadmap, #105) -------------------------------------------
 
-test('propose(add) appends planned stages, drops issues already planned, and pauses a running roadmap', (t) => {
+const nextProposal = { stages: [{ name: 'Next', items: [{ workflow: 'w.yaml', issues: [1, 2] }] }] };
+
+test('propose(add) appends planned stages, drops issues already planned, and keeps a running roadmap running (#654)', (t) => {
   const dir = tmp(t);
-  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running' }));
-  const { roadmap, dropped } = roadmaps.propose(dir, 'proj', { stages: [{ name: 'Next', items: [{ workflow: 'w.yaml', issues: [1, 2] }] }] });
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { runId: 'r1', runs: ['r1'] })] }], { state: 'running', scope: { stage: 's1' } }));
+  const { roadmap, dropped } = roadmaps.propose(dir, 'proj', nextProposal);
   assert.deepEqual(dropped, [1]);
-  assert.equal(roadmap.state, 'paused');
-  assert.match(roadmap.error, /press Start to continue/);
+  assert.equal(roadmap.state, 'running');
+  assert.deepEqual(roadmap.scope, { stage: 's1' });
+  assert.equal(roadmap.pausedBy, null);
+  assert.equal(roadmap.error, null);
   assert.equal(roadmap.stages.length, 2);
   assert.deepEqual(itemIssues(roadmap.stages[1].items[0]).map((i) => i.number), [2]);
+  // the file says the same: nothing waits for a Start
+  assert.equal(roadmaps.readRoadmap(dir, 'proj').state, 'running');
+});
+
+test('propose(add) on a running roadmap never writes a "press Start" message (#654)', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running' }));
+  const { roadmap } = roadmaps.propose(dir, 'proj', { stages: [{ name: 'A', items: [{ workflow: 'w.yaml', issues: [2] }] }, { name: 'B', items: [{ workflow: 'w.yaml', issues: [3] }] }] });
+  assert.equal(roadmap.state, 'running');
+  assert.equal(roadmap.stages.length, 3);
+  assert.doesNotMatch(String(roadmap.error ?? ''), /press Start|added from a proposal/);
+});
+
+test('the stages a proposal adds to a running roadmap start in their turn, once the stages before them end (#654)', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { runId: 'r1', runs: ['r1'] })] }], { state: 'running' }));
+  const { roadmap } = roadmaps.propose(dir, 'proj', nextProposal);
+  const newItemId = roadmap.stages[1].items[0].id;
+  // stage 1 still running: the new stage waits
+  const stillRunning = roadmaps.advance(roadmap, { runOf: (id) => (id === 'r1' ? { status: 'running' } : null) });
+  assert.deepEqual(stillRunning.start, []);
+  // stage 1 done: the new stage starts without anyone pressing Start
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: (id) => (id === 'r1' ? doneRun() : null) });
+  assert.equal(after.state, 'running');
+  assert.deepEqual(start.map((x) => x.id), [newItemId]);
+});
+
+test('propose(add) keeps a paused roadmap paused, with its pausedBy and error (#654)', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap(
+    [{ id: 's1', items: [mkItem('i1', 1, { status: 'failed', runId: 'r1', runs: ['r1'], error: 'boom' })] }],
+    { state: 'paused', pausedBy: 'i1', error: 'Stage 1: #1 failed.' },
+  ));
+  const { roadmap } = roadmaps.propose(dir, 'proj', nextProposal);
+  assert.equal(roadmap.state, 'paused');
+  assert.equal(roadmap.pausedBy, 'i1');
+  assert.equal(roadmap.error, 'Stage 1: #1 failed.');
+  assert.equal(roadmap.stages.length, 2);
+});
+
+test('propose(add) keeps a planned roadmap planned: nothing starts by itself (#654)', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'planned' }));
+  const { roadmap } = roadmaps.propose(dir, 'proj', nextProposal);
+  assert.equal(roadmap.state, 'planned');
+  assert.equal(roadmap.error, null);
+  assert.equal(roadmap.stages.length, 2);
+});
+
+test('propose(add) turns a done roadmap into a planned one: the new stages wait for Start (#654)', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'done', runId: 'r1', runs: ['r1'] })] }], { state: 'done' }));
+  const { roadmap } = roadmaps.propose(dir, 'proj', nextProposal);
+  assert.equal(roadmap.state, 'planned');
+  assert.equal(roadmap.stages.length, 2);
 });
 
 test('propose(replace) throws while an item\'s run is alive (alive(runId), #112)', (t) => {
@@ -728,6 +787,14 @@ test('propose(replace) throws while an item\'s run is alive (alive(runId), #112)
   assert.throws(() => roadmaps.propose(dir, 'proj', { stages: [] }, { replace: true, alive: (id) => id === 'r1' }), /in progress/);
   // no `alive`: the stored status (never 'running' any more, see persisted/withStatus) never blocks it
   roadmaps.propose(dir, 'proj', { stages: [] }, { replace: true });
+});
+
+test('propose(replace) on a running roadmap with no live run returns a roadmap that does not start by itself (#654)', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running' }));
+  const { roadmap } = roadmaps.propose(dir, 'proj', nextProposal, { replace: true, alive: () => false });
+  assert.notEqual(roadmap.state, 'running');
+  assert.deepEqual(roadmap.stages.flatMap((s) => s.items.flatMap((x) => itemIssues(x).map((i) => i.number))), [1, 2]);
 });
 
 // ---- dropIssues / adoptResumed ---------------------------------------------------------------
