@@ -22,7 +22,8 @@
 // (living-doc, mock-2); each change by request is a versioned card whose detail holds Undo this change
 // and Mark reviewed (mock-3); the review shows its score, its rubric checks and the anchored notes with
 // Apply / Edit / Dismiss (mock-4); the approval gate is the sign-off panel (mock-5). Several writers
-// (AI Arena, phase 2) and Screens to capture first (captures, phase 3) are shown disabled.
+// (AI Arena, phase 2) and Screens to capture first (captures, phase 3) are shown disabled. The New item
+// panel, the review and the sign-off markup live in docs-panels.js (DocsPanels).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, showToast, showView, confirmDialog), markdownHtml (artifact-render.js),
 // DocModel (packages/shared/doc-model.js), CurrentProject and AgentChat.
@@ -670,28 +671,9 @@
     const o = docs.open;
     const box = $('#docs-notes');
     if (!o || !box) return;
-    const shown = o.notes.length || o.checks.length || o.score !== undefined;
-    box.classList.toggle('hidden', !shown);
-    const result = (r) => {
-      if (r === 'pass') return `<span class="docs-pill done">${t('docs.check_pass')}</span>`;
-      if (r === 'note') return `<span class="docs-pill editing">${t('docs.check_note')}</span>`;
-      return `<span class="docs-pill">${esc(r || '')}</span>`;
-    };
-    box.innerHTML = shown ? `
-      <div class="docs-section-head"><h3>${t('docs.review')}</h3>${o.score !== undefined ? `<span class="docs-pill done" data-testid="doc-review-score">${t('docs.review_score', { score: esc(o.score) })}</span>` : ''}</div>
-      ${o.checks.length ? `<ul class="docs-check-list">${o.checks.map((c) => `
-        <li class="docs-check" data-testid="doc-review-check"><span class="docs-check-name" title="${esc(c.name)}">${esc(c.name)}</span>${result(c.result)}</li>`).join('')}</ul>` : ''}
-      <ul class="docs-note-list">${o.notes.map((n, i) => `
-        <li class="docs-note${n.severity === 'major' ? ' major' : ''}" data-testid="doc-review-note" data-anchor="${esc(n.anchor)}">
-          <div class="docs-note-top"><b class="mono">#${esc(noteKey(n.anchor))}</b><span class="muted small">${t('docs.reviewer')}</span></div>
-          ${n.quote ? `<blockquote class="docs-note-quote">“${esc(n.quote)}”</blockquote>` : ''}
-          <p class="docs-note-text">${esc(n.text)}</p>
-          <div class="row docs-note-actions">
-            <button type="button" class="btn sm primary" data-testid="doc-note-apply" data-docs-note-apply="${i}">${t('docs.apply')}</button>
-            <button type="button" class="btn sm ghost" data-testid="doc-note-edit" data-docs-note-edit="${i}">${t('docs.edit')}</button>
-            <button type="button" class="btn sm ghost" data-testid="doc-note-dismiss" data-docs-note-dismiss="${i}">${t('docs.dismiss')}</button>
-          </div>
-        </li>`).join('')}</ul>` : ''; // i18n-ignore
+    const html = DocsPanels.review({ score: o.score, checks: o.checks, notes: o.notes, key: noteKey });
+    box.classList.toggle('hidden', !html);
+    box.innerHTML = html;
   }
 
   // the selection a review note points to: the first block of its section, its quote when it is there
@@ -739,39 +721,18 @@
   // #671 the sign-off panel of mock-5: the review and unreviewed pills, the front matter the gate
   // writes, the next steps (nothing starts before their own click) and its three answers
   function signoffHtml(o, g, wait) {
-    const spec = o.doc === 'spec';
-    const file = docFile(o.doc);
-    const pending = liveChanges(o).filter((c) => o.unreviewed.includes(c.commit)).length;
-    const open = o.notes.length;
-    const today = new Date().toISOString().slice(0, 10);
-    // the front matter's own keys, as the file spells them
-    const fm = `status: ${esc(o.data?.status || 'draft')} → <span class="docs-fm-new">${esc(acceptedStatus(o.doc) || '')}</span> · approver: ${t('docs.your_git_name')} · date: ${today}`; // i18n-ignore
-    const next = spec
-      ? [[t('docs.create_epic_and_phase_issues'), t('docs.next_issues_help')], [t('docs.start_the_build'), t('docs.next_build_help')]]
-      : [[t('docs.write_the_spec'), t('docs.next_spec_help')]];
-    return `
-      <section class="docs-signoff" data-testid="doc-signoff" aria-labelledby="docs-signoff-heading">
-        <div class="docs-signoff-head">
-          <h3 id="docs-signoff-heading">${spec ? t('docs.sign_off_required', { file }) : t('docs.acceptance_required', { file })}</h3>
-          <span class="spacer"></span>
-          ${o.score !== undefined ? `<span class="docs-pill done" data-testid="doc-signoff-review">${open === 1 ? t('docs.review_pill_one', { score: esc(o.score), count: open }) : t('docs.review_pill', { score: esc(o.score), count: open })}</span>` : ''}
-          <span class="docs-pill${pending ? ' editing' : ' done'}" data-testid="doc-signoff-unreviewed">${pending === 1 ? t('docs.unreviewed_changes_one', { count: pending }) : t('docs.unreviewed_changes', { count: pending })}</span>
-        </div>
-        ${g.message ? `<p class="muted small docs-gate-message" title="${esc(g.message)}">${esc(g.message)}</p>` : ''}
-        <div class="docs-signoff-fm">
-          <b class="small">${spec ? t('docs.front_matter_after_sign_off') : t('docs.front_matter_after_acceptance')}</b>
-          <code class="docs-signoff-fm-line" data-testid="doc-signoff-frontmatter">${fm}</code>
-        </div>
-        <div class="docs-signoff-next">${next.map(([title, help]) => `
-          <div class="docs-next-card" data-testid="doc-signoff-next"><b>${title}</b><p class="muted small">${help}</p></div>`).join('')}</div>
-        <div class="row docs-signoff-actions">
-          <button type="button" class="btn primary" data-testid="doc-gate-accept" data-docs-gate="accept"${wait}>${spec ? t('docs.sign_off_spec') : t('docs.accept_intent')}</button>
-          <button type="button" class="btn ghost" data-testid="doc-gate-revise" data-docs-gate="revise"${wait}>${t('docs.back_to_editing')}</button>
-          <button type="button" class="btn ghost" data-testid="doc-gate-cancel" data-docs-stop${wait}>${t('docs.stop')}</button>
-          <span class="spacer"></span>
-          <span class="muted small mono">${t('docs.versions_count', { count: versionOf(o) })}</span>
-        </div>
-      </section>`; // i18n-ignore
+    return DocsPanels.signoff({
+      spec: o.doc === 'spec',
+      file: docFile(o.doc),
+      from: o.data?.status,
+      to: acceptedStatus(o.doc),
+      score: o.score,
+      open: o.notes.length,
+      pending: liveChanges(o).filter((c) => o.unreviewed.includes(c.commit)).length,
+      message: g.message,
+      versions: versionOf(o),
+      wait,
+    });
   }
 
   function renderGate() {
@@ -1004,40 +965,7 @@
             <p id="docs-list-error" class="error small"></p>
             <div id="docs-list" class="docs-list" data-testid="docs-list"></div>
           </div>
-          <aside id="docs-new-panel" class="docs-new-panel hidden" data-testid="docs-new-panel" aria-labelledby="docs-new-heading">
-            <form id="docs-new-form" class="docs-new-form">
-              <div class="docs-new-head">
-                <h2 id="docs-new-heading">${t('docs.new_item')}</h2>
-                <button type="button" id="btn-docs-new-close" class="docs-chip-x" aria-label="${t('common.close')}" title="${t('common.close')}">×</button>
-              </div>
-              <div class="field">
-                <label for="docs-new-starts">${t('docs.starts_with')}</label>
-                <select id="docs-new-starts" data-testid="docs-new-starts-with">
-                  ${SDLC.filter((s) => s.doc).map((s) => `<option value="${s.doc}">${s.file} (${s.name()})</option>`).join('')}
-                </select>
-              </div>
-              <div class="field">
-                <label for="docs-new-title">${t('docs.what_it_is_about')}</label>
-                <textarea id="docs-new-title" data-testid="docs-new-item-title" rows="3" maxlength="200" placeholder="${t('docs.what_the_item_is_about')}"></textarea>
-              </div>
-              <div class="field">
-                <span class="docs-new-label">${t('docs.screens_to_capture_first')}</span>
-                <div class="docs-new-screens" data-testid="docs-new-screens">
-                  <button type="button" class="chip" data-testid="docs-new-screen-add" disabled title="${t('docs.later_phase')}">${t('docs.add_screen')}</button>
-                </div>
-              </div>
-              <label class="docs-new-writers" title="${t('docs.later_phase')}">
-                <input type="checkbox" data-testid="docs-new-writers" disabled />
-                <span><b>${t('docs.several_writers')}</b><span class="muted small">${t('docs.several_writers_help')}</span></span>
-              </label>
-              <p id="docs-new-error" class="error small"></p>
-              <div class="docs-new-foot">
-                <span id="docs-new-estimate" class="mono muted small" data-testid="docs-new-estimate">${estimateText('intent')}</span>
-                <span class="spacer"></span>
-                <button type="submit" class="btn primary" data-testid="docs-new-item-start">${t('docs.start')}</button>
-              </div>
-            </form>
-          </aside>
+          ${DocsPanels.newItemPanel(SDLC.filter((s) => s.doc), estimateText('intent'))}
         </div>
         <div id="docs-editor-area" class="hidden">
           <div id="docs-editor" class="docs-editor" data-testid="doc-editor" data-stage="intent">
