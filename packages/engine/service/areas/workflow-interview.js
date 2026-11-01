@@ -70,10 +70,9 @@ async function simulatedProfile(project) {
   const shas = head ? [head] : [];
   const e2eCommand = detectE2eCommand(folder);
   return {
+    // #630: the ways of working the set is composed from (mode, ci, tests, e2eCommand); who works on it
+    // and how it merged stay in the evidence (`team`, `merge`), as the seed says
     profile: {
-      team: nAuthors > 1 ? 'team' : 'solo',
-      merge: nMerges > 0 ? 'pr' : 'local',
-      // #630: the ways of working the set is composed from (mode, ci, tests, e2eCommand)
       mode: nMerges > 0 ? 'remote' : 'local',
       release: null,
       testCommand: detectTestCommand(folder),
@@ -96,12 +95,15 @@ async function simulatedProfile(project) {
 // #640: a field git could not settle (null, or no language found)
 const open = (v) => v == null || (Array.isArray(v) && !v.length);
 
+// #630: evidence only, never a profile field (an older seed's answer may still give them)
+const EVIDENCE_ONLY = ['merge', 'team'];
+
 // #640: the free profile with the model's answer only in the fields the free one leaves open
 function mergeProfile(free, model) {
   const profile = { ...free.profile };
   const evidence = { ...free.evidence };
   for (const k of new Set([...Object.keys(free.profile), ...Object.keys(model.profile)])) {
-    if (!open(free.profile[k]) || open(model.profile[k])) continue;
+    if (EVIDENCE_ONLY.includes(k) || !open(free.profile[k]) || open(model.profile[k])) continue;
     profile[k] = model.profile[k];
     if (model.evidence?.[k]) evidence[k] = model.evidence[k];
   }

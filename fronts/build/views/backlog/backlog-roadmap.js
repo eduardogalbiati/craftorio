@@ -97,12 +97,15 @@
       .catch(() => { workflows = new Map(); })
       .finally(() => { loading = false; });
   }
-  const inputDefs = (x) => workflows?.get(x.workflow)?.inputs || {};
+  // #630: an item saved under an old workflow name (software-development.yaml, ...) means its alias
+  const fileOf = (x) => (!x.workflow || workflows?.has(x.workflow) ? x.workflow : window.DefaultWorkflow?.aliasOf(x.workflow)?.file || x.workflow);
+  const wfOf = (x) => workflows?.get(fileOf(x));
+  const inputDefs = (x) => wfOf(x)?.inputs || {};
 
   // #195: an item whose workflow pushes (a branch, a PR/MR, CI minutes) while the default merges locally
   function pushesAgainstDefault(x) {
     const def = window.DefaultWorkflow?.current();
-    return def?.merge === 'local' && x.workflow !== def.file && workflows?.get(x.workflow)?.merge === 'remote';
+    return def?.merge === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote';
   }
   // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
   // error without a run, e.g. kept work of an ended run), never while its run is alive
@@ -307,7 +310,7 @@
       ? `<div class="field rm-add"><label>${t('backlog_roadmap.new_input')}</label><div class="row"><input type="text" data-rm-newname placeholder="${t('backlog_roadmap.name')}" aria-label="${t('backlog_roadmap.new_input_name')}" autofocus /><input type="text" data-rm-newvalue placeholder="${t('backlog_roadmap.value')}" aria-label="${t('backlog_roadmap.new_input_value')}" /></div></div>`
       : `<button class="link-btn small" type="button" data-rm-addinput>${t('backlog_roadmap.add_input')}</button>`;
     // #262: each agent's provider / model / effort for this item's run, folded unless one was changed
-    const wfDef = workflows?.get(x.workflow);
+    const wfDef = wfOf(x);
     const changed = Object.keys(x.agentOverrides || {}).length;
     const agents = wfDef && window.AgentOverrides
       ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">${t('backlog_roadmap.agents')}${changed ? t('backlog_roadmap.changed_changed_for_this_run', { changed }) : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides, hideLegend: true })}</details>`
@@ -336,7 +339,7 @@
   function estimate(x) {
     const run = x.run;
     if (!x.runId || !run) return null;
-    const path = (workflows?.get(x.workflow)?.steps || []).map((st) => st.id);
+    const path = (wfOf(x)?.steps || []).map((st) => st.id);
     const est = RunProgress.estimateProgress({ steps: run.progress || [], path, typical: run.stepTimes || {}, status: run.status, startedAt: run.startedAt, keep: true });
     return x.waiting && est.state === 'running' ? { ...est, state: 'waiting' } : est;
   }
@@ -507,7 +510,7 @@
   const STATION_ROBOT = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping' };
   const stationWord = (state) => t({ done: 'backlog_roadmap.station_done', skipped: 'backlog_roadmap.station_not_run', todo: 'backlog_roadmap.station_not_reached', gate: 'backlog_roadmap.station_waits_for_you', running: 'backlog_roadmap.station_running', waiting: 'backlog_roadmap.station_waiting_for_you', failed: 'backlog_roadmap.station_failed', stopped: 'backlog_roadmap.station_stopped', back: 'backlog_roadmap.station_asked_for_fixes' }[state]);
   function stationsOf(x, v) {
-    const wf = workflows?.get(x.workflow);
+    const wf = wfOf(x);
     const run = v?.run;
     // the workflow as installed; a run of a workflow that is not: what its trail and its groups say
     const steps = wf?.steps?.length ? wf.steps : [...new Map((run?.progress || []).map((e) => [e.step, { id: e.step, type: e.type }])).values()];
@@ -530,7 +533,7 @@
     }
     if (st.human) return you();
     // not reached yet: the agents the workflow gives its steps (the engine's gear for a step without one)
-    const wf = workflows?.get(x.workflow);
+    const wf = wfOf(x);
     const byId = new Map((wf?.steps || []).map((s) => [s.id, s]));
     const keys = [...new Set(st.steps.flatMap((id) => {
       const s = byId.get(id);
@@ -549,7 +552,7 @@
     const run = v?.run || null;
     const stations = stationsOf(x, v);
     if (!stations.length) return workflows ? `<div class="rm-pipe rm-pipe-none small muted" data-testid="roadmap-pipeline">${t('backlog_roadmap.no_pipeline_to_show_this_workflow')}</div>` : '';
-    const wf = workflows?.get(x.workflow);
+    const wf = wfOf(x);
     const stepNames = run?.stepNames || Object.fromEntries((wf?.steps || []).filter((s) => s.display).map((s) => [s.id, s.display]));
     const active = !!run && (run.status === 'running' || run.status === 'pending');
     const html = stations.map((st) => {
@@ -576,7 +579,7 @@
   // #279 (data-testid="roadmap-update-after"), which the E2E steps assert absent on every card.
   function workflowHtml(x, locked, open, v) {
     const push = pushesAgainstDefault(x);
-    const name = readable(String(x.run?.workflow || x.workflow || '').replace(/\.ya?ml$/i, ''));
+    const name = readable(String(x.run?.workflow || fileOf(x) || '').replace(/\.ya?ml$/i, ''));
     const full = x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow;
     const gate = x.waiting && x.run?.gate ? x.run.gate : '';
     // the chip opens the run (backlog.js: any [data-run]); its state is said to a screen reader only:
@@ -587,7 +590,7 @@
     const edit = locked || open ? '' : `<button class="link-btn small" type="button" data-rm-edit title="${t('backlog_roadmap.edit_this_item_s_inputs')}">${t('backlog_roadmap.edit')}</button>`;
     const pushBadge = push ? `<span class="badge rm-wf rm-wf-push" title="${esc(`${full}. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally`)}"><span aria-hidden="true">⇡ </span>${t('backlog_roadmap.pushes_a_pr_mr')}</span>` : '';
     const sim = x.mock || x.run?.mock ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '';
-    const meta = `${pushBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(workflows?.get(x.workflow) || null, x.inputs, { skip: ['mode'] })}`;
+    const meta = `${pushBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(wfOf(x) || null, x.inputs, { skip: ['mode'] })}`;
     return `
         <div class="rm-workflow" data-testid="roadmap-workflow">
           <div class="rm-wf-config">

@@ -251,10 +251,10 @@
   // #630: a workflow's auto | validated toggle: its `validation` input when it has one (feature, whose
   // `mode` is local | remote), else `mode`. `old`: an item saved before still says `mode: validated`,
   // read as that value. `context`: the toggle's value (or default) for show_if.
-  const VALIDATION = ['auto', 'validated'];
+  const defaultWorkflow = () => (typeof module === 'object' && module.exports ? require('@multiagent/shared/default-workflow') : root.DefaultWorkflow);
   function modeInput(defs = {}, inputs = {}) {
     const key = defs.validation ? 'validation' : 'mode';
-    const old = key === 'validation' && VALIDATION.includes(inputs?.mode);
+    const old = key === 'validation' && defaultWorkflow().VALIDATION.includes(inputs?.mode);
     const value = inputs?.[key] ?? (old ? inputs.mode : undefined);
     return { key, def: defs[key], value, old, context: { [key]: value ?? defs[key]?.default } };
   }

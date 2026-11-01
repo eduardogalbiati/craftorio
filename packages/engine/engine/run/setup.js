@@ -12,14 +12,14 @@ const path = require('path');
 const { checkAttachments, storeAttachments } = require('../providers');
 const { resolveSkill } = require('../../domains/agents/skills');
 const { displayName } = require('@multiagent/shared/display-name');
+const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const { render } = require('./templates');
 const { MACHINE_STEP_TYPES, toBoolean } = require('./load');
 
-// #630: feature's old `mode: auto | validated` (the PO's plans, saved roadmaps) is now `validation`;
-// `mode` names local | remote
+// #630: a workflow with `validation` (feature) reads an old `mode: auto | validated` as it
 function oldValidation(inputs, given) {
-  if (!inputs.validation || !['auto', 'validated'].includes(given.mode) || inputs.mode?.enum?.includes(given.mode)) return given;
-  return { ...given, validation: given.validation || given.mode, mode: undefined };
+  if (!inputs.validation || inputs.mode?.enum?.includes(given.mode)) return given;
+  return DefaultWorkflow.oldValidation(given);
 }
 
 const methods = {

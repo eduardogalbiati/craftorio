@@ -12,6 +12,7 @@
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
+const { aliasInputs } = require('@multiagent/shared/default-workflow');
 const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
 const { Recorder } = require('@multiagent/engine/engine/recorder');
 const {
@@ -65,8 +66,9 @@ const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOut
 const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('@multiagent/engine/domains/local/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
   file: wfFile.file,
-  // #630: an old workflow name brings its variant's inputs, under the given ones
-  inputs: { ...(wfFile.inputs || {}), ...args.inputs },
+  // #630: an old workflow name brings its variant's inputs, under the given ones (an old
+  // `mode: validated` is the validation, so the alias's mode stays)
+  inputs: aliasInputs(wfFile, args.inputs || {}),
   attachments: args.attachments,
   mock: args.mock,
   ...(args.mock && args.mockAsks ? { mockSequences: { needs_human: args.mockAsks } } : {}),

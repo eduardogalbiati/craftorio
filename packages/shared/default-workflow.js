@@ -12,7 +12,9 @@
 // - projectFirst(list): the pickers' workflows with the header project's set first (#486).
 // - #630: ALIASES / aliasOf(file): the old bundled names (software-development, the local heroes,
 //   multi-model-review, e2e-release) now mean feature.yaml or release.yaml with the inputs of the old
-//   variant; a saved setting, manifest or roadmap naming one still runs (workflows.js resolveWorkflow).
+//   variant; a saved setting, manifest or roadmap naming one still runs (workflows.js resolveWorkflow);
+//   VALIDATION / oldValidation(given) / aliasInputs(alias, given): an old `mode: auto | validated` is
+//   feature's `validation` (the engine's resolveInputs, the run starts, the renderer's toggle).
 // Browser: window.DefaultWorkflow; Node: module.exports (packages/engine/domains/po/product-owner.js).
 (function (root) {
   const LOCAL = 'feature.yaml';
@@ -33,6 +35,18 @@
     const hit = ALIASES[name] || ALIASES[`${name}.yaml`];
     return hit ? { file: hit.file, inputs: { ...hit.inputs } } : null;
   }
+
+  // #630: feature's old `mode: auto | validated` (the PO's plans, saved roadmaps and runs) is now
+  // `validation`; `mode` names local | remote
+  const VALIDATION = ['auto', 'validated'];
+  /** #630: `given` inputs with an old `mode: auto | validated` moved to `validation` (mode dropped). */
+  function oldValidation(given) {
+    if (!VALIDATION.includes(given?.mode)) return given;
+    const { mode, ...rest } = given;
+    return { ...rest, validation: rest.validation || mode };
+  }
+  /** #630: an alias's inputs under the run's own; an old validation mode moves first, so the alias's mode wins. */
+  const aliasInputs = (alias, given) => (alias?.inputs ? { ...alias.inputs, ...oldValidation(given || {}) } : given);
 
   /** The default among `files` (workflow file names): the setting when it exists, else the fallback. */
   function resolve(setting, files = []) {
@@ -91,15 +105,18 @@
   const label = (file) => String(file || '').replace(/\.ya?ml$/i, '');
 
   const api = {
+    aliasInputs,
     aliasOf,
     ALIASES,
     BUILD,
     LOCAL,
     REMOTE,
+    VALIDATION,
     current,
     firstBuild,
     label,
     mergeOf,
+    oldValidation,
     projectFirst,
     resolve,
   };

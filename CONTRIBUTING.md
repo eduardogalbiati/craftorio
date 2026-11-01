@@ -46,7 +46,7 @@ Read when running from source; the packaged app ignores the ones marked "source 
 
 ## Checks
 
-- `npm test` runs the unit tests and a full simulated run of the software-development workflow.
+- `npm test` runs the unit tests and a full simulated run of the feature workflow.
   It is simulation-only (`MULTIAGENT_SIMULATION_ONLY=1`): it never calls a model and never starts
   a real run, so it costs nothing.
 - `node scripts/docs.js --check` checks that the generated README tables are up to date

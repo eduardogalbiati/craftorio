@@ -127,7 +127,7 @@ test('#487 a second analysis while the first runs is refused as busy and seeds:l
   assert.equal((await row()).running === null, false);
   release();
   const out = await first;
-  assert.equal(out.profile.team, 'solo');
+  assert.equal(out.profile.mode, 'local');
   assert.equal((await row()).running, null);
   assert.equal(oracle.turns.length, 1);
 });
@@ -141,8 +141,7 @@ test('#487 in simulation a Go project without package.json gets go test and go i
   assert.equal(oracle.turns.length, 0);
   assert.equal(out.profile.testCommand, 'go test ./...');
   assert.deepEqual(out.profile.languages, ['go']);
-  assert.equal(out.profile.team, 'solo');
-  assert.equal(out.profile.merge, 'local');
+  assert.equal(out.profile.mode, 'local');
   assert.equal(out.profile.release, null);
   const ids = out.questions.map((q) => q.id);
   assert.equal(ids.includes('release'), true);

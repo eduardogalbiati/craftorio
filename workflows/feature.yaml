@@ -202,7 +202,7 @@ inputs:
     enum: [e2e_first, code_first]
     default: e2e_first
     options: { e2e_first: "E2E first", code_first: "Code first" }
-    description: "E2E first: the test writer writes the issue's E2E scenarios with the acceptance tests, before the code. Code first: the acceptance tests are unit tests only; the E2E scenarios come after the code."
+    description: "E2E first: the test writer writes the issue's E2E scenarios with the acceptance tests, before the code. Code first: the acceptance tests are unit tests only; no E2E scenarios in this run."
   # #630: the multi-model review (the old multi-model-review workflow) as a second reviewer on another model
   review:
     label: "Review"

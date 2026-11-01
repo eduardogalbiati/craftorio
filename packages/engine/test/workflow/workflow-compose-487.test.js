@@ -141,7 +141,8 @@ test('#487 merge=local composes a development workflow that merges locally and o
 });
 
 test('#487 the merge answer overrides the profile: answers.merge=pr composes a pull-request development workflow', (t) => {
-  const wf = engine().loadWorkflow(devFile(writeSet(t, compose(profileOf({ merge: 'local' }), { merge: 'pr' }))));
+  // #630: only a project whose CI runs on pull requests waits for it (R7)
+  const wf = engine().loadWorkflow(devFile(writeSet(t, compose(profileOf({ merge: 'local', ci: 'pr+release' }), { merge: 'pr' }))));
   assert.equal(waitsOnPullRequest(wf), true);
   assert.equal(mergesLocally(wf), false);
 });

@@ -227,7 +227,9 @@ const e2eStep = (s, fragment, next, failed) => ({ id: 'e2e', fragment, command: 
 // the local merge, then push_main (Local), or through a pull request (Remote)
 function changeSteps(s, review) {
   const local = s.mode === 'local';
-  const land = local ? { merge: 'local', goto: 'push_main', on_error: 'resolve_merge' } : { goto: 'ci' };
+  // R7: only a project whose CI runs on pull requests waits for it; else the PR is opened and handed over
+  const prCi = s.ci === 'pr+release';
+  const land = local ? { merge: 'local', goto: 'push_main', on_error: 'resolve_merge' } : { goto: prCi ? 'ci' : 'pr_open' };
   const verified = s.validate ? { goto: 'validate' } : land;
   const retry = [
     { when: "output.status == 'blocked'", goto: 'verify_failed' },
@@ -251,7 +253,9 @@ function changeSteps(s, review) {
     { id: 'verify_failed', fragment: 'dev-pipeline', transitions: [{ when: 'approved', ...land }, { when: 'rejected', goto: 'end', status: 'failed' }] },
     ...(local
       ? [{ id: 'resolve_merge', fragment: 'local-merge-pipeline', agent: 'developer' }, { id: 'merge_blocked', fragment: 'local-merge-pipeline' }, { id: 'push_main', fragment: 'local-merge-pipeline' }]
-      : [{ id: 'ci', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'ci_failed', fragment: 'pr-pipeline' }, { id: 'pr_review', fragment: 'pr-pipeline' }]),
+      : prCi
+        ? [{ id: 'ci', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'ci_failed', fragment: 'pr-pipeline' }, { id: 'pr_review', fragment: 'pr-pipeline' }]
+        : [{ id: 'pr_open', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'pr_review', fragment: 'pr-pipeline' }]),
   ];
 }
 
@@ -262,7 +266,7 @@ function changeAgents(s, facts, order) {
   const facts1 = factsText(s, facts);
   const build = toolsOf(s, facts, ['bash:git', 'edit', 'read', 'write']);
   return {
-    developer: agent({ effort: 'high', tools: build, skills: facts.skills, system: `You are the developer. You implement the task on the run's branch with small, cohesive changes that follow the project's conventions, with their tests. ${order} ${facts1} Never push.` }),
+    developer: agent({ effort: 'high', tools: build, skills: facts.skills, system: `You are the developer. You implement the task on the run's branch with small, cohesive changes that follow the project's conventions, with their tests. ${order} ${facts1} Never push, except in the push main step.` }),
     reviewer: agent({ effort: review.effort, tools: ['bash:git', 'read'], system: `You are the code reviewer (${s.review} rigour). You read the change's diff and approve it or list what to change; you change nothing. ${facts1}` }),
     verifier: agent({ model: FAST_MODEL, effort: 'medium', tools: toolsOf(s, facts, ['bash:git', 'read']), skills: facts.skills, system: `You are the verifier. You check, with one command and its observed result, that the change does what the task asked. ${facts1}${s.screenshots ? ' Capture the screens the change touches (the project\'s screenshot command, else a short description of each state) and name them in your evidence.' : ''}` }),
     ...(local ? {} : { ci_pusher: agent({ model: FAST_MODEL, effort: 'medium', tools: ['bash:gh', 'bash:git', 'bash:glab', 'read'], system: 'You are the CI pusher. You push the run\'s branch, open its pull request and read its CI.' }) }),
