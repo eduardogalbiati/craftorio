@@ -1,6 +1,6 @@
 // Service area: local merges not pushed (software-development-local-hero, packages/engine/domains/local/local-push.js). The
 // base a project's local runs merge into, what it has that origin has not (cached for the Backlog
-// and the sidebar badge), Push / Update and push, auto-push after a run's `merge: local`, and a
+// and the sidebar badge), Push / Update and push, the status after a run's `merge: local`, and a
 // push conflict handed to a run of the local workflow. A push records a release candidate (#489).
 
 const path = require('path');
@@ -88,21 +88,11 @@ module.exports = (ctx) => {
     return ctx.startWorkflowRun({ file, inputs, mock: !!mock, projectId: project.id });
   }
 
-  // After a run's `merge: local`: the project's count of commits not pushed, and the push when the
-  // project asks for it (auto-push, off by default). A rejected or failed push only notifies: the
-  // Backlog's Push / Update and push takes it from there.
+  // After a run's `merge: local`: the project's count of commits not pushed. The push itself is the
+  // feature and fix workflows' last step in Local mode (`push_main`, #630; the project auto-push left).
   async function afterLocalMerge(run, { base }) {
     if (!run.projectId || run.mock) return;
     const project = projects.readProject(ctx.ws.projects, run.projectId);
-    if (project.autoPush && project.isGit) {
-      try {
-        const r = await pushProject({ projectId: project.id, base });
-        if (!r.pushed && r.rejected) throw new Error(`origin moved: use Update and push in the Backlog. ${r.error || ''}`);
-      } catch (e) {
-        ctx.notify({ kind: 'run', event: 'failed', title: `Auto-push failed: ${project.name}`, body: e.message.slice(0, 180), target: { runId: run.runId, workflow: run.wf.metadata?.name } });
-      }
-      return;
-    }
     await refreshLocal(project.id, { fetch: false, base });
   }
 

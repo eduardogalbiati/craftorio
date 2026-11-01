@@ -6,9 +6,11 @@
 // - initialState(): { step: 'start', source, repository, name, analyzeLater };
 // - canGoNext(state), next(state), back(state), skipAnalysis(state): pure moves, a new state each;
 //   skipAnalysis ("Skip, analyze later") goes from analysis to review with analyzeLater: true;
-// - suggestWorkflows(profile): { suggestions: [{ id, reason }], defaulted } among today's workflows
-//   for { mode: 'local' | 'remote', ci: 'none' | 'release' | 'pr+release', tests: 'unit' | 'unit+e2e' };
-//   an empty or unknown profile gets the default workflow and defaulted: true;
+// - suggestWorkflows(profile): { suggestions: [{ id, reason, value, choices }], defaulted }: feature, fix
+//   and release (#630) for { mode: 'local' | 'remote', ci: 'none' | 'release' | 'pr+release', tests:
+//   'unit' | 'unit+e2e' }, each with its reason and its selector (the value the profile picks among
+//   choices [{ value, label }]); an empty or unknown profile gets the default profile's and
+//   defaulted: true; ciChoice(profile) is step 3's CI row, profileLine(profile) the profile in one line;
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
 //   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
 // - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
@@ -22,7 +24,7 @@
     { id: 'analysis', needs: [] },
     { id: 'review', needs: [] },
   ];
-  const DEFAULT = 'ai-development-local-hero';
+  const DEFAULT = 'feature';
   const PROFILE = { mode: ['local', 'remote'], ci: ['none', 'release', 'pr+release'], tests: ['unit', 'unit+e2e'] };
 
   const filled = (v) => typeof v === 'string' && v.trim().length > 0;
@@ -54,24 +56,83 @@
 
   const validProfile = (p) => !!p && Object.keys(PROFILE).every((k) => PROFILE[k].includes(p[k]));
 
+  // #630 (spec R7, mock-4): each suggested workflow's selector, value → label, and the value the
+  // profile picks; the CI row is the profile's ci itself (ciChoice)
+  const LANDS = { local: 'Local merge', remote: 'Remote PRs' };
+  const CHOICES = {
+    feature: {
+      'remote-e2e': 'Remote PRs · E2E first',
+      'remote-code': 'Remote PRs · code first',
+      'local-e2e': 'Local merge · E2E first',
+      'local-code': 'Local merge · code first',
+    },
+    fix: {
+      'remote-e2e': 'Code + unit, then E2E · remote PR',
+      'remote-code': 'Code + unit · remote PR',
+      'local-e2e': 'Code + unit, then E2E · local merge',
+      'local-code': 'Code + unit · local merge',
+    },
+    release: {
+      milestone: 'Milestone · tag + notes',
+      'per-merge': 'Per merge · tag + notes',
+      train: 'Release train · tag + notes',
+      'rc-stable': 'Release candidate, then stable',
+    },
+    ci: {
+      none: 'No CI: the local suite only',
+      release: 'On releases only',
+      'pr+release': 'On pull requests and releases',
+    },
+  };
+  const DEFAULT_PROFILE = { mode: 'local', ci: 'none', tests: 'unit' };
+  const choicesOf = (kind) => Object.entries(CHOICES[kind]).map(([value, label]) => ({ value, label }));
+
+  // feature, fix and release, always (spec D9), each with its reason from the profile's rules (R7);
+  // an empty or unknown profile gets the default profile's, with defaulted: true
   function suggestWorkflows(profile) {
-    if (!validProfile(profile)) {
-      return { suggestions: [{ id: DEFAULT, reason: 'No project profile yet: the default workflow' }], defaulted: true };
-    }
-    const out = [];
-    const add = (id, reason) => { if (!out.some((s) => s.id === id)) out.push({ id, reason }); };
-    const e2e = profile.tests === 'unit+e2e';
-    if (profile.mode === 'local') {
-      add(DEFAULT, 'Local project: develops and merges on your machine');
-      // R7: unit tests only = implement, then write the unit tests
-      if (!e2e) add('software-development-local-hero', 'Unit tests: implements first, then writes the unit tests');
-    } else {
-      add('software-development', 'Remote repository: develops through a pull request');
-    }
-    // e2e-release runs in a worktree of the local base, so it fits both modes
-    if (e2e) add('e2e-release', 'End-to-end tests: runs them before a release');
-    if (profile.ci !== 'none') add('release', 'CI builds releases: prepares and publishes a release');
-    return { suggestions: out, defaulted: false };
+    const valid = validProfile(profile);
+    const p = valid ? profile : DEFAULT_PROFILE;
+    const remote = p.mode === 'remote';
+    const e2e = p.tests === 'unit+e2e';
+    const variant = `${p.mode}-${e2e ? 'e2e' : 'code'}`;
+    const release = CHOICES.release[profile?.release] ? profile.release : 'milestone';
+    const lands = remote
+      ? 'the changes reach main through pull requests, merged on the platform'
+      : 'the changes are merged on your machine and main is pushed as the last step';
+    const why = [
+      ['feature', variant, `${lands}${e2e ? '; there is an E2E suite, so the E2E scenarios are written before the code' : '; unit tests only, so it implements first, then writes the unit tests'}.`],
+      ['fix', variant, `a fix reproduces the bug, then fixes it with a unit regression test${e2e ? ', and the E2E suite runs after' : ''}. Hotfix mode: from the last tag, shipped as a patch.`],
+      ['release', release, p.ci === 'none'
+        ? 'no CI builds releases: the release runs the suite, writes the notes and tags the version.'
+        : `the CI runs on release tags: the release pushes the tag and waits for that CI run${e2e ? '; E2E is a step of the release' : ''}.`],
+    ];
+    const suggestions = why.map(([id, value, reason]) => ({
+      id,
+      reason: valid ? reason : `No project profile yet: ${reason}`,
+      value,
+      choices: choicesOf(id),
+    }));
+    return { suggestions, defaulted: !valid };
+  }
+
+  // the CI row of step 3: what the project's CI runs on, with its reason and choices
+  function ciChoice(profile) {
+    const ci = validProfile(profile) ? profile.ci : DEFAULT_PROFILE.ci;
+    const reason = {
+      none: 'no CI file was found: the runs rely on the local suite only.',
+      release: 'the CI runs on release tags, not on pull requests: the release waits for that run.',
+      'pr+release': 'the CI runs on pull requests and on release tags: a remote feature waits for the PR\'s CI, the release for the tag\'s.',
+    }[ci];
+    return { id: 'ci', reason, value: ci, choices: choicesOf('ci') };
+  }
+
+  // the profile in one line, as step 3's "Ways of working profile" says it
+  function profileLine(profile) {
+    const p = validProfile(profile) ? profile : null;
+    if (!p) return '';
+    const ci = { none: 'no CI', release: 'CI on tags only', 'pr+release': 'CI on pull requests and tags' }[p.ci];
+    const lands = p.mode === 'remote' ? 'pull requests' : 'local merges, then push main';
+    return `${lands} · ${p.tests === 'unit+e2e' ? 'unit and E2E tests' : 'unit tests'} · ${ci}`;
   }
 
   function costSummary(analyses) {
@@ -94,12 +155,15 @@
 
   const api = {
     DEFAULT,
+    LANDS,
     STEPS,
     back,
     canGoNext,
+    ciChoice,
     costSummary,
     initialState,
     next,
+    profileLine,
     repoNameFromUrl,
     skipAnalysis,
     suggestWorkflows,

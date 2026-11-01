@@ -1,13 +1,14 @@
 // #487: a project's workflow set composed from its ways of working. The ways-of-working seed
-// (seeds/ways-of-working/seed.md) infers a profile from the repository (solo or team, local merge or
-// pull requests, the release style, the test and check commands, CI, languages); the interview
-// (packages/engine/service/areas/workflow-interview.js) asks only what the profile leaves open (openQuestions),
-// and the owner may override any inferred field (answers named after the profile's fields, PROFILE_FIELDS).
-// composeWorkflowSet builds the set from the step fragments (fragments/intake-pipeline,
-// dev-pipeline, local-merge-pipeline, pr-pipeline, release-pipeline): an intake workflow, the
-// development workflow in the chosen merge style, the release workflow in the chosen release style,
-// with the project's facts (test and check commands, languages, language skills) in the agents'
-// prompts, and the `.multiagent/project.yaml` manifest that lists them (packages/engine/domains/project/project-manifest.js),
+// (seeds/ways-of-working/seed.md) infers a profile from the repository (#630: the mode, local merge or
+// pull requests; the CI's triggers; unit or unit+E2E tests and the E2E command; the release style, the
+// test and check commands, languages); the interview (packages/engine/service/areas/workflow-interview.js)
+// asks only what the profile leaves open (openQuestions), and the owner may override any inferred field
+// (answers named after the profile's fields, PROFILE_FIELDS). composeWorkflowSet builds the set from the
+// step fragments (fragments/dev-pipeline, fix-pipeline, local-merge-pipeline, pr-pipeline,
+// release-pipeline): feature and fix in the chosen mode (Local ends with push_main) and release in the
+// chosen release style (waiting for the release CI when the CI runs on tags), with the project's facts
+// (test, E2E and check commands, languages, language skills) in the agents' prompts, and the
+// `.multiagent/project.yaml` manifest that lists them (packages/engine/domains/project/project-manifest.js),
 // merged into the one the repository already has (mergeManifest). Pure: it returns YAML texts;
 // writing them into the project is the service's, on the owner's click.
 
@@ -21,8 +22,11 @@ const { MANIFEST_FILE } = require('../project/project-manifest');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
 
-const TEAM_STYLES = ['solo', 'team'];
-const MERGE_STYLES = ['local', 'pr'];
+// #630 (spec R6): local merges into the local base and pushes main as the workflow's last step;
+// remote opens a pull request. ci: what the CI runs on. tests: E2E first when the project has an E2E suite.
+const MODES = ['local', 'remote'];
+const CI_STYLES = ['none', 'release', 'pr+release'];
+const TEST_STYLES = ['unit', 'unit+e2e'];
 const RELEASE_STYLES = ['milestone', 'per-merge', 'train', 'rc-stable'];
 const REVIEW_LEVELS = ['light', 'standard', 'strict'];
 // review rounds before the change goes on to the escalation gate, and the reviewer's effort
@@ -61,7 +65,7 @@ const RUNNERS = ['./gradlew', './mvnw', 'cargo', 'dotnet', 'go', 'gradle', 'mvn'
 // the workflow provider definition of the CLI the agents run on (its adapter's, as the Builder writes it)
 const PROVIDERS = { claude: registry.byId('claude').definition };
 // the profile's fields the owner may override with an answer of the same name
-const PROFILE_FIELDS = ['checkCommand', 'ci', 'languages', 'merge', 'release', 'team', 'testCommand'];
+const PROFILE_FIELDS = ['checkCommand', 'ci', 'e2eCommand', 'languages', 'mode', 'release', 'testCommand', 'tests'];
 const STRONG_MODEL = 'claude-opus-5-5';
 const FAST_MODEL = 'claude-sonnet-5';
 
@@ -79,32 +83,37 @@ function languageFacts(languages) {
   return { languages: keys, skills: keys.map((k) => `unit-test-writer-${k}`) };
 }
 
-const isTeam = (profile) => profile?.team === 'team';
+// the profile's mode; a #487 profile named the merge style instead (local | pr)
+const modeOf = (profile) => (MODES.includes(profile?.mode) ? profile.mode : { local: 'local', pr: 'remote' }[profile?.merge] || null);
+const isRemote = (profile) => modeOf(profile) === 'remote';
 const hasUi = (profile) => (profile?.languages || []).some((l) => LANGUAGE_KEYS[str(l).toLowerCase()] === 'js');
 
 /**
  * The questions the profile leaves open, each with its default from the profile:
  * [{ id, label, question, type: 'choice'|'number', options?, default }]. Validation, the budget per
- * issue, screenshots and the review rigour are always the owner's; the release style, the merge
- * style and solo or team only when the analysis could not settle them.
+ * issue, screenshots and the review rigour are always the owner's; the release style, the mode, the
+ * CI and the tests only when the analysis could not settle them.
  */
 function openQuestions(profile) {
-  const team = isTeam(profile);
+  const remote = isRemote(profile);
   const choice = (values) => values.map(([value, label]) => ({ value, label }));
   const out = [
     { id: 'validate', label: 'Validation', question: 'Approve every change before it lands, or trust the automatic checks?', type: 'choice', options: choice([['validate', 'Validate every round'], ['auto', 'Trust auto']]), default: 'validate' },
-    { id: 'budget', label: 'Budget per issue', question: 'The most one issue may spend on models, in US$.', type: 'number', default: team ? 30 : 20 },
+    { id: 'budget', label: 'Budget per issue', question: 'The most one issue may spend on models, in US$.', type: 'number', default: remote ? 30 : 20 },
     { id: 'screenshots', label: 'Screenshots', question: 'Capture the screens a change touches as its evidence?', type: 'choice', options: choice([['on', 'On'], ['off', 'Off']]), default: hasUi(profile) ? 'on' : 'off' },
-    { id: 'review', label: 'Review rigour', question: 'How hard the code review is before the tests run.', type: 'choice', options: choice([['light', 'Light: one round'], ['standard', 'Standard: two rounds'], ['strict', 'Strict: three rounds']]), default: team ? 'strict' : 'standard' },
+    { id: 'review', label: 'Review rigour', question: 'How hard the code review is before the tests run.', type: 'choice', options: choice([['light', 'Light: one round'], ['standard', 'Standard: two rounds'], ['strict', 'Strict: three rounds']]), default: remote ? 'strict' : 'standard' },
   ];
   if (!RELEASE_STYLES.includes(profile?.release)) {
-    out.push({ id: 'release', label: 'Release style', question: 'How the project releases: no tag history settles it.', type: 'choice', options: choice([['milestone', 'Milestone'], ['per-merge', 'Per merge'], ['train', 'Release train'], ['rc-stable', 'Release candidate, then stable']]), default: team ? 'train' : 'milestone' });
+    out.push({ id: 'release', label: 'Release style', question: 'How the project releases: no tag history settles it.', type: 'choice', options: choice([['milestone', 'Milestone'], ['per-merge', 'Per merge'], ['train', 'Release train'], ['rc-stable', 'Release candidate, then stable']]), default: remote ? 'train' : 'milestone' });
   }
-  if (!MERGE_STYLES.includes(profile?.merge)) {
-    out.push({ id: 'merge', label: 'Merge', question: 'How changes land: merged locally or through pull requests.', type: 'choice', options: choice([['local', 'Local merge'], ['pr', 'Pull requests']]), default: team ? 'pr' : 'local' });
+  if (!modeOf(profile)) {
+    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, or through pull requests.', type: 'choice', options: choice([['local', 'Local: merge, then push main'], ['remote', 'Remote: pull requests']]), default: 'local' });
   }
-  if (!TEAM_STYLES.includes(profile?.team)) {
-    out.push({ id: 'team', label: 'Team', question: 'Who works on the project: one person, or a team that reviews each other\'s changes.', type: 'choice', options: choice([['solo', 'Solo'], ['team', 'Team']]), default: 'solo' });
+  if (!CI_STYLES.includes(profile?.ci)) {
+    out.push({ id: 'ci', label: 'CI', question: 'What the project\'s CI runs on: no CI file settles it.', type: 'choice', options: choice([['none', 'No CI: the local suite only'], ['release', 'On releases only'], ['pr+release', 'On pull requests and releases']]), default: 'none' });
+  }
+  if (!TEST_STYLES.includes(profile?.tests)) {
+    out.push({ id: 'tests', label: 'Tests', question: 'Does the project have an E2E suite the feature workflow writes first?', type: 'choice', options: choice([['unit', 'Unit tests'], ['unit+e2e', 'Unit and E2E']]), default: 'unit' });
   }
   return out;
 }
@@ -122,28 +131,32 @@ function withOverrides(profile, answers) {
   return out;
 }
 
-// the platform a CI the seed names belongs to ("GitLab CI", "GitHub Actions"), GitHub's when none matches
+// the platform a CI or platform the seed names belongs to ("GitLab CI", "github"), GitHub's when none matches
 const platformOfCi = (ci) => PLATFORMS.find((p) => ci.toLowerCase().includes(p.id)) || PLATFORMS[0];
 
 // The profile under the owner's answers, each field checked: what the composition builds from
 function settingsOf(profile = {}, answers = {}) {
   const p = profile || {};
   const a = answers || {};
-  const defaults = Object.fromEntries(openQuestions({ ...p, release: null, merge: null }).map((q) => [q.id, q.default]));
+  const mode = modeOf({ mode: a.mode, merge: a.merge }) || modeOf(p) || 'local';
+  const defaults = Object.fromEntries(openQuestions({ ...p, mode, release: null, ci: null, tests: null }).map((q) => [q.id, q.default]));
   const pick = (id, allowed) => [a[id], p[id], defaults[id]].find((v) => allowed.includes(v));
   const budget = Number(a.budget);
-  const testCommand = str(a.testCommand) || str(p.testCommand);
+  // a #487 profile's ci named the CI itself (GitHub Actions): the platform, not a trigger
+  const platform = [a.platform, p.platform, a.ci, p.ci].map(str).find((v) => v && !CI_STYLES.includes(v)) || '';
   return {
-    team: [a.team, p.team].find((v) => TEAM_STYLES.includes(v)) || 'solo',
-    merge: pick('merge', MERGE_STYLES),
+    mode,
+    ci: pick('ci', CI_STYLES),
+    tests: pick('tests', TEST_STYLES),
     release: pick('release', RELEASE_STYLES),
     review: pick('review', REVIEW_LEVELS),
     validate: !(a.validate === false || a.validate === 'auto'),
     screenshots: a.screenshots === undefined ? defaults.screenshots === 'on' : a.screenshots === true || a.screenshots === 'on',
     budget: Number.isFinite(budget) && budget > 0 ? budget : defaults.budget,
-    testCommand,
+    testCommand: str(a.testCommand) || str(p.testCommand),
+    e2eCommand: str(a.e2eCommand) || str(p.e2eCommand),
     checkCommand: str(a.checkCommand) || str(p.checkCommand),
-    platform: platformOfCi(str(a.ci) || str(p.ci)).short,
+    platform: platformOfCi(platform).short,
   };
 }
 
@@ -197,75 +210,35 @@ const REPO_INPUTS = {
   repo_path: { label: 'Repository', type: 'string', required: true, description: 'Local repository path (a git repository).' },
   base_branch: { label: 'Base branch', type: 'string', default: 'main', description: 'The branch the work starts from and lands on.' },
 };
-const worktreeOf = (s) => ({ repo: '{{ inputs.repo_path }}', base: '{{ inputs.base_branch }}', ...(s.merge === 'local' ? { remote: false } : {}) });
+const worktreeOf = (s) => ({ repo: '{{ inputs.repo_path }}', base: '{{ inputs.base_branch }}', ...(s.mode === 'local' ? { remote: false } : {}) });
+const withE2e = (s) => s.tests === 'unit+e2e' && !!s.e2eCommand;
 
-function intakeWorkflow(s) {
-  const doc = workflowBase({
-    name: 'intake',
-    description: `Turns a request into an issue of the project's tracker${s.validate ? ' after you review the draft' : ', filed as soon as it is written'}.`,
-    category: 'plan',
-    tags: ['issues', 'intake'],
-    budget: Math.max(2, Math.round(s.budget / 4)),
-    inputs: {
-      request: { label: 'Request', type: 'string', required: true, description: 'The problem or the idea, in a few words, in any language.' },
-      project_path: { label: 'Project folder', type: 'string', required: true, description: 'The repository the issue is about (read-only).' },
-      git_platform: { label: 'Platform', type: 'string', enum: PLATFORMS.map((p) => p.short), default: s.platform, options: Object.fromEntries(PLATFORMS.map((p) => [p.short, p.label])), description: 'Where the issue is filed.' },
-    },
-  });
-  const vcs = ['bash:gh', 'bash:git', 'bash:glab'];
-  doc.agents = {
-    issue_writer: agent({ effort: 'high', tools: ['read', ...vcs], system: `You are the issue writer. You turn the owner's request into an issue someone else can implement without asking, with evidence from the code (file:line). Read only: use git and gh/glab to read, never to change anything.` }),
-    issue_filer: agent({ model: FAST_MODEL, effort: 'low', session: 'ephemeral', tools: ['bash:gh', 'bash:glab'], system: 'You are the issue filer. You file the drafted issue exactly as written, with its labels, and report its URL.' }),
-  };
-  doc.steps = [
-    { id: 'write', fragment: 'intake-pipeline', agent: 'issue_writer', transitions: [{ when: 'true', goto: s.validate ? 'review' : 'file' }] },
-    ...(s.validate ? [{ id: 'review', fragment: 'intake-pipeline', transitions: [{ when: 'approved', goto: 'file' }, { when: 'rejected', goto: 'write' }] }] : []),
-    { id: 'file', fragment: 'intake-pipeline', agent: 'issue_filer', transitions: [{ when: 'true', goto: 'end' }] },
-  ];
-  return doc;
-}
+// the project's E2E command as a step, after the unit suite (#630: tests unit+e2e)
+const e2eStep = (s, fragment, next, failed) => ({ id: 'e2e', fragment, command: literal(s.e2eCommand), transitions: [
+  { when: "output.status == 'pass'", goto: next },
+  ...failed,
+] });
 
-function developmentWorkflow(s, facts) {
-  const local = s.merge === 'local';
-  const review = REVIEW[s.review];
-  const name = `development-${s.team}-${s.merge}`;
-  const doc = workflowBase({
-    name,
-    description: local
-      ? 'Develops, reviews, tests and verifies a change in its own worktree, then merges it into the local base branch. No push, no pull request.'
-      : 'Develops, reviews, tests and verifies a change in its own worktree, then opens a pull request and waits for CI; the team merges it.',
-    category: 'build',
-    tags: ['dev', 'review', 'test', local ? 'local' : 'pr'],
-    budget: s.budget,
-    worktree: worktreeOf(s),
-    inputs: {
-      task: { label: 'Task', type: 'string', required: true, description: 'Feature or bug to implement.' },
-      issue: { label: 'Issue', type: 'string', default: '', description: 'URL of the issue this run implements (set by the Backlog screen).' },
-      ...REPO_INPUTS,
-    },
-  });
-  const facts1 = factsText(s, facts);
-  const build = toolsOf(s, facts, ['bash:git', 'edit', 'read', 'write']);
-  doc.agents = {
-    developer: agent({ effort: 'high', tools: build, skills: facts.skills, system: `You are the developer. You implement the task on the run's branch with small, cohesive changes that follow the project's conventions, with their tests. ${facts1} Never push.` }),
-    reviewer: agent({ effort: review.effort, tools: ['bash:git', 'read'], system: `You are the code reviewer (${s.review} rigour). You read the change's diff and approve it or list what to change; you change nothing. ${facts1}` }),
-    verifier: agent({ model: FAST_MODEL, effort: 'medium', tools: toolsOf(s, facts, ['bash:git', 'read']), skills: facts.skills, system: `You are the verifier. You check, with one command and its observed result, that the change does what the task asked. ${facts1}${s.screenshots ? ' Capture the screens the change touches (the project\'s screenshot command, else a short description of each state) and name them in your evidence.' : ''}` }),
-    ...(local ? {} : { ci_pusher: agent({ model: FAST_MODEL, effort: 'medium', tools: ['bash:gh', 'bash:git', 'bash:glab', 'read'], system: 'You are the CI pusher. You push the run\'s branch, open its pull request and read its CI.' }) }),
-  };
-  // where a verified (or approved) change goes: the local merge, or the pull request
-  const land = local ? { merge: 'local', goto: 'end', on_error: 'resolve_merge' } : { goto: 'ci' };
+// The develop → review → suite (→ e2e) → verify → land steps of feature and fix: the change lands with
+// the local merge, then push_main (Local), or through a pull request (Remote)
+function changeSteps(s, review) {
+  const local = s.mode === 'local';
+  const land = local ? { merge: 'local', goto: 'push_main', on_error: 'resolve_merge' } : { goto: 'ci' };
   const verified = s.validate ? { goto: 'validate' } : land;
-  doc.steps = [
-    { id: 'develop', fragment: 'dev-pipeline', agent: 'developer', transitions: [{ when: 'true', goto: 'code_review' }] },
+  const retry = [
+    { when: "output.status == 'blocked'", goto: 'verify_failed' },
+    { when: 'true', goto: 'develop', max_visits: 2, on_exhausted: 'verify_failed' },
+  ];
+  return [
     { id: 'code_review', fragment: 'dev-pipeline', agent: 'reviewer', transitions: [
       { when: 'output.approved', goto: 'suite' },
       { when: 'true', goto: 'develop', max_visits: review.rounds, on_exhausted: 'verify_failed' },
     ] },
     { id: 'suite', fragment: 'dev-pipeline', command: literal(s.testCommand), transitions: [
-      { when: "output.status == 'pass'", goto: 'verify_change' },
-      { when: "output.status == 'blocked'", goto: 'verify_failed' },
-      { when: 'true', goto: 'develop', max_visits: 2, on_exhausted: 'verify_failed' },
+      { when: "output.status == 'pass'", goto: withE2e(s) ? 'e2e' : 'verify_change' },
+      ...retry,
     ] },
+    ...(withE2e(s) ? [e2eStep(s, 'dev-pipeline', 'verify_change', retry)] : []),
     { id: 'verify_change', fragment: 'dev-pipeline', agent: 'verifier', transitions: [
       { when: "output.verdict != 'not_verified'", ...verified },
       { when: 'true', goto: 'develop', max_visits: 2, on_exhausted: 'verify_failed' },
@@ -273,8 +246,79 @@ function developmentWorkflow(s, facts) {
     ...(s.validate ? [{ id: 'validate', fragment: 'dev-pipeline', transitions: [{ when: 'approved', ...land }, { when: 'rejected', goto: 'develop' }] }] : []),
     { id: 'verify_failed', fragment: 'dev-pipeline', transitions: [{ when: 'approved', ...land }, { when: 'rejected', goto: 'end', status: 'failed' }] },
     ...(local
-      ? [{ id: 'resolve_merge', fragment: 'local-merge-pipeline', agent: 'developer' }, { id: 'merge_blocked', fragment: 'local-merge-pipeline' }]
+      ? [{ id: 'resolve_merge', fragment: 'local-merge-pipeline', agent: 'developer' }, { id: 'merge_blocked', fragment: 'local-merge-pipeline' }, { id: 'push_main', fragment: 'local-merge-pipeline' }]
       : [{ id: 'ci', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'ci_failed', fragment: 'pr-pipeline' }, { id: 'pr_review', fragment: 'pr-pipeline' }]),
+  ];
+}
+
+// the agents of feature and fix; `order` is the developer's way of working with the tests
+function changeAgents(s, facts, order) {
+  const local = s.mode === 'local';
+  const review = REVIEW[s.review];
+  const facts1 = factsText(s, facts);
+  const build = toolsOf(s, facts, ['bash:git', 'edit', 'read', 'write']);
+  return {
+    developer: agent({ effort: 'high', tools: build, skills: facts.skills, system: `You are the developer. You implement the task on the run's branch with small, cohesive changes that follow the project's conventions, with their tests. ${order} ${facts1} Never push.` }),
+    reviewer: agent({ effort: review.effort, tools: ['bash:git', 'read'], system: `You are the code reviewer (${s.review} rigour). You read the change's diff and approve it or list what to change; you change nothing. ${facts1}` }),
+    verifier: agent({ model: FAST_MODEL, effort: 'medium', tools: toolsOf(s, facts, ['bash:git', 'read']), skills: facts.skills, system: `You are the verifier. You check, with one command and its observed result, that the change does what the task asked. ${facts1}${s.screenshots ? ' Capture the screens the change touches (the project\'s screenshot command, else a short description of each state) and name them in your evidence.' : ''}` }),
+    ...(local ? {} : { ci_pusher: agent({ model: FAST_MODEL, effort: 'medium', tools: ['bash:gh', 'bash:git', 'bash:glab', 'read'], system: 'You are the CI pusher. You push the run\'s branch, open its pull request and read its CI.' }) }),
+  };
+}
+
+const landsText = (s) => (s.mode === 'local'
+  ? 'then merges it into the local base branch and pushes it (push_main). No pull request.'
+  : `then opens a pull request${s.ci === 'pr+release' ? ' and waits for its CI' : ''}; the team merges it.`);
+const CHANGE_INPUTS = {
+  task: { label: 'Task', type: 'string', required: true, description: 'Feature or bug to implement.' },
+  issue: { label: 'Issue', type: 'string', default: '', description: 'URL of the issue this run implements (set by the Backlog screen).' },
+};
+
+function featureWorkflow(s, facts) {
+  const doc = workflowBase({
+    name: 'feature',
+    description: `Develops, reviews, tests and verifies a change in its own worktree, ${landsText(s)}`,
+    category: 'build',
+    tags: ['dev', 'review', 'test', s.mode],
+    budget: s.budget,
+    worktree: worktreeOf(s),
+    inputs: { ...CHANGE_INPUTS, ...REPO_INPUTS },
+  });
+  // spec D14: with E2E the scenarios come first; unit only: implement, then the unit tests
+  const order = withE2e(s)
+    ? `Write the E2E scenarios of the task first (they run with \`${literal(s.e2eCommand)}\`), then implement until they pass.`
+    : 'Implement the change, then write its unit tests.';
+  doc.agents = changeAgents(s, facts, order);
+  doc.steps = [
+    { id: 'develop', fragment: 'dev-pipeline', agent: 'developer', transitions: [{ when: 'true', goto: 'code_review' }] },
+    ...changeSteps(s, REVIEW[s.review]),
+  ];
+  return doc;
+}
+
+// #630: fix reproduces the bug first, fixes it with its regression test (E2E after, when the project has
+// them); its hotfix mode is the urgent lane: from the last release tag, shipped as a patch
+function fixWorkflow(s, facts) {
+  const doc = workflowBase({
+    name: 'fix',
+    description: `Reproduces a bug, fixes it with its regression test, reviews, tests and verifies it, ${landsText(s)} Hotfix mode: from the last release tag, shipped as a patch.`,
+    category: 'build',
+    tags: ['fix', 'review', 'test', s.mode],
+    budget: Math.max(5, Math.round(s.budget / 2)),
+    worktree: worktreeOf(s),
+    inputs: {
+      ...CHANGE_INPUTS,
+      hotfix: { label: 'Hotfix', type: 'boolean', default: false, description: 'An urgent fix: branched from the last release tag and shipped as a patch release.' },
+      ...REPO_INPUTS,
+    },
+  });
+  const order = withE2e(s)
+    ? `Fix the bug with a unit regression test; the E2E suite (\`${literal(s.e2eCommand)}\`) runs after.`
+    : 'Fix the bug, then write its regression test.';
+  doc.agents = changeAgents(s, facts, order);
+  doc.steps = [
+    { id: 'reproduce', fragment: 'fix-pipeline', agent: 'developer', transitions: [{ when: 'true', goto: 'develop' }] },
+    { id: 'develop', fragment: 'fix-pipeline', agent: 'developer', transitions: [{ when: 'true', goto: 'code_review' }] },
+    ...changeSteps(s, REVIEW.light),
   ];
   return doc;
 }
@@ -289,9 +333,11 @@ const RELEASE_STYLE = {
 
 function releaseWorkflow(s, facts) {
   const style = RELEASE_STYLE[s.release];
+  // #630 (spec R7): with a CI on tags, the release pushes the tag and waits for that run
+  const waitCi = s.ci !== 'none';
   const doc = workflowBase({
-    name: `release-${s.release}`,
-    description: `Releases the project (${s.release}): gathers the changes, runs the tests, writes the notes and tags the version. Nothing ships from here: the tag is the release.`,
+    name: 'release',
+    description: `Releases the project (${s.release}): gathers the changes, runs the tests${withE2e(s) ? ' and the E2E suite' : ''}, writes the notes and tags the version${waitCi ? ', then waits for the release CI' : ''}. Nothing ships from here: the tag is the release.`,
     category: 'build',
     tags: ['release', s.release],
     budget: Math.max(5, Math.round(s.budget / 2)),
@@ -306,16 +352,19 @@ function releaseWorkflow(s, facts) {
     release_manager: agent({ model: FAST_MODEL, effort: 'medium', tools: ['bash:git', 'read'], system: `You are the release manager. ${style.what} ${facts1} Read only.` }),
     notes_writer: agent({ model: FAST_MODEL, effort: 'low', session: 'ephemeral', tools: ['bash:git', 'read'], system: 'You write the release notes from the changes the release manager gathered.' }),
     tagger: agent({ model: FAST_MODEL, effort: 'low', session: 'ephemeral', tools: ['bash:git', 'read'], system: 'You tag the release on the base branch. You change no file and never force anything.' }),
+    ...(waitCi ? { ci_watcher: agent({ model: FAST_MODEL, effort: 'low', session: 'ephemeral', tools: ['bash:gh', 'bash:git', 'bash:glab', 'read'], system: 'You read the CI run of the release tag and report its status. You change nothing.' }) } : {}),
   };
   const rc = s.release === 'rc-stable';
   const gate = style.gate || s.validate;
   const afterNotes = rc ? 'tag_rc' : gate ? 'approve' : 'tag';
+  const failed = [{ when: 'true', goto: 'end', status: 'failed' }];
   doc.steps = [
     { id: 'prepare', fragment: 'release-pipeline', agent: 'release_manager', transitions: [{ when: 'true', goto: 'suite' }] },
     { id: 'suite', fragment: 'release-pipeline', command: literal(s.testCommand), transitions: [
-      { when: "output.status == 'pass'", goto: 'notes' },
-      { when: 'true', goto: 'end', status: 'failed' },
+      { when: "output.status == 'pass'", goto: withE2e(s) ? 'e2e' : 'notes' },
+      ...failed,
     ] },
+    ...(withE2e(s) ? [e2eStep(s, 'release-pipeline', 'notes', failed)] : []),
     { id: 'notes', fragment: 'release-pipeline', agent: 'notes_writer', transitions: [{ when: 'true', goto: afterNotes }] },
     ...(rc ? [
       { id: 'tag_rc', fragment: 'release-pipeline', agent: 'tagger', transitions: [{ when: 'true', goto: 'soak' }] },
@@ -323,7 +372,8 @@ function releaseWorkflow(s, facts) {
     ] : gate ? [
       { id: 'approve', fragment: 'release-pipeline', transitions: [{ when: 'approved', goto: 'tag' }, { when: 'rejected', goto: 'end', status: 'cancelled' }] },
     ] : []),
-    { id: 'tag', fragment: 'release-pipeline', agent: 'tagger', transitions: [{ when: 'true', goto: 'end' }] },
+    { id: 'tag', fragment: 'release-pipeline', agent: 'tagger', transitions: [{ when: 'true', goto: waitCi ? 'release_ci' : 'end' }] },
+    ...(waitCi ? [{ id: 'release_ci', fragment: 'release-pipeline', agent: 'ci_watcher' }, { id: 'release_ci_failed', fragment: 'release-pipeline' }] : []),
   ];
   return doc;
 }
@@ -341,9 +391,10 @@ function composeWorkflowSet({ profile, answers, facts, existing } = {}) {
   const prof = withOverrides(profile, answers);
   const s = settingsOf(prof, answers);
   const f = facts && Array.isArray(facts.skills) ? { languages: languageFacts(facts.languages).languages, skills: facts.skills } : languageFacts(prof.languages);
+  // #630 (spec D9): feature, fix and release, the code's life cycle
   const set = [
-    { category: 'intake', doc: intakeWorkflow(s, f) },
-    { category: s.team, doc: developmentWorkflow(s, f) },
+    { category: 'feature', doc: featureWorkflow(s, f) },
+    { category: 'fix', doc: fixWorkflow(s, f) },
     { category: 'release', doc: releaseWorkflow(s, f) },
   ];
   const workflows = set.map(({ category, doc }) => ({
@@ -374,13 +425,14 @@ function mergeManifest(existing, entries) {
 }
 
 module.exports = {
+  CI_STYLES,
   composeWorkflowSet,
   languageFacts,
-  MERGE_STYLES,
   mergeManifest,
+  MODES,
   openQuestions,
   PROFILE_FIELDS,
   RELEASE_STYLES,
   REVIEW_LEVELS,
-  TEAM_STYLES,
+  TEST_STYLES,
 };

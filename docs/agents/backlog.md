@@ -18,12 +18,13 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
 - Worktree follow-ups: see [worktrees.md](worktrees.md).
 - Local merges not pushed (#89, done): `packages/engine/domains/local/local-push.js` (`localStatus` / `pushBase` /
   `updateAndPush`), cached per project in `<workspace>/backlog/<id>.local.json`, column `local` in
-  `linkRuns`, auto-push per project (`project.autoPush`). A conflict of Update and push goes to a
+  `linkRuns`. The project auto-push left with #630: in Local mode the feature and fix workflows push
+  the base as their last step (`push_main`). A conflict of Update and push goes to a
   run (`backlog:resolve-push`, task from `conflictTask`) of the last local workflow of the project:
   its developer merges `origin/<base>` into the run's branch (a merge, so the local commits stay and
   the next push is a fast-forward), then review, tests and the local merge. Not done: if the local
   base moves while that run works, `mergeLocally` rebases the branch and flattens the merge (the
-  next push is rejected again); auto-push is per project, not per workflow; the Update and push
+  next push is rejected again); the Update and push
   rebase runs in the checkout where the base is checked out, so it refuses when that checkout has
   uncommitted changes.
 - One run's figures (#228): `packages/engine/domains/run/run-analysis.js` `runFigures` (cached in the index, `run_figures`)

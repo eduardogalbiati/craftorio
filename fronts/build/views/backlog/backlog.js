@@ -1113,8 +1113,9 @@
   }
 
   // ---- local merges not pushed (software-development-local-hero) ---------------------------
-  // The project's local <base> has commits origin/<base> has not: what they close, Push, auto-push
-  // (an info alert, #270); a push status that could not be read is a warning with "Check again".
+  // The project's local <base> has commits origin/<base> has not: what they close and Push (an info
+  // alert, #270; the auto-push left with #630, Local mode's push is the workflow's push_main step); a
+  // push status that could not be read is a warning with "Check again".
   const issueRefs = (numbers) => numbers.map((n) => `#${n}`).join(', ');
   function localAlert() {
     const l = bl.data?.local;
@@ -1132,20 +1133,6 @@
         ].filter(Boolean).join(' · '),
         dismissible: true,
         actions: [
-          {
-            label: t('backlog.auto_push'),
-            pressed: !!bl.data?.autoPush,
-            title: t('backlog.push_the_local_base_after_every', { base: l.base }),
-            attrs: { 'data-autopush': '' },
-            onClick: async () => {
-              const on = !bl.data?.autoPush;
-              try {
-                await api.setAutoPush(bl.projectId, on);
-                if (bl.data) bl.data.autoPush = on;
-              } catch (err) { bl.error = errMsg(err); }
-              render();
-            },
-          },
           { label: t('backlog.push_2'), primary: true, attrs: { 'data-push': '' }, onClick: openPush },
         ],
       }];

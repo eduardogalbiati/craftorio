@@ -57,7 +57,7 @@ module.exports = (ctx) => {
     const baseFailures = baseHealth.knownFailures(ws.root, data.projectId);
     // #465: the base check's last state (running, green, red), the Roadmap's "Base check" card
     const baseCheck = ctx.baseCheckState?.(data.projectId) || null;
-    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
+    return { ...data, queue, local, roadmap, refresh, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
   }
 
   // The Backlog Refresh banner (#161, packages/engine/domains/backlog/backlog-refresh.js): the merges on the base since the
