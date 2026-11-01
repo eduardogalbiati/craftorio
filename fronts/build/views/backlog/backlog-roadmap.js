@@ -159,26 +159,13 @@
   // The mode (#282, in the Workflow band): the workflow's enum values as a toggle with their icons,
   // saved at once on an editable item; the same toggle with its buttons off on an item that runs
   // ("locked while it runs") or ran. Next to it, what the chosen mode does.
-  // #630: feature's auto | validated toggle is its `validation` input (`mode` is local | remote there);
-  // an item saved before keeps its old `mode: validated` as that value
-  const modeKey = (x) => (inputDefs(x).validation ? 'validation' : 'mode');
-  const VALIDATION = ['auto', 'validated'];
-  function modeRaw(x) {
-    const key = modeKey(x);
-    if (key === 'mode') return x.inputs?.mode;
-    return x.inputs?.validation ?? (VALIDATION.includes(x.inputs?.mode) ? x.inputs.mode : undefined);
-  }
-  const modeOf = (x) => String(modeRaw(x) ?? inputDefs(x)[modeKey(x)]?.default ?? '');
-  const modeContext = (x) => ({ [modeKey(x)]: modeRaw(x) ?? inputDefs(x)[modeKey(x)]?.default });
-  // the mode's sentence in the input's description ("Automatic: … . Validated: … .")
-  function modeHint(def, value) {
-    const label = WorkflowInputs.optionLabel(def || {}, value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const m = String(def?.description || '').match(new RegExp(`(?:^|[.\\s])${label}:\\s*([^.]+)\\.`, 'i'));
-    return m ? m[1].trim().replace(/^./, (c) => c.toUpperCase()) : '';
-  }
+  // #630: feature's toggle is its `validation` input (WorkflowInputs.modeInput)
+  const modeIn = (x) => WorkflowInputs.modeInput(inputDefs(x), x.inputs);
+  const modeKey = (x) => modeIn(x).key;
+  const modeOf = (x) => String(modeIn(x).value ?? modeIn(x).def?.default ?? '');
+  const modeContext = (x) => modeIn(x).context;
   function modeHtml(x, locked) {
-    const def = inputDefs(x)[modeKey(x)];
-    const raw = modeRaw(x);
+    const { def, value: raw } = modeIn(x);
     const values = Array.isArray(def?.enum) ? def.enum.map(String) : raw != null ? [String(raw)] : [];
     if (!values.length) return '';
     const value = String(raw ?? def?.default ?? values[0]);
@@ -188,7 +175,8 @@
     const fixed = locked || values.length < 2;
     const running = x.status === 'running' || !!x.waiting;
     const title = fixed ? `Mode: ${text(value)}${running ? ' (locked while the item runs)' : ''}${help}` : `Mode (saved at once)${help}`;
-    const note = running ? 'locked while it runs' : modeHint(def, value);
+    // the mode's sentence in the input's description ("Automatic: … . Validated: … .")
+    const note = running ? 'locked while it runs' : WorkflowInputs.optionHint(def, value);
     return `<div class="rm-wf-row"><span class="seg sm rm-mode-seg${fixed ? ' locked' : ''}" role="group" aria-label="${running ? t('backlog_roadmap.mode_locked_while_the_item_runs') : t('backlog_roadmap.mode_2')}" data-testid="roadmap-mode" title="${esc(title)}">${values.map((v) =>
       `<button type="button" class="rm-mode-${esc(v)}${v === value ? ' active' : ''}" data-mode="${esc(v)}"${fixed ? '' : ` data-rm-mode="${esc(v)}"`} aria-pressed="${v === value}"${fixed ? ' disabled' : ''}>${ICON[v] || ''}${esc(text(v))}</button>`).join('')}</span>${note ? `<span class="rm-mode-note muted">${esc(note)}</span>` : ''}</div>`;
   }
@@ -1767,7 +1755,7 @@
     if (!item || !editable(item)) return 'handled';
     item.inputs = { ...item.inputs, [modeKey(item)]: el.dataset.rmMode };
     // #630: an old `mode: validated` gives way to the validation picked
-    if (modeKey(item) === 'validation' && VALIDATION.includes(item.inputs.mode)) delete item.inputs.mode;
+    if (modeIn(item).old) delete item.inputs.mode;
     await save(ctx, r, stages, { label: t('backlog_roadmap.changed_the_mode_of_item', { item: numbers(item) }), quiet: true });
     return 'handled';
   }

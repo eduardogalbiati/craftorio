@@ -248,6 +248,24 @@
   /** The scope attributes of a container: show_if there also reads `context` (values not shown in it). */
   const scopeAttrs = (context = {}) => ` data-wi-scope data-wi-context="${esc(JSON.stringify(context))}"`;
 
+  // #630: a workflow's auto | validated toggle: its `validation` input when it has one (feature, whose
+  // `mode` is local | remote), else `mode`. `old`: an item saved before still says `mode: validated`,
+  // read as that value. `context`: the toggle's value (or default) for show_if.
+  const VALIDATION = ['auto', 'validated'];
+  function modeInput(defs = {}, inputs = {}) {
+    const key = defs.validation ? 'validation' : 'mode';
+    const old = key === 'validation' && VALIDATION.includes(inputs?.mode);
+    const value = inputs?.[key] ?? (old ? inputs.mode : undefined);
+    return { key, def: defs[key], value, old, context: { [key]: value ?? defs[key]?.default } };
+  }
+
+  /** The sentence an input's description gives one of its values ("Automatic: … . Validated: … ."), or ''. */
+  function optionHint(def, value) {
+    const name = optionLabel(def || {}, value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = String(def?.description || '').match(new RegExp(`(?:^|[.\\s])${name}:\\s*([^.]+)\\.`, 'i'));
+    return m ? m[1].trim().replace(/^./, (c) => c.toUpperCase()) : '';
+  }
+
   // ---- what the app knows about the project ---------------------------------------------------
   const HINTS_TTL = 30000;
   const hintsCache = new Map(); // project id -> { at, promise }
@@ -332,6 +350,8 @@
     isBoolean,
     kind,
     label,
+    modeInput,
+    optionHint,
     optionLabel,
     read,
     refresh,
