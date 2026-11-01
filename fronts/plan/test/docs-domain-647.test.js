@@ -220,3 +220,52 @@ test('#647 docs:list is window.api.listDocItems', () => {
   const list = loadChannels()({}).find((c) => c.channel === 'docs:list');
   assert.equal(list?.method, 'listDocItems');
 });
+
+// ---- the write-doc run's draft (the service follows the run's events) ---------------------------
+// A lint-clean draft: this repository's own write-doc intent and its translation.
+const OWN = path.join(__dirname, '..', '..', '..', 'docs', 'work', 'write-doc');
+const DRAFT = {
+  source_text: fs.readFileSync(path.join(OWN, 'intent.md'), 'utf8'),
+  translation_text: fs.readFileSync(path.join(OWN, 'intent.pt-BR.md'), 'utf8'),
+};
+
+// the channels on a fake service with one live write-doc run on the item write-doc in `r`
+function followRun(t, r) {
+  const { EventEmitter } = require('events');
+  const events = new EventEmitter();
+  const folder = runDir(t);
+  const run = { runId: 'r1', projectId: 'p1', wf: { metadata: { name: 'write-doc' } }, inputs: { item: 'write-doc', document: 'intent', title: 'Write doc', project_path: r.dir } };
+  loadChannels()({ events, active: new Map([['r1', run]]), runFolder: () => folder });
+  const emit = (ev) => events.emit('run:event', { run_id: 'r1', ...ev });
+  return { emit, base: () => JSON.parse(fs.readFileSync(path.join(folder, 'docs-base.json'), 'utf8')) };
+}
+
+test('#647 the first step of a run on a new document writes its skeleton and keeps it as fresh', (t) => {
+  const r = repo(t, { 'README.md': '# demo\n' });
+  const { emit, base } = followRun(t, r);
+  emit({ type: 'step.started', step_id: 'screenshots' });
+  assert.equal(fs.existsSync(path.join(r.dir, 'docs', 'work', 'write-doc', 'intent.md')), true, 'no skeleton');
+  assert.equal(base().fresh, true);
+  assert.equal(base().base, r.head());
+});
+
+test('#647 the draft of a document the run created is written into it', (t) => {
+  const r = repo(t, { 'README.md': '# demo\n' });
+  const { emit } = followRun(t, r);
+  emit({ type: 'step.started', step_id: 'screenshots' });
+  emit({ type: 'step.finished', step_id: 'draft', output: DRAFT });
+  assert.equal(read(r, 'docs/work/write-doc/intent.md'), DRAFT.source_text);
+  assert.equal(read(r, 'docs/work/write-doc/intent.pt-BR.md'), DRAFT.translation_text);
+});
+
+test('#647 the draft never replaces a document that already existed', (t) => {
+  const r = repo(t, { 'docs/work/write-doc/intent.md': INTENT, 'docs/work/write-doc/intent.pt-BR.md': INTENT_PT });
+  const { emit, base } = followRun(t, r);
+  emit({ type: 'step.started', step_id: 'screenshots' });
+  assert.equal(base().fresh, false);
+  const commits = commitCount(r);
+  emit({ type: 'step.finished', step_id: 'draft', output: DRAFT });
+  assert.equal(read(r, 'docs/work/write-doc/intent.md'), INTENT);
+  assert.equal(read(r, 'docs/work/write-doc/intent.pt-BR.md'), INTENT_PT);
+  assert.equal(commitCount(r), commits);
+});
