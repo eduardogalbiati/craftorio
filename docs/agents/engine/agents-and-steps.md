@@ -42,6 +42,10 @@ fields (references between steps, agents, transitions, groups) are the named rul
   is as before. A UI change always has screenshots: develop changing files under `ui_folders`
   (the `ui_files` filter) with no `screenshots` goes back to develop once (`vars.ui_screens_returned`)
   instead of skipping `developer_screenshots`.
+  Baselines (#696): a new `@visual` scenario's PNG under `features/__screenshots__/` comes with
+  develop's commit (`baseline_check` sends a missing one back); the reviewer treats a missing
+  baseline as blocking, and a baseline the E2E step had to generate (`new_baselines`) is judged by
+  the `ui_reviewer` against the issue's mockups.
 - `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`;
   #473 (SEC-8): the target's real path (its deepest existing parent's realpath, links resolved,
   `canonicalPath` in worktree.js) must be under the run folder, the run's worktree (or base

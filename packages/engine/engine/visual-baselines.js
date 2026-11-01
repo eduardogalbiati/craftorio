@@ -124,9 +124,34 @@ function missingBaselineLines(missing) {
   return (missing || []).map((m) => `- \`${m.file}\` (${m.feature}: ${m.scenario}): run \`${m.command}\``).join('\n');
 }
 
+// The E2E step's side (suite-step.js runSuite): Playwright fails a `toHaveScreenshot` without a
+// baseline with "A snapshot doesn't exist at <path>, writing actual." and writes it (its default
+// updateSnapshots: 'missing' never rewrites an existing one). Those are not failures:
+// → { failures (the others), generated: [{ test, file, baseline }] }; `toFile` makes the path relative.
+const MISSING_SNAPSHOT = /A snapshot doesn't exist at (.+?), writing actual/;
+function splitMissingBaselines(failures, toFile = (p) => p) {
+  const generated = [];
+  const rest = [];
+  for (const f of failures) {
+    const m = MISSING_SNAPSHOT.exec(String(f.error || ''));
+    if (m) generated.push({ test: f.test, file: f.file, baseline: toFile(m[1]).replace(/\\/g, '/') });
+    else rest.push(f);
+  }
+  return { failures: rest, generated };
+}
+
+// The suite message's note and lines for the generated baselines ('' / [] when none).
+const generatedNote = (generated) => (generated?.length
+  ? ` (${generated.length} missing baseline${generated.length === 1 ? '' : 's'} generated, not counted: the UI review compares them with the issue's mockups)` : '');
+const generatedLines = (generated) => (generated?.length
+  ? ['New baselines (generated; compare with the issue\'s mockups in the UI review):', ...generated.map((b) => `- ${b.baseline} (${b.test})`)] : []);
+
 module.exports = {
-  SCREENSHOTS_DIR,
+  generatedLines,
+  generatedNote,
   missingBaselineLines,
   missingBaselines,
   parseFeature,
+  SCREENSHOTS_DIR,
+  splitMissingBaselines,
 };

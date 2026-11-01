@@ -1,5 +1,5 @@
 // Documents screen (#671, views/docs/docs.js): the markup of the panels the spec's mockups draw
-// (docs/work/write-doc/images/): the New item side panel (mock-1), the review with its rubric checks
+// (docs/work/write-doc/images/): the New item side panel (mock-1), the editor's toolbar (mock-2), the review with its rubric checks
 // and anchored notes (mock-4) and the sign-off gate (mock-5). Markup only, from the values docs.js
 // passes; the clicks are docs.js's (data-docs-*). Uses app.js globals (esc, t) and Select (select.js). Browser: window.DocsPanels.
 (() => {
@@ -102,9 +102,26 @@
       </section>`; // i18n-ignore
   }
 
+  // the editor's toolbar (mock-2): the view tabs, the language, then Versions and Send to review at its
+  // right (#696); `wait` disables Send to review
+  function toolbar({ tab: current, lang: language, translation, wait }) {
+    const tab = (id, label) => `<button type="button" role="tab" class="${current === id ? 'active' : ''}" aria-selected="${current === id}" data-docs-tab="${id}">${label}</button>`;
+    const lang = (id, label, off) => `<button type="button" class="${language === id ? 'active' : ''}" aria-pressed="${language === id}" data-testid="doc-lang-${id}" data-docs-lang="${id}"${off ? ' disabled' : ''}>${label}</button>`;
+    return `
+      <div class="docs-toolbar" data-testid="doc-toolbar">
+        <div class="seg sm" role="tablist" aria-label="${t('docs.view')}">${tab('edit', t('docs.edit'))}${tab('diff', t('docs.diff'))}${tab('preview', t('docs.preview'))}</div>
+        <div class="seg sm" role="group" aria-label="${t('docs.language')}">${lang('en', 'EN', false)}${lang('pt', 'PT', !translation)}</div>
+        <div class="docs-toolbar-end">
+          <button type="button" class="btn sm ghost" data-testid="doc-versions" data-docs-tab="diff" title="${t('docs.versions_help')}">${t('docs.versions')}</button>
+          <button type="button" class="btn sm primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait ? ' disabled' : ''}>${t('docs.send_to_review')}</button>
+        </div>
+      </div>`; // i18n-ignore
+  }
+
   window.DocsPanels = {
     newItemPanel,
     review,
     signoff,
+    toolbar,
   };
 })();

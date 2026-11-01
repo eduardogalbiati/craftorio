@@ -8,6 +8,14 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-01** (#696): a new screen with no baseline never stops a run at a human gate. After
+  develop, `baseline_check` sends a new `@visual` scenario with no PNG under
+  `features/__screenshots__/` back to develop (naming the file and the update command), and the
+  code review treats a missing baseline as blocking. One that still reaches the E2E step is
+  generated, listed as `new_baselines` for the UI review against the issue's mockups, and is not a
+  failure; only a difference with an existing baseline goes to the healer and `test_failed`. An
+  existing baseline is never rewritten by a run. Why: #671's run stopped at `test_failed` on three
+  missing baselines after an approved review, where only a person could fix them.
 - **2026-11-01** (#695): tests never read live documents: a document under `docs/work/` is copied
   into `test/fixtures/` and the test reads the copy (`npm run check`'s `test-fixtures` rule). A
   test that reads files from disk runs when those files change: the affected-test selection counts
@@ -231,7 +239,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   evaluated on this repository, groma.md gave 112 one-file "renderer" containers, 81% of the files
   "unidentified" and no relationships, and it writes into `AGENTS.md`/`CLAUDE.md` and serves on all
   interfaces; placing every file with a model is costly and goes stale with the next commit.
-- **2026-10-13** (#368): a run or a roadmap stage can be paused after the current agent turn: an
+  The same day (#368): a run or a roadmap stage can be paused after the current agent turn: an
   agent is never stopped in the middle of a turn (nor a running command), the run ends `paused`
   with everything kept, and Resume continues from that point without redoing a finished turn. A
   pause never answers a gate (a run at a gate pauses at once and asks it again on Resume), and only

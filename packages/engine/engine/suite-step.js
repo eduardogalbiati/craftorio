@@ -89,6 +89,7 @@ const {
 } = require('./processes');
 const { killTree, OWN_GROUP } = require('./providers');
 const { MAX_TEST_TIMEOUT_MS } = require('./test-timeouts');
+const { generatedLines, generatedNote, splitMissingBaselines } = require('./visual-baselines');
 const { workerEnv } = require('../domains/machine/machine-profile');
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
@@ -148,21 +149,6 @@ function fileOf(loc, cwd) {
     if (!rel.startsWith('..')) f = rel;
   }
   return f.split(path.sep).join('/');
-}
-
-// #696: Playwright fails a `toHaveScreenshot` without a baseline with "A snapshot doesn't exist at
-// <path>, writing actual." and writes it (its default updateSnapshots: 'missing' never rewrites an
-// existing one). Those are not failures: → { failures (the others), generated: [{ test, file, baseline }] }
-const MISSING_SNAPSHOT = /A snapshot doesn't exist at (.+?), writing actual/;
-function splitMissingBaselines(failures, cwd) {
-  const generated = [];
-  const rest = [];
-  for (const f of failures) {
-    const m = MISSING_SNAPSHOT.exec(String(f.error || ''));
-    if (m) generated.push({ test: f.test, file: f.file, baseline: fileOf(m[1], cwd).replace(/\\/g, '/') });
-    else rest.push(f);
-  }
-  return { failures: rest, generated };
 }
 
 // The failing tests of a suite's output: [{ test, file, error }], at most MAX_FAILURES, deduplicated.
@@ -787,8 +773,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   let tooLong = null;
   const what = () => (out.scope === 'files' ? `The selected tests (${plural(out.selection?.files?.length ?? files.length, 'test file')})` : tooLong ? `The whole suite (${tooLong})` : 'The suite');
   const finish = () => {
-    const pre = (out.preexisting.length ? ` (${plural(out.preexisting.length, 'pre-existing failure')} not counted: they fail on the base too)` : '')
-      + (out.new_baselines.length ? ` (${plural(out.new_baselines.length, 'missing baseline')} generated, not counted: the UI review compares them with the issue's mockups)` : '');
+    const pre = `${out.preexisting.length ? ` (${plural(out.preexisting.length, 'pre-existing failure')} not counted: they fail on the base too)` : ''}${generatedNote(out.new_baselines)}`;
     const classes = out.in_change != null ? ` (${[out.in_change ? `${out.in_change} ${IN_CHANGE}` : '', out.outside_change ? `${out.outside_change} ${OUTSIDE_CHANGE}` : ''].filter(Boolean).join(', ')})` : '';
     out.message = out.status === 'pass' ? `${what()} passed in round ${round}${out.command ? ` (\`${out.command}\`)` : ''}${pre}.`
       : out.status === 'fail' ? `${what()} failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${classes}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
@@ -870,8 +855,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const cov = saveCoverage(`${clean(text)}\n${clean(human)}`, runDir, changedFiles);
   if (cov) out.coverage = cov;
   if (out.exit_code === 0 && !out.timed_out) { out.status = 'pass'; return finish(); }
-  // #696: a scenario whose baseline did not exist yet is not a failure: Playwright wrote it, the UI review compares it
-  const { failures, generated } = splitMissingBaselines(parseFailures(text, { cwd }), cwd);
+  const parsed = parseFailures(text, { cwd }); // #696: a baseline Playwright had to write is not a failure
+  const { failures, generated } = splitMissingBaselines(parsed, (p) => fileOf(p, cwd));
   out.new_baselines = generated;
   out.preexisting = failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
   out.failures = failures.filter((f) => !out.preexisting.includes(f));
@@ -903,7 +888,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   else if (out.timed_out) {
     const still = out.running.length ? ` Still running: ${out.running.join(', ')}.` : '';
     out.failures.push({ test: '(the whole suite)', file: '', error: `timed out after ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy}): a test hangs or the suite is too slow.${still}` });
-  } else if (!failures.length && !generated.length) {
+  } else if (!parsed.length) {
     // failed with nothing the parser knows: the end of the log says why
     const tail = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-ERROR_LINES).join('\n');
     out.failures.push({ test: '(unrecognized failure)', file: '', error: `exit ${out.exit_code ?? '?'}${tail ? `: ${tail}` : ''}`.slice(0, 400) });
@@ -954,11 +939,7 @@ function suiteMessage(output) {
     lines.push('Also failing on the base (reported, not chased):');
     for (const f of output.preexisting) lines.push(`- ${f.test}${f.file ? ` (${f.file})` : ''}`);
   }
-  // #696: the baselines Playwright wrote because they did not exist, for the UI review
-  if (output.new_baselines?.length) {
-    lines.push('New baselines (generated; compare with the issue\'s mockups in the UI review):');
-    for (const b of output.new_baselines) lines.push(`- ${b.baseline} (${b.test})`);
-  }
+  lines.push(...generatedLines(output.new_baselines)); // #696: the baselines Playwright wrote, for the UI review
   return lines.join('\n');
 }
 
@@ -1009,7 +990,6 @@ module.exports = {
   runningTestFiles,
   runSuite,
   saveCoverage,
-  splitMissingBaselines,
   SUITE_TIMEOUT_MS,
   suiteDurations,
   suiteEnv,
