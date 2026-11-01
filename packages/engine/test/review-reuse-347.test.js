@@ -106,7 +106,7 @@ function developerGuidance(file) {
   return flat([dev.system_prompt || '', ...bodies].join('\n'));
 }
 
-for (const file of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-development-local-hero.yaml']) {
+for (const file of ['feature.yaml']) {
   test(`#347 the developer of ${file} searches for an existing helper, constant or mapping before adding one, and names what it reused in its handoff`, () => {
     const text = developerGuidance(file);
     assert.match(text, /search[^.]*existing[^.]*(helper|constant|mapping)|existing (helper|constant|mapping)[^.]*before add/i);

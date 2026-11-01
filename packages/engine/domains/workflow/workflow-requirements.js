@@ -7,7 +7,7 @@
 // does); steps name agents, so they add nothing of their own. Git is always needed (worktrees,
 // diffs). `forge`: the workflow has a `git_platform` input, i.e. it talks to GitHub or GitLab
 // (issues, backlog sync, pull requests) through gh or glab; the local workflows that only allow
-// bash:gh in their tools do not count.
+// bash:gh in their tools do not count, nor a run in `mode: local` (#630: feature and fix only push main).
 // - workflowRequirements(wf, inputs) -> { clis: sorted ids among claude, codex, git, grok; forge };
 // - missingRequirements(reqs, states): from apps/desktop/renderer/setup-model.js (shared with the renderer).
 
@@ -47,7 +47,7 @@ function workflowRequirements(wf, inputs = {}) {
     const id = name && !off(name) ? cliOf(wf, String(name).trim()) : null;
     if (id) clis.add(id);
   }
-  return { clis: [...clis].sort(), forge: !!wf?.inputs?.git_platform };
+  return { clis: [...clis].sort(), forge: !!wf?.inputs?.git_platform && values.mode !== 'local' };
 }
 
 module.exports = {

@@ -107,16 +107,16 @@ function loadRunList({ looks = {}, workflows = [] } = {}) {
   return sandbox;
 }
 
-const AI_DEV = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml'), 'utf8'));
-const AI_DEV_WF = { file: 'ai-development-local-hero.yaml', name: AI_DEV.name, agents: AI_DEV.agents };
+const AI_DEV = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'), 'utf8'));
+const AI_DEV_WF = { file: 'feature.yaml', name: AI_DEV.name, agents: AI_DEV.agents };
 // an agent entry of the progress strip (RunProgress.progressGroups), done
 const agentEntry = (step, agent) => ({ agent, steps: [step], provider: 'claude', model: AI_DEV.agents[agent].model, cost: 0.1, durationMs: 1000 });
 const doneChip = { status: 'done' };
 
 test('progress strip: each agent\'s robot is painted in its role colour (test writer orange, developer blue)', () => {
   const rl = loadRunList({ workflows: [AI_DEV_WF] });
-  const writer = rl.progressAvatar(agentEntry('acceptance_tests', 'test_writer'), doneChip, null, 'ai-development-local-hero.yaml');
-  const dev = rl.progressAvatar(agentEntry('develop', 'developer'), doneChip, null, 'ai-development-local-hero.yaml');
+  const writer = rl.progressAvatar(agentEntry('acceptance_tests', 'test_writer'), doneChip, null, 'feature.yaml');
+  const dev = rl.progressAvatar(agentEntry('develop', 'developer'), doneChip, null, 'feature.yaml');
   assert.match(writer, /<circle r="32" fill="#FF8A3D"/i, 'the test writer\'s robot has an orange plate');
   assert.match(dev, /<circle r="32" fill="#4C7DFF"/i, 'the developer\'s robot has a blue plate');
 });
@@ -129,21 +129,21 @@ test('progress strip of an AI Development run: every agent step\'s robot differs
     const s = AI_DEV.steps.find((x) => x.id === step);
     assert.ok(s?.agent === agent || (s?.agents || []).includes(agent), `${step} is ${agent}'s step`);
   }
-  const arts = steps.map(([step, agent]) => normal(rl.progressAvatar(agentEntry(step, agent), doneChip, null, 'ai-development-local-hero.yaml').replace(/ style="[^"]*"| title="[^"]*"/g, '')));
+  const arts = steps.map(([step, agent]) => normal(rl.progressAvatar(agentEntry(step, agent), doneChip, null, 'feature.yaml').replace(/ style="[^"]*"| title="[^"]*"/g, '')));
   for (let i = 1; i < arts.length; i++) assert.notEqual(arts[i], arts[i - 1], `${steps[i - 1][0]} and ${steps[i][0]} have the same robot`);
 });
 
 test('progress strip: a look saved for the agent in Agents still wins over the role colour', () => {
   const look = Robots.fromAppearance({ body: '#112233', emblem: 'none' }, 'Saved');
-  const rl = loadRunList({ workflows: [AI_DEV_WF], looks: { 'ai-development-local-hero.yaml/test_writer': look } });
-  const writer = rl.progressAvatar(agentEntry('acceptance_tests', 'test_writer'), doneChip, null, 'ai-development-local-hero.yaml');
+  const rl = loadRunList({ workflows: [AI_DEV_WF], looks: { 'feature.yaml/test_writer': look } });
+  const writer = rl.progressAvatar(agentEntry('acceptance_tests', 'test_writer'), doneChip, null, 'feature.yaml');
   assert.match(writer, /<circle r="32" fill="#112233"/i, 'the saved look\'s body colour');
   assert.doesNotMatch(writer, /fill="#FF8A3D"/i, 'not the role colour');
 });
 
 test('progress strip: the avatar\'s tooltip carries a role chip by the agent\'s name', () => {
   const rl = loadRunList({ workflows: [AI_DEV_WF] });
-  const writer = rl.progressAvatar(agentEntry('acceptance_tests', 'test_writer'), doneChip, null, 'ai-development-local-hero.yaml');
+  const writer = rl.progressAvatar(agentEntry('acceptance_tests', 'test_writer'), doneChip, null, 'feature.yaml');
   assert.match(writer, /class="[^"]*agent-chip[^"]*"[^>]*>test writer</, 'a chip saying "test writer"');
 });
 

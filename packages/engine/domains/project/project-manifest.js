@@ -15,7 +15,8 @@ const { WORKFLOW_CATEGORIES } = require('../workflow/workflow-categories');
 const MANIFEST_FILE = '.multiagent/project.yaml';
 
 // The Workflows screen's sections a repository files its workflows under
-const CATEGORIES = ['intake', 'solo', 'team', 'release'];
+// (#630: feature and fix, the composed set's)
+const CATEGORIES = ['intake', 'solo', 'team', 'feature', 'fix', 'release'];
 // the bundled workflows' own metadata.category values
 const BUNDLED_CATEGORIES = WORKFLOW_CATEGORIES;
 

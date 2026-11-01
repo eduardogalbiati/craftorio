@@ -112,6 +112,13 @@ inputs:
     type: string
     default: ""
     description: "Optional: a command Ship runs after the push and the tag (e.g. npm run package). Empty: no build."
+  release_ci:
+    label: "Release CI"
+    type: string
+    enum: [none, wait]
+    default: none
+    options: { none: "None (the project has no release CI)", wait: "Wait for the release CI after Ship" }
+    description: "#630: with a release CI (ways of working ci: release or pr+release), the run waits after Ship until the CI the tag starts is green."
   history:
     label: "History since the last release"
     type: string
@@ -135,6 +142,7 @@ providers:
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
     resume_args: ["--resume", "{{ session_id }}"]
+    effort_args: ["--effort", "{{ effort }}"]
     skill_args: ["--add-dir", "{{ skill_dir }}"]
 
 x-tools:
@@ -210,13 +218,23 @@ agents:
       push or tag, and never answer a gate. Work from the facts in your prompt; write in the
       language the Language line names, short, and say "unknown" rather than guess.
 
+  # #630: watches the release CI after Ship (release_ci); reads only
+  ci_pusher:
+    provider: claude
+    model: claude-sonnet-5
+    session: handoff
+    capabilities: { tools: [read, bash:git, bash:gh, bash:glab], web: false, subagents: false }
+    system_prompt: |
+      You watch the release CI after the owner shipped: you read the CI runs of the pushed tag on
+      the platform (gh or glab) and report their status. You never push, tag, edit or merge.
+
 groups:
   - name: Regression
     steps: [version, unit, e2e, suite_blocked]
   - name: Fix
     steps: [fix, regression_failed]
   - name: Ship
-    steps: [review, ship, ship_failed]
+    steps: [review, ship, ship_failed, release_ci, release_ci_failed]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -440,9 +458,19 @@ steps:
     transitions:
       # the worktree has commits the local base has not (a fix of any round): they are what the
       # suites passed on, so they merge before the push
-      - when: "choice == 'ship' and (worktree_dir | git_commits(inputs.base_branch))"
+      # #630: with release_ci wait, the run then waits for the release CI the tag starts (release_ci)
+      - when: "choice == 'ship' and inputs.release_ci == 'wait' and (worktree_dir | git_commits(inputs.base_branch))"
         merge: local
         ship: &ship { tag: "{{ inputs.version or ('release-' ~ run_id) }}", build: "{{ inputs.build_command }}" }
+        goto: release_ci
+        on_error: ship_failed
+      - when: "choice == 'ship' and inputs.release_ci == 'wait'"
+        ship: *ship
+        goto: release_ci
+        on_error: ship_failed
+      - when: "choice == 'ship' and (worktree_dir | git_commits(inputs.base_branch))"
+        merge: local
+        ship: *ship
         goto: end
         on_error: ship_failed
       - when: "choice == 'ship'"
@@ -466,6 +494,15 @@ steps:
       - { id: stop,  label: "Stop the run as failed", help: "Ends the run as failed; nothing more is pushed." }
     transitions:
       # the fix is not merged yet (the merge itself failed)
+      - when: "choice == 'retry' and inputs.release_ci == 'wait' and (worktree_dir | git_commits(inputs.base_branch))"
+        merge: local
+        ship: *ship
+        goto: release_ci
+        on_error: ship_failed
+      - when: "choice == 'retry' and inputs.release_ci == 'wait'"
+        ship: *ship
+        goto: release_ci
+        on_error: ship_failed
       - when: "choice == 'retry' and (worktree_dir | git_commits(inputs.base_branch))"
         merge: local
         ship: *ship
@@ -476,6 +513,54 @@ steps:
         goto: end
         on_error: ship_failed
       - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
+  # #630 (spec R7): the release CI the pushed tag starts (ci: release or pr+release), watched by the
+  # CI pusher; nothing is pushed here. Red: the owner decides (release_ci_failed), the tag stays.
+  - id: release_ci
+    display: Release CI
+    agent: ci_pusher
+    goal:
+      description: "The release CI green for the tag {{ inputs.version or ('release-' ~ run_id) }}"
+      until: "output.ci_status == 'success'"
+      on_exhausted: release_ci_failed
+    loop:
+      interval: 1m
+      max_duration: 1h
+    prompt: |
+      Ship pushed the local {{ inputs.base_branch }} and the tag `{{ inputs.version or ('release-' ~ run_id) }}`.
+      Check the CI runs that tag (or that push) started on the remote: running or not started → pending;
+      a failure → failed with failure_log (job, step, error, probable cause); every run passed → success;
+      no CI at all for the tag → success with a failure_log saying so. Never push, tag or edit files.
+    output_schema:
+      type: object
+      required: [ci_status]
+      properties:
+        ci_status:   { type: string, enum: [pending, failed, success] }
+        run_url:     { type: string }
+        failure_log: { type: string }
+    transitions:
+      - when: "output.ci_status == 'success'"
+        goto: end
+      - when: "output.ci_status == 'pending'"
+        goto: release_ci
+      - when: "true"
+        goto: release_ci_failed
+
+  - id: release_ci_failed
+    display: Release CI failed
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      The release CI for `{{ inputs.version or ('release-' ~ run_id) }}` did not pass (status: {{ steps.release_ci.output.ci_status }}).
+      {% if steps.release_ci.output.run_url %}Run: {{ steps.release_ci.output.run_url }}
+      {% endif %}Last error: {{ steps.release_ci.output.failure_log or '(none reported)' }}
+      Approve: check the release CI again (after a re-run). Reject: end the run as failed (the tag stays on the remote).
+    transitions:
+      - when: "approved"
+        goto: release_ci
+      - when: "rejected"
         goto: end
         status: failed
 

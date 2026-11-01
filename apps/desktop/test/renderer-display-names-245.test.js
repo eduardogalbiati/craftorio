@@ -206,10 +206,10 @@ const trail = (step, status, agent, extra = {}) => ({
 // a roadmap item whose run (no groups: each step is its own chip) works at acceptance_tests
 function roadmapItem(run = {}) {
   return {
-    id: 'it1', status: 'running', runId: 'run-245', workflow: 'ai-development-local-hero.yaml', inputs: {},
+    id: 'it1', status: 'running', runId: 'run-245', workflow: 'feature.yaml', inputs: {},
     issues: [{ number: 245, title: 'Readable names everywhere', url: 'https://github.com/o/r/issues/245' }],
     run: {
-      status: 'running', mock: true, startedAt: '2026-10-04T10:00:00.000Z', workflow: 'ai-development-local-hero.yaml',
+      status: 'running', mock: true, startedAt: '2026-10-04T10:00:00.000Z', workflow: 'feature.yaml',
       progress: [trail('acceptance_tests', 'running', 'test_writer')],
       groups: [], stepTimes: {}, history: 0, agentNames: null,
       ...run,
@@ -262,7 +262,7 @@ test('#245 roadmap card: a run that failed at red_check reads "Failed at Red che
 // ---- the run list's progress strip ---------------------------------------------------------------
 
 const stripRun = (extra = {}) => ({
-  runId: 'run-245', current: false, status: 'running', workflow: 'ai-development-local-hero.yaml', groups: [],
+  runId: 'run-245', current: false, status: 'running', workflow: 'feature.yaml', groups: [],
   progress: [trail('acceptance_tests', 'done', 'test_writer'), trail('red_check', 'done', null, { type: 'suite' }), trail('verify_change', 'running', 'verifier')],
   ...extra,
 });

@@ -171,8 +171,6 @@ function updateProject(dir, id, patch) {
   if (patch.name !== undefined) next.name = String(patch.name).trim() || cur.name;
   if (patch.description !== undefined) next.description = String(patch.description).trim();
   if (patch.repo !== undefined) next.repo = String(patch.repo).trim() || null;
-  // push the local base after every successful local merge (software-development-local-hero)
-  if (patch.autoPush !== undefined) next.autoPush = !!patch.autoPush;
   // #138: a new issue the Product Owner registers joins the existing epic it matches clearly, with no extra click
   if (patch.autoEpic !== undefined) next.autoEpic = !!patch.autoEpic;
   // #472: the dependency install of a run skips the packages' scripts (--ignore-scripts)

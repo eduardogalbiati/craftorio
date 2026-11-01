@@ -10,7 +10,7 @@ const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 
 const src = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'default-workflow.js'), 'utf8');
 const WORKFLOWS = [
-  { file: 'software-development-local-hero.yaml', name: 'Local hero' },
+  { file: 'feature.yaml', name: 'Local hero' },
   { file: 'software-development.yaml', name: 'Software development' },
   { file: 'fixture-other.yaml', name: 'Other' },
 ];
@@ -44,7 +44,7 @@ test('#486 current(): a project default that no longer exists falls back to Sett
 test('#486 projectFirst: the header project\'s set first, the list unchanged without one', () => {
   const DW = renderer({ project: { id: 'p', workflows: [{ name: 'fixture-other', origin: 'workspace' }] } });
   // the vm's arrays are of another realm: copied before comparing
-  assert.deepEqual([...DW.projectFirst(WORKFLOWS)].map((w) => w.file), ['fixture-other.yaml', 'software-development-local-hero.yaml', 'software-development.yaml']);
+  assert.deepEqual([...DW.projectFirst(WORKFLOWS)].map((w) => w.file), ['fixture-other.yaml', 'feature.yaml', 'software-development.yaml']);
   const none = renderer({ project: null });
   assert.deepEqual([...none.projectFirst(WORKFLOWS)].map((w) => w.file), WORKFLOWS.map((w) => w.file));
 });

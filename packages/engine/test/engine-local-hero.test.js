@@ -12,14 +12,17 @@ const { root } = require('./engine-helpers');
 // ---- software-development-local-hero: local worktree, automatic local merge, no CI/PR --------
 
 test('local hero workflow: no CI/PR/deploy, a local worktree, an automatic merge with a resolution path, a 40M context limit', () => {
-  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development-local-hero.yaml'));
-  assert.equal(wf.orchestrator.worktree.remote, false);
+  const wf = loadWorkflow(path.join(root, 'workflows', 'feature.yaml'));
+  // #630: local (no fetch) in Local mode, the fetched origin/<base> in Remote mode
+  assert.equal(render(String(wf.orchestrator.worktree.remote), { inputs: { mode: 'local' } }), 'false');
+  assert.equal(render(String(wf.orchestrator.worktree.remote), { inputs: { mode: 'remote' } }), 'true');
   assert.equal(wf.orchestrator.limits.max_total_context, '40M');
   const ids = wf.steps.map((s) => s.id);
-  for (const gone of ['ci', 'pr_babysitter', 'deploy_test', 'approve_merge', 'deploy_prod', 'approve_local_merge']) assert.ok(!ids.includes(gone), gone);
-  assert.ok(!Object.keys(wf.agents).some((a) => ['ci_pusher', 'pr_babysitter', 'deployer'].includes(a)));
+  // #630: feature's Remote mode has ci / ci_failed / pr_review (and the ci_pusher); Local mode merges, then push_main
+  for (const gone of ['pr_babysitter', 'deploy_test', 'approve_merge', 'deploy_prod', 'approve_local_merge']) assert.ok(!ids.includes(gone), gone);
+  assert.ok(!Object.keys(wf.agents).some((a) => ['pr_babysitter', 'deployer'].includes(a)));
   const verify = wf.steps.find((s) => s.id === 'verify_change');
-  assert.deepEqual(verify.transitions[0], { when: "output.verdict != 'not_verified'", merge: 'local', goto: 'end', on_error: 'resolve_merge' });
+  assert.deepEqual(verify.transitions.find((t) => t.merge === 'local'), { when: "output.verdict != 'not_verified'", merge: 'local', goto: 'push_main', on_error: 'resolve_merge' });
   assert.equal(wf.steps.find((s) => s.id === 'resolve_merge').agent, 'developer');
 
   const tmp = path.join(os.tmpdir(), `merge-local-${process.pid}.yaml`);
@@ -105,21 +108,21 @@ steps:
   }
 });
 test('e2e-release.yaml loads', () => {
-  assert.doesNotThrow(() => loadWorkflow(path.join(root, 'workflows', 'e2e-release.yaml')));
+  assert.doesNotThrow(() => loadWorkflow(path.join(root, 'workflows', 'release.yaml')));
 });
 // The `verify_failed` and `approve_merge`/`developer_check` gate templates rendered directly (no
 // full mock run needed: `render` shares the engine's own template env, including `e2e_scenarios`).
 test('local hero workflow: verify_failed\'s message has the Dev/QA line and the scenarios, or "none reported" without them', () => {
-  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development-local-hero.yaml'));
+  const wf = loadWorkflow(path.join(root, 'workflows', 'feature.yaml'));
   const msg = wf.steps.find((s) => s.id === 'verify_failed').message;
-  const scope = { steps: { verify_change: { output: { claim: 'The filter persists', evidence: 'It did not, on reload' } }, test: { output: null } } };
+  const scope = { steps: { verify_change: { output: { claim: 'The filter persists', evidence: 'It did not, on reload' } }, acceptance_tests: { output: null } } };
   const withoutScenarios = render(msg, scope);
   assert.match(withoutScenarios, /Dev\/QA: read the E2E scenarios and the screenshots/);
   assert.match(withoutScenarios, /E2E scenarios: none reported by the test writer\./);
 
   const withScenarios = render(msg, {
     ...scope,
-    steps: { ...scope.steps, test: { output: { scenarios: [{ name: 'Filter the runs', status: 'passed' }, { name: 'Empty filter result', status: 'failed', reason: 'no message shown' }] } } },
+    steps: { ...scope.steps, acceptance_tests: { output: { scenarios: [{ name: 'Filter the runs', status: 'passed' }, { name: 'Empty filter result', status: 'failed', reason: 'no message shown' }] } } },
   });
   assert.match(withScenarios, /E2E scenarios \(written by the test writer\): 1 passed · 1 failed/);
   assert.match(withScenarios, /- failed: Empty filter result \(no message shown\)/);

@@ -97,12 +97,15 @@
       .catch(() => { workflows = new Map(); })
       .finally(() => { loading = false; });
   }
-  const inputDefs = (x) => workflows?.get(x.workflow)?.inputs || {};
+  // #630: an item saved under an old workflow name (software-development.yaml, ...) means its alias
+  const fileOf = (x) => (!x.workflow || workflows?.has(x.workflow) ? x.workflow : window.DefaultWorkflow?.aliasOf(x.workflow)?.file || x.workflow);
+  const wfOf = (x) => workflows?.get(fileOf(x));
+  const inputDefs = (x) => wfOf(x)?.inputs || {};
 
   // #195: an item whose workflow pushes (a branch, a PR/MR, CI minutes) while the default merges locally
   function pushesAgainstDefault(x) {
     const def = window.DefaultWorkflow?.current();
-    return def?.merge === 'local' && x.workflow !== def.file && workflows?.get(x.workflow)?.merge === 'remote';
+    return def?.merge === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote';
   }
   // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
   // error without a run, e.g. kept work of an ended run), never while its run is alive
@@ -159,25 +162,22 @@
   // The mode (#282, in the Workflow band): the workflow's enum values as a toggle with their icons,
   // saved at once on an editable item; the same toggle with its buttons off on an item that runs
   // ("locked while it runs") or ran. Next to it, what the chosen mode does.
-  const modeOf = (x) => String(x.inputs?.mode ?? inputDefs(x).mode?.default ?? '');
-  // the mode's sentence in the input's description ("Automatic: … . Validated: … .")
-  function modeHint(def, value) {
-    const label = WorkflowInputs.optionLabel(def || {}, value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const m = String(def?.description || '').match(new RegExp(`(?:^|[.\\s])${label}:\\s*([^.]+)\\.`, 'i'));
-    return m ? m[1].trim().replace(/^./, (c) => c.toUpperCase()) : '';
-  }
+  // #630: feature's toggle is its `validation` input (WorkflowInputs.modeInput)
+  const modeIn = (x) => WorkflowInputs.modeInput(inputDefs(x), x.inputs);
+  const modeOf = (x) => String(modeIn(x).value ?? modeIn(x).def?.default ?? '');
   function modeHtml(x, locked) {
-    const def = inputDefs(x).mode;
-    const values = Array.isArray(def?.enum) ? def.enum.map(String) : x.inputs?.mode != null ? [String(x.inputs.mode)] : [];
+    const { def, value: raw } = modeIn(x);
+    const values = Array.isArray(def?.enum) ? def.enum.map(String) : raw != null ? [String(raw)] : [];
     if (!values.length) return '';
-    const value = String(x.inputs?.mode ?? def?.default ?? values[0]);
+    const value = String(raw ?? def?.default ?? values[0]);
     // the workflow's labels for its values (`options`, e.g. auto → Automatic; WorkflowInputs, #116)
     const text = (v) => WorkflowInputs.optionLabel(def || {}, v);
     const help = def?.description ? `. ${def.description}` : '';
     const fixed = locked || values.length < 2;
     const running = x.status === 'running' || !!x.waiting;
     const title = fixed ? `Mode: ${text(value)}${running ? ' (locked while the item runs)' : ''}${help}` : `Mode (saved at once)${help}`;
-    const note = running ? 'locked while it runs' : modeHint(def, value);
+    // the mode's sentence in the input's description ("Automatic: … . Validated: … .")
+    const note = running ? 'locked while it runs' : WorkflowInputs.optionHint(def, value);
     return `<div class="rm-wf-row"><span class="seg sm rm-mode-seg${fixed ? ' locked' : ''}" role="group" aria-label="${running ? t('backlog_roadmap.mode_locked_while_the_item_runs') : t('backlog_roadmap.mode_2')}" data-testid="roadmap-mode" title="${esc(title)}">${values.map((v) =>
       `<button type="button" class="rm-mode-${esc(v)}${v === value ? ' active' : ''}" data-mode="${esc(v)}"${fixed ? '' : ` data-rm-mode="${esc(v)}"`} aria-pressed="${v === value}"${fixed ? ' disabled' : ''}>${ICON[v] || ''}${esc(text(v))}</button>`).join('')}</span>${note ? `<span class="rm-mode-note muted">${esc(note)}</span>` : ''}</div>`;
   }
@@ -295,12 +295,12 @@
     // #287: a refused save keeps what the owner typed, not the stored values
     const x = kept?.id === raw.id ? { ...raw, inputs: kept.inputs, mock: kept.mock } : raw;
     const defs = inputDefs(x);
-    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
-    for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
-    const mode = x.inputs?.mode ?? defs.mode?.default;
+    const key = modeIn(x).key;
+    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
+    for (const k of Object.keys(x.inputs || {})) if (k !== key && k !== 'mode' && !defs[k]) fields[k] = {};
     const grid = Object.keys(fields).length
       ? WorkflowInputs.formHtml(fields, {
-        values: x.inputs || {}, context: { mode }, autofocus: !adding,
+        values: x.inputs || {}, context: modeIn(x).context, autofocus: !adding,
         id: (k) => `rm-f-${x.id}-${k}`, attrs: (k) => `data-rm-field="${esc(k)}"`,
       })
       : `<p class="small muted">${t('backlog_roadmap.this_workflow_has_no_other_inputs')}</p>`;
@@ -308,13 +308,13 @@
       ? `<div class="field rm-add"><label>${t('backlog_roadmap.new_input')}</label><div class="row"><input type="text" data-rm-newname placeholder="${t('backlog_roadmap.name')}" aria-label="${t('backlog_roadmap.new_input_name')}" autofocus /><input type="text" data-rm-newvalue placeholder="${t('backlog_roadmap.value')}" aria-label="${t('backlog_roadmap.new_input_value')}" /></div></div>`
       : `<button class="link-btn small" type="button" data-rm-addinput>${t('backlog_roadmap.add_input')}</button>`;
     // #262: each agent's provider / model / effort for this item's run, folded unless one was changed
-    const wfDef = workflows?.get(x.workflow);
+    const wfDef = wfOf(x);
     const changed = Object.keys(x.agentOverrides || {}).length;
     const agents = wfDef && window.AgentOverrides
       ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">${t('backlog_roadmap.agents')}${changed ? t('backlog_roadmap.changed_changed_for_this_run', { changed }) : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides, hideLegend: true })}</details>`
       : '';
     return `
-      <div class="rm-form" role="group" aria-label="${t('backlog_roadmap.edit_the_inputs_of_this_item')}"${WorkflowInputs.scopeAttrs({ mode })}>
+      <div class="rm-form" role="group" aria-label="${t('backlog_roadmap.edit_the_inputs_of_this_item')}"${WorkflowInputs.scopeAttrs(modeIn(x).context)}>
         <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
         ${agents}
@@ -337,7 +337,7 @@
   function estimate(x) {
     const run = x.run;
     if (!x.runId || !run) return null;
-    const path = (workflows?.get(x.workflow)?.steps || []).map((st) => st.id);
+    const path = (wfOf(x)?.steps || []).map((st) => st.id);
     const est = RunProgress.estimateProgress({ steps: run.progress || [], path, typical: run.stepTimes || {}, status: run.status, startedAt: run.startedAt, keep: true });
     return x.waiting && est.state === 'running' ? { ...est, state: 'waiting' } : est;
   }
@@ -508,7 +508,7 @@
   const STATION_ROBOT = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping' };
   const stationWord = (state) => t({ done: 'backlog_roadmap.station_done', skipped: 'backlog_roadmap.station_not_run', todo: 'backlog_roadmap.station_not_reached', gate: 'backlog_roadmap.station_waits_for_you', running: 'backlog_roadmap.station_running', waiting: 'backlog_roadmap.station_waiting_for_you', failed: 'backlog_roadmap.station_failed', stopped: 'backlog_roadmap.station_stopped', back: 'backlog_roadmap.station_asked_for_fixes' }[state]);
   function stationsOf(x, v) {
-    const wf = workflows?.get(x.workflow);
+    const wf = wfOf(x);
     const run = v?.run;
     // the workflow as installed; a run of a workflow that is not: what its trail and its groups say
     const steps = wf?.steps?.length ? wf.steps : [...new Map((run?.progress || []).map((e) => [e.step, { id: e.step, type: e.type }])).values()];
@@ -531,7 +531,7 @@
     }
     if (st.human) return you();
     // not reached yet: the agents the workflow gives its steps (the engine's gear for a step without one)
-    const wf = workflows?.get(x.workflow);
+    const wf = wfOf(x);
     const byId = new Map((wf?.steps || []).map((s) => [s.id, s]));
     const keys = [...new Set(st.steps.flatMap((id) => {
       const s = byId.get(id);
@@ -550,7 +550,7 @@
     const run = v?.run || null;
     const stations = stationsOf(x, v);
     if (!stations.length) return workflows ? `<div class="rm-pipe rm-pipe-none small muted" data-testid="roadmap-pipeline">${t('backlog_roadmap.no_pipeline_to_show_this_workflow')}</div>` : '';
-    const wf = workflows?.get(x.workflow);
+    const wf = wfOf(x);
     const stepNames = run?.stepNames || Object.fromEntries((wf?.steps || []).filter((s) => s.display).map((s) => [s.id, s.display]));
     const active = !!run && (run.status === 'running' || run.status === 'pending');
     const html = stations.map((st) => {
@@ -577,7 +577,7 @@
   // #279 (data-testid="roadmap-update-after"), which the E2E steps assert absent on every card.
   function workflowHtml(x, locked, open, v) {
     const push = pushesAgainstDefault(x);
-    const name = readable(String(x.run?.workflow || x.workflow || '').replace(/\.ya?ml$/i, ''));
+    const name = readable(String(x.run?.workflow || fileOf(x) || '').replace(/\.ya?ml$/i, ''));
     const full = x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow;
     const gate = x.waiting && x.run?.gate ? x.run.gate : '';
     // the chip opens the run (backlog.js: any [data-run]); its state is said to a screen reader only:
@@ -588,7 +588,7 @@
     const edit = locked || open ? '' : `<button class="link-btn small" type="button" data-rm-edit title="${t('backlog_roadmap.edit_this_item_s_inputs')}">${t('backlog_roadmap.edit')}</button>`;
     const pushBadge = push ? `<span class="badge rm-wf rm-wf-push" title="${esc(`${full}. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally`)}"><span aria-hidden="true">⇡ </span>${t('backlog_roadmap.pushes_a_pr_mr')}</span>` : '';
     const sim = x.mock || x.run?.mock ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '';
-    const meta = `${pushBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(workflows?.get(x.workflow) || null, x.inputs, { skip: ['mode'] })}`;
+    const meta = `${pushBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(wfOf(x) || null, x.inputs, { skip: ['mode'] })}`;
     return `
         <div class="rm-workflow" data-testid="roadmap-workflow">
           <div class="rm-wf-config">
@@ -1151,10 +1151,11 @@
     if (!lost) return '';
     const x = lost.item;
     const defs = inputDefs(x);
-    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
-    for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
+    const key = modeIn(x).key;
+    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
+    for (const k of Object.keys(x.inputs || {})) if (k !== key && k !== 'mode' && !defs[k]) fields[k] = {};
     const grid = Object.keys(fields).length
-      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: { mode: x.inputs?.mode ?? defs.mode?.default }, id: (k) => `rm-lost-${k}` })
+      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: modeIn(x).context, id: (k) => `rm-lost-${k}` })
       : '';
     return `<div class="rm-conflict" role="alert" data-testid="roadmap-save-conflict">
       <p>${esc(lost.reason)}</p>
@@ -1753,7 +1754,8 @@
     const { s, n } = locate(stages, target);
     const item = stages[s]?.items[n];
     if (!item || !editable(item)) return 'handled';
-    item.inputs = { ...item.inputs, mode: el.dataset.rmMode };
+    item.inputs = { ...item.inputs, [modeIn(item).key]: el.dataset.rmMode };
+    if (modeIn(item).old) delete item.inputs.mode; // #630: an old `mode: validated` gives way to the validation picked
     await save(ctx, r, stages, { label: t('backlog_roadmap.changed_the_mode_of_item', { item: numbers(item) }), quiet: true });
     return 'handled';
   }

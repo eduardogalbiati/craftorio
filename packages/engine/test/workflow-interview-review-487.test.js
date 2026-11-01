@@ -90,8 +90,8 @@ test('#487 writing replaces the manifest entry of the same name, once and in its
   const { area, project, dir } = await setup(t);
   await area.workflowInterview({ projectId: project.id });
   const preview = await area.workflowCompose({ projectId: project.id, answers: {} });
-  const dev = preview.workflows.find((w) => w.category === 'solo').name;
-  writeManifest(dir, `version: 1\nworkflows:\n  - name: ${dev}\n    file: workflows/old-dev.yaml\n    category: solo\n  - name: software-development\n    category: team\n`);
+  const dev = preview.workflows.find((w) => w.category === 'feature').name;
+  writeManifest(dir, `version: 1\nworkflows:\n  - name: ${dev}\n    file: workflows/old-dev.yaml\n    category: feature\n  - name: software-development\n    category: team\n`);
   await area.workflowCompose({ projectId: project.id, answers: {}, write: true });
   const entries = yaml.load(fs.readFileSync(manifestFile(dir), 'utf8')).workflows;
   assert.equal(entries[0].name, dev);
@@ -127,7 +127,7 @@ test('#487 a second analysis while the first runs is refused as busy and seeds:l
   assert.equal((await row()).running === null, false);
   release();
   const out = await first;
-  assert.equal(out.profile.team, 'solo');
+  assert.equal(out.profile.mode, 'local');
   assert.equal((await row()).running, null);
   assert.equal(oracle.turns.length, 1);
 });
@@ -141,8 +141,7 @@ test('#487 in simulation a Go project without package.json gets go test and go i
   assert.equal(oracle.turns.length, 0);
   assert.equal(out.profile.testCommand, 'go test ./...');
   assert.deepEqual(out.profile.languages, ['go']);
-  assert.equal(out.profile.team, 'solo');
-  assert.equal(out.profile.merge, 'local');
+  assert.equal(out.profile.mode, 'local');
   assert.equal(out.profile.release, null);
   const ids = out.questions.map((q) => q.id);
   assert.equal(ids.includes('release'), true);

@@ -28,16 +28,16 @@ The public page (`site/`) reads exactly these files: "plan: N of M steps", shipp
 
 ## Proposed outcome
 
-A **documentation agent** step in the Code & Build workflows keeps each item's documents current, in real time, as part of the run that changed the item. It is committed by that run, at its usual gate. Projects opt in when they are created, through a new onboarding option, **"Add the realtime documentation model"**.
+A **documentation agent** keeps each item's documents current, in real time, as a **post-flow outside Code & Build**: the chain (`then`) starts it when a Code & Build run finishes with success, and it reads that run's declared outputs (branch, merged commit, PR, the evidence paths) and records them. The `feature`, `fix` and `release` workflows never read or write `docs/work/` (owner decision, 2026-11-01), so every workflow, a user's own included, gets the documents without a step of its own. Projects opt in when they are created, through a new onboarding option, **"Add the realtime documentation model"**.
 
 It arrives in three parts:
 
-1. **With the workflows** (`feature`, `fix`, `release`, after #630):
+1. **After the workflows** (chained after `feature`, `fix`, `release`):
    - `plan.md`: the front matter (`status`, `date`) and the `## Progress` row (Status `done`/`pending`, the run, the commit or PR), after each feature or fix run;
    - `test.md`: a row per run (the run, the unit and E2E counts, the screenshots taken or why none were, the axe findings), the run's final before/after screenshots copied to `images/`, and `status: collecting`;
    - `deploy.md`: the review findings, and on release `release:` and `released:` (which the page needs for shipped and lead time);
    - `CHANGELOG.md` (+ `CHANGELOG.pt-BR.md`) at the root, in the Keep a Changelog format: the `release` workflow adds each version, and a `docs/work/<item>/` link becomes the item's chip.
-2. **The Test stage** (with part 1): when every Progress row is `done`, the step sets `plan.md` to `status: built` and the reader moves the item from Build to Test. A **Test workflow**, started from the Roadmap on a built item (never automatically), runs the quality gates on the integrated base:
+2. **The Test stage** (with part 1): when every Progress row is `done`, `sdlc-record` sets `plan.md` to `status: built` and the reader moves the item from Build to Test. A **Test workflow** (`sdlc-test`), started from the Roadmap on a built item (never automatically), runs the quality gates on the integrated base:
    - the full suite with coverage and the full E2E, every `@visual` scenario with a committed baseline (#696);
    - each of the item's screens compared with its spec mockup, with the coverage listed (#670);
    - the evals, in the Full work model;
@@ -55,8 +55,9 @@ It **does not write `intent.md` or `spec.md`**. That is the write doc flow (#636
   - the owner and readers of the public page, who see true progress without anyone editing files by hand;
   - contributors, who find each item's state in the repository.
 - **Systems:**
-  - the `feature`, `fix` and `release` workflows (a documentation step before the merge);
-  - a new Test workflow and its code owner's gate;
+  - the `feature`, `fix` and `release` workflows: unchanged, except an `evidence` output they declare for the post-flow;
+  - the chain (`then`), which needs a default per project or roadmap item so the post-flow starts on its own;
+  - a new `sdlc-test` workflow and its code owner's gate;
   - the reader's stages (`built` advances Build to Test);
   - the onboarding wizard (a new option at project creation);
   - the work model (#633) and the Monitor (#634);
@@ -70,14 +71,14 @@ It **does not write `intent.md` or `spec.md`**. That is the write doc flow (#636
   - agents run unattended;
   - no automation crosses a `human_approval`;
   - checks in simulation only.
-- Its tests use fixtures, never a live document under `docs/work/` (#695); a docs-only commit runs no tests, so the step runs the document lint itself.
+- Its tests use fixtures, never a live document under `docs/work/` (#695); a docs-only commit runs no tests, so the post-flow runs the document lint itself.
 - It follows `docs/work/CONVENTIONS.md`: the English file first, then the `.pt-BR.md` translation beside it.
-- It writes to the user's repository only through the run, at its usual gate. Onboarding never writes.
+- It writes to the user's repository only as its own run, merged the way the project works (local or PR), never inside a Code & Build run. Onboarding never writes.
 - **Cost:** the step is deterministic where it can be (tables, front matter, release fields), and calls a model only for prose (the test summary, the changelog entry). The cost is shown and counted toward the daily budget.
 
 ## Open questions
 
-1. A separate agent turn, or a deterministic step for the tables plus a model only for prose? *Decided (owner, 2026-11-01): a machine step, `record_docs` (no model), for the tables and front matter, before the merge of each run; a model turn only for prose.*
+1. A separate agent turn, or a deterministic step for the tables plus a model only for prose? *Decided (owner, 2026-11-01): a machine step (no model) in the `sdlc-record` run chained after each successful Code & Build run, for the tables and front matter; a model turn only for prose.*
 2. Default of the onboarding option? *Proposed: on for the Standard and Full work models, off for Light.*
 3. Does the release write the changelog from the items' intents, or from the merged commits? *Proposed: from the items shipped in the release (their intent titles and links), with the commits as a fallback for changes outside any item.*
 4. Who updates the documents of a run that fails or stops at a gate? *Proposed: the step runs at the end of a successful run only. A stopped run leaves Progress `pending`, and its gate shows why.*

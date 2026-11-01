@@ -4,7 +4,7 @@
 //   count as in the change, so the owner's policy never lets them through;
 // - runSuite's timed-out round (packages/engine/engine/suite-step.js): a file that fails alone on the branch, a hang
 //   with no base checkout or a base without the file, and the alone reruns' own timeout history;
-// - the suite step's routing in workflows/ai-development-local-hero.yaml (evalExpr on its transitions);
+// - the suite step's routing in workflows/feature.yaml (evalExpr on its transitions);
 // - where `tested` shows: the run's row (packages/engine/domains/run/runs.js readRun) and the run chat's end item.
 // runSuite runs with a stubbed `run` (the child-process boundary): no real process is spawned.
 const test = require('node:test');
@@ -21,7 +21,7 @@ const { RunChatModel } = require('@multiagent/front-build/views/runchat/run-chat
 
 const IN = 'in the change';
 const OUT = 'outside the change';
-const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
@@ -230,7 +230,7 @@ test('#396 timeout: with no history an alone rerun gets 5 min', async (t) => {
 });
 
 // ---------------------------------------------------------------------------
-// The suite step's routing (workflows/ai-development-local-hero.yaml)
+// The suite step's routing (workflows/feature.yaml)
 // ---------------------------------------------------------------------------
 
 function suiteRoute({ output, policy = 'continue', e2e = 'off', scope = 'none', unitTests = 'write_and_run' }) {
@@ -285,11 +285,6 @@ test('#396 routing: the owner\'s Continue at test_failed records not tested gree
   assert.equal(pick('stop').set?.tested, undefined);
 });
 
-test('#396 software-development-local-hero has no suite policy transition', () => {
-  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', 'software-development-local-hero.yaml'));
-  const text = JSON.stringify(wf.steps.map((s) => s.transitions || []));
-  assert.doesNotMatch(text, /suite_red_outside_change|not green/);
-});
 
 test('#396 inputs form (Start drawer, roadmap item): the policy shows as "Suite red outside the change", Ask selected by default; a chosen Continue stays selected', () => {
   const WorkflowInputs = require('@multiagent/ui-kit/workflow-inputs');

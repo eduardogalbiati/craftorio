@@ -79,12 +79,12 @@ function loadColoredRobot(looks = {}) {
   assert.ok(block, 'the avatar helpers (isSupervisor … robot) not found in runchat.js: the source moved');
   const AgentColors = require('@multiagent/ui-kit/agent-colors.js');
   const yaml = require('js-yaml');
-  const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml'), 'utf8'));
+  const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'), 'utf8'));
   const sandbox = {
     providerType,
     AgentColors,
-    state: { workflows: [{ file: 'ai-development-local-hero.yaml', name: wf.name, agents: wf.agents }] },
-    chat: { model: { run: { workflow: 'ai-development-local-hero.yaml' }, nameOf: (a) => a } },
+    state: { workflows: [{ file: 'feature.yaml', name: wf.name, agents: wf.agents }] },
+    chat: { model: { run: { workflow: 'feature.yaml' }, nameOf: (a) => a } },
     window: { AgentColors, AgentLooks: { forWorkflow: (workflow, agent) => looks[`${workflow}/${agent}`] || null } },
     Robots: {
       svg: (variant, st, opts) => ({ variant, st, ...opts }),
@@ -104,7 +104,7 @@ test('robot(): a workflow agent\'s robot is painted in its role colour (test wri
 });
 
 test('robot(): a look saved for the agent in Agents wins over the role colour', () => {
-  const robot = loadColoredRobot({ 'ai-development-local-hero.yaml/test_writer': 'saved-look' });
+  const robot = loadColoredRobot({ 'feature.yaml/test_writer': 'saved-look' });
   const r = robot({ agent: 'test_writer', provider: 'claude', model: 'claude-opus-5-5' });
   assert.equal(r.variant, 'saved-look');
   assert.equal(r.color, undefined);

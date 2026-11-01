@@ -1,4 +1,4 @@
-// workflows/ai-development-local-hero.yaml, #380: a merge conflict in test files that needs new test
+// workflows/feature.yaml, #380: a merge conflict in test files that needs new test
 // lines. resolve_merge answers `test_conflict`, the test writer gets the conflict (delegate), then
 // resolve_merge runs again to finish the rebase and the run goes on to the scoped re-check and merges.
 // A whole mock run (a new transition): the local merge fails once (action_errors), the
@@ -13,7 +13,7 @@ const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../../engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'feature.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 function makeRepo(t) {

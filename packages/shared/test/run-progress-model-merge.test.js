@@ -7,7 +7,7 @@
 // `merged` is the merged commit (a string; null / absent: the run did not merge). With it the
 // station of the group named Merge is `done`, whether or not the run entered one of its steps; the
 // other stations, a run that did not merge and a workflow without a Merge group draw as before.
-// The groups are the ones of workflows/ai-development-local-hero.yaml, shortened to the steps used here.
+// The groups are the ones of workflows/feature.yaml, shortened to the steps used here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 

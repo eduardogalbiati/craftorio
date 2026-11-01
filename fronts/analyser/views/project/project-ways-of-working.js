@@ -12,29 +12,37 @@
 // globals ($, esc, errMsg, showToast).
 
 (function () {
-  // the proposed workflow's category as the owner reads it: solo / team are the development workflow
-  const shownCategory = (c) => (c === 'solo' || c === 'team' ? 'development' : c);
+  // the proposed workflow's category as the owner reads it: solo / team (#487) and feature (#630) are the
+  // development workflow
+  const shownCategory = (c) => (['feature', 'solo', 'team'].includes(c) ? 'development' : c);
   // an open question's label (packages/engine/domains/workflow/workflow-compose.js openQuestions ids)
   const QUESTION_LABELS = {
     budget: 'ways_of_working.q_budget',
-    merge: 'ways_of_working.q_merge',
+    ci: 'ways_of_working.f_ci',
+    mode: 'ways_of_working.q_mode',
     release: 'ways_of_working.q_release',
     review: 'ways_of_working.q_review',
     screenshots: 'ways_of_working.q_screenshots',
-    team: 'ways_of_working.q_team',
+    tests: 'ways_of_working.tests',
     validate: 'ways_of_working.q_validate',
   };
+  // #630: the ways of working's axes (team left): how changes land, what the CI runs on, the test kinds
+  const MODE_OPTIONS = [['local', 'ways_of_working.merge_local'], ['remote', 'ways_of_working.merge_pr']];
+  const CI_OPTIONS = [['none', 'ways_of_working.ci_none'], ['release', 'ways_of_working.ci_release'], ['pr+release', 'ways_of_working.ci_pr_release']];
+  const TESTS_OPTIONS = [['unit', 'ways_of_working.tests_unit'], ['unit+e2e', 'ways_of_working.tests_unit_e2e']];
   // the profile's fields the owner may override (packages/engine/domains/workflow/workflow-compose.js PROFILE_FIELDS): a fixed list is
   // a select (an empty value keeps the inferred one), a command or a list of languages is free text
   const PROFILE_EDIT = [
-    { id: 'team', label: 'ways_of_working.q_team', options: [['solo', 'ways_of_working.solo'], ['team', 'ways_of_working.team']] },
-    { id: 'merge', label: 'ways_of_working.q_merge', options: [['local', 'ways_of_working.merge_local'], ['pr', 'ways_of_working.merge_pr']] },
+    { id: 'mode', label: 'ways_of_working.q_mode', options: MODE_OPTIONS },
     { id: 'release', label: 'ways_of_working.q_release', options: [['milestone'], ['per-merge'], ['train'], ['rc-stable']] },
-    { id: 'ci', label: 'ways_of_working.f_ci', options: [['github-actions'], ['gitlab-ci'], ['other']] },
+    { id: 'ci', label: 'ways_of_working.f_ci', options: CI_OPTIONS },
+    { id: 'tests', label: 'ways_of_working.tests', options: TESTS_OPTIONS },
     { id: 'testCommand', label: 'ways_of_working.f_test_command' },
+    { id: 'e2eCommand', label: 'ways_of_working.f_e2e_command' },
     { id: 'checkCommand', label: 'ways_of_working.f_check_command' },
     { id: 'languages', label: 'ways_of_working.f_languages' },
   ];
+  const optionText = (options, v) => { const o = options.find(([value]) => value === v); return o ? t(o[1]) : v || t('ways_of_working.open'); };
   let cur = null; // { project, el, backdrop, estimate, phase, error, result, answers, proposed, composing, writing, editing, seq }
 
   const estimateText = (e) => (e?.free ? t('ways_of_working.estimate_free')
@@ -53,12 +61,15 @@
   }
 
   function profileLabels(p) {
-    const merge = p.merge === 'pr' ? t('ways_of_working.merge_pr') : p.merge === 'local' ? t('ways_of_working.merge_local') : t('ways_of_working.open');
-    const team = p.team === 'team' ? t('ways_of_working.team') : p.team === 'solo' ? t('ways_of_working.solo') : t('ways_of_working.open');
-    const out = [`${team}: ${merge}`, `${t('ways_of_working.release')}: ${p.release || t('ways_of_working.open')}`];
-    if (p.testCommand) out.push(`${t('ways_of_working.tests')}: ${p.testCommand}`);
+    const out = [
+      `${t('ways_of_working.q_mode')}: ${optionText(MODE_OPTIONS, p.mode)}`,
+      `${t('ways_of_working.release')}: ${p.release || t('ways_of_working.open')}`,
+      `CI: ${optionText(CI_OPTIONS, p.ci)}`,
+      `${t('ways_of_working.tests')}: ${optionText(TESTS_OPTIONS, p.tests)}`,
+    ];
+    if (p.testCommand) out.push(`${t('ways_of_working.f_test_command')}: ${p.testCommand}`);
+    if (p.e2eCommand) out.push(`${t('ways_of_working.f_e2e_command')}: ${p.e2eCommand}`);
     if (p.checkCommand) out.push(`${t('ways_of_working.check')}: ${p.checkCommand}`);
-    if (p.ci) out.push(`CI: ${p.ci}`);
     if (p.languages?.length) out.push(p.languages.join(', '));
     return out;
   }

@@ -89,7 +89,7 @@ test('#384 run list: a failed run whose resume failed too says the resume failed
 
 // ---- the roadmap card ------------------------------------------------------------------------------
 
-const HERO = 'software-development-local-hero.yaml';
+const HERO = 'feature.yaml';
 function wfEntry(file) {
   const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
   const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', file));

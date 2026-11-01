@@ -28,16 +28,16 @@ A página pública (`site/`) lê exatamente esses arquivos: "plan: N of M steps"
 
 ## Resultado esperado
 
-Um passo de **agente de documentação** nos workflows de Code & Build mantém os documentos de cada item em dia, em tempo real, como parte do run que mudou o item. É commitado por esse run, no gate de sempre. Os projetos aderem na hora do cadastro, por uma opção nova no onboarding, **"Add the realtime documentation model"**.
+Um **agente de documentação** mantém os documentos de cada item em dia, em tempo real, como um **fluxo posterior fora do Code & Build**: o encadeamento (`then`) o inicia quando um run de Code & Build termina com sucesso, e ele lê as saídas declaradas desse run (branch, commit do merge, PR, os caminhos das evidências) e as registra. Os workflows `feature`, `fix` e `release` nunca leem nem escrevem em `docs/work/` (decisão do dono, 2026-11-01), então todo workflow, inclusive os do usuário, ganha os documentos sem precisar de um passo próprio. Os projetos aderem na hora do cadastro, por uma opção nova no onboarding, **"Add the realtime documentation model"**.
 
 Ele chega em três partes:
 
-1. **Com os workflows** (`feature`, `fix`, `release`, depois da #630):
+1. **Depois dos workflows** (encadeado depois de `feature`, `fix`, `release`):
    - `plan.md`: o front matter (`status`, `date`) e a linha da `## Progress` (Status `done`/`pending`, o run, o commit ou PR), depois de cada run de feature ou fix;
    - `test.md`: uma linha por run (o run, as contagens de unidade e E2E, os screenshots tirados ou por que nenhum foi, os achados do axe), os screenshots finais de antes e depois copiados para `images/`, e `status: collecting`;
    - `deploy.md`: os achados da revisão e, na release, `release:` e `released:` (que a página precisa para entregue e lead time);
    - `CHANGELOG.md` (+ `CHANGELOG.pt-BR.md`) na raiz, no formato Keep a Changelog: o workflow `release` acrescenta cada versão, e um link `docs/work/<item>/` vira o chip do item.
-2. **A etapa Test** (junto com a parte 1): quando todas as linhas da Progress estão `done`, o passo põe o `plan.md` em `status: built` e o reader passa o item de Build para Test. Um **workflow de Test**, iniciado pelo Roadmap num item construído (nunca sozinho), roda os gates de qualidade na base integrada:
+2. **A etapa Test** (junto com a parte 1): quando todas as linhas da Progress estão `done`, o `sdlc-record` põe o `plan.md` em `status: built` e o reader passa o item de Build para Test. Um **workflow de Test** (`sdlc-test`), iniciado pelo Roadmap num item construído (nunca sozinho), roda os gates de qualidade na base integrada:
    - a suíte completa com cobertura e o E2E completo, cada cenário `@visual` com baseline commitado (#696);
    - cada tela do item comparada com o mockup da spec, com a cobertura listada (#670);
    - os evals, no modelo de trabalho Full;
@@ -55,8 +55,9 @@ Ele **não escreve `intent.md` nem `spec.md`**. Isso é do fluxo de write doc (#
   - o dono e quem lê a página pública, que veem o progresso verdadeiro sem ninguém editar arquivos à mão;
   - os contribuidores, que acham o estado de cada item no repositório.
 - **Sistemas:**
-  - os workflows `feature`, `fix` e `release` (um passo de documentação antes do merge);
-  - um workflow de Test novo e o gate do code owner;
+  - os workflows `feature`, `fix` e `release`: sem mudança, a não ser uma saída `evidence` que declaram para o fluxo posterior;
+  - o encadeamento (`then`), que precisa de um padrão por projeto ou item do roadmap para o fluxo posterior começar sozinho;
+  - um workflow `sdlc-test` novo e o gate do code owner;
   - as etapas do reader (`built` passa de Build para Test);
   - o assistente de onboarding (uma opção nova no cadastro do projeto);
   - o modelo de trabalho (#633) e o Monitor (#634);
@@ -70,14 +71,14 @@ Ele **não escreve `intent.md` nem `spec.md`**. Isso é do fluxo de write doc (#
   - os agentes rodam sem supervisão;
   - nenhuma automação atravessa um `human_approval`;
   - checagens só em simulação.
-- Os testes dele usam fixtures, nunca um documento vivo em `docs/work/` (#695); um commit só de docs não roda testes, então o próprio passo roda o lint do documento.
+- Os testes dele usam fixtures, nunca um documento vivo em `docs/work/` (#695); um commit só de docs não roda testes, então o próprio fluxo posterior roda o lint do documento.
 - Segue o `docs/work/CONVENTIONS.md`: primeiro o arquivo em inglês, depois a tradução `.pt-BR.md` ao lado.
-- Escreve no repositório do usuário só pelo run, no gate de sempre. O onboarding nunca escreve.
+- Escreve no repositório do usuário só como um run próprio, mesclado do jeito que o projeto trabalha (local ou PR), nunca dentro de um run de Code & Build. O onboarding nunca escreve.
 - **Custo:** o passo é determinístico onde dá (tabelas, front matter, campos de release) e só chama modelo para o texto corrido (o resumo dos testes, a entrada do changelog). O custo aparece e conta no orçamento diário.
 
 ## Perguntas em aberto
 
-1. Um turno de agente separado, ou um passo determinístico para as tabelas mais um modelo só para o texto? *Decidido (dono, 2026-11-01): um passo de máquina, `record_docs` (sem modelo), para as tabelas e o front matter, antes do merge de cada run; um turno de modelo só para o texto.*
+1. Um turno de agente separado, ou um passo determinístico para as tabelas mais um modelo só para o texto? *Decidido (dono, 2026-11-01): um passo de máquina (sem modelo) no run `sdlc-record` encadeado depois de cada run de Code & Build com sucesso, para as tabelas e o front matter; um turno de modelo só para o texto.*
 2. Padrão da opção no onboarding? *Proposta: ligada nos modelos de trabalho Standard e Full, desligada no Light.*
 3. A release escreve o changelog a partir dos intents dos itens ou dos commits mesclados? *Proposta: a partir dos itens entregues na release (o título do intent e o link), com os commits como alternativa para mudanças fora de qualquer item.*
 4. Quem atualiza os documentos de um run que falha ou para num gate? *Proposta: o passo roda só no fim de um run com sucesso. Um run parado deixa a Progress `pending`, e o gate dele mostra o porquê.*

@@ -112,7 +112,7 @@ const round = (step, n, output) => ({
   selection: output.selection ? { mode: output.selection.mode, why: output.selection.why || '', reasons: output.selection.reasons || {} } : null,
 });
 const figuresWith = (suiteRounds) => ({
-  runId: 'run-304', title: 'Affected suite', workflow: 'AI development (local hero)', file: 'ai-development-local-hero.yaml',
+  runId: 'run-304', title: 'Affected suite', workflow: 'AI development (local hero)', file: 'feature.yaml',
   status: 'success', mock: true, startedAt: T(0), finishedAt: T(40), issues: [304],
   costUsd: 1, costPerIssue: 1, durationMs: 2400000, activeMs: 2000000, gateWaitMs: 0, gates: [], suiteRounds, slowestTools: [],
   timeline: [{ row: 'orchestrator', step: 'suite', visit: 1, from: T(0), to: T(10), durationMs: 600000 }],
@@ -178,7 +178,7 @@ function loadStepName() {
   assert.ok(names && stepName, 'workflowStepNames / stepName not found in runchat.js: the source moved');
   const sandbox = {
     displayName,
-    state: { workflows: [{ file: 'ai-development-local-hero.yaml', name: 'AI development (local hero)', steps: [{ id: 'warm_up', display: 'Warm Up' }, { id: 'develop', display: 'Develop' }] }] },
+    state: { workflows: [{ file: 'feature.yaml', name: 'AI development (local hero)', steps: [{ id: 'warm_up', display: 'Warm Up' }, { id: 'develop', display: 'Develop' }] }] },
     chat: { model: { run: null, stepName: (id) => `recorded:${id}` } },
   };
   vm.createContext(withI18n(sandbox));
@@ -188,7 +188,7 @@ function loadStepName() {
 
 test('#301 run chat: a run recorded without step names shows its workflow\'s display names ("Warm Up")', () => {
   const sb = loadStepName();
-  sb.chat.model.run = { workflow: 'ai-development-local-hero.yaml' };
+  sb.chat.model.run = { workflow: 'feature.yaml' };
   assert.equal(sb.stepName('warm_up'), 'Warm Up');
   assert.equal(sb.stepName('develop'), 'Develop');
   assert.equal(sb.stepName(''), '');
@@ -196,7 +196,7 @@ test('#301 run chat: a run recorded without step names shows its workflow\'s dis
 
 test('#301 run chat: a run that recorded its step names keeps them', () => {
   const sb = loadStepName();
-  sb.chat.model.run = { workflow: 'ai-development-local-hero.yaml', stepNames: { warm_up: 'Warm Up' } };
+  sb.chat.model.run = { workflow: 'feature.yaml', stepNames: { warm_up: 'Warm Up' } };
   assert.equal(sb.stepName('warm_up'), 'recorded:warm_up');
 });
 

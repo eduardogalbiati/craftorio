@@ -12,7 +12,7 @@ const { root } = require('../engine-helpers');
 test('e2e-release workflow: a simulated suite fails once, the E2E runner traces it to the app, the developer fixes it, the suite passes, and approves the merge', { timeout: 60000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'e2e-release.yaml'),
+    file: path.join(root, 'workflows', 'release.yaml'),
     inputs: { task: 'Release check', repo_path: root },
     mock: true, runsDir,
     mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } },
@@ -36,7 +36,7 @@ test('e2e-release workflow: a simulated suite fails once, the E2E runner traces 
 });
 test('local hero workflow: a simulated run merges right after verify_change and ends as success', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
-  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'software-development-local-hero.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
@@ -55,7 +55,7 @@ test('local hero workflow: a simulated run merges right after verify_change and 
 test('local hero workflow: validated mode stops at developer_check with a local diff_base (no origin/ prefix); auto mode skips it', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'software-development-local-hero.yaml'),
+    file: path.join(root, 'workflows', 'feature.yaml'),
     inputs: { task: 'Engine test', repo_path: root, mode: 'validated' },
     mock: true, runsDir,
   });
@@ -83,7 +83,7 @@ test('local hero workflow: validated mode stops at developer_check with a local 
 });
 test('local hero workflow: a successful run saves <run>/e2e/scenarios.feature and scenarios.json; the test step reports them pending, never run (#199)', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
-  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'software-development-local-hero.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);

@@ -51,28 +51,28 @@ test('#487 composeWorkflowSet merges into the existing manifest it is given', ()
   assert.deepEqual(doc.workflows.map((w) => w.name), ['nightly', ...out.workflows.map((w) => w.name)]);
 });
 
-test('#487 openQuestions asks solo or team when the profile does not know it, solo by default', () => {
-  const q = compose.openQuestions({ ...SOLO, team: null }).find((x) => x.id === 'team');
+// #630: team left the ways of working; the mode (local | remote) took its question
+test('#487 openQuestions asks local or remote when the profile does not know it, local by default', () => {
+  const q = compose.openQuestions({ ...SOLO, merge: null }).find((x) => x.id === 'mode');
   assert.equal(q === undefined, false);
-  assert.equal(q.default, 'solo');
-  assert.deepEqual(q.options.map((o) => o.value), ['solo', 'team']);
-  assert.equal(compose.openQuestions(SOLO).some((x) => x.id === 'team'), false);
+  assert.equal(q.default, 'local');
+  assert.deepEqual(q.options.map((o) => o.value), ['local', 'remote']);
+  assert.equal(compose.openQuestions(SOLO).some((x) => x.id === 'mode'), false);
 });
 
-test('#487 the team answer wins over the profile and files the development workflow under team', () => {
-  const out = compose.composeWorkflowSet({ profile: SOLO, answers: { team: 'team' } });
-  assert.equal(out.settings.team, 'team');
-  assert.equal(byCategory(out, 'team') === undefined, false);
-  assert.equal(byCategory(out, 'solo') === undefined, true);
+test('#487 the mode answer wins over the profile', () => {
+  const out = compose.composeWorkflowSet({ profile: SOLO, answers: { mode: 'remote' } });
+  assert.equal(out.settings.mode, 'remote');
+  assert.equal(byCategory(out, 'feature') === undefined, false);
 });
 
-test('#487 an unknown team with no answer composes for solo', () => {
-  assert.equal(compose.composeWorkflowSet({ profile: { ...SOLO, team: null }, answers: {} }).settings.team, 'solo');
+test('#487 an unknown mode with no answer composes for local', () => {
+  assert.equal(compose.composeWorkflowSet({ profile: { ...SOLO, merge: null }, answers: {} }).settings.mode, 'local');
 });
 
 test('#487 languages answered as a comma list replace the inferred ones in the prompts and skills', () => {
   const out = compose.composeWorkflowSet({ profile: SOLO, answers: { languages: 'js, rust' } });
-  const dev = yaml.load(byCategory(out, 'solo').yaml);
+  const dev = yaml.load(byCategory(out, 'feature').yaml);
   assert.equal(prompts(dev).includes('languages js, rust'), true);
   assert.equal(skills(dev).includes('unit-test-writer-rust'), true);
 });
@@ -80,8 +80,8 @@ test('#487 languages answered as a comma list replace the inferred ones in the p
 test('#487 an empty override keeps the inferred value', () => {
   const out = compose.composeWorkflowSet({ profile: { ...SOLO, testCommand: 'npm run test:unit' }, answers: { languages: '  ', testCommand: '', merge: null } });
   assert.equal(out.settings.testCommand, 'npm run test:unit');
-  assert.equal(out.settings.merge, 'local');
-  const dev = yaml.load(byCategory(out, 'solo').yaml);
+  assert.equal(out.settings.mode, 'local');
+  const dev = yaml.load(byCategory(out, 'feature').yaml);
   assert.equal(prompts(dev).includes('languages js'), true);
   assert.equal(skills(dev).includes('unit-test-writer-js'), true);
 });
@@ -89,9 +89,9 @@ test('#487 an empty override keeps the inferred value', () => {
 test('#487 the check command reaches the agents\' prompts; none leaves the checks sentence out', () => {
   const withCheck = compose.composeWorkflowSet({ profile: { ...SOLO, checkCommand: 'npm run lint' }, answers: {} });
   assert.equal(withCheck.settings.checkCommand, 'npm run lint');
-  assert.equal(prompts(yaml.load(byCategory(withCheck, 'solo').yaml)).includes('`npm run lint`'), true);
+  assert.equal(prompts(yaml.load(byCategory(withCheck, 'feature').yaml)).includes('`npm run lint`'), true);
   const answered = compose.composeWorkflowSet({ profile: SOLO, answers: { checkCommand: 'npx tsc --noEmit' } });
-  assert.equal(prompts(yaml.load(byCategory(answered, 'solo').yaml)).includes('`npx tsc --noEmit`'), true);
+  assert.equal(prompts(yaml.load(byCategory(answered, 'feature').yaml)).includes('`npx tsc --noEmit`'), true);
   const none = compose.composeWorkflowSet({ profile: SOLO, answers: {} });
-  assert.equal(prompts(yaml.load(byCategory(none, 'solo').yaml)).includes('its checks (lint, types)'), false);
+  assert.equal(prompts(yaml.load(byCategory(none, 'feature').yaml)).includes('its checks (lint, types)'), false);
 });

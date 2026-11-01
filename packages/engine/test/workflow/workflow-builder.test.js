@@ -169,10 +169,11 @@ test('describeWorkflow shows any workflow; patchWorkflow changes only agents and
 });
 
 test('cloneText renames the workflow and keeps its comments', () => {
-  const text = fs.readFileSync(path.join(root, 'workflows', 'multi-model-review.yaml'), 'utf8');
-  const out = builder.cloneText(text, 'multi-model-review-copy');
-  assert.equal(yaml.load(out).metadata.name, 'multi-model-review-copy');
-  assert.equal(out.replace('multi-model-review-copy', 'multi-model-review'), text);
+  // #630: multi-model-review.yaml became an alias of feature.yaml; fix.yaml is a bundled file with comments
+  const text = fs.readFileSync(path.join(root, 'workflows', 'fix.yaml'), 'utf8');
+  const out = builder.cloneText(text, 'fix-copy');
+  assert.equal(yaml.load(out).metadata.name, 'fix-copy');
+  assert.equal(out.replace('fix-copy', 'fix'), text);
 });
 
 // A desk, an AI check that can send the work back (2 rounds), then a human gate.

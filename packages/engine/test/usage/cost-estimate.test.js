@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const costEstimate = require('../../domains/usage/cost-estimate');
 
 const MIN = 60000;
-const WF = 'software-development-local-hero.yaml';
+const WF = 'feature.yaml';
 
 // A past run: `develop` and `screenshots` steps, each with its duration (minutes) and cost.
 function run(runId, startedAt, { develop, screenshots, status = 'success', mock = false, file = WF, issues = [] }) {

@@ -58,7 +58,7 @@ async function clickSuggest(app, within) {
 // ---- the cut line dialog --------------------------------------------------------------------------------
 
 const ref = (number) => ({ number, title: `Issue ${number}`, url: `https://github.com/o/r/issues/${number}` });
-const item = (id, number) => ({ id, status: 'planned', workflow: 'software-development-local-hero.yaml', inputs: {}, issues: [ref(number)] });
+const item = (id, number) => ({ id, status: 'planned', workflow: 'feature.yaml', inputs: {}, issues: [ref(number)] });
 const roadmapData = () => ({
   roadmap: { state: 'planned', updatedAt: '2026-10-21T10:00:00.000Z', stages: [
     { id: 'st1', name: '', note: '', items: [item('i1', 330)] },

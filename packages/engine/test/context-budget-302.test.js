@@ -48,7 +48,7 @@ test('loadWorkflow validates max_requests on an agent and in defaults', (t) => {
 });
 
 test('ai-development-local-hero sets a request budget for the developer', () => {
-  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml'));
+  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'));
   const budget = wf.agents.developer.max_requests ?? wf.defaults?.max_requests;
   assert.notEqual(budget, undefined, 'the developer has a max_requests');
   assert.ok(String(budget).includes('{{') || Number(budget) > 0, `max_requests: ${budget}`);

@@ -132,7 +132,7 @@ test('#266 css: prefers-reduced-motion turns the running pill\'s pulse off', () 
 
 // ---- the kanban / list card's run chip (backlog.js runLink) ----------------------------------------
 
-const kanbanRun = (extra = {}) => ({ runId: 'run-7', workflow: 'software-development-local-hero.yaml', status: 'running', title: 'Login page', ...extra });
+const kanbanRun = (extra = {}) => ({ runId: 'run-7', workflow: 'feature.yaml', status: 'running', title: 'Login page', ...extra });
 
 test('#266 kanban card: a running run\'s chip reads "Running" (not "running"), its id in data-status, still opening the run', () => {
   const html = H.loadRunLink()(kanbanRun());

@@ -26,12 +26,12 @@ test('normalizeThen: product_owner needs nothing else; workflow and queue need a
 
 test('normalizeThen: a workflow then keeps its map (falsy entries dropped) and its own inputs', () => {
   const t = chain.normalizeThen({
-    action: 'workflow', workflow: 'software-development-local-hero.yaml',
+    action: 'workflow', workflow: 'feature.yaml',
     map: { issues: 'issues', task: '', ignored: null, done: 'document' },
     inputs: { mode: 'validated' },
   });
   assert.deepEqual(t, {
-    action: 'workflow', workflow: 'software-development-local-hero.yaml',
+    action: 'workflow', workflow: 'feature.yaml',
     map: { issues: 'issues', done: 'document' }, inputs: { mode: 'validated' },
   });
 });

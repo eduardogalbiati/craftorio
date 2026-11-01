@@ -85,7 +85,7 @@ flowchart LR
 **R9. Modelo de trabalho.**
 - O projeto escolhe entre Leve (issue → feature/fix), Padrão (intent → spec → plan → código) e Completo (+ `REVIEW.md` + evals).
 - Feature começa no Padrão e fix no Leve.
-- Os artefatos (markdown: a fonte em inglês com a tradução `.pt-BR.md`, e as imagens) são commitados em `docs/work/<item>/` pelo run, no gate de sempre. Um leitor renderiza o markdown na hora.
+- Os artefatos (markdown: a fonte em inglês com a tradução `.pt-BR.md`, e as imagens) são commitados em `docs/work/<item>/` pelos fluxos do SDLC em volta do Code & Build, nunca por um run de Code & Build: o fluxo anterior (intent, spec, plan, nos seus gates) e o fluxo posterior encadeado depois de um run com sucesso (Progress, teste, deploy; decisão de 2026-11-01). Um leitor renderiza o markdown na hora.
 
 ![Modelo de trabalho](images/mock-5.jpg)
 

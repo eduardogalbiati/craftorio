@@ -15,8 +15,7 @@
 //     release: 'milestone'|'per-merge'|'train'|'rc-stable'|null, testCommand, ci, languages: [] }.
 //   answers: { <question id>: value } override the profile's fields (answers.merge over profile.merge).
 //   facts (the Architecture facts): { languages: [], skills: [] } (the language skills).
-//   The set: one workflow per manifest entry: category `intake`, the development workflow under the
-//     profile's team (`solo` | `team`), and `release`; entries `{ name, file: workflows/<name>.yaml,
+//   The set (#630): one workflow per manifest entry, categories `feature`, `fix` and `release`; entries `{ name, file: workflows/<name>.yaml,
 //     category }` (packages/engine/domains/project/project-manifest.js parseManifest reads them with no error).
 //   The development workflow merges locally (`merge: local` on a transition) for merge=local, and
 //     works through a pull request (waits on a `pr_*` probe, as software-development does, and has no
@@ -43,7 +42,8 @@ const SKILL = 'unit-test-writer-js';
 const FACTS = { languages: ['javascript'], skills: [SKILL] };
 
 const profileOf = (over = {}) => ({
-  team: 'solo', merge: 'local', release: 'milestone', testCommand: TEST_COMMAND, ci: 'github-actions', languages: ['javascript'], ...over,
+  // #630: the ci axis is none | release | pr+release, and tests unit | unit+e2e
+  team: 'solo', merge: 'local', release: 'milestone', testCommand: TEST_COMMAND, ci: 'release', tests: 'unit', languages: ['javascript'], ...over,
 });
 
 function tmp(t) {
@@ -67,7 +67,7 @@ function writeSet(t, out) {
   for (const e of manifestParser().parseManifest(out.manifest.yaml).workflows) byCategory[e.category] = path.join(dir, '.multiagent', ...String(e.file).split('/'));
   return byCategory;
 }
-const devFile = (files) => files.solo || files.team;
+const devFile = (files) => files.feature;
 
 // every object of a loaded workflow's steps (nested steps, transitions, wait, recover)
 function* nodes(v) {
@@ -93,7 +93,8 @@ test('#487 openQuestions asks the release style when the profile does not know i
 });
 
 test('#487 openQuestions asks local or pull request when the profile does not know the merge', () => {
-  assert.equal(ids(load().openQuestions(profileOf({ merge: null }))).includes('merge'), true);
+  // #630: the merge question is now the mode (local | remote)
+  assert.equal(ids(load().openQuestions(profileOf({ merge: null }))).includes('mode'), true);
 });
 
 test('#487 every open question has a question text and a default', () => {
@@ -119,17 +120,18 @@ test('#487 composeWorkflowSet returns YAML strings under .multiagent/workflows/<
   }
 });
 
-test('#487 the manifest parses without errors and lists every composed file with an intake, a solo and a release entry', () => {
+// #630: the set is feature / fix / release, whatever the old team answer
+test('#487 the manifest parses without errors and lists every composed file with a feature, a fix and a release entry', () => {
   const out = compose(profileOf());
   const parsed = manifestParser().parseManifest(out.manifest.yaml);
   assert.deepEqual(parsed.errors, []);
-  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['intake', 'release', 'solo']);
+  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['feature', 'fix', 'release']);
   assert.deepEqual(parsed.workflows.map((e) => `.multiagent/${e.file}`).sort(), out.workflows.map((w) => w.path).sort());
 });
 
-test('#487 a team profile files its development workflow under the team category', () => {
+test('#487 a pull-request profile still files its development workflow under the feature category', () => {
   const parsed = manifestParser().parseManifest(compose(profileOf({ team: 'team', merge: 'pr' })).manifest.yaml);
-  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['intake', 'release', 'team']);
+  assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['feature', 'fix', 'release']);
 });
 
 test('#487 merge=local composes a development workflow that merges locally and opens no pull request', (t) => {
@@ -139,7 +141,8 @@ test('#487 merge=local composes a development workflow that merges locally and o
 });
 
 test('#487 the merge answer overrides the profile: answers.merge=pr composes a pull-request development workflow', (t) => {
-  const wf = engine().loadWorkflow(devFile(writeSet(t, compose(profileOf({ merge: 'local' }), { merge: 'pr' }))));
+  // #630: only a project whose CI runs on pull requests waits for it (R7)
+  const wf = engine().loadWorkflow(devFile(writeSet(t, compose(profileOf({ merge: 'local', ci: 'pr+release' }), { merge: 'pr' }))));
   assert.equal(waitsOnPullRequest(wf), true);
   assert.equal(mergesLocally(wf), false);
 });

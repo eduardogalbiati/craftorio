@@ -129,7 +129,6 @@ module.exports = {
   'artifacts:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
   'audio:status': { arg: null },
   'backlog:auto-epic': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
-  'backlog:auto-push': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
   'backlog:dismiss-refresh': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:local': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },

@@ -1,4 +1,4 @@
-// workflows/ai-development-local-hero.yaml, #301 and #304 (acceptance tests, written before the code).
+// workflows/feature.yaml, #301 and #304 (acceptance tests, written before the code).
 // #301: a read-only `warm_up` step (agent `mapper`, skill code-mapping) maps the code between red_check
 // and develop, on the first visit only; develop starts from its map, and runs on without it when the
 // mapper fails. #304: the suite step runs with `scope: affected`, and develop and the test step take
@@ -15,7 +15,7 @@ const caps = require('../engine/capabilities');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const WORKFLOW = path.join(ROOT, 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 
 // ------------------------------------------------------------------ #301: loading
@@ -118,7 +118,7 @@ test('ai-development-local-hero (#301, #304): the docs name the mapper as read-o
   const doc = read('docs', 'agents', 'capabilities.md');
   const section = doc.slice(doc.indexOf('## Read-only agents'), doc.indexOf('\n## ', doc.indexOf('## Read-only agents') + 1));
   assert.match(section, /mapper/, 'capabilities.md lists the mapper among the read-only agents');
-  const header = read('workflows', 'ai-development-local-hero.yaml').split(/\napiVersion:/)[0];
+  const header = read('workflows', 'feature.yaml').split(/\napiVersion:/)[0];
   assert.match(header, /Warm Up/);
   assert.match(header, /scope:? affected|affected scope/i);
 });

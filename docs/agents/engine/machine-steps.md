@@ -92,6 +92,16 @@ The steps without an agent besides the suite, and the test requests, coverage an
   ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
   were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
   (`vars.testid_returns`), then develop's own routes follow.
+- A **visual baseline step** (`type: visual_baselines`, no agent, #696; `runVisualBaselinesStep` →
+  `packages/engine/engine/visual-baselines.js`): the `toHaveScreenshot` names of the `@issue-<n>`
+  scenarios (`issues`, comma- or space-separated; a quoted `…png` in the step text, `<placeholder>`s
+  expanded from `Examples`, or the static name of the step definition it matches under `steps`)
+  with no `features/__screenshots__/<name>-<platform>.png`. Output `{ kind: 'visual_baselines',
+  status: pass | missing | skipped, missing: [{ name, file, feature, scenario, command }], round,
+  message }`; the message names each file and its `npm run test:e2e:update -- --grep @issue-<n>`.
+  ai-development-local-hero runs it as `baseline_check` right after a passing `testid_check`
+  (scenarios written first): a missing baseline goes back to develop at most twice
+  (`vars.baseline_returns`).
 - A **check step** (`type: check`, no agent, no model call, #404; `runCheckStep` →
   `packages/engine/engine/check-step.js`): the project's rule checks in the run's checkout, `command` (a
   template; empty: `npm run check` when the project's package.json has a `check` script) through the

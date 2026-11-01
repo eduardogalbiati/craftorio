@@ -20,7 +20,7 @@ const REASON = 'Stage 1 was changed elsewhere. Nothing was saved.';
 const VIEW = { showAll: true, since: 'total' };
 
 const ref = (number) => ({ number, title: `Issue ${number}`, url: `https://github.com/o/r/issues/${number}` });
-const item = (id, number) => ({ id, status: 'planned', workflow: 'software-development-local-hero.yaml', inputs: {}, issues: [ref(number)] });
+const item = (id, number) => ({ id, status: 'planned', workflow: 'feature.yaml', inputs: {}, issues: [ref(number)] });
 const roadmapData = (updatedAt = T1, release = null) => ({
   roadmap: { state: 'planned', updatedAt, stages: [
     { id: 'st1', name: '', note: '', items: [item('i1', 330)], ...(release ? { release } : {}) },

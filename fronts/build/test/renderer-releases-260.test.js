@@ -151,7 +151,7 @@ function loadRoadmap() {
 }
 
 const ref = (number, title) => ({ number, title, url: `https://github.com/o/r/issues/${number}` });
-const item = (id, status, number, title) => ({ id, status, workflow: 'software-development-local-hero.yaml', inputs: {}, issues: [ref(number, title)] });
+const item = (id, status, number, title) => ({ id, status, workflow: 'feature.yaml', inputs: {}, issues: [ref(number, title)] });
 // two open stages; `release` on the first one when given
 function roadmapData(release) {
   return {

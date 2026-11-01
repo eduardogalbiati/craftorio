@@ -315,8 +315,9 @@ test('#567 two questions in a row without a supervisor: a stall is logged and th
   assert.equal(events.some((e) => e.type === 'supervisor.started'), false);
 });
 
-test('#567 the bundled software-development opts in its develop step, never its read-only reviewer', () => {
-  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development.yaml'));
+test('#567 the bundled feature workflow opts in its develop step, never its read-only reviewer', () => {
+  // #630: software-development.yaml is an alias of feature.yaml
+  const wf = loadWorkflow(path.join(root, 'workflows', 'feature.yaml'));
   const step = (id) => wf.steps.find((s) => s.id === id);
   assert.equal(step('develop')?.ask_human, true);
   assert.equal(!!step('code_review')?.ask_human, false);

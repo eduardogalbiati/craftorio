@@ -1,0 +1,59 @@
+# The reproduce → develop steps of the fix workflow (#630, workflows/fix.yaml, and the composed fix of
+# packages/engine/domains/workflow/workflow-compose.js); review, suite, verification and landing come from
+# dev-pipeline, local-merge-pipeline and pr-pipeline. The developer reproduces the bug first (a failing
+# regression test or command), then fixes it until that passes. Hotfix mode (`inputs.hotfix`): the
+# urgent lane, the smallest change, meant as a patch of the last release tag (for now the prompts
+# only: the run starts from base_branch; the release workflow ships the patch). A step
+# `{ id, fragment: fix-pipeline }` gets the body under its id; the step's own keys win
+# (packages/engine/engine/run/load.js, expandFragments). The bodies read only the inputs task, issue,
+# hotfix and base_branch and the steps reproduce, develop, code_review, suite, e2e and verify_change.
+
+steps:
+  reproduce:
+    display: Reproduce
+    prompt: |
+      Reproduce this bug on the run's branch (based on `{{ inputs.base_branch }}`) before fixing it:
+      <task>
+      {{ inputs.task }}
+      </task>
+      {% if inputs.issue %}Issue: {{ inputs.issue }}
+      {% endif %}{% if inputs.hotfix %}Hotfix: the fix ships as a patch of the last release tag
+      (`git describe --tags --abbrev=0`); keep it to the smallest change that removes the bug.
+      {% endif %}Find one command that shows the failure for the reported reason (the failing test,
+      a new minimal failing test, or a direct call) and run it. Change no production code yet.
+      Commit a new failing regression test when you wrote one. Answer with the command, what it
+      showed and whether the bug reproduced.
+    output_schema:
+      type: object
+      required: [reproduced, command, observed]
+      properties:
+        reproduced: { type: boolean }
+        command:    { type: string }
+        observed:   { type: string }
+
+  develop:
+    display: Fix
+    prompt: |
+      {% if steps.develop.visits == 1 %}Fix this bug on the run's branch:
+      <task>
+      {{ inputs.task }}
+      </task>
+      {% if steps.reproduce.output %}It reproduces with `{{ steps.reproduce.output.command }}`: {{ steps.reproduce.output.observed }}
+      {% endif %}{% if inputs.hotfix %}Hotfix: the smallest change that removes the bug, nothing else.
+      {% endif %}{% else %}Back on your fix:
+      {% if steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
+      {% for f in steps.code_review.output.findings %}- {{ f }}
+      {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status != 'pass' %}The test suite failed: {{ steps.suite.output.message }}
+      {% endif %}{% if steps.e2e.output and steps.e2e.output.status != 'pass' %}The E2E suite failed: {{ steps.e2e.output.message }}
+      {% endif %}{% if steps.verify_change.output and steps.verify_change.output.verdict == 'not_verified' %}The verifier could not confirm the fix: {{ steps.verify_change.output.evidence }}
+      {% endif %}Fix it.{% endif %}
+      Fix the root cause, keep a regression test that failed before the fix and passes after it, run
+      the focused tests (not the whole suite: the run's suite step runs it), commit on the branch and
+      answer with the branch, a short summary and the files you changed. Never push.
+    output_schema:
+      type: object
+      required: [branch, summary, files_changed]
+      properties:
+        branch:        { type: string }
+        summary:       { type: string }
+        files_changed: { type: array, items: { type: string } }

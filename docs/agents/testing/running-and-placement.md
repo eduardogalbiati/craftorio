@@ -56,6 +56,10 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   `getByRole` / `getByTestId` (the renderer's `data-testid`s). Visual baselines:
   `features/__screenshots__/<name>-<platform>.png`, committed, `maxDiffPixelRatio` in
   `playwright.config.js`; rewrite one on purpose only (`npm run test:e2e:update -- --grep @visual`).
+  A new `@visual` scenario's baseline comes with the change (#696): `baseline_check` sends develop
+  back when one is missing; if one still reaches the E2E step, Playwright writes it (its default
+  `updateSnapshots: 'missing'`, never `-u`, so an existing baseline is never rewritten), the step
+  lists it in `new_baselines` and passes, and only a pixel difference fails and goes to the healer.
   Results: `.test-output/e2e/results.json`; a failed scenario keeps `trace.zip` (with the window's
   screencast: Playwright's recordVideo stalls Electron 44) and `failure.png` under
   `.test-output/e2e/artifacts/` (`npx playwright show-trace <zip>`). CI's Windows job runs `@smoke`.

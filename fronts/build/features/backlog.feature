@@ -191,3 +191,25 @@ Feature: Backlog Board and Roadmap
     Then the roadmap item "Run reports" shows a run chip reading "Failed"
     And the alerts no longer show "failed: resume to start the next issues"
     And the Backlog shows no queue bar
+
+  # ---- #630: no project auto-push, old workflow names read as the new ones -----------------------------
+  # The demo workspace has 2 commits merged locally, not pushed: the "Not pushed" alert still offers Push…,
+  # but no longer the project's auto-push switch.
+
+  @issue-630
+  Scenario: The Backlog's "Not pushed" alert no longer offers the project auto-push switch
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Board as a kanban
+    And I show the alert "Not pushed"
+    Then the shown alert is at level "info" and says "Not pushed"
+    And the Backlog does not offer to push the project automatically
+
+  @issue-630
+  Scenario: A roadmap item saved with the old workflow software-development shows the workflow feature
+    Given the app is open
+    And the roadmap has a stage of 2 planned items
+    And the roadmap item "Planned item 1001" runs the workflow "software-development"
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the Workflow band of the roadmap item "Planned item 1001" names the workflow "feature"

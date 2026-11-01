@@ -184,6 +184,16 @@ test('#640 the facts come first, the profile and the project map run in parallel
   assert.ok(at('projectMap:end') < at('ranking:start'), `the ranking after the project map: ${fake.log.join(', ')}`);
 });
 
+test('#630 the profile job keeps its profile in the state (jobs.profile.profile)', async (t) => {
+  const fake = fakeJobs();
+  const { ob } = setup(t, { jobs: fake });
+  const s = await ob.start({ name: 'Widgets', repo: GITHUB });
+  await ob.analyze(s.projectId);
+  const end = await until(ob, s.projectId, (x) => x.status === 'analyzed' && idle(x), 'the analysis ends');
+  assert.equal(end.jobs.profile.status, 'done');
+  assert.deepEqual(end.jobs.profile.profile, { merge: 'local' });
+});
+
 // ---- analysis only on the click ------------------------------------------------------------------
 
 test('#640 "analyze later": without analyze the project ends ready and nothing paid runs', async (t) => {

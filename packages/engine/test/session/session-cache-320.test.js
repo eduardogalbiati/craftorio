@@ -247,7 +247,7 @@ test('#320 every bundled workflow with a persistent agent sets fresh_after_idle 
     const ms = duration(defaults.fresh_after_idle);
     assert.ok(ms > 0 && ms < HOUR, `${f}: defaults.fresh_after_idle is under the cache's hour (got ${defaults.fresh_after_idle})`);
   }
-  assert.ok(checked.includes('ai-development-local-hero.yaml') && checked.includes('software-development.yaml'), `the bundled workflows with persistent agents were checked (${checked.join(', ')})`);
-  const hero = loadWorkflow(path.join(dir, 'ai-development-local-hero.yaml'));
+  assert.ok(checked.includes('feature.yaml') && checked.includes('fix.yaml'), `the bundled workflows with persistent agents were checked (${checked.join(', ')})`);
+  const hero = loadWorkflow(path.join(dir, 'feature.yaml'));
   assert.equal(hero.defaults.fresh_after_idle, '55m', 'the cache lifetime minus a margin, for Claude on a subscription');
 });

@@ -66,7 +66,7 @@ function loadDefaultWorkflow({ workflows, defaultWorkflow } = {}) {
 
 const TASK_WORKFLOWS = [
   { file: 'software-development.yaml', name: 'Software development', inputs: { task: {} }, merge: 'remote' },
-  { file: 'software-development-local-hero.yaml', name: 'Software development (local)', inputs: { task: {} }, merge: 'local' },
+  { file: 'feature.yaml', name: 'Software development (local)', inputs: { task: {} }, merge: 'local' },
 ];
 
 test('renderDefaultWorkflow: unset selects the local workflow when the workspace has one, naming how each option merges', () => {
@@ -74,8 +74,8 @@ test('renderDefaultWorkflow: unset selects the local workflow when the workspace
   renderDefaultWorkflow();
   const sel = $('#set-default-workflow');
   assert.match(sel.innerHTML, /<option value="software-development\.yaml">Software development \(software-development\.yaml, pushes and opens PRs\)<\/option>/);
-  assert.match(sel.innerHTML, /<option value="software-development-local-hero\.yaml">Software development \(local\) \(software-development-local-hero\.yaml, local merge\)<\/option>/);
-  assert.equal(sel.value, 'software-development-local-hero.yaml');
+  assert.match(sel.innerHTML, /<option value="feature\.yaml">Software development \(local\) \(feature\.yaml, local merge\)<\/option>/);
+  assert.equal(sel.value, 'feature.yaml');
   assert.equal($('#set-default-wf-note').textContent, '');
   assert.equal($('#set-default-wf-note').classList.contains('hidden'), true);
 });
@@ -90,8 +90,8 @@ test('renderDefaultWorkflow: the saved setting is selected when it still exists'
 test('renderDefaultWorkflow: a saved workflow that no longer exists falls back and the note says so, naming the missing file', () => {
   const { renderDefaultWorkflow, $ } = loadDefaultWorkflow({ workflows: TASK_WORKFLOWS, defaultWorkflow: 'deleted-workflow.yaml' });
   renderDefaultWorkflow();
-  assert.equal($('#set-default-workflow').value, 'software-development-local-hero.yaml');
-  assert.equal($('#set-default-wf-note').textContent, 'deleted-workflow.yaml no longer exists: software-development-local-hero.yaml is used instead.');
+  assert.equal($('#set-default-workflow').value, 'feature.yaml');
+  assert.equal($('#set-default-wf-note').textContent, 'deleted-workflow.yaml no longer exists: feature.yaml is used instead.');
   assert.equal($('#set-default-wf-note').classList.contains('hidden'), false);
 });
 

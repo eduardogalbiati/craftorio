@@ -12,6 +12,7 @@
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
+const { aliasInputs } = require('@multiagent/shared/default-workflow');
 const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
 const { Recorder } = require('@multiagent/engine/engine/recorder');
 const {
@@ -31,7 +32,7 @@ const { seedSkills } = require('@multiagent/engine/domains/agents/skills');
 const root = path.join(__dirname, '..');
 
 function parseArgs(argv) {
-  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'software-development.yaml' };
+  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'feature.yaml' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => argv[++i];
@@ -65,7 +66,9 @@ const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOut
 const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('@multiagent/engine/domains/local/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
   file: wfFile.file,
-  inputs: args.inputs,
+  // #630: an old workflow name brings its variant's inputs, under the given ones (an old
+  // `mode: validated` is the validation, so the alias's mode stays)
+  inputs: aliasInputs(wfFile, args.inputs || {}),
   attachments: args.attachments,
   mock: args.mock,
   ...(args.mock && args.mockAsks ? { mockSequences: { needs_human: args.mockAsks } } : {}),

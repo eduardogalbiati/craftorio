@@ -31,7 +31,7 @@ const history = () => require('../../domains/roadmap/roadmap-history.js');
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const ref = (number) => ({ number, title: `Issue ${number}`, url: `https://github.com/o/r/issues/${number}` });
-const item = (id, number, extra = {}) => ({ id, workflow: 'software-development-local-hero.yaml', workflowName: 'Local hero', inputs: {}, mock: false, ...ref(number), issues: [ref(number)], status: 'planned', runId: null, runs: [], error: null, ...extra });
+const item = (id, number, extra = {}) => ({ id, workflow: 'feature.yaml', workflowName: 'Local hero', inputs: {}, mock: false, ...ref(number), issues: [ref(number)], status: 'planned', runId: null, runs: [], error: null, ...extra });
 const stage = (id, name, items) => ({ id, name, note: '', items });
 const BEFORE = () => [
   stage('st1', 'Login', [item('it1', 101), item('it2', 102)]),

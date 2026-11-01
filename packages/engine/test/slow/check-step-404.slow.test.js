@@ -1,4 +1,4 @@
-// Acceptance tests for #404, mock runs of workflows/ai-development-local-hero.yaml: after develop, a
+// Acceptance tests for #404, mock runs of workflows/feature.yaml: after develop, a
 // step with no agent runs the project's check command (the `check_command` input, or the project's
 // own `check` script from its package.json). A failure goes back to develop with the findings,
 // never to the test writer; after its rounds are used up it goes to the gate as before; a project
@@ -14,7 +14,7 @@ const { execFileSync } = require('child_process');
 const { WorkflowRun, loadWorkflow } = require('../../engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'feature.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 const write = (dir, rel, text) => {
   fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
@@ -70,7 +70,7 @@ function unfix(repo) {
 
 // `answers: { stepId: [choice, ...] }`: the owner's choice per visit of a gate (default: the first one)
 async function runLocalHero(t, { repoOptions, inputs = {}, onTurn, answers = {}, mockSequences = {} } = {}) {
-  assert.ok(checkStep, 'workflows/ai-development-local-hero.yaml has no agent-less step running {{ inputs.check_command }}');
+  assert.ok(checkStep, 'workflows/feature.yaml has no agent-less step running {{ inputs.check_command }}');
   const repo = makeRepo(t, repoOptions);
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-step-runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));

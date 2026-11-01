@@ -201,3 +201,23 @@ Feature: Bring a project in with a guided wizard
     When I cancel the project wizard
     Then the project wizard is not shown
     And the Projects screen lists the project "demo-app"
+
+  # #630: step 3 follows docs/work/first-project-onboarding/images/mock-4.jpg: the ways of working
+  # profile read from the git history and the suggested feature, fix, release and CI workflows, each
+  # with its reason and a selector to change it.
+  @issue-630
+  Scenario: The Analysis & workflows step shows the ways of working profile and suggests feature, fix, release and CI with their reasons
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "workflows-630"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard shows the ways of working profile
+    And the wizard suggests the workflows "feature", "fix", "release" and "ci"
+    And each suggested workflow shows why it is suggested
+    And I can change the suggested "feature" workflow
+    And I can change the suggested "fix" workflow
+    And I can change the suggested "release" workflow
+    And I can change the suggested "ci" workflow

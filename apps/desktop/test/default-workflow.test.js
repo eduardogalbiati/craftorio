@@ -8,18 +8,19 @@ const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 // ---- resolve(setting, files) --------------------------------------------------------------------
 
 test('resolve: the saved setting wins when it names a workflow that still exists', () => {
-  const out = DefaultWorkflow.resolve('software-development.yaml', ['software-development-local-hero.yaml', 'software-development.yaml']);
+  const out = DefaultWorkflow.resolve('software-development.yaml', ['feature.yaml', 'software-development.yaml']);
   assert.deepEqual(out, { file: 'software-development.yaml', missing: null });
 });
 
 test('resolve: unset falls back to the local workflow when the workspace has it', () => {
-  const out = DefaultWorkflow.resolve(null, ['software-development.yaml', 'software-development-local-hero.yaml', 'issue-tracker.yaml']);
-  assert.deepEqual(out, { file: 'software-development-local-hero.yaml', missing: null });
+  const out = DefaultWorkflow.resolve(null, ['software-development.yaml', 'feature.yaml', 'issue-tracker.yaml']);
+  assert.deepEqual(out, { file: 'feature.yaml', missing: null });
 });
 
-test('resolve: unset without the local workflow falls back to the GitHub one', () => {
-  const out = DefaultWorkflow.resolve(null, ['issue-tracker.yaml', 'software-development.yaml']);
-  assert.deepEqual(out, { file: 'software-development.yaml', missing: null });
+// #630: the GitHub workflow is feature's Remote mode, the same file: an old saved name resolves to it
+test('resolve: a saved old workflow name resolves through its alias', () => {
+  const out = DefaultWorkflow.resolve('software-development.yaml', ['issue-tracker.yaml', 'feature.yaml']);
+  assert.deepEqual(out, { file: 'feature.yaml', missing: null });
 });
 
 test('resolve: unset and neither the local nor the GitHub workflow exists falls back to the first workflow listed', () => {
@@ -28,13 +29,13 @@ test('resolve: unset and neither the local nor the GitHub workflow exists falls 
 });
 
 test('resolve: a saved workflow that no longer exists reports it missing and falls back the same way as unset', () => {
-  const out = DefaultWorkflow.resolve('deleted-workflow.yaml', ['software-development.yaml', 'software-development-local-hero.yaml']);
-  assert.deepEqual(out, { file: 'software-development-local-hero.yaml', missing: 'deleted-workflow.yaml' });
+  const out = DefaultWorkflow.resolve('deleted-workflow.yaml', ['software-development.yaml', 'feature.yaml']);
+  assert.deepEqual(out, { file: 'feature.yaml', missing: 'deleted-workflow.yaml' });
 });
 
 test('resolve: an empty (or missing) workflow list falls back to the local workflow\'s name, even though it is not actually in the list', () => {
-  assert.deepEqual(DefaultWorkflow.resolve(null, []), { file: 'software-development-local-hero.yaml', missing: null });
-  assert.deepEqual(DefaultWorkflow.resolve(null, undefined), { file: 'software-development-local-hero.yaml', missing: null });
+  assert.deepEqual(DefaultWorkflow.resolve(null, []), { file: 'feature.yaml', missing: null });
+  assert.deepEqual(DefaultWorkflow.resolve(null, undefined), { file: 'feature.yaml', missing: null });
 });
 
 // ---- mergeOf(wf) ---------------------------------------------------------------------------------

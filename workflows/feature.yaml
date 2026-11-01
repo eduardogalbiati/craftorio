@@ -134,10 +134,10 @@ apiVersion: multiagent/v1
 kind: Workflow
 
 metadata:
-  name: ai-development-local-hero
-  version: 0.2.0
-  description: "Tests first: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build, verification and the local merge. No push, no PR, no CI."
-  tags: [dev, review, test, tests-first, tdd, build, local, worktree]
+  name: feature
+  version: 0.3.0
+  description: "Tests first: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build and verification. Local mode: the local merge, then push main. Remote mode: a pull request and its CI; the team merges it."
+  tags: [dev, review, test, tests-first, tdd, build, local, remote, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
   category: build
 
@@ -178,14 +178,47 @@ inputs:
     type: string
     default: main
     description: The local branch the work starts from and is merged into.
-  # validated: the run stops at developer_check after the developer.
+  # #630 (spec R7): how the change lands. A run saved with the old `mode: auto | validated` (the
+  # Product Owner, a roadmap) still runs: setup moves that value to `validation`.
   mode:
     label: "Mode"
+    type: string
+    enum: [local, remote]
+    default: local
+    options: { local: "Local", remote: "Remote (pull request)" }
+    description: "Local: merged into the local base branch, then the run pushes it (push main). Remote: the run pushes its branch, opens a pull request and waits for its CI; the team merges it on the platform."
+  # validated: the run stops at developer_check after the developer (the old input `mode`, #630).
+  validation:
+    label: "Validation"
     type: string
     enum: [auto, validated]
     default: auto
     options: { auto: Automatic, validated: Validated }
     description: "Automatic: the change goes straight from the developer to review and tests. Validated: the run stops after the developer so you can try the change before review and tests are paid for."
+  # #630 (spec D14): E2E first writes the issue's scenarios with the acceptance tests, before the code
+  test_order:
+    label: "Test order"
+    type: string
+    enum: [e2e_first, code_first]
+    default: e2e_first
+    options: { e2e_first: "E2E first", code_first: "Code first" }
+    description: "E2E first: the test writer writes the issue's E2E scenarios with the acceptance tests, before the code. Code first: the acceptance tests are unit tests only; no E2E scenarios in this run."
+  # #630: the multi-model review (the old multi-model-review workflow) as a second reviewer on another model
+  review:
+    label: "Review"
+    type: string
+    enum: [single, multi_model]
+    default: single
+    options: { single: "Single reviewer", multi_model: "Multi-model" }
+    description: "Single reviewer: the code reviewer alone. Multi-model: a second, independent reviewer on another model reviews the same diff in parallel."
+  git_platform:
+    label: "Git platform"
+    type: string
+    enum: [gh, gl]
+    default: gh
+    options: { gh: GitHub, gl: GitLab }
+    show_if: "mode == 'remote'"
+    description: "Where Remote mode opens the pull request (merge request on GitLab)."
   # owner 2026-10-04: the developer's model per run (Fable 5.1 for the hardest work), the mapper's too;
   # one case of the per-run agent choice (#262, the Start drawer's Agents): a Fable turn gets 3x the
   # turn timeout from `models`, whichever way it was chosen
@@ -210,7 +243,7 @@ inputs:
     label: "Validate every round"
     type: boolean
     default: false
-    show_if: "mode == 'validated'"
+    show_if: "validation == 'validated'"
     description: "Also stop for you after each round of review fixes, not only after the first change and your own change requests."
   # #203: the test step is the largest cost of a run (about half of it): turn its parts on or off.
   unit_tests:
@@ -338,13 +371,14 @@ models:
 orchestrator:
   provider: claude
   model: claude-sonnet-5
-  # One git worktree per run: <workspace>/worktrees/<run_id>, detached at the LOCAL <base>
-  # (remote: false: no fetch). Removed when the run succeeds (its branch is deleted once merged
-  # into the local <base>), kept otherwise so "resume from step" continues there.
+  # One git worktree per run: <workspace>/worktrees/<run_id>, detached at the LOCAL <base> in Local
+  # mode (remote false: no fetch), at the fetched origin/<base> in Remote mode (#630: the PR starts
+  # from what the remote has). Removed when the run succeeds (in Local mode its branch is deleted
+  # once merged into the local <base>), kept otherwise so "resume from step" continues there.
   worktree:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
-    remote: false
+    remote: "{{ inputs.mode == 'remote' }}"
   # AI supervisor: called when a step fails; explains it and picks a recovery the engine
   # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
   # On call: gates with kind: escalation and stalls (the same answer 3 visits in a row, refused
@@ -425,7 +459,7 @@ agents:
       worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
       this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local
       merges that were never pushed. Work on the run's branch: the test writer creates it with the
-      acceptance tests (if the worktree is still detached, create it: `git switch -c <branch>`). Never fetch, pull or branch from origin, and never push: the
+      acceptance tests (if the worktree is still detached, create it: `git switch -c <branch>`). Never fetch, pull or branch from origin, and never push, except in the push main step: the
       orchestrator merges your branch into the local {{ inputs.base_branch }} after approval.
       The engine gives the worktree its dependencies (linked from a shared cache, installed
       once per lockfile): never run `npm ci` and never delete `node_modules`. Adding a package
@@ -449,6 +483,31 @@ agents:
     system_prompt: |
       You are the code reviewer of this workflow. Follow the code-review skill:
       detect the languages in the diff and read the rules for each one before the verdict.
+
+  # #630: the multi-model review's second reviewer (inputs.review == 'multi_model'), on another model
+  second_reviewer:
+    enabled: "{{ inputs.review == 'multi_model' }}"
+    color: "#7C8CFF"
+    provider: codex
+    model: gpt-6-luna
+    session: persistent
+    capabilities: { tools: [read, bash:git], web: false }
+    skills: [code-review]
+    system_prompt: |
+      You are a second, independent code reviewer of this workflow, on another model than the first.
+      Review the change on your own, following the code-review skill. Report real problems only.
+
+  # #630: Remote mode pushes the branch, opens the PR/MR and watches its CI (fragments/pr-pipeline.yaml)
+  ci_pusher:
+    provider: claude
+    model: claude-sonnet-5
+    session: handoff
+    capabilities: { tools: [read, *vcs], web: false }
+    skills: ["ci-pipeline-{{ inputs.git_platform }}"]
+    system_prompt: |
+      You are the CI Pusher. You push the branch, make sure a PR/MR is open and watch CI until it
+      passes. When CI fails, you fetch the failure log and summarize the root cause so the
+      orchestrator can hand it to the developer. You do not fix code and you do not merge.
 
   # #151: the visual review of the UI, in parallel with the reviewer (code_review's fan-out), on the
   # screenshots developer_screenshots takes right after develop; it never runs on a change without UI
@@ -589,14 +648,16 @@ agents:
       exists: the worktree is on it). Never fetch, pull or push.
 
 groups:
+  - name: Tests
+    steps: [acceptance_tests, red_check]
   - name: Develop
-    steps: [warm_up, develop,testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
+    steps: [warm_up, develop, rule_check, testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, suite, e2e, heal, test_failed, build, build_failed, evidence, verify_change, verify_failed]
+    steps: [test, suite, e2e, heal, check_failed, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Merge
-    steps: [resolve_merge, merge_blocked]
+    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_review]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -680,7 +741,9 @@ steps:
          the commit hash in `commit` and `committed: true`.
       A task with no observable behaviour (docs, refactor, infrastructure): write no test, still
       create the branch, leave `tests_added` empty and say why in `summary`.
-      {% if inputs.e2e_tests != 'off' %}{% set tags %}{% for n in inputs | issue_numbers %}{{ ', ' if not loop.first }}`@issue-{{ n }}`{% endfor %}{% endset %}
+      {% if inputs.test_order == 'code_first' %}
+      End-to-end scenarios: none written first (test order: code first, #630); set `e2e_scope: none`.
+      {% endif %}{% if inputs.e2e_tests != 'off' and inputs.test_order != 'code_first' %}{% set tags %}{% for n in inputs | issue_numbers %}{{ ', ' if not loop.first }}`@issue-{{ n }}`{% endfor %}{% endset %}
       {% if not tags %}
       End-to-end scenarios: none in this run. It has no issue number, so the scenarios could not be
       tagged `@issue-<n>` and the orchestrator would never run them: write no scenario, set
@@ -841,6 +904,8 @@ steps:
     # a step's name says what it does ("Develop"); "Developer" is its agent's (#301's Run screen shows both)
     display: Develop
     agent: developer
+    # #567: the developer may ask the owner (needs_human) when a choice is theirs to make
+    ask_human: true
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
     # #303: no self-review pass (#179, #300) in the develop turn: the code_review step is the review
@@ -859,9 +924,16 @@ steps:
       {% endif %}
       {% endif %}
       {% set review = steps.code_review.output.results.reviewer if steps.code_review.output and steps.code_review.output.results else none %}
+      {% set second = steps.code_review.output.results.second_reviewer if steps.code_review.output and steps.code_review.output.results else none %}
+      {% if (review and review.verdict == 'changes_requested') or (second and second.verdict == 'changes_requested') %}
       {% if review and review.verdict == 'changes_requested' %}
       The reviewer requested these changes (iteration {{ loop.iteration }}):
       {{ review.findings | to_yaml }}
+      {% endif %}
+      {% if second and second.verdict == 'changes_requested' %}
+      The second reviewer (multi-model review) requested these changes (iteration {{ loop.iteration }}):
+      {{ second.findings | to_yaml }}
+      {% endif %}
       Fix the blocking items, make a new commit and answer each one.
       A finding that needs no production change (it asks for tests or screenshots, which the
       test writer owns, or you disagree with it): answer it in `summary` with the reason, make no
@@ -1111,7 +1183,7 @@ steps:
       # validated mode: the owner tries the first implementation and every round they asked for
       # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
       # unless validate_every_round)
-      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
+      - when: "inputs.validation == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
         goto: developer_screenshots
       # #151: a committed UI change (screens to capture, or files under the UI folders, #588) is
       # captured right after develop in every mode too, for the ui_reviewer in code_review (a UI fix
@@ -1122,7 +1194,7 @@ steps:
       # call); a project without a check command goes on as before
       - when: "output.committed and worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
-      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+      - when: "inputs.validation == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
@@ -1163,7 +1235,7 @@ steps:
       - when: "output.status == 'fail'"
         goto: check_failed
       # passed (or skipped): the owner's gate in validated mode, else the review
-      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+      - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
         set: &checks_passed { check_returns: "0" }
       - when: "true"
@@ -1193,14 +1265,14 @@ steps:
       - when: "inputs.screenshots != 'off' and not (steps.develop.output.screenshots or []) | length and (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length and vars.ui_screens_returned != 'yes'"
         goto: develop
         set: { ui_screens_returned: "yes" }
-      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
+      - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
         goto: developer_screenshots
       - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
         goto: developer_screenshots
       # #404: the project's rule checks before the owner's gate or the review
       - when: "worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
-      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+      - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
       - when: "true"
         goto: code_review
@@ -1226,7 +1298,7 @@ steps:
       - when: "worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
       # validated mode: the owner's gate first (the same rounds as develop's transitions)
-      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+      - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
       - when: "true"
         goto: code_review
@@ -1309,10 +1381,10 @@ steps:
       - when: "choice == 'continue' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
         set: *accepted_gaps
-      - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
+      - when: "(choice == 'continue' and inputs.validation == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
         goto: developer_check
         set: *accepted_gaps
-      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+      - when: "choice == 'continue' and inputs.validation == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_screenshots
         set: *accepted_gaps
       # #151: a UI change is captured for the ui_reviewer, as in develop's transitions
@@ -1341,7 +1413,7 @@ steps:
       - { id: continue, label: "Continue without them", help: "The run goes on with the issues that are done; the others stay open." }
       - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
     transitions:
-      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes' and inputs.screenshots != 'off'"
+      - when: "choice == 'continue' and inputs.validation == 'validated' and vars.owner_validated != 'yes' and inputs.screenshots != 'off'"
         goto: developer_screenshots
       # #151: a UI change is captured for the ui_reviewer, as in develop's transitions
       - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
@@ -1349,7 +1421,7 @@ steps:
       # #404: the project's rule checks before the owner's gate or the review
       - when: "choice == 'continue' and worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
-      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+      - when: "choice == 'continue' and inputs.validation == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_check
       - when: "choice == 'continue'"
         goto: code_review
@@ -1364,10 +1436,11 @@ steps:
   # otherwise the reviewer runs alone. min_success 1 + required_agents: a failed UI Reviewer never
   # blocks the run, a failed reviewer fails the step as before. output.results.<agent> holds each answer.
   - id: code_review
-    agents: [reviewer, ui_reviewer]
+    agents: [reviewer, second_reviewer, ui_reviewer]
     min_success: 1
     required_agents: [reviewer]
     agent_when:
+      second_reviewer: "inputs.review == 'multi_model'"
       ui_reviewer: "previous_step in ['developer_screenshots', 'developer_check'] and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
     prompt: |
       {% if agent == 'ui_reviewer' %}
@@ -1544,8 +1617,9 @@ steps:
       # code findings, with the blocking UI findings when there are, go back to develop in one turn;
       # the UI is sent back once (vars.ui_review_returned), like evidence did before #151;
       # vars.ui_review_sent: this round shows develop the blocking UI findings (set first, from the
-      # flag before this round)
-      - when: "output.results.reviewer.verdict == 'changes_requested'"
+      # flag before this round). #630: with review multi_model, the second reviewer's changes_requested
+      # sends it back too (both verdicts must approve)
+      - when: "output.results.reviewer.verdict == 'changes_requested' or output.results.second_reviewer.verdict == 'changes_requested'"
         goto: develop
         set:
           ui_review_sent: "{% if (output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes' %}yes{% else %}no{% endif %}"
@@ -1929,7 +2003,7 @@ steps:
         goto: end
         status: failed
       # continue: rule_check's routes after a pass
-      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+      - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
         set: *checks_passed
       - when: "true"
@@ -2210,9 +2284,11 @@ steps:
               verdict:  { type: string, enum: [verified, not_verified, inconclusive] }
               evidence: { type: string }
     transitions:
+      - when: "output.verdict != 'not_verified' and inputs.mode == 'remote'"
+        goto: ci
       - when: "output.verdict != 'not_verified'"
         merge: local
-        goto: end
+        goto: push_main
         on_error: resolve_merge
       - when: "output.verdict == 'not_verified'"
         delegate:
@@ -2250,9 +2326,11 @@ steps:
       {% if steps.e2e.output %}E2E run: {{ steps.e2e.output.message }}{% endif %}
       Merge anyway: merge it into the local {{ inputs.base_branch }} as it is. Stop the run: the run ends as failed (its branch keeps the work to resume it).
     transitions:
+      - when: "approved and inputs.mode == 'remote'"
+        goto: ci
       - when: "approved"
         merge: local
-        goto: end
+        goto: push_main
         on_error: resolve_merge
       - when: "rejected"
         goto: end
@@ -2367,7 +2445,7 @@ steps:
     transitions:
       - when: "choice == 'retry'"
         merge: local
-        goto: end
+        goto: push_main
         on_error: resolve_merge
       - when: "choice == 'stop'"
         goto: end
@@ -2375,6 +2453,21 @@ steps:
 
 # -----------------------------------------------------------------------------
 # What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+  # #630 (closes #617): Local mode's last step pushes the local base (the project auto-push is gone)
+  - id: push_main
+    fragment: local-merge-pipeline
+    agent: developer
+
+  # ============================ REMOTE MODE ==================================
+  # #630: the pull request, its CI and the team's merge (fragments/pr-pipeline.yaml)
+  - id: ci
+    fragment: pr-pipeline
+    agent: ci_pusher
+  - id: ci_failed
+    fragment: pr-pipeline
+  - id: pr_review
+    fragment: pr-pipeline
+
 outputs:
   branch:
     type: string

@@ -13,7 +13,7 @@ const { root } = require('./engine-helpers');
 // to the review. Both software-development and its local-hero variant. --------------------------
 
 test('#98: develop output_schema requires left_out, so an answer cannot skip it', () => {
-  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+  for (const file of ['feature.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', file));
     const develop = wf.steps.find((s) => s.id === 'develop');
     const output = { branch: 'b', summary: 's', files_changed: [], test_notes: 't', committed: true };

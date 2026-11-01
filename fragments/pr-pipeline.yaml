@@ -2,9 +2,10 @@
 # from software-development's ci and ci_failed: the CI pusher pushes the run's branch and opens the
 # PR/MR, the engine waits on its checks (`wait: pr_checks`) and calls the agent only when one failed;
 # a fix goes to the developer (delegate). pr_review hands the green PR/MR to the team, who merge it on
-# the platform. A step `{ id, fragment: pr-pipeline }` gets the body under its id; the step's own
-# keys win (packages/engine/engine/run/load.js, expandFragments). Reads the inputs base_branch and issue and the
-# step develop.
+# the platform. #630: pr_open instead of ci when the project's CI does not run on pull requests (the
+# composed set's ci none or release): it opens the PR/MR with no wait. A step `{ id, fragment: pr-pipeline }`
+# gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js,
+# expandFragments). Reads the inputs base_branch and issue and the steps develop, ci and pr_open.
 
 steps:
   ci:
@@ -81,12 +82,51 @@ steps:
         goto: end
         status: failed
 
-  # the team merges on the platform: the run ends once the PR/MR is green and handed over
+  # #630: a project whose CI does not run on pull requests (ci none or release): the CI pusher pushes
+  # the branch and opens the PR/MR, with no CI to wait for; a conflict with the base goes to the developer
+  pr_open:
+    display: Pull request
+    prompt: |
+      Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
+      {% if delegate_result %}The developer resolved the conflict and pushed: {{ delegate_result.text }}
+      {% endif %}
+      1. Push the branch to the remote.
+      2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
+         title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
+      3. Check its mergeability: a conflict with the base → conflict: true with what conflicts in
+         `detail`. The project's CI does not run on pull requests: do not wait for checks.
+      pr_number is the PR number (GitHub) or the MR iid (GitLab).
+    output_schema:
+      type: object
+      required: [pr_url, pr_number, conflict]
+      properties:
+        pr_url:    { type: string }
+        pr_number: { type: integer }
+        conflict:  { type: boolean }
+        detail:    { type: string }
+    transitions:
+      - when: "output.conflict"
+        delegate:
+          agent: developer
+          prompt: |
+            PR/MR #{{ output.pr_number }} conflicts with `{{ inputs.base_branch }}`: {{ output.detail }}
+            Rebase branch `{{ steps.develop.output.branch }}` on the base, resolve it, check it with a
+            focused test, commit, then `git push --force-with-lease`, and report the commit hash.
+        goto: pr_open
+        max_visits: 3
+        on_exhausted: pr_review
+      - when: "true"
+        goto: pr_review
+
+  # the team merges on the platform: the run ends once the PR/MR is green (or, with no CI on pull
+  # requests, open) and handed over
   pr_review:
     type: human_approval
     display: Team review
     message: |
-      PR/MR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}) is green.
+      {% set pr = steps.ci.output or steps.pr_open.output %}
+      PR/MR #{{ pr.pr_number }} ({{ pr.pr_url }}) is {% if steps.ci.output %}green{% elif pr.conflict %}open, still conflicting with the base: {{ pr.detail }}{% else %}open (the project's CI does not run on pull requests){% endif %}.
       The team reviews and merges it on the platform. Approve to end the run; reject to stop it as failed.
     transitions:
       - when: "approved"

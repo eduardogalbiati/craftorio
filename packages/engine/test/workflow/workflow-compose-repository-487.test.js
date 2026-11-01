@@ -1,4 +1,4 @@
-// #487 (developer's own test): the composed intake and release workflows live under .multiagent/workflows/
+// #487 (developer's own test): the composed feature, fix and release workflows live under .multiagent/workflows/
 // too, so they must load as accepted repository workflows (no ship:, tools within the repository policy),
 // for every release style.
 const test = require('node:test');
@@ -9,10 +9,10 @@ const path = require('path');
 const { composeWorkflowSet } = require('../../domains/workflow/workflow-compose');
 const { loadRepositoryWorkflow } = require('../../engine/run/load');
 
-const profileOf = (over = {}) => ({ team: 'solo', merge: 'local', release: 'milestone', testCommand: 'npm test', ci: null, languages: ['javascript'], ...over });
+const profileOf = (over = {}) => ({ mode: 'local', release: 'milestone', testCommand: 'npm test', ci: 'none', languages: ['javascript'], ...over });
 
 for (const release of ['milestone', 'per-merge', 'train', 'rc-stable']) {
-  test(`#487 the intake and the ${release} release load as accepted repository workflows`, (t) => {
+  test(`#487 the feature, the fix and the ${release} release load as accepted repository workflows`, (t) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wfc-repo-487-'));
     t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
     const out = composeWorkflowSet({ profile: profileOf({ release }), answers: {}, facts: { languages: ['javascript'], skills: [] } });
@@ -22,7 +22,7 @@ for (const release of ['milestone', 'per-merge', 'train', 'rc-stable']) {
       fs.writeFileSync(file, w.yaml);
     }
     const files = Object.fromEntries(out.workflows.map((w) => [w.category, path.join(dir, ...w.path.split('/'))]));
-    for (const category of ['intake', 'release']) {
+    for (const category of ['feature', 'fix', 'release']) {
       assert.ok(files[category], `a ${category} workflow`);
       assert.doesNotThrow(() => loadRepositoryWorkflow(files[category], { accepted: true }), `${category} (${release})`);
     }

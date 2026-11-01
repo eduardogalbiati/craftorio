@@ -551,7 +551,7 @@ test('runSuite with coverage: node\'s coverage report becomes coverage/coverage-
 
 test('the bundled development workflows record coverage on their suite step', () => {
   const yaml = require('js-yaml');
-  for (const name of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-development-local-hero.yaml']) {
+  for (const name of ['feature.yaml']) {
     const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', name), 'utf8'));
     const suite = wf.steps.find((s) => s.id === 'suite');
     assert.equal(suite?.coverage, true, name);

@@ -52,7 +52,7 @@
   const PAID = ['projectMap', 'ranking'];
   // mock-2's toggle: the registry's platforms with a CLI (#351: no platform literal outside the adapters)
   const providers = () => (window.Platforms?.PLATFORMS || []).filter((p) => p.cli).map((p) => p.id);
-  // the suggested workflows' kinds (mock-4); this phase shows them without choosing
+  // the suggested workflows' kinds (mock-4), each with its reason and selector (#630)
   const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
   const svg = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const ICON = { check: svg('M3.5 8.5l3 3 6-7'), download: svg('M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10'), plus: svg('M8 3v10M3 8h10') };
@@ -264,12 +264,15 @@
     };
     const row = (id) => {
       const s = jobs[id]?.status || 'waiting';
-      const line = id === 'clone' ? cur.model.repository : t(`onboarding.job_${id}_text`);
+      // #630 (mock-4): the profile row says the ways of working it found once its job is done
+      const found = id === 'profile' && M.profileLine(profileOf());
+      const line = id === 'clone' ? cur.model.repository : found ? t('onboarding.profile_found', { profile: found }) : t(`onboarding.job_${id}_text`);
+      const testid = id === 'profile' ? ' data-testid="wizard-profile"' : '';
       // mock-4's pick of a paid analysis: both run in this phase (shown checked, disabled)
       const pick = PAID.includes(id) ? `<input type="checkbox" checked disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
       return `<li class="wizard-job"${PAID.includes(id) ? ` data-part="${id}"` : ''}>
           <span class="wizard-dot job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
-          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut" title="${esc(line)}">${esc(line)}</span></span>
+          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut"${testid} title="${esc(line)}">${esc(line)}</span></span>
           <span class="wizard-amount muted">${esc(amount(id))}</span>
         </li>`;
     };
@@ -284,17 +287,30 @@
       </div>`;
   }
 
-  // mock-4's right column: the suggested workflows, shown but not chosen in this phase (disabled); the app's
-  // select (select.js, #383), the same words as text on a page without it (a test's mini DOM)
+  // #630 (mock-4): the ways-of-working profile { mode, ci, tests } the profile job found, or null
+  const profileOf = () => cur.onboarding?.profile || jobOf('profile').profile || null;
+
+  // mock-4's right column: one row per suggested workflow (feature, fix, release) and the CI row, each with
+  // why the profile suggests it and its selector on the profile's pick (#630); the owner's pick stays
+  // (cur.workflows). The app's select (select.js, #383), a plain select on a page without it (a test's mini DOM)
   function workflowsColumn() {
     const name = cur.model.name;
-    const later = t('onboarding.workflow_later');
-    const pick = window.Select ? window.Select.markup('disabled aria-disabled="true"', [['', later]], '')
-      : `<span class="muted">${esc(later)}</span>`;
-    const row = (kind) => `<li class="card wizard-workflow">
+    const profile = profileOf();
+    const all = [...M.suggestWorkflows(profile).suggestions, M.ciChoice(profile)];
+    const select = (kind, choices, value) => {
+      const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"`;
+      const options = choices.map((c) => [c.value, c.label]);
+      return window.Select ? window.Select.markup(attrs, options, value)
+        : `<select ${attrs}>${options.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    };
+    const row = (kind) => {
+      const s = all.find((x) => x.id === kind);
+      return `<li class="card wizard-workflow" data-testid="wizard-workflow" data-kind="${esc(kind)}">
         <label class="wizard-workflow-head"><strong>${esc(t(`onboarding.workflow_${kind}`))}</strong>
-          ${pick}</label>
+          ${select(kind, s.choices, cur.workflows?.[kind] || s.value)}</label>
+        <p class="muted small wizard-workflow-reason" data-testid="wizard-workflow-reason">${esc(t('onboarding.workflow_why', { reason: s.reason }))}</p>
       </li>`;
+    };
     return `<h3>${esc(t('onboarding.workflows_title'))}</h3>
       <p class="muted">${esc(t('onboarding.workflows_line', { name }))}</p>
       <ul class="wizard-workflows">${WORKFLOW_KINDS.map(row).join('')}</ul>
@@ -651,6 +667,11 @@
       return;
     }
     if (id === 'wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
+    // #630: the owner's pick of a suggested workflow's variant (kept across renders)
+    if (e.target?.dataset?.testid === 'wizard-workflow-select') {
+      cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') };
+      return;
+    }
     if (id !== 'wizard-repo' && id !== 'wizard-name') return;
     cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: String(e.target.value || '') };
     // the provider toggle follows the URL (its buttons keep their place: the caret stays)

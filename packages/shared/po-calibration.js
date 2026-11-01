@@ -224,6 +224,8 @@
   // (their test inputs do not trade cost for checks): matched on the file or name, variants included
   const TESTS_FIRST = [
     'ai-development',
+    // #630: feature, born from ai-development-local-hero, writes its acceptance tests first too
+    'feature',
   ];
   const COST_INPUTS = ['e2e_tests', 'screenshots', 'unit_tests'];
   /**

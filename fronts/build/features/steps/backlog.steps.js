@@ -542,3 +542,9 @@ Then('the split card of {string} shows {string} and {string} inside it', async (
     expect(inside(at, box), `"${name}" inside the card`).toBe(true);
   }
 });
+
+// #630: the project's auto-push switch (once a toggle with the attribute data-autopush in the "Not pushed"
+// alert) is gone from the Backlog; pushing is the workflows' business now.
+Then('the Backlog does not offer to push the project automatically', async ({ e2e }) => {
+  await expect(e2e.window.locator('[data-autopush]')).toHaveCount(0);
+});

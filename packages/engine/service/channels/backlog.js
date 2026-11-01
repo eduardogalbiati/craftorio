@@ -113,13 +113,6 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, files: nullable(listOf(STRING)), mock: FLAG }, ['projectId']), result: STARTED },
       fn: ({ projectId, files, mock }) => ctx.resolvePushConflict({ projectId, files, mock }),
     },
-    {
-      channel: 'backlog:auto-push',
-      method: 'setAutoPush',
-      params: ['projectId', 'on'],
-      schema: { params: args({ projectId: PROJECT_ID, on: FLAG }, ['projectId']), result: OBJECT },
-      fn: ({ projectId, on }) => projects.updateProject(ctx.ws.projects, project(projectId), { autoPush: !!on }),
-    },
     // #138: a new issue the Product Owner registers joins the epic it clearly matches (no extra click)
     {
       channel: 'backlog:auto-epic',

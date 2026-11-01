@@ -30,13 +30,13 @@ const seeds = require('../domains/seed/seeds');
 
 const loadArea = () => require('../service/areas/workflow-interview');
 
-const SOLO_PROFILE = { team: 'solo', merge: 'local', release: 'milestone', testCommand: 'npm test', ci: 'github-actions', languages: ['javascript'] };
+const SOLO_PROFILE = { mode: 'local', release: 'milestone', testCommand: 'npm test', ci: 'release', tests: 'unit', languages: ['javascript'] };
 const SOLO_EVIDENCE = {
-  team: { numbers: { authors: 1, commits: 312 }, commits: ['a1b2c3d'] },
-  merge: { numbers: { mergeCommits: 0, pullRequests: 0 }, commits: ['a1b2c3d'] },
+  mode: { numbers: { authors: 1, mergeCommits: 0, pullRequests: 0 }, commits: ['a1b2c3d'] },
   release: { numbers: { tags: 6, milestones: 6 }, commits: ['e4f5a6b'] },
   testCommand: { numbers: { scripts: 1 }, commits: [] },
   ci: { numbers: { workflows: 1 }, commits: [] },
+  tests: { numbers: { unit: 40, e2e: 0 }, commits: [] },
   languages: { numbers: { javascript: 240 }, commits: [] },
 };
 const NO_RELEASE_PROFILE = { ...SOLO_PROFILE, release: null };
@@ -91,11 +91,10 @@ const questionIds = (out) => out.questions.map((q) => q.id).sort();
 test('#487 the interview answers the profile the ways-of-working seed found', async (t) => {
   const { area, project } = await setup(t);
   const out = await area.workflowInterview({ projectId: project.id });
-  assert.equal(out.profile.team, 'solo');
-  assert.equal(out.profile.merge, 'local');
+  assert.equal(out.profile.mode, 'local');
   assert.equal(out.profile.release, 'milestone');
   assert.equal(out.profile.testCommand, 'npm test');
-  assert.equal(out.evidence.team.numbers.authors, 1);
+  assert.equal(out.evidence.mode.numbers.authors, 1);
 });
 
 test('#487 the interview runs the ways-of-working seed in one Oracle turn', async (t) => {

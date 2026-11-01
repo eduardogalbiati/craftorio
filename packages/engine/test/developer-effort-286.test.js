@@ -23,14 +23,14 @@ const yaml = require('js-yaml');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', 'workflows');
-const HERO = path.join(WORKFLOWS, 'ai-development-local-hero.yaml');
+const HERO = path.join(WORKFLOWS, 'feature.yaml');
 const readYaml = (file) => yaml.load(fs.readFileSync(path.join(WORKFLOWS, file), 'utf8'));
 const ARENA = readYaml('ai-arena.yaml');
 const DEV_WORKFLOWS = [
-  'ai-development-local-hero.yaml',
-  'e2e-release.yaml',
-  'software-development-local-hero.yaml',
-  'software-development.yaml',
+  'feature.yaml',
+  'release.yaml',
+  'feature.yaml',
+  'fix.yaml',
 ];
 
 // the args the engine gives the CLI for one turn of `agent` on `provider`
@@ -94,7 +94,7 @@ test('#286 no bundled workflow sets an agent effort on a provider without effort
 });
 
 test('#286 ai-development-local-hero: an agent with effort high gets --effort high on claude; one without gets no --effort', () => {
-  const wf = readYaml('ai-development-local-hero.yaml');
+  const wf = readYaml('feature.yaml');
   const claude = wf.providers.claude;
   const withEffort = argsOf(claude, { model: 'claude-opus-5-5', effort: 'high' });
   assert.equal(effortValueAfter(withEffort, '--effort'), 'high');
@@ -145,7 +145,7 @@ test('#286 validation: an agent effort on a provider with effort_args is not rep
 });
 
 test('#286 ai-development-local-hero: developer_effort input, right after developer_model', () => {
-  const wf = readYaml('ai-development-local-hero.yaml');
+  const wf = readYaml('feature.yaml');
   const keys = Object.keys(wf.inputs);
   assert.equal(keys.indexOf('developer_effort'), keys.indexOf('developer_model') + 1);
   const input = wf.inputs.developer_effort;
@@ -162,7 +162,7 @@ test('#286 ai-development-local-hero: developer_effort input, right after develo
 });
 
 test('#286 ai-development-local-hero: the developer effort is a template over inputs.developer_effort', () => {
-  const dev = readYaml('ai-development-local-hero.yaml').agents.developer;
+  const dev = readYaml('feature.yaml').agents.developer;
   assert.equal(typeof dev.effort, 'string');
   assert.match(dev.effort, /\{\{[^}]*inputs\.developer_effort[^}]*\}\}/);
 });
@@ -187,7 +187,7 @@ test('#286 ai-development-local-hero: developer_effort high gives the developer 
 
 test('#286 Product Owner costInputs never sets developer_effort outside its enum', () => {
   const { costInputs } = require('../domains/po/product-owner');
-  const file = 'ai-development-local-hero.yaml';
+  const file = 'feature.yaml';
   const declared = readYaml(file).inputs;
   const allowed = (declared.developer_effort?.enum || ['default', 'low', 'medium', 'high', 'xhigh']).map(String);
   for (const cheapAgents of [false, true]) {

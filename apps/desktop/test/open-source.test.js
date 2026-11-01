@@ -114,7 +114,7 @@ test('#314: every skill or workflow adapted from an MIT project is named in THIR
   for (const s of ['arena-synthesis', 'blast-radius', 'bug-diagnosis', 'claim-verification', 'decision-log', 'design-sketch', 'merge-conflict-resolver', 'pr-description', 'review-synthesis', 'run-retrospective']) {
     assert.ok(skills.includes(s), `detected skill ${s}`);
   }
-  for (const w of ['multi-model-review.yaml', 'run-retrospective.yaml']) assert.ok(workflows.includes(w), `detected workflow ${w}`);
+  for (const w of ['run-retrospective.yaml']) assert.ok(workflows.includes(w), `detected workflow ${w}`);
   const missing = [
     ...skills.filter((s) => !new RegExp(`(^|[^\\w-])${s}([^\\w-]|$)`).test(notices)),
     ...workflows.filter((w) => !notices.includes(w)),

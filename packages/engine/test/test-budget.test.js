@@ -18,7 +18,7 @@ function resolvedAgent(run, agentName) {
   return { ...(run.wf.defaults || {}), ...run.wf.agents[agentName] };
 }
 
-function makeGroupedRun(issues, runsDir, file = 'software-development-local-hero.yaml') {
+function makeGroupedRun(issues, runsDir, file = 'feature.yaml') {
   return new WorkflowRun({
     file: path.join(root, 'workflows', file),
     inputs: { task: 'Fix things', repo_path: root, issues },
@@ -41,8 +41,6 @@ test('turnTimeout grows with the number of issues of a grouped run, clamped at 6
   assert.equal(timeoutFor(5), 60 * 60e3);
   assert.equal(timeoutFor(8), 60 * 60e3); // still capped
 
-  // the same expression is used by software-development.yaml (not only the local-hero variant)
-  assert.equal(timeoutFor(3, 'software-development.yaml'), 50 * 60e3);
 });
 
 test('turnTimeout: an agent\'s own plain timeout wins over defaults, and an explicit null falls back to the 30m engine default', (t) => {

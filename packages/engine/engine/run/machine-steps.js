@@ -3,7 +3,7 @@
 // #144), `type: suite` (`runSuiteStep` naming its command for a pause #368, `suiteRounds`, `suiteRound` with the memory guard's waits and reruns #276,
 // the machine-wide suite slot of a whole-suite round and its `suite_slot` log while it waits #455,
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
-// (`runTestIdsStep`, #246), `type: check` (`runCheckStep`, the project's rule checks, #404), `type:
+// (`runTestIdsStep`, #246), `type: visual_baselines` (`runVisualBaselinesStep`, #696), `type: check` (`runCheckStep`, the project's rule checks, #404), `type:
 // workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
 // #325), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
 // screenshots step emits step.log { step_id, path, command } when its command's log starts (its live
@@ -26,6 +26,7 @@ const { changedFiles, selectionLines } = require('../affected-tests');
 const { machineSlotDir } = require('../machine-slot');
 const { runWorkflowStep } = require('../workflow-step');
 const testIds = require('../test-ids');
+const visualBaselines = require('../visual-baselines');
 const { previousTag } = require('../../domains/releases/release-city');
 const { releaseSemver } = require('../../domains/releases/releases');
 const { render } = require('./templates');
@@ -563,6 +564,31 @@ const methods = {
         : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${folders.renderer.join(', ')}.` };
     }
     this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'test_ids', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
+    return output;
+  },
+
+  // `type: visual_baselines` (#696): the baselines the issue's @visual scenarios use and the run's
+  // checkout lacks (packages/engine/engine/visual-baselines.js). `issues`: a template, the issue numbers
+  // (comma- or space-separated); `steps`: the step definition folders, as in `type: test_ids`.
+  // Output: { kind: 'visual_baselines', status: pass | missing | skipped, missing: [{ name, file,
+  // feature, scenario, command }], message }; skipped when the run has no checkout or no issue.
+  runVisualBaselinesStep(step, st) {
+    const dir = this.ctx.worktree_dir;
+    const issues = (step.issues ? render(String(step.issues), this.ctx) : '').split(/[\s,]+/).map((n) => Number(n.replace(/^#/, ''))).filter((n) => Number.isInteger(n) && n > 0);
+    const steps = (step.steps ? render(String(step.steps), this.ctx) : '').split(/[\n,]/).map((f) => f.trim()).filter(Boolean);
+    const base = { kind: 'visual_baselines', round: st.visits, issues, missing: [] };
+    let output;
+    if (!dir || !fs.existsSync(dir)) {
+      output = { ...base, status: 'skipped', message: 'Baseline check skipped: the run has no checkout.' };
+    } else if (!issues.length) {
+      output = { ...base, status: 'skipped', message: 'Baseline check skipped: the run names no issue.' };
+    } else {
+      const missing = visualBaselines.missingBaselines(dir, { issues, ...(steps.length ? { steps } : {}) });
+      output = missing.length
+        ? { ...base, status: 'missing', missing, message: `${missing.length} baseline(s) the issue's @visual scenarios use are not committed: create each one with its update command and commit it.\n${visualBaselines.missingBaselineLines(missing)}` }
+        : { ...base, status: 'pass', message: 'Every baseline the issue\'s scenarios use is committed.' };
+    }
+    this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'visual_baselines', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
     return output;
   },
 

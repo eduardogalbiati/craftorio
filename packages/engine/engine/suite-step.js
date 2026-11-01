@@ -89,6 +89,7 @@ const {
 } = require('./processes');
 const { killTree, OWN_GROUP } = require('./providers');
 const { MAX_TEST_TIMEOUT_MS } = require('./test-timeouts');
+const { generatedLines, generatedNote, splitMissingBaselines } = require('./visual-baselines');
 const { workerEnv } = require('../domains/machine/machine-profile');
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
@@ -767,12 +768,12 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
-    exit_code: null, duration_ms: 0, timed_out: false, timeout_ms: null, running: [], passed: null, failed: null, failures: [], preexisting: [], preexisting_failures: [], base_check: null, selection, reason: null, message: '',
+    exit_code: null, duration_ms: 0, timed_out: false, timeout_ms: null, running: [], passed: null, failed: null, failures: [], preexisting: [], preexisting_failures: [], new_baselines: [], base_check: null, selection, reason: null, message: '',
   };
   let tooLong = null;
   const what = () => (out.scope === 'files' ? `The selected tests (${plural(out.selection?.files?.length ?? files.length, 'test file')})` : tooLong ? `The whole suite (${tooLong})` : 'The suite');
   const finish = () => {
-    const pre = out.preexisting.length ? ` (${plural(out.preexisting.length, 'pre-existing failure')} not counted: they fail on the base too)` : '';
+    const pre = `${out.preexisting.length ? ` (${plural(out.preexisting.length, 'pre-existing failure')} not counted: they fail on the base too)` : ''}${generatedNote(out.new_baselines)}`;
     const classes = out.in_change != null ? ` (${[out.in_change ? `${out.in_change} ${IN_CHANGE}` : '', out.outside_change ? `${out.outside_change} ${OUTSIDE_CHANGE}` : ''].filter(Boolean).join(', ')})` : '';
     out.message = out.status === 'pass' ? `${what()} passed in round ${round}${out.command ? ` (\`${out.command}\`)` : ''}${pre}.`
       : out.status === 'fail' ? `${what()} failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${classes}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
@@ -854,7 +855,9 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const cov = saveCoverage(`${clean(text)}\n${clean(human)}`, runDir, changedFiles);
   if (cov) out.coverage = cov;
   if (out.exit_code === 0 && !out.timed_out) { out.status = 'pass'; return finish(); }
-  const failures = parseFailures(text, { cwd });
+  const parsed = parseFailures(text, { cwd }); // #696: a baseline Playwright had to write is not a failure
+  const { failures, generated } = splitMissingBaselines(parsed, (p) => fileOf(p, cwd));
+  out.new_baselines = generated;
   out.preexisting = failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
   out.failures = failures.filter((f) => !out.preexisting.includes(f));
   // a timed-out round (#396): the files still running, rerun alone on the branch (and on the base)
@@ -885,7 +888,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   else if (out.timed_out) {
     const still = out.running.length ? ` Still running: ${out.running.join(', ')}.` : '';
     out.failures.push({ test: '(the whole suite)', file: '', error: `timed out after ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy}): a test hangs or the suite is too slow.${still}` });
-  } else if (!failures.length) {
+  } else if (!parsed.length) {
     // failed with nothing the parser knows: the end of the log says why
     const tail = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-ERROR_LINES).join('\n');
     out.failures.push({ test: '(unrecognized failure)', file: '', error: `exit ${out.exit_code ?? '?'}${tail ? `: ${tail}` : ''}`.slice(0, 400) });
@@ -936,6 +939,7 @@ function suiteMessage(output) {
     lines.push('Also failing on the base (reported, not chased):');
     for (const f of output.preexisting) lines.push(`- ${f.test}${f.file ? ` (${f.file})` : ''}`);
   }
+  lines.push(...generatedLines(output.new_baselines)); // #696: the baselines Playwright wrote, for the UI review
   return lines.join('\n');
 }
 

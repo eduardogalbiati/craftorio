@@ -1,4 +1,4 @@
-// workflows/ai-development-local-hero.yaml, #301 and #304 (acceptance tests, written before the code).
+// workflows/feature.yaml, #301 and #304 (acceptance tests, written before the code).
 // #301: a read-only `warm_up` step (agent `mapper`, skill code-mapping) maps the code between red_check
 // and develop, on the first visit only; develop starts from its map, and runs on without it when the
 // mapper fails. #304: the suite step runs with `scope: affected`, and develop and the test step take
@@ -15,7 +15,7 @@ const { WorkflowRun } = require('../../engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
-const WORKFLOW = path.join(ROOT, 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 

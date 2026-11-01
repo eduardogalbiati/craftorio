@@ -23,7 +23,7 @@
 // and Mark reviewed (mock-3); the review shows its score, its rubric checks and the anchored notes with
 // Apply / Edit / Dismiss (mock-4); the approval gate is the sign-off panel (mock-5). Several writers
 // (AI Arena, phase 2) and Screens to capture first (captures, phase 3) are shown disabled. The New item
-// panel, the review and the sign-off markup live in docs-panels.js (DocsPanels); the Diff tab's page of a
+// panel, the toolbar, the review and the sign-off markup live in docs-panels.js (DocsPanels); the Diff tab's page of a
 // change (its touched sections, docs:read-at) in docs-diff.js (DocsDiff); the sections with their
 // anchors and the reader's page in docs-page.js (DocsPage).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
@@ -147,7 +147,7 @@
     box.innerHTML = docs.items.map((it) => `
       <div class="docs-item" data-testid="docs-item" data-item="${esc(it.item)}">
         <div class="docs-item-main" title="${esc(`docs/work/${it.item}/`)}">
-          <b class="docs-item-title">${esc(it.title || it.item)}</b>
+          <b class="docs-item-title" data-testid="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
           <span class="docs-sep muted">·</span>
           <span class="docs-item-stages muted" data-testid="docs-item-stages">${stagesHtml(it)}</span>
         </div>
@@ -394,18 +394,8 @@
     const o = docs.open;
     const box = $('#docs-toolbar-box');
     if (!o || !box) return;
-    const g = o.gate;
-    const wait = o.requesting || o.answering ? ' disabled' : '';
-    const tab = (id, label) => `<button type="button" role="tab" class="${o.tab === id ? 'active' : ''}" aria-selected="${o.tab === id}" data-docs-tab="${id}">${label}</button>`;
-    const lang = (id, label, off) => `<button type="button" class="${o.lang === id ? 'active' : ''}" aria-pressed="${o.lang === id}" data-testid="doc-lang-${id}" data-docs-lang="${id}"${off ? ' disabled' : ''}>${label}</button>`;
-    box.innerHTML = `
-      <div class="docs-toolbar" data-testid="doc-toolbar">
-        <div class="seg sm" role="tablist" aria-label="${t('docs.view')}">${tab('edit', t('docs.edit'))}${tab('diff', t('docs.diff'))}${tab('preview', t('docs.preview'))}</div>
-        <div class="seg sm" role="group" aria-label="${t('docs.language')}">${lang('en', 'EN', false)}${lang('pt', 'PT', !o.data?.translation)}</div>
-        <span class="spacer"></span>
-        <button type="button" class="btn sm ghost" data-testid="doc-versions" data-docs-tab="diff" title="${t('docs.versions_help')}">${t('docs.versions')}</button>
-        ${g?.edit ? `<button type="button" class="btn sm primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait}>${t('docs.send_to_review')}</button>` : ''}
-      </div>`; // i18n-ignore
+    // #696 Send to review is disabled until the edit gate is open and while a request's commit is pending
+    box.innerHTML = window.DocsPanels.toolbar({ tab: o.tab, lang: o.lang, translation: !!o.data?.translation, wait: !o.gate?.edit || !!o.requesting || !!o.answering });
     $('#docs-editor-body')?.classList.toggle('docs-mode-diff', o.tab === 'diff');
   }
 

@@ -13,7 +13,7 @@ const { loadWorkflow, WorkflowRun } = require('../engine/workflow');
 
 const root = path.join(__dirname, '..', '..', '..');
 const SKILLS = path.join(root, 'skills');
-const WORKFLOWS = ['ai-development-local-hero', 'software-development', 'software-development-local-hero', 'e2e-release', 'test-batch'];
+const WORKFLOWS = ['feature', 'test-batch'];
 const body = (id) => skills.resolveSkill([SKILLS], id).body;
 // a `*toolchains` anchor inside a tools list arrives as a nested list
 const toolsOf = (agent) => (agent.capabilities?.tools || []).flat(Infinity).map(String);
@@ -100,8 +100,8 @@ test('language: a comma-separated list of known languages is accepted ("js,rust"
 });
 
 test('language: a single value keeps working (js, rust), and an unknown language is still refused, alone or in a list', (t) => {
-  for (const language of ['js', 'rust']) assert.doesNotThrow(() => newRun(t, 'software-development.yaml', { language }), language);
+  for (const language of ['js', 'rust']) assert.doesNotThrow(() => newRun(t, 'feature.yaml', { language }), language);
   for (const language of ['cobol', 'js,cobol']) {
-    assert.throws(() => newRun(t, 'software-development.yaml', { language }), /language/, language);
+    assert.throws(() => newRun(t, 'feature.yaml', { language }), /language/, language);
   }
 });

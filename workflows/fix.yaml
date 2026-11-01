@@ -1,0 +1,247 @@
+# =============================================================================
+# Workflow: Fix (#630, spec R8)
+#   reproduce ─► develop ─► code_review ─► suite ─► verify_change ─┬─ Local:  merge: local ─► push_main ─► end
+#                                                                  └─ Remote: ci (PR + CI) ─► pr_review ─► end
+#   - reproduce (the developer): one command that shows the bug for the reported reason, a failing
+#     regression test when it can; no production code yet (fragments/fix-pipeline.yaml).
+#   - develop: the fix of the root cause, with the regression test that failed before it.
+#   - code_review, suite, verify_change, verify_failed: fragments/dev-pipeline.yaml.
+#   - Local mode: the run's branch is merged into the local base (resolve_merge / merge_blocked on a
+#     conflict, fragments/local-merge-pipeline.yaml), then push_main pushes it (the project auto-push
+#     is gone, #617). Remote mode: fragments/pr-pipeline.yaml, the team merges the PR/MR.
+#   - Hotfix mode (input `hotfix`): the urgent lane; the fix starts from the last release tag and ships
+#     as a patch (spec R7: with tags, a hotfix branches from the last tag).
+# =============================================================================
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: fix
+  version: 0.1.0
+  description: "Reproduces a bug, fixes it with its regression test, reviews, tests and verifies it. Local mode: merged into the local base branch, then pushed (push main). Remote mode: a pull request and its CI. Hotfix mode: from the last release tag, shipped as a patch."
+  tags: [fix, review, test, local, remote, worktree]
+  category: build
+
+inputs:
+  task:
+    label: "Task"
+    type: string
+    required: true
+    description: The bug to fix.
+  issue:
+    label: "Issue"
+    type: string
+    default: ""
+    description: "URL of the issue this run fixes (set by the Backlog screen)."
+  issues:
+    label: "Issues"
+    type: array
+    default: []
+    description: "URLs of the issues this run fixes together, in one branch (set by the Backlog screen; one per line)."
+  repo_path:
+    label: "Repository"
+    type: string
+    required: true
+    description: Local repository path (a git repository).
+  base_branch:
+    label: "Base branch"
+    type: string
+    default: main
+    description: The branch the work starts from and lands on.
+  mode:
+    label: "Mode"
+    type: string
+    enum: [local, remote]
+    default: local
+    options: { local: "Local", remote: "Remote (pull request)" }
+    description: "Local: merged into the local base branch, then the run pushes it (push main). Remote: the run pushes its branch, opens a pull request and waits for its CI; the team merges it on the platform."
+  hotfix:
+    label: "Hotfix"
+    type: boolean
+    default: false
+    description: "An urgent fix: the smallest change, meant for a patch release from the last tag. For now it guides the agents only: the run still starts from the base branch, and the patch is released with the release workflow."
+  git_platform:
+    label: "Git platform"
+    type: string
+    enum: [gh, gl]
+    default: gh
+    options: { gh: GitHub, gl: GitLab }
+    show_if: "mode == 'remote'"
+    description: "Where Remote mode opens the pull request (merge request on GitLab)."
+  test_command:
+    type: string
+    default: ""
+    label: Test command
+    description: "The project's whole-suite command (e.g. npm test). Empty: found from the project's files."
+
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    effort_args: ["--effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+x-tools:
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:go, bash:mvn, bash:gradle, bash:dotnet, bash:cargo]
+  vcs: &vcs [bash:git, bash:gh, bash:glab]
+
+defaults:
+  fresh_after_idle: 55m
+  working_dir: "{{ worktree_dir }}"
+  timeout: 30m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # #630: the local <base> in Local mode (no fetch), the fetched origin/<base> in Remote mode
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: "{{ inputs.mode == 'remote' }}"
+  supervisor:
+    enabled: true
+    on_call: true
+    max_interventions: 2
+    max_cost_usd: 5
+  limits:
+    max_total_duration: 8h
+    max_total_cost_usd: 60
+
+agents:
+  developer:
+    provider: claude
+    model: claude-opus-5-5
+    effort: high
+    session: persistent
+    capabilities: { tools: [*toolchains, edit, read, write], web: false }
+    system_prompt: |
+      You are the developer. You reproduce the bug, then fix its root cause on the run's branch with a
+      small change that follows the project's conventions and a regression test that failed before
+      the fix. Never push, except in the push main step.
+  reviewer:
+    provider: claude
+    model: claude-opus-5-5
+    effort: medium
+    session: persistent
+    capabilities: { tools: [read, bash:git], web: false }
+    skills: [code-review]
+    system_prompt: |
+      You are the code reviewer. Follow the code-review skill; you change nothing.
+  verifier:
+    provider: claude
+    model: claude-sonnet-5
+    effort: medium
+    session: persistent
+    capabilities: { tools: [*toolchains, read], web: false }
+    system_prompt: |
+      You are the verifier. You check, with one command and its observed result, that the bug is gone.
+  ci_pusher:
+    provider: claude
+    model: claude-sonnet-5
+    session: handoff
+    capabilities: { tools: [read, *vcs], web: false }
+    skills: ["ci-pipeline-{{ inputs.git_platform }}"]
+    system_prompt: |
+      You are the CI Pusher. You push the branch, make sure a PR/MR is open and watch CI until it
+      passes. You do not fix code and you do not merge.
+
+steps:
+  - id: reproduce
+    fragment: fix-pipeline
+    agent: developer
+    transitions:
+      - when: "true"
+        goto: develop
+  - id: develop
+    fragment: fix-pipeline
+    agent: developer
+    transitions:
+      - when: "true"
+        goto: code_review
+  - id: code_review
+    fragment: dev-pipeline
+    agent: reviewer
+    transitions:
+      - when: "output.approved"
+        goto: suite
+      - when: "true"
+        goto: develop
+        max_visits: 2
+        on_exhausted: verify_failed
+  - id: suite
+    fragment: dev-pipeline
+    command: "{{ inputs.test_command }}"
+    transitions:
+      - when: "output.status == 'pass'"
+        goto: verify_change
+      - when: "output.status == 'blocked'"
+        goto: verify_failed
+      - when: "true"
+        goto: develop
+        max_visits: 2
+        on_exhausted: verify_failed
+  - id: verify_change
+    fragment: dev-pipeline
+    agent: verifier
+    transitions:
+      - when: "output.verdict != 'not_verified' and inputs.mode == 'remote'"
+        goto: ci
+      - when: "output.verdict != 'not_verified'"
+        merge: local
+        goto: push_main
+        on_error: resolve_merge
+      - when: "true"
+        goto: develop
+        max_visits: 2
+        on_exhausted: verify_failed
+  - id: verify_failed
+    fragment: dev-pipeline
+    transitions:
+      - when: "approved and inputs.mode == 'remote'"
+        goto: ci
+      - when: "approved"
+        merge: local
+        goto: push_main
+        on_error: resolve_merge
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  # ============================ LOCAL MODE ===================================
+  - id: resolve_merge
+    fragment: local-merge-pipeline
+    agent: developer
+  - id: merge_blocked
+    fragment: local-merge-pipeline
+  - id: push_main
+    fragment: local-merge-pipeline
+
+  # ============================ REMOTE MODE ==================================
+  - id: ci
+    fragment: pr-pipeline
+    agent: ci_pusher
+  - id: ci_failed
+    fragment: pr-pipeline
+  - id: pr_review
+    fragment: pr-pipeline
+
+groups:
+  - name: Develop
+    steps: [reproduce, develop]
+  - name: Review
+    steps: [code_review]
+  - name: Validate
+    steps: [suite, verify_change, verify_failed]
+  - name: Merge
+    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_review]
+
+outputs:
+  branch:
+    value: "{{ steps.develop.output.branch }}"

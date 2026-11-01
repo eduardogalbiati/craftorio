@@ -152,7 +152,7 @@ function backlogData() {
     refresh: { due: true, hoursAgo: 72, merges: 3, lastRun: { runId: 'refresh-1', startedAt: '2026-10-01T00:00:00Z' }, base: 'main' },
     roadmap: {
       state: 'paused', pausedBy: 'it1', error: ROADMAP_ERROR, simulated: false, scope: null,
-      stages: [{ id: 'st1', name: '', note: '', items: [{ id: 'it1', status: 'failed', runId: 'run-42', runs: ['run-42'], error: ROADMAP_ERROR, workflow: 'software-development-local-hero.yaml', workflowName: 'Local hero', inputs: {}, issues: [{ number: 1, title: 'Issue 1', url: 'https://github.com/o/r/issues/1' }] }] }],
+      stages: [{ id: 'st1', name: '', note: '', items: [{ id: 'it1', status: 'failed', runId: 'run-42', runs: ['run-42'], error: ROADMAP_ERROR, workflow: 'feature.yaml', workflowName: 'Local hero', inputs: {}, issues: [{ number: 1, title: 'Issue 1', url: 'https://github.com/o/r/issues/1' }] }] }],
     },
   };
 }

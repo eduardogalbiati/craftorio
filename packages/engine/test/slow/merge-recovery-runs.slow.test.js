@@ -4,7 +4,7 @@
 // - packages/engine/engine/workflow.js: `check:` / `precheck:` gates, the recovery route of a failed action
 //   or check (recoverFromActionError / superviseActionError), and the merge queue's cross-run
 //   withdrawal of an open gate.
-// - workflows/software-development-local-hero.yaml: the scoped re-check after resolve_merge.
+// - workflows/feature.yaml: the scoped re-check after resolve_merge.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -15,7 +15,7 @@ const { WorkflowRun } = require('../../engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
 const root = path.join(__dirname, '..', '..', '..', '..');
 const FIXTURE = path.join(__dirname, '..', 'fixtures', 'merge-race.yaml');
-const LOCAL_HERO = path.join(root, 'workflows', 'software-development-local-hero.yaml');
+const LOCAL_HERO = path.join(root, 'workflows', 'feature.yaml');
 
 // ---- packages/engine/engine/workflow.js: `check:`/`precheck:` gates and their recovery route (fixture) -----
 
@@ -167,7 +167,7 @@ test('two runs racing for the same PR/MR: the second merges first, the first is 
   assert.equal(eventsB.find((e) => e.type === 'workflow.finished').status, 'success');
 });
 
-// ---- #99: workflows/software-development-local-hero.yaml, the scoped re-check (real prompts) --
+// ---- #99: workflows/feature.yaml, the scoped re-check (real prompts) --
 
 // Runs the real local-hero workflow up to and including a failed local merge; gates get
 // `answers[step]` (default: approve / first choice). `patchAgent` can replace a step's answer

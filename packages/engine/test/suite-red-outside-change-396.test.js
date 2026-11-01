@@ -1,5 +1,5 @@
 // #396: a suite that is red only outside the change (packages/engine/engine/suite-step.js runSuite, the
-// suite_lines filter of packages/engine/engine/gate-summary.js, workflows/ai-development-local-hero.yaml).
+// suite_lines filter of packages/engine/engine/gate-summary.js, workflows/feature.yaml).
 // - A timed-out round is checked like a failure: the test files still running are rerun alone, on
 //   the branch and on the base, each with its own timeout (at least 2 min); a file that passes alone
 //   on the branch, or hangs / fails on the base too, is reported outside the change with its reason
@@ -202,9 +202,8 @@ test('#396 classification: a failure whose test file reaches a changed file is i
 
 test('#396 policy: ai-development-local-hero has suite_red_outside_change (ask | continue, default ask); software-development-local-hero does not', () => {
   const load = (name) => yaml.load(fs.readFileSync(path.join(ROOT, 'workflows', name), 'utf8'));
-  const input = load('ai-development-local-hero.yaml').inputs?.suite_red_outside_change;
+  const input = load('feature.yaml').inputs?.suite_red_outside_change;
   assert.ok(input, 'ai-development-local-hero declares the suite_red_outside_change input');
   assert.equal(input.default, 'ask');
   assert.deepEqual([...input.enum].sort(), ['ask', 'continue']);
-  assert.equal(load('software-development-local-hero.yaml').inputs?.suite_red_outside_change, undefined, 'software-development-local-hero does not change');
 });

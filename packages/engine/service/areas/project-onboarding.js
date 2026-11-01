@@ -123,7 +123,8 @@ function createOnboarding({ projectsDir, reposDir, git, cli = machineCli, jobs, 
       change(id, {}, { [name]: { status: 'running' } });
       const result = await jobs[name](input());
       if (result?.refused) throw new Error(result.refused.text || String(result.refused));
-      change(id, {}, { [name]: { status: 'done' } });
+      // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile)
+      change(id, {}, { [name]: { status: 'done', ...(result?.profile ? { profile: result.profile } : {}) } });
       return { result };
     } catch (e) {
       change(id, {}, { [name]: { status: 'failed', error: String(e?.message || e) } });

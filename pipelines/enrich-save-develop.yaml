@@ -1,11 +1,14 @@
 # Saved pipeline (#135, packages/engine/domains/workflow/pipelines.js): Write & Review enriches an issue into a task, its gate's
 # "Accept and save to issue" saves it to the issue, then the local developer workflow implements it.
 name: Enrich → Save → Develop
-description: Write & Review turns a request (or an issue, started from the Backlog's Enrich) into an implementable task; accept it at its gate ("Accept and save to issue" saves it to the issue), then software-development-local-hero implements the accepted document.
+description: Write & Review turns a request (or an issue, started from the Backlog's Enrich) into an implementable task; accept it at its gate ("Accept and save to issue" saves it to the issue), then feature (local mode) implements the accepted document.
 category: build
 stages:
   - workflow: writer-reviewer.yaml
-  - workflow: software-development-local-hero.yaml
+  # #630: software-development-local-hero.yaml is now feature.yaml in local mode
+  - workflow: feature.yaml
     map:
       task: document
       issues: issue
+    inputs:
+      mode: local

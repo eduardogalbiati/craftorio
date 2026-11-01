@@ -93,3 +93,31 @@ Feature: Write an item's intent and spec with the writer, change by change, up t
     And the sign-off panel proposes "Create epic and phase issues" and "Start the Build"
     And the sign-off panel offers "Sign off spec", "Back to editing" and "Stop"
     And the sign-off panel looks like the baseline "671-signoff.png"
+
+  # #696: a list row is one line, "Title · Plan ✓ · Design", its status and actions at the right (mock-1);
+  # the editor's toolbar ends with Send to review, after Versions (mock-2)
+  @issue-696
+  Scenario: A document's row shows its title and its stages on one line, with its status at the right
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with an accepted intent
+    When I open "Documents" in the sidebar
+    Then the item "Export runs as CSV" reads "Export runs as CSV · Plan ✓" on one line
+    And the item "Export runs as CSV" shows its status and its actions at the right of its stages
+
+  @issue-696
+  Scenario: A long title is cut with an ellipsis and its row stays on one line
+    Given the app is open
+    And the demo project's repository has the item "Export every run of the selected project as a CSV file with its stages, its gates, its reviewers, its costs, its durations and the name of the person who started it" in the folder "long-title" with an accepted intent
+    When I open "Documents" in the sidebar
+    Then the title of the item "Export every run of the selected project" is cut with an ellipsis
+    And the item "Export every run of the selected project" reads "Export every run of the selected project as a CSV file with its stages, its gates, its reviewers, its costs, its durations and the name of the person who started it · Plan ✓" on one line
+    And the item "Export every run of the selected project" shows its status and its actions at the right of its stages
+
+  @issue-696
+  Scenario: The editor's toolbar ends with Send to review, right after Versions
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with an accepted intent
+    When I open "Documents" in the sidebar
+    And I choose "Write the spec" on the item "Export runs as CSV"
+    Then the writer drafts the spec with the section "Requirements"
+    And the toolbar ends with "Send to review" right after "Versions"

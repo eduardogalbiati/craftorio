@@ -25,7 +25,7 @@ const ACCEPTED_SHA = '9876543fedcba9876543210fedcba9876543210f';
 const base = { description: '', tags: [], inputs: {}, outputs: {}, agents: {}, providers: {}, groups: [], warnings: [], steps: [{ id: 'work', type: 'agent', agent: 'a', skills: [], next: [], transitions: [] }] };
 const WORKFLOWS = [
   { ...base, file: 'backlog-refresh.yaml', name: 'backlog-refresh', category: 'intake', origin: 'default' },
-  { ...base, file: 'software-development-local-hero.yaml', name: 'software-development-local-hero', category: 'solo', origin: 'default' },
+  { ...base, file: 'feature.yaml', name: 'software-development-local-hero', category: 'solo', origin: 'default' },
   { ...base, file: 'software-development.yaml', name: 'software-development', category: 'team', origin: 'default' },
   { ...base, file: 'release.yaml', name: 'release', category: 'release', origin: 'default' },
   { ...base, file: 'workflows/repo-flow.yaml', name: 'repo-flow', category: 'solo', origin: 'repository', projectId: 'p1', commit: SHA, accepted: false },

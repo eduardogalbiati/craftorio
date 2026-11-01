@@ -123,7 +123,7 @@ test('list_workflows items carry only the fields the tool describes, not the Wor
   const described = ['agents', 'category', 'description', 'file', 'inputs', 'name', 'origin', 'outputs', 'steps', 'tags', 'version'];
   const item = list.find((w) => w.file === 'fixture-supervisor-tools.yaml');
   assert.ok(Object.keys(item).every((k) => described.includes(k)), `unexpected field in ${Object.keys(item)}`);
-  const bundled = list.find((w) => w.file === 'software-development.yaml');
+  const bundled = list.find((w) => w.file === 'feature.yaml');
   assert.deepEqual(Object.keys(bundled).sort(), described.sort());
   for (const w of list) {
     assert.ok(!('builderProblems' in w));

@@ -52,8 +52,9 @@ const methods = {
     if (!cfg) return;
     const repo = render(cfg.repo, this.ctx).trim();
     const base = render(cfg.base, this.ctx).trim() || null;
-    // remote: false = a local workflow: start from the local base (no fetch) and merge back into it
-    const remote = cfg.remote !== false && String(cfg.remote).trim().toLowerCase() !== 'false';
+    // remote: false = a local workflow: start from the local base (no fetch) and merge back into it;
+    // #630: a template too (feature/fix: "{{ inputs.mode == 'remote' }}", the fetched origin/<base> in Remote mode)
+    const remote = cfg.remote !== false && render(String(cfg.remote ?? ''), this.ctx).trim().toLowerCase() !== 'false';
     this.ctx.worktree_dir = repo;
     const log = (level, message) => this.emitEvent('log', { level, message });
     if (!this.worktreesDir) {

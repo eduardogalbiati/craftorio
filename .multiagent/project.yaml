@@ -8,12 +8,12 @@ workflows:
   - name: backlog-refresh
     category: intake
     description: Refresh the issues of the backlog
-  - name: software-development-local-hero
+  - name: feature
     category: solo
-    description: One person, merges into the local main
-  - name: software-development
-    category: team
-    description: Pull requests, CI and CD
+    description: A feature, merged into the local main and pushed (Local mode) or through a pull request (Remote)
+  - name: fix
+    category: fix
+    description: A bug fix, reproduced first; hotfix mode from the last tag
   - name: release
     category: release
     description: Tag and publish a release

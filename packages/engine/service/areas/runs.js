@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { aliasInputs } = require('@multiagent/shared/default-workflow');
 const {
   childRunCost,
   loadWorkflow,
@@ -474,7 +475,9 @@ module.exports = (ctx) => {
         notices.push({ level: 'warn', message: msg });
       }
       run = new WorkflowRun({
-        file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
+        // #630: an old workflow name brings its variant's inputs, under the run's own (an old
+        // `mode: validated` is the validation, so the alias's mode stays)
+        file: wfFile.file, inputs: aliasInputs(wfFile, inputs), mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         ignoreInstallScripts: installScriptsOff(project, fromUrl, notices),

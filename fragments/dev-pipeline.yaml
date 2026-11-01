@@ -1,10 +1,10 @@
-# The develop → code_review → suite → verify_change steps of a composed development workflow (#487,
-# packages/engine/domains/workflow/workflow-compose.js), in either merge style. A step `{ id, fragment: dev-pipeline, ...keys }`
+# The develop → code_review → suite (→ e2e) → verify_change steps of a composed feature or fix workflow
+# (#487, #630, packages/engine/domains/workflow/workflow-compose.js), in either mode. A step `{ id, fragment: dev-pipeline, ...keys }`
 # gets the body under its id; the composition writes the step's own agent, command and transitions
 # (the wiring the interview's answers choose), which win over the body's (packages/engine/engine/run/load.js,
 # expandFragments). The project's facts (test command, languages, skills) are in the composed
 # workflow's agents, not here. The bodies read only the inputs task, issue and base_branch and the
-# steps develop, code_review, suite and verify_change.
+# steps develop, code_review, suite, e2e, verify_change and validate.
 
 steps:
   develop:
@@ -19,6 +19,7 @@ steps:
       {% if steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
       {% for f in steps.code_review.output.findings %}- {{ f }}
       {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status != 'pass' %}The test suite failed: {{ steps.suite.output.message }}
+      {% endif %}{% if steps.e2e.output and steps.e2e.output.status != 'pass' %}The E2E suite failed: {{ steps.e2e.output.message }}
       {% endif %}{% if steps.verify_change.output and steps.verify_change.output.verdict == 'not_verified' %}The verifier could not confirm the change: {{ steps.verify_change.output.evidence }}
       {% endif %}{% if steps.validate.output and steps.validate.output.feedback %}The owner's note: {{ steps.validate.output.feedback }}
       {% endif %}Fix it.{% endif %}
@@ -54,6 +55,12 @@ steps:
     display: Test suite
     scope: affected
 
+  # #630: the project's E2E command after the unit suite (tests unit+e2e; the composition writes the command)
+  e2e:
+    type: suite
+    display: E2E suite
+    scope: full
+
   verify_change:
     display: Final verification
     prompt: |
@@ -64,6 +71,7 @@ steps:
       Run the one command that shows it (a focused test, the build, a request), read its result and
       answer the verdict with the claim you checked, the command and what you observed.
       {% if steps.suite.output %}Test suite: {{ steps.suite.output.message }}{% endif %}
+      {% if steps.e2e.output %}E2E suite: {{ steps.e2e.output.message }}{% endif %}
     output_schema:
       type: object
       required: [verdict, claim, evidence]
@@ -94,4 +102,5 @@ steps:
       {% if steps.verify_change.output %}Claim: {{ steps.verify_change.output.claim }}
       Observed: {{ steps.verify_change.output.evidence }}{% endif %}
       {% if steps.suite.output %}Tests: {{ steps.suite.output.message }}{% endif %}
+      {% if steps.e2e.output %}E2E: {{ steps.e2e.output.message }}{% endif %}
       Approve to let it land anyway; reject to stop the run as failed (its branch keeps the work).

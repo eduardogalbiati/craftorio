@@ -451,35 +451,35 @@ test('draftActions never files by itself: Create, Add to #n instead and Discard 
 
 test('workflowFor: a draft with no workflow picked yet falls back to the default development workflow', () => {
   const { helpers, sandbox } = loadWorkflowSelect();
-  sandbox.state.workflows = [{ file: 'software-development.yaml' }, { file: 'software-development-local-hero.yaml' }];
-  assert.equal(helpers.workflowFor(0), 'software-development-local-hero.yaml'); // unset: the local one wins
+  sandbox.state.workflows = [{ file: 'software-development.yaml' }, { file: 'feature.yaml' }];
+  assert.equal(helpers.workflowFor(0), 'feature.yaml'); // unset: the local one wins
 });
 
 test('workflowFor: once a workflow is picked for a draft (draftWorkflow.set, as the #po-log change handler does), it wins over the default', () => {
   const { helpers, sandbox } = loadWorkflowSelect();
-  sandbox.state.workflows = [{ file: 'software-development.yaml' }, { file: 'software-development-local-hero.yaml' }];
+  sandbox.state.workflows = [{ file: 'software-development.yaml' }, { file: 'feature.yaml' }];
   helpers.draftWorkflow.set(2, 'software-development.yaml');
   assert.equal(helpers.workflowFor(2), 'software-development.yaml');
-  assert.equal(helpers.workflowFor(0), 'software-development-local-hero.yaml'); // another draft: unaffected
+  assert.equal(helpers.workflowFor(0), 'feature.yaml'); // another draft: unaffected
 });
 
 test('workflowSelect: lists the task workflows, the picked one selected, the default (the setting\'s, or the fallback) marked "(default)"', () => {
   const { helpers, sandbox } = loadWorkflowSelect();
   sandbox.state.workflows = [
     { file: 'software-development.yaml', name: 'Software development', inputs: { task: {} } },
-    { file: 'software-development-local-hero.yaml', name: 'Software development (local)', inputs: { task: {} } },
+    { file: 'feature.yaml', name: 'Software development (local)', inputs: { task: {} } },
     { file: 'no-task.yaml', name: 'No task input', inputs: {} }, // never offered: it cannot take a task
   ];
   const html = helpers.workflowSelect(1, '');
   assert.match(html, /<select class="po-wf" data-po-wf/);
-  assert.match(html, /<option value="software-development-local-hero\.yaml" selected>Software development \(local\) \(default\)<\/option>/);
+  assert.match(html, /<option value="feature\.yaml" selected>Software development \(local\) \(default\)<\/option>/);
   assert.match(html, /<option value="software-development\.yaml">Software development<\/option>/);
   assert.doesNotMatch(html, /no-task\.yaml/);
 
   sandbox.state.settings = { defaultWorkflow: 'software-development.yaml' };
   const withSetting = helpers.workflowSelect(1, '');
   assert.match(withSetting, /<option value="software-development\.yaml" selected>Software development \(default\)<\/option>/);
-  assert.match(withSetting, /<option value="software-development-local-hero\.yaml">Software development \(local\)<\/option>/);
+  assert.match(withSetting, /<option value="feature\.yaml">Software development \(local\)<\/option>/);
 });
 
 test('fileDraft (the owner\'s click): every "create" variant files action "create", not a new issue when appending or commenting; a real filing asks to confirm first', () => {

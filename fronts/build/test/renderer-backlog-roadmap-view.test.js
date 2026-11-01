@@ -101,7 +101,7 @@ function meter(block, kind) {
 }
 
 const ref = (number, title) => ({ number, title, url: `https://github.com/o/r/issues/${number}` });
-const item = (id, status, number, title, extra = {}) => ({ id, status, workflow: 'software-development-local-hero.yaml', inputs: {}, issues: [ref(number, title)], ...extra });
+const item = (id, status, number, title, extra = {}) => ({ id, status, workflow: 'feature.yaml', inputs: {}, issues: [ref(number, title)], ...extra });
 
 // four stages: finished (done + skipped), mixed (done + planned), failed, running
 function roadmapData() {
@@ -258,7 +258,7 @@ test('#215 a finished stage shows its real total cost against its estimate, colo
 // ---- #216: inputs as friendly pills ------------------------------------------------------------
 
 const heroWorkflow = {
-  file: 'software-development-local-hero.yaml',
+  file: 'feature.yaml',
   name: 'Software development, local hero',
   inputs: {
     mode: { enum: ['auto', 'validated'], default: 'auto', label: 'Mode', options: { auto: 'Automatic', validated: 'Validated' } },

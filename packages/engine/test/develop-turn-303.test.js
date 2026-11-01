@@ -9,7 +9,7 @@ const path = require('path');
 const { loadWorkflow } = require('../engine/workflow');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const WORKFLOW = path.join(ROOT, 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');
 const skill = (name) => fs.readFileSync(path.join(ROOT, 'skills', name, 'SKILL.md'), 'utf8');
 // one "## ..." section of a skill, up to the next "## " heading
 const section = (text, heading) => {

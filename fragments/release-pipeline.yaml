@@ -30,6 +30,12 @@ steps:
     display: Release tests
     scope: full
 
+  # #630: the project's E2E command on the base, a step of the release (the composition writes the command)
+  e2e:
+    type: suite
+    display: Release E2E
+    scope: full
+
   notes:
     display: Release notes
     prompt: |
@@ -88,3 +94,48 @@ steps:
     message: |
       Release candidate {{ steps.tag_rc.output.tag }} is out. Once it has been tried, approve to tag
       it as the stable {{ steps.prepare.output.version }}; reject to stop (fix and cut another rc).
+
+  # #630 (spec R7, ci: release | pr+release): the tag is pushed and its CI run builds the release
+  release_ci:
+    display: Release CI
+    goal:
+      description: "The release CI run of {{ steps.tag.output.tag }} finished green"
+      until: "output.ci_status == 'success'"
+      on_exhausted: release_ci_failed
+    loop:
+      interval: 2m
+      max_duration: 2h
+    prompt: |
+      Tag `{{ steps.tag.output.tag }}` (commit {{ steps.tag.output.commit }}) starts the project's release
+      CI. Find that run (`gh run list --commit {{ steps.tag.output.commit }}` or `glab ci list`) and read
+      its status: queued or running → pending; every job passed → success; a job failed → failed with
+      run_url and failure_log (job, step, error). Change nothing, re-run nothing.
+    output_schema:
+      type: object
+      required: [ci_status]
+      properties:
+        ci_status:   { type: string, enum: [pending, failed, success] }
+        run_url:     { type: string }
+        failure_log: { type: string }
+    transitions:
+      - when: "output.ci_status == 'success'"
+        goto: end
+      - when: "output.ci_status == 'pending'"
+        goto: release_ci
+      - when: "true"
+        goto: release_ci_failed
+
+  release_ci_failed:
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    display: Release CI failed
+    message: |
+      The release CI of {{ steps.tag.output.tag }} did not pass{% if steps.release_ci.output %} ({{ steps.release_ci.output.run_url }}){% endif %}.
+      {% if steps.release_ci.output %}Last error: {{ steps.release_ci.output.failure_log or '(none reported)' }}{% endif %}
+      Approve to check it again (after a re-run); reject to stop the run as failed (the tag stays).
+    transitions:
+      - when: "approved"
+        goto: release_ci
+      - when: "rejected"
+        goto: end
+        status: failed
