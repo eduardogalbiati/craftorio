@@ -47,3 +47,49 @@ Feature: Write an item's intent and spec with the writer, change by change, up t
     When I undo the change "Make it shorter" in the unreviewed queue
     Then the unreviewed queue no longer shows the change "Make it shorter"
     And the "Problem" section reads as before the change
+
+  # #671: the screens match the spec's mockups (docs/work/write-doc/images/mock-1..5.jpg, living-doc.jpg),
+  # drawn in the dark theme (baselines: npm run test:e2e:update -- --grep @issue-671)
+  @issue-671 @visual
+  Scenario: The Documents list shows each item's stages and status, next to the New item panel
+    Given the app is open in the dark theme
+    And the demo project's repository has the item "Export runs as CSV" with an accepted intent
+    When I open "Documents" in the sidebar
+    Then the item "Export runs as CSV" shows the stages "Plan ✓"
+    And the item "Export runs as CSV" shows the status of "intent.md"
+    When I open the New item panel
+    Then the New item panel starts with "intent.md (Plan)"
+    And the New item panel asks "What it is about", "Screens to capture first" and "Several writers"
+    And the New item panel offers "Start"
+    And the Documents screen looks like the baseline "671-documents.png"
+
+  @issue-671 @visual
+  Scenario: The editor shows the item's six stages, the contents, the toolbar and the writer panel
+    Given the app is open in the dark theme
+    And the demo project's repository has the item "Export runs as CSV" with an accepted intent
+    When I open "Documents" in the sidebar
+    And I choose "Write the spec" on the item "Export runs as CSV"
+    Then the writer drafts the spec with the section "Requirements"
+    And the document's stages are "Plan, Design, Build, Test, Deploy, Maintain" with "Design" open
+    And the contents list "Requirements" and "Markdown source"
+    And the toolbar offers the tabs "Edit", "Diff" and "Preview"
+    And the toolbar switches the language between "EN" and "PT"
+    And the toolbar offers "Versions" and "Send to review"
+    And the writer panel offers "Apply now", "Queue" and "Attach image"
+    And the editor looks like the baseline "671-editor.png"
+
+  @issue-671 @visual
+  Scenario: After the review, the sign-off gate shows the front matter to come and the next steps
+    Given the app is open in the dark theme
+    And the demo project's repository has the item "Export runs as CSV" with an accepted intent
+    When I open "Documents" in the sidebar
+    And I choose "Write the spec" on the item "Export runs as CSV"
+    Then the writer drafts the spec with the section "Requirements"
+    When I send the document to review
+    Then the review shows its score out of 10
+    And a review note offers "Apply", "Edit" and "Dismiss"
+    And the sign-off panel is headed "Sign off required"
+    And the sign-off panel shows the front matter after sign-off "status: draft → signed off"
+    And the sign-off panel proposes "Create epic and phase issues" and "Start the Build"
+    And the sign-off panel offers "Sign off spec", "Back to editing" and "Stop"
+    And the sign-off panel looks like the baseline "671-signoff.png"
