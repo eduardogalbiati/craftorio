@@ -102,3 +102,14 @@ test('#631 an old refactor-proposals run\'s inputs (project_path, no repo_path) 
   const run = analyzeRun(t, { project_path: repo, project_id: 'p1', since: 'v1', limit: 5, mode: 'auto' });
   assert.equal(run.refactorProposalsPlace({ id: 'refactor_facts' }).folder, repo);
 });
+
+test('#631 an input\'s old name (was:) is read only when the new name is empty: repo_path wins over project_path', (t) => {
+  const repo = tmpDir(t, 'repo-631-');
+  const old = tmpDir(t, 'old-631-');
+  assert.equal(analyzeRun(t, { repo_path: repo, project_path: old, since: 'v1' }).inputs.repo_path, repo);
+  assert.equal(analyzeRun(t, { repo_path: '', project_path: old, since: 'v1' }).inputs.repo_path, old);
+});
+
+test('#631 neither repo_path nor its old name project_path: the run refuses to start', (t) => {
+  assert.throws(() => analyzeRun(t, { since: 'v1' }), /Required input not provided: repo_path/);
+});
