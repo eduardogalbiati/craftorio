@@ -32,10 +32,10 @@ const num = (v) => (v === '' || v == null || !Number.isFinite(+v) || +v <= 0 ? n
 
 // Details for the Settings screen: path, version and (gh) authentication of each CLI. Started from
 // a worker thread (#389, packages/engine/domains/machine/tool-worker.js): starting a CLI can block the starting thread for
-// seconds on Windows; here, if the worker cannot start.
+// seconds on Windows; here, if the worker cannot start. #632: { cwd, timeout } run it in a folder, longer.
 const toolWorker = workerClient(path.join(SRC, 'domains', 'machine', 'tool-worker.js'));
-function runTool(file, args, env = {}) {
-  const opts = { windowsHide: true, timeout: 15000, env: { ...process.env, ...env } };
+function runTool(file, args, env = {}, { cwd, timeout = 15000 } = {}) {
+  const opts = { windowsHide: true, timeout, env: { ...process.env, ...env }, ...(cwd ? { cwd } : {}) };
   const here = () => new Promise((resolve) => {
     execShim(file, args, opts, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() }));
   });

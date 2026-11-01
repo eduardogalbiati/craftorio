@@ -3152,6 +3152,7 @@
   "onboarding.new_release_rc_stable": "RC → stable",
   "onboarding.new_release_train": "Release train",
   "onboarding.new_remote": "Also create a private repository on",
+  "onboarding.new_remote_creating": "Creating the private repository on {provider}…",
   "onboarding.new_remote_failed": "The private repository was not created",
   "onboarding.new_remote_hint": "{repo}, pushed after the first commit. {other} works the same way with {cli}.",
   "onboarding.new_remote_hint_none": "Sign in with {clis} in Setup to create a private repository.",

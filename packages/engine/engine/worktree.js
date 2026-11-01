@@ -316,9 +316,10 @@ async function prepareBaseWorktree({ repo, base, dir, log = () => {}, remote = t
 }
 
 // Committer identity for the rebase below: the user's own when git has one, otherwise a fixed
-// one (a machine or CI with no user.name/email must not make the merge fail).
-async function identityArgs(repo) {
-  const email = await tryGit(['config', 'user.email'], repo);
+// one (a machine or CI with no user.name/email must not make the merge fail). run: another git (#632, the
+// onboarding's injected one), answering null on an error.
+async function identityArgs(repo, run = tryGit) {
+  const email = await run(['config', 'user.email'], repo);
   return email ? [] : ['-c', 'user.name=Multiagent Orchestrator', '-c', 'user.email=orchestrator@localhost'];
 }
 

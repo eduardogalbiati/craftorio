@@ -12,7 +12,8 @@
 //     remote?: { provider, status: creating | created | missing | signed-out | failed, url?, reason? } }
 // #632 (spec R4): create() makes a new project instead of importing one: git init on main, README and
 // .gitignore in a first commit, then its private remote only when asked and gh / glab is signed in (`remote`);
-// it is ready at once, nothing is cloned, and the three answers are its profile (jobs.profile.profile).
+// it is ready at once, nothing is cloned, and the three answers are its profile (jobs.profile.profile); its
+// state also has the project's `name`, so the wizard follows it (remote: creating) before create() answers.
 // and every change is pushed as `onboarding:changed` (channels/onboarding.js). A refused access check or
 // a failed clone ends `failed` with a readable reason; onboardingRetry runs again what failed (the
 // access check and the clone, a failed job) and always checks gh / glab again. A project removed while
@@ -25,7 +26,7 @@ const Platforms = require('@multiagent/shared/platforms');
 const agents = require('../../domains/agents/agents');
 const arch = require('../../domains/oracle/oracle-architecture');
 const issues = require('../../domains/backlog/issues');
-const { execShim } = require('../../domains/machine/shell');
+const { identityArgs } = require('../../engine/worktree');
 const priority = require('../../domains/refactor/refactor-priority');
 const projectMap = require('../../domains/project/project-map');
 const projects = require('../../domains/project/projects');
@@ -86,10 +87,13 @@ async function machineRepos(provider) {
   return out.ok ? platform.parseRepos(out.out) : [];
 }
 
-// #632: runs a command in `cwd` → { ok, out } (stdout and stderr), never rejects
-const runIn = (file, args, cwd, timeout) => new Promise((resolve) => {
-  execShim(file, args, { cwd, windowsHide: true, timeout }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() }));
-});
+// #632: why a new project's remote was not created, when its CLI is missing or signed out
+function remoteReason(provider, status) {
+  const { cli: id, label } = issues.PLATFORMS[provider];
+  return status === 'missing'
+    ? `The ${label} CLI (${id}) is not installed, so no repository was created on ${label}: the project stays local.`
+    : `The ${label} CLI (${id}) is not signed in, so no repository was created on ${label}: the project stays local until you run ${id} auth login.`;
+}
 
 // #632 (spec R4): the private repository of a new project, created by its platform's CLI from its folder
 // (the adapter's repoCreateCommand, never public), then origin set and main pushed when it has a commit
@@ -102,7 +106,7 @@ async function machineRemote(provider, { name, folder }) {
   const { cli, args } = platform.repoCreateCommand({ name, folder });
   const r = await resolveCommandAsync(cli);
   if (!r) return { ok: false, error: `${cli} is not installed.` };
-  const created = await runIn(r.file, args, folder, 60000);
+  const created = await runTool(r.file, args, {}, { cwd: folder, timeout: 60000 });
   const url = (created.out.match(/https:\/\/\S+/g) || []).slice(-1)[0]?.replace(/\.git$/, '') || null;
   if (!created.ok || !url) return { ok: false, error: created.out || `${cli} did not create the repository.` };
   try {
@@ -113,12 +117,6 @@ async function machineRemote(provider, { name, folder }) {
     return { ok: false, url, error: `The repository ${url} was created, but main was not pushed: ${String(e?.message || e)}` };
   }
   return { ok: true, url };
-}
-
-// #632: git's identity for the first commit when this machine has none (a fresh install), as -c options
-async function identityArgs(git, folder) {
-  const email = await git(['config', 'user.email'], folder).then((s) => String(s).trim(), () => '');
-  return email ? [] : ['-c', 'user.name=Multiagent', '-c', 'user.email=multiagent@localhost'];
 }
 
 const README = (name) => `# ${name}\n`;
@@ -314,11 +312,25 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return { mode: a.mode, ci: a.ci, release: a.release };
   }
 
+  // #632: the local repository of a new project: git init on main, README.md and .gitignore in a first commit
+  // (starts 'readme') or nothing more ('empty')
+  async function initRepository(folder, name, starts) {
+    await git(['init'], folder);
+    await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], folder);
+    if (starts !== 'readme') return;
+    fs.writeFileSync(path.join(folder, 'README.md'), README(name));
+    fs.writeFileSync(path.join(folder, '.gitignore'), GITIGNORE);
+    await git(['add', 'README.md', '.gitignore'], folder);
+    const identity = await identityArgs(folder, (args, dir) => git(args, dir).then((s) => String(s).trim() || null, () => null));
+    await git([...identity, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Initial commit'], folder);
+  }
+
   /**
-   * #632 (spec R4): creates a new project in <projectsDir>/<slug>: git init on main, with README.md and
-   * .gitignore in a first commit (starts 'readme', the default) or nothing more ('empty'); then, only when
-   * asked and its CLI is signed in, its private remote. Nothing is cloned; the state is ready at once,
-   * with the answers as its profile. A remote that fails leaves the local project.
+   * #632 (spec R4): creates a new project in <projectsDir>/<slug> (an empty or new folder): its local
+   * repository (initRepository); then, only when asked and its CLI is signed in, its private remote. Nothing
+   * is cloned and no facts are read (an empty repository); the state is ready at once, with the answers as
+   * its profile, and is pushed before the remote is asked. A failed local repository removes the project; a
+   * remote that fails leaves the local project.
    */
   async function create({ name, starts = 'readme', remote: wanted = null, answers } = {}) {
     if (typeof name !== 'string' || !name.trim()) throw clientError('The project name is missing.');
@@ -326,24 +338,23 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const provider = wanted?.provider || null;
     if (provider && !Platforms.findPlatform(provider)?.cli) throw clientError(`No CLI creates repositories on ${provider}.`);
     const profile = { ...cleanAnswers(answers), tests: 'unit' };
-    const p = await projects.createProject(projectsDir, { name }, { git });
+    const p = await projects.createProject(projectsDir, { name }, { git, fresh: true }).catch((e) => { throw clientError(String(e?.message || e)); });
     const folder = p.folder;
-    await git(['init'], folder);
-    await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], folder);
-    if (starts === 'readme') {
-      fs.writeFileSync(path.join(folder, 'README.md'), README(name.trim()));
-      fs.writeFileSync(path.join(folder, '.gitignore'), GITIGNORE);
-      await git(['add', 'README.md', '.gitignore'], folder);
-      await git([...(await identityArgs(git, folder)), 'commit', '-m', 'Initial commit'], folder);
+    try {
+      await initRepository(folder, p.name, starts);
+    } catch (e) {
+      projects.removeProject(projectsDir, p.id);
+      fs.rmSync(folder, { recursive: true, force: true });
+      throw clientError(`The repository of ${p.name} could not be created: ${String(e?.message || e)}`);
     }
     const waiting = Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }]));
-    states.set(p.id, { projectId: p.id, status: 'ready', jobs: { ...waiting, clone: { status: 'skipped' }, profile: { status: 'done', profile } }, cli: null });
+    states.set(p.id, { projectId: p.id, name: p.name, status: 'ready', jobs: { ...waiting, clone: { status: 'skipped' }, facts: { status: 'skipped' }, profile: { status: 'done', profile } }, cli: null });
     change(p.id, {});
     if (provider) {
       const found = await Promise.resolve().then(() => cli(provider)).catch(() => null);
       const c = cliState(provider, found);
       if (c.status !== 'ok') {
-        change(p.id, { remote: { provider, status: c.status, reason: c.reason } });
+        change(p.id, { remote: { provider, status: c.status, reason: remoteReason(provider, c.status) } });
       } else {
         change(p.id, { remote: { provider, status: 'creating' } });
         const out = await Promise.resolve().then(() => remote(provider, { name: p.id, folder })).catch((e) => ({ ok: false, error: String(e?.message || e) }));

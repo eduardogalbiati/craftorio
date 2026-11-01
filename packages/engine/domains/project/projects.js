@@ -18,14 +18,10 @@ const { childEnv, PLATFORM_CLIS } = require('../../engine/child-env');
 const { cleanConfig } = require('../local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow
 const { firstBuild } = require('@multiagent/shared/default-workflow');
+// #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery)
+const { slugify } = require('@multiagent/shared/onboarding-model');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
-
-function slugify(name) {
-  const s = String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return s || 'project';
-}
 
 const metaFile = (dir, id) => path.join(dir, `${id}.json`);
 
@@ -88,6 +84,22 @@ function listProjects(dir) {
     .sort((a, b) => String(a.name).localeCompare(String(b.name)) || a.id.localeCompare(b.id));
 }
 
+const notEmpty = (folder) => isDir(folder) && fs.readdirSync(folder).length > 0;
+
+// createProject's folder: its parent for a clone (the folder itself empty or missing), else the folder
+// (#632 fresh: empty or missing) → the repository, read from the folder's origin when none was given
+async function prepareFolder(folder, { repo, cloned, fresh, git }) {
+  if (cloned) {
+    if (notEmpty(folder)) throw new Error(`The folder ${folder} is not empty and is not a git repository; cannot clone into it.`);
+    fs.mkdirSync(path.dirname(folder), { recursive: true });
+    return repo;
+  }
+  if (fresh && notEmpty(folder)) throw new Error(`The folder ${folder} is not empty; a new project needs an empty folder.`);
+  fs.mkdirSync(folder, { recursive: true });
+  if (!repo && isDir(path.join(folder, '.git'))) return git(['remote', 'get-url', 'origin'], folder).then((s) => s.trim() || null, () => null);
+  return repo;
+}
+
 /**
  * Creates a project. If `repo` is given and the folder is not a git repository, it returns at once
  * with status 'cloning' and clones the repository into it in the background (the folder must be
@@ -95,9 +107,10 @@ function listProjects(dir) {
  * @param {{ name: string, folder?: string, repo?: string, description?: string }} data
  * @param {{ git?: Function, reposDir?: string, cloneError?: string }} opts reposDir: <workspace>/repos;
  *   cloneError (#640, the access check refused the repository): the project is saved 'failed' with
- *   that reason and nothing is cloned (retryClone clones it)
+ *   that reason and nothing is cloned (retryClone clones it); fresh (#632, a new project): its folder must be
+ *   empty or not exist
  */
-async function createProject(dir, data, { git = execGit, reposDir = null, cloneError = null } = {}) {
+async function createProject(dir, data, { git = execGit, reposDir = null, cloneError = null, fresh = false } = {}) {
   const name = String(data.name || '').trim();
   if (!name) throw new Error('Enter the project name.');
   fs.mkdirSync(dir, { recursive: true });
@@ -110,13 +123,7 @@ async function createProject(dir, data, { git = execGit, reposDir = null, cloneE
   const folder = path.resolve(data.folder?.trim() || defaultFolder);
 
   const cloned = !!repo && !isDir(path.join(folder, '.git'));
-  if (cloned) {
-    if (isDir(folder) && fs.readdirSync(folder).length) throw new Error(`The folder ${folder} is not empty and is not a git repository; cannot clone into it.`);
-    fs.mkdirSync(path.dirname(folder), { recursive: true });
-  } else {
-    fs.mkdirSync(folder, { recursive: true });
-    if (!repo && isDir(path.join(folder, '.git'))) repo = await git(['remote', 'get-url', 'origin'], folder).then((s) => s.trim() || null, () => null);
-  }
+  repo = await prepareFolder(folder, { repo, cloned, fresh, git });
 
   const localPreview = cleanLocalPreview(data.localPreview);
   // #472: a repository the app cloned (not the user's own checkout) installs without its scripts

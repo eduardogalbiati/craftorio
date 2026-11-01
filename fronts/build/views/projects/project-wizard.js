@@ -331,9 +331,13 @@
       </div>`;
   }
 
-  // the private repository asked for and not made (gh signed out, the CLI failed): the local project stays
+  // the private repository asked for and not made (gh signed out, the CLI failed): the local project stays;
+  // while gh / glab creates it, a muted line
   function remoteWarning(remote) {
-    if (!remote || ['creating', 'created'].includes(remote.status)) return '';
+    if (remote?.status === 'creating') {
+      return `<p class="muted small" data-testid="wizard-remote-creating">${esc(t('onboarding.new_remote_creating', { provider: platformById(remote.provider)?.label || remote.provider }))}</p>`;
+    }
+    if (!remote || remote.status === 'created') return '';
     return `<div class="wizard-alert warn" data-testid="wizard-remote-warning" data-error="remote-${esc(remote.status)}">
         <strong>${esc(t('onboarding.new_remote_failed'))}</strong>
         <p>${esc(remote.reason || t('onboarding.no_reason'))}</p>
@@ -597,6 +601,11 @@
     states.delete(state.projectId);
     states.set(state.projectId, state);
     renderTray();
+    // #632: the project being created, pushed before create() answers (its remote: creating)
+    if (cur && !cur.projectId && cur.creating && state.name === cur.creating) {
+      cur.projectId = state.projectId;
+      names.set(state.projectId, state.name);
+    }
     // spec R10: what was left at Finish arrives on the project's page with a notification
     if (finished.has(state.projectId) && ['analyzed', 'failed'].includes(state.status)) {
       finished.delete(state.projectId);
@@ -690,6 +699,7 @@
         begin = () => api.startOnboarding({ name, repo });
       }
       cur.busy = true;
+      if (creating) cur.creating = name;
       render();
       try {
         const state = await begin();
@@ -699,7 +709,7 @@
       } catch (e) {
         showToast(t(creating ? 'onboarding.new_create_failed' : 'onboarding.start_failed'), errMsg(e));
       } finally {
-        cur.busy = false;
+        if (cur) { cur.busy = false; cur.creating = null; }
         render();
       }
       return;

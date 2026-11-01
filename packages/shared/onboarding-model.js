@@ -168,8 +168,8 @@
     return name.replace(/[^\w.-]/g, '_');
   }
 
-  // #632: a new project's id and folder name, the engine's rule (packages/engine/domains/project/projects.js
-  // slugify): "Field Notes" → field-notes
+  // #632: a project's id and a new project's folder name, the one rule (packages/engine/domains/project/projects.js
+  // uses it): "Field Notes" → field-notes
   function slugify(name) {
     const s = String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
       .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
