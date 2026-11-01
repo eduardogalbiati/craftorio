@@ -262,6 +262,8 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:software-development.yaml:deployer',
     'workflow:test-batch.yaml:test_writer',
     'workflow:test-batch.yaml:developer',
+    'workflow:write-doc.yaml:writer',
+    'workflow:write-doc.yaml:reviewer',
     'workflow:writer-reviewer.yaml:writer',
     'workflow:writer-reviewer.yaml:reviewer',
     'workflow:writer-reviewer.yaml:signoff',
