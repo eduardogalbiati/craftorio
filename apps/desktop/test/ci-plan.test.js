@@ -34,6 +34,12 @@ test('planOs: docs the tests read are not docs-only', () => {
   }
 });
 
+test('#672 planOs: a Markdown fixture of the tests is not docs-only (the doc-editor tests read a frozen spec)', () => {
+  for (const file of ['test/fixtures/doc-editor/spec.md', 'test/fixtures/doc-editor/spec.pt-BR.md']) {
+    assert.deepEqual(planOs({ event: 'pull_request', files: ['README.md', file] }), ['ubuntu-latest', 'windows-latest'], file);
+  }
+});
+
 test('#341 planOs: every file of the cargo workspace (native/**) is code, its Markdown too', () => {
   for (const file of ['native/Cargo.toml', 'native/Cargo.lock', 'native/multiagent-mcp/src/main.rs', 'native/multiagent-mcp/README.md', 'native/README.md']) {
     const os = planOs({ event: 'pull_request', files: ['README.md', file] });

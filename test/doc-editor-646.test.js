@@ -184,6 +184,26 @@ for (const name of DOCS) {
   });
 }
 
+// The live spec poc/doc-editor.html opens: no recorded line numbers, only that every heading
+// still maps between the languages (#672).
+test('every section of the live spec.md gives the same anchor from either language', () => {
+  const { selectionPayload } = loadModel();
+  const source = { file: `${DIR}/spec.md`, markdown: read(`${DIR}/spec.md`) };
+  const translation = { file: `${DIR}/spec.pt-BR.md`, markdown: read(`${DIR}/spec.pt-BR.md`) };
+  const enHeads = headings(source.markdown);
+  const ptHeads = headings(translation.markdown);
+  assert.equal(enHeads.length > 0, true);
+  assert.equal(ptHeads.length, enHeads.length);
+  enHeads.forEach((h, i) => {
+    const pt = ptHeads[i];
+    const fromEn = selectionPayload({ selection: { file: source.file, src: `${h.line}-${h.line}`, text: h.title }, source, translation });
+    const fromPt = selectionPayload({ selection: { file: translation.file, src: `${pt.line}-${pt.line}`, text: pt.title }, source, translation });
+    assert.equal(fromEn.anchor.startsWith('spec-'), true, `${h.title}: ${fromEn.anchor}`);
+    assert.equal(fromPt.anchor, fromEn.anchor, h.title);
+    assert.deepEqual({ start: fromPt.lines.start, end: fromPt.lines.end }, { start: h.line, end: h.line }, h.title);
+  });
+});
+
 test('poc/doc-editor.html opens the onboarding example in the reader iframe, beside a fake chat', () => {
   const html = read('poc/doc-editor.html');
   assert.equal(/<iframe\b/i.test(html), true, 'no reader iframe');
