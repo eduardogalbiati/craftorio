@@ -26,6 +26,9 @@
 // - setFrontMatter(markdown, fields): those keys replaced or added, every other line unchanged.
 // - replaceLines(markdown, { start, end }, text): 1-based inclusive lines replaced, the rest unchanged.
 // - version(markdown): the hash above.
+// - alignedLines(sourceMd, translationMd, { start }): { start, end } of the translation that match
+//   the source block at that line (the alignment rule above, source to translation), null without a match.
+// - ACCEPTED: { intent: 'accepted', spec: 'signed off' }, the status past the SDLC gate.
 // Browser: window.DocModel; Node: module.exports.
 (function (root) {
   'use strict';
@@ -39,6 +42,8 @@
     spec: ['Requirements', 'Design', 'Areas of concern', 'Open questions'],
   };
   const FRONT_MATTER_KEYS = ['item', 'stage', 'status', 'date'];
+  // the status of a document past its SDLC gate (Accept intent, Sign off spec)
+  const ACCEPTED = { intent: 'accepted', spec: 'signed off' };
   const RECOMMENDED = /\*\*(Recommended|Recomendado):\*\*/;
   const IMAGE = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 
@@ -153,6 +158,23 @@
     return null;
   }
 
+  // The lines in the other language's section of the block found in this one: aligned by order (a
+  // heading always maps to its heading, whatever follows it), else the whole section.
+  function alignedBlock(found, target) {
+    if (target.blocks.length === found.section.blocks.length || (found.index === 0 && found.section.title !== null)) {
+      const { start, end } = target.blocks[found.index];
+      return { start, end };
+    }
+    return { start: target.blocks[0].start, end: target.blocks[target.blocks.length - 1].end };
+  }
+
+  // The translation's lines that match these source lines (the rule above), null without a match.
+  function alignedLines(sourceMd, translationMd, { start }) {
+    const found = locate(sections(sourceMd), Number(start));
+    const target = found && sections(translationMd).find((s) => s.key === found.section.key);
+    return target ? alignedBlock(found, target) : null;
+  }
+
   function span(rows, start, end) {
     const from = rows[start - 1].offset;
     const to = rows[end - 1].offset + rows[end - 1].text.length;
@@ -184,13 +206,8 @@
       at = span(rows, start, end);
       const inside = selection.text ? md.slice(at.offset, at.offset + at.length).indexOf(selection.text) : -1;
       if (inside >= 0) at = { offset: at.offset + inside, length: selection.text.length };
-    } else if (target.blocks.length === found.section.blocks.length || (found.index === 0 && found.section.title !== null)) {
-      // Aligned by order; a heading always maps to its heading, whatever follows it.
-      ({ start, end } = target.blocks[found.index]);
-      at = span(rows, start, end);
     } else {
-      start = target.blocks[0].start;
-      end = target.blocks[target.blocks.length - 1].end;
+      ({ start, end } = alignedBlock(found, target));
       at = span(rows, start, end);
     }
 
@@ -323,6 +340,8 @@
   }
 
   const api = {
+    ACCEPTED,
+    alignedLines,
     blocks,
     frontMatter,
     lintDoc,

@@ -1,9 +1,10 @@
 /* global api */
 // Documents screen (#647, Plan & Design › Documents, docs/work/write-doc/spec.md R1, R8-R13): the work
 // items of the header's project, read from its repository's docs/work/ (the docs: channels,
-// fronts/plan/engine/channels/docs.js), each with its stage and its documents' status. New item
-// creates the intent from the playbook's skeleton and starts the write-doc workflow
-// (workflows/write-doc.yaml); an accepted intent offers Write the spec. The editor draws the document
+// fronts/plan/engine/channels/docs.js), each with its stage and its documents' status (and the
+// write-doc runs in progress, reopened with their gate). New item starts the write-doc workflow
+// (workflows/write-doc.yaml), whose worktree the service writes: the skeleton, the writer's draft,
+// each request (the docs: channels take the runId); an accepted intent offers Write the spec. The editor draws the document
 // in a sandboxed iframe without scripts (each block tagged with its source lines, data-src); a
 // selection on the page becomes the chip above the writer's chat (AgentChat, agent-chat.js, pasted
 // images too), and each request is a writer turn of the run's human_edit gate (run:request-edit)
@@ -19,11 +20,12 @@
 (() => {
   const FILE = 'write-doc.yaml';
   const slugOf = (title) => String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100);
-  const ACCEPTED = { intent: 'accepted', spec: 'signed off' };
+  // the status past the SDLC gate (DocModel.ACCEPTED), read when drawn: the module may load later
+  const acceptedStatus = (doc) => window.DocModel?.ACCEPTED?.[doc];
 
   // open: the document in the editor { item, doc, data (docs:read), runId, base (the commit the
-  // run started from), fresh (a new document: the writer's draft replaces the skeleton), gate (the
-  // run's waiting approval.requested), changes, unreviewed, notes (the reviewer's), messages, selection }
+  // run started from, docs:changes'), gate (the run's waiting approval.requested), changes,
+  // unreviewed, notes (the reviewer's), messages, selection, requesting (a request in flight) }
   const docs = { projectId: null, items: [], seq: 0, open: null, chat: null, busy: false, early: [] };
 
   const docLabel = (doc) => (doc === 'spec' ? t('docs.spec') : t('docs.intent'));
@@ -56,7 +58,11 @@
   function itemActions(it) {
     const intent = it.docs.find((d) => d.doc === 'intent');
     const spec = it.docs.find((d) => d.doc === 'spec');
-    const open = it.docs.map((d) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(d.doc)}" data-item="${esc(it.item)}">${d.doc === 'spec' ? t('docs.open_spec') : t('docs.open_intent')}</button>`);
+    // the document a run in progress writes opens with that run (its gate, its queue)
+    const names = it.docs.map((d) => d.doc);
+    if (it.runId && !names.includes(it.runDoc)) names.push(it.runDoc);
+    const run = (doc) => (it.runId && it.runDoc === doc ? ` data-run="${esc(it.runId)}"` : '');
+    const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${doc === 'spec' ? t('docs.open_spec') : t('docs.open_intent')}</button>`);
     if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
     return open.join('');
   }
@@ -88,7 +94,7 @@
     const write = e.target.closest('[data-docs-write-spec]');
     if (write) return startDoc(write.dataset.item, 'spec', null);
     const open = e.target.closest('[data-docs-open]');
-    if (open) return openDoc(open.dataset.item, open.dataset.docsOpen, null);
+    if (open) return openDoc(open.dataset.item, open.dataset.docsOpen, open.dataset.run || null);
     return undefined;
   }
 
@@ -111,15 +117,15 @@
     await startDoc(item, 'intent', title);
   }
 
-  // A new document from the skeleton (one commit), then the write-doc run that drafts and edits it.
+  // A new document: the write-doc run that creates its skeleton in the run's worktree (the service, at
+  // its first step), drafts and edits it.
   async function startDoc(item, doc, title) {
     if (docs.busy) return;
     docs.busy = true;
     listError('');
     try {
-      const created = await api.createDoc(docs.projectId, item, doc, title || item);
-      await openDoc(item, doc, created.commit);
-      docs.open.fresh = true;
+      await openDoc(item, doc, null);
+      docs.open.title = title || item;
       await startWriter();
       refresh();
     } catch (e) {
@@ -135,7 +141,8 @@
     docs.early = [];
     renderGate();
     try {
-      const out = await api.startRun({ file: FILE, inputs: { project_path: folder, item: o.item, document: o.doc }, mock: !!state.simulationOnly, projectId: docs.projectId });
+      const inputs = { project_path: folder, item: o.item, document: o.doc, title: o.title || o.item };
+      const out = await api.startRun({ file: FILE, inputs, mock: !!state.simulationOnly, projectId: docs.projectId });
       if (docs.open !== o) return;
       o.runId = out.runId;
       // the run's first events may arrive before startRun answers
@@ -149,15 +156,27 @@
   }
 
   // ---- the editor ---------------------------------------------------------------------------------
-  async function openDoc(item, doc, base) {
+  // runId: the write-doc run in progress on this document (the list's), its waiting gate found again
+  async function openDoc(item, doc, runId) {
     docs.projectId = window.CurrentProject?.get() || docs.projectId;
-    docs.open = { item, doc, data: null, runId: null, base, fresh: false, gate: null, changes: [], unreviewed: [], notes: [], messages: [], selection: null, problems: [] };
+    docs.open = { item, doc, data: null, runId: runId || null, base: null, gate: null, changes: [], unreviewed: [], notes: [], messages: [], selection: null, problems: [] };
     $('#docs-list-area').classList.add('hidden');
     $('#docs-editor-area').classList.remove('hidden');
     $('#docs-editor').dataset.stage = doc;
     editorError('');
     docs.chat?.setMessages([]);
+    if (runId) await restoreGate(docs.open);
     await reload();
+  }
+
+  async function restoreGate(o) {
+    try {
+      const run = (await api.listActiveRuns?.() || []).find((r) => r.runId === o.runId);
+      if (docs.open !== o) return;
+      if (!run) { o.runId = null; return; }
+      const g = (run.gates || [])[0];
+      if (g) o.gate = g.edit || g.step_id !== 'edit' ? g : { ...g, edit: { agent: 'writer' } };
+    } catch (e) { editorError(errMsg(e)); }
   }
 
   function closeDoc() {
@@ -173,13 +192,18 @@
     if (!o) return;
     try {
       const [data, ch] = await Promise.all([
-        api.readDoc(docs.projectId, o.item, o.doc),
+        api.readDoc(docs.projectId, o.item, o.doc, o.runId).catch((e) => {
+          // a new item's run has not written its skeleton yet: the writer is working
+          if (o.runId || o.starting) return null;
+          throw e;
+        }),
         api.listDocChanges(docs.projectId, o.item, o.doc, o.base, o.runId),
       ]);
       if (docs.open !== o) return;
       o.data = data;
       o.changes = ch.changes || [];
       o.unreviewed = ch.unreviewed || [];
+      o.base = o.base || ch.base || null;
     } catch (e) { editorError(errMsg(e)); }
     renderEditor();
   }
@@ -259,21 +283,6 @@
       </span>` : `<p class="muted small">${t('docs.select_a_passage_on_the_page')}</p>`;
   }
 
-  // The translation's lines of the source's section (same key, same block by order; the whole section
-  // when the blocks do not line up).
-  function translationLines(o, lines) {
-    const M = window.DocModel;
-    const tr = o.data?.translation;
-    if (!M || !tr) return null;
-    const src = M.sections(o.data.source.markdown);
-    const section = src.find((s) => s.blocks.some((b) => b.start <= lines.start && lines.start <= b.end));
-    const target = section && M.sections(tr.markdown).find((s) => s.key === section.key);
-    if (!target) return null;
-    const index = section.blocks.findIndex((b) => b.start <= lines.start && lines.start <= b.end);
-    if (target.blocks.length === section.blocks.length) return { start: target.blocks[index].start, end: target.blocks[index].end };
-    return { start: target.blocks[0].start, end: target.blocks[target.blocks.length - 1].end };
-  }
-
   // One request: a writer turn of the edit gate with the selection payload, its answer swapped into
   // both files as one commit.
   async function sendRequest(text, attachments) {
@@ -288,23 +297,44 @@
       'Answer source_text with the lines that replace these lines, translation_text with the same lines in Português (Brasil), reply with one sentence.',
     ].join('\n');
     o.messages = [...o.messages, { role: 'user', text, ts: new Date().toISOString() }];
+    // the gate waits for this request's commit: Send to review and the approval are off until then
+    o.requesting = true;
+    renderGate();
     try {
-      const turn = await api.requestEdit(o.runId, o.gate.approval_id, prompt, attachments?.length ? attachments : undefined);
+      const images = await savedImages(attachments);
+      const turn = await api.requestEdit(o.runId, o.gate.approval_id, prompt, images.length ? images : undefined);
       const out = turn?.output || {};
       if (typeof out.source_text !== 'string') throw new Error(t('docs.the_writer_gave_no_text'));
-      const tr = translationLines(o, payload.lines);
+      const tr = o.data.translation ? window.DocModel.alignedLines(o.data.source.markdown, o.data.translation.markdown, payload.lines) : null;
       const done = await api.applyDocRequest(docs.projectId, o.item, o.doc, `req-${Date.now()}`, text, { lines: payload.lines, text: out.source_text },
-        tr && typeof out.translation_text === 'string' ? { lines: tr, text: out.translation_text } : null);
+        tr && typeof out.translation_text === 'string' ? { lines: tr, text: out.translation_text } : null, o.runId);
       if (docs.open !== o) return { messages: o.messages };
       o.problems = done.problems || [];
       o.selection = null;
       o.messages = [...o.messages, { role: 'agent', text: out.reply || turn.text || '', ts: new Date().toISOString() }];
+      o.requesting = false;
       await reload();
       return { messages: o.messages };
     } catch (e) {
       o.messages = o.messages.slice(0, -1);
       return { ok: false, error: errMsg(e) };
+    } finally {
+      if (o.requesting) { o.requesting = false; renderGate(); }
     }
+  }
+
+  // The chat's pasted images ({ name, dataUrl }) saved as files (clipboard:saveImage, as PasteImage
+  // does), the { path, name } run:request-edit reads
+  async function savedImages(attachments) {
+    const out = [];
+    for (const a of attachments || []) {
+      if (a?.path) { out.push({ path: a.path, name: a.name }); continue; }
+      const url = String(a?.dataUrl || '');
+      if (!url.includes(',')) continue;
+      const saved = await api.clipboardSaveImage(url.slice(url.indexOf(',') + 1), a.name || 'image.png');
+      out.push({ path: saved.path, name: saved.name || a.name });
+    }
+    return out;
   }
 
   // ---- the changes by request ---------------------------------------------------------------------
@@ -326,7 +356,7 @@
           <span class="docs-change-text" title="${esc(c.subject)}">${esc(c.subject)}</span>
           <span class="mono muted small" title="${esc(c.commit)}">${esc(String(c.commit).slice(0, 8))}</span>
           ${open ? `<button type="button" class="btn sm ghost" data-testid="doc-mark-reviewed" data-docs-reviewed="${esc(c.commit)}">${t('docs.mark_reviewed')}</button>` : ''}
-          <button type="button" class="btn sm ghost danger" data-testid="doc-undo-change" data-docs-undo="${esc(c.commit)}" aria-label="${t('docs.undo_this_change')}" title="${t('docs.undo_this_change')}">${t('common.undo')}</button>
+          ${o.runId ? `<button type="button" class="btn sm ghost danger" data-testid="doc-undo-change" data-docs-undo="${esc(c.commit)}" aria-label="${t('docs.undo_this_change')}" title="${t('docs.undo_this_change')}">${t('common.undo')}</button>` : ''}
         </li>`;
   }).join('')}</ol>` : `<p class="muted small">${t('docs.no_change_yet')}</p>`}
       ${o.problems.length ? `<p class="small muted" title="${esc(o.problems.join('\n'))}">${t('docs.lint_problems_count', { count: o.problems.length })}</p>` : ''}`;
@@ -336,7 +366,7 @@
     const o = docs.open;
     const change = o.changes.find((c) => c.commit === commit);
     try {
-      await api.undoDocChange(docs.projectId, commit);
+      await api.undoDocChange(docs.projectId, commit, o.runId);
       await reload();
       showToast(t('docs.change_undone'), change?.subject || '');
     } catch (e) { editorError(errMsg(e)); }
@@ -372,20 +402,22 @@
     const status = o.data?.status;
     const g = o.gate;
     let html = '';
+    // a request still in flight: its commit lands before the gate is answered
+    const wait = o.requesting || o.answering ? ' disabled' : '';
     if (g?.edit) {
-      html = `<button type="button" class="btn primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review">${t('docs.send_to_review')}</button>`;
+      html = `<button type="button" class="btn primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait}>${t('docs.send_to_review')}</button>`;
     } else if (g) {
       html = `
         <p class="muted small docs-gate-message" title="${esc(g.message || '')}">${esc(g.message || '')}</p>
-        <button type="button" class="btn primary" data-testid="doc-gate-accept" data-docs-gate="accept">${o.doc === 'spec' ? t('docs.sign_off_spec') : t('docs.accept_intent')}</button>
-        <button type="button" class="btn ghost" data-docs-gate="revise">${t('docs.back_to_the_edit')}</button>`;
-    } else if (o.doc === 'spec' && status === ACCEPTED.spec) {
+        <button type="button" class="btn primary" data-testid="doc-gate-accept" data-docs-gate="accept"${wait}>${o.doc === 'spec' ? t('docs.sign_off_spec') : t('docs.accept_intent')}</button>
+        <button type="button" class="btn ghost" data-docs-gate="revise"${wait}>${t('docs.back_to_the_edit')}</button>`;
+    } else if (o.doc === 'spec' && status === acceptedStatus('spec')) {
       html = `
         <button type="button" class="btn primary" data-docs-next="backlog">${t('docs.create_epic_and_phase_issues')}</button>
         <button type="button" class="btn" data-docs-next="roadmap">${t('docs.start_the_build')}</button>`;
     } else if (o.starting || o.runId) {
       html = `<p class="muted small" role="status"><span class="spinner" aria-hidden="true"></span> ${t('docs.the_writer_is_working')}</p>`;
-    } else if (status !== ACCEPTED[o.doc]) {
+    } else if (status !== acceptedStatus(o.doc)) {
       html = `<button type="button" class="btn primary" data-testid="docs-start-writer" data-docs-start>${t('docs.edit_with_the_writer')}</button>`;
     }
     box.innerHTML = html;
@@ -395,11 +427,11 @@
   async function answerGate(choice) {
     const o = docs.open;
     const g = o?.gate;
-    if (!g || o.answering) return;
+    if (!g || o.answering || o.requesting) return;
     o.answering = true;
     try {
       // the SDLC gate: the front matter changes and commits before the run hears accept
-      if (choice === 'accept') await api.acceptDoc(docs.projectId, o.item, o.doc);
+      if (choice === 'accept') await api.acceptDoc(docs.projectId, o.item, o.doc, o.runId);
       await api.resolveApproval(g.approval_id, choice, '', o.runId);
       if (o.gate === g) o.gate = null;
       await reload();
@@ -428,14 +460,13 @@
     if (!o || !ev) return;
     if (o.starting && !o.runId) { docs.early.push(ev); return; }
     if (ev.run_id !== o.runId) return;
-    if (ev.type === 'step.finished' && ev.step_id === 'draft' && o.fresh && ev.output?.source_text) {
-      try {
-        const done = await api.applyDocDraft(docs.projectId, o.item, o.doc, ev.output.source_text, ev.output.translation_text || null);
-        o.problems = done.commit ? [] : (done.problems || []);
-      } catch (e) { editorError(errMsg(e)); }
-      if (ev.output.reply) o.messages = [...o.messages, { role: 'agent', text: ev.output.reply }];
+    if (ev.type === 'step.finished' && ev.step_id === 'draft') {
+      // the service wrote the draft into the run's worktree (channels/docs.js): read it again
+      if (ev.output?.reply) o.messages = [...o.messages, { role: 'agent', text: ev.output.reply }];
       docs.chat?.setMessages(o.messages);
       await reload();
+    } else if (ev.type === 'step.started' && !o.data) {
+      await reload(); // the new document's skeleton, written at the run's first step
     } else if (ev.type === 'step.finished' && ev.step_id === 'review' && ev.output) {
       o.notes = Array.isArray(ev.output.notes) ? ev.output.notes : [];
       o.score = ev.output.score;
@@ -446,7 +477,7 @@
     } else if (ev.type === 'approval.resolved') {
       if (o.gate?.approval_id === ev.approval_id) o.gate = null;
       renderGate();
-    } else if (ev.type === 'run.finished' || ev.type === 'run.failed' || ev.type === 'run.cancelled') {
+    } else if (['workflow.finished', 'run.finished', 'run.failed', 'run.cancelled'].includes(ev.type)) {
       o.runId = null;
       o.gate = null;
       await reload();

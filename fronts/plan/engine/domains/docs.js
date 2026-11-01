@@ -17,7 +17,10 @@
 // - unreviewed(dir, runDir, { base? }) / markReviewed(runDir, commit): the changes not undone and not
 //   marked, the marks in <runDir>/docs-reviewed.json;
 // - acceptDoc(dir, { item, doc, approver?, date? }) → { commit, status }: intent → accepted, spec →
-//   signed off, approver and date in both front matters, one commit, the bodies unchanged.
+//   signed off, approver and date in both front matters, one commit, the bodies unchanged; already
+//   accepted: HEAD, no commit;
+// - ensureBranch(dir, branch): a detached checkout (a run's worktree) gets that branch, else its own.
+// undoChange refuses (the files as they were) when a later request changed the same lines.
 // A request, an item or a document outside docs/work/<item>/ is refused before anything is written.
 // A repository without an identity commits as the person at this machine (user.name/user.email given
 // to that commit only).
@@ -27,9 +30,9 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const DocModel = require('@multiagent/shared/doc-model');
+const { gitOut } = require('@multiagent/engine/service/common');
 
 const DOCS = ['intent', 'spec'];
-const ACCEPTED = { intent: 'accepted', spec: 'signed off' };
 const ITEM = /^[a-z0-9][a-z0-9._-]{0,99}$/i;
 const MESSAGE_ID = /^[\w.:-]{1,100}$/;
 const COMMIT = /^[0-9a-f]{7,40}$/i;
@@ -58,11 +61,10 @@ const TO_WRITE = ['To be written with the writer.', 'A escrever com o writer.'];
 function git(dir, args) {
   return execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }).trim();
 }
-function gitOrNull(dir, args) {
-  try { return git(dir, args); } catch { return null; }
-}
+const gitOrNull = gitOut;
 
-// -c user.name/user.email when the repository has no identity of its own
+// -c user.name/user.email when the repository has no identity of its own: the person at this
+// machine, whose requests these commits are (identityArgs of worktree.js is the engine's own, async)
 function identity(dir) {
   if (gitOrNull(dir, ['config', 'user.name']) && gitOrNull(dir, ['config', 'user.email'])) return [];
   let name = 'owner';
@@ -74,6 +76,13 @@ function commit(dir, files, message) {
   git(dir, ['add', '--', ...files]);
   git(dir, [...identity(dir), 'commit', '-q', '-m', message, '--', ...files]);
   return git(dir, ['rev-parse', 'HEAD']);
+}
+
+// A run's worktree starts detached at its base: its requests go on this branch (merge: local takes it)
+function ensureBranch(dir, branch) {
+  if (gitOrNull(dir, ['symbolic-ref', '-q', 'HEAD'])) return git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  git(dir, ['switch', '-q', '-c', branch]);
+  return branch;
 }
 
 function checkItem(item) {
@@ -199,6 +208,7 @@ function applyRequest(dir, { item, doc, messageId, request, source, translation 
 }
 
 function listChanges(dir, { base, item, doc } = {}) {
+  if (base && !COMMIT.test(String(base))) throw new Error('Not a commit.');
   const range = base ? `${base}..HEAD` : 'HEAD';
   const scope = item ? [`docs/work/${checkItem(item)}/${doc ? `${checkDoc(doc)}.` : ''}`] : ['docs/work/'];
   const out = gitOrNull(dir, ['log', '--reverse', '--format=%x1e%H%x1f%B%x1f', '--name-only', range, '--', ...scope.map((s) => (s.endsWith('/') ? s : `${s}*`))]);
@@ -224,7 +234,13 @@ function undoChange(dir, { commit: sha }) {
   if (!id) throw new Error(`${sha} is not a change by request.`);
   const full = git(dir, ['rev-parse', sha]);
   const changed = git(dir, ['show', '--name-only', '--format=', full]).split('\n').map((s) => s.trim()).filter(Boolean);
-  git(dir, ['revert', '--no-commit', full]);
+  try {
+    git(dir, ['revert', '--no-commit', full]);
+  } catch {
+    // a later request changed the same lines: the files go back as they were, nothing is undone
+    gitOrNull(dir, ['revert', '--abort']);
+    throw new Error(`A later change touches the same lines as ${full.slice(0, 8)}: undo that one first.`);
+  }
   const subject = body.split('\n')[0].replace(/^docs\(([^)]*)\): /, 'docs($1): undo ');
   return { commit: commit(dir, changed, `${subject}\n\nDoc-Undo: ${full}`) };
 }
@@ -250,7 +266,7 @@ function unreviewed(dir, runDir, opts = {}) {
 
 function acceptDoc(dir, { item, doc, approver, date }) {
   const f = files(dir, item, doc);
-  const status = ACCEPTED[doc];
+  const status = DocModel.ACCEPTED[doc];
   const fields = {
     status,
     approver: String(approver || gitOrNull(dir, ['config', 'user.name']) || 'owner').replace(/\s+/g, ' ').trim(),
@@ -264,6 +280,8 @@ function acceptDoc(dir, { item, doc, approver, date }) {
     changed.push(rel);
   }
   if (!changed.length) throw new Error(`No ${doc} for ${item} yet.`);
+  // accepted already (a second click after the gate's answer failed): nothing new to commit
+  if (!git(dir, ['status', '--porcelain', '--', ...changed])) return { commit: git(dir, ['rev-parse', 'HEAD']), status };
   const verb = doc === 'spec' ? 'sign off the spec' : 'accept the intent';
   return { commit: commit(dir, changed, `docs(${item}): ${verb}`), status };
 }
@@ -273,6 +291,7 @@ module.exports = {
   applyDraft,
   applyRequest,
   createDoc,
+  ensureBranch,
   listChanges,
   listItems,
   markReviewed,
