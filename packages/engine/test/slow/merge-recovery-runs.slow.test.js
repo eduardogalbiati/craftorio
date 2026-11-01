@@ -206,8 +206,11 @@ async function runLocalHero(t, { mockSequences, answers = {}, patchAgent } = {})
 // The slice of `transitions` from the failed merge onward (the happy path up to it is covered by
 // test/engine.test.js's own local-hero test).
 const sinceMerge = (transitions) => transitions.slice(transitions.indexOf('verify_change>resolve_merge'));
+// #722: feature.yaml's whole local run (tests first, suite, e2e, push_main) took over 60 s under the
+// coverage suite's load; the same budget as ai-development-test-conflict-380's runs
+const RUN_TIMEOUT = 180000;
 
-test('local-hero: a merge conflict re-checks only the resolution (review, tests, verify), then merges', { timeout: 60000 }, async (t) => {
+test('local-hero: a merge conflict re-checks only the resolution (review, tests, verify), then merges', { timeout: RUN_TIMEOUT }, async (t) => {
   const { finished, transitions, prompt } = await runLocalHero(t, {
     mockSequences: { action_errors: { verify_change: 1 }, blocked: [false], behaviour_changed: [false] },
   });
@@ -233,7 +236,7 @@ test('local-hero: a merge conflict re-checks only the resolution (review, tests,
   assert.match(scopedVerify, /Re-check only the claims \(issues\) whose evidence depends on those files/);
 });
 
-test('local-hero: a resolution touching many files runs the full suite, not a targeted one', { timeout: 60000 }, async (t) => {
+test('local-hero: a resolution touching many files runs the full suite, not a targeted one', { timeout: RUN_TIMEOUT }, async (t) => {
   const manyFiles = Array.from({ length: 6 }, (_, i) => `src/file${i}.js`);
   const { finished, prompt } = await runLocalHero(t, {
     mockSequences: { action_errors: { verify_change: 1 } },
@@ -250,7 +253,7 @@ test('local-hero: a resolution touching many files runs the full suite, not a ta
   assert.doesNotMatch(scopedTest, /Run only the tests related to those files/);
 });
 
-test('local-hero: a resolution that changes behaviour goes through the full review, tests and verification again', { timeout: 60000 }, async (t) => {
+test('local-hero: a resolution that changes behaviour goes through the full review, tests and verification again', { timeout: RUN_TIMEOUT }, async (t) => {
   const { finished, transitions, prompt } = await runLocalHero(t, {
     // behaviour_changed left at its default (true): the merge is not just combining both sides
     mockSequences: { action_errors: { verify_change: 1 }, blocked: [false] },
@@ -270,7 +273,7 @@ test('local-hero: a resolution that changes behaviour goes through the full revi
   assert.doesNotMatch(fullVerify, /Re-check only the claims/);
 });
 
-test('local-hero: conflicts that keep recurring stop at merge_blocked after 3 rounds, never merged automatically', { timeout: 90000 }, async (t) => {
+test('local-hero: conflicts that keep recurring stop at merge_blocked after 3 rounds, never merged automatically', { timeout: 2 * RUN_TIMEOUT }, async (t) => {
   const { finished, transitions, events } = await runLocalHero(t, {
     mockSequences: { action_errors: { verify_change: 4 }, blocked: [false], behaviour_changed: [false] },
     answers: { merge_blocked: 'stop' },
