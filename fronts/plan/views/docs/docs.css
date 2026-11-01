@@ -1,0 +1,32 @@
+/* Documents screen (#647, views/docs/docs.js): the items list, the editor (the reader's iframe, the
+   writer's chat with the selection chip, the changes by request, the reviewer's notes, the gates). */
+.docs-list { display: flex; flex-direction: column; gap: 6px; }
+.docs-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.docs-item-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.docs-item-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.docs-item-doc { display: inline-flex; align-items: center; gap: 4px; }
+.docs-item-actions { gap: 6px; flex-shrink: 0; }
+.badge.docs-done { color: var(--green); }
+
+.docs-editor { display: flex; flex-direction: column; gap: 8px; }
+.docs-editor-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.docs-editor-title { margin: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-editor-body { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(320px, 420px); gap: 14px; align-items: start; }
+.docs-reader { width: 100%; height: calc(100vh - 190px); min-height: 360px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.docs-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.docs-gate { gap: 8px; flex-wrap: wrap; }
+.docs-gate:empty { display: none; }
+.docs-gate-message { flex-basis: 100%; margin: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.docs-chip { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: var(--radius); min-width: 0; }
+.docs-chip-text { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-chip-x { min-width: 24px; min-height: 24px; background: none; border: 0; color: var(--muted); cursor: pointer; }
+.docs-chip-x:focus-visible { outline: var(--focus-ring); }
+.docs-chat { min-height: 220px; }
+.docs-section-head { display: flex; align-items: center; gap: 8px; }
+.docs-section-head h3 { margin: 0; font-size: 13px; }
+.docs-change-list, .docs-note-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.docs-change, .docs-note { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); }
+.docs-change.unreviewed { border-color: var(--yellow); }
+.docs-change-text, .docs-note-text { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .docs-editor-body { grid-template-columns: 1fr; } }
