@@ -168,7 +168,7 @@ test('#282 the workflow band names the workflow', async () => {
   const band = part(draw(R, one(card())), 'a', 'roadmap-workflow');
   const name = byTestId(band.outer, 'roadmap-workflow-name');
   assert.ok(name, 'roadmap-workflow-name in the band');
-  assert.match(text(name), /local hero/i);
+  assert.match(text(name), /feature/i);
 });
 
 test('#282 a simulated item says Simulated in the workflow band', async () => {
@@ -197,7 +197,7 @@ test('#282 clicking Validated saves the mode at once and the re-rendered pipelin
   const { ctx } = H.makeCtx();
   await R.onClick(H.clickOn(html, (e) => e.attrs['data-mode'] === 'validated'), ctx, d);
   assert.equal(saved.length, 1);
-  assert.equal(saved[0].stages[0].items[0].inputs.mode, 'validated');
+  assert.equal(saved[0].stages[0].items[0].inputs.validation, 'validated');
   const again = draw(R, one(saved[0].stages[0].items[0]));
   assert.equal(stations(again).filter((s) => s.state === 'gate').length, 1);
 });
@@ -209,7 +209,7 @@ test('#282 clicking Automatic on a Validated item saves it and removes the gate 
   const { ctx } = H.makeCtx();
   await R.onClick(H.clickOn(html, (e) => e.attrs['data-mode'] === 'auto'), ctx, d);
   assert.equal(saved.length, 1);
-  assert.equal(saved[0].stages[0].items[0].inputs.mode, 'auto');
+  assert.equal(saved[0].stages[0].items[0].inputs.validation, 'auto');
   assert.equal(stations(draw(R, one(saved[0].stages[0].items[0]))).filter((s) => s.state === 'gate').length, 0);
 });
 

@@ -22,14 +22,14 @@ const vm = require('vm');
 const FILE = path.join(__dirname, '..', '..', 'shared', 'onboarding-model.js');
 const load = () => require('@multiagent/shared/onboarding-model');
 
-// the workflows bundled today (workflows/*.yaml): phase 1 suggests only among these
+// the workflows bundled today (workflows/*.yaml): the wizard suggests only among these (#630:
+// feature, fix and release replace the old development and release workflows)
 const TODAY = [
-  'ai-arena', 'ai-development-local-hero', 'backlog-refresh', 'e2e-release', 'issue-tracker',
-  'multi-model-review', 'project-map', 'refactor-proposals', 'refactor', 'release',
-  'run-retrospective', 'software-development-local-hero', 'software-development', 'test-batch',
+  'ai-arena', 'backlog-refresh', 'feature', 'fix', 'issue-tracker', 'project-map',
+  'refactor-proposals', 'refactor', 'release', 'run-retrospective', 'test-batch', 'write-doc',
   'writer-reviewer',
 ];
-const DEFAULT = 'ai-development-local-hero';
+const DEFAULT = 'feature';
 const ids = (r) => r.suggestions.map((s) => s.id);
 
 // ---------------------------------------------------------------------------
@@ -112,17 +112,20 @@ test('every local/remote x CI x tests profile gets suggestions among today\'s wo
   }
 });
 
-test('a local project gets ai-development-local-hero first, whatever its CI and tests', () => {
+test('a local project gets feature first, in its local variant, whatever its CI and tests', () => {
   const { suggestWorkflows } = load();
   for (const p of PROFILES.filter((x) => x.mode === 'local')) {
-    assert.equal(ids(suggestWorkflows(p))[0], DEFAULT, JSON.stringify(p));
+    const first = suggestWorkflows(p).suggestions[0];
+    assert.equal(first.id, DEFAULT, JSON.stringify(p));
+    assert.match(first.value, /^local-/, JSON.stringify(p));
   }
 });
 
-test('a remote project is suggested the pull-request workflow (software-development)', () => {
+test('a remote project is suggested feature in its pull-request (remote) variant', () => {
   const { suggestWorkflows } = load();
   for (const p of PROFILES.filter((x) => x.mode === 'remote')) {
-    assert.ok(ids(suggestWorkflows(p)).includes('software-development'), JSON.stringify(p));
+    const feature = suggestWorkflows(p).suggestions.find((s) => s.id === 'feature');
+    assert.match(feature.value, /^remote-/, JSON.stringify(p));
   }
 });
 

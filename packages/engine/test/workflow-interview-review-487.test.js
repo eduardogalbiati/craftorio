@@ -90,8 +90,8 @@ test('#487 writing replaces the manifest entry of the same name, once and in its
   const { area, project, dir } = await setup(t);
   await area.workflowInterview({ projectId: project.id });
   const preview = await area.workflowCompose({ projectId: project.id, answers: {} });
-  const dev = preview.workflows.find((w) => w.category === 'solo').name;
-  writeManifest(dir, `version: 1\nworkflows:\n  - name: ${dev}\n    file: workflows/old-dev.yaml\n    category: solo\n  - name: software-development\n    category: team\n`);
+  const dev = preview.workflows.find((w) => w.category === 'feature').name;
+  writeManifest(dir, `version: 1\nworkflows:\n  - name: ${dev}\n    file: workflows/old-dev.yaml\n    category: feature\n  - name: software-development\n    category: team\n`);
   await area.workflowCompose({ projectId: project.id, answers: {}, write: true });
   const entries = yaml.load(fs.readFileSync(manifestFile(dir), 'utf8')).workflows;
   assert.equal(entries[0].name, dev);

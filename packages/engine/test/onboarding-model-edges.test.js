@@ -50,43 +50,40 @@ test('"Skip, analyze later" outside the analysis step changes nothing', () => {
 // ---------------------------------------------------------------------------
 // Suggestions
 // ---------------------------------------------------------------------------
-test('a profile with unit and end-to-end tests is offered the E2E release check in both modes', () => {
+const valueOf = (p, id) => suggestWorkflows(p).suggestions.find((s) => s.id === id).value;
+
+test('a profile with unit and end-to-end tests gets feature and fix in their E2E variant, in both modes', () => {
   for (const mode of ['local', 'remote']) {
     for (const ci of ['none', 'release', 'pr+release']) {
       const p = { mode, ci, tests: 'unit+e2e' };
-      assert.ok(ids(suggestWorkflows(p)).includes('e2e-release'), JSON.stringify(p));
+      assert.equal(valueOf(p, 'feature'), `${mode}-e2e`, JSON.stringify(p));
+      assert.equal(valueOf(p, 'fix'), `${mode}-e2e`, JSON.stringify(p));
     }
   }
 });
 
-test('a profile with unit tests only is never offered the E2E release check', () => {
+test('a profile with unit tests only gets the code-first variant (implement, then unit tests)', () => {
   for (const mode of ['local', 'remote']) {
     for (const ci of ['none', 'release', 'pr+release']) {
       const p = { mode, ci, tests: 'unit' };
-      assert.equal(ids(suggestWorkflows(p)).includes('e2e-release'), false, JSON.stringify(p));
+      assert.equal(valueOf(p, 'feature'), `${mode}-code`, JSON.stringify(p));
     }
   }
 });
 
-test('a local project with unit tests only is offered the code-first local workflow (implement, then unit tests); with E2E it is not', () => {
-  for (const ci of ['none', 'release', 'pr+release']) {
-    assert.ok(ids(suggestWorkflows({ mode: 'local', ci, tests: 'unit' })).includes('software-development-local-hero'), `unit ${ci}`);
-    assert.equal(ids(suggestWorkflows({ mode: 'local', ci, tests: 'unit+e2e' })).includes('software-development-local-hero'), false, `unit+e2e ${ci}`);
-  }
-});
-
-test('CI on releases and CI on PRs and releases both suggest the release workflow; no CI does not', () => {
+test('every profile gets feature, fix and release; the release reason says whether a CI run is waited for', () => {
   for (const mode of ['local', 'remote']) {
     for (const tests of ['unit', 'unit+e2e']) {
-      const label = `${mode} ${tests}`;
-      assert.ok(ids(suggestWorkflows({ mode, ci: 'release', tests })).includes('release'), `${label} release`);
-      assert.ok(ids(suggestWorkflows({ mode, ci: 'pr+release', tests })).includes('release'), `${label} pr+release`);
-      assert.equal(ids(suggestWorkflows({ mode, ci: 'none', tests })).includes('release'), false, `${label} none`);
+      const reason = (ci) => suggestWorkflows({ mode, ci, tests }).suggestions.find((s) => s.id === 'release').reason;
+      for (const ci of ['none', 'release', 'pr+release']) assert.deepEqual(ids(suggestWorkflows({ mode, ci, tests })), ['feature', 'fix', 'release']);
+      assert.match(reason('release'), /waits for that CI run/, `${mode} ${tests} release`);
+      assert.match(reason('pr+release'), /waits for that CI run/, `${mode} ${tests} pr+release`);
+      assert.doesNotMatch(reason('none'), /waits/, `${mode} ${tests} none`);
     }
   }
 });
 
-test('a profile with one invalid field gets the default workflow and says so', () => {
+test('a profile with one invalid field gets the default profile\'s suggestions and says so', () => {
   for (const p of [
     { mode: 'local', ci: 'none' },
     { mode: 'local', ci: 'nightly', tests: 'unit' },
@@ -94,7 +91,8 @@ test('a profile with one invalid field gets the default workflow and says so', (
   ]) {
     const r = suggestWorkflows(p);
     assert.equal(r.defaulted, true, JSON.stringify(p));
-    assert.deepEqual(ids(r), ['ai-development-local-hero'], JSON.stringify(p));
+    assert.deepEqual(ids(r), ['feature', 'fix', 'release'], JSON.stringify(p));
+    assert.equal(valueOf(p, 'feature'), 'local-code', JSON.stringify(p));
   }
 });
 
