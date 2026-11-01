@@ -37,7 +37,10 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    URL (`wizard-source-git-url`, the URL field of step 2) and A folder on this computer
    (`wizard-source-folder`, a folder pick, then step 2 with its `file://` URL).
 2. **repository** (mock-2): `#wizard-repo`, `#wizard-name`, the GitHub / GitLab toggle (`#wizard-provider`,
-   it follows the URL), the gh / glab badge once the engine checked it, and the line "Will be cloned into
+   it follows the URL), the gh / glab sign-in badges (`wizard-cli-account`, read through `onboarding:accounts`
+   when the wizard opens, then from the import's own check), the signed-in account's five latest
+   repositories under the URL field (`wizard-repo-list`, `wizard-repo-option`, through `onboarding:repos`;
+   a pick fills the full https URL, the engine does not take `owner/repo`), and the line "Will be cloned into
    <workspace>/repos/<owner-repo>" (`wizard-clone-into`, the engine's own rule `repoNameFromUrl` of
    `packages/shared/onboarding-model.js`). "Next: clone and continue"
    calls `onboarding:start`; `wizard-import-status` follows the clone. A refused access shows `wizard-error`
@@ -58,7 +61,8 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
 
 The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to
 file and add, the first idea, the refactor cadence, and release CI and screenshots, shown disabled (later
-phases). Its heading adds "· city and refactor backlog done" once the refactor proposals are there.
+phases). Its heading adds "· city and refactor backlog done" once the refactor proposals are there, and
+the number of the project's workflows (its own set, else `listWorkflows`).
 
 The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`
 and stays when the wizard closes; a failed import keeps its reason and Retry there.
