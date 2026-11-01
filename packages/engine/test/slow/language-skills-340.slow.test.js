@@ -37,7 +37,7 @@ test('language: a single value loads that language\'s skills, whatever files cha
   assert.deepEqual(rust.build, ['build-audit-rust']);
 });
 
-test('language "js,rust": a run that changes only JS/TS files loads only the JS skills', { timeout: 120000 }, async () => {
+test('language "js,rust": a run that changes only JS/TS files: the builder loads only the JS skills, the test writer (before any change) both', { timeout: 120000 }, async () => {
   const r = await skillsFor({ language: 'js,rust' });
   assert.deepEqual(r.test, BOTH); // written before any change: every listed language
   assert.deepEqual(r.build, ['build-audit-js']);
@@ -49,7 +49,7 @@ test('language "js,rust": a run that changes JS and Rust files loads the skills 
   assert.deepEqual(r.build, ['build-audit-js', 'build-audit-rust']);
 });
 
-test('language "js,rust": a run that changes only Rust files loads only the Rust skills', { timeout: 120000 }, async () => {
+test('language "js,rust": a run that changes only Rust files: the builder loads only the Rust skills, the test writer (before any change) both', { timeout: 120000 }, async () => {
   const r = await skillsFor({ language: 'js,rust' }, { files_changed: [['crates/core/src/lib.rs', 'crates/core/tests/api.rs']] });
   assert.deepEqual(r.test, BOTH); // written before any change: every listed language
   assert.deepEqual(r.build, ['build-audit-rust']);

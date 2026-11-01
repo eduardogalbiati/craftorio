@@ -1,0 +1,21 @@
+# Test fixture (#720): a skill named by both the agent and its first step goes in the prompt once;
+# a skill only the agent names still goes in its system part.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-skill-once
+providers:
+  claude:
+    type: claude-code
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+agents:
+  writer: { provider: claude, model: model-w, session: persistent, skills: [demo], system_prompt: "You are the writer." }
+  other:  { provider: claude, model: model-o, session: persistent, skills: [demo], system_prompt: "You are the other." }
+steps:
+  - id: write
+    agent: writer
+    skills: [demo]
+    prompt: "write it"
+  - id: other
+    agent: other
+    prompt: "check it"
