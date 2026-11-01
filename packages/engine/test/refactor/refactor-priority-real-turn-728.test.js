@@ -126,3 +126,26 @@ test('#728 providers.runTurn: a CLI turn without onItem runs to its answer (a mi
   assert.match(String(res.text), /"id":"p-2","rank":1/);
   assert.equal(res.costUsd, 0.0123);
 });
+
+test('#728 providers.runTurn: a mock turn without onItem runs to its answer too', async (t) => {
+  const { runTurn } = loadProviders();
+  const scale = process.env.MULTIAGENT_MOCK_DELAY_SCALE;
+  process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0';
+  t.after(() => { if (scale === undefined) delete process.env.MULTIAGENT_MOCK_DELAY_SCALE; else process.env.MULTIAGENT_MOCK_DELAY_SCALE = scale; });
+  const res = await runTurn({ provider: { type: 'mock' }, model: 'simulated', prompt: 'hi', hint: {} });
+  assert.equal(typeof res.text, 'string');
+  assert.equal(res.text.length > 0, true);
+});
+
+test('#728 providers.runTurn: two fresh turns in a row whose CLI reports the same session id each cost their own total', async (t) => {
+  const { runTurn } = loadProviders();
+  const { render } = require('../../engine/run/templates');
+  const { folder } = setup(t);
+  // the stub repeats one session id and reports total_cost_usd 0.0123 each time; no session is resumed
+  const provider = { type: 'claude-code', command: process.execPath, args: [STUB] };
+  const turn = () => runTurn({ provider, model: 'sonnet', prompt: '- id p-1: one\n', cwd: folder, extraArgs: [], timeoutMs: 60e3, render, hint: { stepId: 'test-728', visit: 1 } });
+  const first = await turn();
+  const second = await turn();
+  assert.equal(first.costUsd, 0.0123);
+  assert.equal(second.costUsd, 0.0123, 'the second fresh turn is not charged as a delta of the first');
+});
