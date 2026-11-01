@@ -36,6 +36,17 @@ const answers = (port) => new Promise((resolve) => {
   sock.once('error', () => done(false));
 });
 
+// whether the port still answers after up to `ms`: the product's freePort waits the same way, since the
+// port can take a moment to close after the process exits (seen under the loaded suite)
+async function answersAfter(port, ms = 8000) {
+  const until = Date.now() + ms;
+  while (await answers(port)) {
+    if (Date.now() >= until) return true;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return false;
+}
+
 // a fake `playwright` whose chromium records the pages it opens and writes a PNG on screenshot
 function fakeBrowser(t) {
   let resolved;
@@ -101,7 +112,7 @@ test('capturePreview: starts the preview, opens its url with the --path route, w
   await capturePreview({ entry: { args: ['--path', '/home'] }, ref: null, out, cwd, config: { command: `${node} server.js ${port}`, url }, timeoutMs: 30000 });
   assert.equal(fs.existsSync(out), true, 'the image was written');
   assert.deepEqual(browser.visits, [`${url}/home`]);
-  assert.equal(await answers(port), false, 'the preview stopped before the capture returned');
+  assert.equal(await answersAfter(port), false, 'the preview stopped and its port is free');
 });
 
 test('capturePreview: a port something else already answers on is refused (the image would be of that app)', async (t) => {
