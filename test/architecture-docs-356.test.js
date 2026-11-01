@@ -9,9 +9,11 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
+// the doc of the tab itself: other docs may cite #356 (analyze-project.md cites its report, #631)
 function featureDoc() {
   const dir = path.join(root, 'docs', 'features');
-  const name = fs.readdirSync(dir).filter((f) => f.endsWith('.md')).sort().find((f) => read('docs', 'features', f).includes('356'));
+  const docs = fs.readdirSync(dir).filter((f) => f.endsWith('.md')).sort().filter((f) => read('docs', 'features', f).includes('356'));
+  const name = docs.find((f) => /^#+ .*Architecture tab/m.test(read('docs', 'features', f))) || docs[0];
   return name ? { name, text: read('docs', 'features', name) } : null;
 }
 
