@@ -233,7 +233,7 @@
   // the source), headings without their #; no script runs in it (sandbox without allow-scripts).
   function readerHtml(md) {
     const rows = String(md || '').split('\n');
-    const body = (window.DocModel ? window.DocModel.blocks(md) : []).map((b) => {
+    const body = (window.DocModel ? window.DocModel.blocks(md || '') : []).map((b) => {
       const src = `${b.start}-${b.end}`;
       if (b.heading !== null) {
         const level = Math.min(6, (rows[b.start - 1].match(/^#+/) || ['##'])[0].length);
