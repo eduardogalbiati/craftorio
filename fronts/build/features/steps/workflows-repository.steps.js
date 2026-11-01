@@ -111,6 +111,12 @@ Then('the workflow {string} is listed on the Workflows screen', async ({ e2e }, 
   await expect(card(e2e.window, name)).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
+// #631: a bundled workflow merged or renamed away; the screen is loaded (some card shows) before checking
+Then('the workflow {string} is not listed on the Workflows screen', async ({ e2e }, name) => {
+  await expect(visible(cardsOf(e2e.window)).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(visible(cardsOf(e2e.window)).filter({ has: e2e.window.getByRole('heading', { name: nameRe(name) }) })).toHaveCount(0);
+});
+
 Then('the {string} section explains {string}', async ({ e2e }, name, text) => {
   const explanation = section(e2e.window, name).getByTestId('workflow-category-explanation');
   await expect(explanation).toBeVisible({ timeout: LOAD_TIMEOUT });

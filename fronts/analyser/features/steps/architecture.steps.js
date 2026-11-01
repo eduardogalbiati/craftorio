@@ -470,12 +470,13 @@ Then('the Architecture tab shows a report summary', async ({ e2e }) => {
 
 // ---------- the project map (#372) ----------
 
-// The run folders of the scratch workspace whose records name the project-map workflow
+// The run folders of the scratch workspace whose records name the project-map workflow (analyze-project
+// since #631, which took project-map over; the old name may still show through the loader's alias)
 function projectMapRuns(e2e) {
   const runsDir = path.join(e2e.scratch, 'workspace', 'runs');
   if (!fs.existsSync(runsDir)) return [];
   return fs.readdirSync(runsDir).filter((id) => ['events.jsonl', 'summary.json', 'meta.json'].some((file) => {
-    try { return /project[-_ ]?map/i.test(fs.readFileSync(path.join(runsDir, id, file), 'utf8')); } catch { return false; }
+    try { return /project[-_ ]?map|analyze[-_ ]?project/i.test(fs.readFileSync(path.join(runsDir, id, file), 'utf8')); } catch { return false; }
   }));
 }
 

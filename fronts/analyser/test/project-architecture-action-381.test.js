@@ -103,7 +103,7 @@ test('#381 a click starts the project map run at once: mode auto, the analysis o
   w.click(q(w.box, 'architecture-analyze'));
   await settle();
   const [spec] = w.calls.startRun;
-  assert.equal(spec.file, 'project-map.yaml');
+  assert.equal(spec.file, 'analyze-project.yaml', '#631: project-map merged into analyze-project');
   assert.deepEqual(JSON.parse(JSON.stringify(spec.inputs)), { repo_path: 'C:/fixture', project_id: 'p1', mode: 'auto', analyze: true }); // the sandbox's object, compared by value
   assert.equal(spec.mock, true, 'a simulation in a simulation-only app');
   assert.equal(spec.projectId, 'p1');
@@ -160,9 +160,10 @@ test('#381 a project map run started elsewhere for this project shows as running
   const w = loadWindow();
   w.PA.show('p1', w.box);
   await settle();
-  w.emit({ type: 'workflow.started', run_id: 'run-9', project_id: 'p1', workflow: 'project-map' });
+  // #631: the analysis run is analyze-project (project-map merged into it)
+  w.emit({ type: 'workflow.started', run_id: 'run-9', project_id: 'p1', workflow: 'analyze-project' });
   assert.match(text(q(w.box, 'architecture-analyzing')), /Analyzing this project/);
-  w.emit({ type: 'workflow.started', run_id: 'run-10', project_id: 'p2', workflow: 'project-map' });
+  w.emit({ type: 'workflow.started', run_id: 'run-10', project_id: 'p2', workflow: 'analyze-project' });
   assert.match(q(w.box, 'architecture-analyzing').title, /run-9/, 'another project\'s run is not this one\'s');
 });
 

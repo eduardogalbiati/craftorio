@@ -193,6 +193,12 @@ Then('the pipeline {string} runs {string}, then {string}, then the Product Owner
   await expect(stages.nth(2)).toContainText('Product Owner');
 });
 
+// #631: a removed bundled pipeline; the tab is loaded (some pipeline card shows) before checking it is absent
+Then('the Pipelines tab does not list the pipeline {string}', async ({ e2e }, file) => {
+  await expect(e2e.window.getByTestId('pipeline-card').filter({ visible: true }).first()).toBeVisible({ timeout: LIST_TIMEOUT });
+  await expect(pipelineCard(e2e.window, file)).toHaveCount(0);
+});
+
 // the description says the analysis is a real model call and gives a cost estimate (an amount in dollars)
 Then('the description of the pipeline {string} says {string} and gives a cost estimate', async ({ e2e }, file, text) => {
   const description = pipelineCard(e2e.window, file).getByTestId('pipeline-description');

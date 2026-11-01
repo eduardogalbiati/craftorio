@@ -27,11 +27,12 @@ Then('the Workflows screen notes that workflows, skills and seeds are code, to i
   await expect(notice).toContainText(TRUST_TEXT);
 });
 
-// a copy of the bundled run-retrospective.yaml under another file and name: not bundled, never confirmed
+// a copy of the bundled retrospective.yaml (run-retrospective before #631) under another file and
+// name: not bundled, never confirmed
 Given('the workspace\'s workflows folder has a workflow {string} that is not bundled', async ({ e2e }, file) => {
   const name = file.replace(/\.ya?ml$/, '');
-  const yaml = fs.readFileSync(path.join(root, 'workflows', 'run-retrospective.yaml'), 'utf8')
-    .replace(/^(\s*name:\s*)run-retrospective\s*$/m, `$1${name}`);
+  const yaml = fs.readFileSync(path.join(root, 'workflows', 'retrospective.yaml'), 'utf8')
+    .replace(/^(\s*name:\s*)(run-)?retrospective\s*$/m, `$1${name}`);
   fs.mkdirSync(workflowsDir(e2e), { recursive: true });
   fs.writeFileSync(path.join(workflowsDir(e2e), file), yaml);
   await e2e.window.reload();
