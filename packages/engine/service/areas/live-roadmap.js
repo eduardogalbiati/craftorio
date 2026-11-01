@@ -115,7 +115,7 @@ module.exports = (ctx) => {
       return false;
     }
     if (!stages.length) { record(projectId, { status: 'empty', costUsd, message: nothing }, p); return false; }
-    const { roadmap } = roadmaps.propose(ws.backlog, projectId, { stages }, { issues: data.issues, alive: ctx.runAlive, keepRunning: true });
+    const { roadmap } = roadmaps.propose(ws.backlog, projectId, { stages }, { issues: data.issues, alive: ctx.runAlive });
     const added = roadmap.stages.length - now.stages.length;
     if (!added) { record(projectId, { status: 'empty', costUsd, message: nothing }, p); return false; }
     record(projectId, { status: 'added', added, costUsd, message: `${live.refillNote(at, costUsd)} +${added} stage${added === 1 ? '' : 's'}.` }, p);

@@ -179,7 +179,7 @@ module.exports = (ctx) => {
       const place = mode === 'runNow' ? cadenceRules.placeRunNow : cadenceRules.placeRefactor;
       const { stage } = place({ roadmap: enriched, files, conflictMap: conflictMaps.readConflictMap(ctx.ws.backlog, p.id) });
       if (stage >= roadmap.stages.length) {
-        roadmaps.propose(ctx.ws.backlog, p.id, { stages: [{ name: 'Refactor', items: [item] }] }, { ...write, keepRunning: roadmap.state === 'running' });
+        roadmaps.propose(ctx.ws.backlog, p.id, { stages: [{ name: 'Refactor', items: [item] }] }, write);
       } else {
         const stages = roadmap.stages.map((s, n) => (n === stage ? { ...s, items: [...s.items, item] } : s));
         roadmaps.saveStages(ctx.ws.backlog, p.id, stages, write);

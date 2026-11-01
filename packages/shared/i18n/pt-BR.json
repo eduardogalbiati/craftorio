@@ -1472,7 +1472,7 @@
   "backlog_roadmap.park_its_items_waiting_at_a": "Parar seus itens aguardando em um gate (os gates continuam esperando por você) e pular os itens planejados: a próxima etapa começa",
   "backlog_roadmap.parked_at": "Parada em",
   "backlog_roadmap.parked_at_a_gate": "parada em um gate",
-  "backlog_roadmap.paste_the_product_owner_s_build": "Cole a resposta \"Montar um roadmap\" do Product Owner (JSON: { \"stages\": [{ \"name\", \"note\", \"items\": [{ \"workflow\", \"issues\": [12, 13], \"inputs\", \"mock\", \"reason\", \"mode_reason\" }] }] }). Ela chega como planejada e nunca inicia até Iniciar.",
+  "backlog_roadmap.paste_the_product_owner_s_build": "Cole a resposta \"Montar um roadmap\" do Product Owner (JSON: { \"stages\": [{ \"name\", \"note\", \"items\": [{ \"workflow\", \"issues\": [12, 13], \"inputs\", \"mock\", \"reason\", \"mode_reason\" }] }] }). As etapas novas entram no fim; um roadmap em execução as roda na sua vez.",
   "backlog_roadmap.pause": "Pausar",
   "backlog_roadmap.pause_after_this_stage_or_now": "Pausar após esta etapa, ou agora",
   "backlog_roadmap.pause_the_roadmap": "Pausar o roadmap",

@@ -1472,7 +1472,7 @@
   "backlog_roadmap.park_its_items_waiting_at_a": "Park its items waiting at a gate (the gates keep waiting for you) and skip its planned items: the next stage starts",
   "backlog_roadmap.parked_at": "Parked at",
   "backlog_roadmap.parked_at_a_gate": "parked at a gate",
-  "backlog_roadmap.paste_the_product_owner_s_build": "Paste the Product Owner's \"Build a roadmap\" answer (JSON: { \"stages\": [{ \"name\", \"note\", \"items\": [{ \"workflow\", \"issues\": [12, 13], \"inputs\", \"mock\", \"reason\", \"mode_reason\" }] }] }). It arrives as planned and never starts until Start.",
+  "backlog_roadmap.paste_the_product_owner_s_build": "Paste the Product Owner's \"Build a roadmap\" answer (JSON: { \"stages\": [{ \"name\", \"note\", \"items\": [{ \"workflow\", \"issues\": [12, 13], \"inputs\", \"mock\", \"reason\", \"mode_reason\" }] }] }). New stages are added at the end; a running roadmap runs them in their turn.",
   "backlog_roadmap.pause": "Pause",
   "backlog_roadmap.pause_after_this_stage_or_now": "Pause after this stage, or now",
   "backlog_roadmap.pause_the_roadmap": "Pause the roadmap",

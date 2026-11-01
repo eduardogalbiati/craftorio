@@ -199,7 +199,7 @@ module.exports = (ctx) => {
     const before = roadmaps.readRoadmap(ws.backlog, p.id);
     const { roadmap } = roadmaps.propose(ws.backlog, p.id, { stages }, { issues: data.issues, alive: ctx.runAlive });
     const added = roadmap.stages.length - before.stages.length;
-    const text = `The Product Owner proposed ${added} roadmap stage${added === 1 ? '' : 's'}: review them on the Backlog and press Start.`;
+    const text = `The Product Owner proposed ${added} roadmap stage${added === 1 ? '' : 's'}: ${roadmap.state === 'running' ? 'the running roadmap runs them in their turn.' : 'review them on the Backlog and press Start.'}`;
     write(prev.runDir, { state: 'done', reason: text });
     notice(prev, 'done', text);
     return { added };

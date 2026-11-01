@@ -151,7 +151,7 @@ module.exports = (ctx) => {
         return withEdit(projectId, edit);
       },
     },
-    // The Product Owner's "Build a roadmap" answer (#105): added at the end (or replacing the roadmap), always planned.
+    // The Product Owner's "Build a roadmap" answer (#105): added at the end (or replacing the roadmap); a running roadmap keeps running (#654).
     {
       channel: 'roadmap:propose',
       method: 'proposeRoadmap',

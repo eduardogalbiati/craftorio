@@ -21,7 +21,7 @@
 // issues are all closed then is skipped, `skipClosed`).
 // Live roadmap (#164, `live`, packages/engine/domains/roadmap/live-roadmap.js): when the last stage of a live roadmap ends,
 // `advance` asks for a refill (`refill: true`) instead of ending it; the service adds the Product
-// Owner's next stages (`propose` with `keepRunning`) and the roadmap goes on.
+// Owner's next stages (`propose` keeps a running roadmap running, #654) and the roadmap goes on.
 // Cost (#205, #206): an item keeps the Product Owner's Cost choices (`cost`: the step, the inputs it
 // set, the grouping); a test-batch item (`testsLater`) tests the issues of the stage before it, so it
 // may name issues another item holds and runs even when they are closed. The budget cap (packages/engine/domains/usage/budget.js)
@@ -476,9 +476,10 @@ function insertFrontStage(dir, projectId, raw) {
 /**
  * The Product Owner's roadmap (#105), as planned stages: `replace` swaps the roadmap (refused while
  * one of its runs is in progress), else the stages are added at the end, without the issues the
- * roadmap already plans (listed in `dropped`). It never starts by itself: a running roadmap is paused
- * so the owner reviews the new stages and presses Start. `keepRunning` (a live roadmap's refill, #164):
- * the state is kept, so a running roadmap goes on with the new stages.
+ * roadmap already plans (listed in `dropped`). Adding never pauses (#654): a running roadmap keeps
+ * running and the new stages run in their turn; a planned or paused one keeps its state, its scope,
+ * pausedBy and error; a done one becomes planned (nothing starts until Start). `keepRunning` (the
+ * analyser's waiting refactor stage, #435): a done roadmap stays done too.
  * @param {string} dir
  * @param {string} projectId
  * @param {{ stages: object[], note?: string } | object[]} proposal
@@ -516,9 +517,8 @@ function propose(dir, projectId, proposal, { replace = false, issues = [], alive
     const last = r.stages[r.stages.length - 1];
     const at = last && last.disabled && last.waiting && !added.some((s) => s.waiting) ? r.stages.length - 1 : r.stages.length;
     const next = [...r.stages.slice(0, at), ...added, ...r.stages.slice(at)];
-    if (keepRunning) return { ...r, stages: next };
-    const state = r.state === 'running' ? 'paused' : r.state === 'done' ? 'planned' : r.state;
-    return { ...r, state, error: r.state === 'running' && added.length ? `${added.length} stage(s) added from a proposal: press Start to continue.` : r.error, stages: next };
+    // #654: the state is kept (a running roadmap goes on); a done one waits for Start again
+    return { ...r, state: r.state === 'done' && !keepRunning ? 'planned' : r.state, stages: next };
   });
   return { roadmap, dropped };
 }
