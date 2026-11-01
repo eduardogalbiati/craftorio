@@ -179,20 +179,21 @@ const runAsync = (args) => new Promise((resolve) => {
   const child = spawn(process.execPath, args, { cwd: root, stdio: agent ? ['ignore', fd, fd] : 'inherit', env: process.env });
   let closed = false;
   // a spawn error may emit both 'error' and 'exit'
-  const done = (code, signal = null) => {
+  const done = (code, signal = null, error = null) => {
     if (closed) return;
     closed = true;
     if (fd != null) fs.closeSync(fd);
-    resolve({ code, signal });
+    resolve({ code, signal, error });
   };
-  child.on('error', () => done(null));
+  child.on('error', (error) => done(null, null, error));
   child.on('exit', (code, signal) => done(code, signal));
 });
-// a group's exit: its code, its signal (#705: a killed runner has no code)
+// a group's exit: its code, its signal (#705: a killed runner has no code), its spawn error
 const runGroup = async (g) => {
-  const { code, signal } = await runAsync(argsOf(g));
+  const { code, signal, error } = await runAsync(argsOf(g));
   g.status = code;
   g.signal = signal;
+  g.error = error;
 };
 
 // a file as the report shows it: relative to the root, forward slashes
@@ -221,9 +222,10 @@ const COUNTS = ['passed', 'failed', 'skipped', 'todo', 'cancelled'];
 // #705: a group's runner that died says its own files and how it ended, never the log's tail (the
 // slowest-files listing of the other groups)
 function deadGroupError(g) {
-  const how = g.signal ? `signal ${g.signal}` : `exit code ${g.status}`;
   const list = g.files.map(shown);
   const files = list.length > 10 ? [...list.slice(0, 10), `... ${list.length - 10} more`] : list;
+  if (g.error) return `the runner of ${g.files.length} file(s) could not start (${g.error.code || g.error.message}):\n${files.join('\n')}`;
+  const how = g.signal ? `signal ${g.signal}` : `exit code ${g.status}`;
   return `the runner of ${g.files.length} file(s) ended (${how}) without its report:\n${files.join('\n')}`;
 }
 // One report from the groups' (#402): counts summed, failures in group order

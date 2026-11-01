@@ -1319,12 +1319,13 @@ steps:
     local_preview: true
     diff_base: "{{ inputs.base_branch }}"
     # the gate's card (#213): what happened, then one line per issue; the message below is its Details.
-    # #715: rule_check (#404) runs between the screenshots and this gate
+    # #715: rule_check (#404) runs between the screenshots and this gate; without screenshots nor a
+    # check command the gate comes straight after develop or testid_check (or one of the gaps' gates)
     summary: |
-      The developer finished {% if previous_step in ['developer_screenshots', 'rule_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request{% else %}the implementation{% endif %}: {{ steps.develop.output.summary | one_line(160) }}
+      The developer finished {% if previous_step in ['check_failed', 'develop', 'developer_screenshots', 'issue_not_done', 'requirements_left_out', 'rule_check', 'testid_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request{% else %}the implementation{% endif %}: {{ steps.develop.output.summary | one_line(160) }}
       {{ steps.develop.output.issues | issue_lines }}
     message: |
-      The developer finished {% if previous_step in ['developer_screenshots', 'rule_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
+      The developer finished {% if previous_step in ['check_failed', 'develop', 'developer_screenshots', 'issue_not_done', 'requirements_left_out', 'rule_check', 'testid_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
       Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
       Branch `{{ steps.develop.output.branch }}`{% if worktree_dir %} in the worktree {{ worktree_dir }}{% endif %}.
       {% if local_preview %}Run App starts `{{ local_preview.command }}` there.{% else %}To try it: Run App proposes a command from the worktree (package.json, the README) and saves it as the project's Local preview.{% endif %} Try it with Run App, not by starting it by hand in the worktree.
