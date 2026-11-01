@@ -75,6 +75,8 @@ module.exports = [
   { channel: 'nightwatch:limits', reason: WIDE },
   { channel: 'nightwatch:permissions', reason: WIDE },
   { channel: 'nightwatch:replay', reason: WIDE },
+  { channel: 'onboarding:accounts', reason: GIT },
+  { channel: 'onboarding:repos', reason: GIT },
   { channel: 'oracle:act', reason: ANSWER },
   { channel: 'oracle:ask', reason: AGENT },
   { channel: 'oracle:attachment', reason: ATTACHMENT },

@@ -25,7 +25,11 @@ const projects = require('../../domains/project/projects');
 const proposalsRun = require('../../domains/refactor/refactor-proposals-run');
 const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
-const { clientError } = require('../common');
+const { resolveCommandAsync } = require('../../engine/providers');
+const {
+  clientError,
+  runTool,
+} = require('../common');
 const { toolSignIn } = require('./settings');
 
 const SLOT = slots.ANALYSIS_SLOT;
@@ -55,6 +59,32 @@ function cliState(provider, found) {
 
 // gh / glab on this machine: installed, and signed in (settings.js's probe)
 const machineCli = (provider) => toolSignIn(issues.PLATFORMS[provider].cli);
+
+// the wizard's repository step before any import (#669, mock-2): per platform with a CLI, { provider, cli,
+// installed, signedIn, account? }, from the same probe as the import's check
+const cliAccounts = (cli = machineCli) => Promise.all(Platforms.PLATFORMS.filter((p) => p.cli)
+  .map(async (p) => ({ provider: p.id, cli: p.cli, ...(await cli(p.id)) })));
+
+// the signed-in account's repositories as its CLI lists them (mock-2's list under the field):
+// [{ name: 'owner/repo', private, updatedAt }], [] when the CLI is missing, signed out or answers no JSON
+const REPO_LISTS = {
+  github: { args: ['repo', 'list', '--limit', '30', '--json', 'nameWithOwner,isPrivate,updatedAt'], read: (r) => ({ name: r.nameWithOwner, private: !!r.isPrivate, updatedAt: r.updatedAt || null }) },
+  gitlab: { args: ['repo', 'list', '--per-page', '30', '--output', 'json'], read: (r) => ({ name: r.path_with_namespace, private: r.visibility !== 'public', updatedAt: r.last_activity_at || null }) },
+};
+function readRepoList(provider, out) {
+  const text = String(out || '');
+  try {
+    const list = JSON.parse(text.slice(text.indexOf('['), text.lastIndexOf(']') + 1));
+    return Array.isArray(list) ? list.map(REPO_LISTS[provider].read).filter((r) => typeof r.name === 'string' && r.name) : [];
+  } catch { return []; }
+}
+async function machineRepos(provider) {
+  const list = REPO_LISTS[provider];
+  const r = list ? await resolveCommandAsync(issues.PLATFORMS[provider].cli) : null;
+  if (!r) return [];
+  const out = await runTool(r.file, list.args);
+  return out.ok ? readRepoList(provider, out.out) : [];
+}
 
 /**
  * The onboarding of new projects: { start, status, analyze, retry } (the state is documented above).
@@ -266,12 +296,16 @@ module.exports = (ctx) => {
   }
 
   return {
+    onboardingAccounts: () => cliAccounts(),
     onboardingAnalyze: ({ projectId }) => onboarding().analyze(projectId),
+    onboardingRepos: ({ provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
     onboardingStart: (data) => onboarding().start(data),
     onboardingStatus: ({ projectId }) => onboarding().status(projectId),
   };
 };
 
+module.exports.cliAccounts = cliAccounts;
 module.exports.createOnboarding = createOnboarding;
+module.exports.readRepoList = readRepoList;
 module.exports.SLOT = SLOT;

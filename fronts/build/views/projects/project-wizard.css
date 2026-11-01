@@ -47,6 +47,16 @@
 .wizard-field input { font-size: 13px; color: var(--text); }
 .wizard-field input[readonly] { color: var(--muted); }
 .wizard-field .badge:empty { display: none; }
+/* mock-2: gh / glab's sign-in beside the toggle, the account's repositories under the field */
+.wizard-cli-badges { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+#wizard-repo-slot:empty { display: none; }
+.wizard-repos { list-style: none; margin: -6px 0 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); overflow: hidden; }
+.wizard-repos li + li { border-top: 1px solid var(--border); }
+.wizard-repo-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 30px; padding: 6px 10px; border: 0; border-radius: 0; background: none; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
+.wizard-repo-item:hover, .wizard-repo-item[aria-pressed="true"] { background: var(--panel); }
+.wizard-repo-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.wizard-repo-item .text-cut { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wizard-repo-item .muted { flex: none; font-size: 12px; }
 
 .wizard-import-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .wizard-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }

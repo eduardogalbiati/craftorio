@@ -42,6 +42,8 @@ module.exports = [
   { channel: 'depsCache:clear', reason: "empties the machine's shared dependency cache, used by every run" },
   { channel: 'env:details', reason: 'runs every installed CLI (--version) and gh auth status (network): ~5 s on a machine with the CLIs' },
   { channel: 'localPreview:start', reason: "starts a project's dev server process" },
+  { channel: 'onboarding:accounts', reason: 'runs gh / glab auth status (network)' },
+  { channel: 'onboarding:repos', reason: 'lists the repositories with gh / glab (network)' },
   { channel: 'phonegates:check', reason: 'HTTP requests to the phone page and its public URL (network)' },
   { channel: 'phonegates:configure', reason: 'starts or restarts the phone page web server (a listening port)' },
   { channel: 'phonegates:pair', reason: 'turns the phone page web server on (a listening port)' },

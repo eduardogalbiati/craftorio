@@ -11,7 +11,8 @@
 // No sidebar entry of its own: Projects stays lit (`menu`). The header's "Ways of working" opens the
 // interview drawer (project-ways-of-working.js, #487). After the new-project wizard's Finish (#642, spec
 // R11) the Overview leads with the Next steps card (project-next-steps, as mock-7 of
-// docs/work/first-project-onboarding/images, #669: "<name> is ready" in its head, then a grid of entries:
+// docs/work/first-project-onboarding/images, #669: "<name> is ready · <n> workflows" in its head (the project's
+// workflow set, else api.listWorkflows for it), then a grid of entries:
 // next-step-refactors, the project's proposals with a checkbox each and "File and add <n>" (the checked ones
 // filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence → the
 // Refactor tab, and next-step-release-ci / next-step-screenshots shown disabled (later phases);
@@ -61,6 +62,12 @@ function loadNextStepProposals(pv) {
     pv.nextStepProposals = Array.isArray(list) ? list : [];
     if (state.pv === pv && state.view === 'project') renderProjectView();
   });
+  // mock-7's "3 workflows": the project's workflow set, else the workflows it can run (the workspace's and its repository's)
+  const set = pv.project?.workflows;
+  new Promise((resolve) => resolve(Array.isArray(set) && set.length ? set : api.listWorkflows?.({ projectId: pv.id }))).then((list) => list, () => null).then((list) => {
+    pv.nextStepWorkflows = Array.isArray(list) ? list.length : 0;
+    if (pv.nextStepWorkflows && state.pv === pv && state.view === 'project') renderProjectView();
+  });
 }
 
 const fileAndAddLabel = (pv) => t('onboarding.next_steps_file_add', { count: pv.nextStepPicked.size });
@@ -80,8 +87,10 @@ function nextStepsMarkup(pv) {
       ${line ? `<span class="muted small">${esc(t(line, { name: pv.project?.name || '' }))}</span>` : proposals()}
       <button type="button" class="btn sm" data-next-step="${step}"${later ? ' disabled aria-disabled="true"' : ''}>${esc(step === 'refactors' ? fileAndAddLabel(pv) : t(action))}</button>
     </li>`;
-  // mock-7's head: "<name> is ready", then "city and refactor backlog done" once the ranking made proposals
+  // mock-7's head: "<name> is ready", its workflows' count, then "city and refactor backlog done" once the
+  // ranking made proposals
   const ready = [t('onboarding.next_steps_ready', { name: pv.project?.name || '' })];
+  if (pv.nextStepWorkflows) ready.push(t('onboarding.next_steps_workflows', { count: pv.nextStepWorkflows }));
   if (pv.nextStepProposals?.length) ready.push(t('onboarding.next_steps_done'));
   return `<section class="card pr-next-steps" data-testid="project-next-steps">
       <header class="pr-next-steps-head"><h3>${esc(t('onboarding.next_steps_title'))}</h3>

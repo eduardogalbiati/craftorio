@@ -29,13 +29,18 @@ const TOOLS = [
   { id: 'git', name: 'Git', args: ['--version'] },
 ];
 
-// a CLI of TOOLS on this machine: installed, and signed in by its own probe (`gh auth status`); env: the
-// probe's variables (#312: a provider account's folder). Also the onboarding's gh / glab check (#640).
+// the account a sign-in probe names ("Logged in to github.com account eduardo", "Logged in to gitlab.com as eduardo")
+const accountOf = (out) => (String(out || '').match(/account (\S+)/) || String(out || '').match(/as (\S+)/) || [])[1] || null;
+
+// a CLI of TOOLS on this machine: installed, and signed in by its own probe (`gh auth status`) with its
+// account; env: the probe's variables (#312: a provider account's folder). Also the onboarding's gh / glab
+// check (#640) and the wizard's badges (#669).
 async function toolSignIn(id, env) {
   const tool = TOOLS.find((t) => t.id === id);
   const r = await resolveCommandAsync(id);
   if (!r) return { installed: false, signedIn: false };
-  return { installed: true, signedIn: !!tool?.auth && (await runTool(r.file, tool.auth, env)).ok };
+  const a = tool?.auth ? await runTool(r.file, tool.auth, env) : null;
+  return a?.ok ? { installed: true, signedIn: true, account: accountOf(a.out) } : { installed: true, signedIn: false };
 }
 
 module.exports = () => {
@@ -52,7 +57,7 @@ module.exports = () => {
       if (t.auth) {
         const a = await runTool(r.file, t.auth);
         out.connected = a.ok;
-        out.account = (a.out.match(/account (\S+)/) || a.out.match(/as (\S+)/) || [])[1] || null;
+        out.account = accountOf(a.out);
         if (!a.ok) out.output = lastLines(a.out);
       } else if (t.signedIn && v.ok) {
         out.connected = t.signedIn();

@@ -1,4 +1,4 @@
-/* global api */
+/* global api, uiLocale */
 // The new-project wizard (#641, onboarding step 4 of docs/work/first-project-onboarding/plan.md; spec
 // R1-R3, R5): a modal over the page with the steps of OnboardingModel (packages/shared/onboarding-model.js),
 // and the onboarding's progress tray. window.ProjectWizard = { open(), close() } opens it: Projects › New project
@@ -11,8 +11,10 @@
 //   when the wizard opens, and wizard-source-new, disabled until a later phase, each with its
 //   wizard-card-icon and three points; wizard-other-sources with wizard-source-git-url, step 2's URL field,
 //   and wizard-source-folder, api.pickFolder() then step 2 with the folder's file:// URL), repository (the
-//   GitHub / GitLab toggle #wizard-provider read from the URL, the gh / glab badge once the engine answered,
-//   #wizard-repo, #wizard-name, wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl),
+//   GitHub / GitLab toggle #wizard-provider read from the URL, the gh / glab badges wizard-cli-account
+//   data-cli (api.onboardingAccounts when the wizard opens; the import's own check once the engine answered),
+//   #wizard-repo with the signed-in account's repositories under it (wizard-repo-list, api.onboardingRepos:
+//   one wizard-repo-option data-repo="owner/repo" each, a click fills the URL and the name), #wizard-name, wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl),
 //   wizard-import-status once api.startOnboarding answered), analysis (the jobs
 //   from the clone on in wizard-cost, with wizard-cost-total and the paid parts data-part="projectMap" |
 //   "ranking" before the click, checked and locked, wizard-clone-progress in the footer, and wizard-skip; the suggested workflows beside them, disabled in this
@@ -154,6 +156,63 @@
     return `<span class="badge ${cli.status === 'ok' ? 'cli-ok' : 'cli-off'}">${esc(t(key, { cli: name }))}</span>`;
   }
 
+  // gh / glab on this machine before any import (mock-2: "gh signed in as eduardo", "glab not signed in")
+  function accountBadge(a) {
+    const key = !a.installed ? 'onboarding.cli_not_installed' : !a.signedIn ? 'onboarding.cli_not_signed_in'
+      : a.account ? 'onboarding.cli_signed_in_as' : 'onboarding.cli_ok';
+    return `<span class="badge ${a.signedIn ? 'cli-ok' : 'cli-off'}" data-testid="wizard-cli-account" data-cli="${esc(a.cli || '')}">${esc(t(key, { cli: a.cli || '', account: a.account || '' }))}</span>`;
+  }
+  const cliBadges = () => (cur.onboarding?.cli ? cliBadge(cur.onboarding.cli) : (cur.accounts || []).map(accountBadge).join(''));
+
+  // "updated 2 days ago" in the interface's language
+  function updatedAgo(iso) {
+    const s = (Date.parse(iso) - Date.now()) / 1000;
+    if (!Number.isFinite(s)) return '';
+    const units = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
+    const [unit, size] = units.find(([, n]) => Math.abs(s) >= n) || units[units.length - 1];
+    try {
+      const lang = typeof uiLocale === 'function' ? uiLocale() : undefined;
+      return t('onboarding.repo_updated', { ago: new Intl.RelativeTimeFormat(lang, { numeric: 'auto' }).format(Math.round(s / size), unit) });
+    } catch { return ''; }
+  }
+
+  // mock-2's list under the field: the account's five latest repositories on the picked provider
+  const repoUrl = (name) => `https://${platformById(pickedProvider())?.host || 'github.com'}/${name}`;
+  function repoList() {
+    const repos = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).slice(0, 5);
+    if (!repos.length) return '';
+    const typed = cur.model.repository.trim().replace(/\.git$/, '');
+    const item = (r) => {
+      const meta = [t(r.private ? 'onboarding.repo_private' : 'onboarding.repo_public'), updatedAgo(r.updatedAt)].filter(Boolean).join(' · ');
+      return `<li><button type="button" class="wizard-repo-item" data-act="pick-repo" data-repo="${esc(r.name)}" data-testid="wizard-repo-option" aria-pressed="${typed === repoUrl(r.name)}">
+          <span class="text-cut" title="${esc(r.name)}">${esc(r.name)}</span><span class="muted">${esc(meta)}</span></button></li>`;
+    };
+    return `<ul class="wizard-repos" data-testid="wizard-repo-list" aria-label="${esc(t('onboarding.repo_list'))}">${repos.map(item).join('')}</ul>`;
+  }
+
+  // the badges and the list arrive after the step is drawn: only their own parts change (the caret stays)
+  function refreshAccounts() {
+    const badges = document.getElementById('wizard-cli-badges');
+    if (badges) badges.innerHTML = cliBadges();
+    const list = document.getElementById('wizard-repo-slot');
+    if (list) list.innerHTML = repoList();
+  }
+
+  // read once per opening of the wizard: gh / glab's sign-in, then each signed-in account's repositories
+  async function loadAccounts() {
+    const mine = cur;
+    const accounts = await Promise.resolve().then(() => api.onboardingAccounts()).catch(() => null);
+    if (cur !== mine || !Array.isArray(accounts)) return;
+    cur.accounts = accounts;
+    refreshAccounts();
+    await Promise.all(accounts.filter((a) => a.signedIn).map(async (a) => {
+      const repos = await Promise.resolve().then(() => api.onboardingRepos(a.provider)).catch(() => null);
+      if (cur !== mine || !Array.isArray(repos)) return;
+      cur.repos[a.provider] = repos;
+      refreshAccounts();
+    }));
+  }
+
   // mock-2's line under the fields: where the engine clones the repository (its rule, OnboardingModel.repoNameFromUrl)
   const cloneInto = () => (cur.model.repository.trim()
     ? t('onboarding.clone_into', { folder: `<workspace>/repos/${M.repoNameFromUrl(cur.model.repository)}` }) : ''); // i18n-ignore
@@ -168,12 +227,13 @@
       </div>` : '';
     return `<div class="wizard-title-row">
         <h2 id="project-wizard-title">${esc(t('onboarding.import_title'))}</h2>
-        <div class="wizard-title-side">${providerToggle()}${o?.cli ? cliBadge(o.cli) : ''}</div>
+        <div class="wizard-title-side">${providerToggle()}<span class="wizard-cli-badges" id="wizard-cli-badges">${cliBadges()}</span></div>
       </div>
       <div class="wizard-fields">
         <label class="wizard-field"><span>${esc(t('onboarding.repo_label'))}</span>
           <input id="wizard-repo" data-testid="wizard-repo" type="text" spellcheck="false" value="${esc(cur.model.repository)}" placeholder="${esc(t(`onboarding.repo_placeholder_${pickedProvider()}`))}"${locked}>
           <span class="muted small">${esc(t('onboarding.repo_help'))}</span></label>
+        <div id="wizard-repo-slot">${repoList()}</div>
         <label class="wizard-field"><span>${esc(t('onboarding.name_label'))}</span>
           <input id="wizard-name" data-testid="wizard-name" type="text" value="${esc(cur.model.name)}"${locked}></label>
       </div>
@@ -544,6 +604,13 @@
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }
+    else if (act === 'pick-repo') {
+      const repo = e.target.closest('[data-repo]').dataset.repo;
+      const last = repo.split('/').pop() || '';
+      cur.model = { ...cur.model, repository: repoUrl(repo), name: cur.model.name || last.charAt(0).toUpperCase() + last.slice(1) };
+      render();
+      document.getElementById('wizard-name')?.focus?.();
+    }
     else if (act === 'open-city') finish({ city: true });
     else if (act === 'next') await next();
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
@@ -619,10 +686,11 @@
       document.body.appendChild(root);
     }
     // Import is the one source of this phase: selected when the wizard opens (mock-1)
-    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, ...freshReview() };
+    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, ...freshReview() };
     root.hidden = false;
     render();
     root.querySelector('.wizard-panel')?.focus?.();
+    loadAccounts();
   }
 
   function close() {
