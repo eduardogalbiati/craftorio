@@ -94,7 +94,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'packages/engine/engine/run/transitions.js:finishStep': 32,
   'packages/engine/engine/run/transitions.js:pollStep': 40,
   'packages/engine/engine/run/turns.js:invokeTurn': 42,
-  'packages/engine/engine/screenshot-step.js:captureScreenshots': 34,
   'packages/engine/engine/source-text.js:withoutComments': 27,
   'packages/engine/engine/suite-step.js:checkOnBase': 27,
   'packages/engine/engine/suite-step.js:parseFailures': 51,
