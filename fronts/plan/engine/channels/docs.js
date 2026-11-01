@@ -10,8 +10,9 @@
 // list adds the items of the write-doc runs in progress (their worktree's documents, with `runId`).
 // The run's own steps are written here too, from its events, whether the screen is open or not: at
 // its first step the document's skeleton (a new item) and the run's base commit
-// (<runDir>/docs-base.json); at the end of `draft` the writer's draft, when the document is new or
-// has no change by request yet.
+// (<runDir>/docs-base.json); at the end of `draft` the writer's draft, only when the run created the
+// document (an existing one is never replaced whole: the writer edits it by request).
+// A run stopped or failed leaves its commits on its branch, not merged (the worktree keeps them).
 
 const fs = require('fs');
 const os = require('os');
@@ -89,14 +90,12 @@ module.exports = (ctx) => {
     fs.writeFileSync(path.join(runDir(r.runId), BASE_FILE), JSON.stringify({ base, fresh }, null, 2));
   }
 
-  // the writer's draft, kept by the service whoever watches the run (a turn paid for)
+  // the writer's draft of a document the run created, kept by the service whoever watches the run (a
+  // turn paid for); an existing document stays as it is and the edit goes on from it
   function writeDraft(r, output) {
+    if (!savedBase(r.runId)?.fresh) return;
     const dir = runFolderOf(r);
-    const item = r.inputs.item;
-    const doc = r.inputs.document || 'intent';
-    const saved = savedBase(r.runId);
-    if (!saved?.fresh && docs.listChanges(dir, { item, doc }).length) return; // edited already: the edit goes on from it
-    docs.applyDraft(dir, { item, doc, source: output.source_text, translation: output.translation_text || null });
+    docs.applyDraft(dir, { item: r.inputs.item, doc: r.inputs.document || 'intent', source: output.source_text, translation: output.translation_text || null });
   }
 
   function onRunEvent(ev) {

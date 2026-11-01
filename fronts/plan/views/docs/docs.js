@@ -124,7 +124,8 @@
     docs.busy = true;
     listError('');
     try {
-      await openDoc(item, doc, null);
+      // creating: its run writes the skeleton, the first read has nothing yet
+      await openDoc(item, doc, null, { creating: true });
       docs.open.title = title || item;
       await startWriter();
       refresh();
@@ -142,6 +143,9 @@
     renderGate();
     try {
       const inputs = { project_path: folder, item: o.item, document: o.doc, title: o.title || o.item };
+      // the run starts from and merges into the project's default branch (main, master, develop…)
+      const hints = await api.projectInputHints?.(docs.projectId).catch(() => null);
+      if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch;
       const out = await api.startRun({ file: FILE, inputs, mock: !!state.simulationOnly, projectId: docs.projectId });
       if (docs.open !== o) return;
       o.runId = out.runId;
@@ -151,15 +155,15 @@
       for (const ev of early) await onRunEvent(ev);
     } catch (e) {
       editorError(errMsg(e));
-    } finally { o.starting = false; }
+    } finally { o.starting = false; o.creating = false; }
     renderGate();
   }
 
   // ---- the editor ---------------------------------------------------------------------------------
   // runId: the write-doc run in progress on this document (the list's), its waiting gate found again
-  async function openDoc(item, doc, runId) {
+  async function openDoc(item, doc, runId, { creating = false } = {}) {
     docs.projectId = window.CurrentProject?.get() || docs.projectId;
-    docs.open = { item, doc, data: null, runId: runId || null, base: null, gate: null, changes: [], unreviewed: [], notes: [], messages: [], selection: null, problems: [] };
+    docs.open = { item, doc, data: null, runId: runId || null, creating, base: null, gate: null, changes: [], unreviewed: [], notes: [], messages: [], selection: null, problems: [] };
     $('#docs-list-area').classList.add('hidden');
     $('#docs-editor-area').classList.remove('hidden');
     $('#docs-editor').dataset.stage = doc;
@@ -194,12 +198,13 @@
       const [data, ch] = await Promise.all([
         api.readDoc(docs.projectId, o.item, o.doc, o.runId).catch((e) => {
           // a new item's run has not written its skeleton yet: the writer is working
-          if (o.runId || o.starting) return null;
+          if (o.runId || o.starting || o.creating) return null;
           throw e;
         }),
         api.listDocChanges(docs.projectId, o.item, o.doc, o.base, o.runId),
       ]);
       if (docs.open !== o) return;
+      editorError('');
       o.data = data;
       o.changes = ch.changes || [];
       o.unreviewed = ch.unreviewed || [];
@@ -406,6 +411,12 @@
     const wait = o.requesting || o.answering ? ' disabled' : '';
     if (g?.edit) {
       html = `<button type="button" class="btn primary" data-testid="doc-send-to-review" data-docs-gate="send_to_review"${wait}>${t('docs.send_to_review')}</button>`;
+    } else if (g && yesNoGate(g)) {
+      // merge_blocked: the local merge failed, a yes/no gate (try again, stop as failed)
+      html = `
+        <p class="muted small docs-gate-message" title="${esc(g.message || '')}">${esc(g.message || '')}</p>
+        <button type="button" class="btn primary" data-testid="doc-gate-retry" data-docs-gate="yes"${wait}>${t('docs.retry_the_merge')}</button>
+        <button type="button" class="btn ghost" data-testid="doc-gate-stop" data-docs-gate="no"${wait}>${t('docs.stop_as_failed')}</button>`;
     } else if (g) {
       html = `
         <p class="muted small docs-gate-message" title="${esc(g.message || '')}">${esc(g.message || '')}</p>
@@ -424,15 +435,22 @@
     docs.chat?.refresh?.();
   }
 
+  // a gate without choices answers true or false (merge_blocked); a gate restored without its
+  // choices is the SDLC one only at the `approval` step
+  function yesNoGate(g) {
+    return Array.isArray(g.choices) ? !g.choices.length : g.step_id !== 'approval';
+  }
+
   async function answerGate(choice) {
     const o = docs.open;
     const g = o?.gate;
     if (!g || o.answering || o.requesting) return;
     o.answering = true;
     try {
+      const yesNo = yesNoGate(g);
       // the SDLC gate: the front matter changes and commits before the run hears accept
-      if (choice === 'accept') await api.acceptDoc(docs.projectId, o.item, o.doc, o.runId);
-      await api.resolveApproval(g.approval_id, choice, '', o.runId);
+      if (choice === 'accept' && !yesNo) await api.acceptDoc(docs.projectId, o.item, o.doc, o.runId);
+      await api.resolveApproval(g.approval_id, yesNo ? choice === 'yes' : choice, '', o.runId);
       if (o.gate === g) o.gate = null;
       await reload();
     } catch (e) { editorError(errMsg(e)); } finally { o.answering = false; }

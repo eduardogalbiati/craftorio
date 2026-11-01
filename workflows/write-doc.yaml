@@ -49,7 +49,7 @@ inputs:
     label: "Base branch"
     type: string
     default: main
-    description: The local branch the run starts from and merges into at the accept.
+    description: The local branch the run starts from and merges into at the accept (the Documents screen passes the project's default branch).
   item:
     label: "Work item"
     type: string
@@ -251,7 +251,7 @@ steps:
         reply:            { type: string }
     choices:
       - { id: send_to_review, label: "Send to review", help: "The reviewer reads the changes you have not reviewed yet and anchors its notes to the sections." }
-      - { id: stop, label: "Stop without review", help: "Ends the run; the commits stay in the project." }
+      - { id: stop, label: "Stop without review", help: "Ends the run; its commits stay on the run's branch write-doc/<item>-<document>-<run>, not merged." }
     transitions:
       - when: "choice == 'send_to_review'"
         goto: review
@@ -293,7 +293,7 @@ steps:
     choices:
       - { id: accept, label: "{% if inputs.document == 'spec' %}Sign off spec{% else %}Accept intent{% endif %}" }
       - { id: revise, label: "Back to the edit" }
-      - { id: stop,   label: "Stop without accepting" }
+      - { id: stop,   label: "Stop without accepting", help: "Ends the run; its commits stay on the run's branch, not merged." }
     transitions:
       - when: "choice == 'accept'"
         merge: local

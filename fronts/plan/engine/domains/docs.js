@@ -78,7 +78,8 @@ function commit(dir, files, message) {
   return git(dir, ['rev-parse', 'HEAD']);
 }
 
-// A run's worktree starts detached at its base: its requests go on this branch (merge: local takes it)
+// A run's worktree starts detached at its base: its requests go on this branch (merge: local takes it).
+// The same lines as saveWork's in packages/engine/engine/worktree.js, kept synchronous here (that one is async and internal).
 function ensureBranch(dir, branch) {
   if (gitOrNull(dir, ['symbolic-ref', '-q', 'HEAD'])) return git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
   git(dir, ['switch', '-q', '-c', branch]);
