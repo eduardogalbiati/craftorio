@@ -601,7 +601,7 @@ const methods = {
     const timeoutMs = step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), undefined) : undefined;
     const logFile = path.join(this.runDir, 'logs', `check-${st.visits}.log`);
     const onLog = ({ command: cmd }) => this.emitEvent('step.log', { step_id: step.id, path: `logs/check-${st.visits}.log`, command: cmd });
-    const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, env: { ...childEnv(process.env, { passthrough: this.envPassthrough() }), ...capabilities.AGENT_ENV }, timeoutMs, signal: this.abort.signal, onLog })), round: st.visits };
+    const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, env: { ...childEnv(process.env, { passthrough: this.envPassthrough() }), ...capabilities.AGENT_ENV }, timeoutMs, signal: this.abort.signal, sweep: !!this.worktree?.dir, onLog })), round: st.visits };
     this.emitEvent('log', { level: output.status === 'fail' ? 'warn' : 'info', kind: 'check', step_id: step.id, status: output.status, message: `${step.id}: ${output.message.split('\n')[0]}` });
     return output;
   },

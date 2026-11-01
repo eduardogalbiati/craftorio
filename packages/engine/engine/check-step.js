@@ -38,7 +38,9 @@ function findingLines(text) {
 
 // → { kind: 'check', status: pass | fail | skipped, command, findings, message, log }
 // onLog({ command }) (#465): called before the command starts, its output going to logFile
-async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = DEFAULT_TIMEOUT_MS, signal, onLog = /** @type {((info: { command: string }) => void) | null} */ (null) }) {
+// sweep (#390): false when dir is not a folder the run owns (a mock run checks repo_path itself):
+// the command's own tree is still stopped, never the other processes running from dir (#705)
+async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = DEFAULT_TIMEOUT_MS, signal, sweep = true, onLog = /** @type {((info: { command: string }) => void) | null} */ (null) }) {
   const base = { kind: 'check', command: null, findings: [], log: null };
   if (!dir || !fs.existsSync(dir)) return { ...base, status: 'skipped', message: 'Rule checks skipped: the run has no checkout.' };
   const cmd = checkCommand(dir, command);
@@ -46,7 +48,7 @@ async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = 
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   onLog?.({ command: cmd });
   const t0 = Date.now();
-  const r = await runCommand({ command: cmd, cwd: dir, env, timeoutMs, signal, logFile });
+  const r = await runCommand({ command: cmd, cwd: dir, env, timeoutMs, signal, logFile, sweep });
   let text = '';
   try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
   const findings = findingLines(text);
