@@ -9,6 +9,8 @@
 //   unchanged either way.
 // - execShim(file, args, opts, cb): the same with execFile's callback (err, stdout, stderr).
 // - cmdLine(file, args): the escaped cmd.exe command line (exported for tests).
+// - quoteArg(arg, { once }): one argument of such a line; `once` ^-escapes it a single time, for a
+//   line cmd.exe parses once (a project's own command run with `shell: true`, #649).
 // - shQuote(s) / psQuote(s): a single-quoted literal for a POSIX shell (a quote inside closes,
 //   escapes and reopens it) and for PowerShell (a quote inside is doubled).
 //
@@ -24,15 +26,15 @@ const isShim = (file) => process.platform === 'win32' && /\.(cmd|bat)$/i.test(St
 
 const META = /([()\][%!^"`<>&|;, *?])/g;
 
-function quoteArg(arg) {
+function quoteArg(arg, { once = false } = {}) {
   let a = String(arg);
   if (/[\r\n]/.test(a)) throw new Error('An argument with a newline cannot be passed through cmd.exe.');
   a = a.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, '$1$1');
-  return `"${a}"`.replace(META, '^^^$1');
+  return `"${a}"`.replace(META, once ? '^$1' : '^^^$1');
 }
 
 function cmdLine(file, args = []) {
-  return [String(file).replace(META, '^$1'), ...args.map(quoteArg)].join(' ');
+  return [String(file).replace(META, '^$1'), ...args.map((a) => quoteArg(a))].join(' ');
 }
 
 const shQuote = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
@@ -54,6 +56,7 @@ module.exports = {
   execShim,
   isShim,
   psQuote,
+  quoteArg,
   runShim,
   shQuote,
 };

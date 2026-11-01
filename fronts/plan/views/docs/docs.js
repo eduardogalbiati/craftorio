@@ -183,8 +183,8 @@
 
   // ---- the editor ---------------------------------------------------------------------------------
   // runId: the write-doc run in progress on this document (the list's), its waiting gate found again
-  async function openDoc(item, doc, runId, { creating = false } = {}) {
-    docs.projectId = window.CurrentProject?.get() || docs.projectId;
+  async function openDoc(item, doc, runId, { creating = false, projectId = null } = {}) {
+    docs.projectId = projectId || window.CurrentProject?.get() || docs.projectId;
     docs.open = { item, doc, data: null, runId: runId || null, creating, base: null, gate: null, changes: [], unreviewed: [], notes: [], messages: [], selection: null, problems: [] };
     $('#docs-list-area').classList.add('hidden');
     $('#docs-editor-area').classList.remove('hidden');
@@ -557,9 +557,12 @@
     const item = slugOf(title) || 'card';
     const folder = (state.projects || []).find((p) => p.id === projectId)?.folder || null;
     const out = await runWriter(projectId, folder, { item, doc: 'intent', title });
-    window.DiscoveryRuns?.started(out.runId, { projectId, cardId, source: 'write-doc' });
+    window.DiscoveryRuns?.started(out.runId, { projectId, cardId, source: 'write-doc', item, doc: 'intent' });
+    // the editor follows the card's project, the header too (openDoc reads it)
+    if (projectId && window.CurrentProject?.get() !== projectId) window.CurrentProject?.set?.(projectId, { redraw: false });
+    docs.projectId = projectId || docs.projectId;
     showView('docs');
-    await openDoc(item, 'intent', out.runId, { creating: true });
+    await openDoc(item, 'intent', out.runId, { creating: true, projectId });
     if (docs.open) docs.open.title = title;
     return out.runId;
   };

@@ -1312,10 +1312,10 @@
   const readRuns = () => { try { return JSON.parse(localStorage.getItem(LS_RUNS)) || {}; } catch { return {}; } };
   const writeRuns = (runs) => { try { localStorage.setItem(LS_RUNS, JSON.stringify(runs)); } catch { /* ignore */ } };
 
-  /** The run `runId` was started for a card: `{ projectId, cardId, source }` ('write-review' | 'ai-arena' | 'write-doc'). */
-  function runStarted(runId, { projectId, cardId, source }) {
-    writeRuns({ ...readRuns(), [runId]: { projectId, cardId, source } });
-  }
+  /** The run `runId` was started for a card: `{ projectId, cardId, source, item?, doc? }` (source 'write-review' | 'ai-arena' | 'write-doc'). */
+  function runStarted(runId, { projectId, cardId, source, item, doc }) { writeRuns({ ...readRuns(), [runId]: { projectId, cardId, source, item, doc } }); }
+  // a write-doc run's document, read back from the project once it ends (the run has no `document` output)
+  const writtenDoc = (link, ev) => (link.item && ev.status === 'success' ? api.readDoc(link.projectId, link.item, link.doc || 'intent').then((d) => d?.source?.markdown, () => null) : null);
 
   function forgetRun(runId) { const runs = readRuns(); delete runs[runId]; writeRuns(runs); }
 
@@ -1325,7 +1325,7 @@
   async function runEnded(runId, ev) {
     const link = readRuns()[runId];
     if (!link || dv.recording.has(runId)) return;
-    const text = String(ev.outputs?.document ?? '');
+    const text = String(ev.outputs?.document ?? (await writtenDoc(link, ev)) ?? '');
     if (ev.status !== 'success' || !text.trim()) {
       forgetRun(runId);
       return;

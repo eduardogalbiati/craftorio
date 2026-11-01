@@ -133,6 +133,7 @@ function lockHash(dir) {
 // stateFile: where the lockfile hash of the last install is kept (in the preview's own folder, not
 // the worktree). The first preview of a JS project whose node_modules exists trusts it (the
 // developer installed for this branch); anything else installs once, then again on a lockfile change.
+// A null stateFile (a one-off preview, #649) is always that first preview.
 // reason: why it runs or not (installState says it to the owner).
 function needsInstall(dir, stateFile) {
   const hash = lockHash(dir);

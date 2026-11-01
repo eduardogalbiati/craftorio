@@ -55,6 +55,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const clarity = require('./clarity');
+const { slugify } = require('../project/projects');
 const { sniffImage } = require('../../engine/providers');
 const { renameWithRetry, writeFileAtomic } = require('../workspace/state-file');
 
@@ -623,22 +624,22 @@ function restoreVersion(dir, projectId, id, name, { by = 'owner' } = {}) {
   return load(folder);
 }
 
-// The result of a run started from the card comes back (`source`: 'write-review', 'ai-arena' or 'write-doc'): `text` becomes the
-// document, kept as the version result-<source> (the document it replaces too), the thread gets an entry { kind: 'result',
-// source, runId }, and a written document (#649, write-doc) is also a .md attachment named after the title. Returns the card.
+/**
+ * A card's run result (`source`: write-review, ai-arena, write-doc) becomes its document, kept as the version result-<source> (the
+ * replaced one too), noted in the thread { kind: 'result', source, runId }; a write-doc one (#649) is also attached as <title slug>.md.
+ */
 function recordResult(dir, projectId, id, { source, text, runId = null, by = 'owner' } = {}) {
   const folder = editableCard(dir, projectId, id);
   if (!Object.hasOwn(RESULT_SOURCES, String(source))) throw new Error(`Unknown result source: ${source} (one of ${Object.keys(RESULT_SOURCES).join(', ')})`);
   if (!String(text ?? '').trim()) throw new Error('A result needs a text.');
+  const title = String(load(folder).title || '');
   keepDocument(dir, projectId, id, 'before-result');
   writeFileAtomic(path.join(folder, 'document.md'), String(text));
   const version = snapshotVersion(dir, projectId, id, `result-${source}`);
-  if (source === 'write-doc') addAttachment(dir, projectId, id, { name: `${String(load(folder).title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'write-doc'}.md`, data: Buffer.from(String(text)) });
+  if (source === 'write-doc') addAttachment(dir, projectId, id, { name: `${/[a-z0-9]/i.test(title) ? slugify(title).slice(0, 60) : 'write-doc'}.md`, data: Buffer.from(String(text)) });
   rescore(folder);
-  appendConversation(dir, projectId, id, {
-    kind: 'result', source, runId: runId ? String(runId) : null, author: String(by || 'owner'), version,
-    text: `${RESULT_SOURCES[source]} finished: its result is the document now (version ${version}).`,
-  });
+  appendConversation(dir, projectId, id, { kind: 'result', source, runId: runId ? String(runId) : null, author: String(by || 'owner'), version,
+    text: `${RESULT_SOURCES[source]} finished: its result is the document now (version ${version}).` });
   return load(folder);
 }
 

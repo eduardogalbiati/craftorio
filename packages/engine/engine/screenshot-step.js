@@ -30,7 +30,11 @@ const yaml = require('js-yaml');
 const evidence = require('../domains/evidence/evidence');
 const { readRepoConfig } = require('../domains/local/local-preview');
 const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
-const { runShim, shQuote } = require('../domains/machine/shell');
+const {
+  quoteArg,
+  runShim,
+  shQuote,
+} = require('../domains/machine/shell');
 const { readChecks, screenChecks } = require('./ui-review-checks');
 const {
   acquireSlot,
@@ -103,9 +107,10 @@ function captureSource(dir) {
   return preview && !preview.error ? { kind: 'run-app', ...preview } : { kind: 'manual' };
 }
 
-// `<command> -- <args>` for the shell, each argument quoted (cmd.exe on Windows, /bin/sh elsewhere)
+// `<command> -- <args>` for the shell, each argument quoted (cmd.exe on Windows, parsed once, its
+// metacharacters ^-escaped: shell.js; /bin/sh elsewhere)
 function shellLine(command, args) {
-  const quote = process.platform === 'win32' ? (a) => `"${String(a).replace(/"/g, '\\"')}"` : shQuote;
+  const quote = process.platform === 'win32' ? (a) => quoteArg(a, { once: true }) : shQuote;
   return `${command} -- ${args.map(quote).join(' ')}`;
 }
 
@@ -293,13 +298,17 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
   fs.mkdirSync(dir, { recursive: true });
   const label = source.kind === 'command' ? source.command : `Run App ${source.url || source.command}`;
   const shotLog = openShotLog(logFile, runDir, label, onLog);
+  // Run App: one session for every capture (the base worktree and its install made once)
+  const session = {};
   const take = source.kind === 'command'
     ? (e, side, args) => withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, command: source.command, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}), ...shotLog.opts }))
     : (e, side) => withSlot({ signal, onSlotWait, slot }, () => previewShot(capturePreview, {
       entry: e, side, ref: side === 'original' ? base : null, out: path.join(dir, `${e.name}.${side}.png`), name: e.name,
-      cwd, config: source, env, signal, timeoutMs,
+      cwd, config: source, env, signal, timeoutMs, session,
     }));
-  await shootEntries(valid, { dir, base, runDir, label, take, timeoutMs, signal, log, shotLog, out });
+  try {
+    await shootEntries(valid, { dir, base, runDir, label, take, timeoutMs, signal, log, shotLog, out });
+  } finally { await session.release?.(); }
   return finish();
 }
 
