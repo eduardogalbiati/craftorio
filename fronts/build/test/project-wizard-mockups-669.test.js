@@ -8,8 +8,8 @@
 //   "<n> <label>" (1 Start, 2 Repository, 3 Analysis & workflows, 4 Review); exactly one aria-current="step";
 // - step 1: the heading "Add a project" and the line "A project is the code the agents work on. You can change
 //   everything later." (no "New project" heading); in each card (wizard-source-import / wizard-source-new) an
-//   icon data-testid="wizard-card-icon" and three <li> bullets; Create new stays disabled (soon); the selected
-//   card has aria-pressed="true" and Import is selected when the wizard opens (mock-1: Create is not offered yet);
+//   icon data-testid="wizard-card-icon" and three <li> bullets; Create new is enabled since #632 (no "soon"); the
+//   selected card has aria-pressed="true" and Import is selected when the wizard opens (mock-1);
 //   data-testid="wizard-other-sources" ("Other sources") with data-testid="wizard-source-git-url" (Any git URL:
 //   to step 2 and its URL field) and data-testid="wizard-source-folder" (A folder on this computer:
 //   api.pickFolder(), the existing folder pick of projects.js);
@@ -254,12 +254,13 @@ test('#669 step 1: Import\'s bullets say cloned in the background, its history s
   assert.match(items[2], /city.*refactor backlog/i);
 });
 
-test('#669 step 1: Create new project stays disabled (soon) with its icon and bullets', { timeout: 20000 }, async () => {
+// #632 offers Create new project (mock-1 without "soon"); its step is tested in project-wizard-create-632.test.js
+test('#669 #632 step 1: Create new project is enabled (no "soon") with its icon and bullets', { timeout: 20000 }, async () => {
   const app = await opened();
   const card = byTestId(wizardMarkup(app), 'wizard-source-new');
   assert.equal(card === null, false, 'data-testid="wizard-source-new"');
-  assert.equal(isDisabled(card), true, 'disabled');
-  assert.match(textOf(card), /soon/i);
+  assert.equal(isDisabled(card), false, 'enabled');
+  assert.equal(/soon/i.test(textOf(card)), false, `the card: ${textOf(card)}`);
   assert.equal(byTestId(card.outer, 'wizard-card-icon') === null, false, 'its icon');
   assert.equal(H.findAll(card.inner, (e) => e.name === 'li').length, 3, 'its three bullets');
 });

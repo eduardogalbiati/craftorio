@@ -252,6 +252,15 @@ Then("the wizard's {string} card cannot be chosen", async ({ e2e }, title) => {
   await expect(sourceCard(e2e.window, title)).toBeDisabled();
 });
 
+// #632: Create new project is enabled (mock-1 no longer marks it "soon")
+Then("the wizard's {string} card can be chosen", async ({ e2e }, title) => {
+  const card = sourceCard(e2e.window, title);
+  await expect(card).toBeVisible();
+  await expect(card).toBeEnabled();
+  await expect(card).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(card).not.toContainText(/\bsoon\b/i);
+});
+
 Then('the wizard offers the other sources {string} and {string}', async ({ e2e }, a, b) => {
   await expect(otherSources(e2e.window)).toContainText('Other sources');
   for (const name of [a, b]) await expect(otherSource(e2e.window, name), `the other source "${name}"`).toBeVisible();
@@ -426,4 +435,102 @@ Then('I can change the suggested {string} workflow', async ({ e2e }, kind) => {
 
 Then('the wizard shows the ways of working profile', async ({ e2e }) => {
   await expect(wizard(e2e.window).getByTestId('wizard-profile')).toBeVisible({ timeout: IMPORT_TIMEOUT });
+});
+
+// ---- #632: Create new project (docs/work/first-project-onboarding/images/mock-3.jpg, spec R4 / D5 B) ------
+// - wizard-new-name: the project name; wizard-new-starts: the "Starts with" radios (value readme | empty),
+//   named "README and .gitignore" / "Empty"; wizard-new-remote: "Also create a private repository on …"
+//   (disabled with no gh / glab signed in, as in the simulated E2E app); wizard-new-remote-provider;
+//   wizard-new-folder: the folder line "<workspace>/projects/<slug>";
+// - data-testid="wizard-question" data-question="mode|ci|release": a question group, its title ("Where
+//   changes land", "CI", "How you release") and its chips (class wizard-chip, role button, the chosen one
+//   aria-pressed="true"), each chip reading its label first ("Local: merge here, push main").
+// The repository is made in the scratch workspace (MULTIAGENT_WORKSPACE, features/support/app.js).
+
+const question = (page, title) => wizard(page).getByTestId('wizard-question').filter({ hasText: title });
+// the chip whose text starts with the label: "Local" never matches "Local + remote"
+const chip = (page, title, label) => question(page, title).getByRole('button')
+  .filter({ hasText: new RegExp(`^\\s*${escapeRe(label)}(?!\\s*\\+)`) });
+const workspaceFolder = (e2e, rel) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  return path.join(e2e.scratch, 'workspace', ...rel.split('/'));
+};
+// git in the created repository, with no machine config (the scratch's empty one)
+function gitIn(e2e, folder, args) {
+  const config = path.join(e2e.scratch, 'empty.gitconfig');
+  if (!fs.existsSync(config)) fs.writeFileSync(config, '');
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: config };
+  return execFileSync('git', ['-C', folder, ...args], { env, encoding: 'utf8' }).trim();
+}
+
+When('I choose to create a new project in the wizard', async ({ e2e }) => {
+  const page = e2e.window;
+  await wizard(page).getByTestId('wizard-source-new').click();
+  // a card may move on by itself, or wait for Next
+  if ((await currentStep(page).getAttribute('data-step')) === 'start') await wizard(page).getByTestId('wizard-next').click();
+  await expect(wizard(page).getByTestId('wizard-new-name')).toBeVisible();
+});
+
+When('I name the new project {string}', async ({ e2e }, name) => {
+  await wizard(e2e.window).getByTestId('wizard-new-name').fill(name);
+});
+
+When('I start the new project with {string}', async ({ e2e }, label) => {
+  const radio = wizard(e2e.window).getByRole('radio', { name: new RegExp(`^\\s*${escapeRe(label)}`) });
+  await radio.check();
+  await expect(radio).toBeChecked();
+});
+
+Then('the new project starts with {string}', async ({ e2e }, label) => {
+  await expect(wizard(e2e.window).getByRole('radio', { name: new RegExp(`^\\s*${escapeRe(label)}`) })).toBeChecked();
+});
+
+// the folder line shows the workspace's projects folder and the name made a slug
+Then('the new project will be created in {string} of the workspace', async ({ e2e }, rel) => {
+  const tail = rel.split('/').map(escapeRe).join('[\\\\/]');
+  await expect(wizard(e2e.window).getByTestId('wizard-new-folder')).toContainText(new RegExp(`${tail}\\s*$`));
+});
+
+When('I answer {string} to {string} in the wizard', async ({ e2e }, label, title) => {
+  const button = chip(e2e.window, title, label);
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+});
+
+Then('the wizard asks {string} with {string} chosen', async ({ e2e }, title, label) => {
+  const page = e2e.window;
+  await expect(question(page, title)).toBeVisible();
+  await expect(chip(page, title, label)).toHaveAttribute('aria-pressed', 'true');
+  await expect(question(page, title).locator('[aria-pressed="true"]'), `one answer chosen for "${title}"`).toHaveCount(1);
+});
+
+Then('the private repository option cannot be ticked', async ({ e2e }) => {
+  const remote = wizard(e2e.window).getByTestId('wizard-new-remote');
+  await expect(remote).toBeVisible();
+  await expect(remote).toBeDisabled();
+  await expect(remote).not.toBeChecked();
+});
+
+Then('the next step of the wizard is unavailable', async ({ e2e }) => {
+  await expect(wizard(e2e.window).getByTestId('wizard-next')).toBeDisabled();
+});
+
+Then("the workspace's {string} is a git repository with {string} and {string} committed on main", async ({ e2e }, rel, a, b) => {
+  const folder = workspaceFolder(e2e, rel);
+  await expect.poll(() => fs.existsSync(path.join(folder, '.git')), { message: `${rel} is a git repository`, timeout: IMPORT_TIMEOUT }).toBe(true);
+  expect(gitIn(e2e, folder, ['rev-parse', '--abbrev-ref', 'HEAD']), 'the branch').toBe('main');
+  const files = gitIn(e2e, folder, ['ls-tree', '--name-only', 'main']).split(/\r?\n/);
+  expect(files).toEqual(expect.arrayContaining([a, b]));
+  expect(Number(gitIn(e2e, folder, ['rev-list', '--count', 'main'])), 'commits on main').toBe(1);
+});
+
+Then("the workspace's {string} is a git repository with no commit", async ({ e2e }, rel) => {
+  const folder = workspaceFolder(e2e, rel);
+  await expect.poll(() => fs.existsSync(path.join(folder, '.git')), { message: `${rel} is a git repository`, timeout: IMPORT_TIMEOUT }).toBe(true);
+  // git init only: HEAD names a branch with no commit yet
+  expect(() => gitIn(e2e, folder, ['rev-parse', '--verify', '-q', 'HEAD']), 'no commit').toThrow();
+});
+
+Then("the workspace's {string} has no remote", async ({ e2e }, rel) => {
+  expect(gitIn(e2e, workspaceFolder(e2e, rel), ['remote']), 'the remotes').toBe('');
 });

@@ -168,8 +168,8 @@ Feature: Bring a project in with a guided wizard
     And the progress tray shows the project "missing-644" as failed with its reason and a Retry
     And the progress tray shows the project "sample-644" as ready
 
-  # #669: step 1 follows docs/work/first-project-onboarding/images/mock-1.jpg. Create new project stays
-  # disabled (coming soon); its card still shows its icon and its three points.
+  # #669: step 1 follows docs/work/first-project-onboarding/images/mock-1.jpg. Since #632 Create new
+  # project can be chosen (no longer "soon"); its card shows its icon and its three points.
   @issue-669
   Scenario: The wizard's first step shows the numbered steps, both cards with their icon and points, the other sources and Cancel and Next
     Given the app is open
@@ -179,7 +179,7 @@ Feature: Bring a project in with a guided wizard
     And the wizard's steps read "Start", "Repository", "Analysis & workflows" and "Review", numbered from 1, with "Start" current
     And the wizard's "Import a repository" card has an icon and the points "Cloned into your workspace in the background", "Its history shows how you work today" and "City and refactor backlog ready at the end"
     And the wizard's "Create new project" card has an icon and the points "A git repository in your workspace", "Optionally a private GitHub repository" and "Three questions pick its workflows"
-    And the wizard's "Create new project" card cannot be chosen
+    And the wizard's "Create new project" card can be chosen
     And the wizard offers the other sources "Any git URL" and "A folder on this computer"
     And the wizard's footer has "Cancel" on the left and "Next" on the right
 
@@ -221,3 +221,57 @@ Feature: Bring a project in with a guided wizard
     And I can change the suggested "fix" workflow
     And I can change the suggested "release" workflow
     And I can change the suggested "ci" workflow
+
+  # #632: Create new project follows docs/work/first-project-onboarding/images/mock-3.jpg (spec R4, D5 B):
+  # a git repository in <workspace>/projects/<name> with a README, a .gitignore and a first commit on main,
+  # three questions with their defaults, then the Analysis & workflows step. The simulated E2E app has no
+  # GitHub / GitLab CLI signed in, so the private repository option cannot be ticked there.
+  @issue-632
+  Scenario: Creating a new project makes a git repository with a first commit on main and goes on to the workflows
+    Given the app is open
+    When I open the project wizard
+    And I choose to create a new project in the wizard
+    Then the wizard's title reads "Create new project"
+    And the new project starts with "README and .gitignore"
+    And the wizard asks "Where changes land" with "Local: merge here, push main" chosen
+    And the wizard asks "CI" with "On releases: build macOS, Linux, Windows" chosen
+    And the wizard asks "How you release" with "Milestones (tags)" chosen
+    And the wizard says "Change them any time in Ways of working. Setting up CI is offered as a next step."
+    When I name the new project "Field Notes"
+    Then the new project will be created in "projects/field-notes" of the workspace
+    When I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the workspace's "projects/field-notes" is a git repository with "README.md" and ".gitignore" committed on main
+    When I close the project wizard
+    And I open "Projects" in the sidebar
+    Then the Projects screen lists the project "Field Notes"
+
+  @issue-632
+  Scenario: Without a signed-in GitHub or GitLab CLI the private repository cannot be ticked and the project is created locally only
+    Given the app is open
+    When I open the project wizard
+    And I choose to create a new project in the wizard
+    Then the private repository option cannot be ticked
+    When I name the new project "Local Only"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the workspace's "projects/local-only" is a git repository with "README.md" and ".gitignore" committed on main
+    And the workspace's "projects/local-only" has no remote
+
+  @issue-632
+  Scenario: An empty project with other answers needs a name first, then is created with git init only
+    Given the app is open
+    When I open the project wizard
+    And I choose to create a new project in the wizard
+    Then the next step of the wizard is unavailable
+    When I start the new project with "Empty"
+    And I answer "Local + remote: pull requests on GitHub" to "Where changes land" in the wizard
+    And I answer "None" to "CI" in the wizard
+    And I answer "Every merge" to "How you release" in the wizard
+    Then the wizard asks "Where changes land" with "Local + remote: pull requests on GitHub" chosen
+    And the wizard asks "CI" with "None" chosen
+    And the wizard asks "How you release" with "Every merge" chosen
+    When I name the new project "Blank Slate"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the workspace's "projects/blank-slate" is a git repository with no commit
