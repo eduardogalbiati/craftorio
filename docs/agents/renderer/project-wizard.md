@@ -25,21 +25,37 @@ old dialog.
 
 ## The steps
 
-1. **start**: import a repository (`wizard-source-import`); create new (`wizard-source-new`) is
-   disabled, "soon" (phase 4).
-2. **repository**: `#wizard-repo`, `#wizard-name`, the provider badge read from the URL. Next calls
-   `onboarding:start`; `wizard-import-status` follows the clone. A refused access shows `wizard-error`
+The screens follow the spec's mockups (#669, `docs/work/first-project-onboarding/images/mock-1, 2, 4, 6,
+7.jpg`): what phase 1 does not do yet stays visible and disabled. The panel has the numbered step pills
+(`wizard-steps`, one `wizard-step-pill` each, the current one `aria-current="step"`) over a divider, the
+step's body (its title is `#project-wizard-title`) and the footer (`wizard-footer`) over a divider: Cancel
+(`wizard-cancel`, step 1) or Back on the left, the step's action on the right.
+
+1. **start** (mock-1): "Add a project", two cards with an icon (`wizard-card-icon`) and three points:
+   import a repository (`wizard-source-import`, picked when the wizard opens); create new
+   (`wizard-source-new`) is disabled, "soon" (phase 4). Other sources (`wizard-other-sources`): Any git
+   URL (`wizard-source-git-url`, the URL field of step 2) and A folder on this computer
+   (`wizard-source-folder`, a folder pick, then step 2 with its `file://` URL).
+2. **repository** (mock-2): `#wizard-repo`, `#wizard-name`, the GitHub / GitLab toggle (`#wizard-provider`,
+   it follows the URL) and the gh / glab badge once the engine checked it. "Next: clone and continue"
+   calls `onboarding:start`; `wizard-import-status` follows the clone. A refused access shows `wizard-error`
    `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
    the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A
    missing or signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
-3. **analysis**: the jobs with their status, the cost before the click (`wizard-cost`,
-   `wizard-cost-total`, one `data-part` per paid analysis), `wizard-analyze` or `wizard-skip`. Nothing
-   paid starts without the click.
-4. **review** (`wizard-review`): the city, the backlog and the refactor backlog, each
-   `data-state="ready | pending | failed | skipped | later"`; each refactor with its file's score and
-   quadrant and an unchecked pick; an idea for the Inbox. `wizard-finish` never waits: the project's page
-   opens with the Next steps card, the picked refactors go to the roadmap as planned items and the idea
-   to the Inbox.
+3. **analysis** (mock-4): on the left the jobs from the clone on with their status and the cost before the
+   click (`wizard-cost`, `wizard-cost-total`, one `data-part` per paid analysis, `wizard-skip`); on the
+   right the suggested workflows, disabled (chosen in a later phase). "Analyze and continue"
+   (`wizard-analyze`) is in the footer. Nothing paid starts without the click.
+4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on, its workflows),
+   the city (`wizard-review-city`, Open the city) and the refactor backlog, then the backlog and an idea
+   for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each refactor
+   with its file's score and quadrant and an unchecked pick. `wizard-finish` never waits: the project's
+   page opens with the Next steps card, the picked refactors go to the roadmap as planned items and the
+   idea to the Inbox.
+
+The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to
+file and add, the first idea, the refactor cadence, and release CI and screenshots, shown disabled (later
+phases).
 
 The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`
 and stays when the wizard closes; a failed import keeps its reason and Retry there.

@@ -4,13 +4,18 @@
 .pr-head-info p { margin: 0 0 4px; }
 .pr-head-info .kv { margin-top: 6px; }
 #project-info { margin-bottom: 10px; }
-/* #642: the Next steps card after the new-project wizard */
-.pr-next-steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-.pr-next-steps-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pr-next-steps-head h3 { margin: 0; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+/* #642 / #669: the Next steps card after the new-project wizard (mock-7): its head, then the entries in a
+   grid of three, each its title, its line (or the proposals to pick) and its button */
+.pr-next-steps { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+.pr-next-steps-head { display: flex; align-items: center; gap: 8px; }
+.pr-next-steps-head h3 { margin: 0; flex: 1; font-size: 14px; }
 .pr-next-steps-head .btn { min-width: 24px; min-height: 24px; }
-.pr-next-steps-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.pr-next-steps-list li { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pr-next-steps-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; font-size: 13px; }
+.pr-next-step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); min-width: 0; }
+.pr-next-step > .btn { margin-top: auto; }
+.pr-next-step-picks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.pr-next-step-picks .check { display: flex; align-items: center; gap: 8px; min-width: 0; }
+@media (max-width: 760px) { .pr-next-steps-list { grid-template-columns: minmax(0, 1fr); } }
 /* #354: the Conflict map tab (project-conflict-map.js) and its link on the Roadmap and Analytics */
 .pcm-controls { flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .pcm-row { cursor: pointer; }
