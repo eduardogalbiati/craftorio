@@ -3522,6 +3522,7 @@
   "project_architecture.no_finding": "No finding.",
   "project_architecture.no_finding_matches_the_filter": "No finding matches the filter.",
   "project_architecture.no_finding_sent_every_finding_shown": "No finding sent: every finding shown was sent already",
+  "project_architecture.no_folder_on_this_machine": "The project has no folder on this machine: clone it again or point its folder from the Overview.",
   "project_architecture.no_mass_change": "no mass change",
   "project_architecture.no_risk_yet_the_report_s": "No risk yet: the report's findings show here.",
   "project_architecture.none": "none",

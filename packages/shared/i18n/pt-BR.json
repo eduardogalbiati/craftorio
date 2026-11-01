@@ -3522,6 +3522,7 @@
   "project_architecture.no_finding": "Nenhum achado.",
   "project_architecture.no_finding_matches_the_filter": "Nenhum achado corresponde ao filtro.",
   "project_architecture.no_finding_sent_every_finding_shown": "Nenhum achado enviado: todos os achados mostrados já foram enviados",
+  "project_architecture.no_folder_on_this_machine": "O projeto não tem pasta nesta máquina: clone-o de novo ou aponte a pasta dele na Visão geral.",
   "project_architecture.no_mass_change": "nenhuma mudança em massa",
   "project_architecture.no_risk_yet_the_report_s": "Nenhum risco ainda: os achados do relatório aparecem aqui.",
   "project_architecture.none": "nenhum",

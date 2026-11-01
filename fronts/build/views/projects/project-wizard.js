@@ -48,6 +48,8 @@
 // - #onboarding-tray (data-testid="onboarding-tray"): one tray-item per imported project (data-project,
 //   data-status = the engine's status), its name, and when failed the reason and Retry; it follows
 //   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads) and stays when the wizard closes.
+// - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status
+//   change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
 // architecture:estimate (the project map's cost; the ranking has no estimate yet: not known), and for the
 // review architecture:city / facts, refactor:proposals, the backlog, the refactor's roadmap item
@@ -929,7 +931,25 @@
     }
   }
 
-  if (typeof window.api?.onOnboardingChanged === 'function') window.api.onOnboardingChanged(remember);
+  // #732: the Projects list (state.projects, read by Analyze, the backlog's pickers, the header) follows the
+  // onboarding: read again when a project shows up and at each status change (its clone done: its folder)
+  const listedStatus = new Map(); // projectId → the status the list was last read at
+  async function refreshProjectList(ev) {
+    if (!ev?.projectId || listedStatus.get(ev.projectId) === ev.status) return;
+    listedStatus.set(ev.projectId, ev.status);
+    let list;
+    try { list = await api.listProjects(); } catch { return; } // the list stays as it was
+    if (!Array.isArray(list)) return;
+    state.projects = list;
+    const fresh = list.find((p) => p.id === ev.projectId);
+    if (fresh && state.pv?.id === fresh.id && state.pv.project) state.pv.project = { ...state.pv.project, ...fresh };
+    window.CurrentProject?.refresh?.();
+  }
+
+  if (typeof window.api?.onOnboardingChanged === 'function') {
+    window.api.onOnboardingChanged(remember);
+    window.api.onOnboardingChanged(refreshProjectList);
+  }
 
   window.ProjectWizard = {
     close,

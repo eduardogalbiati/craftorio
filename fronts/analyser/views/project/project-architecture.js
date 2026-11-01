@@ -26,7 +26,9 @@
 // run). The tab follows the run through run:event: "Analyzing this project" with the step while it
 // runs, then the city and the report read again when it ends, or its error. A run started elsewhere
 // (Workflows) for this project shows the same way. The advice to refresh (more than 5% of the drawn
-// files match no district, or a new top-level folder) never starts anything.
+// files match no district, or a new top-level folder) never starts anything. The run's folder is the
+// project's own (#732: the project page's project before the cached Projects list, which a project the
+// onboarding just made may miss); a project without one gets a translated message and no estimate.
 // A "Facts | City" switch leads the tab (#373), remembered per window (sessionStorage MODE_KEY): City
 // shows the project as a 3D city in place of all the above (views/project/project-city.js, one per
 // project on screen, kept while the tab switches back and forth, with the same action and run state;
@@ -135,7 +137,7 @@
     const error = cur.error ? `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">${t('project_architecture.the_analysis_failed')} ${esc(cur.error)}</div>` : '';
     return `<section class="arch-action" data-testid="architecture-action">
       <div class="row">
-        <button type="button" class="btn primary" data-testid="architecture-analyze" data-arch-analyze ${running || cur.mapStarting ? 'disabled' : ''} title="${esc(title)}">${label} <span class="arch-estimate" data-testid="architecture-estimate">${esc(e.text)}</span></button>
+        <button type="button" class="btn primary" data-testid="architecture-analyze" data-arch-analyze ${running || cur.mapStarting ? 'disabled' : ''} title="${esc(title)}">${label}${cur.errorKind === 'no-folder' ? '' : ` <span class="arch-estimate" data-testid="architecture-estimate">${esc(e.text)}</span>`}</button>
         <span class="small muted">${esc(planText)}</span>
       </div>
       ${progress}${error}${mapAdviceHtml(city?.refresh)}
@@ -145,19 +147,32 @@
   // the City view's copy of the action's state
   const analysisState = () => {
     const e = estimateInfo();
-    return { running: !!cur.mapRun, step: cur.mapRun ? stepLabel(cur.mapStep) : null, error: cur.error || null, estimate: e.text, estimateTitle: e.title };
+    // #732: no estimate next to a retry that cannot work (the project has no folder)
+    const noFolder = cur.errorKind === 'no-folder';
+    return { running: !!cur.mapRun, step: cur.mapRun ? stepLabel(cur.mapStep) : null, error: cur.error || null, estimate: noFolder ? null : e.text, estimateTitle: noFolder ? null : e.title };
   };
+
+  // #732: the project's own folder: the project page's project (fresh, as the Overview reads it), then
+  // the cached Projects list (stale until the onboarding's clone is listed again), then a fresh read
+  async function folderOf(id) {
+    const pv = state.pv?.id === id ? state.pv.project?.folder : null;
+    const cached = (state.projects || []).find((p) => p.id === id)?.folder;
+    if (pv || cached) return pv || cached;
+    if (typeof api.getProject !== 'function') return null;
+    try { return (await api.getProject(id))?.folder || null; } catch { return null; }
+  }
 
   async function analyze() {
     const c = cur;
     if (!c || c.mapStarting || c.mapRun) return;
-    const folder = state.projects.find((p) => p.id === c.id)?.folder;
+    const folder = await folderOf(c.id);
+    if (c !== cur || c.mapStarting || c.mapRun) return;
     if (!folder) {
-      c.error = 'The project has no folder: there is nothing to analyse.';
+      Object.assign(c, { error: t('project_architecture.no_folder_on_this_machine'), errorKind: 'no-folder' });
       render();
       return;
     }
-    Object.assign(c, { mapStarting: true, error: null });
+    Object.assign(c, { mapStarting: true, error: null, errorKind: null });
     render();
     try {
       const out = await api.startRun({ file: MAP_WORKFLOW, inputs: { repo_path: folder, project_id: c.id, mode: 'auto', analyze: true }, mock: !!state.simulationOnly, projectId: c.id });
