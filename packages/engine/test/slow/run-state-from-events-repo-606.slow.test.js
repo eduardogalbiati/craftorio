@@ -72,7 +72,7 @@ test('refactor-proposals: the replay of its mock run gives the in-memory state',
 });
 
 test('multi-model-review: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('multi-model-review.yaml'), inputs: { task: 'Review the branch', repo_path: makeRepo(t, { branch: 'feat' }), branch: 'feat' } });
+  const run = await recordedRun(t, { file: bundled('feature.yaml'), inputs: { task: 'Review the branch', repo_path: makeRepo(t, { branch: 'feat' }), branch: 'feat', review: 'multi_model' } });
   assertReplayMatches(run);
 });
 

@@ -33,7 +33,7 @@ function assertReplayMatches(run) {
 }
 
 test('software-development: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('software-development.yaml'), inputs: { task: 'Engine test', repo_path: root }, mockSequences: { preview_status: ['success'] } });
+  const run = await recordedRun(t, { file: bundled('feature.yaml'), inputs: { task: 'Engine test', repo_path: root, mode: 'remote' }, mockSequences: { preview_status: ['success'] } });
   assertReplayMatches(run);
 });
 

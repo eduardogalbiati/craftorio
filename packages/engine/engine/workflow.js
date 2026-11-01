@@ -116,6 +116,11 @@ function runMachine(machine, mock, sequences) {
 const runWorkers = (testWorkers) => (Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null);
 // A service hook given as an option (architectureOracle, refactorPriorityOptions): the function, else null
 const functionOrNull = (f) => (typeof f === 'function' ? f : null);
+// #631: feature.yaml's "Retrospective after" (the old develop-to-retrospective pipeline): the
+// retrospective analyses this run when it ends, unless the run already has a then
+const thenWithRetrospective = (then, inputs) => (!then && [true, 'true'].includes(inputs.retrospective)
+  ? chain.normalizeThen({ action: 'workflow', workflow: 'retrospective.yaml', map: { run_id: '@run' } })
+  : then);
 // #396: the failures of the suite steps that ended red, with their class (in or outside the change)
 const testedFailures = (steps) => Object.entries(steps)
   .filter(([, s]) => s?.output?.kind === 'suite' && s.output.status === 'fail')
@@ -244,9 +249,7 @@ class WorkflowRun extends EventEmitter {
     this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
-    // #631: feature.yaml's "Retrospective after" (the old develop-to-retrospective pipeline): the
-    // retrospective analyses this run when it ends, unless the run already has a then
-    if (!this.then && [true, 'true'].includes(this.inputs.retrospective)) this.then = chain.normalizeThen({ action: 'workflow', workflow: 'retrospective.yaml', map: { run_id: '@run' } });
+    this.then = thenWithRetrospective(this.then, this.inputs); // #631
     this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
     this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
     // #212: the whole suite passed once in this run (scope: affected stops running it), and the
