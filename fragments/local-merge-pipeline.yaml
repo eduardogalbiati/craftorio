@@ -2,7 +2,7 @@
 # software-development-local-hero: the change lands with `merge: local` (on the transition the
 # composition writes after verify_change or the owner's approval); a merge that fails goes to
 # resolve_merge (the developer rebases and resolves on the run's branch), and merge_blocked asks the
-# owner when that cannot go on. Nothing is pushed. A step `{ id, fragment: local-merge-pipeline }`
+# owner when that cannot go on. Once merged, push_main pushes the local base (#630). A step `{ id, fragment: local-merge-pipeline }`
 # gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js, expandFragments).
 
 steps:
@@ -32,7 +32,7 @@ steps:
         goto: merge_blocked
       - when: "output.resolved"
         merge: local
-        goto: end
+        goto: push_main
         on_error: merge_blocked
       - when: "true"
         goto: merge_blocked
@@ -51,8 +51,29 @@ steps:
     transitions:
       - when: "approved"
         merge: local
-        goto: end
+        goto: push_main
         on_error: fail
       - when: "rejected"
         goto: end
         status: failed
+
+  # #630 (closes #617): Local mode's last step, once the change is merged: the local base is pushed by
+  # the workflow, not by the project's auto-push any more. A repository without a remote, or a push
+  # refused, ends the run all the same (merged locally); the summary says what to do.
+  push_main:
+    display: Push main
+    agent: developer
+    prompt: |
+      The run's branch is merged into the local `{{ inputs.base_branch }}`. Push it: in the repository
+      `{{ inputs.repo_path }}` run `git push origin {{ inputs.base_branch }}` (never force, never another
+      branch). No remote named origin, or a push refused (e.g. the remote moved): change nothing and
+      answer pushed: false with the reason.
+    output_schema:
+      type: object
+      required: [pushed, summary]
+      properties:
+        pushed:  { type: boolean }
+        summary: { type: string }
+    transitions:
+      - when: "true"
+        goto: end
