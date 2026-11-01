@@ -51,6 +51,16 @@ Scope: phase 0 (the editor on the reader prototype) and phase 1 (MVP, R1–R13 f
 7. **The gates:** Accept intent / Sign off spec change the front matter and commit; "Create epic and phase issues" and "Start the Build" as proposals that wait for the owner's click.
 8. **The Documents screen, the screenshot seed, the E2E feature, i18n and the docs.**
 
+## Left after phase 1 (#647)
+
+Phase 1 ships the flow from the intent to a signed-off spec; these parts of R8–R13 move to the next phase's plan:
+- R8: the minimum reading width, the contents behind ☰ and the collapsible chat;
+- R9: a selection made in the translation (only the source is rendered, no EN/PT switch);
+- R10: the Queue to collect requests;
+- R11: clicking a message to see that turn's diff inline;
+- R12: Apply / Edit / Dismiss on the reviewer's notes and the Auto-apply notes option (the notes are listed only);
+- R13: Create epic and phase issues and Start the Build open the Backlog and the Roadmap; the Product Owner's proposal from the spec and the feature workflow's `plan.md` come later.
+
 ## Risks
 
 - **The reader's contract moves:** the editor talks to it only through `postMessage` messages, with a contract test on both sides.

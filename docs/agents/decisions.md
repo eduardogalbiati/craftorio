@@ -19,8 +19,9 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   translation, undone one by one by a revert. The reviewer anchors its notes to sections and sees
   only the changes not marked reviewed. The SDLC gates are the person's: Accept intent and Sign off
   spec change both front matters (status, approver from the repository's git identity, date) in one
-  commit; after the sign-off, Create epic and phase issues and Start the Build only open the Backlog
-  and the Roadmap on the owner's click, nothing is filed or started by itself. Why: each request stays
+  commit; after the sign-off, Create epic and phase issues and Start the Build wait for the owner's
+  click, nothing is filed or started by itself (in phase 1 they open the Backlog and the Roadmap; the
+  proposal from the spec is left for the next phase, listed in the plan). Why: each request stays
   a change the person can read, review and undo on its own, and a stage only moves on when its owner
   signs it. Write & Review and AI
   Arena stay in the menu until phase 2. Checked simulated only. Spec and plan:

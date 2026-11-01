@@ -15,7 +15,8 @@ const {
   repeatKey,
   validateSchema,
 } = require('./outputs');
-const { GATE, isLooping } = require('./load');
+const { GATE } = require('./field-rules');
+const { isLooping } = require('./load');
 const { DENIAL_WARN } = require('./turns');
 
 // Stall signals of an agent step (orchestrator.supervisor.stall, 0 = off): the same decision this many

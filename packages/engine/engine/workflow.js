@@ -37,8 +37,8 @@ const chain = require('@multiagent/shared/chain-model');
 const Language = require('@multiagent/shared/language');
 const { BUNDLED_SKILLS, methods: sessionsMethods } = require('./run/sessions');
 const { evalExpr, render, testsPlan } = require('./run/templates');
+const { GATE } = require('./run/field-rules');
 const {
-  GATE,
   loadWorkflow,
   MACHINE_STEP_TYPES,
   parseTokens,

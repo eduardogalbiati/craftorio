@@ -593,7 +593,6 @@ const loopConfig = (step) => step.loop || step.poll || {};
 module.exports = {
   FALLBACK_ENTRY,
   fragmentSources,
-  GATE,
   isLooping,
   loadRepositoryWorkflow,
   loadWorkflow,
