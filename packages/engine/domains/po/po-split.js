@@ -19,7 +19,10 @@ const path = require('path');
 const backlog = require('../backlog/backlog');
 const epics = require('../backlog/epics');
 const Language = require('@multiagent/shared/language');
-const { MOCKUP_EXTENSIONS } = require('./po-mockups');
+const {
+  issueMockups,
+  MOCKUP_EXTENSIONS,
+} = require('../../engine/ui-review-checks');
 
 const MAX_TASKS = 8;
 const MIN_CHILDREN = 2;
@@ -30,11 +33,9 @@ const PARENT_ACTIONS = ['umbrella', 'close'];
 const TASK_LINE = /^\s*[-*+] \[([ xX])\]\s*(.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*?)\s*#*\s*$/;
 const FILE = /(?:[\w@.-]+\/)+[\w@.-]+\.[a-z]{1,5}\b/gi;
-// #670: a mockup's name (`mock-1.jpg`), the one a task "matches", and an embedded image `![alt](url)`
+// #670: a mockup's name (`mock-1.jpg`) and the one a task "matches"
 const MOCKUP_NAME = `[\\w.-]+(?:${MOCKUP_EXTENSIONS.map((e) => e.replace('.', '\\.')).join('|')})`;
 const MATCHES = new RegExp(`\\bmatches\\s+\`?(${MOCKUP_NAME})\`?`, 'gi');
-const EMBED = /!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g;
-const baseName = (s) => String(s || '').split(/[\\/]/).pop().split(/[?#]/)[0];
 
 /** The parent's task list, in order: [{ n (1-based), text, done, part (the heading above it) }]. */
 function parentTasks(body) {
@@ -49,16 +50,9 @@ function parentTasks(body) {
   return out;
 }
 
-// #670: the mockups a body embeds (`![mock-1.jpg](url)`): their base names (the alt text when it is a
-// mockup's name, else the url's file)
+// #670: the mockups a body embeds or links: their file names, by the run's own rule (issueMockups)
 function embeddedMockups(body) {
-  const isName = (s) => new RegExp(`^${MOCKUP_NAME}$`, 'i').test(s);
-  const out = [];
-  for (const m of String(body || '').matchAll(EMBED)) {
-    const name = isName(m[1].trim()) ? m[1].trim() : baseName(m[2]);
-    if (isName(name) && !out.includes(name)) out.push(name);
-  }
-  return out;
+  return issueMockups(body).map((m) => m.file);
 }
 
 // #670: the mockups a task names: the one it "matches", and any the parent embeds that it names

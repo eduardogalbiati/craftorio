@@ -7,7 +7,7 @@
 //   itemOf(question)                               the `docs/work/<item>` a question names, or ''
 //   mockupSection({ folder, question })            the prompt block of the item's mockups, or ''
 //   specPhases(markdown)                           the spec's `## Phases` (each with its mockups) and later ones
-//   specProposal({ folder, question, issues })     the spec's issues with their coverage, or null
+//   specProposal({ folder, question, issues, mock }) the spec's issues with their coverage, or null
 'use strict';
 
 const fs = require('fs');
@@ -90,9 +90,10 @@ function specPhases(markdown) {
 }
 
 // The proposal of a spec's issues with its mockup coverage, for a question naming `docs/work/<item>`
-// with a spec: `issues` the model's [{ title, body }], or one issue per phase of the spec (the
-// simulated answer). null when the question names no spec.
-function specProposal({ folder, question, issues = null } = {}) {
+// with a spec: `issues` the model's [{ title, body }], or, simulated (`mock`), one issue per phase of
+// the spec. A real answer without issues proposes none: the coverage shows what is missing.
+// null when the question names no spec.
+function specProposal({ folder, question, issues = null, mock = false } = {}) {
   const item = itemOf(question);
   if (!item || !folder) return null;
   let markdown;
@@ -101,7 +102,7 @@ function specProposal({ folder, question, issues = null } = {}) {
   const title = (String(markdown).match(/^#\s+(?:Spec:\s*)?(.+?)\s*$/m) || [])[1] || item;
   const list = Array.isArray(issues) && issues.length
     ? issues.map((i) => ({ title: String(i?.title || ''), body: String(i?.body || '') })).filter((i) => i.title)
-    : phases.map((p) => ({
+    : !mock ? [] : phases.map((p) => ({
       title: `${title}: ${p.name}`,
       body: [`Phase of docs/work/${item}/spec.md.`, '', ...p.mockups.map((m) => `- Matches \`${m}\`: layout, icons, texts, controls, order.`)].join('\n'),
     }));

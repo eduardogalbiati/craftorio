@@ -1503,7 +1503,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
     // #670: a question naming a spec: its issues (the model's, or one per phase when simulated) and their mockup coverage
-    const spec = poMockups.specProposal({ folder, question: q, issues: raw?.spec?.issues });
+    const spec = poMockups.specProposal({ folder, question: q, issues: raw?.spec?.issues, mock: !!mock });
     const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs, spec });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', ...tag, text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),

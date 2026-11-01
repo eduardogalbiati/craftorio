@@ -100,10 +100,15 @@ const fileOf = (ref) => String(ref || '').split(/[?#]/)[0].split(/[\\/]/).pop();
 
 // #670: the mockups an issue's text embeds or links: `![mock-1.jpg](url)`, `[mock-1.jpg](url)` and
 // the spec's own files (`docs/work/<item>/mock-1.jpg`) → [{ file, ref }] (ref: the url or the
-// repository path), each file once; [] for an issue without mockups (reviewed as before)
+// repository path), each file once; [] for an issue without mockups (reviewed as before). An HTML
+// mockup is one of the spec's files: a link to an outside page (`[guide](https://site/page.html)`) is not
 function issueMockups(text) {
   const out = new Map();
-  const add = (file, ref) => { if (file && MOCKUP_FILE.test(file) && !out.has(file)) out.set(file, { file, ref }); };
+  const add = (file, ref) => {
+    if (!file || !MOCKUP_FILE.test(file) || out.has(file)) return;
+    if (/\.html$/i.test(file) && !/\bdocs\/work\//.test(ref)) return;
+    out.set(file, { file, ref });
+  };
   const s = String(text || '');
   for (const m of s.matchAll(/!?\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)) {
     const alt = m[1].trim();

@@ -36,7 +36,7 @@ test('specPhases: the phases with their mockups, and the later ones', () => {
 
 test('specProposal: one issue per phase, every mockup covered, the later ones listed', (t) => {
   const folder = project(t, ['mock-1.jpg', 'mock-2.jpg', 'mock-3.jpg', 'mock-5.jpg']);
-  const out = specProposal({ folder, question: 'Create the issues of docs/work/export-runs-as-csv/spec.md' });
+  const out = specProposal({ folder, question: 'Create the issues of docs/work/export-runs-as-csv/spec.md', mock: true });
   assert.equal(out.item, 'export-runs-as-csv');
   assert.deepEqual(out.issues.map((i) => i.title), ['Export runs as CSV: Phase 1', 'Export runs as CSV: Phase 2']);
   assert.match(out.issues[0].body, /Matches `mock-1\.jpg`: layout, icons, texts, controls, order/);
@@ -48,10 +48,17 @@ test('specProposal: one issue per phase, every mockup covered, the later ones li
 test('specProposal: a mockup no phase names blocks; the model\'s issues replace the phases', (t) => {
   const folder = project(t, ['mock-1.jpg', 'mock-4.jpg']);
   const q = 'docs/work/export-runs-as-csv';
-  assert.deepEqual(specProposal({ folder, question: q }).coverage.errors, ['mock-4.jpg has no issue']);
+  assert.deepEqual(specProposal({ folder, question: q, mock: true }).coverage.errors, ['mock-4.jpg has no issue']);
   const own = specProposal({ folder, question: q, issues: [{ title: 'All screens', body: 'mock-1.jpg and mock-4.jpg' }] });
   assert.deepEqual(own.issues, [{ title: 'All screens', body: 'mock-1.jpg and mock-4.jpg' }]);
   assert.equal(own.coverage.ok, true);
+});
+
+test('specProposal: a real answer without issues proposes none, the coverage shows every mockup missing', (t) => {
+  const folder = project(t, ['mock-1.jpg']);
+  const out = specProposal({ folder, question: 'docs/work/export-runs-as-csv' });
+  assert.deepEqual(out.issues, []);
+  assert.deepEqual(out.coverage.errors, ['mock-1.jpg has no issue']);
 });
 
 test('specProposal: null without a spec or without a docs/work item in the question', (t) => {
