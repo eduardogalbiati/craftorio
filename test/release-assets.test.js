@@ -95,11 +95,16 @@ test('#557 release assets: no package to sum fails the step, so nothing is publi
   assert.notEqual(out.status, 0);
 });
 
-test('#557 release assets: the publish job only runs on main, the ref the documented cosign identity names', () => {
+// Since 2026-10-31 a vX.Y.Z tag publishes the release and a manual run on main an rc (#489 in
+// docs/agents/decisions.md): the documented identity names both refs.
+test('#557 release assets: the publish job runs only on a tag or main, the refs the documented cosign identity names', () => {
   const wf = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/deploy.yml'), 'utf8'));
-  assert.match(String(wf.jobs.publish.if || ''), /github\.ref\s*==\s*'refs\/heads\/main'/);
+  const cond = String(wf.jobs.publish.if || '');
+  assert.match(cond, /github\.ref\s*==\s*'refs\/heads\/main'/);
+  assert.match(cond, /github\.ref_type\s*==\s*'tag'/);
   const doc = fs.readFileSync(path.join(root, 'docs', 'readme', '020-install.md'), 'utf8');
-  assert.equal(doc.includes('.github/workflows/deploy.yml@refs/heads/main'), true, 'the docs expect deploy.yml@refs/heads/main');
+  const id = doc.split('\n').find((l) => /--certificate-identity/.test(l)) || '';
+  assert.match(id, /\.github\/workflows\/deploy\.yml@refs\/\(tags\/v[^|]*\|heads\/main\)/, 'the docs accept deploy.yml@refs/tags/v… and @refs/heads/main');
 });
 
 // preview.yml's targets job keeps its own list of builds (inline JSON in a shell variable).

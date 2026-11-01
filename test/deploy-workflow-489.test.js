@@ -1,10 +1,10 @@
-// #489 .github/workflows/deploy.yml as "rc + stable": acceptance tests written before the change.
-// - a push to main builds and publishes a PRERELEASE vX.Y.Z-rc.N (`gh release create ... --prerelease`,
-//   never `--latest`);
-// - a vX.Y.Z tag promotes: a job that edits the release of the same commit (`gh release edit ...
-//   --latest`, renamed to the tag), with no build (it does not need the build job, packages nothing,
-//   uploads nothing); the build job does not run on a tag;
-// - workflow_dispatch is kept.
+// .github/workflows/deploy.yml builds only for a release (owner decision of 2026-10-31, replacing the
+// "every push to main builds an rc" part of #489; docs/agents/decisions.md):
+// - a pushed vX.Y.Z tag builds every OS and publishes the release vX.Y.Z, marked latest; an rc tag
+//   (vX.Y.Z-rc.N) triggers nothing;
+// - a push to main builds nothing;
+// - a run by hand (workflow_dispatch) on main still publishes a PRERELEASE vX.Y.Z-rc.N, never latest;
+// - nothing promotes an existing release any more (no `gh release edit`).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -12,39 +12,40 @@ const path = require('path');
 const yaml = require('js-yaml');
 
 const load = () => yaml.load(fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'deploy.yml'), 'utf8'));
-const jobs = (wf) => Object.entries(wf.jobs || {}).map(([id, job]) => ({ id, job, script: (job.steps || []).map((s) => `${s.run || ''}\n${s.uses || ''}`).join('\n') }));
-const needsOf = (job) => [].concat(job.needs || []);
+const steps = (wf) => Object.entries(wf.jobs || {}).flatMap(([id, job]) => (job.steps || []).map((s) => ({ id, job, step: s, run: `${s.run || ''}\n${s.uses || ''}` })));
 
-test('#489 deploy.yml runs on a push to main, on a v* tag and by hand', () => {
+test('deploy.yml runs on a vX.Y.Z tag and by hand, never on a push to main nor on an rc tag', () => {
   const on = load().on || {};
-  assert.equal([].concat(on.push?.branches || []).includes('main'), true);
-  assert.equal([].concat(on.push?.tags || []).some((t) => String(t).startsWith('v')), true);
+  assert.equal(on.push?.branches, undefined, 'no push to a branch');
+  const tags = [].concat(on.push?.tags || []);
+  assert.ok(tags.some((t) => String(t).startsWith('v')), 'a v* tag');
+  assert.ok(tags.includes('!v*-rc.*'), 'rc tags excluded');
   assert.equal('workflow_dispatch' in on, true);
+  assert.equal('pull_request' in on || 'schedule' in on, false);
 });
 
-test('#489 the push to main publishes a prerelease vX.Y.Z-rc.N, never marked latest', () => {
-  const creates = jobs(load()).filter((j) => /gh release create/.test(j.script));
-  assert.equal(creates.length > 0, true, 'a job creates the release');
-  for (const j of creates) {
-    assert.equal(j.script.includes('--prerelease'), true, `${j.id}: --prerelease`);
-    assert.equal(j.script.includes('-rc.'), true, `${j.id}: an -rc. tag`);
-    assert.equal(/--latest(?!=false)/.test(j.script), false, `${j.id}: never --latest`);
-  }
+test('the build runs for the tag too: no job skips a tag push', () => {
+  const wf = load();
+  const build = Object.entries(wf.jobs).find(([, j]) => (j.steps || []).some((s) => /npm run package/.test(s.run || '')));
+  assert.ok(build, 'a build job packages the app');
+  assert.doesNotMatch(String(build[1].if || ''), /tags/, 'the build is not kept off the tag');
 });
 
-test('#489 a v* tag promotes the existing release (gh release edit --latest) without a rebuild', () => {
-  const all = jobs(load());
-  const promote = all.filter((j) => /gh release edit/.test(j.script));
-  assert.equal(promote.length, 1, 'one job edits the release');
-  const p = promote[0];
-  assert.equal(p.script.includes('--latest'), true, 'marked latest');
-  assert.equal(p.script.includes('--prerelease=false'), true, 'no longer a prerelease');
-  const builds = all.filter((j) => /npm run package|release-assets\.js|upload-artifact/.test(j.script)).map((j) => j.id);
-  assert.equal(builds.length > 0, true, 'a build job exists');
-  assert.equal(builds.includes(p.id), false, 'the promotion packages nothing');
-  assert.equal(needsOf(p.job).some((n) => builds.includes(n)), false, 'the promotion does not wait for a build');
-  for (const id of builds) {
-    const cond = String(all.find((j) => j.id === id).job.if || '');
-    assert.match(cond, /tag|refs\/heads/, `${id}: its if keeps it off the tag push`);
-  }
+test('a tag publishes the release vX.Y.Z as latest; a run by hand publishes an rc prerelease, never latest', () => {
+  const creates = steps(load()).filter((s) => /gh release create/.test(s.run));
+  assert.equal(creates.length, 2, 'one step per kind of release');
+  const stable = creates.find((s) => /ref_type == 'tag'/.test(String(s.step.if || '')));
+  const rc = creates.find((s) => /ref_type != 'tag'/.test(String(s.step.if || '')));
+  assert.ok(stable && rc, 'the steps split on the tag');
+  assert.match(stable.run, /--latest(?!=false)/);
+  assert.match(stable.run, /github\.ref_name/, 'the release is named after the tag');
+  assert.doesNotMatch(stable.run, /--prerelease/);
+  assert.match(rc.run, /--prerelease/);
+  assert.match(rc.run, /-rc\./);
+  assert.doesNotMatch(rc.run, /--latest/);
+  assert.equal(stable.id, rc.id, 'both in the publish job (sums and signature first)');
+});
+
+test('nothing promotes an existing release any more', () => {
+  assert.equal(steps(load()).some((s) => /gh release edit/.test(s.run)), false);
 });

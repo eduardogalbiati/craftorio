@@ -59,6 +59,10 @@
   // ids for h2/h3, requirement anchors, links and images resolved inside the item folder.
   function render(md, opts) {
     var html = window.marked.parse(md, { gfm: true, breaks: false });
+    // what the sanitizer would drop but the conventions read: a task's box (decisions) and a code
+    // block's language (the mermaid flow), kept as data-* attributes on marked's own output
+    html = html.replace(/<input (checked="" )?disabled="" type="checkbox">/g, function (all, on) { return '<span data-task="' + (on ? 'x' : ' ') + '"></span>'; })
+      .replace(/<code class="language-mermaid">/g, '<code data-lang="mermaid">');
     var frag = window.DOMPurify.sanitize(html, {
       RETURN_DOM_FRAGMENT: true,
       FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed', 'svg', 'math'],
@@ -66,6 +70,7 @@
     });
     var box = document.createElement('div');
     box.appendChild(frag);
+    conventions(box);
     var title = '', toc = [], prefix = opts.prefix || 'doc';
     var h1 = box.querySelector('h1');
     if (h1 && opts.takeTitle) { title = h1.textContent; h1.remove(); }
@@ -98,6 +103,75 @@
     });
     box.querySelectorAll('table').forEach(function (t) { var w = document.createElement('div'); w.className = 'tbl'; t.parentNode.insertBefore(w, t); w.appendChild(t); });
     return { el: box, title: title, toc: toc };
+  }
+  // The SDLC document conventions (docs/work/CONVENTIONS.md), drawn from plain GitHub markdown:
+  // GitHub alerts ("> [!TIP]" …) as callouts, a decision (a task list under "### Dn · Title") as one
+  // card per option, the chosen one marked, and a mermaid flowchart as a strip of steps.
+  var ALERTS = { TIP: 'Tip', NOTE: 'Note', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
+  function conventions(box) {
+    box.querySelectorAll('blockquote').forEach(function (q) {
+      var p = q.querySelector('p'), m = p && p.textContent.match(/^\s*\[!(TIP|NOTE|IMPORTANT|WARNING|CAUTION)\]\s*/);
+      if (!m) return;
+      // drop the marker (a text node, then the line break marked keeps after it)
+      var t = p.firstChild;
+      if (t && t.nodeType === 3) t.nodeValue = t.nodeValue.replace(/^\s*\[!\w+\]\s*/, '');
+      while (p.firstChild && ((p.firstChild.nodeType === 3 && !p.firstChild.nodeValue.trim()) || p.firstChild.nodeName === 'BR')) p.firstChild.remove();
+      if (!p.childNodes.length) p.remove();
+      var box2 = document.createElement('div'); box2.className = 'alert alert-' + m[1].toLowerCase(); box2.setAttribute('role', 'note');
+      var label = document.createElement('div'); label.className = 'alert-h'; label.textContent = ALERTS[m[1]];
+      box2.appendChild(label);
+      while (q.firstChild) box2.appendChild(q.firstChild);
+      q.replaceWith(box2);
+    });
+    box.querySelectorAll('h3').forEach(function (h) {
+      if (!/^\s*D\d+\s*·/.test(h.textContent)) return;
+      var list = h.nextElementSibling;
+      if (list && list.tagName === 'P') list = list.nextElementSibling;   // the question line
+      if (!list || list.tagName !== 'UL' || !list.querySelector(':scope > li > [data-task], :scope > li > p > [data-task]')) return;
+      var cards = document.createElement('div'); cards.className = 'opts'; cards.setAttribute('role', 'list');
+      [].slice.call(list.children).forEach(function (li) {
+        var mark = li.querySelector('[data-task]'); if (!mark) return;
+        var chosen = mark.getAttribute('data-task') === 'x';
+        var name = li.querySelector('strong'), points = li.querySelector('ul');
+        var head = (name ? name.parentNode : li).cloneNode(true);
+        [].slice.call(head.querySelectorAll('ul,[data-task]')).forEach(function (n) { n.remove(); });
+        var nm = head.querySelector('strong'), why = '';
+        if (nm) { why = head.textContent.replace(nm.textContent, '').replace(/^[\s·]+|[\s·]+$/g, ''); }
+        var card = document.createElement('div'); card.className = 'opt' + (chosen ? ' chosen' : ''); card.setAttribute('role', 'listitem');
+        card.innerHTML = '<div class="opt-h"><span class="box" aria-hidden="true"></span><b></b>' + (why ? '<span class="tag"></span>' : '') + '</div>';
+        if (chosen) card.setAttribute('aria-label', 'Chosen option');
+        var b = card.querySelector('b'); if (nm) { while (nm.firstChild) b.appendChild(nm.firstChild); } else b.textContent = head.textContent.trim();
+        if (why) card.querySelector('.tag').textContent = why;
+        if (points) [].slice.call(points.children).forEach(function (pl) {
+          var k = pl.querySelector('strong'), sign = k ? k.textContent.trim() : '';
+          var pt = document.createElement('p'); pt.className = sign === '+' ? 'pro' : /^[−-]$/.test(sign) ? 'con' : '';
+          if (k && /^[+−-]$/.test(sign)) k.remove();
+          while (pl.firstChild) pt.appendChild(pl.firstChild);
+          card.appendChild(pt);
+        });
+        cards.appendChild(card);
+      });
+      h.className = 'dec';
+      list.replaceWith(cards);
+    });
+    box.querySelectorAll('code[data-lang="mermaid"]').forEach(function (code) {
+      var nodes = [], seen = {}, later = {};
+      code.textContent.split('\n').forEach(function (line) {
+        line.replace(/([A-Za-z0-9_]+)\[([^\]]+)\]/g, function (all, id, label) { if (!seen[id]) { seen[id] = 1; nodes.push({ id: id, label: label }); } return all; });
+        var d = line.match(/-\.->\s*([A-Za-z0-9_]+)/); if (d) later[d[1]] = 1;
+      });
+      if (!nodes.length) return;
+      var ol = document.createElement('ol'); ol.className = 'flowstrip';
+      nodes.forEach(function (n) {
+        var parts = n.label.split(/<br\s*\/?>/i), li = document.createElement('li');
+        if (later[n.id]) li.className = 'later';
+        var b = document.createElement('b'); b.textContent = parts[0].replace(/&amp;/g, '&'); li.appendChild(b);
+        if (parts[1]) { var sp = document.createElement('span'); sp.textContent = parts[1].replace(/&amp;/g, '&'); li.appendChild(sp); }
+        if (later[n.id]) { var lt = document.createElement('em'); lt.textContent = 'later'; li.appendChild(lt); }
+        ol.appendChild(li);
+      });
+      (code.closest('pre') || code).replaceWith(ol);
+    });
   }
   // Resolves a relative path inside base without letting "../" climb out of it.
   function resolve(base, rel) {
@@ -216,7 +290,9 @@
     var names = [];
     try {
       var idx = await fetch(ROOT + 'index.json', { cache: 'no-cache' });
-      if (idx.ok && /json/.test(idx.headers.get('content-type') || '')) return (await idx.json()).filter(function (n) { return SAFE.test(n); });
+      if (idx.ok && /json/.test(idx.headers.get('content-type') || '')) {
+        return (await idx.json()).map(function (e) { if (typeof e === 'string') return e; if (e && e.kind === 'milestone') MILESTONES[e.name] = true; return e && e.name; }).filter(function (n) { return SAFE.test(n || ''); });
+      }
     } catch (e) { /* no index: ask the server */ }
     try {
       var r = await fetch(ROOT, { headers: { Accept: 'application/json' }, cache: 'no-cache' });
@@ -240,10 +316,13 @@
   // Each stage file is the English source; its front matter may name a translation beside it
   // (`translation: intent.pt-BR.md`, which says `source: intent.md (English)` back).
   var TR = /^[a-z0-9][a-z0-9._-]*\.md$/i;
+  // the items index.json marks as milestones: their folder has no stage file to ask for
+  var MILESTONES = {};
   async function loadItem(name) {
     var base = ROOT + name + '/';
+    if (MILESTONES[name]) return loadMilestone(name, base);
     var files = await Promise.all(STAGES.map(function (s) { return getText(base + s.f + '.md').catch(function () { return null; }); }));
-    if (!files.some(Boolean)) return null;
+    if (!files.some(Boolean)) return loadMilestone(name, base);
     var stages = await Promise.all(STAGES.map(async function (s, i) {
       var r = files[i];
       if (!r) return { f: s.f, name: s.name, fills: s.fills, missing: true, meta: { status: 'not started' }, hints: {}, body: '', raw: '', file: s.f + '.md' };
@@ -282,13 +361,60 @@
     var shipped = statusCls(deploy.meta.status) === 'ok' || here === 5;
     var group = shipped ? 'shipped' : here < 2 || (here === 2 && statusCls(stages[2].meta.status) !== 'ok') ? 'planned' : 'progress';
     return {
+      deps: first.missing ? [] : window.SdlcOrder.dependsOn(first.meta.depends_on), depHint: first.missing ? '' : (first.hints.depends_on || ''),
       group: group, created: stages[0].at, released: released, release: deploy.meta.release || '', target: first.meta.target || '',
+      plan: stages[2].missing ? null : planProgress(stages[2].body),
+      summary: { en: first.missing ? '' : firstParagraph(first.body), pt: first.tr ? firstParagraph(first.tr.body) : (first.missing ? '' : firstParagraph(first.body)) },
       issue: first.meta.issue || '', lead: !isNaN(released) && !isNaN(stages[0].at) ? (released - stages[0].at) / DAY : null,
       name: name, base: base, stages: stages, here: here,
       title: { en: (!first.missing && h1(first.body)) || name, pt: (first.tr && h1(first.tr.body)) || (!first.missing && h1(first.body)) || name },
       translated: written.filter(function (s) { return s.tr; }).length, written: written.length,
       updated: dates.length ? Math.max.apply(null, dates) : null
     };
+  }
+  // A milestone (docs/work/<name>/milestone.md, `kind: milestone`): a marker on the project's history,
+  // not an SDLC item, so it has no stages. Front matter: title, summary, status (planned | in progress |
+  // done), after (the item it follows in Next), expected (the day it should be reached), reached (the
+  // day it was: it then shows on the Changelog), date (when it was written), and a translation.
+  async function loadMilestone(name, base) {
+    var r = await getText(base + 'milestone.md').catch(function () { return null; });
+    if (!r) return null;
+    var fm = frontMatter(r.text), M = fm.meta, tn = typeof M.translation === 'string' ? M.translation.split(/\s/)[0] : '';
+    var t = TR.test(tn) ? await getText(base + tn).catch(function () { return null; }) : null, tf = t ? frontMatter(t.text) : null;
+    var st = String(M.status || 'planned').toLowerCase();
+    var str = function (v) { return typeof v === 'string' ? v : ''; };
+    return {
+      deps: window.SdlcOrder.dependsOn(M.depends_on), depHint: fm.hints.depends_on || '',
+      kind: 'milestone', name: name, base: base, here: -1, stages: [], issue: '', release: '', target: '', lead: null,
+      group: st === 'done' ? 'shipped' : WORKING.test(st) ? 'progress' : 'planned', status: st, after: str(M.after),
+      created: M.date ? day(M.date) : NaN, expected: M.expected ? day(M.expected) : NaN, reached: M.reached ? day(M.reached) : NaN,
+      title: { en: str(M.title) || name, pt: (tf && str(tf.meta.title)) || str(M.title) || name },
+      summary: { en: str(M.summary), pt: (tf && str(tf.meta.summary)) || str(M.summary) },
+      doc: { en: { meta: M, hints: fm.hints, body: fm.body, raw: r.text, file: 'milestone.md' }, pt: tf ? { meta: tf.meta, hints: tf.hints, body: tf.body, raw: t.text, file: tn } : null }
+    };
+  }
+  // The plan's Progress table (`## Progress` / `## Progresso`): its rows, and the ones whose Status says done.
+  function planProgress(body) {
+    var lines = String(body || '').split('\n'), at = lines.findIndex(function (l) { return /^##\s+(progress|progresso)\b/i.test(l); });
+    if (at < 0) return null;
+    var rows = [], col = -1;
+    for (var i = at + 1; i < lines.length && !/^##\s/.test(lines[i]); i++) {
+      if (!/^\s*\|/.test(lines[i])) { if (rows.length || col >= 0) { if (lines[i].trim()) break; } continue; }
+      var cells = lines[i].trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); });
+      if (col < 0) { col = cells.findIndex(function (c) { return /^status$/i.test(c); }); continue; }
+      if (cells.every(function (c) { return /^:?-+:?$/.test(c); })) continue;
+      rows.push(cells);
+    }
+    if (col < 0 || !rows.length) return null;
+    var done = rows.filter(function (r) { return /^(done|feito|merged|shipped|ok|✓|✅)/i.test(r[col] || ''); }).length;
+    return { done: done, total: rows.length };
+  }
+  // The first plain paragraph of a document (after its headings), as a one-line summary.
+  function firstParagraph(body) {
+    var para = String(body || '').split(/\n\s*\n/).map(function (b) { return b.trim(); })
+      .find(function (b) { return b && !/^(#|\||!|>|-|\*|\d+\.|```)/.test(b); }) || '';
+    para = para.replace(/\s+/g, ' ').replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+    return para.length > 220 ? para.slice(0, 217).replace(/\s+\S*$/, '') + '…' : para;
   }
   // The stage being worked on: the first one with a working status (draft, in progress); else the last
   // one started, moving past it when it is approved (an accepted plan means Build is on, so it stays).
@@ -332,19 +458,105 @@
   // in a stage sits on the line that leaves it.
   function flowDots(it) {
     return '<ol class="fdots" aria-label="Stages">' + it.stages.map(function (s, i) {
-      var cls = s.here && it.group !== 'shipped' ? 'here' : i < it.here || (s.here && it.group === 'shipped') ? 'done' : 'todo';
+      var cls = s.here && it.group !== 'shipped' ? (s.missing ? 'next' : 'here') : i < it.here || (s.here && it.group === 'shipped') ? 'done' : 'todo';
       var tip = SHORT[i] + ' · ' + (s.missing ? 'not started' : (s.meta.status || '')) + (isNaN(s.at) ? '' : ' · ' + shortDate(s.at)) + (s.days != null ? ' · ' + days(s.days) + (s.ongoing ? ' so far' : '') : '');
       return '<li class="fd ' + cls + (s.ongoing ? ' ongoing' : '') + '" title="' + esc(tip) + '"><span class="d" aria-hidden="true"></span><span class="l">' + SHORT[i] + '<span class="sr"> ' + (cls === 'done' ? 'done' : cls === 'here' ? 'current' : 'to do') + '</span></span>' +
         (i < 5 && s.days != null ? '<span class="t">' + days(s.days) + '</span>' : '') + '</li>';
     }).join('') + '</ol>';
   }
+  var FLAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>';
+  function longDay(t) { return new Date(t).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }); }
+  // "Expected Thu, Nov 5 · in 5 days", or when it was reached
+  function milestoneWhen(it) {
+    if (it.group === 'shipped') return isNaN(it.reached) ? 'Reached' : 'Reached ' + longDay(it.reached);
+    if (isNaN(it.expected)) return 'No date yet';
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var left = Math.round((it.expected - today.getTime()) / 864e5);
+    return 'Expected <b>' + longDay(it.expected) + '</b> · ' + (left > 1 ? 'in ' + left + ' days' : left === 1 ? 'tomorrow' : left === 0 ? 'today' : (-left) + (left === -1 ? ' day' : ' days') + ' late');
+  }
+  function milestoneCard(it) {
+    return '<a class="wcard mile g-' + it.group + '" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
+      '<div class="wc-top"><span class="gtag mtag">' + FLAG + 'Milestone</span></div>' +
+      '<h3>' + esc(it.title[lang]) + '</h3>' + (it.summary[lang] ? '<p class="msum">' + esc(it.summary[lang]) + '</p>' : '') +
+      '<div class="wc-foot mwhen">' + milestoneWhen(it) + '</div></a>';
+  }
+  // What GitHub and git say (scripts/site-data.js writes them at build time; absent on a local build
+  // without a token): the state of each item's issue and its pull requests, the backlog label's open
+  // issues, and the commit activity. A private repository's issues are named, never linked.
+  var GH = null, ACT = null;
+  async function loadExtras() {
+    var j = function (f) { return getText(ROOT + f).then(function (r) { return r ? JSON.parse(r.text) : null; }).catch(function () { return null; }); };
+    var r = await Promise.all([j('github.json'), j('activity.json')]);
+    GH = r[0]; ACT = r[1];
+  }
+  function ghIssue(it) { var m = String(it.issue || '').match(/#(\d+)/); return GH && m ? GH.issues[m[1]] || null : null; }
+  function refHtml(it) {
+    if (!it.issue) return '';
+    var g = ghIssue(it);
+    return '<span class="ref">' + (g ? '<i class="st st-' + g.state + '" title="Issue ' + g.state + ' on GitHub"></i>' : '') + esc(it.issue.split(/\s/)[0]) + '</span>';
+  }
+  function lastPr(it) {
+    var g = ghIssue(it), pr = g && g.prs && g.prs[0];
+    return pr ? 'PR #' + pr.number + ' ' + pr.state : '';
+  }
+  // The item's sub-issues (its epic's phases on GitHub), folded under its card: how many are done, then
+  // the list, open ones first. A private repository's issues are named, never linked.
+  function subsHtml(it) {
+    var g = ghIssue(it), kids = g && g.children ? g.children : [];
+    if (!kids.length) return '';
+    var done = kids.filter(function (c) { return c.state === 'closed'; }).length;
+    var order = kids.slice().sort(function (a, b) { return (a.state === 'closed') - (b.state === 'closed') || a.number - b.number; });
+    // a dot per sub-issue, filled when it is done (a bar past 12)
+    var pips = kids.length <= 12 ? '<span class="pips" aria-hidden="true">' + kids.map(function (c, k) { return '<i class="' + (k < done ? 'on' : '') + '"></i>'; }).join('') + '</span>'
+      : '<span class="sbar" aria-hidden="true"><i style="width:' + Math.round(done / kids.length * 100) + '%"></i></span>';
+    return '<details class="subs"><summary>' + pips + '<span><b>' + kids.length + '</b> sub-issues · ' + done + ' done</span></summary><ul>' +
+      order.map(subLi).join('') + '</ul></details>';
+  }
+  // One sub-issue: its state and title; a phase with steps of its own folds them under it, with its count.
+  function subLi(c) {
+    var n = '#' + c.number, kids = c.children || [], done = kids.filter(function (k) { return k.state === 'closed'; }).length;
+    var line = '<i class="st st-' + c.state + '"></i><span class="num">' + (GH.private ? n : '<a href="' + esc(c.url) + '" target="_blank" rel="noopener noreferrer">' + n + '</a>') + '</span><span class="ttl">' + esc(c.title) + '</span>' +
+      '<span class="stt">' + (kids.length ? done + '/' + kids.length : c.state === 'closed' ? 'done' : 'open') + '</span>';
+    if (!kids.length) return '<li class="' + (c.state === 'closed' ? 'done' : '') + '">' + line + '</li>';
+    var order = kids.slice().sort(function (a, b) { return (a.state === 'closed') - (b.state === 'closed') || a.number - b.number; });
+    return '<li class="has-kids' + (c.state === 'closed' ? ' done' : '') + '"><details><summary>' + line + '</summary><ul>' + order.map(subLi).join('') + '</ul></details></li>';
+  }
+  // A card and its folded sub-issues, kept together (the details cannot sit inside the card's link).
+  function cardBlock(it) { return '<div class="cblock">' + itemCard(it) + depsHtml(it) + subsHtml(it) + '</div>'; }
+  // What an item builds on (`depends_on:`): "After <the item>", linked, the reason as a tooltip.
+  // TITLES maps a folder to its title per language: the list's items, or the item page's lookups.
+  var TITLES = {};
+  function depsHtml(it) {
+    var deps = (it.deps || []).filter(function (d) { return d !== it.name; });
+    if (!deps.length) return '';
+    return '<div class="deps"' + (it.depHint ? ' title="' + esc(it.depHint) + '"' : '') + '><span>After</span>' + deps.map(function (d) {
+      var t = TITLES[d] ? TITLES[d][lang] : d;
+      return '<a class="dchip" href="' + itemHref(d) + '">' + esc(t) + '</a>';
+    }).join('') + (it.depHint ? '<span class="why">' + esc(it.depHint) + '</span>' : '') + '</div>';
+  }
+  // the titles of the items an item depends on, read from their first document
+  async function loadDepTitles(it) {
+    await Promise.all((it.deps || []).map(async function (d) {
+      if (TITLES[d] || !SAFE.test(d)) return;
+      var f = MILESTONES[d] ? 'milestone.md' : 'intent.md';
+      var r = await getText(ROOT + d + '/' + f).catch(function () { return null; });
+      if (!r) return;
+      var fm = frontMatter(r.text), en = typeof fm.meta.title === 'string' ? fm.meta.title : cleanTitle((fm.body.match(/^#\s+(.+)$/m) || [])[1] || d);
+      var pt = en, tn = typeof fm.meta.translation === 'string' ? fm.meta.translation.split(/\s/)[0] : '';
+      var t = TR.test(tn) ? await getText(ROOT + d + '/' + tn).catch(function () { return null; }) : null;
+      if (t) { var tf = frontMatter(t.text); pt = typeof tf.meta.title === 'string' ? tf.meta.title : cleanTitle((tf.body.match(/^#\s+(.+)$/m) || [])[1] || en); }
+      TITLES[d] = { en: en, pt: pt };
+    }));
+  }
   function itemCard(it) {
+    if (it.kind === 'milestone') return milestoneCard(it);
     var cur = it.stages[it.here];
     var foot = ['Created ' + (shortDate(it.created) || '—')];
     if (it.group === 'shipped') { foot.push('shipped in <b>' + esc(it.release) + '</b>'); if (it.lead != null) foot.push(days(it.lead) + ' from intent to release'); }
     else { if (cur.days != null) foot.push(days(cur.days) + ' in ' + SHORT[it.here]); if (it.target) foot.push('target <b>' + esc(it.target) + '</b>'); }
+    if (lastPr(it)) foot.push(esc(lastPr(it)));
     return '<a class="wcard g-' + it.group + '" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
-      '<div class="wc-top"><span class="gtag">' + GROUPS[it.group] + (it.group === 'shipped' ? '' : ' · ' + SHORT[it.here]) + '</span>' + (it.issue ? '<span class="ref">' + esc(it.issue) + '</span>' : '') + '</div>' +
+      '<div class="wc-top"><span class="gtag">' + GROUPS[it.group] + (it.group === 'shipped' ? '' : ' · ' + (cur.missing ? 'next: ' : '') + SHORT[it.here]) + '</span>' + refHtml(it) + '</div>' +
       '<h3>' + esc(it.title[lang]) + '</h3>' + flowDots(it) +
       '<div class="wc-foot">' + foot.join(' · ') + '</div></a>';
   }
@@ -419,9 +631,26 @@
     return out;
   }
   var KIND = { Added: 'add', Changed: 'chg', Fixed: 'fix', Security: 'sec', Removed: 'rem', Deprecated: 'rem' };
-  function changelogHtml(versions) {
+  function changelogHtml(versions, milestones) {
     var box = document.createElement('div'); box.className = 'clog';
+    // milestones on the timeline: an upcoming one (with an expected day) above everything, a reached one
+    // above the first release older than it
+    var marks = (milestones || []).filter(function (m) { return !isNaN(m.reached) || (m.group !== 'shipped' && !isNaN(m.expected)); });
+    var placed = marks.map(function (m) {
+      if (isNaN(m.reached)) return { m: m, at: 0 };
+      var i = versions.findIndex(function (v) { return !isNaN(v.date) && v.date < m.reached; });
+      return { m: m, at: i < 0 ? versions.length : i };
+    });
+    var markHtml = function (m) {
+      var sec = document.createElement('section'); sec.className = 'rel mile' + (m.group === 'shipped' ? ' reached' : ' upcoming');
+      sec.innerHTML = '<div class="rel-side"><span class="ver mver">' + FLAG + 'Milestone</span><span class="rdate">' + (m.group === 'shipped' ? new Date(m.reached).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : 'expected ' + longDay(m.expected)) + '</span></div>' +
+        '<div class="rel-body"><p class="rsum"><a href="' + itemHref(m.name) + '"></a></p>' + (m.summary[lang] ? '<p class="msum"></p>' : '') + '</div>';
+      sec.querySelector('.rsum a').textContent = m.title[lang];
+      if (m.summary[lang]) sec.querySelector('.msum').textContent = m.summary[lang];
+      return sec;
+    };
     versions.forEach(function (v, i) {
+      placed.filter(function (p) { return p.at === i; }).forEach(function (p) { box.appendChild(markHtml(p.m)); });
       var next = versions[i + 1], gap = next && !isNaN(v.date) && !isNaN(next.date) ? Math.round((v.date - next.date) / 864e5) : null;
       var sec = document.createElement('section'); sec.className = 'rel' + (v.version.toLowerCase() === 'unreleased' ? ' unrel' : '') + (v === versions.find(function (x) { return !isNaN(x.date); }) ? ' newest' : '');
       sec.id = 'v-' + slug(v.version);
@@ -438,10 +667,89 @@
       });
       box.appendChild(sec);
     });
+    placed.filter(function (p) { return p.at === versions.length; }).forEach(function (p) { box.appendChild(markHtml(p.m)); });
     return box;
   }
 
+  // Commits per week as bars, the last one the current week; the numbers say the rest.
+  function activityTile(a) {
+    var max = Math.max.apply(null, a.weeks.map(function (w) { return w.commits; }).concat([1]));
+    var fmt = function (n) { return Number(n).toLocaleString('en'); };
+    return '<div class="stat wide span3 act"><dt>Activity</dt><dd>' + fmt(a.commits30) + '<small>commits in the last 30 days · ' + fmt(a.merges30) + ' pull requests merged · last commit ' + esc(shortDate(day(a.last))) + '</small></dd>' +
+      '<div class="spark" role="img" aria-label="Commits per week, last ' + a.weeks.length + ' weeks">' + a.weeks.map(function (w) {
+        return '<span title="Week of ' + esc(shortDate(day(w.start))) + ': ' + fmt(w.commits) + ' commits"><i style="height:' + Math.max(w.commits ? 6 : 2, Math.round(w.commits / max * 100)) + '%"></i></span>';
+      }).join('') + '</div></div>';
+  }
+
   // A project just imported: no item and no release yet. Shows what will fill the page, and from where.
+  // Overview as a spine (owner's choice of 2026-10-31): what is ahead on top (the farthest first), today
+  // in the middle with what is being built, what shipped below (the releases, newest first, with the
+  // items each one carried). One vertical line; the rows alternate sides on a wide screen.
+  function spine(items, versions) {
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var T = today.getTime(), DAY = 864e5;
+    var daysTo = function (t) { return Math.round((t - T) / DAY); };
+    var ago = function (t) { var d = -daysTo(t); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago'; };
+    var side = 0, rows = [];
+    function row(kind, node, card, meta) {
+      side++;
+      rows.push('<div class="srow ' + kind + ' ' + (side % 2 ? 'side-r' : 'side-l') + '"><div class="snode" aria-hidden="true">' + node + '</div><div class="scard">' + card + '</div><div class="smeta">' + (meta || '') + '</div></div>');
+    }
+    var sep = function (label) { rows.push('<div class="ssep"><span>' + label + '</span></div>'); };
+    var ahead = items.filter(function (it) { return it.group === 'planned'; }).reverse();
+    var now = items.filter(function (it) { return it.group === 'progress'; });
+    var nextStop = items.filter(function (it) { return it.kind === 'milestone' && it.group !== 'shipped' && !isNaN(it.expected) && it.expected >= T; })
+      .sort(function (a, b) { return a.expected - b.expected; })[0];
+    var backlog = GH && GH.backlog ? GH.backlog : [];
+    if (ahead.length || backlog.length) {
+      sep('Ahead');
+      if (backlog.length) {
+        row('s-backlog', '<span class="n-plan"></span>', '<div class="rcard bcard"><div class="rhead"><b>From the backlog</b><span>' + backlog.length + (backlog.length === 1 ? ' issue' : ' issues') + ' marked for the roadmap</span></div><ul class="blist">' +
+          backlog.slice(0, 6).map(function (b) { var n = '#' + b.number; return '<li><span class="mono">' + (GH.private ? n : '<a href="' + esc(b.url) + '" target="_blank" rel="noopener noreferrer">' + n + '</a>') + '</span> ' + esc(b.title) + '</li>'; }).join('') +
+          (backlog.length > 6 ? '<li class="more">and ' + (backlog.length - 6) + ' more</li>' : '') + '</ul></div>', 'not started');
+      }
+      ahead.forEach(function (it) {
+        if (it.kind === 'milestone') row('s-mile', '<span class="n-mile"></span>', milestoneCard(it), isNaN(it.expected) ? '' : longDay(it.expected));
+        else row('s-plan', '<span class="n-plan"></span>', cardBlock(it), isNaN(it.created) ? '' : 'created ' + shortDate(it.created));
+      });
+    }
+    // today: the date on one side, what is being built on the other
+    var nowCards = now.map(function (it) {
+      if (it.kind === 'milestone') return milestoneCard(it);
+      var sum = it.summary && it.summary[lang], p = it.plan;
+      return '<div class="cblock"><a class="wcard now g-progress" href="' + itemHref(it.name) + '" data-item="' + esc(it.name) + '">' +
+        '<div class="wc-top"><span class="gtag">In progress · ' + SHORT[it.here] + '</span>' + refHtml(it) + '</div>' +
+        '<h3>' + esc(it.title[lang]) + '</h3>' + (sum ? '<p class="msum">' + esc(sum) + '</p>' : '') + flowDots(it) +
+        (p ? '<div class="pbar"><span><i style="width:' + Math.max(3, Math.round(p.done / p.total * 100)) + '%"></i></span><b>plan: ' + p.done + ' of ' + p.total + ' steps</b></div>' : '') +
+        (lastPr(it) ? '<div class="wc-foot">' + esc(lastPr(it)) + '</div>' : '') + '</a>' + subsHtml(it) + '</div>';
+    }).join('') || '<p class="none">Nothing in progress right now.</p>';
+    var todayLine = now.length + ' in progress' + (nextStop ? ' · next stop in ' + daysTo(nextStop.expected) + (daysTo(nextStop.expected) === 1 ? ' day' : ' days') : '');
+    rows.push('<div class="srow today"><div class="snode" aria-hidden="true"><span class="n-today"></span></div><div class="smeta"><span class="kicker">Today</span><b>' + esc(longDay(T)) + '</b><span>' + esc(todayLine) + '</span></div><div class="scard">' + nowCards + '</div></div>');
+    // shipped: unreleased work on main, then the releases (and the milestones reached between them)
+    var reached = items.filter(function (it) { return it.kind === 'milestone' && !isNaN(it.reached); });
+    if (versions.length || reached.length) sep('Shipped');
+    var dated = versions.filter(function (v) { return !isNaN(v.date); });
+    versions.forEach(function (v) {
+      var bullets = []; v.sections.forEach(function (sec) { sec.html.querySelectorAll('li').forEach(function (li) { bullets.push(li.textContent.replace(/\s+/g, ' ').trim()); }); });
+      var counts = v.sections.map(function (sec) { return '<span>' + sec.html.querySelectorAll('li').length + ' ' + esc(sec.name.toLowerCase()) + '</span>'; }).join('');
+      var carried = items.filter(function (it) { return it.release && it.release === v.version; }).map(function (it) { return '<a class="ichip" href="' + itemHref(it.name) + '">' + esc(it.title[lang]) + '</a>'; }).join('');
+      var text = v.summary || bullets.slice(0, 2).join(' ');
+      if (isNaN(v.date)) {
+        // what is on main: its changes themselves, not the section's generic summary
+        row('s-unrel', '<span class="n-unrel"></span>', '<div class="rcard"><div class="rhead"><b>Not released yet</b><span>on main</span></div>' + (bullets.length ? '<ul class="rlist">' + bullets.slice(0, 3).map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul>' : '') + '<div class="rcounts">' + counts + '</div></div>', 'next release');
+        return;
+      }
+      reached.filter(function (m) { return m.reached >= v.date && !m.placed; }).forEach(function (m) { m.placed = true; row('s-mile s-reached', '<span class="n-mile"></span>', milestoneCard(m), ago(m.reached)); });
+      var prev = dated[dated.indexOf(v) + 1], gap = prev ? Math.round((v.date - prev.date) / DAY) : null;
+      row('s-rel' + (v === dated[0] ? ' s-newest' : ''), '<span class="n-rel"></span>',
+        '<div class="rcard"><div class="rhead"><b>' + esc(v.version) + '</b><span>' + shortDate(v.date) + (gap != null ? ' · ' + gap + ' days after ' + esc(prev.version) : '') + '</span></div>' +
+        (text ? '<p>' + esc(text) + '</p>' : '') + (carried ? '<div class="rcarried">' + carried + '</div>' : '') + '<div class="rcounts">' + counts + '</div></div>', ago(v.date));
+    });
+    reached.filter(function (m) { return !m.placed; }).forEach(function (m) { row('s-mile s-reached', '<span class="n-mile"></span>', milestoneCard(m), ago(m.reached)); });
+    reached.forEach(function (m) { delete m.placed; });
+    return '<div class="spine">' + rows.join('') + '</div>' + (versions.length ? '<p class="spine-more"><button type="button" class="linkbtn" data-goto="changelog">Read the full changelog →</button></p>' : '');
+  }
+
   function emptyWork() {
     var steps = [['Plan', 'intent.md', 'Grill me or Write doc turns an idea into an intent; a person accepts it.'],
       ['Design', 'spec.md', 'The spec, signed off at its gate.'], ['Build', 'plan.md', 'The plan, then the runs: commits and PRs fill its progress.'],
@@ -478,10 +786,17 @@
     var foot = document.createElement('p'); foot.className = 'foot noprint'; main.appendChild(foot);
 
     var names = await listItems();
-    var results = await Promise.all([Promise.all(names.map(function (n) { return loadItem(n).catch(function () { return null; }); })), pair(BASE + 'CHANGELOG.md')]);
-    var items = results[0].filter(Boolean), clog = results[1];
+    var results = await Promise.all([loadExtras(), Promise.all(names.map(function (n) { return loadItem(n).catch(function () { return null; }); })), pair(BASE + 'CHANGELOG.md')]);
+    var items = results[1].filter(Boolean), clog = results[2];
     var order = { progress: 0, planned: 1, shipped: 2 };
     items.sort(function (a, b) { return order[a.group] - order[b.group] || (b.here - a.here) || ((b.released || b.created || 0) - (a.released || a.created || 0)); });
+    // then each item after the items it depends on, in its group (site/assets/order.js)
+    items = window.SdlcOrder.orderByDeps(items, function (it) { return it.group; });
+    // a milestone is the last stop of its group's roadmap (the top of the spine's Ahead)
+    items = items.map(function (it, i) { return { it: it, i: i }; }).sort(function (a, b) {
+      return order[a.it.group] - order[b.it.group] || (a.it.kind === 'milestone') - (b.it.kind === 'milestone') || a.i - b.i;
+    }).map(function (x) { return x.it; });
+    items.forEach(function (it) { TITLES[it.name] = it.title; });
     var tab = ['overview', 'work', 'changelog'].indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : 'overview';
     var filter = 'all', query = '';
 
@@ -493,7 +808,7 @@
       header.querySelector('.title span').textContent = M.repo || 'docs/work/';
       var versions = clog ? parseChangelog(lang === 'pt' && clog.pt ? clog.pt : clog.en, items) : [];
       var latest = versions.find(function (v) { return !isNaN(v.date); });
-      var count = function (g) { return items.filter(function (it) { return it.group === g; }).length; };
+      var count = function (g) { return items.filter(function (it) { return it.group === g && it.kind !== 'milestone'; }).length; };
       var leads = items.map(function (it) { return it.lead; }).filter(function (x) { return x != null; });
       var med = median(leads);
       hero.innerHTML = '<div class="hero-in"><div class="hero-text">' + (M.kicker ? '<span class="kicker"></span>' : '') + '<h1></h1><p class="tagline"></p><div class="intro"></div>' + (M.generated_by ? '<p class="prov"></p>' : '') + '</div>' +
@@ -501,8 +816,9 @@
         '<div class="stat s-progress"><dt>In progress</dt><dd>' + count('progress') + '</dd></div>' +
         '<div class="stat s-planned"><dt>Planned</dt><dd>' + count('planned') + '</dd></div>' +
         '<div class="stat s-shipped"><dt>Shipped</dt><dd>' + count('shipped') + '</dd></div>' +
-        (latest ? '<div class="stat wide"><dt>Latest release</dt><dd>' + esc(latest.version) + '<small>' + shortDate(latest.date) + ' · ' + ago(latest.date) + '</small></dd></div>' : '<div class="stat wide"><dt>Latest release</dt><dd>—<small>No release recorded yet</small></dd></div>') +
-        (med != null ? '<div class="stat wide"><dt>Median lead time</dt><dd>' + days(med) + '<small>intent to release</small></dd></div>' : '') +
+        (latest ? '<div class="stat wide ' + (med != null ? 'span2' : 'span3') + '"><dt>Latest release</dt><dd>' + esc(latest.version) + '<small>' + shortDate(latest.date) + ' · ' + ago(latest.date) + '</small></dd></div>' : '<div class="stat wide ' + (med != null ? 'span2' : 'span3') + '"><dt>Latest release</dt><dd>—<small>No release recorded yet</small></dd></div>') +
+        (med != null ? '<div class="stat wide span1"><dt>Median lead time</dt><dd>' + days(med) + '<small>intent to release</small></dd></div>' : '') +
+        (ACT && ACT.weeks ? activityTile(ACT) : '') +
         '</dl></div>';
       hero.querySelector('h1').textContent = title;
       hero.querySelector('.tagline').textContent = M.tagline || '';
@@ -516,17 +832,8 @@
       tabs.querySelectorAll('[role=tab]').forEach(function (b) { b.addEventListener('click', function () { select(b.dataset.tab, true); }); });
 
       // Overview
-      var now = items.filter(function (it) { return it.group === 'progress'; }), next = items.filter(function (it) { return it.group === 'planned'; }), done = items.filter(function (it) { return it.group === 'shipped'; });
-      var byTarget = {}; next.forEach(function (it) { (byTarget[it.target || 'Later'] = byTarget[it.target || 'Later'] || []).push(it); });
-      if (!items.length) panes.overview.innerHTML = emptyWork();
-      else panes.overview.innerHTML = '<div class="lanes">' +
-        '<section class="lane"><header><h2>Now</h2><span>' + now.length + ' in progress</span></header>' + (now.map(itemCard).join('') || '<p class="none">Nothing in progress.</p>') + '</section>' +
-        '<section class="lane"><header><h2>Next</h2><span>' + next.length + ' planned</span></header>' + (Object.keys(byTarget).sort().map(function (t) { return '<h5 class="tgt">' + (t === 'Later' ? 'No target yet' : 'Target ' + esc(t)) + '</h5>' + byTarget[t].map(itemCard).join(''); }).join('') || '<p class="none">Nothing planned.</p>') + '</section>' +
-        '</div><div class="shipped-row">' + stageChart(items) +
-        (latest ? '<aside class="latest"><span class="kicker">Latest release</span><h3>' + esc(latest.version) + '</h3><p class="ldate">' + new Date(latest.date).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) + '</p><p class="lsum"></p><ul>' +
-          latest.sections.map(function (s) { return '<li><b>' + s.html.querySelectorAll('li').length + '</b> ' + esc(s.name.toLowerCase()) + '</li>'; }).join('') + '</ul><button type="button" class="linkbtn" data-goto="changelog">Read the changelog →</button></aside>' : '') + '</div>' +
-        (done.length ? '<section class="lane recent"><header><h2>Recently shipped</h2><span>' + done.length + ' items</span></header><div class="grid2">' + done.slice(0, 4).map(itemCard).join('') + '</div></section>' : '');
-      if (latest && items.length) panes.overview.querySelector('.lsum').textContent = latest.summary;
+      if (!items.length && !versions.length) panes.overview.innerHTML = emptyWork();
+      else panes.overview.innerHTML = spine(items, versions) + (stageChart(items) ? '<div class="shipped-row solo">' + stageChart(items) + '</div>' : '');
       panes.overview.querySelectorAll('[data-goto]').forEach(function (b) { b.addEventListener('click', function () { select(b.dataset.goto, true); window.scrollTo({ top: tabs.offsetTop - 70, behavior: 'smooth' }); }); });
       var tip = document.createElement('div'); tip.className = 'ctip'; tip.hidden = true; panes.overview.appendChild(tip);
       panes.overview.querySelectorAll('.seg').forEach(function (seg) {
@@ -548,7 +855,7 @@
           if (!query) return true;
           return (it.title.en + ' ' + it.title.pt + ' ' + it.name + ' ' + it.issue + ' ' + it.release + ' ' + it.target).toLowerCase().indexOf(query.toLowerCase()) >= 0;
         });
-        panes.work.querySelector('.wlist').innerHTML = shown.map(itemCard).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
+        panes.work.querySelector('.wlist').innerHTML = shown.map(cardBlock).join('') || (items.length ? '<p class="none">No item matches.</p>' : '<p class="none">No work items yet: the first one appears when a workflow writes its <code>intent.md</code>.</p>');
         bindCards(panes.work);
       }
       panes.work.querySelectorAll('.chip').forEach(function (c) { c.addEventListener('click', function () { filter = c.dataset.f; panes.work.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', x === c); }); list(); }); });
@@ -557,7 +864,7 @@
 
       // Changelog
       panes.changelog.innerHTML = '';
-      if (versions.length) panes.changelog.appendChild(changelogHtml(versions));
+      if (versions.length) panes.changelog.appendChild(changelogHtml(versions, items.filter(function (it) { return it.kind === 'milestone'; })));
       else panes.changelog.innerHTML = '<div class="empty-state"><span class="kicker">Changelog</span><h3>No release recorded yet</h3><p>The <code>release</code> workflow adds each version to <code>CHANGELOG.md</code> when someone ships it at the Ship gate, with the items that went in. A repository that already has tags can generate the history from them, in a run you approve.</p></div>';
 
       bindCards(main);
@@ -593,14 +900,51 @@
   }
 
   // ---------- item ----------
+  // A milestone's page: its one document, with the front matter, the source and the EN/PT switch.
+  function milestonePage(root, it) {
+    var header = bar(it.title[lang], 'docs/work/' + it.name + '/', true);
+    var main = document.createElement('div'); main.className = 'home mpage';
+    function draw() {
+      header.querySelector('.title b').textContent = document.title = it.title[lang];
+      var d = lang === 'pt' && it.doc.pt ? it.doc.pt : it.doc.en, isTr = d !== it.doc.en;
+      var r = render(d.body, { prefix: 'milestone', base: it.base, takeTitle: true });
+      var keys = Object.keys(d.meta).filter(function (k) { return k !== 'kind'; });
+      main.innerHTML = '<article class="panel" lang="' + (isTr ? 'pt-BR' : 'en') + '"><div class="eyebrow">Milestone · ' + esc(d.file) + ' · <span class="kind">' + (isTr ? 'translation' : 'source') + '</span></div><h1></h1>' +
+        '<p class="mwhen big">' + milestoneWhen(it) + '</p>' +
+        (lang === 'pt' && !it.doc.pt ? '<p class="notice" lang="en"><b>Translation missing.</b> No pt-BR translation for this file; showing the English source.</p>' : '') +
+        '<dl class="meta">' + keys.map(function (k) { var v = Array.isArray(d.meta[k]) ? d.meta[k].join(', ') : d.meta[k]; return '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + (d.hints[k] ? '<small>' + esc(d.hints[k]) + '</small>' : '') + '</dd></div>'; }).join('') + '</dl></article>';
+      main.querySelector('h1').textContent = r.title || it.title[lang];
+      r.el.className = 'doc'; main.querySelector('article').appendChild(r.el);
+      var raw = document.createElement('details'); raw.className = 'raw';
+      raw.innerHTML = '<summary>Markdown source: ' + esc(d.file) + ' (what is committed)</summary><pre></pre>';
+      raw.querySelector('pre').textContent = d.raw;
+      main.querySelector('article').appendChild(raw);
+    }
+    header.querySelector('.actions').before(langSwitch(draw));
+    root.appendChild(header); root.appendChild(main);
+    draw();
+  }
+
+  // The item's issue on GitHub and the pull requests that name it (the item page's left rail).
+  function issueHtml(it) {
+    var g = ghIssue(it);
+    if (!g) return '';
+    var link = function (x, label) { return GH.private ? esc(label) : '<a href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>'; };
+    return '<b class="ihead">On GitHub</b><ul class="hist"><li><span><i class="st st-' + g.state + '"></i>' + link(g, 'Issue #' + g.number) + '</span><span>' + g.state + '</span><span></span></li>' +
+      (g.prs || []).slice(0, 5).map(function (pr) { return '<li><span>' + link(pr, 'PR #' + pr.number) + '</span><span>' + pr.state + '</span><span></span></li>'; }).join('') + '</ul>' + subsHtml(it);
+  }
+
   async function item() {
     var root = document.getElementById('app');
     // ?item= names the item; the last one opened from the list covers a host that drops the query string
     var params = new URLSearchParams(location.search), name = params.get('item') || store.get('last-item') || '';
     await loadConfig();
     if (!SAFE.test(name)) { root.innerHTML = '<p class="status-msg">Pick an item on the <a href="' + HOME + '">list</a>.</p>'; return; }
+    await listItems().catch(function () { return []; });   // marks the milestones
     var it = await loadItem(name);
+    await loadExtras();
     if (!it) { root.innerHTML = '<p class="status-msg">No markdown found in <code>docs/work/' + esc(name) + '/</code>. <a href="' + HOME + '">All items</a></p>'; return; }
+    if (it.kind === 'milestone') { milestonePage(root, it); return; }
     document.title = it.title[lang];
     var header = bar(it.title[lang], 'docs/work/' + it.name + '/', true);
     var flow = document.createElement('nav'); flow.className = 'flow'; flow.setAttribute('aria-label', 'AI-native SDLC stages');
@@ -623,7 +967,10 @@
     var layout = document.createElement('div'); layout.className = 'layout';
     var left = document.createElement('aside'); left.className = 'left';
     var main = document.createElement('main');
-    layout.appendChild(left); layout.appendChild(main);
+    // the item's history and its issue on GitHub: a box on the right that stays on screen (in the left
+    // column it sat under the sticky index, which scrolled over it)
+    var side = document.createElement('aside'); side.className = 'side'; side.setAttribute('aria-label', 'History and issue');
+    layout.appendChild(left); layout.appendChild(main); layout.appendChild(side);
     root.appendChild(mbar); root.appendChild(scrim); root.appendChild(drawerEl); root.appendChild(layout);
 
     it.stages.forEach(function (s) {
@@ -663,13 +1010,16 @@
         drawerEl.appendChild(dtoc);
       });
     });
-    left.insertAdjacentHTML('beforeend', '<div class="loopnote"><b>History</b>' + historyHtml(it) + '</div>');
+    await loadDepTitles(it);
+    side.innerHTML = '<div class="sidebox loopnote">' + (depsHtml(it) ? '<b>Builds on</b>' + depsHtml(it) : '') + '<b>History</b>' + historyHtml(it) + issueHtml(it) + '</div>';
 
     wire(it, pdf);
   }
 
   function wire(it, pdfBtn) {
-    var current = it.stages[it.here].f, links = [], targets = [], ticking = false, idxOn = 0;
+    // the page opens on the current stage, or on the last written one when the current has no document yet
+    var opening = it.stages.slice(0, it.here + 1).reverse().find(function (st) { return !st.missing; }) || it.stages[it.here];
+    var current = opening.f, links = [], targets = [], ticking = false, idxOn = 0;
     function key() { return current + (lang === 'pt' ? '@pt' : ''); }
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var mobile = function () { return window.innerWidth <= 760; };

@@ -1,26 +1,33 @@
 # The project's public page on GitHub Pages: the reader in site/ with docs/work/ and CHANGELOG.md,
-# assembled by scripts/site.js (no npm install: it only copies files and writes docs/work/index.json).
+# assembled by scripts/site.js (no npm install: it only copies files and writes docs/work/index.json),
+# plus docs/work/github.json (the items' issues and their pull requests, the backlog label's open issues,
+# read with this job's token) and docs/work/activity.json (commits per week, from the full git history).
 # Off until the owner turns it on, so a push never fails on a repository without Pages:
 #   1. Settings › Pages › Build and deployment › Source: GitHub Actions (a public repository, or a plan
 #      with Pages for private ones: the site is public either way);
 #   2. Settings › Secrets and variables › Actions › Variables: SITE_PAGES = on.
-# Then every push to main that changes the page's sources publishes it; Run workflow publishes by hand.
+# Then each release (a pushed vX.Y.Z tag, as deploy.yml) publishes it from the tagged commit, a push to
+# main that changes the documents the page reads (docs/work/, the changelog, site/) republishes main, so
+# approved SDLC documents show without a manual run (owner, 2026-10-31: agents only commit to git), and
+# Run workflow publishes main by hand. Any other push to main builds nothing.
 name: Pages
 
 on:
   push:
+    tags: ['v*', '!v*-rc.*']
     branches: [main]
     paths:
       - 'docs/work/**'
       - 'CHANGELOG.md'
       - 'CHANGELOG.pt-BR.md'
       - 'site/**'
-      - 'scripts/site.js'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: read           # docs/work/github.json
+  pull-requests: read    # the pull requests that name an item's issue
   pages: write
   id-token: write
 
@@ -37,10 +44,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # activity.json counts commits per week
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
       - run: node scripts/site.js --out build/site
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

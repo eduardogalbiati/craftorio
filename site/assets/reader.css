@@ -356,3 +356,218 @@ h1,h2,h3,.req,.raw{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--b
 .esteps code{align-self:flex-start;font-size:11px}
 .esteps span:last-child{font-size:12.5px;color:var(--soft);line-height:1.45}
 @media (max-width:860px){.esteps{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.esteps li:not(:last-child)::after{display:none}}
+
+/* a milestone: a marker on the project's history, not an SDLC item (no stages) */
+.wcard.mile{border-style:dashed;border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:linear-gradient(120deg,var(--wash),var(--paper) 70%)}
+.wcard.mile .mtag{display:inline-flex;align-items:center;gap:5px;background:var(--ink);color:var(--paper);border:0}
+.mtag svg,.mver svg{width:12px;height:12px}
+.msum{margin:2px 0 6px;font-size:14px;color:var(--soft);line-height:1.5}
+.mwhen{color:var(--ink)}
+.mwhen b{color:var(--accent);font-weight:700}
+.mwhen.big{font-size:16px;margin:-4px 0 18px}
+.mpage .panel{max-width:860px}
+.mpage .panel>h1{font-size:clamp(28px,3.4vw,40px);margin:6px 0 10px}
+.rel.mile .rel-side::before{border-radius:3px;transform:rotate(45deg);border-color:var(--ink);background:var(--paper)}
+.rel.mile.reached .rel-side::before{background:var(--ink)}
+.rel.mile .rel-body{border-style:dashed;background:linear-gradient(120deg,var(--wash),var(--paper) 70%)}
+.rel.mile .rsum{margin:0 0 4px}
+.rel.mile .rsum a{color:var(--ink);text-decoration:none}
+.rel.mile .rsum a:hover{color:var(--accent)}
+.mver{display:inline-flex;align-items:center;gap:6px;font-size:15px}
+.rel.mile .msum{margin:0}
+
+/* Overview as a spine: ahead on top, today in the middle, shipped below; one line down the centre */
+.spine{position:relative;padding:4px 0 8px}
+.spine::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;transform:translateX(-1px);background:linear-gradient(var(--line),color-mix(in oklab,var(--soft) 45%,var(--line)) 35%,var(--line))}
+.ssep{position:relative;display:flex;justify-content:center;margin:6px 0 18px}
+.ssep span{position:relative;font:500 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--soft);background:var(--paper);padding:4px 10px}
+.srow{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 80px minmax(0,1fr);align-items:center;margin:0 0 22px}
+.srow .snode{grid-column:2;grid-row:1;display:flex;justify-content:center;position:relative}
+.srow.side-l .scard{grid-column:1;grid-row:1;justify-self:end}
+.srow.side-l .smeta{grid-column:3;grid-row:1}
+.srow.side-r .scard{grid-column:3;grid-row:1;justify-self:start}
+.srow.side-r .smeta{grid-column:1;grid-row:1;justify-self:end;text-align:right}
+.srow .scard{width:100%;max-width:540px;min-width:0}
+.smeta{font:12px var(--mono);color:var(--soft)}
+.n-plan,.n-rel,.n-unrel,.n-today,.n-mile{display:block;box-sizing:border-box}
+.n-plan{width:14px;height:14px;border-radius:50%;border:2px solid var(--soft);background:var(--paper)}
+.n-rel{width:16px;height:16px;border-radius:50%;background:var(--ok)}
+.srow.s-newest .n-rel{box-shadow:0 0 0 5px color-mix(in oklab,var(--ok) 22%,transparent)}
+.n-unrel{width:14px;height:14px;border-radius:50%;border:2px dashed var(--soft);background:var(--paper)}
+.n-mile{width:20px;height:20px;transform:rotate(45deg);border-radius:4px;border:2px dashed var(--ink);background:var(--paper)}
+.srow.s-reached .n-mile{border-style:solid;background:var(--ink)}
+.srow.today{grid-template-columns:minmax(0,1fr) 80px minmax(0,1fr);margin:8px -24px 30px;padding:24px;border-radius:18px;border:1px solid color-mix(in oklab,var(--accent) 35%,var(--line));background:linear-gradient(90deg,transparent,color-mix(in oklab,var(--accent) 9%,transparent) 30%,color-mix(in oklab,var(--accent) 9%,transparent) 70%,transparent)}
+.srow.today .smeta{grid-column:1;grid-row:1;justify-self:end;text-align:right;display:flex;flex-direction:column;gap:4px;font-family:var(--body)}
+.srow.today .smeta b{font:700 30px/1.1 var(--display);color:var(--ink)}
+.srow.today .smeta span:last-child{font-size:13px}
+.srow.today .scard{grid-column:3;grid-row:1;display:flex;flex-direction:column;gap:10px}
+.n-today{width:26px;height:26px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 8px color-mix(in oklab,var(--accent) 18%,transparent),0 0 0 16px color-mix(in oklab,var(--accent) 7%,transparent);animation:pulse 2.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 11px color-mix(in oklab,var(--accent) 12%,transparent),0 0 0 22px color-mix(in oklab,var(--accent) 4%,transparent)}}
+.wcard.now{border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:color-mix(in oklab,var(--paper) 92%,var(--accent))}
+.wcard.now h3{font-size:21px}
+.pbar{display:flex;align-items:center;gap:10px;margin-top:8px}
+.pbar span{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.pbar i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.pbar b{font:500 12px var(--mono);color:var(--soft)}
+.rcard{border:1px solid var(--line);border-radius:14px;background:var(--paper);padding:14px 18px}
+.rhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.rhead b{font:700 22px var(--display)}
+.rhead span{font:12px var(--mono);color:var(--soft)}
+.rcard p{margin:6px 0 8px;font-size:14px;line-height:1.5}
+.rcarried{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.rcounts{display:flex;flex-wrap:wrap;gap:6px}
+.rcounts span{font-size:12px;color:var(--soft);border:1px solid var(--line);border-radius:999px;padding:1px 9px}
+.srow.s-unrel .rcard{border-style:dashed}
+.rlist{margin:6px 0 8px;padding-left:18px;font-size:13.5px;line-height:1.5;color:var(--soft)}
+.spine-more{text-align:center;margin:4px 0 26px}
+.shipped-row.solo{grid-template-columns:1fr}
+@media (max-width:760px){
+  .spine::before{left:13px;transform:none}
+  .ssep{justify-content:flex-start;margin-left:0}
+  .srow,.srow.today{grid-template-columns:28px minmax(0,1fr);gap:4px 12px;margin-left:0;margin-right:0}
+  .srow .snode{grid-column:1;grid-row:1 / span 2;align-self:start;padding-top:6px}
+  .srow.side-l .smeta,.srow.side-r .smeta,.srow.today .smeta{grid-column:2;grid-row:1;justify-self:start;text-align:left}
+  .srow.side-l .scard,.srow.side-r .scard,.srow.today .scard{grid-column:2;grid-row:2;justify-self:stretch}
+  .srow.today{padding:16px 12px;margin-left:-8px;margin-right:-8px}
+  .srow.today .smeta b{font-size:24px}
+}
+@media (prefers-reduced-motion:reduce){.n-today{animation:none}}
+
+/* from GitHub and git (docs/work/github.json, activity.json) */
+.st{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.st-open{background:var(--ok)}.st-closed{background:#a78bfa}
+.stat.span1{grid-column:span 1}.stat.span2{grid-column:span 2}.stat.span3{grid-column:1 / -1}
+.stat.act{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:4px 18px;align-items:end}
+.stat.act dt{grid-column:1 / -1}
+.spark{display:flex;align-items:flex-end;gap:4px;height:46px}
+.spark span{flex:1;height:100%;display:flex;align-items:flex-end}
+.spark i{display:block;width:100%;border-radius:3px 3px 1px 1px;background:color-mix(in oklab,var(--accent) 70%,var(--paper))}
+.spark span:last-child i{background:var(--accent)}
+.bcard{border-style:dashed}
+.blist{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+.blist .mono{font:12px var(--mono);color:var(--soft)}
+.blist .more{color:var(--soft);font-size:12.5px}
+.loopnote .ihead{margin-top:14px}
+
+/* an item's sub-issues, folded inside its card: one border around both, a hairline between */
+.cblock{display:flex;flex-direction:column;min-width:0;border:1px solid var(--line);border-radius:14px;background:var(--paper);overflow:hidden;transition:border-color .15s,box-shadow .15s}
+.cblock:hover{border-color:color-mix(in oklab,var(--accent) 55%,var(--line));box-shadow:0 6px 18px -10px color-mix(in oklab,var(--accent) 45%,transparent)}
+.cblock>.wcard{border:0;border-radius:0}
+.cblock>.wcard:hover{transform:none;box-shadow:none}
+.cblock:has(>.wcard.now){border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:color-mix(in oklab,var(--paper) 92%,var(--accent))}
+.subs{margin:0;border-top:1px solid var(--line);font-size:13px}
+.subs summary{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;color:var(--soft);list-style:none}
+.subs summary::-webkit-details-marker{display:none}
+.subs summary::after{content:"";margin-left:auto;width:7px;height:7px;border:solid var(--soft);border-width:0 1.5px 1.5px 0;transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.subs[open]>summary::after{transform:rotate(-135deg) translateY(-2px)}
+.subs summary:hover{color:var(--ink)}
+.subs summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.subs summary b{color:var(--ink);font-weight:600}
+.pips{display:inline-flex;gap:4px}
+.pips i{width:7px;height:7px;border-radius:50%;border:1.5px solid color-mix(in oklab,var(--soft) 60%,transparent);box-sizing:border-box}
+.pips i.on{background:var(--ok);border-color:var(--ok)}
+.sbar{width:64px;height:5px;border-radius:3px;background:var(--line);overflow:hidden;flex:0 0 auto}
+.sbar i{display:block;height:100%;background:var(--ok)}
+.subs ul{list-style:none;margin:0;padding:2px 16px 14px;display:flex;flex-direction:column;gap:7px}
+.subs li{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:baseline;gap:6px;line-height:1.4}
+.subs li .st{margin:0}
+.subs .num{font:12px var(--mono);color:var(--soft)}
+.subs .stt{font:11px var(--mono);color:var(--soft)}
+.subs li.done .ttl{color:var(--soft);text-decoration:line-through;text-decoration-color:color-mix(in oklab,var(--soft) 50%,transparent)}
+.loopnote .subs{margin:10px 0 0;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+.srow.today .scard{gap:14px}
+
+.subs li.has-kids{display:block}
+.subs li.has-kids>details>summary{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:baseline;gap:6px;padding:0;cursor:pointer;color:inherit}
+.subs li.has-kids>details>summary::after{display:none}
+.subs li.has-kids>details>summary .stt{color:var(--accent);font-weight:500}
+.subs li.has-kids>details>summary .stt::after{content:" ▾";font-size:9px}
+.subs li.has-kids>details[open]>summary .stt::after{content:" ▴"}
+.subs li ul{padding:6px 0 4px 22px;border-left:1px dashed var(--line);margin:6px 0 2px 3px}
+
+/* phone: the spine's cards run to the screen's edge as rows (no side borders, no corners), the Today
+   band is a tinted strip with no frame, and a card inside it drops its own border: one line, not boxes */
+@media (max-width:760px){
+  .spine{--bleed:max(16px,env(safe-area-inset-right,0px))}
+  .spine .scard>.cblock,.spine .scard>.wcard,.spine .scard>.rcard,.wlist>.cblock{border-left:0;border-right:0;border-radius:0;margin-right:calc(-1 * var(--bleed))}
+  .wlist>.cblock{margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)))}
+  .srow.today{border:0;border-radius:0;margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)));margin-right:calc(-1 * var(--bleed));padding:18px var(--bleed) 18px max(16px,env(safe-area-inset-left,0px));border-top:1px solid color-mix(in oklab,var(--accent) 30%,var(--line));border-bottom:1px solid color-mix(in oklab,var(--accent) 30%,var(--line))}
+  .srow.today .scard>.cblock,.srow.today .scard>.wcard{border:0;margin:0 calc(-1 * var(--bleed)) 0 0;background:transparent}
+  .srow.today .scard>.cblock>.wcard{padding-left:0;background:transparent}
+  .srow.today .subs summary,.srow.today .subs ul{padding-left:0}
+  .wlist{gap:0}
+  .wlist>.cblock+.cblock{border-top:0}
+}
+
+/* the SDLC document conventions (docs/work/CONVENTIONS.md): alerts, decision cards, the flow strip */
+.doc .alert{border-radius:12px;padding:12px 16px;margin:12px 0 20px;border:1px solid color-mix(in oklab,var(--accent) 30%,var(--line));background:var(--wash);font-size:14.5px;max-width:80ch}
+.doc .alert p{margin:4px 0;max-width:none}
+.alert-h{font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:2px}
+.doc .alert-tip{border-color:color-mix(in oklab,var(--ok) 40%,var(--line));background:var(--okw)}.alert-tip .alert-h{color:var(--ok)}
+.doc .alert-warning,.doc .alert-caution{border-color:color-mix(in oklab,var(--warn) 45%,var(--line));background:var(--warnw)}.alert-warning .alert-h,.alert-caution .alert-h{color:var(--warn)}
+.doc .alert-important{border-color:color-mix(in oklab,#a78bfa 45%,var(--line));background:color-mix(in oklab,var(--paper) 88%,#a78bfa)}.alert-important .alert-h{color:#8b6fe0}
+.doc h3.dec{margin-top:40px;font-size:19px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px;margin:12px 0 12px}
+.opt{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--paper);font-size:14px;line-height:1.5;min-width:0}
+.opt-h{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.opt-h b{flex:1;min-width:0;font-size:14.5px;line-height:1.35}
+.opt .box{flex:0 0 auto;width:18px;height:18px;border-radius:5px;border:1.5px solid color-mix(in oklab,var(--soft) 70%,transparent);box-sizing:border-box;margin-top:1px;position:relative}
+.opt.chosen{border:1.5px solid var(--ok);background:var(--okw)}
+.opt.chosen .box{background:var(--ok);border-color:var(--ok)}
+.opt.chosen .box::after{content:"";position:absolute;left:5px;top:1.5px;width:4px;height:8px;border:solid var(--paper);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.opt-h b{flex:1 1 calc(100% - 26px)}
+.opt .tag{flex:0 0 auto;align-self:flex-start;font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:5px;background:var(--ok);color:var(--paper);margin-left:26px;width:max-content;max-width:calc(100% - 26px)}
+.opt p{margin:4px 0;max-width:none;padding-left:16px;position:relative}
+.opt p.pro::before,.opt p.con::before{position:absolute;left:0;top:0;font-weight:700}
+.opt p.pro::before{content:"+";color:var(--ok)}
+.opt p.con{color:var(--soft)}.opt p.con::before{content:"−";color:var(--warn)}
+.opt code{font-size:.85em}
+.flowstrip{list-style:none;padding:0;margin:14px 0 24px;display:flex;flex-wrap:wrap;gap:22px 26px;counter-reset:none}
+.flowstrip li{position:relative;flex:1 1 150px;max-width:220px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--paper);display:flex;flex-direction:column;gap:2px}
+.flowstrip li:not(:last-child)::after{content:"";position:absolute;right:-19px;top:50%;width:12px;height:2px;background:var(--soft);opacity:.6}
+.flowstrip li b{font:700 14px var(--display)}
+.flowstrip li span{font-size:12.5px;color:var(--soft);line-height:1.4}
+.flowstrip li.later{border-style:dashed;background:transparent}
+.flowstrip li em{font:500 10px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--soft);font-style:normal;margin-top:4px}
+@media (max-width:760px){.flowstrip{flex-direction:column;gap:12px}.flowstrip li{max-width:none}.flowstrip li:not(:last-child)::after{right:auto;left:22px;top:auto;bottom:-10px;width:2px;height:8px}}
+@media print{.opts{break-inside:avoid}.opt.chosen{background:#eaf6ef}}
+
+/* the item page's side box (history, the issue on GitHub): right of the document, fixed on screen;
+   under 1280 px it moves above the document, under 760 px it is a plain block */
+.layout{grid-template-columns:280px minmax(0,1fr) 300px}
+.side{padding:24px 20px 32px 0;min-width:0}
+.sidebox{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--bar) + 20px);max-height:calc(100vh - var(--bar) - 40px);overflow:auto;margin:0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--rail)}
+.sidebox .hist li{grid-template-columns:1fr auto 60px}
+@media (max-width:1280px){
+  .layout{grid-template-columns:280px minmax(0,1fr)}
+  .side{grid-column:2;grid-row:1;padding:24px clamp(20px,4vw,72px) 0}
+  .layout>main{grid-column:2;grid-row:2}
+  .layout>.left{grid-row:1 / span 2}
+  .sidebox{position:static;max-height:none;max-width:960px}
+}
+@media (max-width:760px){
+  .layout{display:flex;flex-direction:column}
+  .side{order:-1;padding:16px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
+}
+.loopnote .subs b{display:inline;font:inherit;font-weight:600;text-transform:none;letter-spacing:0;margin:0;color:var(--ink)}
+
+/* what an item builds on (depends_on): "After <item>", inside its card block and in the item's side box */
+.deps{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:9px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--soft)}
+.deps>span:first-child{font:500 10.5px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.dchip{display:inline-flex;align-items:center;gap:5px;font-weight:600;text-decoration:none;color:var(--accent);background:var(--wash);border-radius:999px;padding:1px 10px}
+.dchip::before{content:"";width:6px;height:6px;border-radius:50%;border:1.5px solid currentColor;box-sizing:border-box}
+.dchip:hover{text-decoration:underline}
+.deps .why{flex-basis:100%;font-size:12px}
+.cblock .deps .why{display:none}
+.sidebox .deps{padding:0 0 12px;border-top:0}
+.loopnote .deps b{display:inline}
+
+/* the next stage, whose document does not exist yet: announced, not in progress */
+.fd.next .d{background:var(--paper);border:2px dashed color-mix(in oklab,var(--accent) 70%,var(--soft))}
+.fd.next .l{color:var(--soft)}
+.stage.here.missing .st-num{background:transparent;border:1.5px dashed var(--accent);color:var(--accent);box-sizing:border-box}
+/* in a grid row the block stretches: the card fills it, and a milestone's look (dashed border,
+   gradient) belongs to the block, not to the card inside it */
+.cblock>.wcard{flex:1 1 auto}
+.cblock:has(>.wcard.mile){border-style:dashed;border-color:color-mix(in oklab,var(--accent) 45%,var(--line));background:linear-gradient(120deg,var(--wash),var(--paper) 70%)}
+.cblock>.wcard.mile{background:transparent}

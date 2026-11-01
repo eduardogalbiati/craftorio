@@ -1,18 +1,19 @@
-# Releases as "rc + stable" (#489, README "Release"):
-# - a push to main (or a run by hand) builds the packaged app for Windows, macOS and Linux (one job
-#   per OS and architecture), smoke-tests each package in simulation and publishes them together as
-#   a PRERELEASE v<package.json version>-rc.N (N: the rcs of that version so far + 1), never latest;
-# - pushing a vX.Y.Z tag promotes the rc of the same commit without a rebuild: its release is
-#   renamed to the tag, marked latest and keeps its assets. A commit without an rc is refused.
-# Every rc carries SHA256SUMS of its packages, signed with cosign keyless (SHA256SUMS.sigstore.json),
-# and the sums in its notes; a promotion keeps both (#557).
+# Builds only for a release (owner decision of 2026-10-31, docs/agents/decisions.md): GitHub Actions
+# minutes are spent when a version ships, not on every merge.
+# - pushing a vX.Y.Z tag (the app's "Promote to stable" on the Releases screen pushes it) builds the
+#   packaged app for Windows, macOS and Linux (one job per OS and architecture), runs `npm test` and
+#   smoke-tests each package in simulation, and publishes them together as the release vX.Y.Z, marked
+#   latest;
+# - a run by hand on main publishes a PRERELEASE v<package.json version>-rc.N (N: the rcs of that
+#   version so far + 1), never latest, to try a build before tagging it.
+# A push to main builds nothing. Every release carries SHA256SUMS of its packages, signed with cosign
+# keyless (SHA256SUMS.sigstore.json), and the sums in its notes (#557).
 # macOS builds are not signed nor notarized (README "Install").
 name: Deploy
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    tags: ['v*', '!v*-rc.*']
   workflow_dispatch:
 
 permissions:
@@ -28,7 +29,6 @@ jobs:
   # Assets: MultiagentOrchestrator-<platform>-<arch>.<ext> (scripts/release-assets.js)
   build:
     name: build (${{ matrix.platform }} ${{ matrix.arch }})
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}   # a tag promotes a built rc (job promote)
     strategy:
       fail-fast: true   # a failing OS stops the release: no release without all its downloads
       matrix:
@@ -59,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # The PR's CI already tested this code when the merge kept the tree CI tested (main unchanged since):
-      # do not repeat `npm test`.
+      # do not repeat `npm test`. CI runs only by hand now, so a release usually runs the tests here.
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,8 +123,9 @@ jobs:
 
   publish:
     needs: build
-    # main only, never a fork: the signature's identity is deploy.yml@refs/heads/main (#557)
-    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'eduardogalbiati/multiagent-orchestrator' }}
+    # a vX.Y.Z tag or main, never a fork: the signature's identity is deploy.yml@refs/tags/vX.Y.Z
+    # (deploy.yml@refs/heads/main for an rc by hand) (#557)
+    if: ${{ (github.ref_type == 'tag' || github.ref == 'refs/heads/main') && github.repository == 'eduardogalbiati/multiagent-orchestrator' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write   # gh release create
@@ -162,7 +163,24 @@ jobs:
       # binds SHA256SUMS to this repository's deploy.yml on main (cosign verify-blob, README "Install")
       - name: Sign SHA256SUMS
         run: cosign sign-blob --yes --bundle assets/SHA256SUMS.sigstore.json assets/SHA256SUMS
+      # A vX.Y.Z tag: the stable release, latest. The packaged app reports package.json's version: say
+      # so when the tag differs (bump package.json before the tag to match).
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l assets
+          TAG="${{ github.ref_name }}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "v${PKG}" != "$TAG" ]; then
+            echo "::warning::${TAG} is a build of package.json ${PKG}: the app reports ${PKG}. Bump package.json before tagging to match."
+          fi
+          gh release create "$TAG" assets/* \
+            --verify-tag --title "$TAG" --generate-notes --notes-file "$RUNNER_TEMP/sha256-notes.md" --latest
+          echo "Release published: $TAG"
       - name: Publish release candidate
+        if: github.ref_type != 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -180,30 +198,3 @@ jobs:
           gh release create "$RC" assets/* \
             --verify-tag --title "$RC" --generate-notes --notes-file "$RUNNER_TEMP/sha256-notes.md" --prerelease
           echo "Release candidate published: $RC"
-
-  # A vX.Y.Z tag on a commit with an rc: that release becomes the stable one, assets reused (no build)
-  promote:
-    if: github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-      - name: Promote the release candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          SHA="${{ github.sha }}"
-          RC=$(git ls-remote --tags origin 'refs/tags/v*-rc.*' | grep "^${SHA}" | grep -v '\^{}' \
-            | sed 's|.*refs/tags/||' | sort -V | tail -n 1)
-          if [ -z "$RC" ]; then
-            echo "No release candidate (rc) on ${SHA}: merge into main first, then tag the rc's commit" >&2
-            exit 1
-          fi
-          # no rebuild: the packaged app keeps package.json's version; say so when the tag differs
-          PKG=$(node -p "require('./package.json').version")
-          if [ "v${PKG}" != "$TAG" ]; then
-            echo "::warning::${TAG} promotes a build of package.json ${PKG}: the app reports ${PKG}. Bump package.json before the merge to match."
-          fi
-          gh release edit "$RC" --tag "$TAG" --title "$TAG" --prerelease=false --latest
-          echo "Promoted $RC to $TAG"

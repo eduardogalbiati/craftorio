@@ -41,7 +41,7 @@ Then check that `SHA256SUMS` itself comes from this repository, with
 
 ```
 cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-  --certificate-identity https://github.com/eduardogalbiati/multiagent-orchestrator/.github/workflows/deploy.yml@refs/heads/main \
+  --certificate-identity-regexp '^https://github.com/eduardogalbiati/multiagent-orchestrator/.github/workflows/deploy.yml@refs/(tags/v.+|heads/main)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
