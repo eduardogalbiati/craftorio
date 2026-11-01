@@ -91,6 +91,16 @@
       return Array.isArray(list) ? list.map((p) => ({ id: p.id, name: p.ref || null, status: p.status, conclusion: null, createdAt: p.created_at, updatedAt: p.updated_at, url: p.web_url })) : [];
     },
 
+    // ---- the signed-in account's repositories (#669, the wizard's list under the repository field)
+    repoListCommand: (limit) => cmd(['repo', 'list', '--per-page', String(limit || 30), '--output', 'json']),
+    // → [{ name: 'group/project', private, updatedAt }], [] when the output holds no JSON list
+    parseRepos: (text) => {
+      const s = String(text || '');
+      let list;
+      try { list = JSON.parse(s.slice(s.indexOf('['), s.lastIndexOf(']') + 1)); } catch { return []; }
+      return Array.isArray(list) ? list.map((r) => ({ name: r.path_with_namespace, private: r.visibility !== 'public', updatedAt: r.last_activity_at || null })).filter((r) => typeof r.name === 'string' && r.name) : [];
+    },
+
     // ---- URLs
     // https://host/group/sub/project/-/issues/7 → { host, repo, number }, or null
     parseIssueUrl(url) {

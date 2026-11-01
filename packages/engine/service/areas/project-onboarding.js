@@ -65,25 +65,17 @@ const machineCli = (provider) => toolSignIn(issues.PLATFORMS[provider].cli);
 const cliAccounts = (cli = machineCli) => Promise.all(Platforms.PLATFORMS.filter((p) => p.cli)
   .map(async (p) => ({ provider: p.id, cli: p.cli, ...(await cli(p.id)) })));
 
-// the signed-in account's repositories as its CLI lists them (mock-2's list under the field):
-// [{ name: 'owner/repo', private, updatedAt }], [] when the CLI is missing, signed out or answers no JSON
-const REPO_LISTS = {
-  github: { args: ['repo', 'list', '--limit', '30', '--json', 'nameWithOwner,isPrivate,updatedAt'], read: (r) => ({ name: r.nameWithOwner, private: !!r.isPrivate, updatedAt: r.updatedAt || null }) },
-  gitlab: { args: ['repo', 'list', '--per-page', '30', '--output', 'json'], read: (r) => ({ name: r.path_with_namespace, private: r.visibility !== 'public', updatedAt: r.last_activity_at || null }) },
-};
-function readRepoList(provider, out) {
-  const text = String(out || '');
-  try {
-    const list = JSON.parse(text.slice(text.indexOf('['), text.lastIndexOf(']') + 1));
-    return Array.isArray(list) ? list.map(REPO_LISTS[provider].read).filter((r) => typeof r.name === 'string' && r.name) : [];
-  } catch { return []; }
-}
+// the signed-in account's repositories as its CLI lists them (mock-2's list under the field, the adapter's
+// repoListCommand / parseRepos): [{ name: 'owner/repo', private, updatedAt }], [] for an unknown provider or
+// when the CLI is missing, signed out or answers no JSON
 async function machineRepos(provider) {
-  const list = REPO_LISTS[provider];
-  const r = list ? await resolveCommandAsync(issues.PLATFORMS[provider].cli) : null;
+  const platform = Platforms.findPlatform(provider);
+  if (!platform?.cli || typeof platform.repoListCommand !== 'function') return [];
+  const { cli, args } = platform.repoListCommand(30);
+  const r = await resolveCommandAsync(cli);
   if (!r) return [];
-  const out = await runTool(r.file, list.args);
-  return out.ok ? readRepoList(provider, out.out) : [];
+  const out = await runTool(r.file, args);
+  return out.ok ? platform.parseRepos(out.out) : [];
 }
 
 /**
@@ -307,5 +299,5 @@ module.exports = (ctx) => {
 
 module.exports.cliAccounts = cliAccounts;
 module.exports.createOnboarding = createOnboarding;
-module.exports.readRepoList = readRepoList;
+module.exports.machineRepos = machineRepos;
 module.exports.SLOT = SLOT;

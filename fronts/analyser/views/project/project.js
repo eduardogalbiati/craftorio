@@ -11,11 +11,12 @@
 // No sidebar entry of its own: Projects stays lit (`menu`). The header's "Ways of working" opens the
 // interview drawer (project-ways-of-working.js, #487). After the new-project wizard's Finish (#642, spec
 // R11) the Overview leads with the Next steps card (project-next-steps, as mock-7 of
-// docs/work/first-project-onboarding/images, #669: "<name> is ready · <n> workflows" in its head (the project's
-// workflow set, else api.listWorkflows for it), then a grid of entries:
+// docs/work/first-project-onboarding/images, #669: "<name> is ready · <n> workflows" in its head (the count only
+// for a project with its own workflow set), then a grid of entries:
 // next-step-refactors, the project's proposals with a checkbox each and "File and add <n>" (the checked ones
-// filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence → the
-// Refactor tab, and next-step-release-ci / next-step-screenshots shown disabled (later phases);
+// filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence's "Turn on"
+// → the Refactor tab, where the cadence is turned on (it does not turn it on itself), and
+// next-step-release-ci / next-step-screenshots shown disabled (later phases);
 // next-steps-dismiss), remembered per project in localStorage multiagent.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
@@ -62,12 +63,10 @@ function loadNextStepProposals(pv) {
     pv.nextStepProposals = Array.isArray(list) ? list : [];
     if (state.pv === pv && state.view === 'project') renderProjectView();
   });
-  // mock-7's "3 workflows": the project's workflow set, else the workflows it can run (the workspace's and its repository's)
+  // mock-7's "3 workflows": the project's own workflow set; a project without one (the wizard's import)
+  // shows no count, since everything the workspace can run is not the project's
   const set = pv.project?.workflows;
-  new Promise((resolve) => resolve(Array.isArray(set) && set.length ? set : api.listWorkflows?.({ projectId: pv.id }))).then((list) => list, () => null).then((list) => {
-    pv.nextStepWorkflows = Array.isArray(list) ? list.length : 0;
-    if (pv.nextStepWorkflows && state.pv === pv && state.view === 'project') renderProjectView();
-  });
+  pv.nextStepWorkflows = Array.isArray(set) ? set.length : 0;
 }
 
 const fileAndAddLabel = (pv) => t('onboarding.next_steps_file_add', { count: pv.nextStepPicked.size });

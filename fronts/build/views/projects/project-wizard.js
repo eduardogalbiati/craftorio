@@ -50,7 +50,8 @@
   const M = window.OnboardingModel;
   const JOBS = ['facts', 'profile', 'projectMap', 'ranking'];
   const PAID = ['projectMap', 'ranking'];
-  const PROVIDERS = ['github', 'gitlab'];
+  // mock-2's toggle: the registry's platforms with a CLI (#351: no platform literal outside the adapters)
+  const providers = () => (window.Platforms?.PLATFORMS || []).filter((p) => p.cli).map((p) => p.id);
   // the suggested workflows' kinds (mock-4); this phase shows them without choosing
   const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
   const svg = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -140,13 +141,13 @@
   }
 
   // the provider: read from the URL, else the one picked on the toggle (GitHub by default)
-  const pickedProvider = () => platformOfRepo(cur.model.repository)?.id || cur.provider || PROVIDERS[0];
+  const pickedProvider = () => platformOfRepo(cur.model.repository)?.id || cur.provider || window.Platforms?.DEFAULT_PLATFORM || providers()[0];
 
   // mock-2's GitHub / GitLab toggle: it follows the URL as it is typed (onInput) and picks the hint
   function providerToggle() {
     const on = pickedProvider();
     const b = (id) => `<button type="button" class="${on === id ? 'active' : ''}" id="wizard-provider-${id}" data-act="provider" data-provider="${id}" aria-pressed="${on === id}">${esc(platformById(id)?.label || id)}</button>`;
-    return `<div class="seg wizard-provider" id="wizard-provider" data-testid="wizard-provider" role="group" aria-label="${esc(t('onboarding.provider_label'))}">${PROVIDERS.map(b).join('')}</div>`;
+    return `<div class="seg wizard-provider" id="wizard-provider" data-testid="wizard-provider" role="group" aria-label="${esc(t('onboarding.provider_label'))}">${providers().map(b).join('')}</div>`;
   }
 
   // the provider's CLI as the engine found it (gh signed in, glab missing…)
@@ -177,7 +178,7 @@
   }
 
   // mock-2's list under the field: the account's five latest repositories on the picked provider
-  const repoUrl = (name) => `https://${platformById(pickedProvider())?.host || 'github.com'}/${name}`;
+  const repoUrl = (name) => `https://${(platformById(pickedProvider()) || platformById(window.Platforms?.DEFAULT_PLATFORM))?.host}/${name}`;
   function repoList() {
     const repos = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).slice(0, 5);
     if (!repos.length) return '';
@@ -213,9 +214,17 @@
     }));
   }
 
+  // the repository the import sends: the short form of the placeholder and of mock-2 (`acme/shop`, no scheme,
+  // no `@` or `:`) is the picked provider's https URL; a URL or a local folder stays as typed
+  const SHORT_REPO = /^[A-Za-z0-9_][\w.-]*(\/[\w.-]+)+$/;
+  const typedRepo = () => {
+    const repo = cur.model.repository.trim();
+    return SHORT_REPO.test(repo) ? repoUrl(repo.replace(/\.git$/, '')) : repo;
+  };
+
   // mock-2's line under the fields: where the engine clones the repository (its rule, OnboardingModel.repoNameFromUrl)
   const cloneInto = () => (cur.model.repository.trim()
-    ? t('onboarding.clone_into', { folder: `<workspace>/repos/${M.repoNameFromUrl(cur.model.repository)}` }) : ''); // i18n-ignore
+    ? t('onboarding.clone_into', { folder: `<workspace>/repos/${M.repoNameFromUrl(typedRepo())}` }) : ''); // i18n-ignore
 
   function repositoryStep() {
     const o = cur.onboarding;
@@ -549,7 +558,8 @@
     if (!canNext()) return;
     if (cur.model.step === 'repository' && !cur.projectId) {
       const name = cur.model.name.trim();
-      const repo = cur.model.repository.trim();
+      const repo = typedRepo();
+      cur.model = { ...cur.model, repository: repo };
       cur.busy = true;
       render();
       try {
@@ -641,7 +651,7 @@
     cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: String(e.target.value || '') };
     // the provider toggle follows the URL (its buttons keep their place: the caret stays)
     const on = pickedProvider();
-    for (const id of PROVIDERS) {
+    for (const id of providers()) {
       const b = document.getElementById(`wizard-provider-${id}`);
       b?.setAttribute?.('aria-pressed', String(on === id));
       b?.classList?.toggle?.('active', on === id);
