@@ -118,6 +118,21 @@ test('#696 suiteMessage: a passing round names the baseline it generated (eviden
   assert.match(suiteMessage(out), /features\/__screenshots__\/671-documents-win32\.png/);
 });
 
+// Playwright's own count still says "1 failed": the passing round's message says it was a generated
+// baseline, not counted (as for pre-existing failures), so the count is not read as a red test.
+test('#696 runSuite: a round green only because of generated baselines says the missing one was not counted, and lists no pre-existing failure', async (t) => {
+  const runDir = tmp(t);
+  const cwd = tmp(t);
+  const at = path.join(cwd, 'features', '__screenshots__', '671-documents-win32.png');
+  const run = runWith(playwrightLog({ blocks: [missingBlock(1, at)], failed: 1, passed: 1 }));
+  const out = await runSuite({ command: 'npm run test:e2e', cwd, runDir, round: 1, run });
+  assert.equal(out.status, 'pass', out.message);
+  assert.match(out.message, /passed in round 1/);
+  assert.match(out.message, /1 missing baseline generated, not counted/);
+  assert.deepEqual(out.preexisting_failures, []);
+  assert.deepEqual(out.preexisting, []);
+});
+
 test('#696 runSuite: an existing baseline is never overwritten (its bytes unchanged, no update command run)', async (t) => {
   const runDir = tmp(t);
   const cwd = tmp(t);
