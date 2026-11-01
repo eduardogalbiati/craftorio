@@ -34,7 +34,7 @@ test('parseFailures: a Playwright failure prefixed with its project ("[chromium]
 });
 
 test('ai-development: a product fix from the healer runs the unit suite again unless it is off', () => {
-  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml'));
+  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'));
   const app = wf.steps.find((s) => s.id === 'heal').transitions.filter((x) => /'app'/.test(x.when));
   assert.deepEqual(app.map((x) => x.goto), ['suite', 'e2e']);
   assert.match(app[0].when, /unit_tests != 'off'/);
@@ -42,7 +42,7 @@ test('ai-development: a product fix from the healer runs the unit suite again un
 });
 
 test('ai-development: a run without an issue number writes no E2E scenario', () => {
-  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml'));
+  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'));
   const prompt = wf.steps.find((s) => s.id === 'acceptance_tests').prompt;
   const withIssue = render(prompt, { inputs: { e2e_tests: 'write_and_run', issue: 'https://github.com/a/b/issues/223' }, steps: {} });
   assert.match(withIssue, /tagged `@issue-223`/);

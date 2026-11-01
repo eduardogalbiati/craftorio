@@ -50,7 +50,7 @@ const RUN_ID = '20261002-105416-a6668cf0';
 const RUN = {
   run_id: RUN_ID,
   project_id: 'multiagent-orchestrator',
-  workflow: 'software-development-local-hero.yaml',
+  workflow: 'feature.yaml',
   version: '0.2.0',
   issues: [{ number: 143, url: 'https://github.com/o/r/issues/143', title: 'E2E/BDD scenarios' }],
   branch: 'feat/143-e2e-scenarios',
@@ -85,7 +85,7 @@ test('#183 gateContext: the chip names the run, the issue, the step and the bran
 
 test('#183 gateContext: the context carries the run id, project, issues, step, workflow and version, branch and base', () => {
   const text = contextText();
-  for (const v of [RUN_ID, 'multiagent-orchestrator', '143', 'https://github.com/o/r/issues/143', 'developer_check', 'software-development-local-hero.yaml', '0.2.0', 'feat/143-e2e-scenarios', '"main"']) {
+  for (const v of [RUN_ID, 'multiagent-orchestrator', '143', 'https://github.com/o/r/issues/143', 'developer_check', 'feature.yaml', '0.2.0', 'feat/143-e2e-scenarios', '"main"']) {
     assert.ok(text.includes(v), `the context has ${v}`);
   }
 });

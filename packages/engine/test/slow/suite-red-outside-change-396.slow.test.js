@@ -1,4 +1,4 @@
-// #396: workflows/ai-development-local-hero.yaml with the owner's policy `suite_red_outside_change`.
+// #396: workflows/feature.yaml with the owner's policy `suite_red_outside_change`.
 // Whole mock runs (docs/agents/testing.md: a new transition suite → build and a new way a run is
 // recorded): with `continue`, a suite red only outside the change goes on to build and the local
 // merge without opening test_failed, and the run's summary.json says it was not tested green; a
@@ -18,7 +18,7 @@ const { WorkflowRun } = require('../../engine/workflow');
 const { Recorder } = require('../../engine/recorder');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'feature.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 function makeRepo(t) {

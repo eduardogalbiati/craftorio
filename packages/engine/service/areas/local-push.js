@@ -1,9 +1,10 @@
-// Service area: local merges not pushed (software-development-local-hero, packages/engine/domains/local/local-push.js). The
+// Service area: local merges not pushed (feature in Local mode, packages/engine/domains/local/local-push.js). The
 // base a project's local runs merge into, what it has that origin has not (cached for the Backlog
 // and the sidebar badge), Push / Update and push, the status after a run's `merge: local`, and a
 // push conflict handed to a run of the local workflow. A push records a release candidate (#489).
 
 const path = require('path');
+const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
 const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
@@ -65,7 +66,7 @@ module.exports = (ctx) => {
   }
 
   // A push conflict (Update and push found the local base conflicting with origin) handed to a run
-  // of the local workflow that merged there last (software-development-local-hero when none): its
+  // of the local workflow that merged there last (feature in Local mode when none, #630): its
   // developer merges origin/<base> into the run's branch and resolves the conflict, the change is
   // reviewed, tested, built and verified, then merged locally; Push takes it from there.
   async function resolvePushConflict({ projectId, files = [], mock = false }) {
@@ -75,7 +76,7 @@ module.exports = (ctx) => {
     const status = await localPush.localStatus({ repo: project.folder, base, fetch: false });
     if (status.error) throw new Error(status.error);
     if (!status.behind) throw new Error(`The local ${status.base} already has every commit of origin/${status.base}: push it.`);
-    const file = last ? path.basename(last.file) : 'software-development-local-hero.yaml';
+    const file = last ? path.basename(last.file) : DefaultWorkflow.LOCAL;
     const wf = loadWorkflow(ctx.workflowPath(file).file);
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the conflict.`);
     const inputs = { task: localPush.conflictTask({ ...status, files: (files || []).map(String) }) };
@@ -84,6 +85,8 @@ module.exports = (ctx) => {
       if (/^base(_branch)?$/.test(k)) inputs[k] = status.base;
       else if ((def.type || 'string') === 'string' && /path|dir/i.test(k)) inputs[k] = project.folder;
       else if (k === 'language' && last?.inputs?.language) inputs[k] = last.inputs.language;
+      // #630: feature's Local mode (the conflict is merged locally, then pushed)
+      else if (k === 'mode' && def.enum?.includes('local')) inputs[k] = 'local';
     }
     return ctx.startWorkflowRun({ file, inputs, mock: !!mock, projectId: project.id });
   }

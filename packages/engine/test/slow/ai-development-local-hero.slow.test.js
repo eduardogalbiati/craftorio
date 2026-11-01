@@ -1,4 +1,4 @@
-// workflows/ai-development-local-hero.yaml (#220): the tests-first workflow. Mock runs of the whole
+// workflows/feature.yaml (#220): the tests-first workflow. Mock runs of the whole
 // flow (acceptance tests → red check → develop → review → suite → merge), on a git repository in a
 // temp folder so the developer's turn can change files; the mock writes no real code.
 // Split by #306 (whole mock runs of a bundled workflow live in test/slow/, docs/agents/testing.md):
@@ -12,7 +12,7 @@ const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../../engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'feature.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 // a repository on main with one production file, and the run's branch checked out: the developer's

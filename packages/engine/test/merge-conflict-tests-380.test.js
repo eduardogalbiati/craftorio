@@ -2,7 +2,7 @@
 // - packages/engine/engine (protect_files): a protected file the turn's rebase had in conflict may change when the
 //   resolution only combines the two sides (every line comes from the base's or the branch's
 //   version); a resolution that writes a new line is still refused.
-// - workflows/ai-development-local-hero.yaml: such a resolution goes to the test writer (resolve_merge
+// - workflows/feature.yaml: such a resolution goes to the test writer (resolve_merge
 //   routes to it), and the developer keeps its protect_files.
 // - packages/engine/engine/run/supervision.js: when the supervisor says a retry would fail the same way
 //   (`retry_would_fail` in its decision) and names where to go on (`goto`), its gate offers that way
@@ -144,9 +144,9 @@ test('protect_files: a conflicted protected test file resolved with a new line i
   assert.equal(refused[0].attempt, 1);
 });
 
-// ---- workflows/ai-development-local-hero.yaml: a real test change goes to the test writer --------------
+// ---- workflows/feature.yaml: a real test change goes to the test writer --------------
 
-const AI_DEV = path.join(root, 'workflows', 'ai-development-local-hero.yaml');
+const AI_DEV = path.join(root, 'workflows', 'feature.yaml');
 
 test('ai-development: resolve_merge routes a test conflict that needs new lines to the test writer, with the conflict', () => {
   const wf = loadWorkflow(AI_DEV);

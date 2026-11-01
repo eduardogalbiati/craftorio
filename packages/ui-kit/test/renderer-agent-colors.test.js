@@ -69,7 +69,7 @@ test('colorFor: a workflow\'s `color` wins over the role map and over the fallba
 test('colorFor: every agent of the bundled development workflows has its role colour', () => {
   const { colorFor } = load();
   const dir = path.join(__dirname, '..', '..', '..', 'workflows');
-  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-development-local-hero.yaml']) {
+  for (const file of ['feature.yaml']) {
     const wf = yaml.load(fs.readFileSync(path.join(dir, file), 'utf8'));
     for (const [agent, def] of Object.entries(wf.agents || {})) {
       if (!ROLES[agent]) continue;

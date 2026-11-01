@@ -159,7 +159,17 @@
   // The mode (#282, in the Workflow band): the workflow's enum values as a toggle with their icons,
   // saved at once on an editable item; the same toggle with its buttons off on an item that runs
   // ("locked while it runs") or ran. Next to it, what the chosen mode does.
-  const modeOf = (x) => String(x.inputs?.mode ?? inputDefs(x).mode?.default ?? '');
+  // #630: feature's auto | validated toggle is its `validation` input (`mode` is local | remote there);
+  // an item saved before keeps its old `mode: validated` as that value
+  const modeKey = (x) => (inputDefs(x).validation ? 'validation' : 'mode');
+  const VALIDATION = ['auto', 'validated'];
+  function modeRaw(x) {
+    const key = modeKey(x);
+    if (key === 'mode') return x.inputs?.mode;
+    return x.inputs?.validation ?? (VALIDATION.includes(x.inputs?.mode) ? x.inputs.mode : undefined);
+  }
+  const modeOf = (x) => String(modeRaw(x) ?? inputDefs(x)[modeKey(x)]?.default ?? '');
+  const modeContext = (x) => ({ [modeKey(x)]: modeRaw(x) ?? inputDefs(x)[modeKey(x)]?.default });
   // the mode's sentence in the input's description ("Automatic: … . Validated: … .")
   function modeHint(def, value) {
     const label = WorkflowInputs.optionLabel(def || {}, value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -167,10 +177,11 @@
     return m ? m[1].trim().replace(/^./, (c) => c.toUpperCase()) : '';
   }
   function modeHtml(x, locked) {
-    const def = inputDefs(x).mode;
-    const values = Array.isArray(def?.enum) ? def.enum.map(String) : x.inputs?.mode != null ? [String(x.inputs.mode)] : [];
+    const def = inputDefs(x)[modeKey(x)];
+    const raw = modeRaw(x);
+    const values = Array.isArray(def?.enum) ? def.enum.map(String) : raw != null ? [String(raw)] : [];
     if (!values.length) return '';
-    const value = String(x.inputs?.mode ?? def?.default ?? values[0]);
+    const value = String(raw ?? def?.default ?? values[0]);
     // the workflow's labels for its values (`options`, e.g. auto → Automatic; WorkflowInputs, #116)
     const text = (v) => WorkflowInputs.optionLabel(def || {}, v);
     const help = def?.description ? `. ${def.description}` : '';
@@ -295,12 +306,12 @@
     // #287: a refused save keeps what the owner typed, not the stored values
     const x = kept?.id === raw.id ? { ...raw, inputs: kept.inputs, mock: kept.mock } : raw;
     const defs = inputDefs(x);
-    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
-    for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
-    const mode = x.inputs?.mode ?? defs.mode?.default;
+    const key = modeKey(x);
+    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
+    for (const k of Object.keys(x.inputs || {})) if (k !== key && k !== 'mode' && !defs[k]) fields[k] = {};
     const grid = Object.keys(fields).length
       ? WorkflowInputs.formHtml(fields, {
-        values: x.inputs || {}, context: { mode }, autofocus: !adding,
+        values: x.inputs || {}, context: modeContext(x), autofocus: !adding,
         id: (k) => `rm-f-${x.id}-${k}`, attrs: (k) => `data-rm-field="${esc(k)}"`,
       })
       : `<p class="small muted">${t('backlog_roadmap.this_workflow_has_no_other_inputs')}</p>`;
@@ -1151,10 +1162,11 @@
     if (!lost) return '';
     const x = lost.item;
     const defs = inputDefs(x);
-    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
-    for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
+    const key = modeKey(x);
+    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
+    for (const k of Object.keys(x.inputs || {})) if (k !== key && k !== 'mode' && !defs[k]) fields[k] = {};
     const grid = Object.keys(fields).length
-      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: { mode: x.inputs?.mode ?? defs.mode?.default }, id: (k) => `rm-lost-${k}` })
+      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: modeContext(x), id: (k) => `rm-lost-${k}` })
       : '';
     return `<div class="rm-conflict" role="alert" data-testid="roadmap-save-conflict">
       <p>${esc(lost.reason)}</p>
@@ -1753,7 +1765,9 @@
     const { s, n } = locate(stages, target);
     const item = stages[s]?.items[n];
     if (!item || !editable(item)) return 'handled';
-    item.inputs = { ...item.inputs, mode: el.dataset.rmMode };
+    item.inputs = { ...item.inputs, [modeKey(item)]: el.dataset.rmMode };
+    // #630: an old `mode: validated` gives way to the validation picked
+    if (modeKey(item) === 'validation' && VALIDATION.includes(item.inputs.mode)) delete item.inputs.mode;
     await save(ctx, r, stages, { label: t('backlog_roadmap.changed_the_mode_of_item', { item: numbers(item) }), quiet: true });
     return 'handled';
   }

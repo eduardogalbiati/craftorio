@@ -13,7 +13,7 @@ const { loadWorkflow, render, validateSchema } = require('@multiagent/engine/eng
 const { resolveSkill, skillPrompt } = require('@multiagent/engine/domains/agents/skills');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const WORKFLOW = path.join(ROOT, 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');
 const skill = (id) => resolveSkill([path.join(ROOT, 'skills')], id);
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const codeReview = () => loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'code_review');

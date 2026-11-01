@@ -1,4 +1,4 @@
-// workflows/ai-development-local-hero.yaml (#220): the tests-first workflow. Mock runs of the whole
+// workflows/feature.yaml (#220): the tests-first workflow. Mock runs of the whole
 // flow (acceptance tests → red check → develop → review → suite → merge), on a git repository in a
 // temp folder so the developer's turn can change files; the mock writes no real code.
 // Split by #306 (whole mock runs of a bundled workflow live in test/slow/, docs/agents/testing.md):
@@ -11,7 +11,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, evalExpr } = require('@multiagent/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 
 test('ai-development-local-hero: the transition from acceptance_tests goes to develop when no acceptance test was written', () => {
   const wf = loadWorkflow(WORKFLOW);
@@ -36,18 +36,6 @@ test('ai-development-local-hero (#179, #303): the acceptance tests stay protecte
   assert.match(protect, /steps\.acceptance_tests\.output\.tests_added/, 'the developer\'s protect_files still cover the acceptance tests');
 });
 
-test('ai-development-local-hero (#179): software-development workflows are not changed: no self_review in their develop step', () => {
-  const dir = path.join(__dirname, '..', '..', '..', 'workflows');
-  const files = fs.readdirSync(dir).filter((f) => /^software-development.*\.yaml$/.test(f));
-  assert.ok(files.includes('software-development.yaml'));
-  for (const f of files) {
-    const develop = loadWorkflow(path.join(dir, f)).steps.find((s) => s.id === 'develop');
-    if (!develop) continue;
-    assert.equal(develop.output_schema?.properties?.self_review, undefined, `${f}: develop schema has no self_review`);
-    assert.doesNotMatch(develop.prompt, /self_review/, `${f}: develop prompt has no self_review`);
-  }
-});
-
 test('ai-development-local-hero: quality first by default, the change\'s unit tests and its E2E scenarios are written and run', () => {
   const wf = loadWorkflow(WORKFLOW);
   assert.equal(wf.inputs.unit_tests.default, 'write_and_run');
@@ -66,7 +54,7 @@ function firstGoto(step, scope) {
 // develop's answer and the run's state when it finishes a committed turn
 function developScope({ mode = 'auto', screenshots = [], files = ['packages/engine/engine/workflow.js'] } = {}) {
   return {
-    inputs: { mode, validate_every_round: false, screenshots: 'all', issues: [], unit_tests: 'write_and_run', e2e_tests: 'write_and_run', base_branch: 'main' },
+    inputs: { validation: mode, validate_every_round: false, screenshots: 'all', issues: [], unit_tests: 'write_and_run', e2e_tests: 'write_and_run', base_branch: 'main' },
     vars: {},
     steps: {},
     output: { committed: true, branch: 'feat', summary: 's', test_notes: 't', left_out: [], issues: [], files_changed: files, screenshots },
@@ -175,7 +163,7 @@ test('ai-development-local-hero (#151): the screenshots go to the review in auto
   const shots = wf.steps.find((s) => s.id === 'developer_screenshots');
   assert.equal(shots.type, 'screenshots', 'still the machine step (no model cost)');
   assert.equal(firstGoto(develop, developScope({ mode: 'validated', screenshots: [SCREEN] })), 'developer_screenshots');
-  const after = (mode) => firstGoto(shots, { inputs: { mode, validate_every_round: false, screenshots: 'all' }, vars: {}, steps: { develop: { output: { screenshots: [SCREEN] } } }, output: { kind: 'screenshots', taken: 1, errors: [] } });
+  const after = (mode) => firstGoto(shots, { inputs: { validation: mode, validate_every_round: false, screenshots: 'all' }, vars: {}, steps: { develop: { output: { screenshots: [SCREEN] } } }, output: { kind: 'screenshots', taken: 1, errors: [] } });
   assert.equal(after('auto'), 'code_review');
   assert.equal(after('validated'), 'developer_check');
 });
@@ -193,7 +181,8 @@ test('ai-development-local-hero (#151): the ui_reviewer is a read-only, cheaper 
 
 test('ai-development-local-hero (#151): code_review fans out to the reviewer and the ui_reviewer, and a UI Reviewer failure alone does not fail it', () => {
   const review = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'code_review');
-  assert.deepEqual([...(review.agents || [])].sort(), ['reviewer', 'ui_reviewer']);
+  // #630: the second reviewer of the multi-model review (agent_when inputs.review == 'multi_model')
+  assert.deepEqual([...(review.agents || [])].sort(), ['reviewer', 'second_reviewer', 'ui_reviewer']);
   assert.equal(review.min_success, 1, 'one agent answering is enough: a failed UI Reviewer never blocks the run');
 });
 

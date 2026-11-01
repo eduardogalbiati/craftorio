@@ -43,7 +43,8 @@ const SKILL = 'unit-test-writer-js';
 const FACTS = { languages: ['javascript'], skills: [SKILL] };
 
 const profileOf = (over = {}) => ({
-  team: 'solo', merge: 'local', release: 'milestone', testCommand: TEST_COMMAND, ci: 'github-actions', languages: ['javascript'], ...over,
+  // #630: the ci axis is none | release | pr+release, and tests unit | unit+e2e
+  team: 'solo', merge: 'local', release: 'milestone', testCommand: TEST_COMMAND, ci: 'release', tests: 'unit', languages: ['javascript'], ...over,
 });
 
 function tmp(t) {
@@ -93,7 +94,8 @@ test('#487 openQuestions asks the release style when the profile does not know i
 });
 
 test('#487 openQuestions asks local or pull request when the profile does not know the merge', () => {
-  assert.equal(ids(load().openQuestions(profileOf({ merge: null }))).includes('merge'), true);
+  // #630: the merge question is now the mode (local | remote)
+  assert.equal(ids(load().openQuestions(profileOf({ merge: null }))).includes('mode'), true);
 });
 
 test('#487 every open question has a question text and a default', () => {

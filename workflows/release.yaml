@@ -142,6 +142,7 @@ providers:
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
     resume_args: ["--resume", "{{ session_id }}"]
+    effort_args: ["--effort", "{{ effort }}"]
     skill_args: ["--add-dir", "{{ skill_dir }}"]
 
 x-tools:

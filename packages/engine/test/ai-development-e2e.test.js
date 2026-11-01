@@ -1,4 +1,4 @@
-// Acceptance tests for #223: E2E in workflows/ai-development-local-hero.yaml. With e2e_tests on, the
+// Acceptance tests for #223: E2E in workflows/feature.yaml. With e2e_tests on, the
 // test writer writes the issue's BDD scenarios first (with the unit acceptance tests, two sub-agents
 // in parallel), the developer may not change them, a step without an agent (`e2e`) runs the issue's
 // scenarios plus @smoke after the suite, and an agent (the healer) is called only for a red scenario.
@@ -20,7 +20,7 @@ const path = require('path');
 const { loadWorkflow } = require('../engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 
 test('ai-development e2e: the e2e step has no agent and runs only the issue\'s scenarios and the @smoke journeys', () => {
   const wf = loadWorkflow(WORKFLOW);

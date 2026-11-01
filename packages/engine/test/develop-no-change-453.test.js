@@ -12,7 +12,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { loadWorkflow, evalExpr, render } = require('../engine/workflow');
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 const stepOf = (id) => loadWorkflow(WORKFLOW).steps.find((s) => s.id === id);
 
 // the goto of the first transition of a step whose `when` holds in this scope (the engine's order)

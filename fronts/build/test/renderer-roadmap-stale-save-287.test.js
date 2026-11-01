@@ -172,7 +172,7 @@ test('#287 a refused save whose item is gone shows the "Not saved" box with the 
 });
 
 test('#287 Start with items that push: "Switch them" refused because the roadmap changed elsewhere starts nothing and shows the reason', async () => {
-  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
   const starts = [];
   const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [issue(1)] };
   const data = { roadmap: { state: 'planned', updatedAt: T1, stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };

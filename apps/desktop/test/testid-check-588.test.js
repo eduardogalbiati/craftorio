@@ -13,7 +13,7 @@ const { WorkflowRun, loadWorkflow } = require('@multiagent/engine/engine/workflo
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const WORKFLOW = path.join(ROOT, 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');
 const load = () => require('@multiagent/engine/engine/test-ids');
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();

@@ -164,7 +164,8 @@
   }
 
   // ---- the fixed stations of a workflow's pipeline (#282: the roadmap card's Workflow band) -----------
-  const MODE_GATE = (mode) => new RegExp(`inputs\\.mode\\s*==\\s*['"]${String(mode).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`);
+  // #630: feature's validation mode is the `validation` input (`mode` names local | remote there)
+  const MODE_GATE = (mode) => new RegExp(`inputs\\.(?:mode|validation)\\s*==\\s*['"]${String(mode).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`);
   /**
    * A workflow's stations, in the order of its steps: one per group (`human`: a group of human gates
    * only), one per step in no group. A human gate in no group is never a station of its own, but the

@@ -25,8 +25,8 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const H = require('./roadmap-status-helpers');
 
-const HERO = 'software-development-local-hero.yaml';
-const DEV_WORKFLOWS = ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-development-local-hero.yaml'];
+const HERO = 'feature.yaml';
+const DEV_WORKFLOWS = ['feature.yaml', 'fix.yaml'];
 
 // a bundled workflow as api.listWorkflows gives it (packages/engine/service/areas/workflows.js), with its groups
 function wfEntry(file) {
@@ -341,7 +341,7 @@ test('#282 a done item: the meters compare with the estimate (cost under it ok, 
 // Assumed: the service's runView gives the card's run `mergedCommit` (the merged commit, null when the
 // run did not merge); the card passes it to RunProgress.pipeline, whose Merge station is then done (✓)
 // and names that commit (its title, its accessible name or its text).
-const AI_HERO = 'ai-development-local-hero.yaml';
+const AI_HERO = 'feature.yaml';
 const MERGED = 'abc1234def567890abc1234def567890abc12345';
 function mergedCard(mergedCommit) {
   const start = H.NOW - 2 * H.HOUR;

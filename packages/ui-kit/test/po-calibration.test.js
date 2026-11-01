@@ -76,8 +76,8 @@ test('fromQuestion reads an explicit "for quality" / "for speed" / "for balanced
 
 // #235: the Cost axis (Economy ↔ Generous) only for a workflow that declares the inputs it changes
 // and is not tests-first
-const AI_DEV = { file: 'ai-development-local-hero.yaml', name: 'ai-development-local-hero', inputs: { task: {}, unit_tests: {}, e2e_tests: {}, screenshots: {} } };
-const SW_DEV = { file: 'software-development-local-hero.yaml', name: 'software-development-local-hero', inputs: { task: {}, unit_tests: {}, e2e_tests: {}, screenshots: {} } };
+const AI_DEV = { file: 'feature.yaml', name: 'ai-development-local-hero', inputs: { task: {}, unit_tests: {}, e2e_tests: {}, screenshots: {} } };
+const SW_DEV = { file: 'feature.yaml', name: 'software-development-local-hero', inputs: { task: {}, unit_tests: {}, e2e_tests: {}, screenshots: {} } };
 
 test('#235 testsFirst: true for AI Development and its variants, false for software development', () => {
   assert.equal(calibration.testsFirst(AI_DEV), true);

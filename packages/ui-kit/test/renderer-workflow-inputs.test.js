@@ -196,7 +196,7 @@ test('applyHints: without a projectId, or without api.projectInputHints, it does
 
 const pillsText = (html) => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const heroWorkflow = {
-  file: 'software-development-local-hero.yaml',
+  file: 'feature.yaml',
   inputs: {
     unit_tests: { enum: ['write_and_run', 'run_existing', 'off'], default: 'write_and_run', label: 'Unit tests', options: { write_and_run: 'Write and run', run_existing: 'Run existing', off: 'Off' }, description: 'How the change is tested.' },
     e2e_tests: { enum: ['off', 'write', 'write_and_run'], default: 'off', label: 'E2E', options: { off: 'Off', write: 'Write only', write_and_run: 'Write and run' } },
@@ -243,7 +243,7 @@ test('inputPills: no inputs gives no pills; no workflow still labels each input 
 // with formHtml, and the roadmap card's input pairs come from inputPills: the real YAML's inputs.
 const heroInputs = () => {
   const yaml = require('js-yaml');
-  const file = require('path').join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+  const file = require('path').join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
   return yaml.load(require('fs').readFileSync(file, 'utf8')).inputs;
 };
 
@@ -261,7 +261,7 @@ test('formHtml (#286): "Developer effort" comes right after "Developer model", D
 });
 
 test('inputPills (#286): the roadmap card shows "Developer effort: High", never a plain pill at Default', () => {
-  const wf = { file: 'ai-development-local-hero.yaml', inputs: heroInputs() };
+  const wf = { file: 'feature.yaml', inputs: heroInputs() };
   assert.match(pillsText(WorkflowInputs.inputPills(wf, { developer_effort: 'high' })), /Developer effort: High/);
   assert.match(pillsText(WorkflowInputs.inputPills(wf, { developer_effort: 'xhigh' })), /Developer effort: Extra high/);
   const html = WorkflowInputs.inputPills(wf, { developer_effort: 'default' });

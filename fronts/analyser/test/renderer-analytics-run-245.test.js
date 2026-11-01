@@ -21,7 +21,7 @@ const agent = (name, extra = {}) => ({
   tokens: { input: 400, output: 300, cache_read: 200, cache_write: 100 }, ...extra,
 });
 const FIGURES = {
-  runId: 'run-245', title: 'Readable names', workflow: 'AI development (local hero)', file: 'ai-development-local-hero.yaml',
+  runId: 'run-245', title: 'Readable names', workflow: 'AI development (local hero)', file: 'feature.yaml',
   status: 'success', mock: true, startedAt: T(0), finishedAt: T(40), issues: [245],
   costUsd: 3, costPerIssue: 3, durationMs: 2400000, activeMs: 2000000, gateWaitMs: 400000,
   gates: [{ gate: 'human_review', from: T(38), to: T(40), waitMs: 120000 }], suiteRounds: [], slowestTools: [],

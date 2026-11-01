@@ -28,7 +28,7 @@ test('document skills for the arena exist and have a structure and a rubric', ()
 // ---- #160: sub-agents by default for code research (test_writer gets them too) ---------------
 
 test('#160: test_writer gets subagents: true and the context-economy skill; the developer still has subagents: true', () => {
-  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+  for (const file of ['feature.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', file));
     assert.equal(wf.agents.test_writer.capabilities.subagents, true, file);
     assert.ok(wf.agents.test_writer.skills.includes('context-economy'), file);

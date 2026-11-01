@@ -27,14 +27,19 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const text = (html) => String(html).replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ');
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-const AI_DEV = 'ai-development-local-hero.yaml';
-const SW_DEV = 'software-development-local-hero.yaml';
+const AI_DEV = 'feature.yaml';
+// #630: the code-first workflow with the Cost axis, now a workspace's own (no bundled one is left)
+const SW_DEV = 'custom-dev.yaml';
 const wf = (file) => {
   const doc = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', file), 'utf8'));
   return { file, name: doc.metadata.name, description: doc.metadata.description, inputs: doc.inputs || {} };
 };
+const CUSTOM_DEV = {
+  file: SW_DEV, name: 'Custom development', description: 'Code, then tests',
+  inputs: { task: { type: 'string' }, unit_tests: { label: 'Unit tests', type: 'string', enum: ['write_and_run', 'off'], default: 'write_and_run' } },
+};
 // two workflows that take a task, one that does not (never offered)
-const WORKFLOWS = [wf(AI_DEV), wf(SW_DEV), { file: 'no-task.yaml', name: 'no-task', inputs: { repo_path: { type: 'string' } } }];
+const WORKFLOWS = [wf(AI_DEV), CUSTOM_DEV, { file: 'no-task.yaml', name: 'no-task', inputs: { repo_path: { type: 'string' } } }];
 const PROJECTS = [{ id: 'proj-a1b2', name: 'Demo project' }, { id: 'proj-c3d4', name: 'Second project' }];
 
 function fakeEl(selector) {
@@ -214,7 +219,7 @@ test('#235 Plan mode shows a workflow select (data-testid="po-workflow") listing
     assert.doesNotMatch(o.label, /\.ya?ml$/, `"${o.label}" is a display name, not a file`);
     assert.notEqual(o.label, o.value.replace(/\.yaml$/, ''), `"${o.label}" is a display name, not the slug`);
   }
-  assert.match(options.find((o) => o.value === AI_DEV).label, /AI development/i);
+  assert.match(options.find((o) => o.value === AI_DEV).label, /feature/i);
 });
 
 test('#235 switching the workflow re-renders its options (data-testid="po-workflow-options") from that workflow\'s inputs, never task, issue, issues, repo_path or base_branch', async () => {
@@ -255,25 +260,26 @@ test('#235 the header reads "Planning for <project name> · <workflow display na
   d.choose(AI_DEV);
   await tick();
   const t = d.allText();
-  assert.match(t, /Planning for Demo project\s*·\s*AI development/i);
+  assert.match(t, /Planning for Demo project\s*·\s*feature/i);
   assert.doesNotMatch(t, /Planning for proj-a1b2/);
 });
 
 test('#235 the chosen workflow is remembered per project: another project starts on the default, and back on the first one it is the last chosen', async () => {
   const d = loadDrawer();
   await d.open();
-  d.choose(AI_DEV);
+  // #630: the default development workflow is feature (AI_DEV)
+  d.choose(SW_DEV);
   await tick();
   d.close();
 
   d.current.projectId = 'proj-c3d4';
   await d.open();
-  assert.equal(d.selected(), SW_DEV, 'a project with no choice yet starts on the default development workflow');
+  assert.equal(d.selected(), AI_DEV, 'a project with no choice yet starts on the default development workflow');
   d.close();
 
   d.current.projectId = 'proj-a1b2';
   await d.open();
-  assert.equal(d.selected(), AI_DEV);
+  assert.equal(d.selected(), SW_DEV);
 });
 
 test('#235 a plan question sends the chosen workflow to the Product Owner (api.askProductOwner\'s 10th argument, after cost)', async () => {

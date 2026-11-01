@@ -744,7 +744,7 @@ test('loadWorkflow validates a step\'s stall.same_output_fields', () => {
 });
 
 test('both bundled development workflows load with develop.stall set to commit_sha, summary, files_changed', () => {
-  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+  for (const file of ['feature.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', file));
     const develop = wf.steps.find((s) => s.id === 'develop');
     assert.deepEqual(develop.stall, { same_output_fields: ['commit_sha', 'summary', 'files_changed'] });

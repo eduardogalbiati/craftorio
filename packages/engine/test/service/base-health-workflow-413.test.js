@@ -43,8 +43,8 @@ const loadArea = () => require('../../service/areas/base-health');
 const loadHealth = () => require('../../domains/project/base-health');
 const loadRoadmap = () => require('../../domains/roadmap/roadmap');
 
-const AI_DEV = 'ai-development-local-hero.yaml';
-const LOCAL = 'software-development-local-hero.yaml';
+const AI_DEV = 'feature.yaml';
+const LOCAL = 'feature.yaml';
 const FAILURE = { test: 'cart totals include tax', file: 'test/cart.test.js', reason: 'fails on the base too' };
 
 /** The issue CLI, faked: creates return incrementing URLs, everything else returns ''. */

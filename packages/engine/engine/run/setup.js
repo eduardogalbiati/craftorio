@@ -15,9 +15,17 @@ const { displayName } = require('@multiagent/shared/display-name');
 const { render } = require('./templates');
 const { MACHINE_STEP_TYPES, toBoolean } = require('./load');
 
+// #630: feature's old `mode: auto | validated` (the PO's plans, saved roadmaps) is now `validation`;
+// `mode` names local | remote
+function oldValidation(inputs, given) {
+  if (!inputs.validation || !['auto', 'validated'].includes(given.mode) || inputs.mode?.enum?.includes(given.mode)) return given;
+  return { ...given, validation: given.validation || given.mode, mode: undefined };
+}
+
 const methods = {
-  resolveInputs(given) {
+  resolveInputs(raw) {
     const out = {};
+    const given = oldValidation(this.wf.inputs || {}, raw);
     for (const [k, def] of Object.entries(this.wf.inputs || {})) {
       let v = given[k];
       if (v === undefined || v === '') v = def.default;

@@ -214,9 +214,9 @@ inputs:
   git_platform:
     label: "Git platform"
     type: string
-    enum: [github, gitlab]
-    default: github
-    options: { github: GitHub, gitlab: GitLab }
+    enum: [gh, gl]
+    default: gh
+    options: { gh: GitHub, gl: GitLab }
     show_if: "mode == 'remote'"
     description: "Where Remote mode opens the pull request (merge request on GitLab)."
   # owner 2026-10-04: the developer's model per run (Fable 5.1 for the hardest work), the mapper's too;

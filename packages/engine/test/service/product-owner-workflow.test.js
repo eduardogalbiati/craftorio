@@ -9,8 +9,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeService, roadmapProject } = require('./helpers');
 
-const AI_DEV = 'ai-development-local-hero.yaml';
-const SW_DEV = 'software-development-local-hero.yaml';
+const AI_DEV = 'feature.yaml';
+const SW_DEV = 'feature.yaml';
 
 async function setup(t, name) {
   const { service, api } = makeService(t);

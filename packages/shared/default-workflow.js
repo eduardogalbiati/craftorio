@@ -53,8 +53,9 @@
     return wf.metadata?.merges === false ? 'none' : 'remote';
   }
 
-  // #486: the categories of a development workflow (the manifest's solo/team, the bundled ones' build)
-  const BUILD = ['solo', 'team', 'build'];
+  // #486: the categories of a development workflow (the manifest's solo/team, the bundled ones' build;
+  // #630: a composed set's feature)
+  const BUILD = ['solo', 'team', 'build', 'feature'];
   /** #486: a project's default without a given one: the first development workflow of its set ([{ name, category }]). */
   const firstBuild = (workflows) => (workflows || []).find((w) => BUILD.includes(w?.category))?.name || null;
 

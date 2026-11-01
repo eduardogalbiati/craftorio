@@ -242,7 +242,7 @@ test('listWorkflows (#286): an agent effort on a provider without effort_args co
   assert.equal(silent.error || '', '', 'a silent effort does not stop the workflow from loading');
   assert.deepEqual(Array.from(silent.warnings || []).map(String), ['the effort of reviewer is not passed: its provider has no effort_args']);
   assert.equal(Array.from(list.find((w) => w.file === 'passed-effort.yaml').warnings || []).length, 0);
-  const hero = list.find((w) => w.file === 'ai-development-local-hero.yaml');
+  const hero = list.find((w) => w.file === 'feature.yaml');
   assert.ok(hero, 'the bundled workflow is listed');
   assert.equal(Array.from(hero.warnings || []).length, 0);
 });

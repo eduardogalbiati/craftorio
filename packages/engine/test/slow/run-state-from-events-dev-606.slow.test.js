@@ -38,13 +38,13 @@ test('software-development: the replay of its mock run gives the in-memory state
 });
 
 test('software-development-local-hero: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('software-development-local-hero.yaml'), inputs: { task: 'Engine test', repo_path: root } });
+  const run = await recordedRun(t, { file: bundled('feature.yaml'), inputs: { task: 'Engine test', repo_path: root } });
   assertReplayMatches(run);
 });
 
 test('ai-development-local-hero: the replay of its mock run gives the in-memory state, vars included', async (t) => {
   const run = await recordedRun(t, {
-    file: bundled('ai-development-local-hero.yaml'),
+    file: bundled('feature.yaml'),
     inputs: { task: 'Add the feature', repo_path: makeRepo(t), unit_tests: 'run_existing', e2e_tests: 'off' },
     mockSequences: { verdict: ['approved'], suite: { red_check: ['fail'], suite: ['pass'] } },
   });
@@ -57,6 +57,6 @@ test('test-batch: the replay of its mock run gives the in-memory state', async (
 });
 
 test('e2e-release: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('e2e-release.yaml'), inputs: { task: 'Release check', repo_path: root }, mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } } });
+  const run = await recordedRun(t, { file: bundled('release.yaml'), inputs: { task: 'Release check', repo_path: root }, mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } } });
   assertReplayMatches(run);
 });

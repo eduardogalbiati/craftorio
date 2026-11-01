@@ -1,4 +1,4 @@
-// Acceptance tests for #246 (written before the code): in workflows/ai-development-local-hero.yaml the
+// Acceptance tests for #246 (written before the code): in workflows/feature.yaml the
 // orchestrator checks, right after `develop`, that every `data-testid` the E2E step definitions use
 // exists in the renderer, and returns the missing ones to the developer before the review (no model
 // call, no full suite); the develop prompt also lists them upfront. Mock runs on a git repository in a
@@ -23,7 +23,7 @@ const { execFileSync } = require('child_process');
 const { WorkflowRun, loadWorkflow } = require('@multiagent/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 // the module the change creates: loaded inside each test

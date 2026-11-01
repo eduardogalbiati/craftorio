@@ -36,7 +36,7 @@ function uiReviewerPrompt(step) {
 }
 
 test('#670 the bundled workflows with a ui_reviewer are found (ai-development-local-hero among them)', () => {
-  assert.equal(UI_WORKFLOWS.some((x) => rel(x.file) === 'workflows/ai-development-local-hero.yaml'), true);
+  assert.equal(UI_WORKFLOWS.some((x) => rel(x.file) === 'workflows/feature.yaml'), true);
   assert.equal(UI_WORKFLOWS.some((x) => rel(x.file) === '.multiagent/workflows/ai-development-local-hero.yaml'), true);
 });
 

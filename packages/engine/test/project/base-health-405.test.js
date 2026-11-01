@@ -270,7 +270,7 @@ test('#405 runBaseCheck onRed \'issue\': files the issue, leaves the roadmap unt
 // #413: the service resolves the default development workflow and passes it; the item runs it
 test('#413 the fix item runs the workflow it is given (recordPreexisting and runBaseCheck), mode auto, in the front stage', async (t) => {
   const { recordPreexisting, runBaseCheck } = load();
-  const workflow = 'ai-development-local-hero.yaml';
+  const workflow = 'feature.yaml';
   const fx = fakeExec();
   const ws1 = tmpWs(t);
   writeRoadmapFixture(ws1);

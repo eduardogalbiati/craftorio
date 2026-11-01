@@ -1,4 +1,4 @@
-// Acceptance tests for #404 on the definition of workflows/ai-development-local-hero.yaml: the
+// Acceptance tests for #404 on the definition of workflows/feature.yaml: the
 // developer runs the project's check command before its final answer and records the result; a
 // step with no agent runs the check command after develop and sends a failure back to develop
 // (never to the test writer); the command is the `check_command` input. The runs of the step are
@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const { loadWorkflow } = require('../engine/workflow');
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 const runsCheckCommand = (step) => /inputs\.check_command/.test(JSON.stringify({ ...step, transitions: undefined, prompt: undefined }));
 const checkStepOf = (wf) => wf.steps.find((s) => !s.agent && runsCheckCommand(s));
 const gotos = (step) => (step.transitions || []).map((tr) => tr.goto).filter(Boolean);

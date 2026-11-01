@@ -992,9 +992,9 @@ test('backlog.css (#193): a long reason, note, error and input badge wrap or are
 // ---- #195: a workflow that pushes while the default development workflow merges locally -----------
 
 test('html: an item whose workflow pushes (remote) while the default is local gets the push badge, naming the default in its tooltip', () => {
-  const { BacklogRoadmap, sandbox } = loadRoadmap({ listWorkflows: async () => [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }] });
+  const { BacklogRoadmap, sandbox } = loadRoadmap({ listWorkflows: async () => [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }] });
   sandbox.state.settings = { defaultWorkflow: null };
-  sandbox.state.workflows = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  sandbox.state.workflows = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
   const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   BacklogRoadmap.html(data, () => {}, SHOW_ALL); // kicks off loadWorkflows (the module's own cache)
@@ -1006,11 +1006,11 @@ test('html: an item whose workflow pushes (remote) while the default is local ge
 });
 
 test('html: an item already on the default (local) workflow gets no push badge', () => {
-  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
   const { BacklogRoadmap, sandbox } = loadRoadmap({ listWorkflows: async () => list });
   sandbox.state.settings = { defaultWorkflow: null };
   sandbox.state.workflows = list;
-  const item = { id: 'it1', status: 'planned', workflow: 'software-development-local-hero.yaml', workflowName: 'Software development (local)', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const item = { id: 'it1', status: 'planned', workflow: 'feature.yaml', workflowName: 'Software development (local)', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   return settle().then(() => {
@@ -1020,7 +1020,7 @@ test('html: an item already on the default (local) workflow gets no push badge',
 });
 
 test('onClick [data-rm=start]: a roadmap with items that would push while the default is local asks first; "Switch them to …" saves the default workflow on them, then starts', async () => {
-  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
   const choiceCalls = [];
   const { BacklogRoadmap, savedCalls, startCalls, sandbox } = loadRoadmap({
     listWorkflows: async () => list,
@@ -1039,12 +1039,12 @@ test('onClick [data-rm=start]: a roadmap with items that would push while the de
   assert.equal(choiceCalls.length, 1);
   assert.deepEqual(choiceCalls[0].options, ['switch', 'anyway']);
   assert.equal(savedCalls.length, 1);
-  assert.equal(savedCalls[0].stages[0].items[0].workflow, 'software-development-local-hero.yaml');
+  assert.equal(savedCalls[0].stages[0].items[0].workflow, 'feature.yaml');
   assert.equal(startCalls.length, 1); // the start goes on after switching
 });
 
 test('onClick [data-rm=start]: "Start anyway" keeps the pushing workflow and starts without saving', async () => {
-  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
   const { BacklogRoadmap, savedCalls, startCalls, sandbox } = loadRoadmap({ listWorkflows: async () => list, choiceDialog: async () => 'anyway' });
   sandbox.state.settings = { defaultWorkflow: null };
   sandbox.state.workflows = list;
@@ -1059,7 +1059,7 @@ test('onClick [data-rm=start]: "Start anyway" keeps the pushing workflow and sta
 });
 
 test('onClick [data-rm=start]: cancelling the push confirmation starts nothing', async () => {
-  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
   const { BacklogRoadmap, startCalls, sandbox } = loadRoadmap({ listWorkflows: async () => list, choiceDialog: async () => null });
   sandbox.state.settings = { defaultWorkflow: null };
   sandbox.state.workflows = list;

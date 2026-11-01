@@ -45,8 +45,7 @@ test('each bundled workflow declares its outputs: contract', () => {
   assert.deepEqual(outputsOf('issue-tracker.yaml'), ['issues']);
   assert.deepEqual(outputsOf('writer-reviewer.yaml'), ['document', 'issue']);
   assert.deepEqual(outputsOf('ai-arena.yaml'), ['document']);
-  assert.deepEqual(outputsOf('software-development.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
-  assert.deepEqual(outputsOf('software-development-local-hero.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
+  assert.deepEqual(outputsOf('feature.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
   assert.deepEqual(outputsOf('run-retrospective.yaml'), ['findings']);
 });
 test('loadWorkflow rejects a transition to an unknown step', () => {
@@ -143,22 +142,6 @@ test('developer_gaps filter drops Tests/Measure entries, keeps real gaps', () =>
   assert.equal(render(t, { gaps: 'not-an-array' }), '[]');
   assert.equal(render(t, { gaps: undefined }), '[]');
 });
-test('software-development removes the PR screenshots on merge or close, only when some were posted', () => {
-  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development.yaml'));
-  const action = (stepId, when) => wf.steps.find((s) => s.id === stepId).transitions.find((x) => x.when === when).action;
-  const scope = (posted) => ({
-    inputs: { git_platform: 'gh' },
-    skill_dir: () => 'C:/skills/pr-screenshots',
-    steps: { ci: { output: { pr_number: 12, pr_url: 'https://github.com/acme/app/pull/12', screenshots_posted: posted } } },
-  });
-  const cleanupCmd = 'node "C:/skills/pr-screenshots/publish.js" --cleanup --platform gh --pr-url https://github.com/acme/app/pull/12';
-  assert.equal(render(action('approve_merge', 'approved'), scope(true)), `gh pr merge 12 --repo github.com/acme/app --squash --delete-branch && ${cleanupCmd}`);
-  assert.equal(render(action('approve_merge', 'approved'), scope(false)), 'gh pr merge 12 --repo github.com/acme/app --squash --delete-branch');
-  for (const when of ["output.state == 'merged'", "output.state == 'closed'"]) {
-    assert.equal(render(action('pr_babysitter', when), scope(true)), cleanupCmd);
-    assert.equal(render(action('pr_babysitter', when), scope(false)), '');
-  }
-});
 test('loadWorkflow validates a transition status (end outcome)', () => {
   const tmp = path.join(os.tmpdir(), `wf-status-${process.pid}.yaml`);
   const write = (t) => fs.writeFileSync(tmp, `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: s1\n    agent: a\n    transitions:\n      - ${t}\n`);
@@ -241,7 +224,7 @@ test('loadWorkflow validates groups: known steps, one group per step, unique nam
   }
 });
 test('the bundled workflows group every step', () => {
-  for (const f of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'multi-model-review.yaml', 'run-retrospective.yaml', 'backlog-refresh.yaml']) {
+  for (const f of ['feature.yaml', 'fix.yaml', 'release.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'run-retrospective.yaml', 'backlog-refresh.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', f));
     assert.ok(wf.groups?.length, `${f} has groups`);
     assert.deepEqual(wf.groups.flatMap((g) => g.steps).sort(), wf.steps.map((s) => s.id).sort(), f);

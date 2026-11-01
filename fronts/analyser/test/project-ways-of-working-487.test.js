@@ -96,13 +96,13 @@ test('#487 Save in Edit profile puts the fields into the answers and recomposes'
   w.q('[data-wow-profile-field="languages"]').value = 'go, rust';
   w.q('[data-wow-profile-field="testCommand"]').value = '';
   w.q('[data-wow-profile-field="release"]').value = '';
-  w.q('[data-wow-profile-field="team"]').value = 'team';
+  w.q('[data-wow-profile-field="mode"]').value = 'remote';
   w.fire(w.q('[data-testid="ways-of-working-profile-edit"]'), 'submit');
   await settle();
   assert.equal(w.composes.length, 2);
   const answers = w.composes[1].args.answers;
   assert.equal(answers.languages, 'go, rust');
-  assert.equal(answers.team, 'team');
+  assert.equal(answers.mode, 'remote');
   assert.equal(answers.release, 'milestone');
   assert.equal('testCommand' in answers, false);
   assert.equal(w.q('[data-testid="ways-of-working-profile-edit"]') === null, true);
@@ -113,7 +113,7 @@ test('#487 Cancel in Edit profile closes the form and recomposes nothing', async
   const w = await analyzed();
   w.click(w.q('[data-testid="ways-of-working-edit-profile"]'));
   await settle();
-  w.q('[data-wow-profile-field="team"]').value = 'team';
+  w.q('[data-wow-profile-field="mode"]').value = 'remote';
   w.click(w.q('[data-testid="ways-of-working-profile-cancel"]'));
   await settle();
   assert.equal(w.q('[data-testid="ways-of-working-profile-edit"]') === null, true);

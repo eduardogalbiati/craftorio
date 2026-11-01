@@ -147,10 +147,11 @@ test('#485 this repository\'s .multiagent/project.yaml declares the four flows w
   assert.deepEqual(m.errors, []);
   const byName = Object.fromEntries(m.workflows.map((w) => [w.name, w]));
   assert.equal(byName['backlog-refresh']?.category, 'intake');
-  assert.equal(byName['software-development-local-hero']?.category, 'solo');
-  assert.equal(byName['software-development']?.category, 'team');
+  // #630: the bundled set is feature, fix and release
+  assert.equal(byName.feature?.category, 'solo');
+  assert.equal(byName.fix?.category, 'fix');
   assert.equal(byName.release?.category, 'release');
-  for (const name of ['backlog-refresh', 'software-development-local-hero', 'software-development', 'release']) {
+  for (const name of ['backlog-refresh', 'feature', 'fix', 'release']) {
     assert.ok(fs.existsSync(path.join(ROOT, 'workflows', `${name}.yaml`)), `${name} is a bundled workflow`);
     assert.equal(byName[name].file ?? null, null, `${name} is the bundled one, by name`);
   }
@@ -166,9 +167,12 @@ test('#485 this repository keeps its own ai-development-local-hero copy, without
   const copy = path.join(ROOT, '.multiagent', 'workflows', 'ai-development-local-hero.yaml');
   assert.ok(fs.existsSync(copy), '.multiagent/workflows/ai-development-local-hero.yaml exists');
   const wf = loadWorkflow(copy);
-  const bundled = loadWorkflow(path.join(ROOT, 'workflows', 'ai-development-local-hero.yaml'));
-  const runsOn = (w) => Object.fromEntries(Object.entries(w.agents).map(([k, a]) => [k, `${a.provider} ${a.model} ${a.effort ?? ''}`]));
-  assert.deepEqual(runsOn(wf), runsOn(bundled), 'every agent runs on the bundled provider / model / effort');
+  // #630: the bundled copy is feature.yaml now, which added agents (second_reviewer, ci_pusher): the
+  // copy's own agents run on the bundled provider / model / effort
+  const bundled = loadWorkflow(path.join(ROOT, 'workflows', 'feature.yaml'));
+  const runsOn = (w, names) => Object.fromEntries(names.map((k) => [k, `${w.agents[k]?.provider} ${w.agents[k]?.model} ${w.agents[k]?.effort ?? ''}`]));
+  const names = Object.keys(wf.agents);
+  assert.deepEqual(runsOn(wf, names), runsOn(bundled, names), 'every agent runs on the bundled provider / model / effort');
   assert.equal(String(wf.orchestrator?.model), String(bundled.orchestrator?.model));
   assert.deepEqual(wf.inputs?.developer_model, bundled.inputs?.developer_model);
 });

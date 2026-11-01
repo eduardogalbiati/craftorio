@@ -9,7 +9,7 @@ const evidence = require('../../domains/evidence/evidence');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 const { runSoftwareDevelopment } = require('../engine-helpers');
 
-for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+for (const file of ['software-development.yaml', 'feature.yaml']) {
   // software-development also needs a successful preview to reach the end; local-hero has none
   const toEnd = file === 'software-development.yaml' ? { preview_status: ['success'] } : {};
   // only transitions where both ends are one of these three steps (hides the rest of the pipeline)

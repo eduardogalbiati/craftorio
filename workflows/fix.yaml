@@ -63,9 +63,9 @@ inputs:
   git_platform:
     label: "Git platform"
     type: string
-    enum: [github, gitlab]
-    default: github
-    options: { github: GitHub, gitlab: GitLab }
+    enum: [gh, gl]
+    default: gh
+    options: { gh: GitHub, gl: GitLab }
     show_if: "mode == 'remote'"
     description: "Where Remote mode opens the pull request (merge request on GitLab)."
   test_command:

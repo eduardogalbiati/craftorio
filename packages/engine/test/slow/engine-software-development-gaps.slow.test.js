@@ -11,7 +11,7 @@ process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 const { root, runSoftwareDevelopment } = require('../engine-helpers');
 
 test('#98: requirements_left_out is a human gate; neither a retry nor the supervisor can answer it', () => {
-  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+  for (const file of ['software-development.yaml', 'feature.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', file));
     const gate = wf.steps.find((s) => s.id === 'requirements_left_out');
     assert.equal(gate.type, 'human_approval', file);
@@ -19,7 +19,7 @@ test('#98: requirements_left_out is a human gate; neither a retry nor the superv
   }
 });
 
-for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+for (const file of ['software-development.yaml', 'feature.yaml']) {
   // software-development also needs a successful preview to reach the end; local-hero has none
   const toEnd = file === 'software-development.yaml' ? { preview_status: ['success'] } : {};
   // only transitions where both ends are one of these three steps (hides the rest of the pipeline)

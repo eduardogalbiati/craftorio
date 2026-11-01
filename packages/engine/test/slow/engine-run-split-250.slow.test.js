@@ -36,7 +36,7 @@ test('#250 a mock run of ai-development-local-hero emits the same events, in the
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'split-250-runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'ai-development-local-hero.yaml'),
+    file: path.join(root, 'workflows', 'feature.yaml'),
     inputs: { task: 'Add the feature', repo_path: repo, unit_tests: 'run_existing', e2e_tests: 'off' },
     mock: true, runsDir, mockSequences: { verdict: ['approved'] },
   });

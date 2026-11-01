@@ -1,4 +1,4 @@
-// Acceptance tests for #223: E2E in workflows/ai-development-local-hero.yaml. With e2e_tests on, the
+// Acceptance tests for #223: E2E in workflows/feature.yaml. With e2e_tests on, the
 // test writer writes the issue's BDD scenarios first (with the unit acceptance tests, two sub-agents
 // in parallel), the developer may not change them, a step without an agent (`e2e`) runs the issue's
 // scenarios plus @smoke after the suite, and an agent (the healer) is called only for a red scenario.
@@ -21,7 +21,7 @@ const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../../engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'feature.yaml');
 const ISSUE = 'https://github.com/acme/app/issues/223';
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 

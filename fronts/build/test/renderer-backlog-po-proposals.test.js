@@ -50,7 +50,7 @@ function loadProposals({ confirmDialog, devMode, splitProductOwnerIssue, propose
 
 const WORKFLOWS = [
   { file: 'software-development.yaml', name: 'Software development', inputs: { task: { type: 'string' } } },
-  { file: 'software-development-local-hero.yaml', name: 'Software development (local)', inputs: { task: { type: 'string' } } },
+  { file: 'feature.yaml', name: 'Software development (local)', inputs: { task: { type: 'string' } } },
 ];
 
 function split(issue, over = {}) {
@@ -71,9 +71,9 @@ test('splitsHtml: the workflow select next to Split + roadmap defaults to the de
   const html = BacklogPoProposals.splitsHtml(makeCtx([msg]), msg);
   assert.match(html, /<select class="po-wf" data-split-wf/);
   // unset: falls back to the local workflow (DefaultWorkflow.resolve with no setting)
-  assert.match(html, /<option value="software-development-local-hero\.yaml" selected>Software development \(local\) \(default\)<\/option>/);
+  assert.match(html, /<option value="feature\.yaml" selected>Software development \(local\) \(default\)<\/option>/);
   assert.match(html, /<option value="software-development\.yaml">Software development<\/option>/);
-  assert.match(html, /title="File the children, then plan them in the roadmap in this order \(software-development-local-hero\)"/);
+  assert.match(html, /title="File the children, then plan them in the roadmap in this order \(feature\)"/);
 });
 
 test('onInput [data-split-wf]: picking another workflow is kept for that split, and the "Split + roadmap" tooltip follows it', () => {
@@ -114,7 +114,7 @@ test('fileSplit (Split + roadmap): the roadmap stages use the split\'s picked wo
   await settle(); // onClick fires fileSplit without awaiting it
   await settle();
   assert.equal(proposeCalls.length, 1);
-  assert.deepEqual(proposeCalls[0].stages.flatMap((st) => st.items.map((i) => i.workflow)), ['software-development-local-hero.yaml', 'software-development-local-hero.yaml']);
+  assert.deepEqual(proposeCalls[0].stages.flatMap((st) => st.items.map((i) => i.workflow)), ['feature.yaml', 'feature.yaml']);
 });
 
 // ---- #609: only the clicked split/epic action is busy while its request is in flight ----------------
@@ -438,7 +438,7 @@ test('#670 the roadmap button files the spec\'s issues, then plans one roadmap s
   assert.deepEqual(specCalls.map((c) => [c.projectId, c.at]), [['p1', 't670d']]);
   assert.equal(proposeCalls.length, 1);
   assert.deepEqual(proposeCalls[0].stages.map((st) => [st.name, st.items.map((i) => i.issues[0])]), [['Phase 1', [21]], ['Phase 2', [22]]]);
-  assert.deepEqual(proposeCalls[0].stages.map((st) => st.items[0].workflow), ['software-development-local-hero.yaml', 'software-development-local-hero.yaml']);
+  assert.deepEqual(proposeCalls[0].stages.map((st) => st.items[0].workflow), ['feature.yaml', 'feature.yaml']);
 });
 
 test('#670 with a mockup in scope uncovered, a click files nothing and plans nothing', async () => {

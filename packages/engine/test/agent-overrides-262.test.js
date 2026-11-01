@@ -22,7 +22,7 @@ const path = require('path');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const HERO = path.join(__dirname, '..', '..', '..', 'workflows', 'ai-development-local-hero.yaml');
+const HERO = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 
 const PROVIDERS = `providers:
   claude:

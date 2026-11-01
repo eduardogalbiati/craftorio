@@ -174,12 +174,12 @@ test('#245 bundled workflows: every red_check step is displayed "Red check (TDD)
 });
 
 test('#245 bundled workflows: ai-development-local-hero\'s Run suite (E2E) step (e2e) is displayed "Run suite (E2E)"', () => {
-  assert.equal(stepOf('ai-development-local-hero.yaml', 'e2e')?.display, 'Run suite (E2E)');
+  assert.equal(stepOf('feature.yaml', 'e2e')?.display, 'Run suite (E2E)');
 });
 
 test('#245 bundled workflows: every verify_change step is displayed "Final verification"', () => {
   const found = bundled().filter((f) => stepOf(f, 'verify_change'));
-  assert.ok(found.length >= 3, 'software-development, its local-hero variant and ai-development-local-hero have verify_change');
+  assert.ok(found.length >= 2, 'feature and fix have verify_change (#630)');
   for (const f of found) assert.equal(stepOf(f, 'verify_change').display, 'Final verification', f);
 });
 
