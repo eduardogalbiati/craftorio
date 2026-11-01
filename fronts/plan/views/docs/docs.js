@@ -150,6 +150,7 @@
 
   // ---- the editor ---------------------------------------------------------------------------------
   async function openDoc(item, doc, base) {
+    docs.projectId = window.CurrentProject?.get() || docs.projectId;
     docs.open = { item, doc, data: null, runId: null, base, fresh: false, gate: null, changes: [], unreviewed: [], notes: [], messages: [], selection: null, problems: [] };
     $('#docs-list-area').classList.add('hidden');
     $('#docs-editor-area').classList.remove('hidden');
@@ -465,6 +466,17 @@
       emptyHtml: () => `<p class="muted small">${t('docs.the_writer_answers_here')}</p>`,
     });
   }
+
+  // One document open in the editor, and a write-doc run followed from its events so far (the
+  // screenshot seed's review state, scripts/screenshot/views/docs.js; a run resumed elsewhere).
+  window.DocsActions = {
+    openDoc: async (item, doc) => { showView('docs'); await openDoc(item, doc, null); },
+    follow: async (runId, events = []) => {
+      if (!docs.open) return;
+      docs.open.runId = runId;
+      for (const ev of events) await onRunEvent({ run_id: runId, ...ev });
+    },
+  };
 
   registerView({
     id: 'docs',

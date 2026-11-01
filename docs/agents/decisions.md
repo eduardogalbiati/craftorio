@@ -8,6 +8,22 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-31** (#647, #636, write doc phase 1): the stage documents of a work item
+  (`docs/work/<item>/intent.md`, then `spec.md`, each with its `pt-BR` translation, the playbook's
+  sections) are written in Plan & Design › Documents with one writer (`workflows/write-doc.yaml`, the
+  `intent-writing` / `spec-writing` skills). The agents only read: the Documents service
+  (`fronts/plan/engine/domains/docs.js`) is the only code that writes them. Editing is by selection on
+  the rendered page (a sandboxed iframe without scripts); each request is a writer turn of the
+  `human_edit` gate (a protected gate: the supervisor and the automatic answers never end it, only
+  the person's Send to review does) and **one commit per request**, swapped into the source and its
+  translation, undone one by one by a revert. The reviewer anchors its notes to sections and sees
+  only the changes not marked reviewed. The SDLC gates are the person's: Accept intent and Sign off
+  spec change both front matters (status, approver from the repository's git identity, date) in one
+  commit; after the sign-off, Create epic and phase issues and Start the Build only open the Backlog
+  and the Roadmap on the owner's click, nothing is filed or started by itself. Write & Review and AI
+  Arena stay in the menu until phase 2. Checked simulated only. Spec and plan:
+  `docs/work/write-doc/` (the tech lead signs R4, R9 and R13).
+
 - **2026-10-31** (#629, #628, first project onboarding phase 1): a new project is made in a 4-step
   wizard (start, repository, analysis, review: `fronts/build/views/projects/project-wizard.js`),
   opened by Home's empty state, Projects › New project and the Setup's last step; Edit keeps the old
