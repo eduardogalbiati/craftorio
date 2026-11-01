@@ -60,6 +60,8 @@ inputs:
     label: "Repository"
     type: string
     required: true
+    # refactor-proposals' old name for it: an old run's or a saved pipeline's project_path still starts
+    was: project_path
     description: "The project's local git repository (read-only: nothing in it changes)."
   project_id:
     label: "Project"

@@ -1,6 +1,6 @@
 // @ts-check
 // Run setup (#250, from packages/engine/engine/workflow.js): the inputs with their defaults and types
-// (`resolveInputs`, `resolveRunInput` for `type: run`), the images attached to inputs (#129:
+// (`resolveInputs`, an input's `was:` old name #631, `resolveRunInput` for `type: run`), the images attached to inputs (#129:
 // `checkInputAttachments`, `copyAttachments`, `stepAttachments`), the per-run agent overrides
 // (`applyAgentOverrides`, #262), disabled agents (`dropDisabledAgents`), `persona: random`
 // (`pickPersonas`) and the agents' names for the screens (`agentNames`, `displayNames` #245).
@@ -28,6 +28,8 @@ const methods = {
     const given = oldValidation(this.wf.inputs || {}, raw);
     for (const [k, def] of Object.entries(this.wf.inputs || {})) {
       let v = given[k];
+      // #631: `was: <old name>`, the input's name before a rename (an old run's or a saved pipeline's inputs)
+      if ((v === undefined || v === '') && def.was) v = given[def.was];
       if (v === undefined || v === '') v = def.default;
       if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
       // a yes/no: a boolean, or its text from a form, the CLI or inputs saved before it was one ("true"/"false")
