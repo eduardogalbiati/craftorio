@@ -121,8 +121,16 @@ When('I start a new item {string}', async ({ e2e }, title) => {
 });
 
 Given('the demo project\'s repository has the item {string} with an accepted intent', async ({ e2e }, title) => {
+  seedAcceptedIntent(e2e, title, slugOf(title));
+});
+
+// #696: a long title under a short folder name (docs/work/<folder>/), the path stays short on Windows
+Given('the demo project\'s repository has the item {string} in the folder {string} with an accepted intent', async ({ e2e }, title, slug) => {
+  seedAcceptedIntent(e2e, title, slug);
+});
+
+function seedAcceptedIntent(e2e, title, slug) {
   const folder = demoFolder(e2e);
-  const slug = slugOf(title);
   const dir = path.join(folder, 'docs', 'work', slug);
   fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(path.join(folder, '.git'))) git(e2e, folder, ['init', '-q', '-b', 'main']);
@@ -131,7 +139,7 @@ Given('the demo project\'s repository has the item {string} with an accepted int
   git(e2e, folder, ['add', '-A']);
   git(e2e, folder, ['commit', '-q', '-m', `Accept the intent of ${title}`]);
   e2e.docItem = { title, slug, dir };
-});
+}
 
 When('I choose {string} on the item {string}', async ({ e2e }, action, title) => {
   const row = item(e2e.window, title);
@@ -244,4 +252,91 @@ Then('no issue was filed and no build was started', async ({ e2e }) => {
   if (e2e.docItem) expect(fs.existsSync(path.join(e2e.docItem.dir, 'plan.md')), 'the Build wrote no plan.md').toBe(false);
   // the Product Owner's proposal is not open either: it waits for "Create epic and phase issues"
   await expect(e2e.window.getByRole('dialog')).toHaveCount(0);
+});
+
+// ---- #696: the list rows on one line (mock-1) and Send to review at the toolbar's right (mock-2) ------
+// Assumes these data-testids (besides the #671 ones: docs-item-stages, docs-item-pill, doc-toolbar,
+// doc-versions, doc-send-to-review): docs-item-title, the title of a list row.
+
+const boxOf = async (locator, what) => {
+  await expect(locator, what).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box, `${what} has a box on the screen`).toBeTruthy();
+  return box;
+};
+// two boxes are on one line when each one's vertical middle falls inside the other one
+const middle = (b) => b.y + b.height / 2;
+const inside = (y, b) => y >= b.y && y <= b.y + b.height;
+const expectSameLine = (a, b, what) => {
+  expect(inside(middle(a), b) && inside(middle(b), a), `${what} are on one line`).toBe(true);
+};
+const paddingRight = (locator) => locator.evaluate((el) => parseFloat(getComputedStyle(el).paddingRight) || 0);
+const oneSpace = (s) => s.replace(/\s+/g, ' ').trim();
+
+Then('the item {string} reads {string} on one line', async ({ e2e }, title, text) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  const name = row.getByTestId('docs-item-title');
+  const stages = row.getByTestId('docs-item-stages');
+  const read = oneSpace(`${await name.textContent()} ${await row.getByText('·', { exact: true }).first().textContent()} ${await stages.textContent()}`);
+  expect(read, 'the row reads its title, a dot and its stages').toBe(oneSpace(text));
+  const titleBox = await boxOf(name, 'the title');
+  expectSameLine(titleBox, await boxOf(stages, 'the stages'), 'the title and the stages');
+  // every dot between the title and the stages, and between the stages, sits on the title's line
+  const dots = row.getByText('·', { exact: true });
+  const count = await dots.count();
+  expect(count, 'the row separates its title and its stages with a dot').toBeGreaterThan(0);
+  for (let i = 0; i < count; i += 1) expectSameLine(titleBox, await boxOf(dots.nth(i), `dot ${i + 1}`), `the title and dot ${i + 1}`);
+});
+
+Then('the item {string} shows its status and its actions at the right of its stages', async ({ e2e }, title) => {
+  const row = item(e2e.window, title);
+  const titleBox = await boxOf(row.getByTestId('docs-item-title'), 'the title');
+  const stages = await boxOf(row.getByTestId('docs-item-stages'), 'the stages');
+  const pill = await boxOf(row.getByTestId('docs-item-pill'), 'the status');
+  expectSameLine(titleBox, pill, 'the title and the status');
+  expect(pill.x, 'the status is right of the stages').toBeGreaterThanOrEqual(stages.x + stages.width);
+  const buttons = row.getByRole('button');
+  const n = await buttons.count();
+  expect(n, 'the row offers an action').toBeGreaterThan(0);
+  let rightmost = pill.x + pill.width;
+  for (let i = 0; i < n; i += 1) {
+    const b = await boxOf(buttons.nth(i), `action ${i + 1}`);
+    expectSameLine(titleBox, b, `the title and action ${i + 1}`);
+    expect(b.x, `action ${i + 1} is right of the stages`).toBeGreaterThanOrEqual(stages.x + stages.width);
+    rightmost = Math.max(rightmost, b.x + b.width);
+  }
+  // the status and the actions end at the row's right edge (inside its padding)
+  const rowBox = await boxOf(row, 'the row');
+  expect(rightmost, 'the status and the actions sit at the right of the row').toBeGreaterThanOrEqual(rowBox.x + rowBox.width - (await paddingRight(row)) - 2);
+});
+
+Then('the title of the item {string} is cut with an ellipsis', async ({ e2e }, title) => {
+  const name = item(e2e.window, title).getByTestId('docs-item-title');
+  await expect(name).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(name).toHaveCSS('text-overflow', 'ellipsis');
+  await expect(name).toHaveCSS('white-space', 'nowrap');
+  const cut = await name.evaluate((el) => el.scrollWidth > el.clientWidth);
+  expect(cut, 'the title is wider than its room, so the ellipsis shows').toBe(true);
+});
+
+Then('the toolbar ends with {string} right after {string}', async ({ e2e }, last, before) => {
+  const toolbar = editor(e2e.window).getByTestId('doc-toolbar');
+  const send = toolbar.getByTestId('doc-send-to-review');
+  const versions = toolbar.getByTestId('doc-versions');
+  await expect(send).toHaveAccessibleName(last);
+  await expect(versions).toHaveAccessibleName(before);
+  await expect(send).toBeEnabled({ timeout: RUN_TIMEOUT });
+  const sendBox = await boxOf(send, `"${last}"`);
+  const versionsBox = await boxOf(versions, `"${before}"`);
+  expectSameLine(versionsBox, sendBox, `"${before}" and "${last}"`);
+  expect(sendBox.x, `"${last}" is right of "${before}"`).toBeGreaterThanOrEqual(versionsBox.x + versionsBox.width);
+  // nothing of the toolbar comes after it, and it ends at the toolbar's right edge
+  const controls = toolbar.locator('button:visible, [role="tab"]:visible');
+  for (let i = 0; i < await controls.count(); i += 1) {
+    const b = await controls.nth(i).boundingBox();
+    if (b) expect(b.x + b.width, `no control of the toolbar is right of "${last}"`).toBeLessThanOrEqual(sendBox.x + sendBox.width + 1);
+  }
+  const bar = await boxOf(toolbar, 'the toolbar');
+  expect(sendBox.x + sendBox.width, `"${last}" sits at the toolbar's right`).toBeGreaterThanOrEqual(bar.x + bar.width - (await paddingRight(toolbar)) - 2);
 });
