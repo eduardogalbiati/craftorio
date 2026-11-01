@@ -26,11 +26,13 @@ const TESTED_CONTEXT = 'ci/tested';
 // (the root's and the nested ones per area, test/nested-agents-572.test.js), docs/agents/**/*.md (test/claude-md.test.js), the bundled skills (skills/**, seeded and parsed by the engine tests)
 // and the README's fragments (docs/screens/, docs/features/: test/docs.test.js checks the README's
 // generated sections against them). The cargo workspace (native/, #341) is code, its Markdown too:
-// CI checks the whole workspace (a crate may include its README as docs).
+// CI checks the whole workspace (a crate may include its README as docs). A test folder's Markdown
+// is a fixture (the doc-editor tests read a frozen spec, test/fixtures/doc-editor/, #672).
 function isDocsFile(file) {
   if (!file.toLowerCase().endsWith('.md')) return false;
   if (/(^|\/)(AGENTS|CLAUDE)\.md$/.test(file) || file.startsWith('docs/agents/') || file.startsWith('skills/')) return false;
   if (file.startsWith('native/')) return false;
+  if (/(^|\/)test\//.test(file)) return false;
   if (file.startsWith('docs/screens/') || file.startsWith('docs/features/')) return false;
   return true;
 }
