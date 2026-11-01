@@ -1,7 +1,7 @@
 // Documents screen (#671, views/docs/docs.js): the markup of the panels the spec's mockups draw
 // (docs/work/write-doc/images/): the New item side panel (mock-1), the review with its rubric checks
 // and anchored notes (mock-4) and the sign-off gate (mock-5). Markup only, from the values docs.js
-// passes; the clicks are docs.js's (data-docs-*). Uses app.js globals (esc, t). Browser: window.DocsPanels.
+// passes; the clicks are docs.js's (data-docs-*). Uses app.js globals (esc, t) and Select (select.js). Browser: window.DocsPanels.
 (() => {
   // the side panel next to the list: starts with, what it is about, the screens and Several writers
   // (later phases, disabled), the estimate and Start; `steps` the SDLC steps a document starts at
@@ -15,9 +15,7 @@
               </div>
               <div class="field">
                 <label for="docs-new-starts">${t('docs.starts_with')}</label>
-                <select id="docs-new-starts" data-testid="docs-new-starts-with">
-                  ${steps.map((s) => `<option value="${s.doc}">${s.file} (${s.name()})</option>`).join('')}
-                </select>
+                ${Select.markup('id="docs-new-starts" data-testid="docs-new-starts-with"', steps.map((s) => [s.doc, `${s.file} (${s.name()})`]))}
               </div>
               <div class="field">
                 <label for="docs-new-title">${t('docs.what_it_is_about')}</label>
