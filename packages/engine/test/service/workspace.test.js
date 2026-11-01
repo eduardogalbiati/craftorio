@@ -15,7 +15,7 @@ test('the service needs no Electron and refuses calls before a workspace is open
 test('seeds the bundled workflows and answers the UI channels', async (t) => {
   const { api } = makeService(t);
   const files = api['workflows:list']().map((w) => w.file);
-  assert.ok(files.includes('software-development.yaml'));
+  assert.ok(files.includes('feature.yaml'));
   assert.ok(files.includes('fixture-service.yaml'));
   assert.equal(api['app:info']().version, '9.9.9');
 
