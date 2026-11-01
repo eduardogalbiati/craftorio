@@ -1,10 +1,13 @@
 # Saved pipeline (#135, packages/engine/domains/workflow/pipelines.js): the local developer workflow implements a task, then the
 # retrospective analyzes that run.
 name: Develop → Retrospective
-description: software-development-local-hero implements a task up to the local merge, then run-retrospective analyzes that run and reports what to change in the workflow first.
+description: feature (local mode) implements a task up to the local merge, then run-retrospective analyzes that run and reports what to change in the workflow first.
 category: build
 stages:
-  - workflow: software-development-local-hero.yaml
+  # #630: software-development-local-hero.yaml is now feature.yaml in local mode
+  - workflow: feature.yaml
+    inputs:
+      mode: local
   - workflow: run-retrospective.yaml
     map:
       run_id: "@run"

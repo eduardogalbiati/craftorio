@@ -904,6 +904,8 @@ steps:
     # a step's name says what it does ("Develop"); "Developer" is its agent's (#301's Run screen shows both)
     display: Develop
     agent: developer
+    # #567: the developer may ask the owner (needs_human) when a choice is theirs to make
+    ask_human: true
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
     # #303: no self-review pass (#179, #300) in the develop turn: the code_review step is the review
