@@ -40,6 +40,12 @@ function demoDiscoveryBoard(ws, projectId) {
   // #259: the Shape automation runs on this card (Running… on its face); Ready's is turned off
   discovery.markAutomation(dir, projectId, plugin, { runId: '20261011-2210-cd34', name: 'AI Arena → Write & Review', column: 'shape' });
   discovery.setColumnAutomation(dir, projectId, 'ready', { mode: 'off' });
+  // #649: a "Write a document" result on it: plugin-api-for-custom-steps.md attached and a version
+  discovery.recordResult(dir, projectId, plugin, {
+    source: 'write-doc', runId: '20261009-0930-ef56', by: 'marina',
+    text: ['# Plugin API for custom steps', '', '## Problem', '', 'A workflow can only call the steps the engine ships; a team with its own check forks the engine.', '',
+      '## Goals', '', '- A workspace plugin registers a step type', '- A workflow calls it like a built-in step', '', '## Non-goals', '', '- A plugin marketplace'].join('\n'),
+  });
   const report = card(52, 'shape', {
     title: 'Weekly cost report by project', type: 'prd', tags: ['cost', 'reports'], clarity: 62, estimate: { usd: 4.2, minutes: 35 },
     text: ['# Weekly cost report', '', 'A report of what each project spent in the week, sent on Monday morning.', '', '## Open questions', '', '- Per workflow too, or per project only?', '- In the app only, or by e-mail?'].join('\n'),
