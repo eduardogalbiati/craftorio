@@ -1,14 +1,14 @@
 {
   "test/slow/engine-software-development.slow.test.js": [
-    "software-development: a preview code failure goes to the developer, then ci → pr_babysitter → preview again",
-    "software-development: preview code failures stop at the human gate after 2 fix rounds",
-    "software-development: a preview infra failure goes to the gate; \"retry\" publishes again",
-    "software-development: an infra build failure skips the fix rounds; \"retry\" builds again",
-    "software-development: a code build failure still goes to the developer first",
-    "software-development: rejecting the merge ends the run as cancelled; deploy_prod never ran, so merged_commit is empty",
-    "software-development: merged_commit is the deploy step\\'s merge_commit, not the branch\\'s own commit_sha",
-    "software-development: a run for several issues records them, and its PR/MR closes each one",
-    "software-development: an issue of the group that cannot be done stops at the owner\\'s gate",
+    "feature.yaml (remote): a CI code failure goes to the developer, then ci again → pr_review",
+    "feature.yaml (remote): CI code failures stop at the ci_failed gate after 5 fix rounds",
+    "feature.yaml (remote): a CI infra failure goes to the ci_failed gate; approving checks CI again",
+    "feature.yaml (remote): an infra build failure skips the fix rounds; \"retry\" builds again",
+    "feature.yaml (remote): a code build failure still goes to the developer first",
+    "feature.yaml (remote): rejecting the team review ends the run as failed at pr_review; nothing was merged, so merged_commit is empty",
+    "feature.yaml (remote): merged_commit comes from run.local_merge, so a remote run that ends green records none",
+    "feature.yaml (remote): a run for several issues records them, and its commits close each one",
+    "feature.yaml (remote): an issue of the group that cannot be done stops at the owner\\'s gate",
     "#98: requirements_left_out is a human gate; neither a retry nor the supervisor can answer it",
     "${file}: no declared gap goes straight develop > code_review",
     "${file}: a gap declared once sends the developer back before the review, never straight to code_review",
@@ -18,19 +18,19 @@
     "${file}: declaring only the Tests and Measure tasks never returns to develop nor opens the gate",
     "${file}: a real gap still returns to develop and reaches the gate even with Tests/Measure also declared",
     "${file}: Tests/Measure never count toward the second visit's gap either, so a 2nd clean visit goes straight to the review",
-    "software-development: validated mode stops at developer_check with the diff and worktree details; auto mode (the default) skips it",
-    "software-development: approve_merge\\'s message shows the Dev/QA line and the test writer\\'s E2E scenarios (#143)",
-    "software-development: validated mode — Ask for changes sends the feedback to the developer and reopens developer_check; Approve then moves on to code_review",
-    "software-development: validated mode — a review fix round does not reopen developer_check; validate_every_round makes it stop again",
-    "software-development: validated mode — Stop ends the run as cancelled, the worktree kept to resume",
-    "software-development: developer_screenshots captures the developer\\'s UI list as simulated in a mock run, reported at developer_check",
-    "software-development: a failing suite goes back to the test writer once with the failures, then passes; summary.suite_runs counts the engine\\'s runs",
-    "software-development: pre-existing suite failures never loop back to the test writer",
-    "software-development: a suite that cannot run (blocked) goes straight to test_failed",
-    "software-development: a suite that keeps failing exhausts its 2 retries (3 rounds total) and stops at test_failed, with the failures in the gate message",
-    "software-development: unit_tests \\'run_existing\\' with a failing suite delegates to the developer instead of the test writer",
-    "software-development: the test writer\\'s skills follow unit_tests / e2e_tests (no unit skill unless write_and_run, no e2e skill when off)",
-    "software-development: tests_plan records whether a value is the workflow default or chosen for this run"
+    "feature.yaml (remote): validated mode stops at developer_check with the diff and worktree details; auto mode (the default) skips it",
+    "feature.yaml (remote): developer_check\\'s message shows the Dev/QA line and the test writer\\'s E2E scenarios (#143)",
+    "feature.yaml (remote): validated mode — Ask for changes goes through the test writer to the developer and reopens developer_check; Approve then moves on to code_review",
+    "feature.yaml (remote): validated mode — a review fix round does not reopen developer_check; validate_every_round makes it stop again",
+    "feature.yaml (remote): validated mode — Stop ends the run as cancelled, the worktree kept to resume",
+    "feature.yaml (remote): developer_screenshots captures the developer\\'s UI list as simulated in a mock run, reported at developer_check",
+    "feature.yaml (remote): a failing suite goes back to the test writer once with the failures, then passes; summary.suite_runs counts the engine\\'s runs",
+    "feature.yaml (remote): pre-existing suite failures never loop back to the test writer",
+    "feature.yaml (remote): a suite that cannot run (blocked) goes straight to test_failed",
+    "feature.yaml (remote): a suite that keeps failing exhausts its 2 retries (3 rounds total) and stops at test_failed, with the failures in the gate message",
+    "feature.yaml (remote): unit_tests \\'run_existing\\' with a failing suite delegates to the developer instead of the test writer",
+    "feature.yaml (remote): the test writer\\'s skills follow e2e_tests (the unit skill always, for the acceptance tests; no e2e skill when off)",
+    "feature.yaml (remote): tests_plan records whether a value is the workflow default or chosen for this run"
   ],
   "test/worktree.test.js": [
     "canonicalPath/samePath: symlinks, 8.3 names, missing tails, separators and case",
@@ -84,6 +84,6 @@
     "software-development: 2 resolution rounds that stay conflicted reach the merge_failed gate, never merged automatically"
   ],
   "test/engine-helpers.js": [
-    "software-development: unit_tests=${unit_tests} x e2e_tests=${e2e_tests}: test visited=${testVisited}, suite visited=${suiteVisited}"
+    "feature.yaml (remote): unit_tests=${unit_tests} x e2e_tests=${e2e_tests}: test visited=${testVisited}, suite visited=${suiteVisited}"
   ]
 }
