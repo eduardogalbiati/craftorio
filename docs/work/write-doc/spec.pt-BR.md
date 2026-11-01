@@ -62,7 +62,7 @@ O "depois" vem do mesmo comando na branch do run, das telas dos Mockups (#625) o
 
 ![Revisão com notas ancoradas](images/mock-4.jpg)
 
-**R13. Os portões do SDLC.** "Accept intent" (product owner) e "Sign off spec" (dono; o tech lead nos pontos que o spec marca) são gates `human_approval` que mudam o front matter (status, aprovador, data) e commitam. Depois do sign-off: "Create epic and phase issues" (o Product Owner propõe a épica e uma sub-issue por fase; o dono revisa antes de abrir) e "Start the Build" (o workflow feature escreve o `plan.md`, em draft até o engenheiro aceitar, antes de qualquer código). *Tech lead:* a renomeação dos workflows de Planning (R14).
+**R13. Os portões do SDLC.** "Accept intent" (product owner) e "Sign off spec" (dono; o tech lead nos pontos que o spec marca) são gates `human_approval` que mudam o front matter (status, aprovador, data) e commitam. Depois do sign-off: "Create epic and phase issues" (o Product Owner propõe a épica e uma sub-issue por fase; o dono revisa antes de abrir) e "Start the Build" (o fluxo anterior escreve o `plan.md`, em draft até o engenheiro aceitar, e abre os passos como issues; os workflows de Build só recebem essas issues). *Tech lead:* a renomeação dos workflows de Planning (R14).
 
 ![O gate de sign-off](images/mock-5.jpg)
 
@@ -70,7 +70,7 @@ O "depois" vem do mesmo comando na branch do run, das telas dos Mockups (#625) o
 
 **R15. Um editor para os artefatos do app.** O editor é a base comum dos editores de artefatos: a seleção sobre o que está renderizado, o chat lateral (`agent-chat.js`), seleção → fonte, um commit por pedido com o diff, a fila de não revisadas e o gate de revisão. O renderizador é o ponto de extensão: `render(source)`, `mapSelection(selection)`, `applyDiff(diff)`. O write doc traz o renderizador de markdown (o leitor); os Mockups (#625) acrescentam um renderizador de telas como o segundo consumidor.
 
-**R16. O resto do documento vivo (fases seguintes).** O workflow feature/fix escreve o `plan.md` e uma linha de Progresso por run, commit e PR; os runs gravam a evidência no `test.md`; a revisão e a release com o Ship vão para o `deploy.md`. O Monitor e o Night watch registram incidentes e post-mortems no `maintain.md` e abrem um novo intent.
+**R16. O resto do documento vivo (fases seguintes).** Um fluxo posterior, encadeado depois de cada run de feature/fix com sucesso (`then`), escreve a linha de Progresso do `plan.md` (run, commit, PR) e a evidência do run no `test.md`, a partir das saídas declaradas do run; a revisão e a release com o Ship vão para o `deploy.md` do mesmo jeito. Os workflows de Code & Build nunca escrevem em `docs/work/` (decisão de 2026-11-01). O Monitor e o Night watch registram incidentes e post-mortems no `maintain.md` e abrem um novo intent.
 
 ## Design
 

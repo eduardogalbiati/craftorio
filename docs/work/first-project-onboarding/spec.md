@@ -85,7 +85,7 @@ flowchart LR
 **R9. Work model.**
 - The project picks Light (issue → feature/fix), Standard (intent → spec → plan → code) or Full (+ `REVIEW.md` + evals).
 - Feature starts at Standard and fix at Light.
-- The artifacts (markdown, English source with a `.pt-BR.md` translation, plus their images) are committed in `docs/work/<item>/` by the run, at its usual gate. A reader renders the markdown at runtime.
+- The artifacts (markdown, English source with a `.pt-BR.md` translation, plus their images) are committed in `docs/work/<item>/` by the SDLC flows around Code & Build, never by a Code & Build run: the pre-flow (intent, spec, plan, at their gates) and the post-flow chained after a successful run (Progress, test, deploy; decision of 2026-11-01). A reader renders the markdown at runtime.
 
 ![Work model](images/mock-5.jpg)
 

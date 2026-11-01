@@ -8,6 +8,20 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-01** (#658, #702, #651, #633): the AI-native SDLC stays out of Code & Build. The
+  `feature`, `fix` and `release` workflows (and a user's own) take an issue and hand back a PR and
+  their evidence as declared outputs; they never read or write `docs/work/`. A pre-flow writes an
+  item's documents before the Build (write doc: intent, spec, then `plan.md`, each at its gate, then
+  the plan's steps filed as issues). A post-flow, started by the chain (`then`,
+  `docs/agents/engine/chaining.md`) when a Code & Build run finishes with success, reads that run's
+  outputs and records them: `sdlc-record` (the `plan.md` Progress row, the `test.md` evidence row),
+  `sdlc-test` (the Test stage, at the code owner's gate, started from the Roadmap) and
+  `sdlc-release` (`deploy.md`, the changelog). A failed or stopped run starts nothing and leaves
+  Progress `pending`. Replaces the `record_docs` step inside feature/fix (#702), the documentation
+  step in the workflows (#658's intent) and "the feature workflow writes `plan.md`" (write doc
+  R13/R16, onboarding R9). Why: SDLC steps inside every build workflow meant two homes for the
+  evidence, conditional steps, doc lint and translations able to block a code merge, model calls
+  for prose in every run, and users' own workflows left out.
 - **2026-11-01** (#696): a new screen with no baseline never stops a run at a human gate. After
   develop, `baseline_check` sends a new `@visual` scenario with no PNG under
   `features/__screenshots__/` back to develop (naming the file and the update command), and the
@@ -202,7 +216,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   language's separators; user content, workflow YAML texts, skills, agents' messages, engine errors
   and logs are never translated. Why: an owner who works in another language read an English-only
   app, and logs and errors must stay searchable and reportable.
-- **2026-10-13** (#357, #378): refactor proposals (Architecture findings or the owner's) are prioritized
+- **2026-10-13** (#357, #378, #381, #382): refactor proposals (Architecture findings or the owner's) are prioritized
   by the Product Owner (rank, reason, complexity; the Danger Zone score as value, the conflict map
   and the roadmap's unfinished items as risk), and a cadence, off by default, adds the top ranked one
   that has an issue to the roadmap every X real runs of the project (3 to 50). The item counts in the
@@ -216,7 +230,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   `refactor` issue) are dropped and named. Auto mode files the top `limit`; validated mode asks at a
   gate, where a proposal is dropped by dismissing it on the Refactor tab. Why: refactors suggested
   after every release without clicking through two tabs; the release's gates stay human.
-- **2026-10-13** (#381, #382): one click analyses a project: "Analyze this project" in the
+  #381, #382 (same day, folded here to keep the log short): one click analyses a project: "Analyze this project" in the
   Architecture tab runs the project map (the city plan) and the Oracle's analysis together, as one
   run of `project-map.yaml`, with its combined estimate shown first and no human gate (validated
   mode, from Workflows, keeps a gate that shows the plan's districts and validation); the tab
