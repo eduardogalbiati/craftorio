@@ -55,6 +55,7 @@
   const MACHINE_STEP_TYPES = [
     'check',
     'human_approval',
+    'human_edit',
     'project_map',
     'refactor_proposals',
     'release_version',
@@ -96,7 +97,9 @@
   // Where a step field applies: every step type, a list of types, or every type except some
   const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
   const NO_AGENT_TYPES = ['check', 'project_map', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids'];
-  const GATE = ['human_approval'];
+  // The protected gates: only the person ends them; human_edit (#647) also takes the person's edit
+  // requests, each a turn of its named agent, while it waits
+  const GATE = ['human_approval', 'human_edit'];
   const AGENTS = 'agents and defaults';
   const WORKFLOW = 'workflow';
 
@@ -292,6 +295,7 @@
     END_STATUSES,
     FIELD_RULES,
     fieldReference,
+    GATE,
     GATE_KINDS,
     MACHINE_STEP_TYPES,
     parseDuration,

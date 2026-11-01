@@ -18,6 +18,7 @@
 
 const { checkAttachments, emptyUsage, seedClaudeTotal } = require('../providers');
 const { attemptSummary, noteToolCall } = require('./turns');
+const { GATE } = require('./field-rules');
 
 // #368: what ends a run that pauses (the step loop, a gate left unanswered, children that paused):
 // status `paused`, not an error (WorkflowRun#endOfError)
@@ -250,7 +251,7 @@ const methods = {
   startRecovered() {
     const r = this.recovered;
     this.emitEvent('run.recovered', {
-      step_id: r.nextStep, after_seq: r.from, gate: !!r.nextStep && this.wf.steps.find((s) => s.id === r.nextStep)?.type === 'human_approval',
+      step_id: r.nextStep, after_seq: r.from, gate: !!r.nextStep && GATE.includes(this.wf.steps.find((s) => s.id === r.nextStep)?.type),
       lost_turns: r.lostTurns.map((t) => ({ session_id: t.session_id, step_id: t.step_id, turn: t.turn })),
     });
     for (const lost of r.lostTurns) this.recordLostTurn(lost);
@@ -312,7 +313,7 @@ const methods = {
 
   // The agent steps the run went through: where the supervisor may resume it.
   resumableSteps() {
-    return this.wf.steps.filter((s) => s.type !== 'human_approval' && this.ctx.steps[s.id]?.visits > 0).map((s) => s.id);
+    return this.wf.steps.filter((s) => !GATE.includes(s.type) && this.ctx.steps[s.id]?.visits > 0).map((s) => s.id);
   },
 
   // A resumed run (#175): the children the previous run started for the step it resumes from, by item

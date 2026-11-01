@@ -38,6 +38,7 @@ const Language = require('@multiagent/shared/language');
 const { BUNDLED_SKILLS, methods: sessionsMethods } = require('./run/sessions');
 const { evalExpr, render, testsPlan } = require('./run/templates');
 const {
+  GATE,
   loadWorkflow,
   MACHINE_STEP_TYPES,
   parseTokens,
@@ -519,7 +520,7 @@ class WorkflowRun extends EventEmitter {
   nextTurnOf(stepId) {
     const step = this.wf.steps.find((s) => s.id === stepId);
     if (!step) return null;
-    if (step.type === 'human_approval') return 'Owner';
+    if (GATE.includes(step.type)) return 'Owner';
     const names = this.displayNames().agents;
     const agents = step.agents || (step.agent ? [step.agent] : []);
     if (agents.length && !MACHINE_STEP_TYPES.includes(step.type)) return agents.map((a) => names[a] || a).join(' and ');
@@ -550,11 +551,13 @@ class WorkflowRun extends EventEmitter {
     const exhausted = this.exhausted?.target === step.id ? this.exhausted : null;
     this.exhausted = null;
     let output, scope;
-    if (step.type === 'human_approval') {
+    if (GATE.includes(step.type)) {
       // `kind: escalation`, or any gate an exhausted loop leads to: the supervisor on call tries to
       // solve the problem before the person is asked; when it cannot, the gate opens with its
       // diagnosis. A decision gate stays the person's: the supervisor may only send the run back.
-      const oc = step.kind === 'escalation' || exhausted ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
+      // A human_edit gate (#647) is the person's alone: their requests go to its agent (requestEdit).
+      const supervised = step.type === 'human_approval' && (step.kind === 'escalation' || exhausted);
+      const oc = supervised ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
       if (oc?.goto) { exhausted?.refund(); return oc.goto; }
       const routed = oc?.route !== undefined;
       const gate = routed ? { answer: oc.route, feedback: '' } : await this.openGate(step, t0, oc?.diagnosis);

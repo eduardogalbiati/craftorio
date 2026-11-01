@@ -15,7 +15,7 @@ const {
   repeatKey,
   validateSchema,
 } = require('./outputs');
-const { isLooping } = require('./load');
+const { GATE, isLooping } = require('./load');
 const { DENIAL_WARN } = require('./turns');
 
 // Stall signals of an agent step (orchestrator.supervisor.stall, 0 = off): the same decision this many
@@ -396,7 +396,7 @@ const methods = {
     }
     this.supervisorUsed++;
     const allowed = [...new Set([step.id, step.on_error, ...(step.transitions || []).flatMap((t) => [t.goto, t.on_exhausted])])]
-      .filter((x) => x && x !== 'end' && x !== 'fail' && this.wf.steps.some((y) => y.id === x && y.type !== 'human_approval'));
+      .filter((x) => x && x !== 'end' && x !== 'fail' && this.wf.steps.some((y) => y.id === x && !GATE.includes(y.type)));
     this.emitEvent('supervisor.started', { step_id: step.id, error: err.message });
     // the agents' own summaries of where they are, instead of their full transcripts
     const handoffs = (step.agents || [step.agent]).map((a) => this.handoffNotes.get(a) && { agent: a, ...this.handoffNotes.get(a) }).filter(Boolean);

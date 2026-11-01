@@ -15,6 +15,7 @@ const gateSummary = require('../gate-summary');
 const mergeQueue = require('../merge-queue');
 const { render } = require('./templates');
 const { parseDuration } = require('./load');
+const { extractJson, validateSchema } = require('./outputs');
 const { pausedError } = require('./resume');
 
 // What the supervisor on call found, under a gate's message ('' without a diagnosis)
@@ -137,6 +138,8 @@ const methods = {
       ...(step.save_to_issue && this.issues?.[0] ? { save_to_issue: { choice: step.save_to_issue, issue: this.issues[0] } } : {}),
       // #567: an agent's own question (agentQuestion): who asks, and a decision only the owner takes
       // and its default, the choice --auto-approve answers
+      // #647: a human_edit gate also takes the person's edit requests (requestEdit), for this agent
+      ...(step.type === 'human_edit' ? { edit: { agent: step.agent } } : {}),
       ...(step.by === 'agent' ? { by: 'agent', agent: step.agent, kind: 'decision', ...(step.default ? { default: step.default } : {}) } : {}),
     };
 
@@ -228,6 +231,35 @@ const methods = {
   // The service lists them in runs:active: the UI never relies only on the events it saw live.
   pendingGates() {
     return [...this.approvals.values()].map((a) => a.gate).filter(Boolean);
+  },
+
+  // #647: the person's edit request at an open `type: human_edit` gate: one turn of the step's agent
+  // (its session, so a persistent writer keeps the document in mind) with the text in its prompt.
+  // The gate stays open: only resolveApproval ends the step. Resolves to the turn's result
+  // ({ text, ... }); with the step's `output_schema` (the answer of each request), its parsed `output`
+  // too. Refuses an unknown gate or a gate of another step type.
+  async requestEdit(id, text, opts = {}) {
+    const a = this.approvals.get(id);
+    const step = a && this.wf.steps.find((s) => s.id === a.stepId);
+    if (!step || step.type !== 'human_edit') throw new Error(`No open human_edit gate ${id}.`);
+    const request = String(text ?? '').trim();
+    if (!request) throw new Error('An edit request needs a text.');
+    const message = String(a.gate?.message || '').trim();
+    const schema = step.output_schema || null;
+    let prompt = `${message ? `${message}\n\n` : ''}The owner asks for a change:\n\n${request}`;
+    if (schema) {
+      prompt += '\n\n---\nAt the end of your response you MUST include a ```json block with an object that validates against this JSON Schema:\n```json\n'
+        + `${JSON.stringify(schema, null, 2)}\n\`\`\``;
+    }
+    const attachments = this.copyAttachments(checkAttachments(opts.images || []), `${step.id}-request`);
+    this.editRequests = (this.editRequests || 0) + 1;
+    const hint = { stepId: step.id, visit: this.editRequests, schema, agent: step.agent, sequences: this.mockSequences };
+    const res = await this.sendToAgent(step.agent, prompt, { stepId: step.id, hint, attachments });
+    if (!schema) return res;
+    const output = extractJson(res.text);
+    const errors = validateSchema(output, schema);
+    if (errors.length) throw new Error(`${step.agent}'s answer to the edit request does not match the step's output_schema: ${errors.join('; ')}`);
+    return { ...res, output };
   },
 
   // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text;

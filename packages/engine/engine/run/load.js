@@ -30,6 +30,7 @@ const {
 } = require('./templates');
 const {
   FIELD_RULES,
+  GATE,
   MACHINE_STEP_TYPES,
   parseDuration,
   parseRequests,
@@ -85,7 +86,7 @@ const fail = (ctx, message) => { throw new Error(`${ctx.prefix}${message}`); };
 // (every caller names a field of the table)
 const messageOf = (field) => /** @type {{ message: string }} */ (FIELD_RULES.find((r) => r.field === field)).message;
 const isAgentStep = (s) => !MACHINE_STEP_TYPES.includes(s.type);
-const isGate = (s) => s.type === 'human_approval';
+const isGate = (s) => GATE.includes(s.type);
 
 // an agent's (or `defaults`') fallbacks and capabilities
 const agentFallbacks = (a, ctx) => validateFallbacks(a.fallbacks, ctx.name, ctx.wf.providers);
@@ -159,6 +160,15 @@ function choiceThen(s, ctx) {
 function escalationWithCheck(s, ctx) {
   if (s.kind === 'escalation' && s.check) fail(ctx, 'a gate with check (a merge) is a decision, not an escalation.');
 }
+// #647: the person edits with the agent at a human_edit gate; the supervisor on call never answers it
+function escalationOnEdit(s, ctx) {
+  if (s.type === 'human_edit' && s.kind === 'escalation') fail(ctx, 'kind: escalation is not valid on a human_edit step (only the person ends it).');
+}
+// #647: a human_edit step sends the person's requests to its named agent
+function editAgent(s, ctx) {
+  if (s.type !== 'human_edit') return;
+  if (!s.agent || !ctx.wf.agents[s.agent]) fail(ctx, `a human_edit step needs the agent its edit requests go to (unknown agent "${s.agent ?? ''}").`);
+}
 // a deterministic PR/MR check: `check:` before a gate opens, `precheck:` before a transition's action
 function probeAndTarget(c, what, ctx) {
   if (!c || typeof c !== 'object' || !PROBES.includes(c.probe) || !c.target) fail(ctx, `${what} needs a probe (${PROBES.join(', ')}) and a target.`);
@@ -224,7 +234,7 @@ function mergeNeedsWorktree(t, ctx) {
 // `ship` (#260): only the answer a person gives at a decision gate ships a release
 function shipOnHumanGate(t, ctx) {
   const s = ctx.step;
-  if (t.ship !== undefined && (!isGate(s) || s.kind === 'escalation' || s.timeout !== undefined)) fail(ctx, 'ship belongs to a human gate nobody else answers (type: human_approval, no kind: escalation, no timeout).');
+  if (t.ship !== undefined && (s.type !== 'human_approval' || s.kind === 'escalation' || s.timeout !== undefined)) fail(ctx, 'ship belongs to a human gate nobody else answers (type: human_approval, no kind: escalation, no timeout).');
 }
 function shipNeedsWorktree(t, ctx) {
   if (t.ship !== undefined && !ctx.wf.orchestrator?.worktree) fail(ctx, 'ship needs orchestrator.worktree (the repository and its base branch).');
@@ -322,14 +332,14 @@ const STEP_CHECKS = resolveChecks('steps[].', [
   askHumanShape,
   // the step types without an agent, then the agent steps (one applies to a step)
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
-  childWorkflow, 'steps', 'renderer', 'version', 'dir', 'branch', 'action', projectMapFrom, fanOutGoal, knownAgents,
+  childWorkflow, 'steps', 'renderer', 'version', 'dir', 'branch', 'action', projectMapFrom, fanOutGoal, knownAgents, editAgent,
   'goal.until', 'wait', waitOnLoop, 'wait.probe', 'wait.target', 'wait.output', outputNeedsProbe('output'),
   'wait.infra_output', outputNeedsProbe('infra_output'), 'wait.grace',
   'choices', 'full_suite', 'commit_tests', commitTestsSingleAgent, 'base_worktree', baseWorktreeNeedsWorktree,
   'local_preview', 'diff_base', 'save_to_issue', saveToIssueChoice, feedbackField,
   'summary', 'recommend', 'approve_label', notWithChoices('approve_label'), 'reject_label', notWithChoices('reject_label'),
   'approve_help', notWithChoices('approve_help'), 'reject_help', notWithChoices('reject_help'), choiceHelp, choiceThen,
-  'kind', escalationWithCheck, 'check', checkProbe, checkOnFail, checkRecover,
+  'kind', escalationWithCheck, escalationOnEdit, 'check', checkProbe, checkOnFail, checkRecover,
   'stall.same_output_fields', stallFieldsInSchema, transitions,
 ]);
 const WORKFLOW_CHECKS = resolveChecks('', [
@@ -583,6 +593,7 @@ const loopConfig = (step) => step.loop || step.poll || {};
 module.exports = {
   FALLBACK_ENTRY,
   fragmentSources,
+  GATE,
   isLooping,
   loadRepositoryWorkflow,
   loadWorkflow,
