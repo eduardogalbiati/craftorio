@@ -62,7 +62,7 @@ The "after" comes from the same command on the run's branch, the Mockups' screen
 
 ![Review with anchored notes](images/mock-4.jpg)
 
-**R13. The SDLC gates.** "Accept intent" (product owner) and "Sign off spec" (owner; the tech lead for the points the spec marks) are `human_approval` gates that change the front matter (status, approver, date) and commit. After the sign-off: "Create epic and phase issues" (the Product Owner proposes the epic and one sub-issue per phase; the owner reviews before anything is filed) and "Start the Build" (the feature workflow writes `plan.md`, a draft until the engineer accepts it, before any code). *Tech lead:* renaming the Planning workflows (R14).
+**R13. The SDLC gates.** "Accept intent" (product owner) and "Sign off spec" (owner; the tech lead for the points the spec marks) are `human_approval` gates that change the front matter (status, approver, date) and commit. After the sign-off: "Create epic and phase issues" (the Product Owner proposes the epic and one sub-issue per phase; the owner reviews before anything is filed) and "Start the Build" (the pre-flow writes `plan.md`, a draft until the engineer accepts it, and files its steps as issues; the Build workflows only take those issues). *Tech lead:* renaming the Planning workflows (R14).
 
 ![The sign-off gate](images/mock-5.jpg)
 
@@ -70,7 +70,7 @@ The "after" comes from the same command on the run's branch, the Mockups' screen
 
 **R15. One editor for the app's artifacts.** The editor is the common base of the artifact editors: selection on the rendered output, the side chat (`agent-chat.js`), selection → source, one commit per request with its diff, the unreviewed queue and the review gate. The renderer is its extension point: `render(source)`, `mapSelection(selection)`, `applyDiff(diff)`. Write doc brings the markdown renderer (the reader); the Mockups (#625) add a screen renderer as the second consumer.
 
-**R16. The rest of the living document (later phases).** The feature/fix workflow writes `plan.md` and a Progress line per run, commit and PR; runs record the evidence in `test.md`; the review and the release with the Ship go in `deploy.md`. The Monitor and the Night watch record incidents and post-mortems in `maintain.md` and open a new intent.
+**R16. The rest of the living document (later phases).** A post-flow chained after each successful feature/fix run (`then`) writes the Progress line of `plan.md` (run, commit, PR) and the run's evidence in `test.md`, from the run's declared outputs; the review and the release with the Ship go in `deploy.md` the same way. The Code & Build workflows never write `docs/work/` (decision of 2026-11-01). The Monitor and the Night watch record incidents and post-mortems in `maintain.md` and open a new intent.
 
 ## Design
 

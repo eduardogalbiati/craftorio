@@ -26,11 +26,11 @@ The public page (`site/`) reads exactly these files: "plan: N of M steps", shipp
 
 ## Proposed outcome
 
-A **documentation agent** step in the Code & Build workflows keeps each item's documents current, in real time, as part of the run that changed the item. It is committed by that run, at its usual gate. Projects opt in when they are created, through a new onboarding option, **"Add the realtime documentation model"**.
+A **documentation agent** keeps each item's documents current, in real time, as a **post-flow outside Code & Build**: the chain (`then`) starts it when a Code & Build run finishes with success, and it reads that run's declared outputs (branch, merged commit, PR, the evidence paths) and records them. The `feature`, `fix` and `release` workflows never read or write `docs/work/` (owner decision, 2026-11-01), so every workflow, a user's own included, gets the documents without a step of its own. Projects opt in when they are created, through a new onboarding option, **"Add the realtime documentation model"**.
 
 It arrives in two parts:
 
-1. **With the workflows** (`feature`, `fix`, `release`, after #630):
+1. **After the workflows** (chained after `feature`, `fix`, `release`):
    - `plan.md`: the front matter (`status`, `date`) and the `## Progress` row (Status `done`/`pending`, the run, the commit or PR), after each feature or fix run;
    - `test.md`: the suite and E2E results and the run's before/after screenshots;
    - `deploy.md`: the review findings, and on release `release:` and `released:` (which the page needs for shipped and lead time);
@@ -48,7 +48,8 @@ It **does not write `intent.md` or `spec.md`**. That is the write doc flow (#636
   - the owner and readers of the public page, who see true progress without anyone editing files by hand;
   - contributors, who find each item's state in the repository.
 - **Systems:**
-  - the `feature`, `fix` and `release` workflows (a final documentation step);
+  - the `feature`, `fix` and `release` workflows: unchanged, except an `evidence` output they declare for the post-flow;
+  - the chain (`then`), which needs a default per project or roadmap item so the post-flow starts on its own;
   - the onboarding wizard (a new option at project creation);
   - the work model (#633) and the Monitor (#634);
   - `docs/work/CONVENTIONS.md`, which the agent follows;
@@ -62,7 +63,7 @@ It **does not write `intent.md` or `spec.md`**. That is the write doc flow (#636
   - no automation crosses a `human_approval`;
   - checks in simulation only.
 - It follows `docs/work/CONVENTIONS.md`: the English file first, then the `.pt-BR.md` translation beside it.
-- It writes to the user's repository only through the run, at its usual gate. Onboarding never writes.
+- It writes to the user's repository only as its own run, merged the way the project works (local or PR), never inside a Code & Build run. Onboarding never writes.
 - **Cost:** the step is deterministic where it can be (tables, front matter, release fields), and calls a model only for prose (the test summary, the changelog entry). The cost is shown and counted toward the daily budget.
 
 ## Open questions
