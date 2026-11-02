@@ -154,30 +154,12 @@ const methods = {
     const w = step.wait;
     if (st.delegate_result || st.supervisorNote || !st.output || st.output.error) return null;
     const stats = (this.probeStats[step.id] ??= { polls: 0, agent_calls: 0, completed: 0, errors: 0 });
-    const parent = w.parent && !st.parentMerged ? render(w.parent, { ...this.ctx, output: st.output }).trim() : '';
+    const parent = this.parentToWaitFor(w, st);
     if (parent) return this.pollParent(step, st, parent, stats);
-    return this.pollTarget(step, st, t0, stats);
-  },
-
-  // pollStep's own check: the step's probe on its target (wait.probe, wait.target)
-  async pollTarget(step, st, t0, stats) {
-    const w = step.wait;
     const target = render(w.target, { ...this.ctx, output: st.output }).trim();
-    let r;
-    try {
-      if (!target) throw new Error(`${w.probe}: no target yet (${w.target} is empty)`);
-      r = await this.probe({ probe: w.probe, target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id, quota: this.actionsQuota });
-    } catch (e) {
-      if (this.abort.signal.aborted) throw new Error('Cancelled');
-      r = { state: 'error', detail: `the check could not run (${e.message})` };
-      stats.errors++;
-    }
-    let state = r.state;
-    // pr_changes: news = the PR/MR differs from what the agent saw at the end of its last turn
-    if (w.probe === 'pr_changes' && r.fingerprint !== undefined && !['merged', 'closed', 'error'].includes(state)) {
-      state = st.probeBaseline && r.fingerprint === st.probeBaseline ? 'unchanged' : 'changed';
-      if (state === 'changed') r.detail = st.probeBaseline ? `the PR/MR changed since your last turn (${r.detail})` : `the PR/MR could not be compared with your last turn (${r.detail})`;
-    }
+    const r = await this.probeOrError(step, stats, { probe: w.probe, target, quota: this.actionsQuota }, 'the check could not run', target ? '' : `${w.probe}: no target yet (${w.target} is empty)`);
+    const state = this.comparedWithLastTurn(w, st, r);
+    const grace = w.grace ?? DEFAULT_WAIT_GRACE;
     let action = 'agent';
     let output = null;
     // the agent's last output with the given fields over it (templates see `probe`: { state, detail })
@@ -190,12 +172,12 @@ const methods = {
       return null;
     };
     if (state === 'pending' || state === 'unchanged') action = 'poll';
-    else if (state === 'none') action = Date.now() - (st.lastAgentAt || 0) < parseDuration(w.grace ?? DEFAULT_WAIT_GRACE, 600000) ? 'poll' : 'agent';
+    else if (state === 'none') action = Date.now() - (st.lastAgentAt || 0) < parseDuration(grace, 600000) ? 'poll' : 'agent';
     else if (state === 'passed' && w.output) output = finishWith('output');
     // CI cannot run at all (the Actions quota ran out): no agent turn or fix round helps
     else if (state === 'quota_exhausted' && w.infra_output) output = finishWith('infra_output');
     if (output) action = 'output';
-    if (state === 'none' && action === 'agent') r.detail = `${r.detail}, ${w.grace ?? DEFAULT_WAIT_GRACE} after your last turn`;
+    if (state === 'none' && action === 'agent') r.detail = `${r.detail}, ${grace} after your last turn`;
     st.probePolls = (st.probePolls || 0) + 1;
     this.emitEvent('step.probe', {
       step_id: step.id, probe: w.probe, target, state, detail: r.detail || state, action, iteration: st.iteration, polls: st.probePolls,
@@ -220,20 +202,39 @@ const methods = {
     return null;
   },
 
+  // A probe call of pollStep / pollParent; a check that cannot run (or `missing`: why it cannot start)
+  // becomes the `error` state, "<what> (<reason>)", so the agent is called instead.
+  async probeOrError(step, stats, args, what, missing) {
+    try {
+      if (missing) throw new Error(missing);
+      return await this.probe({ ...args, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id });
+    } catch (e) {
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      stats.errors++;
+      return { state: 'error', detail: `${what} (${e.message})` };
+    }
+  },
+
+  // pr_changes: news = the PR/MR differs from what the agent saw at the end of its last turn
+  comparedWithLastTurn(w, st, r) {
+    if (w.probe !== 'pr_changes' || r.fingerprint === undefined || ['merged', 'closed', 'error'].includes(r.state)) return r.state;
+    if (st.probeBaseline && r.fingerprint === st.probeBaseline) return 'unchanged';
+    r.detail = st.probeBaseline ? `the PR/MR changed since your last turn (${r.detail})` : `the PR/MR could not be compared with your last turn (${r.detail})`;
+    return 'changed';
+  },
+
+  // #738 the parent PR/MR pollStep waits for first (wait.parent), '' once it merged or when none
+  parentToWaitFor(w, st) {
+    return w.parent && !st.parentMerged ? render(w.parent, { ...this.ctx, output: st.output }).trim() : '';
+  },
+
   // #738 `wait.parent` (a split implementation's parent PR/MR, "wait and rebase"): before the step's own
   // probe, the engine checks the parent itself. Not merged yet → poll again, without the agent, and the
   // wait is not counted in the /loop's max_duration (a maintainer may take days); merged → the agent is
   // called once to rebase and open its PR/MR (st.parentMerged: then the step's own probe runs); closed
   // or unreadable → the agent is called to say what to do.
   async pollParent(step, st, parent, stats) {
-    let r;
-    try {
-      r = await this.probe({ probe: 'pr_checks', target: parent, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id });
-    } catch (e) {
-      if (this.abort.signal.aborted) throw new Error('Cancelled');
-      r = { state: 'error', detail: `the parent PR/MR could not be read (${e.message})` };
-      stats.errors++;
-    }
+    const r = await this.probeOrError(step, stats, { probe: 'pr_checks', target: parent }, 'the parent PR/MR could not be read');
     const waiting = !['merged', 'closed', 'error'].includes(r.state);
     st.probePolls = (st.probePolls || 0) + 1;
     this.emitEvent('step.probe', {
