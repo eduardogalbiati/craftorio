@@ -43,6 +43,8 @@
 .steps li.waiting .dot { background: var(--yellow); }
 .steps li.done .dot { background: var(--green); }
 .steps li .kind { font-size: 10px; color: var(--muted); }
+/* #735: a step the run's inputs rule out (no UI in the project), dimmed with its reason */
+.steps li.doesnt-apply { opacity: 0.55; }
 /* #465: a deterministic step's log buttons ("Live terminal", ↗), on their own line under the step */
 .steps li:has(.step-term) { flex-wrap: wrap; }
 .steps li .step-term { flex-basis: 100%; display: flex; align-items: center; gap: 6px; padding-left: 16px; }

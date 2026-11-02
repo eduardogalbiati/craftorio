@@ -104,9 +104,10 @@ inputs:
   e2e_command:
     label: "E2E command"
     type: string
-    default: "npm run test:e2e"
+    # #735: no Node assumption; empty runs npm run test:e2e (the projects whose package.json has it)
+    default: ""
     show_if: "e2e_suite == 'run'"
-    description: "The command that runs the whole E2E suite, run by the orchestrator (no agent). After a fix, its failed feature files are passed to it first (npm/pnpm/yarn run <script>), then the whole suite."
+    description: "The command that runs the whole E2E suite, run by the orchestrator (no agent). Empty: the project's own (its run defaults), else npm run test:e2e. After a fix, its failed feature files are passed to it first (npm/pnpm/yarn run <script>), then the whole suite."
   build_command:
     label: "Build command"
     type: string
@@ -284,7 +285,7 @@ steps:
   - id: e2e
     display: E2E scenarios
     type: suite
-    command: "{{ inputs.e2e_command }}"
+    command: '{{ inputs.e2e_command or "npm run test:e2e" }}'
     scope: failed
     timeout: "{{ inputs.time_budget_minutes }}m"
     base_check: false
@@ -379,7 +380,7 @@ steps:
       The unit suite (`{{ steps.unit.output.command }}`), each round:
       {% for o in steps.unit.outputs %}- unit round {{ loop.index }}: {{ o.status }}, {{ o | suite_scope }}: {{ o.message | one_line(300) }}
       {% endfor %}
-      {% if inputs.e2e_suite == 'skip' %}The E2E suite was skipped (the project has none).{% else %}The E2E suite (`{{ inputs.e2e_command }}`), each round (focused: only the files that failed before, then whole):
+      {% if inputs.e2e_suite == 'skip' %}The E2E suite was skipped (the project has none).{% else %}The E2E suite (`{{ inputs.e2e_command or "npm run test:e2e" }}`), each round (focused: only the files that failed before, then whole):
       {% for o in steps.e2e.outputs %}- e2e round {{ loop.index }}: {{ o.status }}, {{ o | suite_scope('scenario') }}: {{ o.message | one_line(300) }}
       {% endfor %}{% endif %}
 

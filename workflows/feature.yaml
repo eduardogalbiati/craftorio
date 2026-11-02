@@ -273,10 +273,11 @@ inputs:
   # #223: the e2e step adds `--grep "@issue-<n>|@smoke"` (Playwright) to it
   e2e_command:
     type: string
-    default: "npm run test:e2e"
+    # #735: no Node assumption; the project's run defaults fill it when its facts found an E2E suite
+    default: ""
     label: E2E command
     show_if: "e2e_tests == 'write_and_run'"
-    description: "The project's Playwright E2E command; the orchestrator runs it with --grep on the issue's tag and @smoke."
+    description: "The project's Playwright E2E command; the orchestrator runs it with --grep on the issue's tag and @smoke. Empty: the project's own (its run defaults), else npm run test:e2e."
   # #205: the evidence screenshots (the Product Owner's Cost step sets it on a roadmap item:
   # Economy off, Balanced changed, Generous all)
   screenshots:
@@ -301,7 +302,7 @@ inputs:
     type: string
     default: ""
     label: Test command
-    description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+    description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml)."
   # #404: the project's fast rule checks, run after each develop commit (rule_check)
   check_command:
     type: string

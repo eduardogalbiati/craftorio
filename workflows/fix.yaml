@@ -72,7 +72,7 @@ inputs:
     type: string
     default: ""
     label: Test command
-    description: "The project's whole-suite command (e.g. npm test). Empty: found from the project's files."
+    description: "The project's whole-suite command (e.g. npm test, cargo test). Empty: found from the project's files (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml)."
 
 providers:
   claude:

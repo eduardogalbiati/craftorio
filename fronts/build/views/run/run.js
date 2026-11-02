@@ -665,6 +665,7 @@ function renderSteps() {
   const groupOf = new Map(v.groups.flatMap((g) => g.steps.map((id) => [id, g.name])));
   const current = v.trail?.steps.at(-1)?.step || all.find((s) => s.status === 'running' || s.status === 'waiting')?.id;
   const logs = stepLogs(v);
+  const na = stepsThatDontApply(v, all);
   // #465: a deterministic step that wrote a log follows it live, as a session does (read-only)
   const logButtons = (s) => {
     const log = logs.get(s.id);
@@ -672,10 +673,18 @@ function renderSteps() {
     const base = log.base ? `<button type="button" class="btn sm ghost" data-term="log" data-log="${esc(log.base)}" title="${esc(t('run.follow_the_base_check_log'))}">${t('run.base_log')}</button>` : '';
     return `<div class="step-term" data-log="${esc(log.path)}">${termButtons('log', `${log.command ? `$ ${log.command}\n` : ''}${log.path}`)}${base}<span class="muted small" data-term-msg></span></div>`;
   };
+  // #735: a step (or a fan-out agent of it, the code review's UI reviewer) that can't run with the
+  // run's inputs is dimmed and says why
+  const naLine = (s) => {
+    const own = na.get(s.id);
+    const agents = [...na.keys()].filter((id) => id !== s.id && !v.steps.has(id) && na.get(id).step === s.id);
+    if (own && !s.visits) return `<br><span class="muted small" data-testid="run-step-doesnt-apply">${esc(t(own.reason))}</span>`;
+    return agents.map((id) => `<br><span class="muted small" data-testid="run-agent-doesnt-apply">${esc(agentLabel(id, v.run?.agentNames))}: ${esc(t(na.get(id).reason))}</span>`).join('');
+  };
   const item = (s) => `
-    <li class="${s.status}" data-testid="run-step-card" data-step="${esc(s.id)}">
+    <li class="${s.status}${na.has(s.id) && !s.visits ? ' doesnt-apply' : ''}" data-testid="run-step-card" data-step="${esc(s.id)}"${na.has(s.id) && !s.visits ? ' data-doesnt-apply="1"' : ''}>
       <span class="dot"></span>
-      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span><br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span>${naLine(s)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
       ${logButtons(s)}
     </li>`;
@@ -718,6 +727,18 @@ function renderSteps() {
     line.textContent = msg.text;
     line.classList.toggle('error', !!msg.error);
   }));
+}
+
+// #735: the steps and agents the run's inputs rule out (window.RunPlan, packages/shared/run-plan.js):
+// id → { reason, step } (`step`: the step whose agent_when names an agent; the step itself otherwise)
+function stepsThatDontApply(v, all) {
+  const r = v.run || state.run;
+  if (!r || typeof window.RunPlan?.stepsThatDontApply !== 'function') return new Map();
+  const wf = (state.workflows || []).find((w) => w.file === r.file || w.name === r.workflow) || null;
+  const steps = Array.isArray(wf?.steps) ? wf.steps : all.map((s) => ({ id: s.id }));
+  const owner = new Map(steps.flatMap((s) => Object.keys(s?.agent_when || {}).map((a) => [a, s.id])));
+  const list = window.RunPlan.stepsThatDontApply({ inputs: wf?.inputs || {}, steps }, r.inputs || {});
+  return new Map(list.map((x) => [x.id, { reason: x.reason, step: owner.get(x.id) || x.id }]));
 }
 
 // #465: each deterministic step's log for its terminal buttons: the latest round's (its step.log, else

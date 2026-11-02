@@ -252,7 +252,9 @@ module.exports = (ctx) => {
     const name = String(version || '').trim();
     // the default E2E command is an npm script: a project without it has no E2E suite to run (a
     // missing script would read as a red suite and call the developer for nothing)
-    const noE2e = !!wf.inputs?.e2e_suite && wf.inputs?.e2e_command?.default === 'npm run test:e2e' && !npmScript(project.folder, 'test:e2e');
+    // (#735: an empty default command falls back to that npm script)
+    const e2eDefault = wf.inputs?.e2e_command?.default;
+    const noE2e = !!wf.inputs?.e2e_suite && (!e2eDefault || e2eDefault === 'npm run test:e2e') && !npmScript(project.folder, 'test:e2e');
     const inputs = {
       task: `Check the release${name ? ` ${name}` : ''} of ${project.name}: the whole unit suite${noE2e ? ' (the project has no test:e2e script: no E2E suite)' : ' and the whole E2E suite'}, then Ship or Hold.`,
       version: name,
