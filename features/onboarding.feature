@@ -336,6 +336,63 @@ Feature: Bring a project in with a guided wizard
     And the wizard lets me continue to the review
     And the wizard does not offer to analyze everything again
 
+  # #726: every text of step 3's suggested workflows column follows the interface language (the reasons,
+  # the selectors' options, the left column's profile line), and the "Why" of each reason is an element of
+  # its own, bold in the accent colour. The sample repository has no pull request, no CI file and unit tests
+  # only, so its rows read the local merge reasons. A language switch with the wizard open (what Settings
+  # saves, pushed to every window) re-renders the column and keeps the owner's picks.
+  @issue-726
+  Scenario: With the interface in Português (Brasil), the suggested workflows read in Portuguese with a highlighted "Por quê:"
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "idioma-726"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I choose "Analyze the repository" in the wizard's suggested workflows
+    Then the wizard suggests the workflows "feature", "fix", "release" and "ci"
+    And every suggested workflow shows a highlighted "Por quê:" label
+    And the wizard's "suggested workflows" shows none of these English texts:
+      | Why:                                         |
+      | Remote PRs                                   |
+      | Local merge                                  |
+      | Milestone · tag + notes                      |
+      | On pull requests and releases                |
+      | the changes are merged on your machine       |
+      | Hotfix mode                                  |
+      | no CI file was found                         |
+    And the wizard's "ways of working profile" shows none of these English texts:
+      | Local: merge, then push main |
+      | No CI: the local suite only  |
+      | Unit tests                   |
+
+  @issue-726
+  Scenario: Switching the interface language with the wizard open re-renders the suggested workflows and keeps the pick
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "switch-726"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I choose "Analyze the repository" in the wizard's suggested workflows
+    Then every suggested workflow shows a highlighted "Why:" label
+    When I pick "Local merge · E2E first" for the suggested "feature" workflow
+    And the interface language is switched to "Português (Brasil)" while the wizard stays open
+    Then every suggested workflow shows a highlighted "Por quê:" label
+    And the suggested "feature" workflow still has "Local merge · E2E first" picked, read in "Português (Brasil)"
+    And the wizard's "suggested workflows" shows none of these English texts:
+      | Why:                                   |
+      | Remote PRs                             |
+      | Local merge                            |
+      | Milestone · tag + notes                |
+      | On pull requests and releases          |
+      | the changes are merged on your machine |
+
   # #724: the progress tray never covers the wizard. The simulated clone is held (an E2E hook, see
   # onboarding.steps.js) so the import is still running while it is checked.
   @issue-724

@@ -102,10 +102,11 @@ Given("the app is open while another analysis holds the machine's analysis slot"
 });
 
 // The page global opens the wizard directly; Projects › New project and the Setup's last step also
-// open it since #643 (features/setup-projects-onboarding.feature drives those paths)
+// open it since #643 (features/setup-projects-onboarding.feature drives those paths). #726: the app is
+// ready when its sidebar shows, whatever the interface language (no wait on the English "Home")
 When('I open the project wizard', async ({ e2e }) => {
   const page = e2e.window;
-  await expect(page.getByRole('navigation').getByRole('button', { name: 'Home', exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole('navigation').first().getByRole('button').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   await page.waitForFunction(() => typeof window.ProjectWizard?.open === 'function', null, { timeout: LOAD_TIMEOUT });
   await page.evaluate(() => window.ProjectWizard.open());
   await expect(wizard(page)).toBeVisible();
@@ -656,6 +657,118 @@ Then('the wizard does not offer to analyze everything again', async ({ e2e }) =>
   await expect(w.getByTestId('wizard-analyze')).toHaveCount(0);
   await expect(w.getByTestId('wizard-workflows-choice-analyze')).toHaveCount(0);
   await expect(w.getByRole('button', { name: /analy[sz]e (everything|all|again)|analy[sz]e and continue/i })).toHaveCount(0);
+});
+
+// ---- #726: the suggested workflows column in the interface language ------------------------------------
+// Every text of step 3's "Suggested workflows" column (and the left column's ways of working profile line)
+// follows the interface language: the reasons, the selectors' options, the "Why" of each reason. What the
+// screen exposes:
+// - data-testid="wizard-workflow-why" (new): in each wizard-workflow row with a reason, the word "Why:" /
+//   "Por quê:" as an element of its own, bold and in the accent colour (var(--accent)), before the reason;
+// - wizard-workflow-select's options: the labels of packages/shared/onboarding-model.js CHOICES, now read
+//   from the catalogs (an entry whose English value is the label, e.g. "Local merge · E2E first").
+// A language switch with the wizard open: what Settings › General › Language saves (window.api.setSettings,
+// 'settings:set'), pushed to every window as 'settings:changed' (packages/ui-kit/interface-language.js);
+// the wizard re-renders in the new language and keeps the owner's picks (cur.workflows).
+// The expected text in a language is read from the catalogs (packages/shared/i18n/<lang>.json), as
+// interface-language.steps.js does, so the steps never depend on the Portuguese wording.
+
+const I18N_DIR = path.join(__dirname, '..', '..', 'packages', 'shared', 'i18n');
+const LANGUAGE_CODES = { English: 'en', 'Português (Brasil)': 'pt-BR' };
+const languageCode = (language) => {
+  const code = LANGUAGE_CODES[language];
+  if (!code) throw new Error(`no catalog for the language "${language}" (known: ${Object.keys(LANGUAGE_CODES).join(', ')})`);
+  return code;
+};
+const catalogOf = (code) => JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${code}.json`), 'utf8'));
+// the texts an English label reads as in the language (one per catalog entry carrying the label)
+function inLanguage(english, language) {
+  const code = languageCode(language);
+  if (code === 'en') return [english];
+  const en = catalogOf('en');
+  const other = catalogOf(code);
+  const keys = Object.keys(en).filter((k) => en[k] === english && typeof other[k] === 'string');
+  if (!keys.length) throw new Error(`no catalog entry has the English text "${english}" with a ${language} value: the wizard's workflows are not translated yet`);
+  return [...new Set(keys.map((k) => other[k]))];
+}
+const workflowRow = (page, kind) => wizard(page).locator(`[data-testid="wizard-workflow"][data-kind="${kind}"]`);
+const WIZARD_PART = {
+  'suggested workflows': (page) => workflowsColumn(page),
+  'ways of working profile': (page) => wizard(page).getByTestId('wizard-profile'),
+};
+
+// every row (feature, fix, release, CI) once analyzed: its "Why" label, a separate element in bold and the
+// accent colour, then the reason's own text
+Then('every suggested workflow shows a highlighted {string} label', async ({ e2e }, label) => {
+  const page = e2e.window;
+  const rows = workflowRows(page);
+  await expect(rows).toHaveCount(4, { timeout: IMPORT_TIMEOUT });
+  await expect(wizard(page).getByTestId('wizard-workflow-why'), 'a "Why" label in every row').toHaveCount(4, { timeout: IMPORT_TIMEOUT });
+  for (let i = 0; i < 4; i++) {
+    const row = rows.nth(i);
+    const kind = await row.getAttribute('data-kind');
+    const why = row.getByTestId('wizard-workflow-why');
+    await expect(why, `the "${kind}" workflow's label`).toBeVisible();
+    await expect(why, `the "${kind}" workflow's label`).toHaveText(label);
+    const look = await why.evaluate((el) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--accent)';
+      el.parentElement.appendChild(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      const s = getComputedStyle(el);
+      return { color: s.color, weight: Number(s.fontWeight) || (s.fontWeight === 'bold' ? 700 : 400), accent };
+    });
+    expect(look.color, `the "${kind}" workflow's label in the accent colour`).toBe(look.accent);
+    expect(look.weight, `the "${kind}" workflow's label in bold`).toBeGreaterThanOrEqual(600);
+    const reason = (await row.getByTestId('wizard-workflow-reason').innerText()).replace(label, '').trim();
+    expect(reason, `the "${kind}" workflow's reason after its label`).toMatch(/\S/);
+  }
+});
+
+// none of the texts (one per row of the table) anywhere in that part of the wizard: its text, its
+// selectors' options, its titles and aria-labels
+Then("the wizard's {string} shows none of these English texts:", async ({ e2e }, part, table) => {
+  const locate = WIZARD_PART[part];
+  if (!locate) throw new Error(`unknown part of the wizard "${part}": one of ${Object.keys(WIZARD_PART).join(', ')}`);
+  const el = locate(e2e.window);
+  await expect(el).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  const texts = table.raw().map((r) => String(r[0] || '').trim()).filter(Boolean);
+  await expect.poll(async () => {
+    const all = await el.evaluate((n) => [n, ...n.querySelectorAll('*')]
+      .map((x) => `${x === n ? x.textContent : ''} ${x.getAttribute('title') || ''} ${x.getAttribute('aria-label') || ''}`).join(' '));
+    return texts.filter((t) => all.includes(t));
+  }, { message: `English texts left in the wizard's ${part}`, timeout: LOAD_TIMEOUT }).toEqual([]);
+});
+
+When('I pick {string} for the suggested {string} workflow', async ({ e2e }, label, kind) => {
+  const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
+  await expect(select).toBeEnabled({ timeout: IMPORT_TIMEOUT });
+  const value = await select.evaluate((el, l) => [...el.options].find((o) => o.textContent.trim() === l)?.value ?? null, label);
+  if (value == null) throw new Error(`the "${kind}" workflow's selector offers no "${label}"`);
+  await select.selectOption(value);
+  await expect(select).toHaveValue(value);
+  e2e.workflowPicks = { ...(e2e.workflowPicks || {}), [kind]: { label, value } };
+});
+
+When('the interface language is switched to {string} while the wizard stays open', async ({ e2e }, language) => {
+  const code = languageCode(language);
+  const page = e2e.window;
+  await expect(wizard(page)).toBeVisible();
+  await page.evaluate(async (c) => { await window.api.setSettings({ language: { interface: c } }); }, code);
+  await expect(page.locator('html')).toHaveAttribute('lang', code === 'en' ? /^en/ : code, { timeout: LOAD_TIMEOUT });
+  await expect(wizard(page), 'the wizard stays open').toBeVisible();
+  await expect(currentStep(page)).toHaveAttribute('data-step', 'analysis');
+});
+
+// the same pick (the option's value), its label now in the language
+Then('the suggested {string} workflow still has {string} picked, read in {string}', async ({ e2e }, kind, label, language) => {
+  const pick = e2e.workflowPicks?.[kind];
+  if (!pick || pick.label !== label) throw new Error(`no "${label}" was picked for the "${kind}" workflow: use "I pick {string} for the suggested {string} workflow" first`);
+  const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
+  await expect(select).toHaveValue(pick.value, { timeout: LOAD_TIMEOUT });
+  const texts = inLanguage(label, language);
+  await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*(${texts.map(escapeRe).join('|')})\\s*$`), { timeout: LOAD_TIMEOUT });
 });
 
 // ---- #724: the tray never covers the wizard; #739: the name from the URL; #743: cloning in place ---------
