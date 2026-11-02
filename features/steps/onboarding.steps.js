@@ -173,9 +173,11 @@ Then('the wizard shows the analysis cost in total and for the project map and th
 });
 
 Then('the wizard offers to start the analysis', async ({ e2e }) => {
-  const analyze = wizard(e2e.window).getByTestId('wizard-analyze');
+  // #725: the analysis starts from the workflows column's "Analyze the repository" choice
+  // ("Analyze and continue", wizard-analyze, is gone).
+  const analyze = wizard(e2e.window).getByTestId('wizard-workflows-choice-analyze');
   await expect(analyze).toBeEnabled();
-  await expect(analyze).toContainText(/Analyze and continue/i);
+  await expect(analyze).toContainText(/Analyze the repository/i);
 });
 
 When('I skip the analysis for later', async ({ e2e }) => {
@@ -313,7 +315,8 @@ const nextStepsEntry = (page, words) => nextSteps(page).getByTestId(/^next-step-
 const nextStepsAction = (page, words) => nextStepsEntry(page, words).getByRole('button').first();
 
 When('I start the analysis in the wizard', async ({ e2e }) => {
-  await wizard(e2e.window).getByTestId('wizard-analyze').click();
+  // #725: "Analyze the repository" in the workflows column starts the analysis (the step stays put).
+  await wizard(e2e.window).getByTestId('wizard-workflows-choice-analyze').click();
 });
 
 Then("the review shows the project's city and its backlog", async ({ e2e }) => {
@@ -533,4 +536,124 @@ Then("the workspace's {string} is a git repository with no commit", async ({ e2e
 
 Then("the workspace's {string} has no remote", async ({ e2e }, rel) => {
   expect(gitIn(e2e, workspaceFolder(e2e, rel), ['remote']), 'the remotes').toBe('');
+});
+
+// ---- #725: step 3's "Suggested workflows" column: two choices first, an analyzing look, failed jobs -------
+// What the screen exposes (to be added by #725):
+// - wizard-workflows-column: the right column (its heading, the choices or the rows, the analyzing notice);
+// - wizard-workflows-choice-analyze / wizard-workflows-choice-manual: the two choices, buttons named
+//   "Analyze the repository" / "Define manually", shown until one is chosen (no row before);
+// - wizard-workflows-rows: the rows' list (the wizard-workflow rows of #630), aria-busy="true" while dimmed;
+// - wizard-workflows-analyzing: the loading notice over the dimmed rows, "Analyzing <name>'s ways of
+//   working…", holding wizard-workflows-spinner;
+// - a failed job's row of the left column (data-part="<job>", as the cost's parts) holds
+//   wizard-job-error-<job> (the reason under its title) and wizard-job-retry-<job> (Retry:
+//   api.retryOnboarding(projectId)); its amount reads "—";
+// - wizard-next: the footer's Continue to the review, enabled all along step 3; wizard-analyze is gone.
+//
+// E2E HOOKS THE DEVELOPER MUST ADD (none exists yet), read by the simulated onboarding's jobs
+// (packages/engine/service/areas/project-onboarding.js, its `jobs`, only when MULTIAGENT_SIMULATION_ONLY=1):
+// - MULTIAGENT_E2E_ONBOARDING_HOLD=<job>[,<job>]: that job stays `running` until the app closes (a promise
+//   that never settles), so its in-progress look can be checked and screenshotted;
+// - MULTIAGENT_E2E_ONBOARDING_FAIL=<job>[,<job>]: that job throws "The simulated <job> failed (e2e)."
+//   so it ends `failed` with that error as its reason (a Retry fails again the same way).
+
+// the analyses in the owner's words → the onboarding's job ids
+const ONBOARDING_JOB = { 'ways of working': 'profile', 'project map': 'projectMap', 'refactor ranking': 'ranking' };
+const jobId = (words) => {
+  const id = ONBOARDING_JOB[words];
+  if (!id) throw new Error(`unknown analysis "${words}": one of ${Object.keys(ONBOARDING_JOB).join(', ')}`);
+  return id;
+};
+const WORKFLOW_CHOICE = { 'Analyze the repository': 'wizard-workflows-choice-analyze', 'Define manually': 'wizard-workflows-choice-manual' };
+const choiceTestid = (label) => {
+  const id = WORKFLOW_CHOICE[label];
+  if (!id) throw new Error(`unknown choice "${label}": one of ${Object.keys(WORKFLOW_CHOICE).join(', ')}`);
+  return id;
+};
+const workflowsColumn = (page) => wizard(page).getByTestId('wizard-workflows-column');
+const jobRow = (page, words) => wizard(page).getByTestId('wizard-cost').locator(`[data-part="${jobId(words)}"]`);
+
+Given('the app is open while the {string} analysis keeps running', async ({ e2e }, words) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_HOLD: jobId(words) } });
+});
+
+Given('the app is open where the {string} analysis fails', async ({ e2e }, words) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_FAIL: jobId(words) } });
+});
+
+Then("the wizard's suggested workflows offer {string} and {string} and no workflow yet", async ({ e2e }, a, b) => {
+  const column = workflowsColumn(e2e.window);
+  await expect(column).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  for (const label of [a, b]) {
+    const choice = column.getByTestId(choiceTestid(label));
+    await expect(choice, `the choice "${label}"`).toBeVisible();
+    await expect(choice).toBeEnabled();
+    await expect(choice).toContainText(label);
+  }
+  await expect(column.getByTestId('wizard-workflow'), 'no workflow row before a choice').toHaveCount(0);
+});
+
+When("I choose {string} in the wizard's suggested workflows", async ({ e2e }, label) => {
+  const choice = workflowsColumn(e2e.window).getByTestId(choiceTestid(label));
+  await expect(choice).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await choice.click();
+});
+
+Then("the wizard's suggested workflows are dimmed under {string} with a spinner", async ({ e2e }, notice) => {
+  const column = workflowsColumn(e2e.window);
+  const analyzing = column.getByTestId('wizard-workflows-analyzing');
+  await expect(analyzing).toBeVisible();
+  await expect(analyzing).toContainText(notice);
+  await expect(analyzing.getByTestId('wizard-workflows-spinner')).toBeVisible();
+  const rows = column.getByTestId('wizard-workflows-rows');
+  await expect(rows).toBeVisible();
+  await expect(rows).toHaveAttribute('aria-busy', 'true');
+});
+
+Then("the wizard's suggested workflows are not dimmed", async ({ e2e }) => {
+  const column = workflowsColumn(e2e.window);
+  await expect(column.getByTestId('wizard-workflows-rows')).toBeVisible();
+  await expect(column.getByTestId('wizard-workflows-rows')).not.toHaveAttribute('aria-busy', 'true');
+  await expect(column.getByTestId('wizard-workflows-analyzing')).toHaveCount(0);
+});
+
+// the footer's Continue to the review, on step 3 whatever the analysis is doing
+Then('the wizard lets me continue to the review', async ({ e2e }) => {
+  const page = e2e.window;
+  const next = footer(page).getByTestId('wizard-next');
+  await expect(next).toBeVisible();
+  await expect(next).toBeEnabled();
+  await expect(next).toContainText(/Continue/i);
+  await expect(wizard(page).getByTestId('wizard-analyze'), '"Analyze and continue" is gone').toHaveCount(0);
+});
+
+// modelled on "the sidebar looks like the baseline" (sidebar-footer.steps.js): the column only (the left
+// one shows the scratch folder's repository URL, which changes per run)
+Then("the wizard's suggested workflows look like the baseline {string}", async ({ e2e }, name) => {
+  await expect(workflowsColumn(e2e.window)).toHaveScreenshot(name);
+});
+
+Then("the wizard's {string} analysis says why it failed and offers to retry it", async ({ e2e }, words) => {
+  const id = jobId(words);
+  const row = jobRow(e2e.window, words);
+  await expect(row.getByTestId(`wizard-job-error-${id}`)).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(row.getByTestId(`wizard-job-error-${id}`)).toHaveText(/\S/);
+  const retry = row.getByTestId(`wizard-job-retry-${id}`);
+  await expect(retry).toBeVisible();
+  await expect(retry).toBeEnabled();
+  await expect(retry).toContainText(/Retry/i);
+});
+
+Then("the wizard's {string} analysis shows no amount", async ({ e2e }, words) => {
+  const row = jobRow(e2e.window, words);
+  await expect(row).toContainText('—');
+  await expect(row).not.toContainText(AMOUNT);
+});
+
+Then('the wizard does not offer to analyze everything again', async ({ e2e }) => {
+  const w = wizard(e2e.window);
+  await expect(w.getByTestId('wizard-analyze')).toHaveCount(0);
+  await expect(w.getByTestId('wizard-workflows-choice-analyze')).toHaveCount(0);
+  await expect(w.getByRole('button', { name: /analy[sz]e (everything|all|again)|analy[sz]e and continue/i })).toHaveCount(0);
 });

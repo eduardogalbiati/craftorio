@@ -275,3 +275,58 @@ Feature: Bring a project in with a guided wizard
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
     And the workspace's "projects/blank-slate" is a git repository with no commit
+
+  # #725: step 3's right column "Suggested workflows" starts with two choices, Analyze the repository or
+  # Define manually; no workflow row before one is chosen. The footer's Continue to the review works at
+  # any point of the step (the left column's "Analyze and continue" is gone). The simulated ways of working
+  # analysis is kept running (an E2E hook of the simulated onboarding, see onboarding.steps.js) so the
+  # analyzing look stays on screen for its baseline (@visual: the screenshot lane).
+  @issue-725 @visual
+  Scenario: Analyzing the repository dims the suggested workflows under a loading notice, and Continue stays available
+    Given the app is open while the "ways of working" analysis keeps running
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "analyzing-725"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard's suggested workflows offer "Analyze the repository" and "Define manually" and no workflow yet
+    And the wizard lets me continue to the review
+    When I choose "Analyze the repository" in the wizard's suggested workflows
+    Then the wizard's suggested workflows are dimmed under "Analyzing analyzing-725's ways of working…" with a spinner
+    And the wizard lets me continue to the review
+    And the wizard's suggested workflows look like the baseline "onboarding-analysis-analyzing.png"
+
+  @issue-725
+  Scenario: Defining the workflows manually shows them ready to change at once, and Continue stays available
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "manual-725"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I choose "Define manually" in the wizard's suggested workflows
+    Then the wizard's suggested workflows are not dimmed
+    And I can change the suggested "feature" workflow
+    And I can change the suggested "fix" workflow
+    And I can change the suggested "release" workflow
+    And I can change the suggested "ci" workflow
+    And the wizard lets me continue to the review
+
+  # Analyze the repository starts the analysis (the paid project map and refactor ranking included); the
+  # simulated ranking is made to fail (an E2E hook, see onboarding.steps.js). Its row says why and retries
+  # that job only; nothing offers to analyze everything again.
+  @issue-725
+  Scenario: A paid analysis that failed says why and offers to retry it, and Continue stays available
+    Given the app is open where the "refactor ranking" analysis fails
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "failed-725"
+    And I go to the next step of the wizard
+    And I choose "Analyze the repository" in the wizard's suggested workflows
+    Then the wizard's "refactor ranking" analysis says why it failed and offers to retry it
+    And the wizard's "refactor ranking" analysis shows no amount
+    And the wizard lets me continue to the review
+    And the wizard does not offer to analyze everything again
