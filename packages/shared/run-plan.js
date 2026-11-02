@@ -7,7 +7,8 @@
 //   `e2e_tests: off`: testid_check.
 // `stepsThatDontApply(workflow, inputs)` → [{ id, reason }], `reason` an i18n key:
 // run.doesnt_apply_no_ui when the project has no UI folders, run.doesnt_apply_off when an input
-// turned the step off. Only ids the workflow has (steps, or agents of a step's agent_when).
+// turned the step off. Only ids the workflow has (steps, or agents of a step: its agent_when or the
+// `agents` list the app's workflow description gives, `agentsOf`).
 // Browser: window.RunPlan; Node: module.exports.
 (function (root) {
   const NO_UI = 'run.doesnt_apply_no_ui';
@@ -20,10 +21,13 @@
     for (const s of (workflow && workflow.steps) || []) {
       if (!s || !s.id) continue;
       ids.add(s.id);
-      for (const a of Object.keys(s.agent_when || {})) ids.add(a);
+      for (const a of agentsOf(s)) ids.add(a);
     }
     return ids;
   }
+
+  // a step's agents: its agent_when's keys (the workflow file) or its `agents` (the app's describe())
+  const agentsOf = (s) => [...new Set([...Object.keys((s && s.agent_when) || {}), ...((s && Array.isArray(s.agents) && s.agents) || [])])];
 
   function stepsThatDontApply(workflow, inputs) {
     const wf = workflow || {};
@@ -44,7 +48,10 @@
       .map(([id]) => ({ id, reason: noUi ? NO_UI : OFF }));
   }
 
-  const api = { stepsThatDontApply };
+  const api = {
+    agentsOf,
+    stepsThatDontApply,
+  };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RunPlan = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -25,9 +25,8 @@ const path = require('path');
 const oracleSeeds = require('../oracle/oracle-seeds');
 const { checkCommand } = require('../../engine/check-step');
 const { detectTestCommand } = require('../../engine/suite-step');
-const { listBranches } = require('./project-inputs');
-
-const KINDS = ['backend', 'frontend', 'full-stack'];
+const { detectLanguage, listBranches } = require('./project-inputs');
+const { PROJECT_KINDS: KINDS } = require('@multiagent/shared/onboarding-model');
 const WAYS_OF_WORKING = 'ways-of-working';
 
 // what the project page may override (`project.runDefaults`)
@@ -84,7 +83,7 @@ function projectFacts(folder) {
   const deps = Object.keys({ ...pkg?.dependencies, ...pkg?.devDependencies });
   const webFramework = deps.some((d) => WEB_DEPS.includes(d));
   // another toolchain than Node (Cargo, Go, Maven...) is a service; so is a Node server framework
-  const otherToolchain = ['Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'pyproject.toml', 'requirements.txt', 'setup.py'].some((f) => exists(folder, f));
+  const otherToolchain = String(detectLanguage(folder) || '').split(',').some((l) => l && l !== 'js');
   const server = otherToolchain || deps.some((d) => SERVER_DEPS.includes(d)) || ['server', 'api'].some((d) => isDir(path.join(folder, d)));
   const ui = uiFolders(folder);
   const e2eCommand = detectE2eCommand(folder);

@@ -736,7 +736,7 @@ function stepsThatDontApply(v, all) {
   if (!r || typeof window.RunPlan?.stepsThatDontApply !== 'function') return new Map();
   const wf = (state.workflows || []).find((w) => w.file === r.file || w.name === r.workflow) || null;
   const steps = Array.isArray(wf?.steps) ? wf.steps : all.map((s) => ({ id: s.id }));
-  const owner = new Map(steps.flatMap((s) => Object.keys(s?.agent_when || {}).map((a) => [a, s.id])));
+  const owner = new Map(steps.flatMap((s) => window.RunPlan.agentsOf(s).map((a) => [a, s.id])));
   const list = window.RunPlan.stepsThatDontApply({ inputs: wf?.inputs || {}, steps }, r.inputs || {});
   return new Map(list.map((x) => [x.id, { reason: x.reason, step: owner.get(x.id) || x.id }]));
 }

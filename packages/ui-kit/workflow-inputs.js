@@ -322,7 +322,8 @@
     if (!defaults || typeof defaults !== 'object' || !Object.prototype.hasOwnProperty.call(defaults, k)) return;
     const v = defaults[k];
     if (v == null || (Array.isArray(def?.enum) && !def.enum.map(String).includes(String(v)))) return;
-    const value = Array.isArray(v) ? v.join('\n') : v;
+    // a list in a one-line box: comma-separated (a text input drops line breaks; the engine splits on both)
+    const value = Array.isArray(v) ? v.join(',') : v;
     if (!field.dataset.wiTouched && !keep.includes(k)) set(rootEl, k, value, { touched: false });
     const same = el.type === 'checkbox' ? el.checked === truthy(value) : String(el.value ?? '').trim() === String(value).trim();
     if (k !== 'language') note(field, same ? t('workflow_inputs.from_project') : '', t('workflow_inputs.from_project_title'));

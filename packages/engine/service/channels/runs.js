@@ -3,6 +3,10 @@
 // Execution › Concurrent runs): the channels that act on one take its runId.
 
 const runs = require('../../domains/run/runs');
+const projects = require('../../domains/project/projects');
+const { loadWorkflow } = require('../../engine/workflow');
+const { resolveRunInputs } = require('../../domains/project/project-run-defaults');
+const { runDefaultsOf } = require('../seed-runs');
 const {
   clientError,
   requireId,
@@ -56,6 +60,24 @@ function answeredBefore(ctx, runId, id) {
   return ev ? { already_answered: true, answered_at: ev.ts } : false;
 }
 
+// #735: the dialog's inputs over the project's run defaults (resolveRunInputs: typed > project), the
+// workflow's own defaults left to the engine; the inputs unchanged without a project or a workflow.
+async function withProjectDefaults(ctx, { file, inputs, projectId }) {
+  if (!projectId) return inputs;
+  let project = null;
+  let wf = null;
+  try {
+    project = projects.readProject(ctx.ws.projects, projectId);
+    wf = loadWorkflow(ctx.workflowPath(file).file);
+  } catch { return inputs; }
+  if (!project?.folder || !wf?.inputs) return inputs;
+  const typed = Object.fromEntries(Object.entries(inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  const { values, sources } = resolveRunInputs({ typed, project: await runDefaultsOf(ctx, project), workflow: { inputs: wf.inputs } });
+  const out = { ...inputs };
+  for (const [k, v] of Object.entries(values)) if (sources[k] === 'project') out[k] = v;
+  return out;
+}
+
 module.exports = (ctx) => [
   {
     channel: 'run:start',
@@ -85,14 +107,17 @@ module.exports = (ctx) => [
     // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun).
     // then: what happens with the run's result when it finishes (#134, chain-model normalizeThen).
     // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun).
-    fn: (payload) => {
+    // #735: an input the dialog left empty takes the project's run default (an empty ui_folders of a
+    // backend project included) before the workflow's own (withProjectDefaults).
+    fn: async (payload) => {
       const { file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides, workspace } = requireObject(payload, 'run options');
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.text, kept, runId: kept.runId };
-      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace });
+      const resolved = await withProjectDefaults(ctx, { file, inputs, projectId });
+      return ctx.startWorkflowRun({ file, inputs: resolved, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace });
     },
   },
   // runId: the run to stop (without it, the only run in progress)

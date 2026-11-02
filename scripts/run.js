@@ -39,6 +39,7 @@ const {
   runDefaultsWith,
   savedProfile,
 } = require('@multiagent/engine/domains/project/project-run-defaults');
+const { seedsRoot } = require('@multiagent/engine/service/seed-runs');
 const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
 
 const root = path.join(__dirname, '..');
@@ -74,7 +75,7 @@ function projectFor(projectsDir, id, repoPath) {
 function withProjectDefaults(file, typed, project) {
   if (!project) return typed;
   const wf = loadWorkflow(file);
-  const defaults = runDefaultsWith({ project, profile: savedProfile(path.join(ws.root, 'architecture'), project.id) });
+  const defaults = runDefaultsWith({ project, profile: savedProfile(seedsRoot({ ws }), project.id) });
   const { values, sources } = resolveRunInputs({ typed, project: defaults, workflow: wf });
   const inputs = { ...typed };
   for (const [k, v] of Object.entries(values)) if (sources[k] === 'project') inputs[k] = v;

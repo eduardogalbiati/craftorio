@@ -80,6 +80,14 @@
     ci: keysOf('profile_ci', PROFILE.ci),
     tests: keysOf('profile_tests', PROFILE.tests),
   };
+  // #735: the project's kind, value → label key (the wizard, the Ways of working drawer); PROJECT_KINDS
+  // its values (packages/engine/domains/project/project-run-defaults.js): a backend gets no UI step
+  const KIND_LABELS = {
+    backend: 'ways_of_working.kind_backend',
+    frontend: 'ways_of_working.kind_frontend',
+    'full-stack': 'ways_of_working.kind_full_stack',
+  };
+  const PROJECT_KINDS = Object.keys(KIND_LABELS);
   // #630 (spec R7, mock-4): each suggested workflow's selector, value → label key (#726), and the value
   // the profile picks; the CI row is the profile's ci itself (ciChoice)
   const VARIANTS = ['remote-e2e', 'remote-code', 'local-e2e', 'local-code'];
@@ -201,8 +209,10 @@
     CREATE_DEFAULTS,
     DEFAULT,
     FAILURE_CODES,
+    KIND_LABELS,
     PROFILE,
     PROFILE_LABELS,
+    PROJECT_KINDS,
     STEPS,
     back,
     canGoNext,

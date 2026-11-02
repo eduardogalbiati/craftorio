@@ -36,14 +36,21 @@
   const MODE_OPTIONS = [['local', 'ways_of_working.merge_local'], ['remote', 'ways_of_working.merge_pr']];
   const CI_OPTIONS = [['none', 'ways_of_working.ci_none'], ['release', 'ways_of_working.ci_release'], ['pr+release', 'ways_of_working.ci_pr_release']];
   const TESTS_OPTIONS = [['unit', 'ways_of_working.tests_unit'], ['unit+e2e', 'ways_of_working.tests_unit_e2e']];
-  // #735: the project's kind (packages/engine/domains/project/project-run-defaults.js KINDS): a backend gets no UI step
-  const KIND_OPTIONS = [['backend', 'ways_of_working.kind_backend'], ['frontend', 'ways_of_working.kind_frontend'], ['full-stack', 'ways_of_working.kind_full_stack']];
+  // #735: the project's kind (window.OnboardingModel KIND_LABELS, packages/shared/onboarding-model.js): a backend gets no UI step
+  const kindOptions = () => Object.entries(window.OnboardingModel?.KIND_LABELS || {});
   // #735: the profile's fields saved as the project's run defaults (project.runDefaults, the run dialog's inputs)
   const RUN_DEFAULT_OF = { mode: 'mode', testCommand: 'test_command', e2eCommand: 'e2e_command', checkCommand: 'check_command' };
+  // #735: the run defaults that are not profile fields, edited under "Run defaults" (an empty field: what
+  // the engine derives, projects:inputHints' runDefaults, shown as the placeholder)
+  const RUN_DEFAULT_EDIT = [
+    { id: 'base_branch', label: 'ways_of_working.f_base_branch' },
+    { id: 'ui_folders', label: 'ways_of_working.f_ui_folders', list: true },
+    { id: 'screenshots', label: 'ways_of_working.q_screenshots', options: [['off', 'ways_of_working.screenshots_off'], ['changed', 'ways_of_working.screenshots_changed'], ['all', 'ways_of_working.screenshots_all']] },
+  ];
   // the profile's fields the owner may override (packages/engine/domains/workflow/workflow-compose.js PROFILE_FIELDS): a fixed list is
   // a select (an empty value keeps the inferred one), a command or a list of languages is free text
   const PROFILE_EDIT = [
-    { id: 'kind', label: 'ways_of_working.f_kind', options: KIND_OPTIONS },
+    { id: 'kind', label: 'ways_of_working.f_kind', get options() { return kindOptions(); } },
     { id: 'mode', label: 'ways_of_working.q_mode', options: MODE_OPTIONS },
     { id: 'release', label: 'ways_of_working.q_release', options: [['milestone'], ['per-merge'], ['train'], ['rc-stable']] },
     { id: 'ci', label: 'ways_of_working.f_ci', options: CI_OPTIONS },
@@ -74,7 +81,7 @@
 
   function profileLabels(p) {
     const out = [
-      ...(p.kind ? [`${t('ways_of_working.f_kind')}: ${optionText(KIND_OPTIONS, p.kind)}`] : []),
+      ...(p.kind ? [`${t('ways_of_working.f_kind')}: ${optionText(kindOptions(), p.kind)}`] : []),
       `${t('ways_of_working.q_mode')}: ${optionText(MODE_OPTIONS, p.mode)}`,
       `${t('ways_of_working.release')}: ${p.release || t('ways_of_working.open')}`,
       `CI: ${optionText(CI_OPTIONS, p.ci)}`,
@@ -133,11 +140,34 @@
     }).join('');
     return `<form class="wow-profile-edit" data-wow-profile data-testid="ways-of-working-profile-edit" aria-label="${t('ways_of_working.edit_profile')}">
         ${fields}
+        ${runDefaultsEditHtml()}
         <div class="row">
           <button type="submit" class="btn primary" data-testid="ways-of-working-profile-save">${t('common.save')}</button>
           <button type="button" class="btn ghost" data-wow-profile-cancel data-testid="ways-of-working-profile-cancel">${t('common.cancel')}</button>
         </div>
       </form>`;
+  }
+
+  // #735: "Run defaults" in the profile's edit form: the project's own value, else empty with what the
+  // engine derives as the placeholder (a select's empty option names it)
+  function runDefaultsEditHtml() {
+    const own = cur.project?.runDefaults || {};
+    const derived = cur.derived || {};
+    const text = (v) => (Array.isArray(v) ? v.join(', ') : v == null ? '' : String(v));
+    const fields = RUN_DEFAULT_EDIT.map((f) => {
+      const id = `wow-r-${f.id}`;
+      const value = text(own[f.id]);
+      const auto = text(derived[f.id]);
+      const control = f.options
+        ? selectMarkup({ id, 'data-wow-run-default': f.id }, [['', auto ? `${t('ways_of_working.open')} (${t(f.options.find(([v]) => v === auto)?.[1] || auto)})` : t('ways_of_working.open')], ...f.options.map(([v, l]) => [v, t(l)])], value)
+        : `<input type="text" id="${id}" data-wow-run-default="${f.id}" value="${esc(value)}" placeholder="${esc(auto)}" />`;
+      return `<div class="field"><label for="${id}">${t(f.label)}</label>${control}</div>`;
+    }).join('');
+    return `<fieldset class="wow-run-defaults" data-testid="ways-of-working-run-defaults">
+        <legend class="arch-sub">${t('ways_of_working.run_defaults')}</legend>
+        <p class="hint">${t('ways_of_working.run_defaults_hint')}</p>
+        ${fields}
+      </fieldset>`;
   }
 
   function proposedHtml() {
@@ -267,23 +297,33 @@
       else if (question) cur.answers[id] = question.default;
       else delete cur.answers[id];
     }
+    const own = {};
+    for (const input of form.querySelectorAll('[data-wow-run-default]')) {
+      const id = input.getAttribute('data-wow-run-default');
+      const value = input.value.trim();
+      const f = RUN_DEFAULT_EDIT.find((x) => x.id === id);
+      own[id] = !value ? null : f?.list ? value.split(',').map((s) => s.trim()).filter(Boolean) : value;
+    }
     cur.editing = false;
     compose();
-    saveRunDefaults();
+    saveRunDefaults(own);
   }
 
   // #735: the edited profile becomes the project's kind and run defaults (projects:update), so the run
-  // dialog, the roadmap and the CLI start from it; a field left open keeps what the engine derives
-  async function saveRunDefaults() {
+  // dialog, the roadmap and the CLI start from it. Each field is written or null (projects.js drops a
+  // null: a field left open, or cleared, takes what the engine derives again); `own`: the "Run
+  // defaults" fields (base_branch, ui_folders, screenshots), the others kept as they were
+  async function saveRunDefaults(own = {}) {
     const c = cur;
     const p = effectiveProfile();
-    const runDefaults = { ...(c.project.runDefaults || {}) };
+    const runDefaults = { ...(c.project.runDefaults || {}), ...own };
     for (const [field, input] of Object.entries(RUN_DEFAULT_OF)) {
-      if (typeof p[field] === 'string' && p[field].trim()) runDefaults[input] = p[field].trim();
+      runDefaults[input] = typeof p[field] === 'string' && p[field].trim() ? p[field].trim() : null;
     }
-    if (p.tests === 'unit') { runDefaults.e2e_tests = 'off'; runDefaults.e2e_command = ''; }
+    runDefaults.e2e_tests = p.tests === 'unit' ? 'off' : null;
+    if (p.tests === 'unit') runDefaults.e2e_command = null;
     const patch = { runDefaults };
-    if (KIND_OPTIONS.some(([k]) => k === c.answers.kind)) patch.kind = c.answers.kind;
+    if (kindOptions().some(([k]) => k === c.answers.kind)) patch.kind = c.answers.kind;
     try {
       const saved = await api.updateProject(c.project.id, patch);
       c.project = { ...c.project, ...(saved || patch) };
@@ -457,9 +497,11 @@
     el.addEventListener('change', onChange);
     el.addEventListener('submit', onSubmit);
     document.addEventListener('keydown', onKey, true);
-    cur = { project: p, el, backdrop, estimate: undefined, phase: 'idle', error: null, result: null, answers: {}, proposed: null, composing: false, writing: false, editing: false, seq: 0, last: null, run: null, poll: null, own: false, startedAt: null };
+    cur = { project: p, el, backdrop, estimate: undefined, phase: 'idle', error: null, result: null, answers: {}, proposed: null, composing: false, writing: false, editing: false, seq: 0, last: null, run: null, poll: null, own: false, startedAt: null, derived: null };
     const c = cur;
     render();
+    // #735: what the engine derives for the run defaults (the "Run defaults" fields' placeholders)
+    if (typeof api.projectInputHints === 'function') api.projectInputHints(p.id).then((h) => { if (cur === c) c.derived = h?.runDefaults || null; }, () => {});
     // #733: the cost, the last saved analysis and a run in progress, none of which runs anything
     const [estimate, last, state] = await Promise.all([
       maybe('seedEstimate', { projectId: p.id, seedId: 'ways-of-working' }),
