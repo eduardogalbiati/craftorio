@@ -17,3 +17,14 @@ test('#739 displayNameFromUrl: the list short form and an ssh:// URL', () => {
   assert.equal(M.displayNameFromUrl('acme/ai-memory'), 'Ai Memory');
   assert.equal(M.displayNameFromUrl('ssh://git@gitlab.com/group/sub/my_repo.git'), 'My Repo');
 });
+
+// GitLab namespaces may hold a dot; the list pick hands the short form owner/repo
+test('#739 displayNameFromUrl: the list short form with an owner holding a dot (GitLab group "my.company")', () => {
+  assert.equal(M.displayNameFromUrl('my.company/repo'), 'Repo');
+  assert.equal(M.displayNameFromUrl('my.company/ai-memory'), 'Ai Memory');
+});
+
+test('#739 displayNameFromUrl: an https URL with an owner holding a dot', () => {
+  assert.equal(M.displayNameFromUrl('https://gitlab.com/my.company/repo'), 'Repo');
+  assert.equal(M.displayNameFromUrl('https://gitlab.com/my.company/ai-memory.git'), 'Ai Memory');
+});

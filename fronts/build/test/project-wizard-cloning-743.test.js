@@ -52,6 +52,18 @@ test('#743 while cloning the repository and name fields are read-only', async ()
   assert.equal(locked(field(app, 'wizard-name')), true, '#wizard-name readonly or disabled');
 });
 
+// Decided with the change (3ef7f86c): Next is disabled only while the start call is in flight; a click on
+// "Cloning <name>…" while the clone runs goes on to the analysis step, the clone still running there.
+test('#743 a click on "Cloning <name>…" while the clone runs goes on to the analysis step, the clone still running', async () => {
+  const app = await W.imported(W.CLONING);
+  await W.press(app, 'wizard-next');
+  assert.equal(W.currentStep(app), 'analysis', 'the analysis step after the click');
+  const progress = W.byTestId(W.wizardMarkup(app), 'wizard-clone-progress');
+  assert.ok(progress, 'the clone\'s progress in the footer (data-testid="wizard-clone-progress")');
+  assert.equal(W.hasSpinner(progress.outer), true, 'the clone still running: a spinner');
+  assert.equal(app.callsTo('startOnboarding').length, 1, 'the click does not start a second import');
+});
+
 // ---- the clone done ----------------------------------------------------------------------------------
 
 test('#743 the clone done goes straight to the analysis step, and "The clone is ready." is never rendered', async () => {

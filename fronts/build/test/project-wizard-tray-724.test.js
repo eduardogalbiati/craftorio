@@ -200,6 +200,24 @@ test('#724 the tray with one import finished and one still cloning keeps only th
   assert.equal(W.isHidden(app, 'onboarding-tray'), false, 'the tray still shows');
 });
 
+// The wizard showed the import as it finished: closing it within the 5 s gives no "imported" toast (the
+// owner saw it), and the import still leaves the tray.
+test('#724 an import finished while the wizard showed it gives no "imported" toast when the wizard closes within 5 s', async () => {
+  const app = await W.imported(W.CLONING);
+  const advance = virtualClock(app);
+  await W.emit(app, W.READY);
+  await advance(2000);
+  W.wizard(app).close();
+  await app.settle(10);
+  await advance(6000);
+  const toast = app.el('#toast');
+  const text = H.visibleText(String(toast.innerHTML || ''));
+  const shown = !toast.classList.contains('hidden') && text.includes(`${W.NAME} imported`);
+  assert.equal(shown, false, `no "imported" toast: "${text}"`);
+  assert.equal(trayItem(app) === null, true, 'the finished import left the tray');
+  assert.equal(W.isHidden(app, 'onboarding-tray'), true, 'no item left: the tray is hidden');
+});
+
 // ---- the words -----------------------------------------------------------------------------------
 
 test('#724 onboarding.analysis_running no longer mentions the tray (en "tray", pt-BR "bandeja")', () => {

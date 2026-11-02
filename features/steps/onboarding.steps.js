@@ -659,19 +659,19 @@ Then('the wizard does not offer to analyze everything again', async ({ e2e }) =>
 });
 
 // ---- #724: the tray never covers the wizard; #739: the name from the URL; #743: cloning in place ---------
-// What the screens expose (to be added by #724 / #743):
+// What the screens expose (#724 / #743):
 // - wizard-spinner: the circular spinner of a running import inside the wizard's footer, in
 //   wizard-clone-progress (the import's name and state; data-status="running|done|failed" = the clone
 //   job's status; when failed its reason and a role="button" named /Retry/) or in wizard-next while it
-//   reads "Cloning <name>…" (#743: the Repository step's Next turned into the cloning state, disabled);
+//   reads "Cloning <name>…" (#743: the Repository step's Next turned into the cloning state; disabled only
+//   while the start call is in flight, then a click goes on to the analysis with the clone running);
 // - wizard-panel: the dialog's panel (.wizard-panel), measured for its size on every step;
 // - tray-spinner: the spinner of a running import's tray-item;
 // - the toast "<name> imported" (the shell's data-testid="toast") with its button "Open the project".
 // The tray (onboarding-tray) is hidden while the wizard is open, whatever the imports' states.
 //
-// E2E HOOKS THE DEVELOPER MUST ADD, read by the simulated onboarding (packages/engine/service/areas/
-// project-onboarding.js, only when MULTIAGENT_SIMULATION_ONLY=1). The clone is not one of the `jobs`
-// e2eJobs wraps (follow() awaits projects.cloneJob), so both hooks apply to it there:
+// The E2E hooks of the clone, read by the simulated onboarding (packages/engine/service/areas/
+// project-onboarding.js, only when MULTIAGENT_SIMULATION_ONLY=1):
 // - MULTIAGENT_E2E_ONBOARDING_HOLD=clone: the clone stays running (status cloning) until the app closes;
 // - MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS=<ms>: the clone waits that long, then runs as usual.
 
