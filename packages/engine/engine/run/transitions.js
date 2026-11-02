@@ -156,6 +156,12 @@ const methods = {
     const stats = (this.probeStats[step.id] ??= { polls: 0, agent_calls: 0, completed: 0, errors: 0 });
     const parent = w.parent && !st.parentMerged ? render(w.parent, { ...this.ctx, output: st.output }).trim() : '';
     if (parent) return this.pollParent(step, st, parent, stats);
+    return this.pollTarget(step, st, t0, stats);
+  },
+
+  // pollStep's own check: the step's probe on its target (wait.probe, wait.target)
+  async pollTarget(step, st, t0, stats) {
+    const w = step.wait;
     const target = render(w.target, { ...this.ctx, output: st.output }).trim();
     let r;
     try {

@@ -92,7 +92,7 @@ const COMPLEXITY_EXCEPTIONS = {
   'packages/engine/engine/run/machine-steps.js:suiteRound': 41,
   'packages/engine/engine/run/sessions.js:agentTurn': 103,
   'packages/engine/engine/run/transitions.js:finishStep': 32,
-  'packages/engine/engine/run/transitions.js:pollStep': 40,
+  'packages/engine/engine/run/transitions.js:pollTarget': 36,
   'packages/engine/engine/run/turns.js:invokeTurn': 42,
   'packages/engine/engine/source-text.js:withoutComments': 27,
   'packages/engine/engine/suite-step.js:checkOnBase': 27,

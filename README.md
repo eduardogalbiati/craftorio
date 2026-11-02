@@ -1155,14 +1155,15 @@ The way changes land is one of three modes:
 - **Remote**: the run pushes its branch to `origin`, opens a pull request and waits for its CI; it
   is merged on the platform.
 - **Fork + PR** (#738): for a repository you can't push to (the onboarding reads gh's push
-  permission and offers **Create a fork** or **Work locally**). `origin` is your fork, `upstream`
+  permission, or glab's access level on GitLab, below Developer = no push, and offers **Create a fork** or **Work locally**). `origin` is your fork, `upstream`
   the original: before each run the fork's default branch is fast-forwarded to upstream's and
   pushed to the fork; the run's branch goes to the fork and its pull request to upstream's default
   branch (following the repository's CONTRIBUTING.md and PR template), and the run waits for that
   PR's CI. Nothing is ever pushed to `upstream`: the merge is the maintainer's. A roadmap item can
   depend on an earlier one (`dependsOn`): its run starts from that item's branch on the fork, and by
-  default its pull request waits for the earlier one to merge and is rebased onto the synced default
-  branch (or opens at once saying "Depends on #N", the project's `depends-on` setting).
+  default its pull request waits for the earlier one to merge (the engine checks the parent's PR
+  itself, without calling the agent, and the wait does not count in the step's time limit) and is
+  rebased onto the synced default branch (or opens at once saying "Depends on #N", the project's `depends-on` setting).
 
 Details:
 [`docs/agents/seeds.md`](docs/agents/seeds.md) and [`docs/agents/engine.md`](docs/agents/engine.md).

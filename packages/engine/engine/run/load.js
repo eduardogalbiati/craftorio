@@ -334,7 +334,7 @@ const STEP_CHECKS = resolveChecks('steps[].', [
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
   childWorkflow, 'steps', 'renderer', 'issues', 'version', 'dir', 'branch', 'action', projectMapFrom, fanOutGoal, knownAgents, editAgent,
   'goal.until', 'wait', waitOnLoop, 'wait.probe', 'wait.target', 'wait.output', outputNeedsProbe('output'),
-  'wait.infra_output', outputNeedsProbe('infra_output'), 'wait.grace',
+  'wait.infra_output', outputNeedsProbe('infra_output'), 'wait.grace', 'wait.parent',
   'choices', 'full_suite', 'commit_tests', commitTestsSingleAgent, 'base_worktree', baseWorktreeNeedsWorktree,
   'local_preview', 'diff_base', 'save_to_issue', saveToIssueChoice, feedbackField,
   'summary', 'recommend', 'approve_label', notWithChoices('approve_label'), 'reject_label', notWithChoices('reject_label'),

@@ -18,7 +18,14 @@ actions, or any code that deletes or checks out branches.
   from `upstream/<base>`; a dependent item (`inputs.parent_branch`, set by the roadmap from the item it
   `dependsOn`) starts from `origin/<parent branch>`. Once the parent merged upstream, `restackOnBase` syncs the
   base and rebases the branch with `rebase --onto upstream/<base> origin/<parent branch>` (a conflict aborts).
-  Nothing is ever pushed to `upstream`.
+  Nothing is ever pushed to `upstream`. The PR step waits for the parent with `wait.parent`
+  (`{{ inputs.parent_pr }}`, `pr-pipeline.yaml`'s `ci`): `pollParent` (`engine/run/transitions.js`) probes the
+  parent PR/MR (`pr_checks`) before the step's own probe; not merged → poll again without the agent, and
+  `loopStartedAt` restarts so days of waiting never hit `max_duration`; merged → one agent turn to rebase, push
+  to `origin` and open the PR (`st.parentMerged`); closed or unreadable → the agent decides. The fork itself
+  (onboarding): `gh api repos/<o>/<r>` `permissions.push` on GitHub; on GitLab `glab api projects/<path>`
+  (push = `access_level` ≥ 30 in `project_access` or `group_access`), the fork reused when
+  `projects/<user>%2F<name>` has that `forked_from_project`, else `glab repo fork <path> --clone=false`.
 - **Lifecycle: the branch is the record, the folder is temporary (#202)**. No worktree folder is
   kept for an ended run. Success: `removeWorktree` (the folder, and the local branch once merged).
   Failed, cancelled, stopped: `retireWorktree` (from `finishWorktree`) gives a detached worktree a

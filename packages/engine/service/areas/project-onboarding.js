@@ -213,6 +213,26 @@ function jsonOf(answer) {
 // #738: the repository's owner/name, the one rule of the wizard's notice (onboarding-model.js forkSuggestion)
 const ownerRepoOf = (repo) => OnboardingModel.forkSuggestion({ repo, push: false }).repo;
 
+// #738: a GitLab repository URL's host and its full project path (groups and subgroups kept:
+// https://gitlab.com/group/sub/app.git and git@gitlab.com:group/sub/app → gitlab.com, group/sub/app)
+function gitlabPartsOf(repo) {
+  const clean = String(repo ?? '').trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '')
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^[^@/]+@/, '');
+  const parts = clean.split(/[/:]/).filter(Boolean);
+  return { host: parts[0] || 'gitlab.com', path: parts.slice(1).join('/') };
+}
+const gitlabPathOf = (repo) => gitlabPartsOf(repo).path;
+const gitlabHostOf = (repo) => gitlabPartsOf(repo).host;
+
+// #738: GitLab's push right from `glab api projects/<path>`: Developer (30) or more in the project or its
+// group (permissions.project_access / group_access); undefined when the answer has no permissions
+function gitlabPush(info) {
+  const perms = info?.permissions;
+  if (!perms || typeof perms !== 'object') return undefined;
+  const levels = [perms.project_access, perms.group_access].map((a) => Number(a?.access_level) || 0);
+  return Math.max(...levels) >= 30;
+}
+
 const README = (name) => `# ${name}\n`;
 const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Store', 'Thumbs.db', 'dist/', 'build/', 'coverage/', '*.log', ''].join('\n');
 
@@ -366,16 +386,19 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   }
 
   // #738: the push permission of a GitHub repository (`gh api repos/<owner>/<repo>`, its permissions.push):
-  // access: { push } once read; without push the state suggests a fork (the wizard's notice). Not read on
-  // another host (GitLab: unknown) nor when gh does not answer; never fails the import. A simulated run's
+  // or of a GitLab one (`glab api projects/<path>`, gitlabPush): access: { push } once read; without push the
+  // state suggests a fork (the wizard's notice). Not read on another host nor when the CLI does not answer;
+  // never fails the import. A simulated run's
   // E2E hook stands for gh on any host.
   async function readPush(id, repo) {
     const e2e = simulation.simulationOnly() && ['0', '1'].includes(process.env.MULTIAGENT_E2E_REPO_PUSH);
     const provider = providerOf(repo) || (e2e ? 'github' : null);
-    if (provider !== 'github') return;
-    const name = ownerRepoOf(repo);
-    const info = jsonOf(await Promise.resolve().then(() => platformCli(provider, ['api', `repos/${name}`], {})).catch(() => null));
-    const push = info?.permissions?.push;
+    if (provider !== 'github' && provider !== 'gitlab') return;
+    const name = provider === 'gitlab' ? gitlabPathOf(repo) : ownerRepoOf(repo);
+    const ask = (args) => Promise.resolve().then(() => platformCli(provider, args, {})).catch(() => null);
+    const push = provider === 'gitlab'
+      ? gitlabPush(jsonOf(await ask(['api', `projects/${encodeURIComponent(name)}`])))
+      : jsonOf(await ask(['api', `repos/${name}`]))?.permissions?.push;
     if (typeof push !== 'boolean') return;
     change(id, { access: { push }, ...(push ? {} : { fork: { status: 'suggested', repo: name } }) });
   }
@@ -402,7 +425,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
 
   // #738: the owner's fork of owner/name → { status: 'reused' | 'created', url } (an existing fork of that
   // repository is reused; `gh repo fork` never sets remotes: forkProject does it with git), or throws
-  async function makeFork(name) {
+  async function makeFork(name, repo) {
+    if (providerOf(repo) === 'gitlab') return makeGitlabFork(name, repo);
     const login = jsonOf(await platformCli('github', ['api', 'user'], {}))?.login;
     if (!login) throw new Error('gh did not say which account is signed in (gh auth login).');
     const mine = jsonOf(await platformCli('github', ['api', `repos/${login}/${name.split('/').pop()}`], {}));
@@ -411,6 +435,21 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     if (!made?.ok) throw new Error(String(made?.out || 'gh repo fork failed.').trim());
     const url = (String(made.out).match(/https:\/\/\S+/g) || []).slice(-1)[0]?.replace(/\.git$/, '') || `https://github.com/${login}/${name.split('/').pop()}`;
     return { status: 'created', url };
+  }
+
+  // #738: the same on GitLab with glab: the signed-in username (`glab api user`), its project of the same
+  // name reused when it is a fork of that project (forked_from_project), else `glab repo fork`
+  async function makeGitlabFork(name, repo) {
+    const user = jsonOf(await platformCli('gitlab', ['api', 'user'], {}))?.username;
+    if (!user) throw new Error('glab did not say which account is signed in (glab auth login).');
+    const mine = `${user}/${name.split('/').pop()}`;
+    const read = async () => jsonOf(await platformCli('gitlab', ['api', `projects/${encodeURIComponent(mine)}`], {}));
+    const urlOf = (p) => String(p?.web_url || `https://${gitlabHostOf(repo)}/${mine}`).replace(/\.git$/, '');
+    const found = await read();
+    if (found?.forked_from_project?.path_with_namespace === name) return { status: 'reused', url: urlOf(found) };
+    const made = await platformCli('gitlab', ['repo', 'fork', name, '--clone=false'], {});
+    if (!made?.ok) throw new Error(String(made?.out || 'glab repo fork failed.').trim());
+    return { status: 'created', url: urlOf(await read()) };
   }
 
   /**
@@ -423,7 +462,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const p = projects.readProject(projectsDir, projectId);
     const name = s.fork.repo || ownerRepoOf(p.repo);
     try {
-      const made = await makeFork(name);
+      const made = await makeFork(name, p.repo);
       const remotes = String(await git(['remote'], p.folder)).split(/\s+/).filter(Boolean);
       await git(['remote', 'set-url', 'origin', `${made.url}.git`], p.folder);
       await git(['remote', remotes.includes('upstream') ? 'set-url' : 'add', 'upstream', p.repo], p.folder);
