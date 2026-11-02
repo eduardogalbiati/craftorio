@@ -14,7 +14,8 @@
 //   PROFILE (each field's values) and PROFILE_LABELS (value → label) are the one list of the profile's
 //   mode / ci / tests (the engine's workflow-compose.js reads them too);
 // - #725 workflowsColumnState({ mode, profileJob }): step 3's right column, 'choose' | 'analyzing' |
-//   'failed' | 'analyzed' | 'manual', from the owner's choice and the profile job;
+//   'failed' | 'analyzed' | 'manual', from the owner's choice and the profile job; FAILURE_CODES: the
+//   codes of a failed job the engine knows (failureOf in project-onboarding.js) and the wizard words;
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
 //   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
 // - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
@@ -155,6 +156,9 @@
   // #725: the state of step 3's "Suggested workflows" column from the owner's choice (mode: undefined |
   // 'analyze' | 'manual') and the profile job ({ status, profile }): choose (the two choices, no row yet),
   // analyzing (the profile job not ended), failed (it failed, or answered no valid profile), analyzed or manual
+  // #725: a failed job's known codes, the one list of the engine (its short reason) and the wizard (its words)
+  const FAILURE_CODES = ['cli-missing', 'invalid-ranking', 'no-folder', 'no-profile', 'refused', 'timeout'];
+
   function workflowsColumnState({ mode, profileJob } = {}) {
     if (mode === 'manual') return 'manual';
     if (mode !== 'analyze') return 'choose';
@@ -194,6 +198,7 @@
     CREATE_ANSWERS,
     CREATE_DEFAULTS,
     DEFAULT,
+    FAILURE_CODES,
     PROFILE,
     PROFILE_LABELS,
     STEPS,

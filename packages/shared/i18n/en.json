@@ -3121,6 +3121,7 @@
   "onboarding.job_failed_cli_missing": "Failed: the Product Owner needs {cli}, which is not installed.",
   "onboarding.job_failed_invalid_ranking": "Failed: the Product Owner's ranking could not be read. Retry it.",
   "onboarding.job_failed_no_folder": "Failed: the project has no folder on this machine.",
+  "onboarding.job_failed_no_profile": "Failed: the analysis found no ways of working profile in the history.",
   "onboarding.job_failed_refused": "Failed: {reason}",
   "onboarding.job_failed_timeout": "Failed: the analysis took too long and was stopped.",
   "onboarding.job_profile": "Ways of working profile",

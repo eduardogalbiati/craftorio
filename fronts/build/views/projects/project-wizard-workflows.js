@@ -15,13 +15,12 @@
 
 (function () {
   const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
-  const FAILURES = ['cli-missing', 'invalid-ranking', 'no-folder', 'refused', 'timeout'];
 
   window.ProjectWizardColumn = function ({ cur, jobOf }) {
     const M = window.OnboardingModel;
     const jobReason = (job) => {
       const reason = job?.reason || job?.error || t('onboarding.no_reason');
-      return FAILURES.includes(job?.code)
+      return M.FAILURE_CODES.includes(job?.code)
         ? t(`onboarding.job_failed_${job.code.replace(/-/g, '_')}`, { cli: job.cli || '', reason })
         : t('onboarding.job_failed', { reason });
     };
@@ -82,6 +81,7 @@
       if (at === 'choose') body = `<div class="wizard-workflows-choices">${choiceButton('analyze')}${choiceButton('manual')}</div>`;
       else if (at === 'failed') {
         const job = jobOf('profile');
+        // Retry: the engine's retry runs a failed profile job again, and one done without a valid profile
         const why = job.status === 'failed' ? jobReason(job) : t('onboarding.workflows_no_profile');
         body = `<div class="wizard-alert error" role="alert" data-testid="wizard-workflows-failed">
             <strong>${esc(t('onboarding.workflows_failed'))}</strong>

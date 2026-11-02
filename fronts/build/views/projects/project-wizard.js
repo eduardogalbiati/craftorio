@@ -378,12 +378,13 @@
     const jobs = cur.onboarding?.jobs || {};
     const loading = cur.estimate === undefined;
     const sum = M.costSummary(PAID.map((id) => ({ id, estimate: id === 'projectMap' ? cur.estimate : null, checked: true })));
-    // #725: a failed job has no amount ("—"); a done one its cost, "free" when it is not known
+    // #725: a failed job has no amount ("—"); a done one its cost, "free" for a free job, "—" for a paid
+    // one whose cost is not known (the ranking)
     const amount = (id) => {
       const s = jobs[id]?.status;
       const p = sum.parts.find((x) => x.id === id);
       if (s === 'failed') return '—';
-      if (s === 'done') return p && Number.isFinite(p.estimate) ? money(p.estimate) : t('onboarding.cost_free');
+      if (s === 'done') return p ? (Number.isFinite(p.estimate) ? money(p.estimate) : '—') : t('onboarding.cost_free');
       return p ? (loading ? t('onboarding.estimating') : costText(p.estimate)) : t('onboarding.cost_free');
     };
     const row = (id) => {

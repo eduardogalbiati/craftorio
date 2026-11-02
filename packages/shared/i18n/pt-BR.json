@@ -3121,6 +3121,7 @@
   "onboarding.job_failed_cli_missing": "Falhou: o Product Owner precisa do {cli}, que não está instalado.",
   "onboarding.job_failed_invalid_ranking": "Falhou: a priorização do Product Owner não pôde ser lida. Tente de novo.",
   "onboarding.job_failed_no_folder": "Falhou: o projeto não tem pasta nesta máquina.",
+  "onboarding.job_failed_no_profile": "Falhou: a análise não encontrou um perfil de formas de trabalho no histórico.",
   "onboarding.job_failed_refused": "Falhou: {reason}",
   "onboarding.job_failed_timeout": "Falhou: a análise demorou demais e foi interrompida.",
   "onboarding.job_profile": "Perfil de Formas de trabalho",

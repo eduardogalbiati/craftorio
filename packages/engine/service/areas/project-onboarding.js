@@ -58,19 +58,24 @@ function accessReason(access) {
 }
 
 // #725: a failed job's { code, reason, cli? } from its error: the known failures (refactor-priority.js's CLI
-// missing, invalid ranking and no folder, a refused job, providers.js's timeout) get their code, so the
-// wizard words them in its language; reason: the error's first line, at most 160 characters
+// missing, invalid ranking and no folder, a profile job without a profile, a refused job, providers.js's
+// timeout) get their code, one of OnboardingModel.FAILURE_CODES (the wizard words them in its language),
+// 'failed' else; reason: the error's first line, at most 160 characters
 const cut = (text, n = 160) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+const CLI_MISSING = /needs (\S+), which is not installed/;
+const FAILURE_TESTS = {
+  'cli-missing': (e, error) => CLI_MISSING.test(error),
+  'invalid-ranking': (e, error) => /ranking (could not be read|is not valid)/.test(error),
+  'no-folder': (e, error) => /has no folder on this machine/.test(error),
+  'no-profile': (e) => Boolean(e?.noProfile),
+  refused: (e) => Boolean(e?.refused),
+  timeout: (e, error) => /^Timed out after/.test(error),
+};
 function failureOf(e) {
   const error = String(e?.message || e || '');
   const line = cut(error.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || 'The job failed without a reason.');
-  const cli = error.match(/needs (\S+), which is not installed/);
-  if (cli) return { code: 'cli-missing', cli: cli[1], reason: line };
-  if (e?.refused) return { code: 'refused', reason: line };
-  if (/ranking (could not be read|is not valid)/.test(error)) return { code: 'invalid-ranking', reason: line };
-  if (/has no folder on this machine/.test(error)) return { code: 'no-folder', reason: line };
-  if (/^Timed out after/.test(error)) return { code: 'timeout', reason: line };
-  return { code: 'failed', reason: line };
+  const code = OnboardingModel.FAILURE_CODES.find((c) => FAILURE_TESTS[c](e, error)) || 'failed';
+  return { code, ...(code === 'cli-missing' ? { cli: error.match(CLI_MISSING)[1] } : {}), reason: line };
 }
 
 // #725: the E2E hooks of a simulated run (features/steps/onboarding.steps.js): the jobs named in
@@ -203,6 +208,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       change(id, {}, { [name]: { status: 'running' } });
       const result = await jobs[name](input());
       if (result?.refused) throw Object.assign(new Error(result.refused.text || String(result.refused.reason || result.refused)), { refused: true });
+      // #725: a profile job without a profile failed (its Retry runs it again)
+      if (name === 'profile' && !result?.profile) throw Object.assign(new Error('The ways of working analysis answered no profile.'), { noProfile: true });
       // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile)
       change(id, {}, { [name]: { status: 'done', ...(result?.profile ? { profile: result.profile } : {}) } });
       return { result };
@@ -336,10 +343,15 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
         await projects.retryClone(projectsDir, projectId, { git });
       }
       cloning(projectId);
-    } else if (!w.free && !w.paid && ['ready', 'analyzed'].includes(s.status)) {
+    } else if (['ready', 'analyzing', 'analyzed'].includes(s.status)) {
+      // #725: each part on its own: a failed profile runs again while the paid part still runs, and the
+      // reverse; a part still running is left alone. A profile job done without a valid profile (the wizard's
+      // column says the analysis failed) runs again too, unless the profile is a new project's answers (#632)
       const failed = (job) => s.jobs[job].status === 'failed';
-      if (failed('facts') || failed('profile')) startFree(projectId);
-      if (['projectMap', 'ranking'].some(failed)) startPaid(projectId);
+      const noProfile = s.jobs.profile.status === 'done' && s.jobs.facts.status !== 'skipped'
+        && OnboardingModel.workflowsColumnState({ mode: 'analyze', profileJob: s.jobs.profile }) === 'failed';
+      if (!w.free && (failed('facts') || failed('profile') || noProfile)) startFree(projectId);
+      if (!w.paid && PAID.some(failed)) startPaid(projectId);
     }
     return status(projectId);
   }
