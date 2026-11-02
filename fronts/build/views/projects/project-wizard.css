@@ -2,11 +2,12 @@
    over a backdrop laid out as the spec's mockups (#669, docs/work/first-project-onboarding/images): the
    numbered step pills over a divider, the step's body (source cards with icons and points, the repository
    fields, the analysis and workflows columns, the review's three cards) and the footer over a divider
-   (Cancel / Back on the left, the step's action on the right); the tray is fixed in the bottom-right corner
-   and stays when the wizard closes. */
+   (Cancel / Back on the left, the step's action on the right). #743: the panel has one size on every step
+   and state (the body scrolls, head and footer stay). #724: the tray, fixed in the bottom-right corner, only
+   shows while the wizard is closed; the wizard shows the import's progress itself (the app's .spinner). */
 
 .project-wizard:not([hidden]) { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); }
-.wizard-panel { width: min(1040px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; }
+.wizard-panel { width: min(1040px, calc(100vw - 32px)); height: min(720px, calc(100vh - 48px)); overflow: hidden; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; }
 .wizard-panel:focus { outline: none; }
 .wizard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .wizard-close { min-width: 28px; min-height: 28px; font-size: 16px; }
@@ -19,7 +20,8 @@
 .wizard-step[aria-current="step"] { color: var(--text); border-color: var(--accent); font-weight: 600; }
 .wizard-step[aria-current="step"] .wizard-step-num { background: var(--accent); color: var(--bg); }
 
-.wizard-body { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
+.wizard-head, .wizard-foot { flex: none; }
+.wizard-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px; }
 .wizard-body p { margin: 0; }
 /* the step's title in sentence case, not the app's uppercase section h2 (mock-1, -2, -4) */
 .wizard-body h2 { margin: 0; font-size: 16px; font-weight: 700; text-transform: none; letter-spacing: normal; color: var(--text); }
@@ -77,8 +79,6 @@
 .wizard-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .wizard-chip[disabled] { cursor: default; }
 
-.wizard-import-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.wizard-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
 .badge.status-cloning, .badge.status-analyzing, .badge.job-running { color: var(--accent); }
 .badge.status-ready, .badge.status-analyzed, .badge.job-done { color: var(--green); }
 .badge.status-failed, .badge.job-failed { color: var(--red); }
@@ -157,6 +157,11 @@
 .wizard-bar.job-done::after { right: 0; }
 .wizard-bar.job-failed::after { right: 0; background: var(--red); }
 .wizard-bar.job-waiting::after, .wizard-bar.job-skipped::after { right: 100%; }
+/* #724 / #743: the import's progress in the wizard and the tray, the app's spinner at the text's size */
+.wizard-foot .btn .spinner, .wizard-clone-progress .spinner, .wizard-job .spinner, .tray-head .spinner { width: 12px; height: 12px; flex: none; }
+.wizard-job .spinner { margin-top: 3px; }
+.wizard-foot .btn[aria-busy="true"] { display: inline-flex; align-items: center; gap: 8px; }
+@media (prefers-reduced-motion: reduce) { .wizard-foot .spinner, .wizard-job .spinner, .tray-head .spinner { animation-duration: 2.4s; } }
 
 @media (max-width: 760px) {
   .wizard-sources, .wizard-columns, .wizard-review-grid, .wizard-review-more { grid-template-columns: minmax(0, 1fr); }

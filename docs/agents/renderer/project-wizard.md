@@ -43,8 +43,13 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    a pick fills the full https URL; a typed `owner/repo` becomes the toggle's provider's https URL before
    `onboarding:start`, since the engine does not take the short form), and the line "Will be cloned into
    <workspace>/repos/<owner-repo>" (`wizard-clone-into`, the engine's own rule `repoNameFromUrl` of
-   `packages/shared/onboarding-model.js`). "Next: clone and continue"
-   calls `onboarding:start`; `wizard-import-status` follows the clone. A refused access shows `wizard-error`
+   `packages/shared/onboarding-model.js`). #739: the name (`wizard-name`) follows the URL, typed, pasted or
+   picked from the list, with one rule (`displayNameFromUrl` of the model: `acme/ai-memory` → "Ai Memory")
+   until the owner types a name; clearing it makes it follow again. "Next: clone and continue"
+   calls `onboarding:start`. #743: the access check and the clone read as one wait in place: `wizard-next`
+   is disabled with a spinner (`wizard-spinner`) and "Cloning <name>…", the fields read-only, no status
+   card; the clone done goes straight to the analysis step. The panel (`wizard-panel`) has one fixed size
+   on every step and state: its body scrolls. A refused access shows `wizard-error`
    `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
    the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A
    missing or signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
@@ -71,8 +76,9 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    `aria-busy`, inert) under an overlay with a spinner (`wizard-workflows-analyzing`,
    `wizard-workflows-spinner`); then the profile's picks and reasons. A failed profile shows its reason,
    Retry (`wizard-workflows-retry`) and Define manually (`wizard-workflows-failed`). Manual shows the rows
-   editable without a reason, Analyze still offered. The footer shows the clone's progress
-   (`wizard-clone-progress`) on the left, Back and Continue (`wizard-next`) on the right: always enabled,
+   editable without a reason, Analyze still offered; a running job's row has a spinner instead of its dot.
+   The footer shows the clone's progress (`wizard-clone-progress`, `data-status` the clone job's, with
+   `wizard-spinner` while it runs) on the left, Back and Continue (`wizard-next`) on the right: always enabled,
    the analysis goes on in the background and the review shows what is pending. Nothing paid starts
    without Analyze; Continue before it skips the analysis.
 4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on, its workflows),
@@ -88,8 +94,12 @@ turned on), and release CI and screenshots, shown disabled (later phases). Its h
 refactor backlog done" once the refactor proposals are there, and the number of the project's workflows
 only when the project has its own set (a wizard import has none, so no count).
 
-The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`
-and stays when the wizard closes; a failed import keeps its reason and Retry there.
+The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`.
+#724: it is hidden while the wizard is open (the wizard shows the import's progress itself, nothing
+covers its footer); with the wizard closed it lists only what needs attention: an import running (with
+`tray-spinner`) or failed (its reason and Retry). A finished import (ready or analyzed, no paid job
+failed) leaves it about 5 s later with the toast "<name> imported" and Open the project (no toast when
+the wizard showed it, nor when Finish's own toast says the analysis ended). No item left: hidden.
 
 ## Texts
 

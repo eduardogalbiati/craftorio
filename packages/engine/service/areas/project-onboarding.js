@@ -93,6 +93,16 @@ function e2eJobs(jobs) {
   }]));
 }
 
+// #724 #743: the clone is not one of those jobs (follow() awaits projects.cloneJob): in a simulated run
+// MULTIAGENT_E2E_ONBOARDING_HOLD=clone keeps it cloning, MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS slows it
+function e2eCloneWait() {
+  if (!simulation.simulationOnly()) return null;
+  const hold = String(process.env.MULTIAGENT_E2E_ONBOARDING_HOLD || '').split(',').map((s) => s.trim());
+  if (hold.includes('clone')) return new Promise(() => {});
+  const ms = Number(process.env.MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS);
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : null;
+}
+
 // 'github' | 'gitlab' (a platform with a CLI) from the repository's URL, null for another host
 // (the registry's rule, the one the wizard shows: packages/shared/platforms/index.js)
 const providerOf = (repo) => Platforms.platformOfRepoUrl(repo)?.id || null;
@@ -268,6 +278,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   // waits for the clone (and the CLI check), then ready with the free part, or failed with the clone's reason
   async function follow(id) {
     try {
+      await e2eCloneWait();
       await projects.cloneJob(projectsDir, id);
       await workOf(id).cli;
       const p = projects.readProject(projectsDir, id);

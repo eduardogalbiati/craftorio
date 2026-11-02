@@ -186,6 +186,14 @@
     return name.replace(/[^\w.-]/g, '_');
   }
 
+  // #739: the project's display name from its repository URL (the wizard's URL field and its list pick):
+  // the last path part, dashes and underscores as spaces, each word capitalized ("ai-memory" → "Ai Memory")
+  function displayNameFromUrl(url) {
+    const clean = String(url ?? '').trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
+    const last = clean.split(/[/:]/).filter(Boolean).pop() || '';
+    return last.split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+
   // #632: a project's id and a new project's folder name, the one rule (packages/engine/domains/project/projects.js
   // uses it): "Field Notes" → field-notes
   function slugify(name) {
@@ -206,6 +214,7 @@
     canGoNext,
     ciChoice,
     costSummary,
+    displayNameFromUrl,
     initialState,
     next,
     profileLine,

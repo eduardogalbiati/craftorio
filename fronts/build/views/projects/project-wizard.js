@@ -14,10 +14,16 @@
 //   GitHub / GitLab toggle #wizard-provider read from the URL, the gh / glab badges wizard-cli-account
 //   data-cli (api.onboardingAccounts when the wizard opens; the import's own check once the engine answered),
 //   #wizard-repo with the signed-in account's repositories under it (wizard-repo-list, api.onboardingRepos:
-//   one wizard-repo-option data-repo="owner/repo" each, a click fills the URL and the name), #wizard-name, wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl),
-//   wizard-import-status once api.startOnboarding answered), analysis (the jobs
+//   one wizard-repo-option data-repo="owner/repo" each, a click fills the URL and the name), #wizard-name
+//   (#739: it follows the URL, OnboardingModel.displayNameFromUrl, typed or picked, until the owner types a
+//   name; cleared, it follows again), wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl);
+//   #743: once Next is pressed, the access check and the clone are one wait in place: wizard-next disabled
+//   with wizard-spinner and "Cloning <name>…", the fields read-only, no status card, then the analysis
+//   step at once), analysis (the jobs
 //   from the clone on in wizard-cost, with wizard-cost-total and the paid parts data-part="projectMap" |
-//   "ranking" before the click, checked and locked, wizard-clone-progress in the footer, and wizard-skip; a
+//   "ranking" before the click, checked and locked, a running row with a spinner (#724),
+//   wizard-clone-progress in the footer (data-status = the clone job's status, wizard-spinner while it runs,
+//   its reason and Retry when it failed), and wizard-skip; a
 //   failed job reads its reason wizard-job-error-<id> (OnboardingModel's code, full error on hover), "—" as
 //   amount and wizard-job-retry-<id> (api.retryOnboarding); #725: the suggested workflows beside them in
 //   wizard-workflows-column, OnboardingModel.workflowsColumnState: choose (wizard-workflows-choice-analyze |
@@ -54,8 +60,11 @@
 //   back to what opened it.
 // - #onboarding-tray (data-testid="onboarding-tray"): one tray-item per imported project (data-project,
 //   data-status = the engine's status), its name, and when failed (or a paid job failed, #725) the reason and
-//   Retry; it follows
-//   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads) and stays when the wizard closes.
+//   Retry, a running one tray-spinner; it follows
+//   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads). #724: hidden while the
+//   wizard is open (the wizard shows the progress itself); closed, it lists what needs attention: running or
+//   failed; a finished import (ready / analyzed) leaves it about 5 s later with the toast "<name> imported"
+//   and Open the project (none when the wizard showed it or Finish's own toast says it).
 // - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status
 //   change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
@@ -87,6 +96,9 @@
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
   const finished = new Set(); // projectIds finished in the wizard with an analysis still running
+  const leaving = new Map(); // #724: projectId → the timer that takes a finished import out of the tray
+  const LEAVE_MS = 5000;
+  const SPINNER = (testid) => `<span class="spinner" data-testid="${testid}" aria-hidden="true"></span>`;
 
   const platformOfRepo = (url) => window.Platforms?.platformOfRepoUrl?.(url) || null;
   const platformById = (id) => window.Platforms?.findPlatform?.(id) || null;
@@ -262,12 +274,8 @@
 
   function repositoryStep() {
     const o = cur.onboarding;
-    const locked = cur.projectId ? ' readonly' : '';
-    const status = o ? `<div class="card wizard-import" data-testid="wizard-import-status">
-        <div class="wizard-import-head"><strong>${esc(cur.model.name)}</strong><span class="badge status-${esc(o.status)}">${esc(statusText(o.status))}</span></div>
-        <span class="muted small wizard-url" title="${esc(cur.model.repository)}">${esc(cur.model.repository)}</span>
-        <span class="small">${esc(t(o.status === 'cloning' ? 'onboarding.import_cloning' : o.status === 'failed' ? 'onboarding.import_failed' : 'onboarding.import_cloned'))}</span>
-      </div>` : '';
+    // #743: read-only from Next on (the access check and the clone are one wait, shown on the Next button)
+    const locked = cur.projectId || cur.busy ? ' readonly' : '';
     return `<div class="wizard-title-row">
         <h2 id="project-wizard-title">${esc(t('onboarding.import_title'))}</h2>
         <div class="wizard-title-side">${providerToggle()}<span class="wizard-cli-badges" id="wizard-cli-badges">${cliBadges()}</span></div>
@@ -281,7 +289,6 @@
           <input id="wizard-name" data-testid="wizard-name" type="text" value="${esc(cur.model.name)}"${locked}></label>
       </div>
       <p class="mono muted small text-cut" id="wizard-clone-into" data-testid="wizard-clone-into">${esc(cloneInto())}</p>
-      ${status}
       ${o?.status === 'failed' ? errorBlock(o) : ''}
       ${o ? cliWarning(o.cli) : ''}`;
   }
@@ -400,7 +407,7 @@
         ? `<span class="small wizard-job-error" data-testid="wizard-job-error-${id}" title="${esc(jobs[id].error || jobs[id].reason || '')}">${esc(jobReason(jobs[id]))}</span>` : '';
       const retry = failed ? retryButton(id) : '';
       return `<li class="wizard-job"${PAID.includes(id) ? ` data-part="${id}"` : ''}>
-          <span class="wizard-dot job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
+          <span class="${s === 'running' ? 'spinner wizard-job-spinner' : 'wizard-dot'} job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
           <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut"${testid} title="${esc(line)}">${esc(line)}</span>${failed}</span>
           <span class="wizard-amount muted">${esc(amount(id))}</span>${retry}
         </li>`;
@@ -546,15 +553,22 @@
 
   const BODY = { analysis: analysisStep, repository: () => (cur.model.source === 'new' ? createStep() : repositoryStep()), review: reviewStep, start: startStep };
 
-  // the analysis step's footer: "Cloning <name>", a bar and the clone job's status (mock-4)
+  // the analysis step's footer: "Cloning <name>", a bar and the clone job's status (mock-4); #724: the
+  // import's progress stays in the wizard: a spinner while the clone runs (a failure's reason and Retry are
+  // the step's errorBlock, above)
   function cloneProgress() {
     const s = jobOf('clone').status || (CLONED.includes(cur.onboarding?.status) ? 'done' : 'running');
-    return `<div class="card wizard-clone-progress" data-testid="wizard-clone-progress">
-        <span class="text-cut" title="${esc(cur.model.name)}">${esc(t('onboarding.cloning_name', { name: cur.model.name }))}</span>
+    return `<div class="card wizard-clone-progress" data-testid="wizard-clone-progress" data-status="${esc(s)}">
+        ${s === 'running' ? SPINNER('wizard-spinner') : ''}<span class="text-cut" title="${esc(cur.model.name)}">${esc(t('onboarding.cloning_name', { name: cur.model.name }))}</span>
         <span class="wizard-bar job-${esc(s)}" aria-hidden="true"></span>
         <span class="badge job-${esc(s)}">${esc(t(`onboarding.job_status_${s}`))}</span>
       </div>`;
   }
+
+  // #743: the repository step's Next while the access check and the clone run: disabled, a spinner and
+  // "Cloning <name>…" in place (no card under the fields), until the analysis step
+  const cloningInPlace = () => cur.model.step === 'repository' && cur.model.source !== 'new'
+    && (cur.busy || cur.onboarding?.status === 'cloning');
 
   function render() {
     if (!root || !cur) return;
@@ -565,7 +579,9 @@
     // #632: a new project is not cloned (mock-3's plain Next)
     const nextLabel = step === 'analysis' ? 'onboarding.continue'
       : step === 'repository' && cur.model.source !== 'new' ? 'onboarding.next_clone' : 'onboarding.next';
-    const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${canNext() ? '' : ' disabled'}>${esc(t(nextLabel))}</button>` : '';
+    const cloning = cloningInPlace();
+    const nextText = cloning ? `${SPINNER('wizard-spinner')}${esc(t('onboarding.cloning_wait', { name: cur.model.name.trim() }))}` : esc(t(nextLabel));
+    const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${cloning ? ' aria-busy="true"' : ''}${canNext() && !cloning ? '' : ' disabled'}>${nextText}</button>` : '';
     const back = step === 'start'
       ? `<button type="button" class="btn" data-act="cancel" data-testid="wizard-cancel">${esc(t('onboarding.cancel'))}</button>`
       : `<button type="button" class="btn" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
@@ -574,7 +590,7 @@
     // mock-4's footer: the clone's progress on the left, Back beside the step's action on the right
     const foot = step === 'analysis' ? `${cur.model.source === 'new' ? '' : cloneProgress()}<span class="wizard-spacer"></span>${back}${next}`
       : `${back}<span class="wizard-spacer"></span>${next}${finish}`;
-    root.innerHTML = `<div class="wizard-panel wizard-at-${step}" tabindex="-1">
+    root.innerHTML = `<div class="wizard-panel wizard-at-${step}" data-testid="wizard-panel" tabindex="-1">
         <header class="wizard-head">
           ${stepper()}
           <button type="button" class="btn ghost wizard-close" data-act="close" data-testid="wizard-close" aria-label="${esc(t('common.close'))}">×</button>
@@ -597,6 +613,7 @@
     if (!state?.projectId) return;
     states.delete(state.projectId);
     states.set(state.projectId, state);
+    scheduleLeave(state);
     renderTray();
     // #632: the project being created, pushed before create() answers (its remote: creating)
     if (cur && !cur.projectId && cur.creating && state.name === cur.creating) {
@@ -800,9 +817,11 @@
     }
     else if (act === 'pick-repo') {
       const repo = e.target.closest('[data-repo]').dataset.repo;
-      const last = repo.split('/').pop() || '';
-      cur.model = { ...cur.model, repository: repoUrl(repo), name: cur.model.name || last.charAt(0).toUpperCase() + last.slice(1) };
+      // #739: the typed URL's rule; a name the owner typed stays
+      cur.model = { ...cur.model, repository: repoUrl(repo), name: cur.nameTyped ? cur.model.name : M.displayNameFromUrl(repo) };
       render();
+      const nameField = document.getElementById('wizard-name');
+      if (nameField) nameField.value = cur.model.name;
       document.getElementById('wizard-name')?.focus?.();
     }
     else if (act === 'open-city') finish({ city: true });
@@ -845,7 +864,15 @@
     }
     if (onCreateInput(e, id)) return;
     if (id !== 'wizard-repo' && id !== 'wizard-name') return;
-    cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: String(e.target.value || '') };
+    const value = String(e.target.value || '');
+    cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: value };
+    // #739: the name follows the URL until the owner types one; cleared, it follows again
+    if (id === 'wizard-name') cur.nameTyped = value.trim() !== '';
+    else if (!cur.nameTyped) {
+      cur.model = { ...cur.model, name: M.displayNameFromUrl(value) };
+      const nameField = document.getElementById('wizard-name');
+      if (nameField) nameField.value = cur.model.name;
+    }
     // the provider toggle follows the URL (its buttons keep their place: the caret stays)
     const on = pickedProvider();
     for (const id of providers()) {
@@ -893,15 +920,17 @@
       document.body.appendChild(root);
     }
     // Import is selected when the wizard opens (mock-1); #632: the create step's choices start at mock-3's
-    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, ...freshReview() };
+    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, nameTyped: false, ...freshReview() };
     root.hidden = false;
     render();
+    renderTray(); // #724: hidden while the wizard is open
     root.querySelector('.wizard-panel')?.focus?.();
     loadAccounts();
   }
 
   function close() {
     cur = null;
+    if (tray) renderTray(); // #724: back with what still needs attention
     if (!root) return;
     root.hidden = true;
     root.innerHTML = '';
@@ -911,6 +940,32 @@
   }
 
   // ---- the progress tray -----------------------------------------------------------------------
+
+  // #724: a finished import (the clone done, its analyses done or never started, none failed) leaves the
+  // tray LEAVE_MS later with the toast "<name> imported"; running again or failed meanwhile, it stays.
+  // No toast when the wizard showed it, nor when Finish's own toast (finished_analyzed) says it
+  const isDone = (s) => ['ready', 'analyzed'].includes(s.status) && !failedPaid(s);
+  function scheduleLeave(s) {
+    const pid = s.projectId;
+    if (!isDone(s)) {
+      clearTimeout(leaving.get(pid));
+      leaving.delete(pid);
+      return;
+    }
+    if (leaving.has(pid)) return;
+    const notify = !(finished.has(pid) && s.status === 'analyzed');
+    leaving.set(pid, setTimeout(() => {
+      leaving.delete(pid);
+      if (!states.has(pid) || !isDone(states.get(pid))) return;
+      states.delete(pid);
+      renderTray();
+      if (!notify || cur?.projectId === pid) return;
+      const name = names.get(pid) || pid;
+      showToast(t('onboarding.imported', { name }), '', null, null, {
+        action: { label: t('onboarding.open_project'), run: () => window.Actions.call('openProject', pid) },
+      });
+    }, LEAVE_MS));
+  }
 
   function renderTray() {
     if (!tray) {
@@ -923,7 +978,8 @@
       tray.addEventListener('click', onTrayClick);
       document.body.appendChild(tray);
     }
-    tray.hidden = states.size === 0;
+    // #724: never over the open wizard (its markup stays current for when it closes)
+    tray.hidden = !!cur || states.size === 0;
     const item = (s) => {
       const name = names.get(s.projectId) || s.projectId;
       // #725: a failed paid analysis (the onboarding analyzed) says why too, with its Retry
@@ -935,7 +991,7 @@
       const dismiss = ACTIVE.includes(s.status) ? ''
         : `<button type="button" class="btn ghost small tray-dismiss" data-act="dismiss" data-project="${esc(s.projectId)}" aria-label="${esc(t('onboarding.dismiss', { name }))}">×</button>`;
       return `<li class="tray-item" data-testid="tray-item" data-project="${esc(s.projectId)}" data-status="${esc(s.status)}">
-          <div class="tray-head"><strong class="tray-name" title="${esc(name)}">${esc(name)}</strong><span class="badge status-${esc(s.status)}">${esc(statusText(s.status))}</span>${dismiss}</div>
+          <div class="tray-head">${ACTIVE.includes(s.status) ? SPINNER('tray-spinner') : ''}<strong class="tray-name" title="${esc(name)}">${esc(name)}</strong><span class="badge status-${esc(s.status)}">${esc(statusText(s.status))}</span>${dismiss}</div>
           ${failed}
         </li>`;
     };
