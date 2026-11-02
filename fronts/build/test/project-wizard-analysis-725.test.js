@@ -339,6 +339,19 @@ test('#725 amounts: a failed job reads "—", a done job its cost or "grátis", 
   assert.match(map, /\d|grátis/i, `the done project map's amount is its cost or "grátis": "${map}"`);
 });
 
+// review 1: a paid job done without a known cost (the ranking has no estimate) reads "—": it is paid, so
+// never "grátis", and it ran, so never "Ainda não estimado"
+test('#725 amounts: a done ranking without a known cost reads "—", never "grátis" nor "Ainda não estimado"', { timeout: 20000 }, async () => {
+  const app = await atAnalysis({ lang: 'pt-BR' });
+  const done = clone(RANKING_FAILED);
+  done.jobs.ranking = { status: 'done' };
+  await emit(app, done);
+  await app.settle(10);
+  const amount = amountOf(part(app, 'ranking'));
+  assert.equal(amount, '—', `the done ranking's amount: "${amount}"`);
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-job-error-ranking'), null, 'no failure line on a done ranking');
+});
+
 // ---- 10. the review and the tray ----------------------------------------------------------------
 
 test('#725 the review\'s refactor card, its ranking failed, shows the same reason and a Retry', { timeout: 20000 }, async () => {

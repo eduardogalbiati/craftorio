@@ -214,7 +214,9 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "workflows-630"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard shows the ways of working profile
+    # #725: the rows show only after a choice in the workflows column
+    When I choose "Analyze the repository" in the wizard's suggested workflows
+    Then the wizard shows the ways of working profile
     And the wizard suggests the workflows "feature", "fix", "release" and "ci"
     And each suggested workflow shows why it is suggested
     And I can change the suggested "feature" workflow
