@@ -282,6 +282,8 @@ module.exports = {
   'workflows:compose': { setup: project, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
   'workflows:export': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
   'workflows:interview': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'workflows:interviewLast': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT }, // #733
+  'workflows:interviewState': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT }, // #733
   'workflows:list': { arg: null },
   'workflows:pipelines': { arg: null },
   'workspace:get': { arg: null },
