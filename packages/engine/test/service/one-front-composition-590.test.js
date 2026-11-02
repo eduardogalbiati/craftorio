@@ -24,8 +24,9 @@ const { createServer } = require('../../server');
 // channel change made on purpose updates this pin with its PR (#642: refactor:addToRoadmap's `file` flag;
 // #647: the docs:* channels and run:request-edit; #670: po:file-spec; #669: onboarding:accounts and
 // onboarding:repos; #671: docs:read-at; #630: backlog:auto-push removed; #632: onboarding:create;
-// #730: architecture:createIssue; #733: workflows:interviewLast and workflows:interviewState).
-const MAIN_CONTRACT = '65ed1fbca910';
+// #730: architecture:createIssue; #733: workflows:interviewLast and workflows:interviewState;
+// #738: onboarding:fork and onboarding:work-locally).
+const MAIN_CONTRACT = 'd79805ef1039';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;

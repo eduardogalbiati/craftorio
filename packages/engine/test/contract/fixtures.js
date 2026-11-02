@@ -191,9 +191,12 @@ module.exports = {
   'onboarding:analyze': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #632: a new project, git init only, no remote
   'onboarding:create': { arg: () => ({ name: unique('Contract create'), starts: 'empty', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone' } }), invalid: { arg: { name: 42 } } },
+  // #738: a repository the owner can push to (here none reached) has no fork to create or decline: 400
+  'onboarding:fork': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
   'onboarding:retry': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'onboarding:start': { arg: () => ({ name: unique('Contract onboarding'), repo: UNREACHABLE_REPO }), invalid: { arg: { name: 'No repository' } } },
   'onboarding:status': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'onboarding:work-locally': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
   'oracle:history': { arg: null },
   'oracle:markRead': { arg: null, invalid: { arg: 42 } },
   'oracle:memory': { arg: null },
