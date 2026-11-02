@@ -7,7 +7,9 @@
 // (localStorage 'interfaceLanguage', read by i18n.js), paints index.html's static hooks
 // (data-i18n = the text, data-i18n-title, data-i18n-aria-label, data-i18n-placeholder = catalog keys), and when the language
 // changed: the menu's labels (view-registry.js relabelNav), the screens whose markup is a function
-// (redrawMarkup), the shell (app.js render), then I18n.notify() for the rest (the Setup, ...).
+// (redrawMarkup), the shell (app.js render), then I18n.notify() for the rest (the Setup, the open
+// project wizard, ...). #726: each of the first three runs on its own (an error is logged), so one
+// that throws never stops the others nor I18n.notify().
 // Every window follows the pushed 'settings:changed', so a change in one redraws the other too.
 // Uses app.js globals (state, render).
 (function () {
@@ -30,10 +32,16 @@
     shown = lang;
     paintStatic();
     if (!changed) return;
-    window.ViewRegistry?.relabelNav();
-    window.ViewRegistry?.redrawMarkup();
-    if (typeof render === 'function') render();
+    // #726: each redraw on its own, so a screen that throws never keeps the others (the open wizard,
+    // I18n.notify's listeners) in the old language
+    redraw(() => window.ViewRegistry?.relabelNav());
+    redraw(() => window.ViewRegistry?.redrawMarkup());
+    redraw(() => { if (typeof render === 'function') render(); });
     I18n.notify();
+  }
+
+  function redraw(fn) {
+    try { fn(); } catch (e) { console.error('interface language: a redraw failed', e); }
   }
 
   api.onSettingsChanged?.((settings) => {
