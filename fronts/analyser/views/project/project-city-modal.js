@@ -3,17 +3,17 @@
 // it was asked from, with the overlay it asked for and its card; nothing navigates (the owner's decision
 // of 2026-10-21). The entry points (ProjectCityImpact.showIssue / showStage / fromRoadmap,
 // ProjectCityRelease.showRelease, ProjectCityAgents.replay) ask targets(handles, projectId, key): the
-// overlays of a city of the project on screen (the Project screen's Architecture tab), or else the
+// overlays of a city of the project on screen (the Project screen's City tab, #730), or else the
 // modal's own overlay, the modal opened (or kept: one at a time, a second "Show on the map" replaces its
 // overlay through the city's mode; another project's city replaces the modal's).
 // The modal (data-testid="city-modal", role="dialog", aria-modal) holds a title bar, "Open in Projects"
-// (city-modal-open-project: closes the modal, then the project's Architecture tab, openProjectView) and
+// (city-modal-open-project: closes the modal, then the project's City tab, openProjectView; a building's "Show the facts": its Health tab) and
 // Close (city-modal-close), then the City view with the tab's overlays (#374 agents with Live off,
 // #382 connections, #375 impact, #376 release). The city's states (loading, not a git repository, no
 // WebGL) are its own. Close, Esc (a capture listener of the document: before the city's own Esc and
 // app.js's, even when app.js marked the key as taken) and a mode's Close (city.back) close the modal:
 // the overlays and the city are destroyed, the focus goes back to the element that had it, the screen
-// under it, the Architecture tab and its remembered mode are left as they were.
+// under it and the City tab are left as they were.
 // Uses app.js globals at call time: api, esc, state, openProjectView. Browser: window.ProjectCityModal.
 (() => {
   let cur = null; // the open modal: { projectId, el, city, agents, connections, impact, release, opener }
@@ -78,11 +78,11 @@
       </div><div class="city-modal-body" data-city-modal-body></div>`;
     document.body.appendChild(el);
     // the City view without the tab's action (no onAnalyze): the overlays in the tab's order; "Show the
-    // facts" closes the modal, then the project's Architecture tab on its Facts
-    const toFacts = () => {
+    // facts" closes the modal, then the project's Health tab (#730) with the file's hotspot row marked
+    const toFacts = (file) => {
       close();
-      if (window.ProjectArchitecture?.openFacts) window.ProjectArchitecture.openFacts(projectId);
-      else openProjectView(projectId, { tab: 'architecture' });
+      if (window.ProjectArchitecture?.openFacts) window.ProjectArchitecture.openFacts(projectId, typeof file === 'string' ? file : undefined);
+      else openProjectView(projectId, { tab: 'health' });
     };
     const city = ProjectCity.create({ projectId, name, onOpenFacts: toFacts });
     el.querySelector('[data-city-modal-body]').appendChild(city.el);
@@ -102,7 +102,7 @@
       .catch(() => { /* the city is drawn without them */ });
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-city-modal-close]')) close();
-      else if (e.target.closest('[data-city-modal-open]')) { close(); openProjectView(projectId, { tab: 'architecture' }); }
+      else if (e.target.closest('[data-city-modal-open]')) { close(); openProjectView(projectId, { tab: 'city' }); }
       // a run of the agents layer, a collision's Conflict map link: their own handlers navigated, the modal
       // must not cover the screen they opened
       else if (cur === mine && e.target.closest('[data-pca-run], [data-pcm-link]')) close();

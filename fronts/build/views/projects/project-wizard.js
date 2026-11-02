@@ -20,8 +20,8 @@
 //   #743: once Next is pressed, the access check and the clone are one wait in place: wizard-next shows
 //   wizard-spinner and "Cloning <name>…" (disabled only while onboarding:start is in flight, #641), the fields read-only, no status card, then the analysis
 //   step at once), analysis (the jobs
-//   from the clone on in wizard-cost, with wizard-cost-total and the paid parts data-part="projectMap" |
-//   "ranking" before the click, checked and locked, a running row with a spinner (#724),
+//   from the clone on in wizard-cost, with wizard-cost-total and the paid part data-part="projectMap"
+//   (#730: no Product Owner ranking any more) before the click, checked and locked, a running row with a spinner (#724),
 //   wizard-clone-progress in the footer (data-status = the clone job's status, wizard-spinner while it runs,
 //   its reason and Retry when it failed), and wizard-skip; a
 //   failed job reads its reason wizard-job-error-<id> (OnboardingModel's code, full error on hover), "—" as
@@ -31,17 +31,19 @@
 //   with wizard-workflows-spinner), failed (wizard-workflows-failed: the reason, wizard-workflows-retry and
 //   Define manually), analyzed (the profile's picks and reasons) or manual (editable, no reason, Analyze
 //   still offered)) and review (#642, spec R10): wizard-review with the project's card, wizard-review-city (Open the
-//   city: Finish, then the project's city) / -refactors / -backlog, each data-state="ready" | "pending"
+//   city: Finish, then the project's City tab) / -findings / -backlog, each data-state="ready" | "pending"
 //   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
-//   | "later" (the analyses were skipped), one wizard-review-refactor data-refactor="<id>" per proposal
-//   with its file's score and quadrant and an unchecked wizard-review-refactor-pick, and the idea field
+//   | "later" (the analyses were skipped), #730: one wizard-review-finding data-finding="<index>" per finding
+//   of the Oracle's report (architecture:report) with wizard-review-create-issue and
+//   wizard-review-create-issue-prioritize (architecture:createIssue: a refactor issue, and with prioritize a
+//   planned roadmap item), then the issue's link wizard-review-finding-issue once filed, and the idea field
 //   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation in the
 //   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next (step 3:
 //   "Continue", enabled whatever the analysis does; before any analysis it skips it) or, on the review,
 //   wizard-finish (never disabled,
 //   never waits): it closes the wizard on the project's page with its Next steps
-//   card (openProject with nextSteps, project.js), then sends the picked refactors to the roadmap as planned
-//   items (refactor:addToRoadmap with `file`: filed as issues first) and the idea to the Inbox; an analysis
+//   card (openProject with nextSteps, project.js), then sends the idea to the Inbox (no finding is filed
+//   without its own click, #730); an analysis
 //   still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
@@ -63,15 +65,15 @@
 // - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status
 //   change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
-// architecture:estimate (the project map's cost; the ranking has no estimate yet: not known), and for the
-// review architecture:city / facts, refactor:proposals, the backlog, the refactor's roadmap item
-// (api.addRefactorToRoadmap, never runNow) and the discovery card (api.createDiscoveryCard, an Inbox idea).
+// architecture:estimate (the project map's cost), and for the review architecture:city / facts / report,
+// architecture:createIssue (api.createFindingIssue, never runNow), the backlog and the discovery card
+// (api.createDiscoveryCard, an Inbox idea).
 // Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.Setup (packages/ui-kit/setup.js).
 
 (function () {
   const M = window.OnboardingModel;
-  const JOBS = ['facts', 'profile', 'projectMap', 'ranking'];
-  const PAID = ['projectMap', 'ranking'];
+  const JOBS = ['facts', 'profile', 'projectMap'];
+  const PAID = ['projectMap'];
   // mock-2's toggle: the registry's platforms with a CLI (#351: no platform literal outside the adapters)
   const providers = () => (window.Platforms?.PLATFORMS || []).filter((p) => p.cli).map((p) => p.id);
   const svg = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -83,9 +85,10 @@
   let root = null;
   // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy, provider (the
   // toggle's pick while the URL names none), and the
-  // review's: review { backlog, city, facts, proposals } (undefined: not read yet), reading, picked, idea }
+  // review's: review { backlog, city, facts, report } (undefined: not read yet), reading, filing (the finding
+  // whose issue is being filed), idea }
   let cur = null;
-  const freshReview = () => ({ review: {}, reading: new Set(), picked: new Set(), idea: '' });
+  const freshReview = () => ({ review: {}, reading: new Set(), filing: null, idea: '' });
   let opener = null; // the element that had the focus when the wizard opened
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
@@ -393,7 +396,7 @@
     const loading = cur.estimate === undefined;
     const sum = M.costSummary(PAID.map((id) => ({ id, estimate: id === 'projectMap' ? cur.estimate : null, checked: true })));
     // #725: a failed job has no amount ("—"); a done one its cost, "free" for a free job, "—" for a paid
-    // one whose cost is not known (the ranking)
+    // one whose cost is not known
     const amount = (id) => {
       const s = jobs[id]?.status;
       const p = sum.parts.find((x) => x.id === id);
@@ -498,25 +501,44 @@
     return `<ul class="wizard-review-list">${issues.map((i) => `<li class="fit-box"><span class="mono muted">#${esc(i.number)}</span> <span class="text-cut" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
   }
 
-  // each proposal with its file's score and quadrant (the Facts view's), and its pick for the roadmap
-  function refactorsBody() {
-    const proposals = cur.review.proposals || [];
-    if (!proposals.length) return `<p class="muted small">${esc(t('onboarding.review_refactors_empty'))}</p>`;
-    const files = cur.review.facts?.model?.files || [];
-    const row = (p, i) => {
-      const target = p.target || p.targetFiles?.[0] || '';
-      const f = files.find((x) => x.file === target);
-      const score = Number.isFinite(f?.score) ? `<span class="mono" title="${esc(t('onboarding.review_score', { score: f.score }))}">${esc(f.score)}</span>` : '';
-      const quadrant = f?.quadrant ? `<span class="${window.ArchitectureModel.quadrantBadge(f.quadrant)}">${esc(f.quadrant)}</span>` : '';
-      return `<li class="wizard-review-refactor fit-box" data-testid="wizard-review-refactor" data-refactor="${esc(p.id)}">
-          <span class="wizard-rank" aria-hidden="true">${i + 1}</span>
-          <label class="check small"><input type="checkbox" data-testid="wizard-review-refactor-pick" data-refactor="${esc(p.id)}" aria-label="${esc(p.title)}"${cur.picked.has(p.id) ? ' checked' : ''}>
-            <span class="text-cut" title="${esc(`${p.title} · ${target}`)}">${esc(p.title)}</span></label>
-          <span class="wizard-review-badges">${score}${quadrant}</span>
+  // #730: each finding of the Oracle's report, its severity, then Create issue / Create issue and prioritize,
+  // or its issue's link once filed
+  function findingsBody() {
+    const findings = cur.review.report?.findings || [];
+    if (!findings.length) return `<p class="muted small">${esc(t('onboarding.review_findings_empty'))}</p>`;
+    const row = (f, i) => {
+      const target = f.files?.[0]?.path || f.kind || '';
+      const busy = cur.filing != null ? ' disabled' : '';
+      const action = f.filed
+        ? `<a class="small" data-testid="wizard-review-finding-issue" href="${esc(f.filed.issueUrl || '')}" target="_blank" rel="noopener">#${esc(f.filed.issue)}</a>`
+        : `<button type="button" class="btn sm" data-act="create-issue" data-testid="wizard-review-create-issue" data-finding="${i}"${busy}>${esc(t('project_architecture.create_issue'))}</button>
+          <button type="button" class="btn sm" data-act="create-issue" data-testid="wizard-review-create-issue-prioritize" data-finding="${i}" data-prioritize${busy}>${esc(t('project_architecture.create_issue_prioritize'))}</button>`;
+      return `<li class="wizard-review-finding fit-box" data-testid="wizard-review-finding" data-finding="${i}">
+          <span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity || '')}</span>
+          <span class="text-cut" title="${esc(`${f.title} · ${target}`)}">${esc(f.title)}</span>
+          <span class="wizard-review-badges">${action}</span>
         </li>`;
     };
-    return `<ul class="wizard-review-list">${proposals.map(row).join('')}</ul>
-      <p class="muted small">${esc(t('onboarding.review_proposals', { count: proposals.length }))}</p>`;
+    return `<ul class="wizard-review-list">${findings.map(row).join('')}</ul>`;
+  }
+
+  // Create issue (and prioritize) for the review's finding `index`: the row then shows the issue's link
+  async function createIssue(index, prioritize) {
+    const pid = cur?.projectId;
+    const reportId = cur?.review.report?.report?.id;
+    if (!pid || !reportId || cur.filing != null) return;
+    const c = cur;
+    c.filing = index;
+    render();
+    try {
+      const { filed } = await api.createFindingIssue(pid, reportId, index, { prioritize });
+      const f = c.review.report?.findings?.[index];
+      if (f) f.filed = filed;
+    } catch (e) {
+      showToast(t('onboarding.finish_failed'), errMsg(e));
+    }
+    c.filing = null;
+    if (cur === c) renderSoon();
   }
 
   // mock-6's first card: the project, how it is worked on (what the analyses read so far) and its workflows
@@ -547,7 +569,7 @@
         <div class="wizard-review-grid">
           ${projectCard()}
           ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city', openCity)}
-          ${reviewSection('refactors', 'onboarding.review_refactors_title', 'ranking', r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors', jobOf('ranking').status === 'failed' ? retryButton('ranking') : '')}
+          ${reviewSection('findings', 'onboarding.review_findings_title', 'projectMap', r.report !== undefined, findingsBody, 'onboarding.review_pending_findings')}
         </div>
         <div class="wizard-review-more">
           ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
@@ -650,7 +672,7 @@
     if (!pid) return;
     const backlogRead = () => Promise.resolve(api.getBacklog?.(pid)).then((data) => data || api.syncBacklog?.(pid));
     const reads = [['backlog', backlogRead, true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
-      ['facts', () => api.architectureFacts?.(pid), jobDone('ranking')], ['proposals', () => api.refactorProposals?.(pid), jobDone('ranking')]];
+      ['facts', () => api.architectureFacts?.(pid), jobDone('projectMap')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
     for (const [key, read, due] of reads) {
       if (!due || cur.review[key] !== undefined || cur.reading.has(key)) continue;
       cur.reading.add(key);
@@ -664,13 +686,12 @@
     }
   }
 
-  // Finish: the project's page at once (with its Next steps card), then the chosen refactors to the
-  // roadmap as planned items (filed as issues first, no runNow: nothing starts) and the idea to the
-  // Inbox, in the background; an analysis still running notifies when it ends (remember). city: the review's
-  // Open the city finishes the same way, then shows the project's city (its Architecture tab)
+  // Finish: the project's page at once (with its Next steps card), then the idea to the Inbox, in the
+  // background (#730: a finding becomes an issue only from its own button); an analysis still running
+  // notifies when it ends (remember). city: the review's Open the city finishes the same way, then shows
+  // the project's City tab
   function finish({ city = false } = {}) {
     const pid = cur.projectId;
-    const picked = [...cur.picked];
     const idea = cur.idea.trim();
     const running = ACTIVE.includes(cur.onboarding?.status);
     const workflows = pickedWorkflows();
@@ -692,9 +713,8 @@
       .catch(failed)
       .finally(() => {
         window.Actions.call('openProject', pid, { nextSteps: true });
-        if (city) window.ProjectArchitecture?.openCity?.(pid);
+        if (city) window.Actions.call('openProject', pid, { tab: 'city' });
       });
-    for (const id of picked) Promise.resolve(api.addRefactorToRoadmap(pid, id, { file: true })).catch(failed);
     if (idea) Promise.resolve(api.createDiscoveryCard(pid, idea.slice(0, 200), idea, 'idea')).catch(failed);
   }
 
@@ -833,6 +853,10 @@
       document.getElementById('wizard-name')?.focus?.();
     }
     else if (act === 'open-city') finish({ city: true });
+    else if (act === 'create-issue') {
+      const button = e.target.closest('[data-act]');
+      await createIssue(Number(button.dataset.finding), button.hasAttribute('data-prioritize'));
+    }
     else if (act === 'next') await next();
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
@@ -859,12 +883,7 @@
   function onInput(e) {
     const id = e.target?.id || e.target?.dataset?.testid;
     if (!cur) return;
-    if (e.target?.dataset?.testid === 'wizard-review-refactor-pick') {
-      const pick = e.target.dataset.refactor;
-      if (e.target.checked) cur.picked.add(pick); else cur.picked.delete(pick);
-      return;
-    }
-    if (id === 'wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
+    if (id ==='wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
     // #630: the owner's pick of a suggested workflow's variant (kept across renders)
     if (e.target?.dataset?.testid === 'wizard-workflow-select') {
       cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') };

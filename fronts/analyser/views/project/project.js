@@ -2,10 +2,11 @@
 // A project's page (Projects › a project, #354): its name, then the tabs Overview (its folder,
 // repository and unpushed commits, its workflow set and default, projects/project-workflows.js #486,
 // and its runs in the shared run list, run-list.js: paged with an
-// infinite scroll, filters and search answered by the service, #200), Conflict map
-// (project-conflict-map.js), Architecture (project-architecture.js, #356, with the Seeds section
-// below it, project-seeds.js, #360) and Refactor
-// (project-refactor.js, #357: the proposals ranked by the Product Owner and the cadence). The
+// infinite scroll, filters and search answered by the service, #200), City (project-architecture.js,
+// #373: the project's 3D city and its Analyze), Health (project-health.js, #730: the git facts, the
+// Oracle's report and its findings, each of which becomes an issue; the Seeds section below it,
+// project-seeds.js, #360) and Conflict map (project-conflict-map.js), in this order (#730: no
+// Architecture or Refactor tab any more; a tab remembered as one of them opens the Overview). The
 // selected tab is remembered per project. The page is the header's project: opening
 // one makes it the app's project, and choosing another in the header switches the page to it.
 // No sidebar entry of its own: Projects stays lit (`menu`). The header's "Ways of working" opens the
@@ -15,7 +16,7 @@
 // for a project with its own workflow set), then a grid of entries:
 // next-step-refactors, the project's proposals with a checkbox each and "File and add <n>" (the checked ones
 // filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence's "Turn on"
-// → the Refactor tab, where the cadence is turned on (it does not turn it on itself), and
+// → the Health tab, where the findings become issues (#730; it does not turn anything on itself), and
 // next-step-release-ci / next-step-screenshots shown disabled (later phases);
 // next-steps-dismiss), remembered per project in localStorage multiagent.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
@@ -24,7 +25,7 @@
 // noteRunMeta) and showProjects (views/projects/projects.js).
 
 // [id, i18n key of its label]
-const PV_TABS = [['overview', 'project.overview'], ['conflicts', 'project.conflict_map'], ['architecture', 'project.architecture'], ['refactor', 'project.refactor']];
+const PV_TABS = [['overview', 'project.overview'], ['city', 'project.city'], ['health', 'project.health'], ['conflicts', 'project.conflict_map']];
 const PV_TABS_KEY = 'multiagent.projectTabs';
 
 // a map per project kept in localStorage under `key`: { <projectId>: <value> }
@@ -115,7 +116,7 @@ function onNextStepClick(step) {
   }
   else if (step === 'idea') showView('inbox');
   else if (step === 'cadence' && state.pv) {
-    state.pv.tab = 'refactor';
+    state.pv.tab = 'health';
     rememberProjectTab(state.pv.id, state.pv.tab);
     renderProjectView();
   }
@@ -193,14 +194,14 @@ function renderProjectView() {
   $('#pv-ways-of-working').onclick = () => p && window.ProjectWaysOfWorking?.open(p);
   $('#pv-start').onclick = () => openDrawer({ project: pv.id });
   $('#project-tabs').innerHTML = PV_TABS.map(([id, label]) =>
-    `<button type="button" class="tab${pv.tab === id ? ' active' : ''}" role="tab" data-pv-tab="${id}" aria-selected="${pv.tab === id}" aria-controls="project-panel-${id}">${t(label)}</button>`).join('');
+    `<button type="button" class="tab${pv.tab === id ? ' active' : ''}" role="tab" data-pv-tab="${id}" data-testid="project-tab-${id}" aria-selected="${pv.tab === id}" aria-controls="project-panel-${id}">${t(label)}</button>`).join('');
   for (const [id] of PV_TABS) $(`#project-panel-${id}`).classList.toggle('hidden', pv.tab !== id);
   if (pv.tab === 'conflicts') window.ProjectConflictMap?.show(pv.id, $('#project-conflicts'));
-  if (pv.tab === 'architecture') {
-    window.ProjectArchitecture?.show(pv.id, $('#project-architecture'));
+  if (pv.tab === 'city') window.ProjectArchitecture?.show(pv.id, $('#project-city'));
+  if (pv.tab === 'health') {
+    window.ProjectHealth?.show(pv.id, $('#project-health'));
     window.ProjectSeeds?.show(pv.id, $('#project-seeds'));
   }
-  if (pv.tab === 'refactor') window.ProjectRefactor?.show(pv.id, $('#project-refactor'));
   if (pv.tab !== 'overview') return;
   loadNextStepProposals(pv);
   $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv);
@@ -246,7 +247,7 @@ function onProjectPageClick(e) {
     return;
   }
   if (window.ProjectWorkflows?.onClick(e)) return;
-  if (!window.ProjectArchitecture?.onClick(e) && !window.ProjectSeeds?.onClick(e) && !window.ProjectRefactor?.onClick(e)) window.ProjectConflictMap?.onClick(e);
+  if (!window.ProjectArchitecture?.onClick(e) && !window.ProjectHealth?.onClick(e) && !window.ProjectSeeds?.onClick(e)) window.ProjectConflictMap?.onClick(e);
 }
 
 registerView({
@@ -271,22 +272,22 @@ registerView({
           <p id="project-runs-error" class="error small"></p>
           <div id="project-runs" class="pr-list"></div>
         </div>
-        <div id="project-panel-conflicts" class="hidden" role="tabpanel" aria-label="${t('project.conflict_map')}" data-testid="project-conflict-map">
-          <div id="project-conflicts"></div>
+        <div id="project-panel-city" class="hidden" role="tabpanel" aria-label="${t('project.city')}" data-testid="project-city">
+          <div id="project-city"></div>
         </div>
-        <div id="project-panel-architecture" class="hidden" role="tabpanel" aria-label="${t('project.architecture')}" data-testid="project-architecture">
-          <div id="project-architecture"></div>
+        <div id="project-panel-health" class="hidden" role="tabpanel" aria-label="${t('project.health')}" data-testid="project-health-panel">
+          <div id="project-health"></div>
           <div id="project-seeds"></div>
         </div>
-        <div id="project-panel-refactor" class="hidden" role="tabpanel" aria-label="${t('project.refactor')}">
-          <div id="project-refactor"></div>
+        <div id="project-panel-conflicts" class="hidden" role="tabpanel" aria-label="${t('project.conflict_map')}" data-testid="project-conflict-map">
+          <div id="project-conflicts"></div>
         </div>
       </section>`,
   mount() {
     // Back: the Projects screen when its front is shipped (the showProjects action), else Home
     $('#btn-project-back').onclick = () => (window.Actions.has('showProjects') ? window.Actions.call('showProjects') : showView('dashboard'));
     $('#view-project').addEventListener('click', onProjectPageClick);
-    $('#view-project').addEventListener('change', (e) => window.ProjectArchitecture?.onChange(e) || window.ProjectRefactor?.onChange(e) || window.ProjectConflictMap?.onChange(e));
+    $('#view-project').addEventListener('change', (e) => window.ProjectArchitecture?.onChange(e) || window.ProjectHealth?.onChange(e) || window.ProjectConflictMap?.onChange(e));
     // a Conflict map row opens from the keyboard too
     $('#view-project').addEventListener('keydown', (e) => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-pcm-row]')) { e.preventDefault(); window.ProjectConflictMap?.onClick(e); }
