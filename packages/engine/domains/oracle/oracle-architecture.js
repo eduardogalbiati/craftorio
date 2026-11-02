@@ -5,8 +5,8 @@
 // files: [{ path, lines }], evidence, severity, refactor }] }, checked against REPORT_SCHEMA
 // (packages/shared/architecture-report.js, shared with the Refactor proposals workflow, #378) with
 // validateSchema (#338): an invalid answer is an error, never half a report. It never edits code
-// and never prescribes a fix to a run (the supervisor rule): a finding goes to the Refactor tab,
-// where the Product Owner prioritizes. The turn runs on the Oracle's model in its daily budget
+// and never prescribes a fix to a run (the supervisor rule): #730 the owner files a finding as an issue
+// from the Health tab (filed.json: the issue of each finding filed, by findingKey). The turn runs on the Oracle's model in its daily budget
 // (packages/engine/domains/oracle/oracle.js oneTurn / budgetRefusal); simulated (mock, MULTIAGENT_SIMULATION_ONLY): a report
 // derived from the facts, no model, no cost.
 // Reports are saved per project as <workspace>/architecture/<project id>/<stamp>.json
@@ -27,6 +27,7 @@ const ESTIMATE_BASIS = 5;
 const PROMPT_ROWS = 15;
 const SETTINGS_FILE = 'settings.json';
 const CITY_PLAN_FILE = 'city-plan.json';
+const FILED_FILE = 'filed.json';
 const PLAN_HISTORY_DIR = 'city-plan-history';
 
 // The JSON of an answer: an object, a ```json fence (the last one), or the text itself
@@ -161,7 +162,7 @@ async function analyze({ project, model, mock, oracle, agent, onItem = null }) {
 // ---------- the saved reports ----------
 
 const projectDir = (root, projectId) => path.join(root, path.basename(String(projectId)));
-const isReportFile = (name) => name.endsWith('.json') && name !== SETTINGS_FILE && name !== CITY_PLAN_FILE;
+const isReportFile = (name) => name.endsWith('.json') && name !== SETTINGS_FILE && name !== CITY_PLAN_FILE && name !== FILED_FILE;
 
 /** The saved reports of a project, newest first. */
 function listReports(root, projectId) {
@@ -202,6 +203,25 @@ function writeSettings(root, projectId, settings) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, SETTINGS_FILE), `${JSON.stringify(settings, null, 2)}\n`);
   return settings;
+}
+
+/** #730: the findings filed as issues, by findingKey: { [key]: { issue, issueUrl, reportId, at } }. */
+function readFiled(root, projectId) {
+  try {
+    const s = JSON.parse(fs.readFileSync(path.join(projectDir(root, projectId), FILED_FILE), 'utf8'));
+    return s && typeof s === 'object' && !Array.isArray(s) ? s : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Records the issue a finding (its findingKey) was filed as; the record. */
+function recordFiled(root, projectId, key, filed) {
+  const dir = projectDir(root, projectId);
+  fs.mkdirSync(dir, { recursive: true });
+  const all = { ...readFiled(root, projectId), [key]: filed };
+  fs.writeFileSync(path.join(dir, FILED_FILE), `${JSON.stringify(all, null, 2)}\n`);
+  return filed;
 }
 
 /**
@@ -250,8 +270,10 @@ module.exports = {
   listReports,
   mockReport,
   parseAnswer,
+  readFiled,
   readPlan,
   readSettings,
+  recordFiled,
   REPORT_SCHEMA,
   saveReport,
   SEVERITIES,

@@ -11,6 +11,8 @@
 // (`before`). ctx.planRefactor (#435) is the Architecture tab's Send to Refactor: it files the issue
 // and plans it the same way (in a simulation without host.fileIssue, a simulated issue in the synced
 // backlog); refactor:addToRoadmap with `file` (#642, the onboarding's review) files the same way first.
+// #730: ctx.fileFinding / ctx.planFinding file a finding of the Oracle's report as an issue (no proposal) and
+// plan it in that waiting stage (architecture:createIssue, the Health tab); the proposals made before stay.
 // The cadence ("Add a refactor to the roadmap every X runs", <workspace>/refactor/<project id>/
 // cadence.json { on, every, since }) listens to run:event: after every X real finished runs of the
 // project since it was turned on (or since its last item) the top ranked proposal with an issue and
@@ -143,13 +145,22 @@ module.exports = (ctx) => {
    */
   async function addToRoadmap(p, proposal, { mode = 'waiting' } = {}) {
     if (!proposal.issue) throw clientError('File the proposal as an issue first: a roadmap item runs an issue.');
-    const number = Number(proposal.issue);
-    const files = filesOf(proposal);
+    const reason = proposal.rankReason || `Refactor: ${proposal.title || proposal.improvement || proposal.target}`;
+    const { stage, waiting, before, target } = await planIssue(p, { number: Number(proposal.issue), files: filesOf(proposal), reason }, { mode });
+    const stored = proposals.updateProposal(root(), p.id, proposal.id, { roadmapAt: new Date().toISOString(), outcome: undefined, ...(before ? { before: { ...before, file: target, at: new Date().toISOString() } } : {}) });
+    return { proposal: stored, stage, waiting };
+  }
+
+  /**
+   * Plans issue `number` on the Refactor workflow (addToRoadmap's `mode`); the core of addToRoadmap, also
+   * a finding's "Create issue and prioritize" (#730, no proposal): { stage, waiting, before, target }.
+   */
+  async function planIssue(p, { number, files, reason }, { mode = 'waiting' } = {}) {
     const inRoadmap = (roadmap) => {
       // unfinished as pickNext reads it: a failed and parked item is finished, so the cadence can add it again
       if (!cadenceRules.unfinishedNumbers(roadmap).has(number)) return;
       const status = roadmaps.issueStages(roadmap).get(number)?.status;
-      throw clientError(`Issue #${proposal.issue} is in the roadmap already (${status || 'unfinished'}).`);
+      throw clientError(`Issue #${number} is in the roadmap already (${status || 'unfinished'}).`);
     };
     inRoadmap(roadmapOf(p.id));
     // the before score first: reading the facts after the roadmap write raced its file on Windows (EPERM);
@@ -160,7 +171,7 @@ module.exports = (ctx) => {
     inRoadmap(roadmap);
     const planned = plannedFiles(p.id);
     const enriched = { ...roadmap, stages: roadmap.stages.map((s) => ({ ...s, items: s.items.map((x) => withFiles(x, planned)) })) };
-    const item = { workflow: WORKFLOW, workflowName: 'Refactor', issues: [{ number }], reason: proposal.rankReason || `Refactor: ${proposal.title || proposal.improvement || proposal.target}` };
+    const item = { workflow: WORKFLOW, workflowName: 'Refactor', issues: [{ number }], reason };
     const issues = syncedIssues(p.id);
     const write = { issues, alive: ctx.runAlive };
     asClient(() => {
@@ -185,10 +196,9 @@ module.exports = (ctx) => {
         roadmaps.saveStages(ctx.ws.backlog, p.id, stages, write);
       }
     });
-    const stored = proposals.updateProposal(root(), p.id, proposal.id, { roadmapAt: new Date().toISOString(), outcome: undefined, ...(before ? { before: { ...before, file: target, at: new Date().toISOString() } } : {}) });
     try { await ctx.dispatchRoadmaps?.(); } catch (e) { console.error('Refactor roadmap:', e.message); }
     const placed = roadmaps.issueStages(roadmapOf(p.id)).get(number);
-    return { proposal: stored, stage: placed?.stage || 0, waiting: cadenceRules.isWaitingStage(placed) };
+    return { stage: placed?.stage || 0, waiting: cadenceRules.isWaitingStage(placed), before, target };
   }
 
   // ---- the issue (packages/engine/domains/refactor/refactor-issues.js) ------------------------------------------------------
@@ -259,6 +269,34 @@ module.exports = (ctx) => {
     if (ctx.host?.fileIssue || !simulation.simulationOnly()) return (await fileIssue({ projectId: p.id, id: proposal.id })).proposal;
     return fileWithHost(p, proposal, asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal, data })), simulatedFiler(p));
   }
+
+  /**
+   * #730 a finding of the Oracle's report filed as a `refactor` issue (the Health tab's and the review's
+   * Create issue), no proposal: its text, files, evidence and refactor in the issue. The backlog is synced
+   * first; host.fileIssue, else a simulated issue in a simulation, else gh/glab. → { issue, issueUrl }
+   */
+  async function fileFinding(projectId, finding) {
+    const p = projectOf(projectId);
+    await syncedFirst(p);
+    const data = backlog.readBacklog(ctx.ws.backlog, p.id);
+    const { kind, title, files, evidence, refactor } = finding;
+    const draft = asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal: { id: 'finding', kind, title, files, evidence, refactor }, data }));
+    const file = ctx.host?.fileIssue || (simulation.simulationOnly() ? simulatedFiler(p) : (d) => refactorIssues.runDraft({ backlogDir: ctx.ws.backlog, project: p, draft: d }));
+    const out = await file(draft);
+    const issue = Number(out?.number) || null;
+    if (!issue) throw new Error('The issue was filed but its number could not be read: sync the backlog and link it.');
+    return { issue, issueUrl: out.url || null };
+  }
+  ctx.fileFinding = fileFinding;
+
+  // #730 Create issue and prioritize: the finding's issue planned as addToRoadmap plans a proposal, in the
+  // disabled stage waiting for the owner's OK (#435): nothing starts → { stage, waiting }
+  async function planFinding(projectId, finding, issue) {
+    const p = projectOf(projectId);
+    const { stage, waiting } = await planIssue(p, { number: Number(issue), files: filesOf(finding), reason: `Refactor: ${finding.title || finding.kind}` }, { mode: 'waiting' });
+    return { stage, waiting };
+  }
+  ctx.planFinding = planFinding;
 
   // ---- the ranking -------------------------------------------------------------------------------
   async function prioritize({ projectId, mock }) {

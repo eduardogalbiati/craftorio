@@ -27,7 +27,7 @@ module.exports = (ctx) => [
   // commit on main), its private remote only when asked and gh / glab is signed in; ready at once, no clone
   { channel: 'onboarding:create', method: 'createOnboarding', params: 'data', schema: { params: args({ name: text(200, 'The project name.'), starts: text(10, 'What the project starts with: readme or empty.'), remote: described(OPTIONS, 'The private remote to create: null, or { provider: github or gitlab }.'), answers: shape({ mode: STRING, ci: STRING, release: STRING }) }, ['name']), result: OBJECT }, fn: (data) => ctx.onboardingCreate(data) },
   { channel: 'onboarding:status', method: 'onboardingStatus', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingStatus(opts) },
-  // the paid part (project map, then the refactor ranking), only on the owner's click
+  // the paid part (the project map: the city plan and the Oracle's report), only on the owner's click
   { channel: 'onboarding:analyze', method: 'analyzeOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingAnalyze(opts) },
   // the signed-in account's repositories as gh / glab list them ([] when signed out)
   { channel: 'onboarding:repos', method: 'onboardingRepos', params: ['provider'], schema: { params: args({ provider: text(40, 'The platform: github or gitlab.') }, ['provider']), result: listOf(shape({ name: STRING }, ['name'])) }, fn: (opts) => ctx.onboardingRepos(opts) },

@@ -4,10 +4,11 @@
 // MULTIAGENT_SIMULATION_ONLY; one analysis at a time, a second call is refused), the saved reports
 // (<workspace>/architecture/<project id>/, the latest with its findings marked new or gone, the
 // project's real finished runs since), the cost estimate from the last real analyses, the
-// project's exclude list, and "Send to Refactor": a finding becomes a proposal of the Refactor tab
-// (packages/engine/domains/refactor/refactor-proposals.js; the Refactor tab's channels are fronts/analyser/engine/channels/refactor.js), filed
-// as an issue and planned in the roadmap's disabled stage waiting for the owner's OK (#435); the report
-// says where each sent finding went (`sentTo`: its issue and stage).
+// project's exclude list, and "Create issue" (#730, architecture:createIssue): a finding becomes a
+// `refactor` issue (fronts/analyser/engine/channels/refactor.js ctx.fileFinding), with `prioritize` also
+// planned in the roadmap's disabled stage waiting for the owner's OK (#435); the report says where each
+// filed finding went (`filed`: its issue and stage) and the Refactor proposal it became before #730
+// (`proposal`, packages/engine/domains/refactor/refactor-proposals.js, read only).
 // The project city (#371): architecture:city is the facts grouped by the saved city plan (folder
 // districts without one) with its edges and validation (packages/engine/domains/project/architecture-facts.js readCity, core
 // packages/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
@@ -155,13 +156,15 @@ module.exports = (ctx) => {
   const runsSince = (p, date) => runs.runsForProject(runs.listRuns(ctx.ws.runs), p)
     .filter((r) => !r.mock && r.finishedAt && Date.parse(r.finishedAt) > Date.parse(date)).length;
 
-  // #435: where a sent proposal went: its issue and its roadmap stage (1-based, `waiting` for the owner's OK), null before its issue
+  // #435/#730: where a filed finding went: its issue and its roadmap stage (1-based, `waiting` for the owner's OK), null before its issue
   const stagesOf = (p) => roadmaps.issueStages(roadmaps.readRoadmap(ctx.ws.backlog, p.id));
-  const sentTo = (x, stages) => {
+  const filedAt = (x, stages) => {
     if (!x?.issue) return null;
     const placed = stages.get(Number(x.issue));
     return { issue: Number(x.issue), issueUrl: x.issueUrl || null, stage: placed?.stage || null, waiting: isWaitingStage(placed) };
   };
+  // #730: a Refactor proposal made from a finding before #730, readable under it
+  const proposalView = (x) => (x ? { id: x.id, title: x.title || null, status: x.status || null, issue: x.issue ?? null, issueUrl: x.issueUrl || null } : null);
 
   function reportView({ projectId, reportId = null }) {
     const p = projectOf(projectId);
@@ -171,14 +174,15 @@ module.exports = (ctx) => {
     const saved = list[at] || null;
     const previous = list[at + 1] || null;
     const marked = saved ? arch.compareReports(previous && previous.report, saved.report) : { findings: [], gone: [] };
-    // `sent`: the finding is a proposal of the Refactor tab already; `sentTo` (#435): its issue and its roadmap stage
-    const sent = new Map(proposals.listProposals(refactorRoot(), p.id).filter((x) => x.source === 'architecture').map((x) => [x.key, x]));
-    const stages = sent.size ? stagesOf(p) : new Map();
+    // `filed` (#730): the finding's issue and its roadmap stage; `proposal`: the proposal it became before #730
+    const filed = arch.readFiled(root(), p.id);
+    const old = new Map(proposals.listProposals(refactorRoot(), p.id).filter((x) => x.source === 'architecture').map((x) => [x.key, x]));
+    const stages = Object.keys(filed).length ? stagesOf(p) : new Map();
     return {
       report: saved, previousId: previous ? previous.id : null, gone: marked.gone,
       findings: marked.findings.map((f) => {
-        const x = sent.get(arch.findingKey(f));
-        return { ...f, sent: !!x, sentTo: sentTo(x, stages) };
+        const key = arch.findingKey(f);
+        return { ...f, filed: filedAt(filed[key], stages), proposal: proposalView(old.get(key)) };
       }),
       runsSince: saved ? runsSince(p, saved.date) : null,
       running: running && running.projectId === p.id ? { ...running } : null,
@@ -212,17 +216,23 @@ module.exports = (ctx) => {
     }
   }
 
-  // #435: the proposal is filed as an issue and planned in the roadmap's waiting stage (ctx.planRefactor,
-  // channels/refactor.js); the same finding sent again only adds its evidence
-  async function sendToRefactor({ projectId, reportId, findingIndex }) {
+  // #730: a finding becomes a `refactor` issue (ctx.fileFinding, channels/refactor.js), recorded by its
+  // findingKey; a finding filed already is not filed again. `prioritize`: the issue is also planned in the
+  // roadmap's waiting stage (ctx.planFinding, #435: nothing starts before the owner's OK)
+  async function createIssue({ projectId, reportId, findingIndex, prioritize = false }) {
     const p = projectOf(projectId);
     const saved = arch.listReports(root(), p.id).find((r) => r.id === reportId);
     const finding = saved && saved.report.findings[findingIndex];
     if (!finding) throw clientError(`No finding ${findingIndex} in the architecture report ${reportId}.`);
-    const { kind, title, files, evidence, severity, refactor } = finding;
-    const added = proposals.addProposal(refactorRoot(), p.id, { source: 'architecture', key: arch.findingKey(finding), reportId, kind, title, files, evidence, severity, refactor });
-    const proposal = ctx.planRefactor ? await ctx.planRefactor(p.id, added) : added;
-    return { proposal, sentTo: sentTo(proposal, proposal.issue ? stagesOf(p) : new Map()) };
+    if (!ctx.fileFinding) throw new Error('Filing a finding as an issue needs the Refactor channels.');
+    const key = arch.findingKey(finding);
+    let record = arch.readFiled(root(), p.id)[key];
+    if (!record?.issue) {
+      const out = await ctx.fileFinding(p.id, finding);
+      record = arch.recordFiled(root(), p.id, key, { issue: out.issue, issueUrl: out.issueUrl, reportId, at: new Date().toISOString() });
+    }
+    if (prioritize && !stagesOf(p).has(Number(record.issue))) await ctx.planFinding(p.id, finding, record.issue);
+    return { filed: filedAt(record, stagesOf(p)) };
   }
 
   return [
@@ -378,11 +388,11 @@ module.exports = (ctx) => {
       fn: ({ projectId }) => ({ estimate: arch.estimateCost(arch.listReports(root(), projectOf(projectId).id)) }),
     },
     {
-      channel: 'architecture:sendToRefactor',
-      method: 'sendFindingToRefactor',
-      params: ['projectId', 'reportId', 'findingIndex'],
-      schema: { params: args({ projectId: PROJECT_ID, reportId: STRING, findingIndex: INT }, ['projectId', 'reportId', 'findingIndex']), result: shape({ proposal: OBJECT, sentTo: nullable(OBJECT) }, ['proposal']) },
-      fn: sendToRefactor,
+      channel: 'architecture:createIssue',
+      method: 'createFindingIssue',
+      params: ['projectId', 'reportId', 'findingIndex', '...opts'],
+      schema: { params: args({ projectId: PROJECT_ID, reportId: STRING, findingIndex: INT, prioritize: FLAG }, ['projectId', 'reportId', 'findingIndex']), result: shape({ filed: OBJECT }, ['filed']) },
+      fn: createIssue,
     },
   ];
 };

@@ -112,6 +112,8 @@ module.exports = {
   'architecture:analyze': { setup: project, arg: ({ projectId }) => ({ projectId, mock: true }), status: 400, invalid: BAD_PROJECT },
   // #371: a plain folder's city is 'not-git'; savePlan checks the plan's schema only
   'architecture:city': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #730: a fresh project has no report: no finding to file (400)
+  'architecture:createIssue': { setup: project, arg: ({ projectId }) => ({ projectId, reportId: 'none', findingIndex: 0 }), status: 400, invalid: BAD_PROJECT },
   // #374: a contract project has no run in progress: no agent on its city
   'architecture:agents': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:savePlan': { setup: project, arg: ({ projectId }) => ({ projectId, plan: { version: 1, project: 'contract', summary: 'A contract plan.', ignore: [], zones: [{ id: 'core', name: 'Core', kind: 'civic', purpose: 'x' }], districts: [{ id: 'all', name: 'All', zone: 'core', purpose: 'x', include: ['**'], exclude: [] }], landmarks: [], ports: [], evidence: [] } }), invalid: { arg: { projectId: 'p', plan: 'not a plan' } } },
@@ -123,7 +125,6 @@ module.exports = {
   'architecture:facts': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:report': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:reports': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
-  'architecture:sendToRefactor': { setup: project, arg: ({ projectId }) => ({ projectId, reportId: 'none', findingIndex: 0 }), status: 400, invalid: BAD_PROJECT },
   'architecture:setExclude': { setup: project, arg: ({ projectId }) => ({ projectId, patterns: ['docs/**'] }), invalid: { arg: { projectId: 'p', patterns: 'docs/**' } } },
   'artifacts:evidence': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'artifacts:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },

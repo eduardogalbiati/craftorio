@@ -3,8 +3,8 @@
 // acceptance criteria, the Refactor workflow named), the `refactor` label (created first when the
 // platform reads labels, as packages/engine/domains/backlog/epics.js does for `epic`; GitLab creates it on filing) and the
 // gh/glab command of the synced repository. issueDraft builds it without running anything (the
-// preview, and every simulation); createIssue runs it, records the issue on the proposal and syncs
-// the backlog. Used by fronts/analyser/engine/channels/refactor.js and packages/engine/domains/refactor/refactor-proposals-run.js.
+// preview, and every simulation); runDraft runs it and syncs the backlog (#730: a finding of the Health
+// tab filed as an issue), createIssue also records the issue on the proposal. Used by fronts/analyser/engine/channels/refactor.js and packages/engine/domains/refactor/refactor-proposals-run.js.
 
 'use strict';
 
@@ -61,10 +61,11 @@ async function ensureLabel({ platform, repo, run }) {
 }
 
 /**
- * Files `draft` (issueDraft's) with gh/glab: the stored proposal with its `issue` and `issueUrl`.
- * Never in a simulation (the caller previews instead). Throws when the issue's number cannot be read.
+ * Files `draft` (issueDraft's) with gh/glab and syncs the backlog: { number, url }. Never in a
+ * simulation. Throws when the issue's number cannot be read. #730: a finding filed from the Health tab
+ * has no proposal, so it calls this directly.
  */
-async function createIssue({ root, backlogDir, project, proposal, draft }) {
+async function runDraft({ backlogDir, project, draft }) {
   const run = (c) => backlog.execCli(c.cli, c.args);
   await ensureLabel({ platform: draft.platform, repo: draft.repo, run });
   fs.mkdirSync(path.dirname(draft.file), { recursive: true });
@@ -72,9 +73,17 @@ async function createIssue({ root, backlogDir, project, proposal, draft }) {
   const url = String(await run(draft.command) || '').match(/https?:\/\/\S+/)?.[0] || null;
   const number = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;
   if (!number) throw new Error(`The issue was filed but its number could not be read${url ? ` from ${url}` : ''}: sync the backlog and link it.`);
-  const stored = proposals.updateProposal(root, project.id, proposal.id, { issue: number, issueUrl: url });
   try { await backlog.syncBacklog({ dir: backlogDir, project, platform: draft.platform }); } catch (e) { console.error('Refactor issue sync:', e.message); }
-  return stored;
+  return { number, url };
+}
+
+/**
+ * Files `draft` (issueDraft's) with gh/glab: the stored proposal with its `issue` and `issueUrl`.
+ * Never in a simulation (the caller previews instead). Throws when the issue's number cannot be read.
+ */
+async function createIssue({ root, backlogDir, project, proposal, draft }) {
+  const { number, url } = await runDraft({ backlogDir, project, draft });
+  return proposals.updateProposal(root, project.id, proposal.id, { issue: number, issueUrl: url });
 }
 
 module.exports = {
@@ -83,5 +92,6 @@ module.exports = {
   issueText,
   issueTitle,
   LABEL,
+  runDraft,
   WORKFLOW,
 };

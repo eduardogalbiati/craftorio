@@ -1,15 +1,15 @@
 // Service area (#640, onboarding step 3 of docs/work/first-project-onboarding/plan.md): the jobs that
 // follow a new project's import, chained by dependency: clone (#639, packages/engine/domains/project/projects.js)
-// → facts → (the Ways of working profile ∥ the project map, its findings added as refactor proposals)
-// → the refactor ranking after the map. #731: the project map job draws the city plan (project-map.js
-// drawMap: the cartographer's turn, validated and saved) then runs the Oracle's report (analyzeMap), so the
-// project's City is grouped by the plan after the onboarding.
-// The free part (facts and profile, spec R5) runs once the clone is ready; the paid part (project map
-// and ranking) only after onboardingAnalyze ("analyze later" never calls it). The project map and the
-// ranking take the machine-wide slot SLOT (packages/engine/engine/machine-slot.js), so they wait for
+// → facts → (the Ways of working profile ∥ the project map). #731: the project map job draws the city plan
+// (project-map.js drawMap: the cartographer's turn, validated and saved) then runs the Oracle's report
+// (analyzeMap), so the project's City is grouped by the plan after the onboarding. #730: the report's
+// findings stay findings (no Refactor proposal, no Product Owner ranking): the wizard's review files them.
+// The free part (facts and profile, spec R5) runs once the clone is ready; the paid part (the project
+// map) only after onboardingAnalyze ("analyze later" never calls it). The project map takes the
+// machine-wide slot SLOT (packages/engine/engine/machine-slot.js), so it waits for
 // other heavy work on the machine. The state of each project is kept in memory:
 //   { projectId, status: cloning | ready | analyzing | analyzed | failed, code?: no-access | clone-failed,
-//     reason?, jobs: { clone, facts, profile, projectMap, ranking: { status: waiting | running | done | failed | skipped, error? } },
+//     reason?, jobs: { clone, facts, profile, projectMap: { status: waiting | running | done | failed | skipped, error? } },
 //     #725: a failed job is { status: 'failed', error (the full error), code: cli-missing | invalid-ranking |
 //     no-folder | refused | timeout | failed, reason (≤ 160 characters), cli? } (failureOf); once the paid
 //     part ended the status is analyzed even with a failed job, and analyzing again runs only what is not done;
@@ -29,13 +29,10 @@ const path = require('path');
 const OnboardingModel = require('@multiagent/shared/onboarding-model');
 const Platforms = require('@multiagent/shared/platforms');
 const agents = require('../../domains/agents/agents');
-const arch = require('../../domains/oracle/oracle-architecture');
 const issues = require('../../domains/backlog/issues');
 const { identityArgs } = require('../../engine/worktree');
-const priority = require('../../domains/refactor/refactor-priority');
 const projectMap = require('../../domains/project/project-map');
 const projects = require('../../domains/project/projects');
-const proposalsRun = require('../../domains/refactor/refactor-proposals-run');
 const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
 const { execGit } = require('../../domains/workspace/workspace');
@@ -47,8 +44,8 @@ const {
 const { toolSignIn } = require('./settings');
 
 const SLOT = slots.ANALYSIS_SLOT;
-const JOBS = ['clone', 'facts', 'profile', 'projectMap', 'ranking'];
-const PAID = ['projectMap', 'ranking'];
+const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
+const PAID = ['projectMap'];
 
 // a readable reason for an access check that did not reach the repository
 function accessReason(access) {
@@ -184,7 +181,7 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
 /**
  * The onboarding of new projects: { start, status, analyze, retry } (the state is documented above).
  * git: projects.js's git (ls-remote and clone); cli(provider) → { installed, signedIn };
- * jobs: { facts, profile, projectMap, ranking }, each async ({ projectId, folder, facts }) => result;
+ * jobs: { facts, profile, projectMap }, each async ({ projectId, folder, facts }) => result;
  * slotsDir: the machine slots' folder (default: the machine's); pollMs: the slot's poll (default:
  * acquireSlot's); emit(event, state); #632: remote(provider, { name, folder }) → { ok, url?, error? } creates
  * a new project's private repository (default: gh / glab, machineRemote).
@@ -251,7 +248,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       .finally(() => { w.free = null; });
   }
 
-  // the paid part: the project map once the facts are known, the ranking after it; analyzed once all ended.
+  // the paid part: the project map once the facts are known (#730: no ranking after it); analyzed once all ended.
   // #725: only the jobs not done run (a done project map is not paid twice), and a failed job is a state of
   // the analysis: the onboarding ends analyzed with it, never back to ready
   function startPaid(id) {
@@ -266,8 +263,6 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       const input = () => ({ ...inputOf(id), facts: facts?.result ?? null });
       const map = done('projectMap') ? { result: w.map ?? null } : await runJob(id, 'projectMap', input, { heavy: true });
       if (map) w.map = map.result;
-      if (map && !done('ranking')) await runJob(id, 'ranking', () => ({ ...input(), map: map.result }), { heavy: true });
-      else if (!map) change(id, {}, { ranking: { status: 'skipped' } });
       await w.free;
       if (states.get(id)) change(id, { status: 'analyzed' });
     })().catch((e) => stopped(id, e)).finally(() => { w.paid = null; });
@@ -467,7 +462,7 @@ module.exports = (ctx) => {
       // #731: the city plan first (the cartographer's turn, validated and saved), then the Oracle's report with
       // both turns' cost: a refused plan never pays the Oracle; after a saved plan and a failed report,
       // Retry runs only the report.
-      // The map's findings become the Refactor tab's proposals, so the ranking (and the review, #642) has them
+      // #730: the report's findings stay findings (the review and the Health tab file them as issues on a click)
       projectMap: async ({ projectId, folder }) => {
         e2eCityPlan();
         const mock = simulation.simulationOnly();
@@ -477,12 +472,8 @@ module.exports = (ctx) => {
         drawn.set(projectId, plan);
         const out = await projectMap.analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, planCostUsd: plan.cost_usd, planTokens: plan.tokens });
         drawn.delete(projectId);
-        const saved = arch.listReports(archRoot, projectId).find((r) => r.id === out.report_id);
-        proposalsRun.addFindings({ wsRoot: ws.root, projectId, reportId: out.report_id, findings: saved?.report?.findings });
         return out;
       },
-      // the Product Owner's turn comes from the analyser front (ctx.refactorPriorityOptions); without it, the simulated ranking
-      ranking: ({ projectId }) => priority.rankProject({ refactorRoot: path.join(ws.root, 'refactor'), backlogDir: ws.backlog, projectId, model: null, mock: simulation.simulationOnly() || !ctx.refactorPriorityOptions, options: () => ctx.refactorPriorityOptions?.(projectId) }),
     };
     const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs: e2eJobs(jobs), emit: (event, state) => ctx.events.emit(event, state) });
     current = { ws, ob };
