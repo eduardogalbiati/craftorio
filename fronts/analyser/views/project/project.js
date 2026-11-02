@@ -286,7 +286,7 @@ registerView({
     // Back: the Projects screen when its front is shipped (the showProjects action), else Home
     $('#btn-project-back').onclick = () => (window.Actions.has('showProjects') ? window.Actions.call('showProjects') : showView('dashboard'));
     $('#view-project').addEventListener('click', onProjectPageClick);
-    $('#view-project').addEventListener('change', (e) => window.ProjectWorkflows?.onChange(e) || window.ProjectArchitecture?.onChange(e) || window.ProjectRefactor?.onChange(e) || window.ProjectConflictMap?.onChange(e));
+    $('#view-project').addEventListener('change', (e) => window.ProjectArchitecture?.onChange(e) || window.ProjectRefactor?.onChange(e) || window.ProjectConflictMap?.onChange(e));
     // a Conflict map row opens from the keyboard too
     $('#view-project').addEventListener('keydown', (e) => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-pcm-row]')) { e.preventDefault(); window.ProjectConflictMap?.onClick(e); }

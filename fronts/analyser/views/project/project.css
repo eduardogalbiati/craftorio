@@ -138,12 +138,31 @@
 .pj-wf-group-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .pj-wf-group-name { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); }
 .pj-wf-group-head .hint { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.pj-wf-row { display: flex; align-items: center; gap: 8px; min-height: 24px; }
-.pj-wf-row .check { min-width: 0; }
-.pj-wf-row .check > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pj-wf-row { display: flex; align-items: center; gap: 8px; min-height: 24px; min-width: 0; }
+.pj-wf-row .check { min-width: 0; flex: 1 1 auto; }
+.pj-wf-row .check > span { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pj-wf-more summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .pj-wf-more[open] summary { margin-bottom: 6px; }
 .pj-wf > .btn { justify-self: start; }
+/* #729: the Overview's cards, one per workflow of the project, and the Add dialog */
+.pj-wf { min-width: 0; }
+.pj-wf-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; min-width: 0; }
+.pj-wf-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 8px 10px; display: grid; gap: 4px; align-content: start; min-width: 0; overflow: hidden; }
+.pj-wf-card-head, .pj-wf-card-meta { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.pj-wf-card-head { flex-wrap: nowrap; justify-content: space-between; }
+.pj-wf-card-name { font-size: 13px; font-weight: 600; min-width: 0; }
+.pj-wf-card-meta > .text-cut { max-width: 100%; }
+.pj-wf-card-desc { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.pj-wf-card-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+.pj-wf-card-actions .link-btn { min-height: 24px; }
+.pj-wf-add-cell { display: flex; align-items: center; justify-content: center; min-height: 72px; border: 1px dashed var(--border); border-radius: var(--radius); }
+.pj-wf-repo { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pj-wf-add-card { width: min(560px, 92vw); display: grid; gap: 10px; }
+.pj-wf-add-card input[type="search"] { width: 100%; box-sizing: border-box; }
+.pj-wf-add-list { display: grid; gap: 10px; max-height: 52vh; overflow-y: auto; min-width: 0; }
+.pj-wf-add-option { display: grid; gap: 2px; text-align: left; width: 100%; min-width: 0; min-height: 24px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); color: inherit; cursor: pointer; }
+.pj-wf-add-option:hover { border-color: var(--accent); }
+.pj-wf-add-option:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* the Ways of working interview drawer (project-ways-of-working.js, #487) */
 .wow-drawer { z-index: 6; }
 .wow-drawer section + section { margin-top: 16px; }

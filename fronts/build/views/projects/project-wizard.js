@@ -396,10 +396,21 @@
   // mock-4's right column: one row per suggested workflow (feature, fix, release) and the CI row, each with
   // why the profile suggests it and its selector on the profile's pick (#630); the owner's pick stays
   // (cur.workflows). The app's select (select.js, #383), a plain select on a page without it (a test's mini DOM)
+  const workflowChoices = () => [...M.suggestWorkflows(profileOf()).suggestions, M.ciChoice(profileOf())];
+
+  // #729: step 3's picks as the project's workflows: feature, fix and release with their variant (the
+  // owner's pick, else the profile's suggestion), the CI pick on release
+  function pickedWorkflows() {
+    const all = workflowChoices();
+    const pick = (kind) => cur.workflows?.[kind] || all.find((x) => x.id === kind)?.value || '';
+    return ['feature', 'fix', 'release'].map((name) => ({
+      name, origin: 'bundled', category: 'build', variant: pick(name), ...(name === 'release' && pick('ci') ? { ci: pick('ci') } : {}),
+    }));
+  }
+
   function workflowsColumn() {
     const name = cur.model.name;
-    const profile = profileOf();
-    const all = [...M.suggestWorkflows(profile).suggestions, M.ciChoice(profile)];
+    const all = workflowChoices();
     const select = (kind, choices, value) => {
       const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"`;
       const options = choices.map((c) => [c.value, c.label]);
@@ -650,12 +661,17 @@
     const picked = [...cur.picked];
     const idea = cur.idea.trim();
     const running = ACTIVE.includes(cur.onboarding?.status);
+    const workflows = pickedWorkflows();
     close();
     if (!pid) return;
     if (running) finished.add(pid);
     window.Actions.call('openProject', pid, { nextSteps: true });
     if (city) window.ProjectArchitecture?.openCity?.(pid);
     const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
+    // #729: the step 3 workflows on the project, feature the default (DefaultWorkflow.firstBuild's rule);
+    // the page already open draws them when the save answers
+    new Promise((resolve) => resolve(api.updateProject(pid, { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature' })))
+      .then((p) => window.ProjectWorkflows?.applySaved?.(pid, p), failed);
     for (const id of picked) Promise.resolve(api.addRefactorToRoadmap(pid, id, { file: true })).catch(failed);
     if (idea) Promise.resolve(api.createDiscoveryCard(pid, idea.slice(0, 200), idea, 'idea')).catch(failed);
   }

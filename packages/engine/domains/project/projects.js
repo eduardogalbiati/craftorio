@@ -220,16 +220,18 @@ const cleanLocalPreview = (v) => cleanConfig(v);
 // #486: a workflow's name without its .yaml suffix; null when empty
 const cleanWorkflowName = (v) => String(v ?? '').trim().replace(/\.ya?ml$/i, '') || null;
 
-// #486: [{ name, origin, category? }], one per name, in the given order
+// #486: [{ name, origin, category?, variant?, ci? }], one per name, in the given order; #729: the
+// variant and the CI pick of the new-project wizard's step 3 kept
 function cleanWorkflows(list) {
   const seen = new Set();
   const out = [];
+  const opt = (key, v) => { const s = typeof v === 'string' ? v.trim() : ''; return s ? { [key]: s } : {}; };
   for (const w of Array.isArray(list) ? list : []) {
     const name = cleanWorkflowName(w?.name);
     if (!name || seen.has(name)) continue;
     seen.add(name);
     const category = String(w.category ?? '').trim();
-    out.push({ name, origin: String(w.origin ?? '').trim() || 'workspace', ...(category ? { category } : {}) });
+    out.push({ name, origin: String(w.origin ?? '').trim() || 'workspace', ...(category ? { category } : {}), ...opt('variant', w.variant), ...opt('ci', w.ci) });
   }
   return out;
 }
