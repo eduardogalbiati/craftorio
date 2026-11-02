@@ -59,7 +59,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
 // The project's page, Overview, of p1 = BASE + `project`
-async function overviewOf(project, { manifest = null } = {}) {
+async function overviewOf(project, { manifest = null, lang = 'en' } = {}) {
   let record = { ...BASE, ...clone(project) };
   const app = loadApp({
     storage: { 'multiagent.currentProject': 'p1' },
@@ -79,6 +79,7 @@ async function overviewOf(project, { manifest = null } = {}) {
   });
   await app.boot();
   app.sandbox.confirm = () => true; // a Remove that asks first is answered yes
+  if (lang !== 'en') app.sandbox.I18n.setLanguage(lang);
   app.run('openProjectView("p1")');
   await app.settle(30);
   return app;
@@ -410,6 +411,18 @@ test('#729 Overview: the release card shows its CI pick by its label', { timeout
   const release = textOf(cardOf(app, 'release'));
   assert.equal(release.includes('CI: On pull requests and releases'), true, `the release card: ${release}`);
   assert.equal(textOf(cardOf(app, 'feature')).includes('CI:'), false, 'no CI line on a card without a CI pick');
+});
+
+// #726: the variant and CI labels are the model's i18n keys, shown in the interface language
+test('#726 Overview: in pt-BR the cards show the variant and the CI pick in Portuguese, never English nor a raw key', { timeout: 20000 }, async () => {
+  const RELEASE = { name: 'release', origin: 'bundled', category: 'build', variant: 'train', ci: 'pr+release' };
+  const app = await overviewOf({ workflows: [FEATURE, RELEASE], defaultWorkflow: 'feature' }, { lang: 'pt-BR' });
+  const feature = textOf(cardOf(app, 'feature'));
+  const release = textOf(cardOf(app, 'release'));
+  assert.equal(feature.includes('PRs remotos · código primeiro'), true, `the feature card's variant in pt-BR: ${feature}`);
+  assert.equal(release.includes('Em pull requests e releases'), true, `the release card's CI in pt-BR: ${release}`);
+  const leaks = ['Remote PRs', 'Release train', 'On pull requests and releases', 'onboarding.'].filter((s) => (feature + release).includes(s));
+  assert.deepEqual(leaks, [], `English or raw keys in the cards: ${feature} | ${release}`);
 });
 
 // ---- the empty state -----------------------------------------------------------------------------------
