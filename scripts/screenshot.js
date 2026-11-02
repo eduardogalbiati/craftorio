@@ -88,6 +88,9 @@
 //                      simulated, "Pausing after stage 2" with Cancel pause; --click "[data-rm=pause]"
 //                      opens the Pause menu) | parked (#395: the item waiting at the developer's gate
 //                      parked, "Parked at Developer check" and the bar's "1 parked at a gate")
+//   --demo-project <p> backlog / roadmap: the demo project as gitlab | self-hosted | rust-backend (#735,
+//                      #745; scripts/screenshot/demo-project.js), e.g. its run dialog: --click ".bl-check"
+//                      --click "#btn-bl-assign" --fill "#assign-workflow=feature.yaml"
 //   --po <state>       backlog: the Product Owner's drawer open with its live turn (#180): working (the
 //                      activity line, timer, Stop and the last steps) | writing (the answer as it is
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
@@ -262,6 +265,7 @@ function parseArgs(argv, views = VIEWS) {
     else if (k === '--release') a.release = next();
     else if (k === '--release-filter') a.releaseFilter = next();
     else if (k === '--po') a.po = next();
+    else if (k === '--demo-project') a.demoProject = next();
     else if (k === '--agents-window') a.agentsWindow = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
