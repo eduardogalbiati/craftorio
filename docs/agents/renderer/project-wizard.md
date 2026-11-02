@@ -59,10 +59,22 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    remote only when asked and signed in; a failed remote leaves `remote.status = 'failed'` and the local
    project). The project is ready at once, the stepper's third pill reads "Workflows" and step 3 follows.
 3. **analysis** (mock-4): on the left the jobs from the clone on with their status and the cost before the
-   click (`wizard-cost`, `wizard-cost-total`, one `data-part` per paid analysis, `wizard-skip`); on the
-   right the suggested workflows, disabled (chosen in a later phase). The footer shows the clone's
-   progress (`wizard-clone-progress`) on the left, Back and "Analyze and continue" (`wizard-analyze`) on
-   the right. Nothing paid starts without the click.
+   click (`wizard-cost`, `wizard-cost-total`, one `data-part` per paid analysis, `wizard-skip`). A failed
+   job is a state of the analysis, never "not started": its row reads the reason in the error colour
+   (`wizard-job-error-<id>`, the engine's `code` — cli-missing, invalid-ranking, no-folder, refused,
+   timeout, failed — translated, the full error on hover), "—" as its amount, and Retry
+   (`wizard-job-retry-<id>`, `api.retryOnboarding`, which reruns only what failed or never ran: a done
+   project map is not paid twice). On the right the suggested workflows (`wizard-workflows-column`,
+   #725, `workflowsColumnState` of the model) start with two choices: Analyze the repository
+   (`wizard-workflows-choice-analyze`, starts the analysis) and Define manually
+   (`wizard-workflows-choice-manual`); no row before that. Analyzing dims the rows (`wizard-workflows-rows`
+   `aria-busy`, inert) under an overlay with a spinner (`wizard-workflows-analyzing`,
+   `wizard-workflows-spinner`); then the profile's picks and reasons. A failed profile shows its reason,
+   Retry (`wizard-workflows-retry`) and Define manually (`wizard-workflows-failed`). Manual shows the rows
+   editable without a reason, Analyze still offered. The footer shows the clone's progress
+   (`wizard-clone-progress`) on the left, Back and Continue (`wizard-next`) on the right: always enabled,
+   the analysis goes on in the background and the review shows what is pending. Nothing paid starts
+   without Analyze; Continue before it skips the analysis.
 4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on, its workflows),
    the city (`wizard-review-city`, Open the city) and the refactor backlog, then the backlog and an idea
    for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each refactor

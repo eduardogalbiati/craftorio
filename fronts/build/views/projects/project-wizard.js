@@ -17,15 +17,22 @@
 //   one wizard-repo-option data-repo="owner/repo" each, a click fills the URL and the name), #wizard-name, wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl),
 //   wizard-import-status once api.startOnboarding answered), analysis (the jobs
 //   from the clone on in wizard-cost, with wizard-cost-total and the paid parts data-part="projectMap" |
-//   "ranking" before the click, checked and locked, wizard-clone-progress in the footer, and wizard-skip; the suggested workflows beside them, disabled in this
-//   phase) and review (#642, spec R10): wizard-review with the project's card, wizard-review-city (Open the
+//   "ranking" before the click, checked and locked, wizard-clone-progress in the footer, and wizard-skip; a
+//   failed job reads its reason wizard-job-error-<id> (OnboardingModel's code, full error on hover), "—" as
+//   amount and wizard-job-retry-<id> (api.retryOnboarding); #725: the suggested workflows beside them in
+//   wizard-workflows-column, OnboardingModel.workflowsColumnState: choose (wizard-workflows-choice-analyze |
+//   -manual, no rows), analyzing (wizard-workflows-rows aria-busy and inert under wizard-workflows-analyzing
+//   with wizard-workflows-spinner), failed (wizard-workflows-failed: the reason, wizard-workflows-retry and
+//   Define manually), analyzed (the profile's picks and reasons) or manual (editable, no reason, Analyze
+//   still offered)) and review (#642, spec R10): wizard-review with the project's card, wizard-review-city (Open the
 //   city: Finish, then the project's city) / -refactors / -backlog, each data-state="ready" | "pending"
 //   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
 //   | "later" (the analyses were skipped), one wizard-review-refactor data-refactor="<id>" per proposal
 //   with its file's score and quadrant and an unchecked wizard-review-refactor-pick, and the idea field
 //   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation in the
-//   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next, wizard-analyze
-//   (step 3 before the click: "Analyze and continue") or, on the review, wizard-finish (never disabled,
+//   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next (step 3:
+//   "Continue", enabled whatever the analysis does; before any analysis it skips it) or, on the review,
+//   wizard-finish (never disabled,
 //   never waits): it closes the wizard on the project's page with its Next steps
 //   card (openProject with nextSteps, project.js), then sends the picked refactors to the roadmap as planned
 //   items (refactor:addToRoadmap with `file`: filed as issues first) and the idea to the Inbox; an analysis
@@ -46,7 +53,8 @@
 //   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus
 //   back to what opened it.
 // - #onboarding-tray (data-testid="onboarding-tray"): one tray-item per imported project (data-project,
-//   data-status = the engine's status), its name, and when failed the reason and Retry; it follows
+//   data-status = the engine's status), its name, and when failed (or a paid job failed, #725) the reason and
+//   Retry; it follows
 //   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads) and stays when the wizard closes.
 // - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status
 //   change such as the clone done), so the screens reading the cached list see the project and its folder.
@@ -62,8 +70,6 @@
   const PAID = ['projectMap', 'ranking'];
   // mock-2's toggle: the registry's platforms with a CLI (#351: no platform literal outside the adapters)
   const providers = () => (window.Platforms?.PLATFORMS || []).filter((p) => p.cli).map((p) => p.id);
-  // the suggested workflows' kinds (mock-4), each with its reason and selector (#630)
-  const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
   const svg = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const ICON = { check: svg('M3.5 8.5l3 3 6-7'), download: svg('M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10'), plus: svg('M8 3v10M3 8h10') };
   // the engine's statuses past the clone: the repository step goes on to the analysis by itself
@@ -91,14 +97,13 @@
   // #725: Continue on the analysis step never waits for the analysis (running, done or failed)
   const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model)
     : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
-  // #725: a failed job in the interface's language from the engine's code (failureOf), its reason else
-  const FAILURES = ['cli-missing', 'invalid-ranking', 'no-folder', 'refused', 'timeout'];
-  const jobReason = (job) => {
-    const reason = job?.reason || job?.error || t('onboarding.no_reason');
-    return FAILURES.includes(job?.code)
-      ? t(`onboarding.job_failed_${job.code.replace(/-/g, '_')}`, { cli: job.cli || '', reason })
-      : t('onboarding.job_failed', { reason });
-  };
+  // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
+  const {
+    jobReason,
+    pickedWorkflows,
+    profileOf,
+    workflowsColumn,
+  } = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
   const failedPaid = (s) => PAID.find((id) => s?.jobs?.[id]?.status === 'failed') || null;
   const retryButton = (id) => `<button type="button" class="btn sm" data-act="retry" data-testid="wizard-job-retry-${id}">${esc(t('onboarding.retry'))}</button>`;
 
@@ -408,85 +413,6 @@
           <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(loading ? t('onboarding.estimating') : costText(sum.total))}</strong>${skip}</div>
         ${unknown}
       </div>`;
-  }
-
-  // #630 (mock-4): the ways-of-working profile { mode, ci, tests } the profile job found, or null
-  const profileOf = () => cur.onboarding?.profile || jobOf('profile').profile || null;
-
-  // mock-4's right column: one row per suggested workflow (feature, fix, release) and the CI row, each with
-  // why the profile suggests it and its selector on the profile's pick (#630); the owner's pick stays
-  // (cur.workflows). The app's select (select.js, #383), a plain select on a page without it (a test's mini DOM)
-  const workflowChoices = () => [...M.suggestWorkflows(profileOf()).suggestions, M.ciChoice(profileOf())];
-
-  // #729: step 3's picks as the project's workflows: feature, fix and release with their variant (the
-  // owner's pick, else the profile's suggestion), the CI pick on release
-  function pickedWorkflows() {
-    const all = workflowChoices();
-    const pick = (kind) => cur.workflows?.[kind] || all.find((x) => x.id === kind)?.value || '';
-    // the category from the installed workflow's YAML (the app's state.workflows) when known, 'build' else
-    const installed = (typeof state !== 'undefined' && Array.isArray(state.workflows)) ? state.workflows : [];
-    const categoryOf = (name) => installed.find((w) => String(w.file || '').replace(/^.*[\\/]/, '').replace(/\.ya?ml$/, '') === name)?.category || 'build';
-    return ['feature', 'fix', 'release'].map((name) => ({
-      name, origin: 'bundled', category: categoryOf(name), variant: pick(name), ...(name === 'release' && pick('ci') ? { ci: pick('ci') } : {}),
-    }));
-  }
-
-  // #725: the column's state (OnboardingModel.workflowsColumnState): choose, analyzing, failed, analyzed, manual
-  // a new project's (#632) profile is its three answers: its rows show at once
-  const columnState = () => M.workflowsColumnState({ mode: cur.workflowsMode || (cur.model.source === 'new' ? 'analyze' : undefined), profileJob: { ...jobOf('profile'), profile: profileOf() } });
-
-  // #725: one of the two ways in (Analyze the repository / Define manually): a card with its hint, or a
-  // plain button (`inline`, beside Retry)
-  const choiceButton = (id, inline = false) => `<button type="button" class="${inline ? 'btn' : 'card wizard-workflows-choice'}" data-act="workflows-${id}" data-testid="wizard-workflows-choice-${id}">
-      <strong>${esc(t(`onboarding.workflows_choice_${id}`))}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}</button>`;
-
-  // mock-4's right column (#630), by its state (#725): the two choices first; then the rows (feature, fix,
-  // release and CI, each with its selector on the profile's pick, the owner's pick kept in cur.workflows),
-  // dimmed under a loading notice while the profile job runs, with the profile's reasons once it is done,
-  // without reasons when defined by hand; a failed profile job gives its reason, Retry and Define manually
-  function workflowsColumn() {
-    const name = cur.model.name;
-    const state = columnState();
-    const all = workflowChoices();
-    const busy = state === 'analyzing';
-    const select = (kind, choices, value) => {
-      const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"${busy ? ' disabled' : ''}`;
-      const options = choices.map((c) => [c.value, c.label]);
-      return window.Select.markup(attrs, options, value);
-    };
-    const row = (kind) => {
-      const s = all.find((x) => x.id === kind);
-      const reason = state === 'analyzed'
-        ? `<p class="muted small wizard-workflow-reason" data-testid="wizard-workflow-reason">${esc(t('onboarding.workflow_why', { reason: s.reason }))}</p>` : '';
-      return `<li class="card wizard-workflow" data-testid="wizard-workflow" data-kind="${esc(kind)}">
-        <label class="wizard-workflow-head"><strong>${esc(t(`onboarding.workflow_${kind}`))}</strong>
-          ${select(kind, s.choices, cur.workflows?.[kind] || s.value)}</label>
-        ${reason}
-      </li>`;
-    };
-    const head = `<h3>${esc(t('onboarding.workflows_title'))}</h3>
-      <p class="muted">${esc(t(state === 'choose' ? 'onboarding.workflows_choose_line' : 'onboarding.workflows_line', { name }))}</p>`;
-    let body;
-    if (state === 'choose') body = `<div class="wizard-workflows-choices">${choiceButton('analyze')}${choiceButton('manual')}</div>`;
-    else if (state === 'failed') {
-      const job = jobOf('profile');
-      const why = job.status === 'failed' ? jobReason(job) : t('onboarding.workflows_no_profile');
-      body = `<div class="wizard-alert error" role="alert" data-testid="wizard-workflows-failed">
-          <strong>${esc(t('onboarding.workflows_failed'))}</strong>
-          <p title="${esc(job.error || '')}">${esc(why)}</p>
-          <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry" data-testid="wizard-workflows-retry">${esc(t('onboarding.retry'))}</button>${choiceButton('manual', true)}</div>
-        </div>`;
-    } else {
-      const list = `<ul class="wizard-workflows" data-testid="wizard-workflows-rows"${busy ? ' aria-busy="true" aria-disabled="true" inert' : ''}>${WORKFLOW_KINDS.map(row).join('')}</ul>`;
-      const overlay = busy ? `<div class="wizard-workflows-analyzing" data-testid="wizard-workflows-analyzing" role="status">
-          <span class="spinner" data-testid="wizard-workflows-spinner" role="progressbar" aria-label="${esc(t('onboarding.workflows_analyzing', { name }))}"></span>
-          <span>${esc(t('onboarding.workflows_analyzing', { name }))}</span></div>` : '';
-      // Define manually keeps Analyze the repository on offer
-      const analyze = state === 'manual' ? `<div class="wizard-workflows-choices">${choiceButton('analyze')}</div>` : '';
-      body = `<div class="wizard-workflows-stage">${list}${overlay}</div>${analyze}`;
-    }
-    return `<div class="wizard-column wizard-workflows-column" data-testid="wizard-workflows-column" data-state="${state}">${head}${body}
-      <p class="muted small">${esc(t('onboarding.workflows_more'))}</p></div>`;
   }
 
   function analysisStep() {

@@ -52,6 +52,9 @@ flowchart LR
 - O que custa vem marcado, com o total visível, e só roda no clique: a cidade + análise de arquitetura (`project-map`) e o ranking da refatoração.
 - O modelo é chamado no Ways of working só para os campos que o git não resolve.
 - "Skip, analyze later" deixa tudo para as abas.
+- (#725) A coluna de fluxos sugeridos começa com duas escolhas, Analisar o repositório (inicia a análise) ou Definir manualmente; analisando, as linhas ficam esmaecidas sob um overlay de carregamento; um perfil que falhou mostra o motivo, Tentar novamente e Definir manualmente.
+- (#725) Continuar fica sempre habilitado nesta etapa: a análise segue em segundo plano e a revisão mostra o que está pendente.
+- (#725) Um job que falhou é um estado da análise, nunca "não iniciado": a linha diz o porquê (CLI ausente, ranking inválido, sem pasta, recusa, tempo esgotado), mostra "—" no valor e oferece Tentar novamente, também na bandeja e na revisão; rodar de novo reexecuta só o que falhou ou nunca rodou (um mapa do projeto pronto não é pago duas vezes).
 
 ![Etapa 3](images/mock-4.jpg)
 

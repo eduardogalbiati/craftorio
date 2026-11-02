@@ -52,6 +52,9 @@ flowchart LR
 - What costs comes checked, with the total shown, and runs only on the click: the city + architecture analysis (`project-map`) and the refactor ranking.
 - Ways of working calls the model only for the fields git cannot settle.
 - "Skip, analyze later" leaves everything to the tabs.
+- (#725) The suggested workflows column starts with two choices, Analyze the repository (starts the analysis) or Define manually; analyzing dims the rows under a loading overlay; a failed profile shows its reason, Retry and Define manually.
+- (#725) Continue is always enabled on this step: the analysis goes on in the background and the review shows what is pending.
+- (#725) A failed job is a state of the analysis, never "not started": its row says why (CLI missing, invalid ranking, no folder, refused, timeout), shows "—" as amount and offers Retry, also in the tray and the review; running again reruns only what failed or never ran (a done project map is not paid twice).
 
 ![Step 3](images/mock-4.jpg)
 
