@@ -13,10 +13,14 @@
 // - analyze (#381): the Oracle's architecture analysis of the project, run and saved as
 //   architecture:analyze runs and saves it (packages/engine/domains/oracle/oracle-architecture.js analyze / saveReport), with the
 //   Oracle and its agent the service gives the run; a simulation saves the simulated report.
-// No other model call: the cartographer's turn is the workflow's plan step.
+// The cartographer's turn is the workflow's plan step; #731: drawMap runs it outside the workflow for the
+// onboarding's city analysis (one Oracle turn per round, the plan step's prompt and the project-map skill,
+// validated with validateMap and saved with saveMap; a simulation saves providers.js's MOCK_CITY_PLAN), and
+// analyzeMap adds its cost to the report it saves, so the analysis's estimate covers both turns.
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const arch = require('../oracle/oracle-architecture');
 const facts = require('./architecture-facts');
@@ -183,15 +187,103 @@ function saveMap({ archRoot, projectId, plan }) {
   return arch.writePlan(archRoot, projectId, plan, new Date().toISOString());
 }
 
+// #731: the project-map skill the workflow's plan step follows (the app's bundled copy); '' when missing,
+// the prompt then names the plan's format itself
+const SKILL_FILE = path.join(__dirname, '..', '..', '..', '..', 'skills', 'project-map', 'SKILL.md');
+function mapSkill() {
+  try { return fs.readFileSync(SKILL_FILE, 'utf8'); } catch { return ''; }
+}
+
+/**
+ * #731: the cartographer's prompt outside the workflow: the plan step's (workflows/analyze-project.yaml),
+ * with the facts step's output and, on a new round, the validator's report and the refused plan.
+ */
+function planPrompt(f, { previous = null, report = '', round = 0, skill = mapSkill() } = {}) {
+  const json = (x) => JSON.stringify(x ?? null);
+  const lines = [
+    'Write the city plan of the repository in the current folder, following the project-map skill below.',
+    'Read the manifests, the README, the agent instructions and the entry points it names before you write; never edit a file.',
+    '',
+    'The facts (counted from `git ls-files`, no model):',
+    `- tracked files: ${f.files}`,
+    `- manifests: ${(f.manifests || []).join(', ') || 'none'}`,
+    '- files per folder (any depth, `(root)` = the files at the root):',
+    json(f.folders),
+    '- files per file-name pattern:',
+    json(f.patterns),
+    '- the folder city (districts by folder, with their files and lines) and the edges between its districts:',
+    json(f.folder_city),
+  ];
+  if (f.current_plan) {
+    lines.push('', 'This is a REFRESH. The current plan, which the owner has seen:', json(f.current_plan),
+      'Start from it: keep every zone and district id and name, change only the rules (include, exclude, ignore) and add districts for what the rules miss.');
+  }
+  if (previous || report) {
+    lines.push('', `Your previous plan failed the validation (round ${round}):`, report);
+    if (previous) lines.push('', 'Your previous plan:', json(previous));
+    lines.push('Fix the rules so that the problems above go away; do not add a catch-all district.');
+  }
+  lines.push('', 'Answer with the plan as `city_plan` in one ```json block: { "city_plan": { "version": 1, "project", "summary", "ignore", "zones", "districts", "landmarks", "ports", "evidence" } }.');
+  if (skill) lines.push('', '--- The project-map skill ---', skill);
+  return lines.join('\n');
+}
+
+/**
+ * #731: the cartographer's turn outside the workflow (the onboarding's city analysis): the facts, the plan
+ * asked of the Oracle's model (one turn per round, the validator's report on the next round), validated
+ * and saved → { cost_usd (the rounds' sum, null when none reported one), tokens, coverage, history,
+ * rounds, simulated }. A simulation (`mock`) saves providers.js's MOCK_CITY_PLAN. Throws when the Oracle
+ * refuses (`refused`) or the plan still fails the validation after `rounds` rounds, with the problems.
+ * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, rounds?: number }} where
+ */
+async function drawMap({ folder, archRoot, projectId, mock, oracle, agent, rounds = 2 }) {
+  if (!mock && !oracle) throw new Error('The Oracle is not available to this run: the city plan needs the app service.');
+  const f = await mapFacts({ folder, archRoot, projectId });
+  let cost = null;
+  const tokens = { input: 0, output: 0 };
+  let previous = null;
+  let v = null;
+  for (let round = 1; round <= Math.max(1, rounds); round++) {
+    let proposed;
+    if (mock) {
+      proposed = require('../../engine/providers').MOCK_CITY_PLAN;
+    } else {
+      const refused = oracle.budgetRefusal();
+      if (refused) throw Object.assign(new Error(`The Oracle refused the city plan: ${refused.text}`), { refused: true });
+      const res = await oracle.oneTurn({ prompt: planPrompt(f, { previous, report: v?.report, round: round - 1 }), model: agent?.model, effort: agent?.effort, startReason: 'architecture' });
+      if (res.costUsd != null && Number.isFinite(Number(res.costUsd))) cost = (cost || 0) + Number(res.costUsd);
+      tokens.input += Number(res.tokens?.input) || 0;
+      tokens.output += Number(res.tokens?.output) || 0;
+      let answer;
+      try { answer = arch.parseAnswer(res.text); } catch { answer = null; }
+      proposed = answer?.city_plan;
+      if (!proposed || typeof proposed !== 'object') {
+        if (round < rounds) { previous = null; v = { report: 'Your answer had no `city_plan` object in a ```json block.' }; continue; }
+        throw new Error('The cartographer answered no city plan (no `city_plan` object in a ```json block).');
+      }
+    }
+    v = await validateMap({ folder, archRoot, projectId, proposed });
+    if (v.ok) {
+      const saved = saveMap({ archRoot, projectId, plan: v.plan });
+      return { cost_usd: cost, coverage: v.coverage, history: saved?.history ?? null, rounds: round, simulated: !!mock, tokens };
+    }
+    if (mock) break;
+    previous = proposed;
+  }
+  throw new Error(`The city plan did not pass the validation: ${(v?.problems || []).join('; ') || 'no problem named'}`);
+}
+
 /**
  * The analyze step (#381): the Oracle's architecture analysis of the project, saved as
  * architecture:analyze saves it → { report_id, date, findings, summary, cost_usd, simulated }.
  * `oracle` / `agent`: the service's Oracle ({ oneTurn, budgetRefusal }) and its agent; a simulation
  * (`mock`) needs neither and saves the simulated report; a real run without them fails, as does one
  * the Oracle refuses (its budget), with the reason.
- * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, onItem?: Function }} where
+ * #731: `planCostUsd` / `planTokens`, the cartographer's turn run just before (drawMap), are added to the
+ * saved report's cost, so the analysis's estimate (arch.estimateCost) covers both turns.
+ * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, onItem?: Function, planCostUsd?: number|null, planTokens?: any }} where
  */
-async function analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, onItem = null }) {
+async function analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, onItem = null, planCostUsd = null, planTokens = null }) {
   if (!mock && !oracle) throw new Error('The Oracle is not available to this run: the analysis needs the app service.');
   const exclude = arch.readSettings(archRoot, projectId).exclude;
   const { state, model } = await facts.readFacts(folder, { exclude });
@@ -201,14 +293,19 @@ async function analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, on
   const out = await arch.analyze({ project, model, mock: !!mock, oracle, agent, onItem });
   if (out.refused) throw new Error(`The Oracle refused the analysis: ${out.refused.text}`);
   const date = new Date().toISOString();
-  const saved = arch.saveReport(archRoot, projectId, { date, head: model.head, branch: model.branch, costUsd: out.costUsd, tokens: out.tokens, simulated: out.simulated, report: out.report });
-  return { cost_usd: out.costUsd, date, findings: (out.report.findings || []).length, report_id: saved.id, simulated: out.simulated, summary: out.report.summary };
+  const plan = !out.simulated && planCostUsd != null && Number.isFinite(Number(planCostUsd)) ? Number(planCostUsd) : null;
+  const costUsd = plan == null ? out.costUsd : (out.costUsd == null ? null : Number(out.costUsd) + plan);
+  const tokens = !out.simulated && planTokens ? { ...out.tokens, input: (Number(out.tokens?.input) || 0) + (Number(planTokens.input) || 0), output: (Number(out.tokens?.output) || 0) + (Number(planTokens.output) || 0) } : out.tokens;
+  const saved = arch.saveReport(archRoot, projectId, { date, head: model.head, branch: model.branch, costUsd, tokens, simulated: out.simulated, report: out.report });
+  return { cost_usd: costUsd, date, findings: (out.report.findings || []).length, report_id: saved.id, simulated: out.simulated, summary: out.report.summary };
 }
 
 module.exports = {
   analyzeMap,
+  drawMap,
   manifestsOf,
   mapFacts,
+  planPrompt,
   saveMap,
   treeCounts,
   validateMap,

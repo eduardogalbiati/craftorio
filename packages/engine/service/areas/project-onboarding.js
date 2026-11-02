@@ -1,7 +1,9 @@
 // Service area (#640, onboarding step 3 of docs/work/first-project-onboarding/plan.md): the jobs that
 // follow a new project's import, chained by dependency: clone (#639, packages/engine/domains/project/projects.js)
 // → facts → (the Ways of working profile ∥ the project map, its findings added as refactor proposals)
-// → the refactor ranking after the map.
+// → the refactor ranking after the map. #731: the project map job draws the city plan (project-map.js
+// drawMap: the cartographer's turn, validated and saved) then runs the Oracle's report (analyzeMap), so the
+// project's City is grouped by the plan after the onboarding.
 // The free part (facts and profile, spec R5) runs once the clone is ready; the paid part (project map
 // and ranking) only after onboardingAnalyze ("analyze later" never calls it). The project map and the
 // ranking take the machine-wide slot SLOT (packages/engine/engine/machine-slot.js), so they wait for
@@ -93,6 +95,12 @@ function e2eJobs(jobs) {
     if (fail.includes(name)) throw new Error(`The simulated ${name} failed (e2e).`);
     return run(input);
   }]));
+}
+
+// #731: the E2E hook of a simulated run (features/steps/onboarding.steps.js): MULTIAGENT_E2E_CITY_PLAN_FAIL=1
+// makes the projectMap job's city plan throw before the Oracle's report
+function e2eCityPlan() {
+  if (simulation.simulationOnly() && process.env.MULTIAGENT_E2E_CITY_PLAN_FAIL === '1') throw new Error('The simulated city plan failed (e2e).');
 }
 
 // #724 #743: the clone is not one of those jobs (follow() awaits projects.cloneJob): in a simulated run
@@ -453,9 +461,16 @@ module.exports = (ctx) => {
       facts: ({ projectId, folder }) => projectMap.mapFacts({ folder, archRoot, projectId }),
       // { refused } (an interview already running, the Oracle's budget) fails the job, so Retry runs it again
       profile: ({ projectId }) => ctx.workflowInterview({ projectId }),
-      // the map's findings become the Refactor tab's proposals, so the ranking (and the review, #642) has them
+      // #731: the city plan first (the cartographer's turn, validated and saved), then the Oracle's report with
+      // both turns' cost: a refused plan never pays the Oracle, and Retry runs the whole job once.
+      // The map's findings become the Refactor tab's proposals, so the ranking (and the review, #642) has them
       projectMap: async ({ projectId, folder }) => {
-        const out = await projectMap.analyzeMap({ folder, archRoot, projectId, mock: simulation.simulationOnly(), oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) });
+        e2eCityPlan();
+        const mock = simulation.simulationOnly();
+        const oracle = ctx.oracleService();
+        const agent = agents.readAgent(ws.agents, agents.ORACLE_ID);
+        const plan = await projectMap.drawMap({ folder, archRoot, projectId, mock, oracle, agent });
+        const out = await projectMap.analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, planCostUsd: plan.cost_usd, planTokens: plan.tokens });
         const saved = arch.listReports(archRoot, projectId).find((r) => r.id === out.report_id);
         proposalsRun.addFindings({ wsRoot: ws.root, projectId, reportId: out.report_id, findings: saved?.report?.findings });
         return out;

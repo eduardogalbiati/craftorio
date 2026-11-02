@@ -866,6 +866,7 @@ module.exports = {
   isRetryable,
   isToolTimeout,
   killTree,
+  MOCK_CITY_PLAN,
   OWN_GROUP,
   parseClaude,
   parseCodex,
