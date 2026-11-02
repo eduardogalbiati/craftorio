@@ -189,6 +189,74 @@ test('applyHints: without a projectId, or without api.projectInputHints, it does
   await assert.doesNotReject(WorkflowInputs.applyHints(root, { language: {} }, 'proj-1'));
 });
 
+// ---- #735: the project's run defaults (hints.runDefaults) before the workflow's own --------------
+// Each test uses its own project id: applyHints caches the hints per project for 30 s.
+
+const RUST_DEFAULTS = { mode: 'remote', e2e_tests: 'off', e2e_command: '', test_command: 'cargo test', ui_folders: [], screenshots: 'off' };
+const RUN_DEFS = {
+  mode: { type: 'string', enum: ['local', 'remote'], default: 'local' },
+  e2e_tests: { type: 'string', enum: ['off', 'write', 'write_and_run'], default: 'write_and_run' },
+  e2e_command: { type: 'string', default: '' },
+  test_command: { type: 'string', default: '' },
+};
+
+test('#735 applyHints: a Rust remote unit-only project prefills Mode remote, E2E off, cargo test and no npm command', async (t) => {
+  t.after(() => { delete global.api; });
+  const { root, controls } = makeFakeRoot(Object.keys(RUN_DEFS));
+  controls.mode.value = 'local';
+  controls.e2e_tests.value = 'write_and_run';
+  global.api = { projectInputHints: async () => ({ runDefaults: RUST_DEFAULTS }) };
+  await WorkflowInputs.applyHints(root, RUN_DEFS, 'proj-735-rust');
+  const values = [controls.mode.value, controls.e2e_tests.value, controls.test_command.value, controls.e2e_command.value];
+  assert.deepEqual(values, ['remote', 'off', 'cargo test', '']);
+  assert.doesNotMatch(values.join(' '), /\bnpm\b/);
+});
+
+test('#735 applyHints: a value prefilled from the project is marked "from the project"', async (t) => {
+  t.after(() => { delete global.api; });
+  const { root, fields } = makeFakeRoot(['test_command']);
+  global.api = { projectInputHints: async () => ({ runDefaults: { test_command: 'cargo test' } }) };
+  await WorkflowInputs.applyHints(root, { test_command: RUN_DEFS.test_command }, 'proj-735-note');
+  assert.match(fields.test_command._notes.join(''), /from the project|do projeto/i);
+});
+
+test('#735 applyHints: a value the owner typed wins over the project\'s and gets no "from the project" note', async (t) => {
+  t.after(() => { delete global.api; });
+  const { root, controls, fields } = makeFakeRoot(['test_command']);
+  fields.test_command.dataset.wiTouched = '1';
+  controls.test_command.value = 'cargo nextest run';
+  global.api = { projectInputHints: async () => ({ runDefaults: { test_command: 'cargo test' } }) };
+  await WorkflowInputs.applyHints(root, { test_command: RUN_DEFS.test_command }, 'proj-735-typed');
+  assert.equal(controls.test_command.value, 'cargo nextest run');
+  assert.doesNotMatch(fields.test_command._notes.join(''), /from the project|do projeto/i);
+});
+
+test('#735 applyHints: a remembered value (keep) wins over the project\'s', async (t) => {
+  t.after(() => { delete global.api; });
+  const { root, controls } = makeFakeRoot(['test_command']);
+  controls.test_command.value = 'make test';
+  global.api = { projectInputHints: async () => ({ runDefaults: { test_command: 'cargo test' } }) };
+  await WorkflowInputs.applyHints(root, { test_command: RUN_DEFS.test_command }, 'proj-735-keep', { keep: ['test_command'] });
+  assert.equal(controls.test_command.value, 'make test');
+});
+
+test('#735 applyHints: two UI folders of the project fill the box comma-separated', async (t) => {
+  t.after(() => { delete global.api; });
+  const { root, controls } = makeFakeRoot(['ui_folders']);
+  global.api = { projectInputHints: async () => ({ runDefaults: { ui_folders: ['web/', 'admin/src/'] } }) };
+  await WorkflowInputs.applyHints(root, { ui_folders: { type: 'array', default: ['src/renderer/'] } }, 'proj-735-folders');
+  assert.equal(controls.ui_folders.value, 'web/,admin/src/');
+});
+
+test('#735 applyHints: a project value outside the input\'s options is ignored', async (t) => {
+  t.after(() => { delete global.api; });
+  const { root, controls } = makeFakeRoot(['mode']);
+  controls.mode.value = 'local';
+  global.api = { projectInputHints: async () => ({ runDefaults: { mode: 'hybrid' } }) };
+  await WorkflowInputs.applyHints(root, { mode: RUN_DEFS.mode }, 'proj-735-enum');
+  assert.equal(controls.mode.value, 'local');
+});
+
 // ---- inputPills (#216): a run's inputs as friendly pills, the same on every card --------------
 // inputPills(workflow, inputs) → markup: one pill per input not at its workflow default, "<label>:
 // <option label>"; the raw key and value only in the tooltip. Shared by the roadmap card, the
