@@ -56,7 +56,8 @@ test('#487 openQuestions asks local or remote when the profile does not know it,
   const q = compose.openQuestions({ ...SOLO, merge: null }).find((x) => x.id === 'mode');
   assert.equal(q === undefined, false);
   assert.equal(q.default, 'local');
-  assert.deepEqual(q.options.map((o) => o.value), ['local', 'remote']);
+  // #738: Fork + PR is the third way of working
+  assert.deepEqual(q.options.map((o) => o.value), ['local', 'remote', 'fork']);
   assert.equal(compose.openQuestions(SOLO).some((x) => x.id === 'mode'), false);
 });
 

@@ -1053,3 +1053,64 @@ Then('every disabled step of the Next steps card says why, in its tooltip and in
   }
   expect(disabled, 'disabled steps on the card').toBeGreaterThan(0);
 });
+
+// ---- #738: Fork + PR, a repository the owner can't push to ------------------------------------------------------
+// When gh answers permissions.push=false for the imported repository, the wizard suggests a fork. What the
+// screen exposes (to be added by #738):
+// - data-testid="wizard-fork-notice": the notice "You can't push to <owner/repo>. Create a fork in your account
+//   to contribute?", holding wizard-create-fork ("Create a fork": gh repo fork, origin = the fork, upstream =
+//   the original) and wizard-work-locally ("Work locally": the Local way of working, no pull request);
+// - data-testid="wizard-way-of-working": in step 3's suggested workflows column, the chosen way of working
+//   ("Local", "Remote" or "Fork + PR"; Local says "no pull request").
+//
+// E2E HOOK THE DEVELOPER MUST ADD, read only when MULTIAGENT_SIMULATION_ONLY=1 (the simulated onboarding,
+// packages/engine/service/areas/project-onboarding.js): MULTIAGENT_E2E_REPO_PUSH=0|1 stands for gh's answer
+// (permissions.push false | true) for the imported repository, a local file:// one included, without calling
+// gh; with 0 "Create a fork" is simulated (no gh repo fork, no network): the project's origin becomes the
+// simulated fork and upstream the original.
+
+const forkNotice = (page) => wizard(page).getByTestId('wizard-fork-notice');
+const FORK_CHOICE = { 'Create a fork': 'wizard-create-fork', 'Work locally': 'wizard-work-locally' };
+
+Given("the app is open where I can't push to the repositories I import", async ({ e2e }) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_REPO_PUSH: '0' } });
+});
+
+Given('the app is open where I can push to the repositories I import', async ({ e2e }) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_REPO_PUSH: '1' } });
+});
+
+Then('the wizard suggests creating a fork to contribute, or working locally', async ({ e2e }) => {
+  const notice = forkNotice(e2e.window);
+  await expect(notice).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(notice).toContainText(/You can.t push to \S+/);
+  await expect(notice).toContainText('Create a fork in your account to contribute?');
+  for (const [label, id] of Object.entries(FORK_CHOICE)) {
+    const button = notice.getByTestId(id);
+    await expect(button, `the "${label}" button`).toHaveRole('button');
+    await expect(button).toHaveAccessibleName(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
+    await expect(button).toBeEnabled();
+  }
+});
+
+When('I choose {string} in the fork suggestion', async ({ e2e }, label) => {
+  const id = FORK_CHOICE[label];
+  if (!id) throw new Error(`unknown choice "${label}": one of ${Object.keys(FORK_CHOICE).join(', ')}`);
+  await forkNotice(e2e.window).getByTestId(id).click();
+  await expect(forkNotice(e2e.window)).toBeHidden({ timeout: IMPORT_TIMEOUT });
+});
+
+Then('the wizard does not suggest a fork', async ({ e2e }) => {
+  await expect(forkNotice(e2e.window)).toHaveCount(0);
+  await expect(wizard(e2e.window).getByText(/You can.t push to/)).toHaveCount(0);
+});
+
+Then("the wizard's suggested workflows use the {string} way of working", async ({ e2e }, mode) => {
+  const way = workflowsColumn(e2e.window).getByTestId('wizard-way-of-working');
+  await expect(way).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(way).toContainText(new RegExp(`^\\s*${escapeRe(mode)}(?!\\s*\\+)`));
+});
+
+Then("the wizard's suggested workflows say {string}", async ({ e2e }, text) => {
+  await expect(workflowsColumn(e2e.window)).toContainText(new RegExp(escapeRe(text), 'i'), { timeout: IMPORT_TIMEOUT });
+});

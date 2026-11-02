@@ -203,7 +203,7 @@ test('#726 the stored values stay: the choices\' values, the profile\'s values a
   assert.equal(byId.feature.value, 'remote-e2e');
   assert.equal(byId.release.value, 'milestone');
   assert.equal(M.ciChoice(p).value, 'pr+release');
-  assert.deepEqual(M.PROFILE, { mode: ['local', 'remote'], ci: ['none', 'release', 'pr+release'], tests: ['unit', 'unit+e2e'] });
+  assert.deepEqual(M.PROFILE, { mode: ['local', 'remote', 'fork'], ci: ['none', 'release', 'pr+release'], tests: ['unit', 'unit+e2e'] });
   assert.deepEqual(Object.keys(M.PROFILE_LABELS.ci), ['none', 'release', 'pr+release']);
   assert.deepEqual(M.CREATE_ANSWERS.release, ['milestone', 'per-merge', 'train', 'rc-stable']);
 });

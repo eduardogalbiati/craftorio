@@ -602,3 +602,46 @@ Feature: Bring a project in with a guided wizard
     Then the project page shows the Next steps card
     And the Next steps card shows "release CI" and "screenshots" as coming later
     And every disabled step of the Next steps card says why, in its tooltip and in a visible line
+
+  # #738: a repository the owner can't push to (gh answers permissions.push=false) gets the fork suggestion:
+  # Create a fork (origin = the fork, upstream = the original) picks the Fork + PR way of working, Work locally
+  # the Local one (no pull request). gh's answer and the fork are simulated (an E2E hook, see onboarding.steps.js).
+  @issue-738
+  Scenario: Importing a repository I can't push to suggests a fork, and Create a fork picks the Fork + PR way of working
+    Given the app is open where I can't push to the repositories I import
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "fork-738"
+    And I go to the next step of the wizard
+    Then the wizard suggests creating a fork to contribute, or working locally
+    When I choose "Create a fork" in the fork suggestion
+    Then the wizard is on its "analysis" step
+    When I choose "Define manually" in the wizard's suggested workflows
+    Then the wizard's suggested workflows use the "Fork + PR" way of working
+
+  @issue-738
+  Scenario: Choosing to work locally on a repository I can't push to picks the Local way of working, with no pull request
+    Given the app is open where I can't push to the repositories I import
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "local-738"
+    And I go to the next step of the wizard
+    Then the wizard suggests creating a fork to contribute, or working locally
+    When I choose "Work locally" in the fork suggestion
+    Then the wizard is on its "analysis" step
+    When I choose "Define manually" in the wizard's suggested workflows
+    Then the wizard's suggested workflows use the "Local" way of working
+    And the wizard's suggested workflows say "no pull request"
+
+  @issue-738
+  Scenario: Importing a repository I can push to does not suggest a fork
+    Given the app is open where I can push to the repositories I import
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "push-738"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard does not suggest a fork
