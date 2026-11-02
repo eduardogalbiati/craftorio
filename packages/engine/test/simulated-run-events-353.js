@@ -64,4 +64,4 @@ async function simulatedSoftwareDevelopmentEvents() {
   return { status: finished?.status || null, events: events.map((ev) => project(ev, dirs)) };
 }
 
-module.exports = { simulatedSoftwareDevelopmentEvents };
+module.exports = { simulatedSoftwareDevelopmentEvents, project };
