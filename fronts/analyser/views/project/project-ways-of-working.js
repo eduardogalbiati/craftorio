@@ -36,9 +36,14 @@
   const MODE_OPTIONS = [['local', 'ways_of_working.merge_local'], ['remote', 'ways_of_working.merge_pr']];
   const CI_OPTIONS = [['none', 'ways_of_working.ci_none'], ['release', 'ways_of_working.ci_release'], ['pr+release', 'ways_of_working.ci_pr_release']];
   const TESTS_OPTIONS = [['unit', 'ways_of_working.tests_unit'], ['unit+e2e', 'ways_of_working.tests_unit_e2e']];
+  // #735: the project's kind (packages/engine/domains/project/project-run-defaults.js KINDS): a backend gets no UI step
+  const KIND_OPTIONS = [['backend', 'ways_of_working.kind_backend'], ['frontend', 'ways_of_working.kind_frontend'], ['full-stack', 'ways_of_working.kind_full_stack']];
+  // #735: the profile's fields saved as the project's run defaults (project.runDefaults, the run dialog's inputs)
+  const RUN_DEFAULT_OF = { mode: 'mode', testCommand: 'test_command', e2eCommand: 'e2e_command', checkCommand: 'check_command' };
   // the profile's fields the owner may override (packages/engine/domains/workflow/workflow-compose.js PROFILE_FIELDS): a fixed list is
   // a select (an empty value keeps the inferred one), a command or a list of languages is free text
   const PROFILE_EDIT = [
+    { id: 'kind', label: 'ways_of_working.f_kind', options: KIND_OPTIONS },
     { id: 'mode', label: 'ways_of_working.q_mode', options: MODE_OPTIONS },
     { id: 'release', label: 'ways_of_working.q_release', options: [['milestone'], ['per-merge'], ['train'], ['rc-stable']] },
     { id: 'ci', label: 'ways_of_working.f_ci', options: CI_OPTIONS },
@@ -58,6 +63,7 @@
   // the inferred profile with the owner's answers of the same name (as workflow-compose.js withOverrides)
   function effectiveProfile() {
     const out = { ...(cur.result?.profile || {}) };
+    if (cur.project?.kind) out.kind = cur.project.kind;
     for (const f of PROFILE_EDIT) {
       const v = cur.answers[f.id];
       if (v == null || (typeof v === 'string' && !v.trim())) continue;
@@ -68,6 +74,7 @@
 
   function profileLabels(p) {
     const out = [
+      ...(p.kind ? [`${t('ways_of_working.f_kind')}: ${optionText(KIND_OPTIONS, p.kind)}`] : []),
       `${t('ways_of_working.q_mode')}: ${optionText(MODE_OPTIONS, p.mode)}`,
       `${t('ways_of_working.release')}: ${p.release || t('ways_of_working.open')}`,
       `CI: ${optionText(CI_OPTIONS, p.ci)}`,
@@ -262,6 +269,28 @@
     }
     cur.editing = false;
     compose();
+    saveRunDefaults();
+  }
+
+  // #735: the edited profile becomes the project's kind and run defaults (projects:update), so the run
+  // dialog, the roadmap and the CLI start from it; a field left open keeps what the engine derives
+  async function saveRunDefaults() {
+    const c = cur;
+    const p = effectiveProfile();
+    const runDefaults = { ...(c.project.runDefaults || {}) };
+    for (const [field, input] of Object.entries(RUN_DEFAULT_OF)) {
+      if (typeof p[field] === 'string' && p[field].trim()) runDefaults[input] = p[field].trim();
+    }
+    if (p.tests === 'unit') { runDefaults.e2e_tests = 'off'; runDefaults.e2e_command = ''; }
+    const patch = { runDefaults };
+    if (KIND_OPTIONS.some(([k]) => k === c.answers.kind)) patch.kind = c.answers.kind;
+    try {
+      const saved = await api.updateProject(c.project.id, patch);
+      c.project = { ...c.project, ...(saved || patch) };
+      if (cur === c) showToast(t('ways_of_working.run_defaults_saved'));
+    } catch (e) {
+      if (cur === c) { c.error = errMsg(e); render(); }
+    }
   }
 
   // #733: a call the service may lack (an older engine, a test's fake api) answers null
