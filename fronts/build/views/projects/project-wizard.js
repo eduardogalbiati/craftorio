@@ -103,17 +103,19 @@
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
+  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
   const {
-    cliWarning,
-    forkNotice,
-    forkPending,
     jobReason,
     kindField,
     pickedWorkflows,
     profileOf,
     textOf,
     workflowsColumn,
-  } = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
+  } = column;
+  // the repository step's notices (CLI missing or signed out; #738 no push access)
+  const cliWarning = (cli) => column.cliWarning(cli);
+  const forkNotice = (o) => column.forkNotice(o);
+  const forkPending = (o) => column.forkPending(o);
   const failedPaid = (s) => PAID.find((id) => s?.jobs?.[id]?.status === 'failed') || null;
   // #724: the progress tray, hidden while the wizard is open (project-wizard-tray.js)
   const tray = window.ProjectWizardTray({
