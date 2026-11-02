@@ -1,7 +1,9 @@
 // Screenshot seed of a project's screen (--view project, opened with openProjectView): the local merge
 // (its run list's "issue from cache" badge, #168), the demo roadmap's runs (#289: tonight's runs and
 // the artifact runs expanded), child runs, a long run history and a simulated run.
-// #354: --tab overview | conflicts | architecture | refactor opens that tab of the page. The Conflict
+// #354, #730: --tab overview | city | health | conflicts opens that tab of the page (the legacy
+// architecture opens City for the city modes and the analysis states, Health otherwise; the legacy
+// refactor opens Health). The Conflict
 // map tab (conflicts) reads a demo git repository with three nights of merged runs (views/analytics.js)
 // and the saved conflict map (views/backlog.js); a row opened: --click "[data-testid=project-conflict-row]".
 // Its states, --mode: not-git (the folder is a plain folder), no-runs (a git repository no run
@@ -39,11 +41,9 @@
 // #732: --mode no-folder and city-no-folder: the project loses its folder once the tab drew, then
 // Analyze is clicked (the tab's button, or the City view's under "No city plan yet"): the translated
 // "no folder on this machine" message, with no estimate next to the retry.
-// #357: the Refactor tab (refactor) on the Architecture demo: five proposals ranked by the Product
-// Owner (one filed and planned, one done that left the Danger Zone, one not improved, one dismissed:
-// --click "[data-testid=refactor-filter-dismissed]"), the cadence on with "next in 4 runs". Its states,
-// --mode: never (no Architecture report), empty (a report, no proposal), prioritizing
-// (refactor:prioritize never answers) and error (it fails), the last two after a click on prioritize.
+// #730: the Health tab (health) holds the facts, the report and its findings: one finding already filed
+// as issue #10 (its link instead of Create issue) and an older refactor proposal listed under its
+// finding; the Refactor tab and its Product Owner ranking are gone (no "prioritizing" mode).
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -430,7 +430,6 @@ function stubArchitecture(mode) {
 async function showArchitecture({ mode, click, js, project, analysis, seedRun }) {
   if (analysis) await click('[data-testid="architecture-analyze"]');
   if (mode?.startsWith('seeds')) await showSeeds({ click, js, seedRun });
-  if (['city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage'].includes(mode)) await click('[data-testid="architecture-mode-city"]');
   // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
   const pid = JSON.stringify(project.id);
   if (mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
@@ -444,37 +443,24 @@ async function showArchitecture({ mode, click, js, project, analysis, seedRun })
 // lose it after the tab drew): Analyze shows the translated message, with no estimate on the retry
 async function showNoFolder({ mode, click, js }) {
   await js('state.pv.project.folder = null; (state.projects || []).forEach((p) => { p.folder = null; })');
-  if (mode === 'city-no-folder') {
-    await click('[data-testid="architecture-mode-city"]');
-    await click('[data-testid="project-city-analyze"]');
-  } else {
-    await click('[data-testid="architecture-analyze"]');
-  }
-}
-
-// #357: "Ask the Product Owner to prioritize" never answers (its state stays on screen) or fails
-function stubRefactor(mode) {
-  const ranking = { prioritizing: () => new Promise(() => {}), error: () => { throw new Error('The Product Owner refused the ranking: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[mode];
-  if (ranking) stubChannel('refactor:prioritize', ranking);
-  return Boolean(ranking);
+  await click(mode === 'city-no-folder' ? '[data-testid="project-city-analyze"]' : '[data-testid="architecture-analyze"]');
 }
 
 async function afterOpen({ args, click, js, project }) {
   if (!args.tab) return;
+  const tab = tabOf(args);
   // the tab's first read never ends: its loading state stays on screen
-  if (args.tab === 'conflicts' && args.mode === 'loading') stubChannel('analytics:performance', () => new Promise(() => {}));
-  const architecture = args.tab === 'architecture' && stubArchitecture(args.mode);
-  const ranking = args.tab === 'refactor' && stubRefactor(args.mode);
-  await click(`[data-pv-tab="${args.tab}"]`);
-  if (ranking) await click('[data-testid="refactor-prioritize"]');
+  if (tab === 'conflicts' && args.mode === 'loading') stubChannel('analytics:performance', () => new Promise(() => {}));
+  const architecture = (tab === 'city' || tab === 'health') && stubArchitecture(args.mode);
+  await click(`[data-pv-tab="${tab}"]`);
   if (architecture) await showArchitecture({ mode: args.mode, click, js, project, ...architecture });
 }
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'prioritizing', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
   open,
   run: true,
   seed,
-  tabs: ['overview', 'conflicts', 'architecture', 'refactor'],
+  tabs: ['overview', 'city', 'health', 'conflicts', 'architecture', 'refactor'],
 };

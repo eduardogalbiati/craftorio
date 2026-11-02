@@ -830,15 +830,9 @@
     return true;
   }
 
-  async function onClick(e) {
-    const act = e.target?.closest?.('[data-act]')?.dataset.act;
-    if (!act || !cur) return;
-    if (act === 'close' || act === 'cancel') close();
-    else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
-    else if (onCreateClick(act, e)) return;
-    else if (act === 'source-git-url') toRepository();
-    else if (act === 'source-folder') await fromFolder();
-    else if (act === 'provider') {
+  // the repository step's clicks (the provider toggle, a pick in the account's repositories): true when handled
+  function onRepoClick(act, e) {
+    if (act === 'provider') {
       cur.provider = e.target.closest('[data-provider]').dataset.provider;
       render();
       document.getElementById('wizard-repo')?.focus?.();
@@ -852,6 +846,18 @@
       if (nameField) nameField.value = cur.model.name;
       document.getElementById('wizard-name')?.focus?.();
     }
+    else return false;
+    return true;
+  }
+
+  async function onClick(e) {
+    const act = e.target?.closest?.('[data-act]')?.dataset.act;
+    if (!act || !cur) return;
+    if (act === 'close' || act === 'cancel') close();
+    else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
+    else if (onCreateClick(act, e) || onRepoClick(act, e)) return;
+    else if (act === 'source-git-url') toRepository();
+    else if (act === 'source-folder') await fromFolder();
     else if (act === 'open-city') finish({ city: true });
     else if (act === 'create-issue') {
       const button = e.target.closest('[data-act]');

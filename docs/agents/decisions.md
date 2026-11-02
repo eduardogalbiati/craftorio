@@ -8,6 +8,18 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-01** (#730): a project's page has the tabs Overview · City · Health · Conflict map (last).
+  Health holds the git facts (free, no model) on top and the Oracle's latest report (summary, verdict
+  per area, findings) below, with its report picker and a rerun with its estimate. There is no
+  Refactor tab and no Product Owner ranking of proposals: a finding becomes an issue from where it is
+  (Create issue: a GitHub/GitLab issue labeled refactor with the finding's text, files and evidence;
+  Create issue and prioritize: the same, then a planned roadmap item), and then shows the issue's link
+  and its roadmap stage. The onboarding sends no finding anywhere on its own and runs no `ranking`
+  job; its review lists the findings with the same two buttons. Older proposals stay readable under
+  their finding; the `refactor` workflow still runs on an issue made this way. Replaces "what the
+  Oracle finds feeds the Refactor tab, where the Product Owner prioritizes" (#356, #357). Why: a finding
+  and a proposal were the same diagnosis twice, and the onboarding marked every finding as sent
+  before the owner saw it.
 - **2026-11-01** (#658, #702, #651, #633): the AI-native SDLC stays out of Code & Build. The
   `feature`, `fix` and `release` workflows (and a user's own) take an issue and hand back a PR and
   their evidence as declared outputs; they never read or write `docs/work/`. A pre-flow writes an
@@ -275,8 +287,8 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   works for any language. The deterministic
   facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
   pure core in `packages/shared/`; complexity comes only from a real tool, never a regex; the analysis is
-  the Oracle's, on demand, in its daily budget. What the Oracle finds feeds the Refactor tab, where
-  the Product Owner prioritizes. Why: a parser per language cannot be the base when a project can be
+  the Oracle's, on demand, in its daily budget. What the Oracle finds becomes an issue from the Health tab
+  (#730, above). Why: a parser per language cannot be the base when a project can be
   in any language, or several. (#574, 2026-10-26) Which docs and rules the agents use is a script,
   `scripts/docs-usage.js` (`npm run docs:usage`), not a seed, and the `run-retrospective` workflow
   does not take its report as an input. Why: the questions are countable from the run folders, so

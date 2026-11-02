@@ -10,7 +10,8 @@ The first project's onboarding: the wizard, its progress tray, the review and th
 - `packages/shared/onboarding-model.js` (`window.OnboardingModel`, pure, dual-load): the steps, the
   wizard's state, the workflow suggestions from the profile and the cost sum.
 - `packages/engine/service/areas/project-onboarding.js` and `channels/onboarding.js`: the jobs after an
-  import (clone → facts → profile ∥ project map → ranking), `onboarding:start | status | analyze | retry`
+  import (clone → facts → profile ∥ project map; #730: no Product Owner ranking, and no finding sent
+  anywhere on its own), `onboarding:start | status | analyze | retry`
   and the `onboarding:changed` event.
 - `fronts/analyser/views/project/project.js`: the Next steps card (`project-next-steps`), shown after
   Finish until dismissed, remembered per project in localStorage `multiagent.nextSteps`.
@@ -68,7 +69,7 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
 3. **analysis** (mock-4): on the left the jobs from the clone on with their status and the cost before the
    click (`wizard-cost`, `wizard-cost-total`, one `data-part` per paid analysis, `wizard-skip`). A failed
    job is a state of the analysis, never "not started": its row reads the reason in the error colour
-   (`wizard-job-error-<id>`, the engine's `code` — cli-missing, invalid-ranking, no-folder, refused,
+   (`wizard-job-error-<id>`, the engine's `code` — cli-missing, no-folder, refused,
    timeout, failed — translated, the full error on hover), "—" as its amount, and Retry
    (`wizard-job-retry-<id>`, `api.retryOnboarding`, which reruns only what failed or never ran: a done
    project map is not paid twice). On the right the suggested workflows (`wizard-workflows-column`,
@@ -84,15 +85,18 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    the analysis goes on in the background and the review shows what is pending. Nothing paid starts
    without Analyze; Continue before it skips the analysis.
 4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on, its workflows),
-   the city (`wizard-review-city`, Open the city) and the refactor backlog, then the backlog and an idea
-   for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each refactor
-   with its file's score and quadrant and an unchecked pick. `wizard-finish` never waits: the project's
-   page opens with the Next steps card, the picked refactors go to the roadmap as planned items and the
-   idea to the Inbox.
+   the city (`wizard-review-city`, Open the city) and the findings (`wizard-review-findings`, #730: the
+   Oracle's report from the project map run), then the backlog and an idea for the Inbox; each section
+   `data-state="ready | pending | failed | skipped | later"`; each finding (`wizard-review-finding`) with
+   its severity and Create issue (`wizard-review-create-issue`) / Create issue and prioritize
+   (`wizard-review-create-issue-prioritize`), both through `architecture:createIssue`; once filed the
+   issue's link (`wizard-review-finding-issue`) replaces the buttons. `wizard-finish` never waits: the
+   project's page opens with the Next steps card and the idea goes to the Inbox; nothing is filed without
+   its own click.
 
 The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to
-file and add, the first idea, the refactor cadence ("Turn on" opens the Refactor tab, where the cadence is
-turned on), and release CI and screenshots, shown disabled (later phases). Its heading adds "· city and
+file and add, the first idea, the refactor cadence ("Turn on" opens the Health tab, #730: there the findings become
+issues; it turns nothing on itself), and release CI and screenshots, shown disabled (later phases). Its heading adds "· city and
 refactor backlog done" once the refactor proposals are there, and the number of the project's workflows
 only when the project has its own set (a wizard import has none, so no count).
 

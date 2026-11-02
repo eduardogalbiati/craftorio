@@ -33,24 +33,28 @@ Green: the branch merges into the local base (`merge: local`, never pushed). The
 runs can be compared with `run_analysis` (#184).
 
 <!-- section:engine order:151 -->
-### The Refactor tab
+### From a finding to an issue (#730; the Refactor tab of #357 is gone)
 
-Refactors land regularly without planning each one by hand (#357). **Projects › a project ›
-Refactor** lists the project's refactor proposals: a finding sent from the Architecture tab, or one
-the owner writes there (target, expected improvement, evidence). Saved in
-`<workspace>/refactor/<project>/` (`proposals.json`, `ranking.json`, `cadence.json`).
+A finding of the Oracle's report becomes an issue from where it is: **Projects › a project › Health**
+(and the onboarding's review). There is no separate proposals list and no Product Owner ranking any
+more: the finding is the diagnosis and the issue is what gets worked on.
 
-- **Ask the Product Owner to prioritize**: one read-only Product Owner turn orders the open proposals
-  by value against risk and cost: the Danger Zone score of the target (the Architecture tab's facts),
-  the hotspots, the conflict map, and the roadmap's unfinished items (a proposal on files such an
-  item will change goes later). Each proposal gets a rank, a one-line reason and `complexity:1-5`,
-  checked against its JSON Schema and saved with the date and cost. In simulation the answer is the
-  simulated one (no model call).
-- **File as issue**: files the proposal in the project's tracker with the `refactor` label (created
-  first when missing on GitHub; GitLab creates it on filing) and names the Refactor workflow. The row
-  then shows the issue, whether it is open, and its roadmap item's status.
-- **The waiting stage** (#435): Send to Refactor (the Architecture tab) files the issue as File as
-  issue does and plans an item on the Refactor workflow in a disabled stage at the end of the
+- **Create issue** (`architecture:createIssue`, `fronts/analyser/engine/channels/architecture.js`):
+  files the finding in the project's tracker with its text, files and evidence and the `refactor`
+  label (created first when missing on GitHub; GitLab creates it on filing), naming the Refactor
+  workflow (`runDraft` of `packages/engine/domains/refactor/refactor-issues.js`). The finding then shows
+  the issue's link instead of the button; a finding already filed is not filed again. **Create issues**
+  files the selected findings the same way.
+- **Create issue and prioritize**: the same, then the issue is planned as a roadmap item in the waiting
+  stage below; the finding shows its stage too.
+- **Older proposals** (`<workspace>/refactor/<project>/proposals.json`, made before #730) stay
+  readable, listed under the finding they came from, with their issue when they have one. The store,
+  the cadence and the success-on-the-map records below keep working for them; nothing new is added to
+  the proposals store from the page, and the onboarding sends nothing there on its own.
+
+The rest of this section describes the #357/#435 rules the issue path reuses:
+
+- **The waiting stage** (#435): Create issue and prioritize (the Health tab) files the issue and plans an item on the Refactor workflow in a disabled stage at the end of the
   roadmap, "Refactor (waiting for your OK)", created when there is none; the proposal records its
   `before` score. Nothing runs until the owner enables that stage: enabling it is the authorization.
   Later sends join it while it is disabled; once it is enabled, the next send opens a new waiting
