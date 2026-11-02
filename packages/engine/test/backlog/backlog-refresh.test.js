@@ -24,6 +24,14 @@ test('WORKFLOW / isRefreshRun: only matches the backlog-refresh.yaml file, by ba
   assert.equal(isRefreshRun(null), false);
 });
 
+test('#763 isRefreshRun: a run recorded with a Windows or a POSIX path is recognised on any platform', () => {
+  assert.equal(isRefreshRun({ file: 'C:\\Users\\me\\workflows\\backlog-refresh.yaml' }), true);
+  assert.equal(isRefreshRun({ file: 'C:/Users/me/workflows/backlog-refresh.yaml' }), true);
+  assert.equal(isRefreshRun({ file: '/home/me/workflows/backlog-refresh.yaml' }), true);
+  assert.equal(isRefreshRun({ file: 'C:\\x\\workflows\\other.yaml' }), false);
+  assert.equal(isRefreshRun({ file: 'C:\\x\\backlog-refresh.yaml\\other.yaml' }), false, 'by basename only');
+});
+
 test('refreshRuns: picks the most recent success as "last" and a running/pending run as "running", ignoring other workflows', () => {
   const runs = [
     { file: 'other.yaml', status: 'success', runId: 'x', startedAt: '2026-01-01T00:00:00Z' },

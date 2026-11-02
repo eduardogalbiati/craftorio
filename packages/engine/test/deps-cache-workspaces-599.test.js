@@ -299,8 +299,14 @@ test('#599 a miss whose tree cannot be linked back from the cache leaves the ins
   const wtA = wsProject(tmpDir(t, 'ws-wtA-'));
   // the filesystem refuses the links into the cache (e.g. junctions not allowed there)
   const symlink = fs.symlinkSync;
+  // a link's target as an absolute folder: a relative symlink (POSIX) is relative to the link's
+  // folder (#764), and a target that does not exist yet is compared as written
+  const targetOf = (target, p) => {
+    const abs = path.resolve(path.dirname(String(p)), String(target));
+    try { return real(abs); } catch { return abs.toLowerCase(); }
+  };
   const refused = t.mock.method(fs, 'symlinkSync', (target, p, type) => {
-    if (real(path.dirname(String(target))).startsWith(real(cacheDir))) throw Object.assign(new Error('EPERM: operation not permitted, symlink'), { code: 'EPERM' });
+    if (targetOf(target, p).startsWith(real(cacheDir))) throw Object.assign(new Error('EPERM: operation not permitted, symlink'), { code: 'EPERM' });
     return symlink(target, p, type);
   });
   const r = await ensure(wtA, cacheDir, npm.run);

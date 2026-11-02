@@ -117,7 +117,9 @@ test('#590 the load order is by code unit, as Array.prototype.sort(), whatever t
   for (const id of ['ab', 'a-b', 'aa']) writeFront(root, `fronts/${id}`, id);
   const kernel = path.join(root, 'kernel-channels');
   fs.mkdirSync(kernel);
-  for (const name of ['a_b.js', 'aB.js', 'ab.js', 'Zed.js']) fs.writeFileSync(path.join(kernel, name), 'module.exports = () => [];');
+  // (no kernel ab.js: the front `ab` brings it, and a name repeated across the engine and a front
+  // fails at startup; a case-insensitive disk used to fold it into aB.js, #766)
+  for (const name of ['a_b.js', 'aB.js', 'Zed.js']) fs.writeFileSync(path.join(kernel, name), 'module.exports = () => [];');
   const names = serviceFiles(kernel, installedFronts(root), 'channels').map((x) => x.name);
   assert.deepEqual(names, [...names].sort(), 'the order of .sort()');
   assert.deepEqual(names, ['Zed.js', 'a-b.js', 'aB.js', 'a_b.js', 'aa.js', 'ab.js']);

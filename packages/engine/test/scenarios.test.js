@@ -44,6 +44,16 @@ test('normalizeScenarios: an absolute screenshot path is made relative to the ru
   assert.deepEqual(s.screenshots, ['evidence/test/round-1/shot.png']);
 });
 
+test('#765 normalizeScenarios: a Windows run folder (backslashes) gives a relative path on any platform', () => {
+  const [s] = scenarios.normalizeScenarios([{ name: 'A', status: 'passed', screenshots: ['C:\\runs\\r1\\evidence\\test\\round-1\\shot.png'] }], 'C:\\runs\\r1');
+  assert.deepEqual(s.screenshots, ['evidence/test/round-1/shot.png']);
+});
+
+test('#765 normalizeScenarios: a POSIX run folder gives a relative path on any platform', () => {
+  const [s] = scenarios.normalizeScenarios([{ name: 'A', status: 'passed', screenshots: ['/runs/r1/evidence/test/round-1/shot.png'] }], '/runs/r1');
+  assert.deepEqual(s.screenshots, ['evidence/test/round-1/shot.png']);
+});
+
 test('normalizeScenarios: a relative screenshot path is kept as given, and an object { path } is accepted', () => {
   const [s] = scenarios.normalizeScenarios([{ name: 'A', status: 'passed', screenshots: ['evidence/x.png', { path: 'evidence/y.png' }, { path: '' }, ''] }]);
   assert.deepEqual(s.screenshots, ['evidence/x.png', 'evidence/y.png']);

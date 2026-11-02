@@ -117,8 +117,22 @@ test('#374 localChanges relative: from a project folder inside the repository, o
 test('#374 localChanges gives up when git takes longer than its timeout, instead of waiting for the default', async (t) => {
   const dir = makeRepo(t);
   write(dir, 'src/app.js', 'module.exports = 2;\n');
-  // no git process starts and ends within 1 ms: a timeout that reaches git makes the call fail
-  await assert.rejects(() => localChanges(dir, { timeout: 1 }));
+  if (process.platform === 'win32') {
+    // no git process starts and ends within 1 ms on Windows: a timeout that reaches git makes the call fail
+    await assert.rejects(() => localChanges(dir, { timeout: 1 }));
+    return;
+  }
+  // #767: a fast git can exit before a 1 ms timer fires (the call then succeeds under load), so the
+  // git found on PATH here hangs for 30 s: only a timeout that reaches git ends the call early
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'test-paths-slow-git-'));
+  t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(bin, 'git'), '#!/bin/sh\nexec sleep 30\n', { mode: 0o755 });
+  const pathBefore = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${pathBefore}`;
+  t.after(() => { process.env.PATH = pathBefore; });
+  const started = Date.now();
+  await assert.rejects(() => localChanges(dir, { timeout: 300 }));
+  assert.ok(Date.now() - started < 10000, `gave up after its timeout (took ${Date.now() - started} ms), not after git's 30 s`);
 });
 
 test('snapshot is null outside a git work tree (nothing to check)', async (t) => {

@@ -87,9 +87,14 @@ test('writeJsonSafe: a file a reader keeps open fails the write (retried, then g
   const file = path.join(dir, 'roadmap.json');
   writeJsonSafe(file, { a: 1 });
   // a reader holding the file open the whole time (Windows: EBUSY/EPERM/EACCES) makes the rename
-  // retry and, once it keeps failing, give up instead of leaving a half-written file
-  const fd = fs.openSync(file, 'r');
-  t.after(() => { try { fs.closeSync(fd); } catch { /* already closed */ } });
+  // retry and, once it keeps failing, give up instead of leaving a half-written file. Only Windows
+  // refuses the rename of an open file, so the filesystem's answer is given here on every
+  // platform (#768): the rename over roadmap.json keeps failing with EBUSY
+  const rename = fs.renameSync;
+  t.mock.method(fs, 'renameSync', (from, to) => {
+    if (path.resolve(String(to)) === path.resolve(file)) throw Object.assign(new Error(`EBUSY: resource busy or locked, rename '${from}' -> '${to}'`), { code: 'EBUSY' });
+    return rename(from, to);
+  });
   const errors = [];
   const origError = console.error;
   console.error = (...a) => errors.push(a.join(' '));

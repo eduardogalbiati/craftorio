@@ -78,7 +78,10 @@ async function loadTab({ data = payload() } = {}) {
   };
   window.document = sandbox.document;
   window.navigator = sandbox.navigator;
-  sandbox.t = withI18n({}).t; // the text only: the dates keep following the machine's locale here
+  sandbox.t = withI18n({}).t; // the text only (English catalog)
+  // #762: the dates follow the interface language (#329), here the owner's pt-BR, whatever the
+  // machine's own locale (en-US on a Linux CI): the language I18n reports, not the catalog
+  window.I18n = { getLanguage: () => 'pt-BR' };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(FILE, 'utf8'), sandbox, { filename: FILE });
   const tab = window.AnalyticsTabs?.occupancy;

@@ -304,6 +304,15 @@ test('#385 Electron\'s own Node measures TypeScript with the shared core (the pa
     '',
   ].join('\n'));
   const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
-  const out = execFileSync(electron, [script], { env, encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  let out;
+  try {
+    out = execFileSync(electron, [script], { env, encoding: 'utf8', windowsHide: true, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    // #761: a machine without Electron's system libraries (a headless Linux: libnspr4, libnss3…)
+    // cannot start the binary at all; that is the machine, not the measure
+    const missing = /error while loading shared libraries: (\S+)/.exec(`${e.stderr || ''}\n${e.message || ''}`);
+    if (missing) return t.skip(`the Electron binary cannot start on this machine (missing ${missing[1].replace(/:$/, '')})`);
+    throw e;
+  }
   assert.deepEqual(JSON.parse(out), [{ name: 'size', line: 2, complexity: 2 }]);
 });

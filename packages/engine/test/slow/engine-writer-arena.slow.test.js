@@ -219,8 +219,9 @@ test('backlog-refresh: a mock run reaches the scope gate (a decision gate), the 
     const actions = events.filter((e) => e.type === 'action.executed');
     assert.equal(actions.length, 2); // safe mode before the gate, scope mode after Apply
     assert.ok(actions.every((a) => a.skipped), 'mock mode never runs the action');
-    assert.match(actions[0].command, /apply\.js" --platform gh --mode safe --file ".*refresh\.json" --project "C:\/proj" --run-id /);
-    assert.match(actions[1].command, /apply\.js" --platform gh --mode scope --file ".*refresh\.json" --project "C:\/proj" --run-id /);
+    // the project is quoted for the platform's shell (shell_quote: "…" on Windows, '…' elsewhere, #769)
+    assert.match(actions[0].command, /apply\.js" --platform gh --mode safe --file ".*refresh\.json" --project (?:"C:\/proj"|'C:\/proj') --run-id /);
+    assert.match(actions[1].command, /apply\.js" --platform gh --mode scope --file ".*refresh\.json" --project (?:"C:\/proj"|'C:\/proj') --run-id /);
   } finally { cleanup(); }
 });
 test('backlog-refresh: Skip at the scope gate ends the run without the scope-mode action; git_platform picks the glab command', { timeout: 60000 }, async () => {
