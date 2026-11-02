@@ -300,10 +300,13 @@ test('#599 a miss whose tree cannot be linked back from the cache leaves the ins
   // the filesystem refuses the links into the cache (e.g. junctions not allowed there)
   const symlink = fs.symlinkSync;
   // a link's target as an absolute folder: a relative symlink (POSIX) is relative to the link's
-  // folder (#764), and a target that does not exist yet is compared as written
+  // folder (#764); a target that does not exist yet is resolved through its nearest existing
+  // folder, so a symlinked tmp folder (macOS /var -> /private/var) still compares with the cache
   const targetOf = (target, p) => {
     const abs = path.resolve(path.dirname(String(p)), String(target));
-    try { return real(abs); } catch { return abs.toLowerCase(); }
+    let base = abs;
+    while (!fs.existsSync(base) && path.dirname(base) !== base) base = path.dirname(base);
+    try { return path.join(real(base), path.relative(base, abs).toLowerCase()); } catch { return abs.toLowerCase(); }
   };
   const refused = t.mock.method(fs, 'symlinkSync', (target, p, type) => {
     if (targetOf(target, p).startsWith(real(cacheDir))) throw Object.assign(new Error('EPERM: operation not permitted, symlink'), { code: 'EPERM' });
