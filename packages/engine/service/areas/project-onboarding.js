@@ -348,7 +348,9 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       // reverse; a part still running is left alone. A profile job done without a valid profile (the wizard's
       // column says the analysis failed) runs again too, unless the profile is a new project's answers (#632)
       const failed = (job) => s.jobs[job].status === 'failed';
-      const noProfile = s.jobs.profile.status === 'done' && s.jobs.facts.status !== 'skipped'
+      const profileDone = s.jobs.profile.status === 'done';
+      const answersProfile = s.jobs.facts.status === 'skipped';
+      const noProfile = profileDone && !answersProfile
         && OnboardingModel.workflowsColumnState({ mode: 'analyze', profileJob: s.jobs.profile }) === 'failed';
       if (!w.free && (failed('facts') || failed('profile') || noProfile)) startFree(projectId);
       if (!w.paid && PAID.some(failed)) startPaid(projectId);
