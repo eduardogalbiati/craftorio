@@ -15,11 +15,13 @@ const path = require('path');
 const STATUSES = ['passed', 'failed', 'skipped', 'pending'];
 const KEYWORDS = /^(Given|When|Then|And|But|\*)\b/i;
 
-// A screenshot path as the run folder knows it: relative, forward slashes
+// A screenshot path as the run folder knows it: relative, forward slashes. The path flavour follows
+// the run folder's shape (a drive or UNC prefix is Windows), not the platform (#765).
 function runPath(runDir, p) {
   const s = String(p || '').trim();
   if (!s) return '';
-  const rel = runDir && path.isAbsolute(s) ? path.relative(runDir, s) : s;
+  const f = /^[A-Za-z]:[\\/]|^\\\\/.test(String(runDir || '')) ? path.win32 : path.posix;
+  const rel = runDir && f.isAbsolute(s) ? f.relative(runDir, s) : s;
   return rel.split(/[\\/]/).join('/');
 }
 

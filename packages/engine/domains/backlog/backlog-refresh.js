@@ -12,7 +12,8 @@ const path = require('path');
 const WORKFLOW = 'backlog-refresh.yaml';
 const DAY_MS = 24 * 3600e3;
 
-const isRefreshRun = (r) => path.basename(String(r?.file || '')) === WORKFLOW;
+// by basename, for a Windows or a POSIX path on any platform (#763)
+const isRefreshRun = (r) => path.posix.basename(String(r?.file || '').replace(/\\/g, '/')) === WORKFLOW;
 const dismissFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.refresh.json`);
 // the local calendar day ("today" for Dismiss for today)
 const localDay = (ms) => {
