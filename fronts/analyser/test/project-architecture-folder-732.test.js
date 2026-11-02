@@ -137,10 +137,11 @@ test('#732 the City view\'s "Analyze this project" finds the folder the same way
   assert.equal(w.calls.startRun[0].inputs.repo_path, FOLDER);
 });
 
-// the catalog key of the "no folder on this machine" message: found by its pt-BR text
+// the catalog key of the "no folder on this machine" message: found by its pt-BR text, which starts with the
+// sentence (#725's onboarding.job_failed_no_folder, "Falhou: o projeto não tem pasta…", is another message)
 function noFolderKey() {
   const pt = JSON.parse(fs.readFileSync(path.join(CATALOGS, 'pt-BR.json'), 'utf8'));
-  const key = Object.keys(pt).find((k) => /não tem pasta nesta máquina/.test(String(pt[k])));
+  const key = Object.keys(pt).find((k) => /^O projeto não tem pasta nesta máquina/.test(String(pt[k])));
   return { key: key || null, pt };
 }
 
