@@ -671,8 +671,15 @@
     const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
     // #729: the step 3 workflows on the project, feature the default (DefaultWorkflow.firstBuild's rule),
     // saved before the project's page opens: its reads (listProjectRuns) then see them; the page opens
-    // whether the save succeeds or fails
-    new Promise((resolve) => resolve(api.updateProject(pid, { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature' })))
+    // whether the save succeeds or fails. The saved record goes into state.projects (the backlog's
+    // pickers read the set and default there), as project-workflows.js's save() does
+    const patch = { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature' };
+    new Promise((resolve) => resolve(api.updateProject(pid, patch)))
+      .then((saved) => {
+        if (typeof state === 'undefined' || !Array.isArray(state.projects)) return;
+        const record = saved && typeof saved === 'object' ? saved : patch;
+        state.projects = state.projects.map((p) => (p.id === pid ? { ...p, ...record } : p));
+      })
       .catch(failed)
       .finally(() => {
         window.Actions.call('openProject', pid, { nextSteps: true });
