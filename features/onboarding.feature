@@ -393,6 +393,70 @@ Feature: Bring a project in with a guided wizard
       | On pull requests and releases          |
       | the changes are merged on your machine |
 
+  # #731: the analysis's "City and architecture" job (the project map) draws the city plan, then runs the
+  # Oracle. Once it is done the project's City is grouped by the plan's districts, never "No city plan yet",
+  # and "Analyze this project" only refreshes the plan. The review's "Open the city" finishes the wizard and
+  # lands on that City. The simulated plan is drawn without a model call (MULTIAGENT_SIMULATION_ONLY=1).
+  @issue-731
+  Scenario: Open the city after the analysis lands on the project's City drawn from its plan, and Analyze only refreshes it
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "city-731"
+    And I go to the next step of the wizard
+    And I start the analysis in the wizard
+    Then the progress tray shows the project "city-731" as analyzed
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review shows the project's city and its backlog
+    When I open the city from the review
+    Then the project wizard closes right away
+    And the project page of "city-731" is open
+    And the project tab "Architecture" is selected
+    And the "City" view of the Architecture tab is the one selected
+    And the Architecture tab shows the project city
+    And the city is drawn from its plan, with its districts
+    And the Architecture tab does not say there is no city plan yet
+    When I switch the Architecture tab to "Facts"
+    Then the Architecture tab offers "Analyze this project" only as a refresh of the city plan
+
+  @issue-731
+  Scenario: After the onboarding's analysis, the project's Architecture tab already has its city plan
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "plan-731"
+    And I go to the next step of the wizard
+    And I start the analysis in the wizard
+    Then the progress tray shows the project "plan-731" as analyzed
+    When I go to the next step of the wizard
+    And I finish the wizard
+    Then the project page of "plan-731" is open
+    When I open the "Architecture" project tab
+    And I switch the Architecture tab to "Facts"
+    Then the Architecture tab offers "Analyze this project" only as a refresh of the city plan
+    And the Architecture tab does not say there is no city plan yet
+    When I switch the Architecture tab to "City"
+    Then the city is drawn from its plan, with its districts
+
+  # The simulated city plan is made to fail (an E2E hook, see onboarding.steps.js): the project map's row
+  # says why and retries that job only (#725).
+  @issue-731
+  Scenario: A city plan that could not be drawn says why on the project map's row and offers to retry it
+    Given the app is open where drawing the city plan fails
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "noplan-731"
+    And I go to the next step of the wizard
+    And I start the analysis in the wizard
+    Then the wizard's "project map" analysis says why it failed and offers to retry it
+    And the wizard's "project map" analysis gives a reason that mentions "city plan"
+    And the wizard's "project map" analysis shows no amount
+    And the wizard lets me continue to the review
+
   # #724: the progress tray never covers the wizard. The simulated clone is held (an E2E hook, see
   # onboarding.steps.js) so the import is still running while it is checked.
   @issue-724

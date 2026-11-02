@@ -915,3 +915,63 @@ Then('the wizard shows no import status card and its repository fields are read-
   await expect(w.getByTestId('wizard-repo')).not.toBeEditable();
   await expect(w.getByTestId('wizard-name')).not.toBeEditable();
 });
+
+// ---- #731: the onboarding's city analysis draws the city plan ----------------------------------------------
+// The "Cidade e arquitetura" job (projectMap) draws the city plan (the cartographer's city-plan.json, as the
+// Architecture tab's "Analyze this project" does), then runs the Oracle. Once it is done the project's City
+// is grouped by the plan's districts, not by folder. What the screen exposes (existing test ids):
+// - the review's "Open the city" (wizard-open-city) finishes the wizard and opens the project's
+//   Architecture tab on its City view (window.ProjectArchitecture.openCity);
+// - the City view: project-city-header ("<n> districts", "plan covers <share>"), no project-city-no-plan;
+// - the Facts view's action: architecture-action holds "City plan: <n> districts, …" and the button
+//   architecture-analyze, whose title is the refresh one ("a refresh keeps the names you saw").
+//
+// E2E HOOK THE DEVELOPER MUST ADD, read by the simulated onboarding's projectMap job only when
+// MULTIAGENT_SIMULATION_ONLY=1: MULTIAGENT_E2E_CITY_PLAN_FAIL=1 makes drawing the city plan throw
+// "The simulated city plan failed (e2e)." so the job ends `failed` with that reason (a Retry fails again).
+
+const architectureTab = (page) => projectPage(page).locator('#project-panel-architecture');
+const cityPart = (page, id) => architectureTab(page).getByTestId(id).filter({ visible: true }).first();
+
+Given('the app is open where drawing the city plan fails', async ({ e2e }) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_CITY_PLAN_FAIL: '1' } });
+});
+
+When('I open the city from the review', async ({ e2e }) => {
+  const open = review(e2e.window).getByTestId('wizard-open-city');
+  await expect(open).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(open).toBeEnabled();
+  await open.click();
+});
+
+Then('the city is drawn from its plan, with its districts', async ({ e2e }) => {
+  const header = cityPart(e2e.window, 'project-city-header');
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header, 'the city is grouped by the plan').toContainText(/plan covers/i, { timeout: LOAD_TIMEOUT });
+  await expect(header).toContainText(/\b[1-9]\d*\s+districts?\b/i);
+  await expect(architectureTab(e2e.window).getByTestId('project-city-no-plan')).toHaveCount(0);
+});
+
+Then('the Architecture tab does not say there is no city plan yet', async ({ e2e }) => {
+  const tab = architectureTab(e2e.window);
+  await expect(tab).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(tab.getByTestId('project-city-no-plan')).toHaveCount(0);
+  await expect(tab.getByText(/no city plan yet/i).filter({ visible: true })).toHaveCount(0);
+});
+
+// the Facts view's action: the plan's districts next to the button, the button's title the refresh one
+Then('the Architecture tab offers {string} only as a refresh of the city plan', async ({ e2e }, label) => {
+  const action = cityPart(e2e.window, 'architecture-action');
+  await expect(action).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(action).toContainText(/City plan:\s*[1-9]\d*\s+districts?/i, { timeout: LOAD_TIMEOUT });
+  const button = action.getByTestId('architecture-analyze');
+  await expect(button).toBeVisible();
+  await expect(button).toContainText(label);
+  await expect(button, 'the refresh title').toHaveAttribute('title', /refresh/i);
+});
+
+Then("the wizard's {string} analysis gives a reason that mentions {string}", async ({ e2e }, words, text) => {
+  const error = jobRow(e2e.window, words).getByTestId(`wizard-job-error-${jobId(words)}`);
+  await expect(error).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(error).toContainText(new RegExp(escapeRe(text), 'i'));
+});
