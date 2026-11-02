@@ -73,7 +73,9 @@ function writeManifest(dir, text) {
   fs.mkdirSync(path.dirname(manifestFile(dir)), { recursive: true });
   fs.writeFileSync(manifestFile(dir), text);
 }
-const settle = async (until) => { for (let i = 0; i < 200 && !until(); i++) await new Promise((r) => setTimeout(r, 5)); };
+// waits up to ~10 s (stops as soon as `until` holds): under the coverage suite's load the analysis's
+// git reads and project facts (#735) take more than a second before the Oracle's turn starts
+const settle = async (until) => { for (let i = 0; i < 2000 && !until(); i++) await new Promise((r) => setTimeout(r, 5)); };
 
 test('#487 writing keeps the repository manifest\'s other entries, version and requires', async (t) => {
   const { area, project, dir } = await setup(t);
