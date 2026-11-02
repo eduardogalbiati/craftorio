@@ -1,5 +1,6 @@
-// #435 acceptance: Send to Refactor plans the refactor in a disabled stage at the end of the roadmap,
-// waiting for the owner (enabling it is his authorization). Through makeService (simulation only, no
+// #435 acceptance: a refactor is planned in a disabled stage at the end of the roadmap, waiting for the
+// owner (enabling it is his authorization). Since #730 a finding reaches it through "Create issue and
+// prioritize" (architecture:createIssue with prioritize), no longer through Send to Refactor. Through makeService (simulation only, no
 // network, no real CLI): the issue is filed through the host's `fileIssue(draft)` (it stands in for
 // gh/glab, as host.readPrJson does for a run's PR), the project is a scratch git repository (the
 // `before` score is read from its facts), the architecture reports are saved with
@@ -38,7 +39,7 @@ async function setup(t) {
   const saveReport = (date, findings) => arch.saveReport(path.join(ws.root, 'architecture'), projectId, {
     date, head: null, branch: 'main', costUsd: 0, simulated: true, report: { summary: 'A small project.', areas: [], findings },
   }).id;
-  const send = (reportId, findingIndex) => api['architecture:sendToRefactor']({ projectId, reportId, findingIndex });
+  const send = (reportId, findingIndex) => api['architecture:createIssue']({ projectId, reportId, findingIndex, prioritize: true });
   const roadmap = () => roadmaps.readRoadmap(ws.backlog, projectId);
   const listed = () => proposals.listProposals(refactorRoot, projectId);
   return { service, api, ws, projectId, refactorRoot, drafts, saveReport, send, roadmap, listed };
@@ -69,15 +70,15 @@ async function until(check, ms = 8000) {
   return check();
 }
 
-test('#435 Send to Refactor files the issue with the refactor label and plans it on the Refactor workflow in a disabled stage at the end', async (t) => {
+test('#435 #730 Create issue and prioritize files the issue with the refactor label and plans it on the Refactor workflow in a disabled stage at the end', async (t) => {
   const w = await setup(t);
   const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt')]);
-  await w.send(reportId, 0);
+  const { filed } = await w.send(reportId, 0);
   assert.equal(w.drafts.length, 1, 'one issue filed');
   const args = w.drafts[0].command.args;
   assert.equal(args[args.indexOf('--label') + 1], 'refactor');
-  const [proposal] = w.listed();
-  assert.equal(proposal.issue, FIRST_ISSUE);
+  assert.equal(filed.issue, FIRST_ISSUE);
+  assert.deepEqual(w.listed(), [], 'no proposal made (#730)');
   const r = w.roadmap();
   const waiting = waitingStages(r);
   assert.equal(waiting.length, 1, 'one waiting stage');
@@ -88,16 +89,6 @@ test('#435 Send to Refactor files the issue with the refactor label and plans it
   assert.deepEqual(numbersOf(x), [FIRST_ISSUE]);
   assert.equal(x.status, 'planned', 'nothing runs until the stage is enabled');
   assert.equal(x.runId ?? null, null);
-});
-
-test('#435 Send to Refactor records the target\'s before score on the proposal', async (t) => {
-  const w = await setup(t);
-  const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt')]);
-  await w.send(reportId, 0);
-  const [proposal] = w.listed();
-  assert.equal(proposal.before?.file, 'a.txt');
-  assert.equal(typeof proposal.before?.score, 'number');
-  assert.equal(typeof proposal.before?.quadrant, 'string');
 });
 
 test('#435 a second send joins the same waiting stage while it is disabled', async (t) => {
@@ -147,50 +138,34 @@ test('#435 a proposal whose target file is already in an item of the waiting sta
   const w = await setup(t);
   const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt'), finding('duplicated-rule', 'a.txt')]);
   await w.send(reportId, 0);
-  await w.send(reportId, 1);
+  const { filed: second } = await w.send(reportId, 1);
   const [waiting] = waitingStages(w.roadmap());
   assert.equal(waiting.items.length, 1, 'one item, one run for the file');
-  const second = w.listed().find((x) => x.kind === 'duplicated-rule');
   assert.equal(numbersOf(waiting.items[0]).includes(Number(second.issue)), true);
 });
 
-test('#435 the same finding from another analysis is recognised: one proposal, one issue, the new evidence added', async (t) => {
+test('#435 #730 the same finding from another analysis is recognised: one issue, one roadmap item', async (t) => {
   const w = await setup(t);
   const first = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt', 'First analysis: a.txt changes in every commit.')]);
   const second = w.saveReport('2026-10-21T10:00:00.000Z', [finding('god-file', 'a.txt', 'Second analysis: a.txt doubled in size.')]);
-  await w.send(first, 0);
-  await w.send(second, 0);
-  const list = w.listed().filter((x) => x.source === 'architecture');
-  assert.equal(list.length, 1, 'one proposal');
+  const a = await w.send(first, 0);
+  const b = await w.send(second, 0);
   assert.equal(w.drafts.length, 1, 'one issue filed');
-  const evidence = JSON.stringify(list[0].evidence);
-  assert.equal(evidence.includes('First analysis'), true);
-  assert.equal(evidence.includes('Second analysis'), true);
+  assert.equal(b.filed.issue, a.filed.issue);
   const [waiting] = waitingStages(w.roadmap());
   assert.equal(waiting.items.length, 1);
 });
 
-test('#435 the report names where a sent finding went: its issue and its waiting stage', async (t) => {
+test('#435 #730 the report names where a filed finding went: its issue and its waiting stage', async (t) => {
   const w = await setup(t);
   const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt')]);
   await w.send(reportId, 0);
   const view = await w.api['architecture:report']({ projectId: w.projectId, reportId });
   const [f] = view.findings;
-  assert.equal(f.sent, true);
-  assert.equal(f.sentTo?.issue, FIRST_ISSUE);
-  assert.equal(f.sentTo?.issueUrl, URL_OF(FIRST_ISSUE));
-  assert.equal(f.sentTo?.stage, 1, 'the 1-based number of the waiting stage');
-  assert.equal(f.sentTo?.waiting, true);
-});
-
-test('#435 the Refactor tab\'s proposals say their stage is waiting for the owner', async (t) => {
-  const w = await setup(t);
-  const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt')]);
-  await w.send(reportId, 0);
-  const [p] = await w.api['refactor:proposals']({ projectId: w.projectId });
-  assert.equal(p.issue, FIRST_ISSUE);
-  assert.equal(p.roadmapStage, 1);
-  assert.equal(p.roadmapWaiting, true);
+  assert.equal(f.filed?.issue, FIRST_ISSUE);
+  assert.equal(f.filed?.issueUrl, URL_OF(FIRST_ISSUE));
+  assert.equal(f.filed?.stage, 1, 'the 1-based number of the waiting stage');
+  assert.equal(f.filed?.waiting, true);
 });
 
 test('#435 Add to roadmap now puts the item in the waiting stage by default', async (t) => {
@@ -298,10 +273,9 @@ test('#435 a stage the owner saves after the waiting stage goes before it, and t
   assert.deepEqual(stageNumbers(waiting[0]), [432, 433]);
 });
 
-test('#435 unchanged: Dismiss keeps its reason on a sent proposal', async (t) => {
+test('#435 unchanged: Dismiss keeps its reason on a proposal', async (t) => {
   const w = await setup(t);
-  const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt')]);
-  const { proposal } = await w.send(reportId, 0);
+  const proposal = await w.api['refactor:add']({ projectId: w.projectId, target: 'src/part1.js', improvement: 'Split part 1', evidence: 'Part 1 changes with every fix' });
   const out = await w.api['refactor:dismiss']({ projectId: w.projectId, id: proposal.id, reason: 'Done by hand' });
   assert.equal(out.status, 'dismissed');
   assert.equal(out.dismissReason, 'Done by hand');

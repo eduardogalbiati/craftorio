@@ -4,8 +4,8 @@
 // saves the project's exclude list; architecture:analyze (mock) saves a report under
 // <workspace>/architecture/<projectId>/ and refuses a second concurrent analysis;
 // architecture:reports / architecture:report / architecture:estimate read the saved reports (runs
-// since, new/gone findings, the cost estimate); architecture:sendToRefactor turns a finding into a
-// Refactor proposal listed by refactor:proposals. Every new channel declares schema.params/result.
+// since, new/gone findings, the cost estimate); architecture:createIssue (#730, in place of
+// sendToRefactor) files a finding as an issue. Every new channel declares schema.params/result.
 // The channels are created by the change: each test calls them through the service (tests first).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -17,11 +17,11 @@ const { makeService } = require('@multiagent/engine/test/service/helpers');
 
 const CHANNELS = [
   'architecture:analyze',
+  'architecture:createIssue',
   'architecture:estimate',
   'architecture:facts',
   'architecture:report',
   'architecture:reports',
-  'architecture:sendToRefactor',
   'architecture:setExclude',
   'refactor:proposals',
 ];
@@ -212,17 +212,6 @@ test('#356 architecture:estimate is null when every saved report is simulated', 
   await analyzed(api, projectId);
   const out = await call(api, 'architecture:estimate', { projectId });
   assert.equal(out.estimate, null);
-});
-
-test('#356 architecture:sendToRefactor turns a finding into a Refactor proposal', async (t) => {
-  const { api, projectId } = await setup(t);
-  const saved = await analyzed(api, projectId);
-  assert.ok(saved.report.findings.length >= 1, 'the mock report has a finding (the tab can show one)');
-  const { proposal } = await call(api, 'architecture:sendToRefactor', { projectId, reportId: saved.id, findingIndex: 0 });
-  assert.equal(proposal.source, 'architecture');
-  assert.equal(typeof proposal.title, 'string');
-  const proposals = await call(api, 'refactor:proposals', { projectId });
-  assert.ok(proposals.some((p) => p.title === proposal.title), 'refactor:proposals lists it');
 });
 
 // ---------- schemas ----------

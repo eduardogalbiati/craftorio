@@ -293,7 +293,8 @@
 
   function factsHtml() {
     const f = cur.facts;
-    const model = f.model;
+    // a partial model (an older facts file) reads as "nothing measured", not as a crash
+    const model = { mass_changes: [], window: {}, files: [], complexity: {}, ...f.model };
     const mass = model.mass_changes.length ? plural(model.mass_changes.length, model.include_mass ? 'project_architecture.mass_changes_counted' : 'project_architecture.mass_changes_not_counted') : t('project_architecture.no_mass_change');
     const window = model.window.since || model.window.until ? t('project_architecture.window_range', { since: esc(day(model.window.since) || t('project_architecture.the_start')), until: esc(day(model.window.until) || t('project_architecture.now')) }) : t('project_architecture.the_whole_history');
     return `<div class="arch-facts" data-testid="architecture-facts">
