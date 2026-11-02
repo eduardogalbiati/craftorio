@@ -130,7 +130,12 @@ module.exports = (ctx) => {
     } catch { return null; }
   }
   // the files each planned issue will change (packages/engine/domains/refactor/refactor-priority.js plannedFiles)
-  const plannedFiles = (id) => priority.plannedFiles({ refactorRoot: root(), backlogDir: ctx.ws.backlog, projectId: id });
+  // and the findings filed as issues (#730, ctx.filedFiles of channels/architecture.js)
+  const plannedFiles = (id) => {
+    const out = priority.plannedFiles({ refactorRoot: root(), backlogDir: ctx.ws.backlog, projectId: id });
+    for (const [n, files] of ctx.filedFiles?.(id) || []) if (!out.has(n)) out.set(n, files);
+    return out;
+  };
   const { filesOf } = cadenceRules;
   const { withFiles } = priority;
   const syncedIssues = (id) => backlog.readBacklog(ctx.ws.backlog, id)?.issues || [];

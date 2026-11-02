@@ -229,11 +229,17 @@ module.exports = (ctx) => {
     let record = arch.readFiled(root(), p.id)[key];
     if (!record?.issue) {
       const out = await ctx.fileFinding(p.id, finding);
-      record = arch.recordFiled(root(), p.id, key, { issue: out.issue, issueUrl: out.issueUrl, reportId, at: new Date().toISOString() });
+      record = arch.recordFiled(root(), p.id, key, { issue: out.issue, issueUrl: out.issueUrl, reportId, files: (finding.files || []).slice(), at: new Date().toISOString() });
     }
     if (prioritize && !stagesOf(p).has(Number(record.issue))) await ctx.planFinding(p.id, finding, record.issue);
     return { filed: filedAt(record, stagesOf(p)) };
   }
+
+  // #730 the files each filed finding's issue will change (Map number → files): the roadmap's planner
+  // (channels/refactor.js plannedFiles) joins a later item on the same file to it (#435)
+  ctx.filedFiles = (projectId) => new Map(Object.values(arch.readFiled(root(), projectId))
+    .filter((r) => r && r.issue && Array.isArray(r.files) && r.files.length)
+    .map((r) => [Number(r.issue), r.files]));
 
   return [
     {
