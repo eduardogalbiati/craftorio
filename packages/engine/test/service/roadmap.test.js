@@ -5,7 +5,7 @@ const os = require('os');
 const { createService } = require('../../service');
 const roadmapModel = require('../../domains/roadmap/roadmap');
 const backlog = require('../../domains/backlog/backlog');
-const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('./helpers');
+const { ISSUE_WORKFLOW, allowRealRuns, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('./helpers');
 const path = require('path');
 
 // A real-capable fixture (no agent steps, so `mock: false` never calls a model): used to prove the
@@ -381,8 +381,7 @@ test('roadmap: #168 a real item reads the platform right before it starts; the c
     warnings: [],
   }));
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['roadmap:start']({ projectId: p.id, simulated: false });
 
   const run = api['runs:active']()[0];
@@ -407,8 +406,7 @@ test('roadmap: #168 an issue found closed on the fresh read is skipped at start,
     ? { issues: [{ number: 1, url: item.url, title: item.title, body: item.body, labels: [], state: 'closed', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }
     : { issues: [{ number: item.number, url: item.url, title: 'Fresh 2', body: 'Fresh body 2', labels: [], state: 'open', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }));
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['roadmap:start']({ projectId: p.id, simulated: false });
 
   const roadmap = api['roadmap:get']({ projectId: p.id });
@@ -430,8 +428,7 @@ test('roadmap: #168 a simulated roadmap (or a project with no repository) skips 
   await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: false }] }] });
   t.mock.method(backlog, 'freshIssues', async () => { throw new Error('the platform must never be read for a simulated roadmap'); });
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['roadmap:start']({ projectId: p.id, simulated: true });
 
   const roadmap = api['roadmap:get']({ projectId: p.id });
@@ -469,8 +466,7 @@ test('roadmap: #161 a real item of a workflow with metadata.merges: false ends d
   await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-never-merges.yaml', number: 1, mock: false }] }] });
   const { gates, finished } = watchRuns(service);
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['roadmap:start']({ projectId: p.id, simulated: false });
 
   const runId = api['runs:active']()[0].runId;
@@ -491,8 +487,7 @@ test('roadmap: #161 a real item of an ordinary workflow (no metadata.merges) sti
   await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-real-roadmap.yaml', number: 1, mock: false }] }] });
   const { gates, finished } = watchRuns(service);
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['roadmap:start']({ projectId: p.id, simulated: false });
 
   const runId = api['runs:active']()[0].runId;
@@ -517,8 +512,7 @@ test('roadmap: #168 a project with no repository skips a cached-closed issue fro
   await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: false }] }] });
   t.mock.method(backlog, 'freshIssues', async () => { throw new Error('the platform must never be read without a project repository'); });
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['roadmap:start']({ projectId: p.id, simulated: false });
 
   const roadmap = api['roadmap:get']({ projectId: p.id });

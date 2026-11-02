@@ -248,7 +248,19 @@ function roadmapProject(api, ws, t, numbers, name) {
   })();
 }
 
+// #752 #753: a test that lifts simulation-only to start a real (fake-provider) run. A real run is held
+// while the machine's free memory is under the memory guard's floor (#276), and that reading is the
+// host's: on a busy machine the run never started and the test failed for a reason that is not its
+// own. The test's workspace turns the guard off (Settings › Execution), so the start depends on the
+// test only; simulation-only comes back after the test.
+function allowRealRuns(t, api) {
+  api['settings:set']({ memoryGuard: { enabled: false, limitPercent: 25, floorPercent: 0 } });
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+}
+
 module.exports = {
+  allowRealRuns,
   WORKFLOW,
   ISSUE_WORKFLOW,
   RESUME_WORKFLOW,

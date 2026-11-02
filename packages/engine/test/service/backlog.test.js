@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
-const { ISSUE_WORKFLOW, gitRepo, makeService, until, untilTrue, watchRuns } = require('./helpers');
+const { ISSUE_WORKFLOW, allowRealRuns, gitRepo, makeService, until, untilTrue, watchRuns } = require('./helpers');
 
 test('backlog: with simulation only, a real assignment is refused and nothing is queued', async (t) => {
   const { service, api } = makeService(t);
@@ -249,8 +249,7 @@ test('backlog: the dispatcher re-checks for an open PR right before starting a q
 
   // only real queue items are re-checked: lift the simulation-only guard for the Backlog's check
   // and restore it before the dispatcher could start anything, so a regression can't call a model
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   const seen = [];
   t.mock.method(backlog, 'newPullRequests', async (args) => {
     process.env.MULTIAGENT_SIMULATION_ONLY = '1';
@@ -309,8 +308,7 @@ test('backlog: #168 the dispatcher reads a queued issue again from the platform 
     warnings: [],
   }));
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-real-queue.yaml', mock: false });
 
   const run = api['runs:active']()[0];
@@ -331,8 +329,7 @@ test('backlog: #168 an issue closed on the platform since it was queued is skipp
     ? { issues: [{ number: 1, url: item.url, title: item.title, body: item.body, labels: [], state: 'closed', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }
     : { issues: [{ number: item.number, url: item.url, title: 'Fresh 2', body: 'Fresh body 2', labels: [], state: 'open', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }));
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   const data = await api['backlog:assign']({ projectId: p.id, numbers: [1, 2], workflow: 'fixture-real-queue.yaml', mock: false });
 
   assert.deepEqual(data.queue.skipped.map((s) => [s.number, s.reason]), [[1, 'closed on the platform']]);
@@ -362,8 +359,7 @@ test('backlog: #168 a platform read that fails when a queued issue starts falls 
   const logs = [];
   service.events.on('run:event', (ev) => { if (ev.type === 'log') logs.push(ev); });
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
   await api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-real-queue.yaml', mock: false });
 
   const run = api['runs:active']()[0];
@@ -589,8 +585,7 @@ steps:
   t.mock.method(backlog, 'syncBacklog', async (args) => { calls.push(args); return null; });
   const { gates, finished } = watchRuns(service);
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  allowRealRuns(t, api);
 
   // a real run with a projectId: syncs
   const real = await api['run:start']({ file: 'backlog-refresh.yaml', inputs: {}, mock: false, projectId: p.id });
