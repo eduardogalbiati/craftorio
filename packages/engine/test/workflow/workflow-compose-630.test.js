@@ -37,7 +37,8 @@ test('#630 openQuestions never asks solo or team', () => {
 test('#726 openQuestions\' mode, ci and tests options read in English, not as i18n keys', () => {
   const qs = load().openQuestions({});
   const labels = (id) => qs.find((q) => q.id === id).options.map((o) => [o.value, o.label]);
-  assert.deepEqual(labels('mode'), [['local', 'Local: merge, then push main'], ['remote', 'Remote: pull requests']]);
+  // #738: the third way of working, Fork + PR
+  assert.deepEqual(labels('mode'), [['local', 'Local: merge, then push main'], ['remote', 'Remote: pull requests'], ['fork', 'Fork + PR: pull requests from your fork']]);
   assert.deepEqual(labels('ci'), [['none', 'No CI: the local suite only'], ['release', 'On releases only'], ['pr+release', 'On pull requests and releases']]);
   assert.deepEqual(labels('tests'), [['unit', 'Unit tests'], ['unit+e2e', 'Unit and E2E']]);
 });
