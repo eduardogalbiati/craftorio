@@ -56,7 +56,7 @@ async function runRelease(t, { mockSequences = {}, shipAnswer = 'hold', inputs: 
     if (def?.default !== undefined && def?.default !== '') continue;
     inputs[k] = /path|dir|repo|folder/i.test(k) ? repo : 'Release v1.0';
   }
-  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release v1.0', repo_path: repo, project_path: repo, ...inputs, ...extra }, mock: true, runsDir, mockSequences, ...(resume ? { resume } : {}) });
+  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release v1.0', repo_path: repo, project_path: repo, ...inputs, e2e_command: 'npm run test:e2e', ...extra }, mock: true, runsDir, mockSequences, ...(resume ? { resume } : {}) });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);

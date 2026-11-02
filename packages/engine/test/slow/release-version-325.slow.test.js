@@ -50,7 +50,7 @@ async function runRelease(t, { files = { 'package.json': PKG }, inputs: extra = 
     if (def?.default !== undefined && def?.default !== '') continue;
     inputs[k] = /path|dir|repo|folder/i.test(k) ? repo : 'Release v1.0';
   }
-  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release', repo_path: repo, project_path: repo, ...inputs, ...extra }, mock: true, runsDir, mockSequences });
+  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release', repo_path: repo, project_path: repo, ...inputs, e2e_command: 'npm run test:e2e', ...extra }, mock: true, runsDir, mockSequences });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
