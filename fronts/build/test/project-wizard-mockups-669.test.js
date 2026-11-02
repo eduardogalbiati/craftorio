@@ -388,11 +388,13 @@ test('#669 step 3: "Analyze <name>" and "Read-only. Nothing is written to the re
   assert.equal(wizardText(app).includes('Read-only. Nothing is written to the repository.'), true);
 });
 
-test('#669 step 3: the analyses listed are Clone, Facts, Ways of working profile, City and architecture, Refactor backlog', { timeout: 20000 }, async () => {
+// #730: no "Refactor backlog" (the Product Owner's ranking) any more
+test('#669 #730 step 3: the analyses listed are Clone, Facts, Ways of working profile, City and architecture', { timeout: 20000 }, async () => {
   const app = await atAnalysis();
   const text = wizardText(app);
-  const missing = ['Clone', 'Facts', 'Ways of working profile', 'City and architecture', 'Refactor backlog'].filter((s) => !text.includes(s));
+  const missing = ['Clone', 'Facts', 'Ways of working profile', 'City and architecture'].filter((s) => !text.includes(s));
   assert.deepEqual(missing, []);
+  assert.equal(text.includes('Refactor backlog'), false);
 });
 
 test('#669 step 3: the cost reads "Real models · estimated total" next to "Skip, analyze later"', { timeout: 20000 }, async () => {
@@ -435,12 +437,13 @@ test('#669 step 4: the "City" card with "Open the city"', { timeout: 20000 }, as
   assert.equal(buttons(city.outer).includes('Open the city'), true, `the buttons: ${JSON.stringify(buttons(city.outer))}`);
 });
 
-test('#669 step 4: the "Refactor backlog" card ends with "<n> proposals · nothing added to the roadmap"', { timeout: 20000 }, async () => {
+// #730: the refactor backlog became the Oracle's findings, each with Create issue
+test('#669 #730 step 4: the "Findings" card replaces the "Refactor backlog" card', { timeout: 20000 }, async () => {
   const app = await atReview();
-  const refactors = byTestId(wizardMarkup(app), 'wizard-review-refactors');
-  assert.equal(refactors === null, false, 'data-testid="wizard-review-refactors"');
-  assert.equal(headings(refactors.outer).includes('Refactor backlog'), true);
-  assert.equal(textOf(refactors).includes('2 proposals · nothing added to the roadmap'), true, textOf(refactors));
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-review-refactors'), null, 'no wizard-review-refactors');
+  const findings = byTestId(wizardMarkup(app), 'wizard-review-findings');
+  assert.equal(findings === null, false, 'data-testid="wizard-review-findings"');
+  assert.equal(headings(findings.outer).includes('Findings'), true);
 });
 
 test('#669 step 4: the footer holds Back and Finish', { timeout: 20000 }, async () => {

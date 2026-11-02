@@ -569,7 +569,7 @@
         <div class="wizard-review-grid">
           ${projectCard()}
           ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city', openCity)}
-          ${reviewSection('findings', 'onboarding.review_findings_title', 'projectMap', r.report !== undefined, findingsBody, 'onboarding.review_pending_findings')}
+          ${reviewSection('findings', 'onboarding.review_findings_title', 'projectMap', r.report !== undefined, findingsBody, 'onboarding.review_pending_findings', jobOf('projectMap').status === 'failed' ? retryButton('projectMap') : '')}
         </div>
         <div class="wizard-review-more">
           ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}

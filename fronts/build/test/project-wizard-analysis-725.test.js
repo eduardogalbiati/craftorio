@@ -47,7 +47,7 @@ const PROJECT = { id: PID, name: NAME, repo: REPO, folder: 'C:/ws/repos/new', ex
 const PROFILE = { mode: 'remote', ci: 'release', tests: 'unit+e2e' };
 const jobs = (over = {}) => ({
   clone: { status: 'running' }, facts: { status: 'waiting' }, profile: { status: 'waiting' },
-  projectMap: { status: 'waiting' }, ranking: { status: 'waiting' }, ...over,
+  projectMap: { status: 'waiting' }, ...over,
 });
 const CLI_OK = { provider: 'github', status: 'ok' };
 const CLONING = { projectId: PID, status: 'cloning', jobs: jobs(), cli: CLI_OK };
@@ -67,14 +67,14 @@ const PROFILE_FAILED = {
   cli: CLI_OK,
 };
 const NO_PROFILE = { ...PROFILED, jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' } }) };
-const RANKING_ERROR = 'The Product Owner needs claude, which is not installed.';
-const RANKING_FAILED = {
+// #730: no ranking job any more; the paid job that fails here is the project map (the city and the report)
+const MAP_ERROR = 'The Oracle needs claude, which is not installed.';
+const MAP_FAILED = {
   projectId: PID,
   status: 'analyzed',
   jobs: jobs({
     clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile: PROFILE },
-    projectMap: { status: 'done' },
-    ranking: { status: 'failed', error: RANKING_ERROR, code: 'cli-missing', cli: 'claude', reason: RANKING_ERROR },
+    projectMap: { status: 'failed', error: MAP_ERROR, code: 'cli-missing', cli: 'claude', reason: MAP_ERROR },
   }),
   cli: CLI_OK,
 };
@@ -300,8 +300,8 @@ test('#725 Continue is enabled and "Analyze and continue" is gone in every state
   assertContinue(app, 'done');
   await emit(app, PROFILE_FAILED);
   assertContinue(app, 'profile failed');
-  await emit(app, RANKING_FAILED);
-  assertContinue(app, 'ranking failed');
+  await emit(app, MAP_FAILED);
+  assertContinue(app, 'project map failed');
   assert.doesNotMatch(H.visibleText(wizardMarkup(app)), /analyze and continue/i);
 });
 
@@ -313,59 +313,47 @@ test('#725 pt-BR: no "Analisar e continuar" on the analysis step', { timeout: 20
 
 // ---- 8, 9. a failed job says why, with Retry on its row ------------------------------------------
 
-test('#725 a failed ranking row says why in pt-BR, keeps the full error in its tooltip, and its Retry calls api.retryOnboarding', { timeout: 20000 }, async () => {
+test('#725 #730 a failed project map row says why in pt-BR, keeps the full error in its tooltip, and its Retry calls api.retryOnboarding', { timeout: 20000 }, async () => {
   const app = await atAnalysis({ lang: 'pt-BR' });
-  await emit(app, RANKING_FAILED);
-  const row = part(app, 'ranking');
-  assert.equal(row === null, false, 'the ranking row (data-part="ranking")');
-  const error = byTestId(row.outer, 'wizard-job-error-ranking');
-  assert.equal(error === null, false, 'data-testid="wizard-job-error-ranking" on the ranking row');
+  await emit(app, MAP_FAILED);
+  const row = part(app, 'projectMap');
+  assert.equal(row === null, false, 'the project map row (data-part="projectMap")');
+  assert.equal(part(app, 'ranking'), null, '#730: no ranking row');
+  const error = byTestId(row.outer, 'wizard-job-error-projectMap');
+  assert.equal(error === null, false, 'data-testid="wizard-job-error-projectMap" on the project map row');
   const words = textOf(error);
   assert.match(words, /claude/, `the reason names the CLI: "${words}"`);
   assert.match(words, /não está instalado/, `the reason in pt-BR: "${words}"`);
-  assert.equal(String(error.attrs.title || '').includes(RANKING_ERROR), true, `the full error in the tooltip: "${error.attrs.title}"`);
+  assert.equal(String(error.attrs.title || '').includes(MAP_ERROR), true, `the full error in the tooltip: "${error.attrs.title}"`);
   const before = app.callsTo('retryOnboarding').length;
-  await press(app, 'wizard-job-retry-ranking', row.outer);
+  await press(app, 'wizard-job-retry-projectMap', row.outer);
   assert.deepEqual(app.callsTo('retryOnboarding').slice(before).map((c) => c[0]), [PID], 'Retry calls api.retryOnboarding with the project');
 });
 
 test('#725 amounts: a failed job reads "—", a done job its cost or "grátis", never "Ainda não estimado"', { timeout: 20000 }, async () => {
   const app = await atAnalysis({ lang: 'pt-BR' });
-  await emit(app, RANKING_FAILED);
+  await emit(app, MAP_FAILED);
   await app.settle(10);
-  assert.equal(amountOf(part(app, 'ranking')), '—', 'the failed ranking\'s amount');
-  const map = amountOf(part(app, 'projectMap'));
-  assert.doesNotMatch(map, /ainda não estimado/i, `the done project map's amount: "${map}"`);
-  assert.match(map, /\d|grátis/i, `the done project map's amount is its cost or "grátis": "${map}"`);
-});
-
-// review 1: a paid job done without a known cost (the ranking has no estimate) reads "—": it is paid, so
-// never "grátis", and it ran, so never "Ainda não estimado"
-test('#725 amounts: a done ranking without a known cost reads "—", never "grátis" nor "Ainda não estimado"', { timeout: 20000 }, async () => {
-  const app = await atAnalysis({ lang: 'pt-BR' });
-  const done = clone(RANKING_FAILED);
-  done.jobs.ranking = { status: 'done' };
-  await emit(app, done);
-  await app.settle(10);
-  const amount = amountOf(part(app, 'ranking'));
-  assert.equal(amount, '—', `the done ranking's amount: "${amount}"`);
-  assert.equal(byTestId(wizardMarkup(app), 'wizard-job-error-ranking'), null, 'no failure line on a done ranking');
+  assert.equal(amountOf(part(app, 'projectMap')), '—', 'the failed project map\'s amount');
+  const facts = amountOf(part(app, 'facts'));
+  assert.doesNotMatch(facts, /ainda não estimado/i, `the done facts' amount: "${facts}"`);
+  assert.match(facts, /\d|grátis/i, `the done facts' amount is its cost or "grátis": "${facts}"`);
 });
 
 // ---- 10. the review and the tray ----------------------------------------------------------------
 
-test('#725 the review\'s refactor card, its ranking failed, shows the same reason and a Retry', { timeout: 20000 }, async () => {
+test('#725 #730 the review\'s findings card, its project map failed, shows the same reason and a Retry', { timeout: 20000 }, async () => {
   const app = await atAnalysis({ lang: 'pt-BR' });
-  await emit(app, RANKING_FAILED);
+  await emit(app, MAP_FAILED);
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review');
-  const card = byTestId(wizardMarkup(app), 'wizard-review-refactors');
-  assert.equal(card === null, false, 'data-testid="wizard-review-refactors"');
+  const card = byTestId(wizardMarkup(app), 'wizard-review-findings');
+  assert.equal(card === null, false, 'data-testid="wizard-review-findings"');
   assert.equal(card.attrs['data-state'], 'failed');
   assert.match(textOf(card), /claude/);
   assert.match(textOf(card), /não está instalado/, `the reason in pt-BR: "${textOf(card)}"`);
   const before = app.callsTo('retryOnboarding').length;
-  await press(app, 'wizard-job-retry-ranking', card.outer);
+  await press(app, 'wizard-job-retry-projectMap', card.outer);
   assert.deepEqual(app.callsTo('retryOnboarding').slice(before).map((c) => c[0]), [PID]);
 });
 
@@ -373,7 +361,7 @@ test('#725 the tray (wizard closed) shows a failed job\'s reason and a Retry cal
   const app = await atAnalysis({ lang: 'pt-BR' });
   app.sandbox.ProjectWizard.close();
   await app.settle(10);
-  await emit(app, RANKING_FAILED);
+  await emit(app, MAP_FAILED);
   const item = H.findEl(trayMarkup(app), (e) => e.attrs['data-testid'] === 'tray-item' && e.attrs['data-project'] === PID);
   assert.equal(item === null, false, 'the project\'s tray-item');
   assert.match(textOf(item), /claude/);
