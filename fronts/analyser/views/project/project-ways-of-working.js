@@ -33,7 +33,8 @@
     validate: 'ways_of_working.q_validate',
   };
   // #630: the ways of working's axes (team left): how changes land, what the CI runs on, the test kinds
-  const MODE_OPTIONS = [['local', 'ways_of_working.merge_local'], ['remote', 'ways_of_working.merge_pr']];
+  // #738: Fork + PR, pull requests from the owner's fork to the original repository
+  const MODE_OPTIONS = [['local', 'ways_of_working.merge_local'], ['remote', 'ways_of_working.merge_pr'], ['fork', 'ways_of_working.merge_fork']];
   const CI_OPTIONS = [['none', 'ways_of_working.ci_none'], ['release', 'ways_of_working.ci_release'], ['pr+release', 'ways_of_working.ci_pr_release']];
   const TESTS_OPTIONS = [['unit', 'ways_of_working.tests_unit'], ['unit+e2e', 'ways_of_working.tests_unit_e2e']];
   // #735: the project's kind (window.OnboardingModel KIND_LABELS, packages/shared/onboarding-model.js): a backend gets no UI step

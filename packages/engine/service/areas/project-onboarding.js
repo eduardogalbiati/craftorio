@@ -213,16 +213,16 @@ function jsonOf(answer) {
 // #738: the repository's owner/name, the one rule of the wizard's notice (onboarding-model.js forkSuggestion)
 const ownerRepoOf = (repo) => OnboardingModel.forkSuggestion({ repo, push: false }).repo;
 
-// #738: a GitLab repository URL's host and its full project path (groups and subgroups kept:
-// https://gitlab.com/group/sub/app.git and git@gitlab.com:group/sub/app → gitlab.com, group/sub/app)
-function gitlabPartsOf(repo) {
-  const clean = String(repo ?? '').trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '')
-    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^[^@/]+@/, '');
-  const parts = clean.split(/[/:]/).filter(Boolean);
-  return { host: parts[0] || 'gitlab.com', path: parts.slice(1).join('/') };
+// #738: a repository URL's host and full path (GitLab subgroups kept), the registry's rule (Platforms.parseRepoUrl)
+const repoPartsOf = (repo) => Platforms.parseRepoUrl(repo) || { host: 'gitlab.com', path: '' };
+
+// #738: the fork's remote URL in the original's protocol: an SSH original (git@host:… or ssh://) gets
+// git@host:<fork path>.git, so an owner who signs in by SSH key keeps pushing; else <fork url>.git
+function forkRemoteOf(forkUrl, repo) {
+  const ssh = /^(ssh:\/\/|[\w.-]+@[\w.-]+:)/i.test(String(repo ?? '').trim());
+  const parts = ssh && Platforms.parseRepoUrl(forkUrl);
+  return parts ? `git@${parts.host}:${parts.path}.git` : `${forkUrl}.git`;
 }
-const gitlabPathOf = (repo) => gitlabPartsOf(repo).path;
-const gitlabHostOf = (repo) => gitlabPartsOf(repo).host;
 
 // #738: GitLab's push right from `glab api projects/<path>`: Developer (30) or more in the project or its
 // group (permissions.project_access / group_access); undefined when the answer has no permissions
@@ -394,7 +394,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const e2e = simulation.simulationOnly() && ['0', '1'].includes(process.env.MULTIAGENT_E2E_REPO_PUSH);
     const provider = providerOf(repo) || (e2e ? 'github' : null);
     if (provider !== 'github' && provider !== 'gitlab') return;
-    const name = provider === 'gitlab' ? gitlabPathOf(repo) : ownerRepoOf(repo);
+    const name = provider === 'gitlab' ? repoPartsOf(repo).path : ownerRepoOf(repo);
     const ask = (args) => Promise.resolve().then(() => platformCli(provider, args, {})).catch(() => null);
     const push = provider === 'gitlab'
       ? gitlabPush(jsonOf(await ask(['api', `projects/${encodeURIComponent(name)}`])))
@@ -444,7 +444,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     if (!user) throw new Error('glab did not say which account is signed in (glab auth login).');
     const mine = `${user}/${name.split('/').pop()}`;
     const read = async () => jsonOf(await platformCli('gitlab', ['api', `projects/${encodeURIComponent(mine)}`], {}));
-    const urlOf = (p) => String(p?.web_url || `https://${gitlabHostOf(repo)}/${mine}`).replace(/\.git$/, '');
+    const urlOf = (p) => String(p?.web_url || `https://${repoPartsOf(repo).host}/${mine}`).replace(/\.git$/, '');
     const found = await read();
     if (found?.forked_from_project?.path_with_namespace === name) return { status: 'reused', url: urlOf(found) };
     const made = await platformCli('gitlab', ['repo', 'fork', name, '--clone=false'], {});
@@ -456,15 +456,18 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
    * #738 "Create a fork": the owner's fork (reused when it exists), then in the project's clone origin = the
    * fork and upstream = the original; the project keeps fork: { url, upstream }. A failure leaves the
    * suggestion with its reason (fork: { status: 'failed' }), so the owner can try again or work locally.
+   * The notice comes before the clone ends: the remotes change once the clone is done.
    */
   async function fork(projectId) {
     const s = forkable(projectId);
-    const p = projects.readProject(projectsDir, projectId);
-    const name = s.fork.repo || ownerRepoOf(p.repo);
+    let name = s.fork.repo;
     try {
+      await projects.cloneJob(projectsDir, projectId);
+      const p = projects.readProject(projectsDir, projectId);
+      name = name || ownerRepoOf(p.repo);
       const made = await makeFork(name, p.repo);
       const remotes = String(await git(['remote'], p.folder)).split(/\s+/).filter(Boolean);
-      await git(['remote', 'set-url', 'origin', `${made.url}.git`], p.folder);
+      await git(['remote', 'set-url', 'origin', forkRemoteOf(made.url, p.repo)], p.folder);
       await git(['remote', remotes.includes('upstream') ? 'set-url' : 'add', 'upstream', p.repo], p.folder);
       projects.updateProject(projectsDir, projectId, { fork: { url: made.url, upstream: p.repo } });
       forkChange(projectId, made);

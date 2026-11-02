@@ -40,8 +40,10 @@ steps:
       0. Check whether it merged (`gh pr view {{ inputs.parent_pr }} --json state`, `glab mr view` on GitLab).
          Not merged yet: push the branch to `origin` only, open nothing, and answer ci_status: pending,
          pr_url: "" and pr_number: 0; the orchestrator waits for the merge and calls you again.
-         Merged: `git fetch upstream`, then `git rebase --onto upstream/{{ inputs.base_branch }} origin/{{ inputs.parent_branch }}`
-         (only this branch's own commits stay), check it builds, `git push --force-with-lease origin {{ steps.develop.output.branch }}`,
+         Merged: the orchestrator rebases the branch onto upstream/{{ inputs.base_branch }} itself and says so
+         above (worktree.js restackOnBase); when it says the rebase failed, `git fetch upstream`, then
+         `git rebase --onto upstream/{{ inputs.base_branch }} origin/{{ inputs.parent_branch }}` (only this branch's
+         own commits stay). Check it builds, `git push --force-with-lease origin {{ steps.develop.output.branch }}`,
          then go on with 2.
       {% endif %}1. Push the branch to `origin` (the fork): `git push -u origin {{ steps.develop.output.branch }}`.
          Never push anything to `upstream`: the maintainers merge the pull request.

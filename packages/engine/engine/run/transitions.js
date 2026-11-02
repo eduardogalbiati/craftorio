@@ -16,6 +16,7 @@ const { execFileSync } = require('child_process');
 const { sleep } = require('../providers');
 const { parseTarget } = require('../probes');
 const mergeQueue = require('../merge-queue');
+const { restackOnBase } = require('../worktree');
 const { evalExpr, render } = require('./templates');
 const { isLooping, loopConfig, parseDuration } = require('./load');
 const { decisionKey, validateSchema } = require('./outputs');
@@ -247,11 +248,25 @@ const methods = {
     }
     if (r.state === 'merged') st.parentMerged = true;
     stats.agent_calls++;
-    const news = r.state === 'merged'
-      ? `the parent PR/MR ${parent} merged: rebase the branch onto the synced base, push it to origin and open its PR/MR now`
-      : `the parent PR/MR ${parent}: ${r.detail || r.state}`;
+    const news = r.state === 'merged' ? await this.restackAfterParent(step, parent) : `the parent PR/MR ${parent}: ${r.detail || r.state}`;
     st.probeNews = { detail: news, polls: st.probePolls };
     return null;
+  },
+
+  // #738 the parent merged: the engine rebases the run's branch onto the synced upstream base itself
+  // (worktree.js restackOnBase, the commits after origin/<inputs.parent_branch>); the agent pushes it to
+  // origin and opens its PR/MR. A conflict leaves the branch as it was and the agent rebases it by hand.
+  async restackAfterParent(step, parent) {
+    const wt = this.worktree;
+    const then = 'push it to origin (`git push --force-with-lease origin HEAD`, never to upstream) and open its PR/MR now';
+    if (!wt?.dir) return `the parent PR/MR ${parent} merged: rebase the branch onto the synced base, ${then}`;
+    const log = (level, message) => this.emitEvent('log', { level, step_id: step.id, message });
+    try {
+      const r = await restackOnBase({ repo: wt.repo, dir: wt.workDir || wt.dir, base: this.ctx.inputs?.base_branch || wt.base, parentBranch: this.ctx.inputs?.parent_branch, log });
+      return `the parent PR/MR ${parent} merged: the engine rebased the branch onto ${r.base} (now at ${r.commit.slice(0, 8)}); ${then}`;
+    } catch (e) {
+      return `the parent PR/MR ${parent} merged, but the engine could not rebase the branch (${String(e?.message || e).split('\n')[0]}): rebase it onto the synced base yourself, then ${then}`;
+    }
   },
 
   // After an agent turn of a `wait:` step: the grace period for "no check yet" starts again, and

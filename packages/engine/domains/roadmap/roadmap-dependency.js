@@ -37,6 +37,25 @@ function assertEarlierDependencies(stages) {
 }
 
 /**
+ * The stages without the dependencies on an item that was there before and is gone (removed, its issues
+ * assigned elsewhere): the child then starts from the default branch, and the next save does not throw.
+ * An id never stored stays, so a writer naming an unknown item still gets assertEarlierDependencies' error.
+ * @param {any[]} stages
+ * @param {Iterable<string>} previousIds the ids of the items before the change
+ */
+function forgetGoneParents(stages, previousIds) {
+  const now = new Set(stages.flatMap((s) => (isRelease(s) ? [] : s.items.map((x) => x.id))));
+  const gone = new Set([...previousIds].filter((id) => !now.has(id)));
+  if (!gone.size) return stages;
+  const forget = (x) => {
+    if (!gone.has(x.dependsOn)) return x;
+    const { dependsOn: _gone, ...rest } = x;
+    return rest;
+  };
+  return stages.map((s) => (isRelease(s) ? s : { ...s, items: s.items.map(forget) }));
+}
+
+/**
  * The base of a dependent item's run: the parent's run branch on the fork, whether the parent merged
  * upstream, and the project's policy for its pull request: 'wait-and-rebase' (the default: it opens once
  * the parent merged) or 'depends-on' (it opens at once, its body saying "Depends on #<parent's PR>").
@@ -67,4 +86,5 @@ module.exports = {
   assertEarlierDependencies,
   dependencyBase,
   dependsOnField,
+  forgetGoneParents,
 };

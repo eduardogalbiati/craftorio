@@ -82,6 +82,7 @@ const {
   assertEarlierDependencies,
   dependencyBase,
   dependsOnField,
+  forgetGoneParents,
 } = require('./roadmap-dependency');
 
 /** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
@@ -418,8 +419,10 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
   const w = prevLast?.waiting ? out.findIndex((s) => s.id === prevLast.id && s.waiting) : -1;
   if (w >= 0 && w < out.length - 1 && out.slice(w + 1).every((s) => !prevIds.has(s.id))) out.push(...out.splice(w, 1));
   assertUnique(out);
-  assertEarlierDependencies(out);
-  return out;
+  // #738: a removed parent leaves its children without a dependency, not an unsavable roadmap
+  const kept = forgetGoneParents(out, prevItems.keys());
+  assertEarlierDependencies(kept);
+  return kept;
 }
 
 /**
@@ -537,7 +540,8 @@ function dropIssues(dir, projectId, numbers, { alive = null } = {}) {
   if (!fs.existsSync(roadmapFile(dir, projectId))) return readRoadmap(dir, projectId);
   return updateRoadmap(dir, projectId, (r) => ({
     ...r,
-    stages: r.stages.map((s) => ({
+    // #738: the children of a dropped item lose their dependency (forgetGoneParents)
+    stages: forgetGoneParents(r.stages.map((s) => ({
       ...s,
       items: s.items.flatMap((x) => {
         if (isFinished(x) || runIsAlive(x, alive)) return [x];
@@ -546,7 +550,7 @@ function dropIssues(dir, projectId, numbers, { alive = null } = {}) {
         const { issues: _old, ...rest } = x;
         return left.length ? [{ ...rest, ...left[0], issues: left }] : [];
       }),
-    })).filter((s) => isRelease(s) || s.items.length),
+    })).filter((s) => isRelease(s) || s.items.length), allItems(r).map((x) => x.id)),
   }));
 }
 

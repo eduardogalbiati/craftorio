@@ -21,8 +21,12 @@ actions, or any code that deletes or checks out branches.
   Nothing is ever pushed to `upstream`. The PR step waits for the parent with `wait.parent`
   (`{{ inputs.parent_pr }}`, `pr-pipeline.yaml`'s `ci`): `pollParent` (`engine/run/transitions.js`) probes the
   parent PR/MR (`pr_checks`) before the step's own probe; not merged → poll again without the agent, and
-  `loopStartedAt` restarts so days of waiting never hit `max_duration`; merged → one agent turn to rebase, push
-  to `origin` and open the PR (`st.parentMerged`); closed or unreadable → the agent decides. The fork itself
+  `loopStartedAt` restarts so days of waiting never hit `max_duration`; merged → `restackAfterParent` runs
+  `restackOnBase` on the run's worktree, then one agent turn pushes to `origin` and opens the PR
+  (`st.parentMerged`; a conflict leaves the branch as it was and the agent rebases it by hand); closed or
+  unreadable → the agent decides. The dependent PR's policy is the project's `fork.dependentPr`
+  (`wait-and-rebase`, the default, or `depends-on`): set through the API only (`projects:update`), no screen
+  edits it yet. Removing a parent item drops its children's `dependsOn` (`forgetGoneParents`). The fork itself
   (onboarding): `gh api repos/<o>/<r>` `permissions.push` on GitHub; on GitLab `glab api projects/<path>`
   (push = `access_level` ≥ 30 in `project_access` or `group_access`), the fork reused when
   `projects/<user>%2F<name>` has that `forked_from_project`, else `glab repo fork <path> --clone=false`.
