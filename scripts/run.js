@@ -9,6 +9,8 @@
 // --auto-approve approves every human gate (use with care outside mock mode); an agent's question
 // (#567) gets the agent's default.
 // --mock-ask <step>: in mock mode, that ask_human step asks the owner once (mockSequences.needs_human).
+// --project <id> (#735): the workspace project the run is for (else the one whose folder is --repo):
+// its run defaults (packages/engine/domains/project/project-run-defaults.js) fill the inputs not given.
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
@@ -28,6 +30,16 @@ const {
   seedWorkflows,
 } = require('@multiagent/engine/domains/workflow/workflows');
 const { seedSkills } = require('@multiagent/engine/domains/agents/skills');
+const {
+  listProjects,
+  readProject,
+} = require('@multiagent/engine/domains/project/projects');
+const {
+  resolveRunInputs,
+  runDefaultsWith,
+  savedProfile,
+} = require('@multiagent/engine/domains/project/project-run-defaults');
+const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
 
 const root = path.join(__dirname, '..');
 
@@ -42,12 +54,31 @@ function parseArgs(argv) {
     else if (k === '--file') a.file = next();
     else if (k === '--task') a.inputs.task = next();
     else if (k === '--repo') a.inputs.repo_path = next();
+    else if (k === '--project') a.project = next();
     else if (k === '--input') { const [key, ...v] = next().split('='); a.inputs[key] = v.join('='); }
     else if (k === '--attach') { const [key, ...v] = next().split('='); (a.attachments[key] ??= []).push(v.join('=')); }
     else throw new Error(`Unknown argument: ${k}`);
   }
-  a.inputs.repo_path ??= root;
   return a;
+}
+
+// #735: the workspace project of --project <id>, else the one whose folder is --repo; null: none
+function projectFor(projectsDir, id, repoPath) {
+  const same = (a, b) => !!a && !!b && (process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b));
+  if (id) return readProject(projectsDir, id);
+  try { return listProjects(projectsDir).find((p) => same(p.folder, repoPath)) || null; } catch { return null; }
+}
+
+// #735: the project's run defaults fill the inputs the command line left out, before the workflow's
+// own defaults (resolveRunInputs: typed > project > workflow; the engine fills the workflow's)
+function withProjectDefaults(file, typed, project) {
+  if (!project) return typed;
+  const wf = loadWorkflow(file);
+  const defaults = runDefaultsWith({ project, profile: savedProfile(path.join(ws.root, 'architecture'), project.id) });
+  const { values, sources } = resolveRunInputs({ typed, project: defaults, workflow: wf });
+  const inputs = { ...typed };
+  for (const [k, v] of Object.entries(values)) if (sources[k] === 'project') inputs[k] = v;
+  return inputs;
 }
 
 const args = parseArgs(process.argv.slice(2));
@@ -61,6 +92,8 @@ seedSkills(path.join(root, 'skills'), ws.skills);
 seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows);
 const wfFile = resolveWorkflow(args.file, [ws.workflows, BUNDLED_WORKFLOWS_DIR]);
 if (wfFile.fallback) console.warn(`workflow ${args.file} is not in ${ws.workflows}; using the bundled copy ${wfFile.file}`);
+const project = projectFor(ws.projects, args.project, args.inputs.repo_path);
+args.inputs.repo_path ??= project?.folder || root;
 const settings = readSettings(ws);
 const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
 const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('@multiagent/engine/domains/local/local-usage').readLocalUsage() : null });
@@ -68,7 +101,8 @@ const run = new WorkflowRun({
   file: wfFile.file,
   // #630: an old workflow name brings its variant's inputs, under the given ones (an old
   // `mode: validated` is the validation, so the alias's mode stays)
-  inputs: aliasInputs(wfFile, args.inputs || {}),
+  // #735: then the project's run defaults
+  inputs: withProjectDefaults(wfFile.file, aliasInputs(wfFile, args.inputs || {}), project),
   attachments: args.attachments,
   mock: args.mock,
   ...(args.mock && args.mockAsks ? { mockSequences: { needs_human: args.mockAsks } } : {}),

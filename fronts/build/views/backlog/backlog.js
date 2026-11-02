@@ -1,7 +1,8 @@
 // Backlog screen: a project's issues synced from its git platform (packages/engine/domains/backlog/backlog.js), as a list or a
 // kanban (To do / In progress / Waiting for approval / Done). Shows the last sync right away and
-// syncs again in the background each time the screen opens. The platform defaults to
-// Settings › General › Backlog and can be switched here.
+// syncs again in the background each time the screen opens. The platform is the project's (#745,
+// window.Platforms.projectPlatform: its host or the platform stored on it), shown as a badge; the
+// select appears only for a host that can't tell it, and its pick is saved on the project.
 // Selected To do issues can be assigned to a workflow: they are queued and the service runs them
 // one at a time (the run records its issues), as separate runs or, when asked, as one run for all
 // of them (one branch, one PR/MR). Issues link to the runs working on them. The Assign dialog's
@@ -144,6 +145,8 @@
   } = window.BacklogArchive;
   const $b =(sel) => document.querySelector(sel);
   const project = () => bl.projects.find((p) => p.id === bl.projectId) || null;
+  // #745: the header project's platform id (github / gitlab) when its host or its stored platform tells it, else null
+  const knownPlatform = () => window.Platforms.projectPlatform?.(project())?.id || null;
   const visible = () => state.view === 'backlog' || state.view === 'roadmap';
   // #253: an epic groups issues, it is never work to assign
   const selectable = (i) => i.state === 'open' && i.column === 'todo' && !i.isEpic;
@@ -176,7 +179,8 @@
     bl.epic = '';
     if (!id) { render(); return; }
     try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
-    bl.platform = bl.data?.platform || state.settings.backlogPlatform || DEFAULT_PLATFORM;
+    // #745: the project's platform (its host, or the one stored on it), never a global setting
+    bl.platform = knownPlatform() || bl.data?.platform || DEFAULT_PLATFORM;
     render();
     // the stage openStage was asked for before this read
     const stage = stageToShow;
@@ -1262,7 +1266,15 @@
     $b('#bl-toolbar').classList.toggle('hidden', roadmap);
     const plat = $b('#bl-platform');
     plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (soon)' : ''}</option>`).join('');
-    plat.value = bl.platform || state.settings.backlogPlatform || DEFAULT_PLATFORM;
+    plat.value = bl.platform || DEFAULT_PLATFORM;
+    // #745: a project whose platform is known shows it as a badge; the select stays only for a host
+    // the URL can't tell (a self-hosted server), and its pick is saved on the project
+    const known = knownPlatform();
+    plat.classList.toggle('hidden', !!known);
+    const badge = $b('#bl-platform-badge');
+    badge.classList.toggle('hidden', !known);
+    badge.textContent = known ? PLATFORMS[known]?.label || known : '';
+    badge.title = known ? t('backlog.platform_of_the_project') : '';
 
     const p = project();
     const btn = $b('#btn-bl-sync');
@@ -1435,6 +1447,12 @@
     $b('nav.sidebar [data-view="backlog"]').insertAdjacentHTML('beforeend', '<span id="nav-backlog-unpushed" class="nav-badge warn hidden"></span>');
     $b('#bl-platform').onchange = (e) => {
       bl.platform = e.target.value;
+      // #745: saved on the project (its host doesn't tell the platform), so the Backlog never asks again
+      const p = project();
+      if (p && !PLATFORMS[bl.platform]?.soon) {
+        p.platform = bl.platform;
+        Promise.resolve(api.updateProject?.(p.id, { platform: bl.platform })).catch((err) => { bl.error = errMsg(err); render(); });
+      }
       bl.seq++;
       bl.syncing = false;
       bl.error = null;
@@ -1585,7 +1603,8 @@
             <p class="muted small"><span id="bl-hint">${t('backlog.a_project_s_issues_synced_from')}</span> ${t('backlog.the_last_sync_is_kept_in')} <span id="backlog-dir" class="mono"></span></p>
           </div>
           <div class="row">
-            <select id="bl-platform" aria-label="${t('backlog.platform')}"></select>
+            <span id="bl-platform-badge" class="badge hidden" data-testid="backlog-platform"></span>
+            <select id="bl-platform" aria-label="${t('backlog.platform')}" data-testid="backlog-platform-select"></select>
             <button id="btn-bl-sync" class="btn primary nowrap">${t('backlog.sync')}</button>
             <button id="btn-bl-new-issue" class="btn ghost nowrap" type="button" title="${t('backlog.describe_a_problem_or_an_idea')}">${t('backlog.new_issue')}</button>
           </div>

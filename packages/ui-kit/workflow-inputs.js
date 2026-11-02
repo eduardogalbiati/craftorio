@@ -325,7 +325,7 @@
     const value = Array.isArray(v) ? v.join('\n') : v;
     if (!field.dataset.wiTouched && !keep.includes(k)) set(rootEl, k, value, { touched: false });
     const same = el.type === 'checkbox' ? el.checked === truthy(value) : String(el.value ?? '').trim() === String(value).trim();
-    if (k !== 'language') note(field, same ? t('wi.from_project') : '', t('wi.from_project_title'));
+    if (k !== 'language') note(field, same ? t('workflow_inputs.from_project') : '', t('workflow_inputs.from_project_title'));
   }
 
   // Pills and show_if work on every form, wired once (forms are redrawn with innerHTML).

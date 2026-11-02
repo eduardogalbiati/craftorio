@@ -1047,6 +1047,7 @@
   "backlog.planned_in_roadmap_one": "{list} is planned in the roadmap. Assigning takes it out of the roadmap and into the queue.",
   "backlog.platform": "Platform",
   "backlog.platform_closes_issues": " GitHub/GitLab closes {issues}.",
+  "backlog.platform_of_the_project": "The project's platform, from its repository",
   "backlog.product_owner": "Product Owner",
   "backlog.product_owner_s_choices": "Product Owner's choices:",
   "backlog.push": "Push",
@@ -4232,6 +4233,8 @@
   "run.description": "Description",
   "run.description_replaced": "description replaced",
   "run.details": "Details",
+  "run.doesnt_apply_no_ui": "Doesn't apply: no UI in this project",
+  "run.doesnt_apply_off": "Doesn't apply: turned off in this run's inputs",
   "run.duration_active_idle": "duration / active / idle",
   "run.duration_in_value_out_output_cost": "{duration} · in {value} · out {output} · {cost}",
   "run.event": "event",
@@ -5450,6 +5453,8 @@
   "ways_of_working.write": "Write to the repository",
   "ways_of_working.written": "Wrote {count} workflows to .multiagent/ (not committed)",
 
+  "workflow_inputs.from_project": "from the project",
+  "workflow_inputs.from_project_title": "The project's run default (Overview › Ways of working); what you type here wins",
   "workflow_inputs.latest": "latest",
 
   "workflows.a_pipeline_chains_workflows_start_a": "A pipeline chains workflows. Start a workflow with a \"When it finishes\" chain, then use Save as pipeline on its run.",

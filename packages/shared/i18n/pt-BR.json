@@ -1047,6 +1047,7 @@
   "backlog.planned_in_roadmap_one": "{list} está planejada no roadmap. Atribuir a tira do roadmap e a coloca na fila.",
   "backlog.platform": "Plataforma",
   "backlog.platform_closes_issues": " O GitHub/GitLab fecha {issues}.",
+  "backlog.platform_of_the_project": "A plataforma do projeto, pelo repositório dele",
   "backlog.product_owner": "Product Owner",
   "backlog.product_owner_s_choices": "Escolhas do Product Owner:",
   "backlog.push": "Push",
@@ -4232,6 +4233,8 @@
   "run.description": "Descrição",
   "run.description_replaced": "descrição substituída",
   "run.details": "Detalhes",
+  "run.doesnt_apply_no_ui": "Não se aplica: o projeto não tem interface",
+  "run.doesnt_apply_off": "Não se aplica: desligado nas entradas desta execução",
   "run.duration_active_idle": "duração / ativo / ocioso",
   "run.duration_in_value_out_output_cost": "{duration} · entrada {value} · saída {output} · {cost}",
   "run.event": "evento",
@@ -5450,6 +5453,8 @@
   "ways_of_working.write": "Gravar no repositório",
   "ways_of_working.written": "{count} workflows gravados em .multiagent/ (sem commit)",
 
+  "workflow_inputs.from_project": "do projeto",
+  "workflow_inputs.from_project_title": "O padrão de execução do projeto (Visão geral › Jeito de trabalhar); o que você digitar aqui vale mais",
   "workflow_inputs.latest": "mais recente",
 
   "workflows.a_pipeline_chains_workflows_start_a": "Um pipeline encadeia workflows. Inicie um workflow com uma cadeia \"Quando terminar\" e depois use Salvar como pipeline na execução dele.",

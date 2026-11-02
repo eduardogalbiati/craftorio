@@ -4,6 +4,7 @@
 const projects = require('../../domains/project/projects');
 const projectInputs = require('../../domains/project/project-inputs');
 const { runDefaultsOf } = require('../seed-runs');
+const { withAliases } = require('../../domains/project/project-run-defaults');
 const { clientError, requireId, requireObject } = require('../common');
 const {
   ANY,
@@ -58,7 +59,7 @@ module.exports = (ctx) => [
     fn: async (id) => {
       const p = projectOf(ctx, id);
       const hints = await projectInputs.inputHints(p?.folder || null);
-      return { ...hints, runDefaults: p ? await runDefaultsOf(ctx, p) : null };
+      return { ...hints, runDefaults: p ? withAliases(await runDefaultsOf(ctx, p)) : null };
     },
   },
 ];

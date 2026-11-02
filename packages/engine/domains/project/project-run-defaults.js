@@ -106,10 +106,16 @@ const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 /** The project's run defaults (see the header); every key always present. */
 async function projectRunDefaults({ project, profile = null } = {}) {
   const folder = project?.folder || null;
+  const { defaultBranch } = folder && isDir(folder) ? await listBranches(folder) : { defaultBranch: null };
+  return runDefaultsWith({ project, profile, defaultBranch });
+}
+
+/** projectRunDefaults with the repository's default branch already read (null: none); synchronous (scripts/run.js). */
+function runDefaultsWith({ project, profile = null, defaultBranch = null } = {}) {
+  const folder = project?.folder || null;
   const facts = projectFacts(folder);
   const p = profile || {};
   const kind = [project?.kind, p.kind].find((k) => KINDS.includes(k)) || facts.kind;
-  const { defaultBranch } = folder && isDir(folder) ? await listBranches(folder) : { defaultBranch: null };
   const mode = wizardMode(project) || (['local', 'remote'].includes(p.mode) ? p.mode : null);
   const suite = str(p.e2eCommand) || facts.e2eCommand;
   const noUi = kind === 'backend';
@@ -136,6 +142,14 @@ const ALIASES = {
   unit_command: (d) => d.test_command,
   e2e_suite: (d) => (d.e2e_tests == null ? undefined : d.e2e_tests === 'off' ? 'skip' : 'run'),
 };
+
+/** The defaults with release.yaml's names added (unit_command, e2e_suite), for the run dialog's fields. */
+function withAliases(defaults) {
+  if (!defaults) return defaults;
+  const out = { ...defaults };
+  for (const [k, of] of Object.entries(ALIASES)) if (!(k in out) && of(out) !== undefined) out[k] = of(out);
+  return out;
+}
 
 const given = (v) => v !== undefined && v !== null;
 const fits = (def, v) => !Array.isArray(def?.enum) || def.enum.includes(v);
@@ -179,5 +193,7 @@ module.exports = {
   projectFacts,
   projectRunDefaults,
   resolveRunInputs,
+  runDefaultsWith,
   savedProfile,
+  withAliases,
 };
