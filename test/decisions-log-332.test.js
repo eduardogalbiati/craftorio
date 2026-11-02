@@ -39,7 +39,8 @@ test('the log is seeded with the three standing decisions of the issue', () => {
   assert.ok(writeAndRun.date === '2026-10-03' || /\b2026-10-03\b/.test(writeAndRun.text), `the write_and_run entry lost its date (${writeAndRun.date})`);
   const openSource = find(/#313\b/);
   assert.ok(openSource, 'no entry for #313');
-  assert.equal(openSource.date, '2026-10-11');
+  // its own entry, or folded into a later one that keeps its date (the cap of #360)
+  assert.ok(openSource.date === '2026-10-11' || /#313\b[^)]*\b2026-10-11\b/.test(openSource.text), `the #313 entry lost its date (${openSource.date})`);
   assert.ok(/\bMIT\b/.test(openSource.text), 'the #313 entry does not name the MIT license');
 });
 
