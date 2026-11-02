@@ -11,6 +11,8 @@
 // - jobReason(job): a failed job in the interface's language from the engine's code (failureOf in
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
 // - profileOf(), workflowChoices(), pickedWorkflows() (#729: Finish saves them as the project's workflows).
+// - #726 textOf(x): the model's i18n keys (a key, { key, params }, an array) in the interface's language: the
+//   reasons (after the highlighted wizard-workflow-why "Why:" label), the selects' options, the profile line.
 // Uses app.js globals (esc, t), window.OnboardingModel and window.Select.
 
 (function () {
@@ -23,6 +25,17 @@
       return M.FAILURE_CODES.includes(job?.code)
         ? t(`onboarding.job_failed_${job.code.replace(/-/g, '_')}`, { cli: job.cli || '', reason })
         : t('onboarding.job_failed', { reason });
+    };
+
+    // #726: a model text in the interface's language: a key, { key, params } (each param a key or
+    // { key, params } too), or an array of those joined with ' · '
+    const textOf = (x) => {
+      if (Array.isArray(x)) return x.map(textOf).join(' · ');
+      if (x && typeof x === 'object') {
+        const params = Object.fromEntries(Object.entries(x.params || {}).map(([k, v]) => [k, typeof v === 'string' || (v && typeof v === 'object') ? textOf(v) : v]));
+        return t(x.key, params);
+      }
+      return x ? t(String(x)) : '';
     };
 
     // #630 (mock-4): the ways-of-working profile { mode, ci, tests } the profile job found, or null
@@ -63,12 +76,13 @@
       const busy = at === 'analyzing';
       const select = (kind, choices, value) => {
         const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"${busy ? ' disabled' : ''}`;
-        return window.Select.markup(attrs, choices.map((c) => [c.value, c.label]), value);
+        return window.Select.markup(attrs, choices.map((c) => [c.value, textOf(c.label)]), value);
       };
       const row = (kind) => {
         const s = all.find((x) => x.id === kind);
+        // #726: "Why:" its own highlighted label, the reason after it in the interface's language
         const reason = at === 'analyzed'
-          ? `<p class="muted small wizard-workflow-reason" data-testid="wizard-workflow-reason">${esc(t('onboarding.workflow_why', { reason: s.reason }))}</p>` : '';
+          ? `<p class="muted small wizard-workflow-reason" data-testid="wizard-workflow-reason"><strong class="wizard-workflow-why" data-testid="wizard-workflow-why">${esc(t('onboarding.workflow_why_label'))}</strong> ${esc(textOf(s.reason))}</p>` : '';
         return `<li class="card wizard-workflow" data-testid="wizard-workflow" data-kind="${esc(kind)}">
           <label class="wizard-workflow-head"><strong>${esc(t(`onboarding.workflow_${kind}`))}</strong>
             ${select(kind, s.choices, cur().workflows?.[kind] || s.value)}</label>
@@ -101,6 +115,13 @@
         <p class="muted small">${esc(t('onboarding.workflows_more'))}</p></div>`;
     }
 
-    return { jobReason, pickedWorkflows, profileOf, workflowChoices, workflowsColumn };
+    return {
+      jobReason,
+      pickedWorkflows,
+      profileOf,
+      textOf,
+      workflowChoices,
+      workflowsColumn,
+    };
   };
 }());

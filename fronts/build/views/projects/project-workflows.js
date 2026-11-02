@@ -136,7 +136,8 @@ window.ProjectWorkflows = (() => {
     const M = window.OnboardingModel;
     if (!value || !M) return value || '';
     const s = kind === 'ci' ? M.ciChoice(null) : M.suggestWorkflows(null).suggestions.find((x) => x.id === kind);
-    return s?.choices?.find((c) => c.value === value)?.label || value;
+    const label = s?.choices?.find((c) => c.value === value)?.label; // #726: an i18n key
+    return label ? t(label) : value;
   }
 
   function cardHtml(w, known, def) {

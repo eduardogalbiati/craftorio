@@ -106,6 +106,7 @@
     jobReason,
     pickedWorkflows,
     profileOf,
+    textOf,
     workflowsColumn,
   } = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
   const failedPaid = (s) => PAID.find((id) => s?.jobs?.[id]?.status === 'failed') || null;
@@ -403,7 +404,7 @@
     const row = (id) => {
       const s = jobs[id]?.status || 'waiting';
       // #630 (mock-4): the profile row says the ways of working it found once its job is done
-      const found = id === 'profile' && M.profileLine(profileOf());
+      const found = id === 'profile' && textOf(M.profileLine(profileOf())); // #726: keys, in the interface's language
       const line = id === 'clone' ? cur.model.repository : found ? t('onboarding.profile_found', { profile: found }) : t(`onboarding.job_${id}_text`);
       const testid = id === 'profile' ? ' data-testid="wizard-profile"' : '';
       // mock-4's pick of a paid analysis: both run in this phase (shown checked, disabled)
@@ -967,6 +968,8 @@
     window.api.onOnboardingChanged(remember);
     window.api.onOnboardingChanged(refreshProjectList);
   }
+  // #726: a live language switch draws the open wizard again, the owner's picks kept (cur.workflows)
+  window.I18n?.onChange?.(() => render());
 
   window.ProjectWizard = {
     close,

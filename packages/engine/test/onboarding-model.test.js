@@ -108,7 +108,8 @@ test('every local/remote x CI x tests profile gets suggestions among today\'s wo
     assert.ok(r.suggestions.length > 0, label);
     assert.deepEqual(ids(r).filter((id) => !TODAY.includes(id)), [], `${label}: only today's workflows`);
     assert.equal(new Set(ids(r)).size, r.suggestions.length, `${label}: no workflow twice`);
-    for (const s of r.suggestions) assert.ok(typeof s.reason === 'string' && s.reason.trim().length > 0, `${label}: ${s.id} has a reason`);
+    // #726: a reason is an i18n key ({ key, params })
+    for (const s of r.suggestions) assert.ok(typeof s.reason?.key === 'string' && s.reason.key.startsWith('onboarding.'), `${label}: ${s.id} has a reason`);
   }
 });
 
@@ -145,7 +146,7 @@ test('an empty or unknown profile suggests the default workflow and says so', ()
     const r = suggestWorkflows(p);
     assert.equal(r.defaulted, true, label);
     assert.equal(ids(r)[0], DEFAULT, label);
-    assert.ok(typeof r.suggestions[0].reason === 'string' && r.suggestions[0].reason.trim().length > 0, label);
+    assert.ok(typeof r.suggestions[0].reason?.key === 'string' && r.suggestions[0].reason.key.startsWith('onboarding.'), label);
   }
 });
 

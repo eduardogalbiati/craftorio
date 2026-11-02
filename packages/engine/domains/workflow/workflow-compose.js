@@ -16,6 +16,7 @@
 
 const path = require('path');
 const yaml = require('js-yaml');
+const I18n = require('@multiagent/shared/i18n');
 const registry = require('@multiagent/shared/providers');
 const { PLATFORMS } = require('@multiagent/shared/platforms');
 const { PROFILE, PROFILE_LABELS } = require('@multiagent/shared/onboarding-model');
@@ -29,8 +30,9 @@ const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
 const MODES = PROFILE.mode;
 const CI_STYLES = PROFILE.ci;
 const TEST_STYLES = PROFILE.tests;
-// a profile field's choices for a question: [{ value, label }]
-const profileChoices = (field) => Object.entries(PROFILE_LABELS[field]).map(([value, label]) => ({ value, label }));
+// a profile field's choices for a question: [{ value, label }]; #726: the model's label keys, in English
+// (Ways of working shows the engine's questions as they are)
+const profileChoices = (field) => Object.entries(PROFILE_LABELS[field]).map(([value, key]) => ({ value, label: I18n.t(key, undefined, 'en') }));
 const RELEASE_STYLES = ['milestone', 'per-merge', 'train', 'rc-stable'];
 const REVIEW_LEVELS = ['light', 'standard', 'strict'];
 // review rounds before the change goes on to the escalation gate, and the reviewer's effort

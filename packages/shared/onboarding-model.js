@@ -23,7 +23,10 @@
 // - #632 "Create new project" (source 'new'): its repository step needs only the name; CREATE_ANSWERS
 //   (mode / ci / release, each field's values) and CREATE_DEFAULTS are its three questions, slugify(name)
 //   the new project's id and folder name (<workspace>/projects/<slug>).
-// The reasons are English for now; the interface language comes with step 7 of the plan.
+// #726: every text is an i18n key, never English: the choices' and PROFILE_LABELS' labels are keys
+// (onboarding.choice_* / onboarding.profile_*), a reason is a key or { key, params } whose params are keys
+// or { key, params } too (onboarding.why_*), profileLine an array of keys; the interface resolves them
+// (textOf in fronts/build/views/projects/project-wizard-workflows.js), the engine in English.
 // Browser: window.OnboardingModel; Node: module.exports (the tests).
 (function (root) {
   const STEPS = [
@@ -66,38 +69,24 @@
 
   const validProfile = (p) => !!p && Object.keys(PROFILE).every((k) => PROFILE[k].includes(p[k]));
 
-  // #630 (spec R6): the profile's fields, value → label: the interview's questions
+  // #726: a value's i18n key, its '-' and '+' as '_' (onboarding.<area>_<value>)
+  const keyOf = (area, value) => `onboarding.${area}_${String(value).replace(/[-+]/g, '_')}`;
+  const keysOf = (area, values) => Object.fromEntries(values.map((v) => [v, keyOf(area, v)]));
+
+  // #630 (spec R6): the profile's fields, value → label key (#726): the interview's questions
   // (packages/engine/domains/workflow/workflow-compose.js openQuestions), step 3's CI row and profileLine
   const PROFILE_LABELS = {
-    mode: { local: 'Local: merge, then push main', remote: 'Remote: pull requests' },
-    ci: {
-      none: 'No CI: the local suite only',
-      release: 'On releases only',
-      'pr+release': 'On pull requests and releases',
-    },
-    tests: { unit: 'Unit tests', 'unit+e2e': 'Unit and E2E' },
+    mode: keysOf('profile_mode', PROFILE.mode),
+    ci: keysOf('profile_ci', PROFILE.ci),
+    tests: keysOf('profile_tests', PROFILE.tests),
   };
-  // #630 (spec R7, mock-4): each suggested workflow's selector, value → label, and the value the
-  // profile picks; the CI row is the profile's ci itself (ciChoice)
+  // #630 (spec R7, mock-4): each suggested workflow's selector, value → label key (#726), and the value
+  // the profile picks; the CI row is the profile's ci itself (ciChoice)
+  const VARIANTS = ['remote-e2e', 'remote-code', 'local-e2e', 'local-code'];
   const CHOICES = {
-    feature: {
-      'remote-e2e': 'Remote PRs · E2E first',
-      'remote-code': 'Remote PRs · code first',
-      'local-e2e': 'Local merge · E2E first',
-      'local-code': 'Local merge · code first',
-    },
-    fix: {
-      'remote-e2e': 'Code + unit, then E2E · remote PR',
-      'remote-code': 'Code + unit · remote PR',
-      'local-e2e': 'Code + unit, then E2E · local merge',
-      'local-code': 'Code + unit · local merge',
-    },
-    release: {
-      milestone: 'Milestone · tag + notes',
-      'per-merge': 'Per merge · tag + notes',
-      train: 'Release train · tag + notes',
-      'rc-stable': 'Release candidate, then stable',
-    },
+    feature: keysOf('choice_feature', VARIANTS),
+    fix: keysOf('choice_fix', VARIANTS),
+    release: keysOf('choice_release', ['milestone', 'per-merge', 'train', 'rc-stable']),
     ci: PROFILE_LABELS.ci,
   };
   const DEFAULT_PROFILE = { mode: 'local', ci: 'none', tests: 'unit' };
@@ -116,19 +105,16 @@
     const e2e = p.tests === 'unit+e2e';
     const variant = `${p.mode}-${e2e ? 'e2e' : 'code'}`;
     const release = CHOICES.release[profile?.release] ? profile.release : 'milestone';
-    const lands = remote
-      ? 'the changes reach main through pull requests, merged on the platform'
-      : 'the changes are merged on your machine and main is pushed as the last step';
+    // #726: each reason is { key, params }, a param a key or { key, params } itself (the interface resolves them)
+    const tests = e2e ? 'e2e' : 'unit';
     const why = [
-      ['feature', variant, `${lands}${e2e ? '; there is an E2E suite, so the E2E scenarios are written before the code' : '; unit tests only, so it implements first, then writes the unit tests'}.`],
-      ['fix', variant, `a fix reproduces the bug, then fixes it with a unit regression test${e2e ? ', and the E2E suite runs after' : ''}. Hotfix mode: from the last tag, shipped as a patch.`],
-      ['release', release, p.ci === 'none'
-        ? 'no CI builds releases: the release runs the suite, writes the notes and tags the version.'
-        : `the CI runs on release tags: the release pushes the tag and waits for that CI run${e2e ? '; E2E is a step of the release' : ''}.`],
+      ['feature', variant, { key: 'onboarding.why_feature', params: { lands: `onboarding.why_lands_${remote ? 'remote' : 'local'}`, tests: `onboarding.why_feature_${tests}` } }],
+      ['fix', variant, { key: `onboarding.why_fix_${tests}`, params: { hotfix: 'onboarding.why_fix_hotfix' } }],
+      ['release', release, { key: p.ci === 'none' ? 'onboarding.why_release_none' : `onboarding.why_release_ci${e2e ? '_e2e' : ''}` }],
     ];
     const suggestions = why.map(([id, value, reason]) => ({
       id,
-      reason: valid ? reason : `No project profile yet: ${reason}`,
+      reason: valid ? reason : { key: 'onboarding.why_no_profile', params: { reason } },
       value,
       choices: choicesOf(id),
     }));
@@ -138,19 +124,15 @@
   // the CI row of step 3: what the project's CI runs on, with its reason and choices
   function ciChoice(profile) {
     const ci = validProfile(profile) ? profile.ci : DEFAULT_PROFILE.ci;
-    const reason = {
-      none: 'no CI file was found: the runs rely on the local suite only.',
-      release: 'the CI runs on release tags, not on pull requests: the release waits for that run.',
-      'pr+release': 'the CI runs on pull requests and on release tags: a remote feature waits for the PR\'s CI, the release for the tag\'s.',
-    }[ci];
-    return { id: 'ci', reason, value: ci, choices: choicesOf('ci') };
+    return { id: 'ci', reason: keyOf('why_ci', ci), value: ci, choices: choicesOf('ci') };
   }
 
-  // the profile in one line, as step 3's "Ways of working profile" says it
+  // the profile in one line, as step 3's "Ways of working profile" says it: #726 its three label keys
+  // (the interface joins them with ' · '), '' without a valid profile
   function profileLine(profile) {
     const p = validProfile(profile) ? profile : null;
     if (!p) return '';
-    return Object.keys(PROFILE).map((k) => PROFILE_LABELS[k][p[k]]).join(' · ');
+    return Object.keys(PROFILE).map((k) => PROFILE_LABELS[k][p[k]]);
   }
 
   // #725: the state of step 3's "Suggested workflows" column from the owner's choice (mode: undefined |

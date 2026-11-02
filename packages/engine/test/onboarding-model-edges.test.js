@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
   STEPS, back, canGoNext, costSummary, initialState, next, skipAnalysis, suggestWorkflows,
 } = require('@multiagent/shared/onboarding-model');
+const I18n = require('@multiagent/shared/i18n');
 
 const ids = (r) => r.suggestions.map((s) => s.id);
 const filled = { ...initialState(), source: 'import', repository: 'owner/repo', name: 'Repo' };
@@ -74,7 +75,8 @@ test('a profile with unit tests only gets the code-first variant (implement, the
 test('every profile gets feature, fix and release; the release reason says whether a CI run is waited for', () => {
   for (const mode of ['local', 'remote']) {
     for (const tests of ['unit', 'unit+e2e']) {
-      const reason = (ci) => suggestWorkflows({ mode, ci, tests }).suggestions.find((s) => s.id === 'release').reason;
+      // #726: the reason is an i18n key, its English text here
+      const reason = (ci) => I18n.t(suggestWorkflows({ mode, ci, tests }).suggestions.find((s) => s.id === 'release').reason.key, undefined, 'en');
       for (const ci of ['none', 'release', 'pr+release']) assert.deepEqual(ids(suggestWorkflows({ mode, ci, tests })), ['feature', 'fix', 'release']);
       assert.match(reason('release'), /waits for that CI run/, `${mode} ${tests} release`);
       assert.match(reason('pr+release'), /waits for that CI run/, `${mode} ${tests} pr+release`);

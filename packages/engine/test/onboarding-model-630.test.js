@@ -16,7 +16,13 @@ for (const mode of ['local', 'remote']) {
     for (const tests of ['unit', 'unit+e2e']) PROFILES.push({ mode, ci, tests });
   }
 }
-const reasonOf = (profile, id) => String(load().suggestWorkflows(profile).suggestions.find((s) => s.id === id)?.reason ?? '');
+const I18n = require('@multiagent/shared/i18n');
+
+// #726: a reason is a key or { key, params }: its English text
+const english = (x) => (x && typeof x === 'object'
+  ? I18n.t(x.key, Object.fromEntries(Object.entries(x.params || {}).map(([k, v]) => [k, english(v)])), 'en')
+  : I18n.t(String(x ?? ''), undefined, 'en'));
+const reasonOf = (profile, id) => english(load().suggestWorkflows(profile).suggestions.find((s) => s.id === id)?.reason ?? '');
 
 test('#630 every suggestion is feature, fix or release, never an old workflow', () => {
   for (const p of PROFILES) {
@@ -31,7 +37,7 @@ test('#630 feature, fix and release are always suggested, each with a reason', (
     for (const id of NEW) {
       const s = suggestions.find((x) => x.id === id);
       assert.equal(Boolean(s), true, `${id} suggested for ${JSON.stringify(p)}`);
-      assert.equal(typeof s.reason === 'string' && s.reason.trim().length > 0, true, `${id}'s reason for ${JSON.stringify(p)}`);
+      assert.equal(english(s.reason).trim().length > 0, true, `${id}'s reason for ${JSON.stringify(p)}`);
     }
   }
 });

@@ -113,6 +113,8 @@
 .wizard-workflow { padding: 10px 12px; }
 .wizard-workflow-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
 .wizard-workflow select { max-width: 60%; }
+/* #726: the reason's "Why:" label, highlighted before the muted reason */
+.wizard-workflow-why { color: var(--accent); font-weight: 600; }
 /* #725: a failed job's reason and Retry under its row; the workflows column's two choices, and its rows
    dimmed under the analyzing notice */
 .wizard-job-error { color: var(--red); }
