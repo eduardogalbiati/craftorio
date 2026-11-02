@@ -7,6 +7,7 @@
 // repository commands it is about to run: 596. #696 adds the suite output's `new_baselines` ([]).
 // #630 removed software-development.yaml (now feature.yaml in remote mode, tests first, the merge
 // left to the team on the platform): re-recorded from feature.yaml (#723), two runs gave 443 events.
+// #725: the E2E steps use new wizard test ids, so the testid_check step's message lists 151 (was 146).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
