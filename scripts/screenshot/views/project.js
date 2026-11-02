@@ -338,6 +338,18 @@ function seed({ appDir, args, projects, ws, project }) {
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
   demoChildRuns(ws, project.id);
   demoRunHistory(ws, project.id);
+  // #729: --mode workflows gives the Overview's Workflows block the wizard's picks as cards
+  if (!args.tab && args.mode === 'workflows') {
+    projects.updateProject(ws.projects, project.id, {
+      workflows: [
+        { name: 'feature', origin: 'bundled', category: 'build', variant: 'remote-code' },
+        { name: 'fix', origin: 'bundled', category: 'build', variant: 'local-e2e' },
+        { name: 'release', origin: 'bundled', category: 'build', variant: 'milestone', ci: 'pr+release' },
+      ],
+      defaultWorkflow: 'feature',
+    });
+    return;
+  }
   if (args.tab === 'architecture') return seedArchitecture(args, ws, project, { appDir, projects });
   if (args.tab === 'refactor') {
     seedArchitecture({ mode: args.mode === 'never' ? 'never' : null }, ws, project, { appDir, projects });
@@ -442,7 +454,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'prioritizing', 'seeds', 'seeds-error', 'seeds-running'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'prioritizing', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
   open,
   run: true,
   seed,
