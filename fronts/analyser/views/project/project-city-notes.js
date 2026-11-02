@@ -1,5 +1,6 @@
 // The notes under the City view's header (#373, #381; project-city.js draws them): no plan (the
-// folders as districts) or a stale plan (the unmatched share), each with the tab's one action
+// folders as districts), a stale plan (the unmatched share) or a current plan (#730: its districts and
+// coverage, the action as a refresh), each with the tab's one action
 // "Analyze this project" (#381: the map and the Oracle's analysis as one run, with its combined
 // estimate next to it) and the action's state (running with its step, or its error with "Analyze
 // again"), then the plan's validation problems and the aggregation of small files over 5,000 (#428:
@@ -42,6 +43,10 @@
       notes.push(note('project-city-no-plan', '', `<b>${t('project_city_notes.no_city_plan_yet')}</b><p>${t('project_city_notes.the_districts_are_the_folders_analyze')}</p>${action}`));
     } else if ((validation?.coverage ?? 1) < STALE_COVERAGE) {
       notes.push(note('project-city-stale', 'warn', `<b>${t('project_city_notes.the_plan_is_older_than_the')}</b><p>${pct(1 - validation.coverage)} ${t('project_city_notes.of_the_files_value_of_drawn', { value: validation.drawn - validation.matched, drawn: validation.drawn })}</p>${action}`));
+    } else if (action) {
+      // #730: a current plan keeps the action, as a refresh of the plan
+      const share = Math.floor((validation?.coverage ?? 1) * 1000) / 10;
+      notes.push(note('project-city-plan', '', `<p class="small muted">${esc(t('project_architecture.city_plan_districts', { count: (model.districts || []).length, share }))}</p>${action}`));
     }
     const state = stateHtml(analysis, ready);
     if (state) notes.push(state);
