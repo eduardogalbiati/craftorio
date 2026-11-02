@@ -213,8 +213,9 @@ function jsonOf(answer) {
 // #738: the repository's owner/name, the one rule of the wizard's notice (onboarding-model.js forkSuggestion)
 const ownerRepoOf = (repo) => OnboardingModel.forkSuggestion({ repo, push: false }).repo;
 
-// #738: a repository URL's host and full path (GitLab subgroups kept), the registry's rule (Platforms.parseRepoUrl)
-const repoPartsOf = (repo) => Platforms.parseRepoUrl(repo) || { host: 'gitlab.com', path: '' };
+// #738: the repository's name on its platform: the full path where the platform has subgroups (GitLab,
+// the registry's Platforms.parseRepoUrl), else owner/repo
+const forkNameOf = (platform, repo) => (platform.subgroups ? Platforms.parseRepoUrl(repo)?.path || '' : ownerRepoOf(repo));
 
 // #738: the fork's remote URL in the original's protocol: an SSH original (git@host:… or ssh://) gets
 // git@host:<fork path>.git, so an owner who signs in by SSH key keeps pushing; else <fork url>.git
@@ -222,15 +223,6 @@ function forkRemoteOf(forkUrl, repo) {
   const ssh = /^(ssh:\/\/|[\w.-]+@[\w.-]+:)/i.test(String(repo ?? '').trim());
   const parts = ssh && Platforms.parseRepoUrl(forkUrl);
   return parts ? `git@${parts.host}:${parts.path}.git` : `${forkUrl}.git`;
-}
-
-// #738: GitLab's push right from `glab api projects/<path>`: Developer (30) or more in the project or its
-// group (permissions.project_access / group_access); undefined when the answer has no permissions
-function gitlabPush(info) {
-  const perms = info?.permissions;
-  if (!perms || typeof perms !== 'object') return undefined;
-  const levels = [perms.project_access, perms.group_access].map((a) => Number(a?.access_level) || 0);
-  return Math.max(...levels) >= 30;
 }
 
 const README = (name) => `# ${name}\n`;
@@ -385,20 +377,17 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(p.id);
   }
 
-  // #738: the push permission of a GitHub repository (`gh api repos/<owner>/<repo>`, its permissions.push):
-  // or of a GitLab one (`glab api projects/<path>`, gitlabPush): access: { push } once read; without push the
-  // state suggests a fork (the wizard's notice). Not read on another host nor when the CLI does not answer;
-  // never fails the import. A simulated run's
-  // E2E hook stands for gh on any host.
+  // #738: the push permission of the repository, read through its platform adapter (repoInfoCommand,
+  // parsePush: `gh api repos/<owner>/<repo>` or `glab api projects/<path>`): access: { push } once read;
+  // without push the state suggests a fork (the wizard's notice). Not read on another host nor when the CLI
+  // does not answer; never fails the import. A simulated run's E2E hook stands for gh on any host.
   async function readPush(id, repo) {
     const e2e = simulation.simulationOnly() && ['0', '1'].includes(process.env.MULTIAGENT_E2E_REPO_PUSH);
-    const provider = providerOf(repo) || (e2e ? 'github' : null);
-    if (provider !== 'github' && provider !== 'gitlab') return;
-    const name = provider === 'gitlab' ? repoPartsOf(repo).path : ownerRepoOf(repo);
-    const ask = (args) => Promise.resolve().then(() => platformCli(provider, args, {})).catch(() => null);
-    const push = provider === 'gitlab'
-      ? gitlabPush(jsonOf(await ask(['api', `projects/${encodeURIComponent(name)}`])))
-      : jsonOf(await ask(['api', `repos/${name}`]))?.permissions?.push;
+    const platform = Platforms.findPlatform(providerOf(repo) || (e2e ? Platforms.DEFAULT_PLATFORM : null));
+    if (!platform) return;
+    const name = forkNameOf(platform, repo);
+    const answer = await Promise.resolve().then(() => platformCli(platform.id, platform.repoInfoCommand(name).args, {})).catch(() => null);
+    const push = platform.parsePush(jsonOf(answer));
     if (typeof push !== 'boolean') return;
     change(id, { access: { push }, ...(push ? {} : { fork: { status: 'suggested', repo: name } }) });
   }
@@ -423,33 +412,24 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return s;
   }
 
-  // #738: the owner's fork of owner/name → { status: 'reused' | 'created', url } (an existing fork of that
-  // repository is reused; `gh repo fork` never sets remotes: forkProject does it with git), or throws
+  // #738: the owner's fork of `name` → { status: 'reused' | 'created', url }, through the repository's
+  // platform adapter (gh / glab; the E2E hook's gh on another host): the signed-in account (userCommand), its
+  // repository of the same name reused when it is a fork of that one (isForkOf), else forkCommand (it never
+  // sets remotes: fork() does it with git); the new fork's URL from its output, else read again. Or throws.
   async function makeFork(name, repo) {
-    if (providerOf(repo) === 'gitlab') return makeGitlabFork(name, repo);
-    const login = jsonOf(await platformCli('github', ['api', 'user'], {}))?.login;
-    if (!login) throw new Error('gh did not say which account is signed in (gh auth login).');
-    const mine = jsonOf(await platformCli('github', ['api', `repos/${login}/${name.split('/').pop()}`], {}));
-    if (mine?.fork && mine.parent?.full_name === name) return { status: 'reused', url: String(mine.html_url || `https://github.com/${mine.full_name}`).replace(/\.git$/, '') };
-    const made = await platformCli('github', ['repo', 'fork', name, '--clone=false'], {});
-    if (!made?.ok) throw new Error(String(made?.out || 'gh repo fork failed.').trim());
-    const url = (String(made.out).match(/https:\/\/\S+/g) || []).slice(-1)[0]?.replace(/\.git$/, '') || `https://github.com/${login}/${name.split('/').pop()}`;
-    return { status: 'created', url };
-  }
-
-  // #738: the same on GitLab with glab: the signed-in username (`glab api user`), its project of the same
-  // name reused when it is a fork of that project (forked_from_project), else `glab repo fork`
-  async function makeGitlabFork(name, repo) {
-    const user = jsonOf(await platformCli('gitlab', ['api', 'user'], {}))?.username;
-    if (!user) throw new Error('glab did not say which account is signed in (glab auth login).');
+    const platform = Platforms.findPlatform(providerOf(repo)) || Platforms.platformOrDefault();
+    const run = (command) => platformCli(platform.id, command.args, {});
+    const user = platform.parseUser(jsonOf(await run(platform.userCommand())));
+    if (!user) throw new Error(`${platform.cli} did not say which account is signed in (${platform.cli} auth login).`);
     const mine = `${user}/${name.split('/').pop()}`;
-    const read = async () => jsonOf(await platformCli('gitlab', ['api', `projects/${encodeURIComponent(mine)}`], {}));
-    const urlOf = (p) => String(p?.web_url || `https://${repoPartsOf(repo).host}/${mine}`).replace(/\.git$/, '');
+    const read = async () => jsonOf(await run(platform.repoInfoCommand(mine)));
+    const urlOf = (info, out) => String(platform.parseForkUrl(out) || platform.repoWebUrl(info) || `https://${Platforms.parseRepoUrl(repo)?.host || platform.host}/${mine}`).replace(/\.git$/, '');
     const found = await read();
-    if (found?.forked_from_project?.path_with_namespace === name) return { status: 'reused', url: urlOf(found) };
-    const made = await platformCli('gitlab', ['repo', 'fork', name, '--clone=false'], {});
-    if (!made?.ok) throw new Error(String(made?.out || 'glab repo fork failed.').trim());
-    return { status: 'created', url: urlOf(await read()) };
+    if (platform.isForkOf(found, name)) return { status: 'reused', url: urlOf(found) };
+    const made = await run(platform.forkCommand(name));
+    if (!made?.ok) throw new Error(String(made?.out || `${platform.cli} repo fork failed.`).trim());
+    const url = platform.parseForkUrl(made.out) ? urlOf(null, made.out) : urlOf(await read());
+    return { status: 'created', url };
   }
 
   /**

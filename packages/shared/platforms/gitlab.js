@@ -103,6 +103,27 @@
     // #632: a new project's private repository (run in its folder; never --public)
     repoCreateCommand: ({ name }) => cmd(['repo', 'create', name, '--private']),
 
+    // ---- the push permission and the owner's fork (#738, the onboarding's Fork + PR)
+    // a project is named by its full path (subgroups kept)
+    subgroups: true,
+    repoInfoCommand: (path) => cmd(['api', `projects/${encodeURIComponent(path)}`]),
+    // `glab api projects/<path>` → Developer (30) or more in the project or its group
+    // (permissions.project_access / group_access); undefined when the answer has no permissions
+    parsePush: (info) => {
+      const perms = info?.permissions;
+      if (!perms || typeof perms !== 'object') return undefined;
+      const levels = [perms.project_access, perms.group_access].map((a) => Number(a?.access_level) || 0);
+      return Math.max(...levels) >= 30;
+    },
+    userCommand: () => cmd(['api', 'user']),
+    parseUser: (info) => info?.username,
+    // the project info is a fork of the project `name` (its full path)
+    isForkOf: (info, name) => info?.forked_from_project?.path_with_namespace === name,
+    repoWebUrl: (info) => info?.web_url || null,
+    // `glab repo fork` does not print the fork's URL: the caller reads the project again
+    forkCommand: (name) => cmd(['repo', 'fork', name, '--clone=false']),
+    parseForkUrl: () => null,
+
     // ---- URLs
     // https://host/group/sub/project/-/issues/7 → { host, repo, number }, or null
     parseIssueUrl(url) {

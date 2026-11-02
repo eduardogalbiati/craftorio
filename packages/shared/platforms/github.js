@@ -121,6 +121,21 @@
     // #632: a new project's private repository, from its local folder (origin is added; never --public)
     repoCreateCommand: ({ name, folder }) => cmd(['repo', 'create', name, '--private', '--source', folder, '--remote', 'origin']),
 
+    // ---- the push permission and the owner's fork (#738, the onboarding's Fork + PR)
+    // a repository is named owner/repo (no subgroups)
+    subgroups: false,
+    repoInfoCommand: (path) => cmd(['api', `repos/${path}`]),
+    // `gh api repos/<path>` → permissions.push (true / false), undefined when the answer has none
+    parsePush: (info) => info?.permissions?.push,
+    userCommand: () => cmd(['api', 'user']),
+    parseUser: (info) => info?.login,
+    // the repository info is a fork of the repository `name` (owner/repo)
+    isForkOf: (info, name) => !!info?.fork && info.parent?.full_name === name,
+    repoWebUrl: (info) => info?.html_url || (info?.full_name ? `https://${OWN_HOST}/${info.full_name}` : null),
+    // `gh repo fork` never sets remotes here (--clone=false); its output ends with the fork's URL
+    forkCommand: (name) => cmd(['repo', 'fork', name, '--clone=false']),
+    parseForkUrl: (out) => (String(out || '').match(/https:\/\/\S+/g) || []).slice(-1)[0] || null,
+
     // ---- URLs
     // https://host/owner/repo/issues/12 → { host, repo, number }, or null
     parseIssueUrl(url) {
