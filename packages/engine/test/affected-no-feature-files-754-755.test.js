@@ -56,3 +56,18 @@ test('#754 #755 an earlier failing JS test still joins the selection next to the
   assert.deepEqual(sel.files, ['test/a.test.js', 'test/b.test.js']);
   assert.equal(sel.reasons['test/b.test.js'], 'failed in an earlier round');
 });
+
+test('#754 #755 other earlier failures that are not unit test files stay out too: a doc, a fixture, a Windows-style feature path', (t) => {
+  const repo = repoWithFeatures(t);
+  const write = (f, s) => { fs.mkdirSync(path.dirname(path.join(repo, f)), { recursive: true }); fs.writeFileSync(path.join(repo, f), s); };
+  write('docs/notes.md', '# notes\n');
+  write('test/fixtures/sample.test.js', 'module.exports = 1;\n');
+  const sel = load().real().affectedTests({
+    root: repo,
+    base: 'main',
+    failed: ['docs/notes.md', 'test/fixtures/sample.test.js', 'features\\settings.feature', 'fronts\\build\\features\\run.feature'],
+  });
+  assert.equal(sel.mode, 'affected');
+  assert.deepEqual(sel.files, ['test/a.test.js']);
+  assert.deepEqual(Object.keys(sel.reasons).sort(), ['test/a.test.js']);
+});
