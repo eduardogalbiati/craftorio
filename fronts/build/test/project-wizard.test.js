@@ -17,8 +17,8 @@
 //   data-testid="wizard-source-new"; navigation data-testid="wizard-next" / "wizard-back";
 // - step 2: inputs id="wizard-repo" (data-testid="wizard-repo") and id="wizard-name"
 //   (data-testid="wizard-name"); the provider read from the URL in data-testid="wizard-provider"
-//   (GitHub or GitLab); Next calls api.startOnboarding({ name, repo }) and its result is shown in
-//   data-testid="wizard-import-status";
+//   (GitHub or GitLab); Next calls api.startOnboarding({ name, repo }) and, #743, the step's action
+//   button (wizard-next) says the clone started (no wizard-import-status card);
 // - the engine's state (project-onboarding.js): { projectId, status, code?, reason?, jobs, cli }, the
 //   answer of api.startOnboarding / analyzeOnboarding / retryOnboarding and the payload of
 //   onboarding:changed (window.api.onOnboardingChanged(cb));
@@ -219,15 +219,16 @@ test('#641 the provider is read from the URL: GitHub for a github.com URL, GitLa
   assert.match(provider(), /GitLab/);
 });
 
-test('#641 Next on step 2 calls api.startOnboarding with the typed name and repository, and the import card shows the clone started', async () => {
+// #743: no import card any more; the step's action button says the clone started
+test('#641 Next on step 2 calls api.startOnboarding with the typed name and repository, and the step says the clone started', async () => {
   const app = await imported(CLONING);
   const calls = app.callsTo('startOnboarding');
   assert.equal(calls.length, 1, 'one api.startOnboarding call');
   assert.equal(calls[0][0]?.name, NAME);
   assert.equal(calls[0][0]?.repo, REPO);
-  const card = byTestId(wizardMarkup(app), 'wizard-import-status');
-  assert.ok(card, 'the import card (data-testid="wizard-import-status")');
-  assert.match(H.visibleText(card.inner), /clon/i, 'the card says the clone started');
+  const btn = byTestId(wizardMarkup(app), 'wizard-next');
+  assert.ok(btn, 'the step\'s action button');
+  assert.match(H.visibleText(btn.inner), /clon/i, 'the button says the clone started');
 });
 
 // ---- the errors ------------------------------------------------------------------------------------
@@ -306,8 +307,11 @@ test('#641 "Skip, analyze later" goes to the review step without starting an ana
 
 const trayItem = (app, id = PID) => H.findEl(trayMarkup(app), (e) => e.attrs['data-testid'] === 'tray-item' && e.attrs['data-project'] === id);
 
+// #724: the tray is hidden while the wizard is open; it is read with the wizard closed
 test('#641 the tray follows onboarding:changed (cloning, analyzing, ready), and a failure shows the reason and a Retry that calls api.retryOnboarding', async () => {
   const app = await imported(CLONING);
+  wizard(app).close();
+  await app.settle(10);
   assert.ok((app.apiHandlers.onOnboardingChanged || []).length >= 1, 'the page listens to api.onOnboardingChanged');
   const statuses = [];
   for (const state of [CLONING, ANALYZING, READY]) {

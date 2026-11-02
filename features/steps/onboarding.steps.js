@@ -657,3 +657,148 @@ Then('the wizard does not offer to analyze everything again', async ({ e2e }) =>
   await expect(w.getByTestId('wizard-workflows-choice-analyze')).toHaveCount(0);
   await expect(w.getByRole('button', { name: /analy[sz]e (everything|all|again)|analy[sz]e and continue/i })).toHaveCount(0);
 });
+
+// ---- #724: the tray never covers the wizard; #739: the name from the URL; #743: cloning in place ---------
+// What the screens expose (to be added by #724 / #743):
+// - wizard-spinner: the circular spinner of a running import inside the wizard's footer, in
+//   wizard-clone-progress (the import's name and state; data-status="running|done|failed" = the clone
+//   job's status; when failed its reason and a role="button" named /Retry/) or in wizard-next while it
+//   reads "Cloning <name>…" (#743: the Repository step's Next turned into the cloning state, disabled);
+// - wizard-panel: the dialog's panel (.wizard-panel), measured for its size on every step;
+// - tray-spinner: the spinner of a running import's tray-item;
+// - the toast "<name> imported" (the shell's data-testid="toast") with its button "Open the project".
+// The tray (onboarding-tray) is hidden while the wizard is open, whatever the imports' states.
+//
+// E2E HOOKS THE DEVELOPER MUST ADD, read by the simulated onboarding (packages/engine/service/areas/
+// project-onboarding.js, only when MULTIAGENT_SIMULATION_ONLY=1). The clone is not one of the `jobs`
+// e2eJobs wraps (follow() awaits projects.cloneJob), so both hooks apply to it there:
+// - MULTIAGENT_E2E_ONBOARDING_HOLD=clone: the clone stays running (status cloning) until the app closes;
+// - MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS=<ms>: the clone waits that long, then runs as usual.
+
+const CLONING = (name) => new RegExp(`Cloning\\s+${escapeRe(name)}\\s*(…|\\.\\.\\.)`);
+// the size of the wizard's panel, unchanged to the pixel
+const SIZE_TOLERANCE = 1;
+const panel = (page) => wizard(page).getByTestId('wizard-panel');
+
+Given('the app is open while the clone of an import keeps running', async ({ e2e }) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_HOLD: 'clone' } });
+});
+
+Given('the app is open where the clone of an import takes {int} seconds', async ({ e2e }, seconds) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS: String(seconds * 1000) } });
+});
+
+Then('the progress tray is not shown', async ({ e2e }) => {
+  await expect(tray(e2e.window)).toBeHidden();
+});
+
+Then('the progress tray does not list the project {string}', async ({ e2e }, name) => {
+  // a finished import leaves the tray about 5 s after it ended
+  await expect(trayItem(e2e.window, name)).toHaveCount(0, { timeout: IMPORT_TIMEOUT });
+});
+
+Then('the progress tray shows the project {string} as {word} with a spinner', async ({ e2e }, name, status) => {
+  const page = e2e.window;
+  await expect(tray(page)).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  const item = trayItem(page, name);
+  await expect(item).toHaveAttribute('data-status', status, { timeout: IMPORT_TIMEOUT });
+  await expect(item).toBeVisible();
+  await expect(item.getByTestId('tray-spinner')).toBeVisible();
+});
+
+// the import's progress inside the wizard: the footer's clone progress, or (#743) the action button
+// cloning in place, holding the name and a spinner
+Then('the wizard shows the import of {string} running with a spinner', async ({ e2e }, name) => {
+  const progress = footer(e2e.window).locator('[data-testid="wizard-clone-progress"], [data-testid="wizard-next"]')
+    .filter({ hasText: name }).filter({ has: e2e.window.getByTestId('wizard-spinner') });
+  await expect(progress.first()).toBeVisible({ timeout: IMPORT_TIMEOUT });
+});
+
+Then('the wizard shows the import of {string} as {word}', async ({ e2e }, name, status) => {
+  const progress = footer(e2e.window).getByTestId('wizard-clone-progress');
+  await expect(progress).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(progress).toContainText(name);
+  await expect(progress).toHaveAttribute('data-status', status, { timeout: IMPORT_TIMEOUT });
+});
+
+// the step's action (Next / the cloning state) is on screen and the topmost element at its centre is
+// the button itself (or inside it): no tray, toast or panel over it
+Then("the wizard's action button is visible and nothing covers it", async ({ e2e }) => {
+  const action = footer(e2e.window).getByTestId('wizard-next');
+  await expect(action).toBeVisible();
+  await expect(action).toBeInViewport({ ratio: 1 });
+  const onTop = await action.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return Boolean(top && (top === el || el.contains(top)));
+  });
+  expect(onTop, 'the action button is the topmost element at its centre').toBe(true);
+});
+
+Then('the app says {string} and offers to open the project', async ({ e2e }, words) => {
+  const toast = e2e.window.getByTestId('toast');
+  await expect(toast).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(toast).toContainText(words);
+  await expect(toast.getByRole('button', { name: /Open the project/i })).toBeVisible();
+});
+
+When('I open the project from the {string} notice', async ({ e2e }, words) => {
+  const toast = e2e.window.getByTestId('toast').filter({ hasText: words });
+  await toast.getByRole('button', { name: /Open the project/i }).click();
+});
+
+// #739: a paste through the clipboard (Ctrl / Cmd+V), as the owner does
+When('I paste the repository {string} in the wizard', async ({ e2e }, repo) => {
+  const field = wizard(e2e.window).getByTestId('wizard-repo');
+  await e2e.app.evaluate(({ clipboard }, text) => clipboard.writeText(text), repo);
+  await field.click();
+  await field.press('ControlOrMeta+A');
+  await field.press('ControlOrMeta+V');
+  await expect(field).toHaveValue(repo);
+});
+
+// typed key by key (the URL replaces what the field held)
+When('I type the repository {string} in the wizard', async ({ e2e }, repo) => {
+  const field = wizard(e2e.window).getByTestId('wizard-repo');
+  await field.clear();
+  await field.pressSequentially(repo);
+  await expect(field).toHaveValue(repo);
+});
+
+When('I type the project name {string} in the wizard', async ({ e2e }, name) => {
+  const field = wizard(e2e.window).getByTestId('wizard-name');
+  await field.clear();
+  await field.pressSequentially(name);
+});
+
+Then("the wizard's project name reads {string}", async ({ e2e }, name) => {
+  await expect(wizard(e2e.window).getByTestId('wizard-name')).toHaveValue(name);
+});
+
+// #743
+When("I note the wizard's size", async ({ e2e }) => {
+  await expect(panel(e2e.window)).toBeVisible();
+  e2e.wizardSize = await panel(e2e.window).boundingBox();
+});
+
+Then('the wizard has the size I noted', async ({ e2e }) => {
+  if (!e2e.wizardSize) throw new Error('no size noted: use "I note the wizard\'s size" first');
+  const box = await panel(e2e.window).boundingBox();
+  expect(box, 'the wizard panel is on screen').not.toBeNull();
+  expect(Math.abs(box.width - e2e.wizardSize.width), `the width ${box.width} vs ${e2e.wizardSize.width}`).toBeLessThanOrEqual(SIZE_TOLERANCE);
+  expect(Math.abs(box.height - e2e.wizardSize.height), `the height ${box.height} vs ${e2e.wizardSize.height}`).toBeLessThanOrEqual(SIZE_TOLERANCE);
+});
+
+Then("the wizard's action button shows a spinner and {string}", async ({ e2e }, text) => {
+  const action = footer(e2e.window).getByTestId('wizard-next');
+  const name = text.replace(/^Cloning\s+/, '').replace(/\s*(…|\.\.\.)$/, '');
+  await expect(action).toContainText(text.startsWith('Cloning') ? CLONING(name) : text, { timeout: IMPORT_TIMEOUT });
+  await expect(action.getByTestId('wizard-spinner')).toBeVisible();
+});
+
+Then('the wizard shows no import status card and its repository fields are read-only', async ({ e2e }) => {
+  const w = wizard(e2e.window);
+  await expect(w.getByTestId('wizard-import-status')).toHaveCount(0);
+  await expect(w.getByTestId('wizard-repo')).not.toBeEditable();
+  await expect(w.getByTestId('wizard-name')).not.toBeEditable();
+});

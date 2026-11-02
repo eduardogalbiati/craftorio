@@ -2,7 +2,8 @@ Feature: Bring a project in with a guided wizard
   A new-project wizard (Start, Repository, Analysis & workflows, Review) imports a GitHub or GitLab
   repository: it checks the access before it clones, says what went wrong and what to do next when
   something fails, shows what the analysis costs before anything is spent, and lets the owner skip
-  it. A progress tray follows the clone and the analyses live, and keeps them after the wizard closes.
+  it. While the wizard is open the import's progress shows inside it and the progress tray is hidden
+  (#724); once the wizard closes the tray follows the imports still running or failed.
 
   # Temporary until onboarding step 6: the wizard is opened through window.ProjectWizard.open()
   # (Projects › New project still opens the old dialog). The URL below fails the access check both
@@ -15,7 +16,8 @@ Feature: Bring a project in with a guided wizard
     And I enter the repository "https://github.com/multiagent-e2e/does-not-exist-641" and the project name "missing-641"
     And I go to the next step of the wizard
     Then the wizard says the repository could not be reached and offers to retry
-    And the progress tray shows the project "missing-641" as failed with its reason and a Retry
+    # #724: the tray never covers the wizard; the failure shows in the wizard
+    And the progress tray is not shown
 
   # A local git repository (a file:// URL in the scratch folder) stands for a reachable one: the
   # access check (git ls-remote) and the clone work on it without network or credentials.
@@ -28,12 +30,12 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "sample-641"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the progress tray shows the project "sample-641" as ready
+    And the wizard shows the import of "sample-641" as done
     And the wizard shows the analysis cost in total and for the project map and the refactor ranking
     And the wizard offers to start the analysis
     When I skip the analysis for later
     Then the wizard is on its "review" step
-    And the progress tray shows the project "sample-641" as ready
+    And the progress tray is not shown
 
   @issue-641
   Scenario: The progress tray keeps following the import after the wizard is closed
@@ -45,7 +47,8 @@ Feature: Bring a project in with a guided wizard
     And I go to the next step of the wizard
     And I close the project wizard
     Then the project wizard is not shown
-    And the progress tray shows the project "tray-641" as ready
+    # #724: once the wizard closes the tray keeps only the imports running or failed; this one is cloned
+    And the progress tray does not list the project "tray-641"
 
   # The simulated analysis (MULTIAGENT_SIMULATION_ONLY=1) maps the sample repository's code and ranks its
   # refactors without a model call; the refactor picked and its title are whatever the simulation proposes.
@@ -165,8 +168,8 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "sample-644"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the progress tray shows the project "missing-644" as failed with its reason and a Retry
-    And the progress tray shows the project "sample-644" as ready
+    And the wizard shows the import of "sample-644" as done
+    And the progress tray is not shown
 
   # #669: step 1 follows docs/work/first-project-onboarding/images/mock-1.jpg. Since #632 Create new
   # project can be chosen (no longer "soon"); its card shows its icon and its three points.
@@ -332,3 +335,84 @@ Feature: Bring a project in with a guided wizard
     And the wizard's "refactor ranking" analysis shows no amount
     And the wizard lets me continue to the review
     And the wizard does not offer to analyze everything again
+
+  # #724: the progress tray never covers the wizard. The simulated clone is held (an E2E hook, see
+  # onboarding.steps.js) so the import is still running while it is checked.
+  @issue-724
+  Scenario: While an import runs the wizard shows its progress and the tray stays hidden, never covering the wizard's action
+    Given the app is open while the clone of an import keeps running
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "running-724"
+    And I go to the next step of the wizard
+    Then the wizard shows the import of "running-724" running with a spinner
+    And the progress tray is not shown
+    And the wizard's action button is visible and nothing covers it
+
+  @issue-724
+  Scenario: Closing the wizard while an import runs shows the import in the progress tray
+    Given the app is open while the clone of an import keeps running
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "closed-724"
+    And I go to the next step of the wizard
+    And I close the project wizard
+    Then the project wizard is not shown
+    And the progress tray shows the project "closed-724" as cloning with a spinner
+
+  # The simulated clone is slowed (an E2E hook, see onboarding.steps.js) so it ends after the wizard closed.
+  @issue-724
+  Scenario: An import that ends after the wizard closed leaves the tray and says so with a way to open the project
+    Given the app is open where the clone of an import takes 8 seconds
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "toast-724"
+    And I go to the next step of the wizard
+    And I close the project wizard
+    Then the progress tray shows the project "toast-724" as cloning with a spinner
+    And the app says "toast-724 imported" and offers to open the project
+    And the progress tray does not list the project "toast-724"
+    When I open the project from the "toast-724 imported" notice
+    Then the project page of "toast-724" is open
+
+  # #739: the Repository step names the project after the repository until the owner names it.
+  @issue-739
+  Scenario: Pasting a repository URL names the project after the repository
+    Given the app is open
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I paste the repository "https://gitlab.com/eduardogalbiati/pharmaged" in the wizard
+    Then the wizard's project name reads "Pharmaged"
+
+  @issue-739
+  Scenario: A project name the owner typed is kept when the repository URL changes
+    Given the app is open
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I type the repository "https://gitlab.com/eduardogalbiati/pharmaged" in the wizard
+    Then the wizard's project name reads "Pharmaged"
+    When I type the project name "My Pharmacy" in the wizard
+    And I type the repository "https://github.com/eduardogalbiati/field-notes" in the wizard
+    Then the wizard's project name reads "My Pharmacy"
+
+  # #743: Next on the Repository step clones in place: its button turns into "Cloning <name>…" with a
+  # spinner (no status card, the fields read-only), then the wizard goes on to "Analysis & workflows";
+  # the dialog keeps one size on every step. The simulated clone is slowed (an E2E hook) to see it.
+  @issue-743
+  Scenario: Next clones in place and goes on to the analysis step, the wizard keeping its size
+    Given the app is open where the clone of an import takes 8 seconds
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "cloning-743"
+    And I note the wizard's size
+    And I go to the next step of the wizard
+    Then the wizard's action button shows a spinner and "Cloning cloning-743…"
+    And the wizard is on its "repository" step
+    And the wizard shows no import status card and its repository fields are read-only
+    And the wizard has the size I noted
+    And the wizard is on its "analysis" step
+    And the wizard has the size I noted
