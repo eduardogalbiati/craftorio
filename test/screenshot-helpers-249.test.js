@@ -17,7 +17,7 @@ test('writeEvents stamps every event with the run id and its seq, unless the eve
 });
 
 test('a seed module\'s options apply to its view only, with the values it lists', () => {
-  assert.deepEqual(Object.keys(VIEWS.backlog.options).sort(), ['live', 'po', 'roadmap']);
+  assert.deepEqual(Object.keys(VIEWS.backlog.options).sort(), ['live', 'po', 'project', 'roadmap']);
   assert.equal(parseArgs(['--view', 'roadmap', '--live', 'on']).live, 'on', 'the Roadmap screen is the Backlog');
   assert.throws(() => parseArgs(['--view', 'workflows', '--live', 'on']), /--live applies to --view backlog/);
   assert.throws(() => parseArgs(['--view', 'backlog', '--roadmap', 'nope']), /--roadmap takes (\w+ \| )*states\b/);

@@ -213,7 +213,7 @@ function seed({ args, ws, project, projects }) {
   demoEnrichRun(ws, project.id);
   writeDemoPackage(project.folder);
   // #735 #745: the project on GitLab, on a self-hosted host, or a Rust backend
-  applyDemoProject({ which: args.demoProject, projects, ws, project });
+  applyDemoProject({ which: args.project, projects, ws, project });
 }
 
 // #254: the Roadmap screen has its own menu entry
@@ -241,6 +241,6 @@ module.exports = {
   open,
   // the options only this view takes, and their values: the Live roadmap (#164), more states of the
   // roadmap card (#282, #284; #395: an item parked at its gate), the Product Owner's drawer (#180)
-  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['parked', 'states'], po: ['working', 'writing', 'stopped', 'failed'], demoProject: DEMO_PROJECTS },
+  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['parked', 'states'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS },
   seed,
 };

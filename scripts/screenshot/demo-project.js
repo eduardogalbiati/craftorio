@@ -1,4 +1,4 @@
-// The demo project's configuration for --demo-project (#735, #745), on any view: its repository's
+// The demo project's configuration for --project (#735, #745), on any view: its repository's
 // platform and its kind, so the Backlog / Roadmap show the project's platform and the run dialog
 // starts from the project's run defaults.
 // - gitlab: a gitlab.com repository (the platform badge reads GitLab, no select);

@@ -88,7 +88,7 @@
 //                      simulated, "Pausing after stage 2" with Cancel pause; --click "[data-rm=pause]"
 //                      opens the Pause menu) | parked (#395: the item waiting at the developer's gate
 //                      parked, "Parked at Developer check" and the bar's "1 parked at a gate")
-//   --demo-project <p> backlog / roadmap: the demo project as gitlab | self-hosted | rust-backend (#735,
+//   --project <p>      backlog / roadmap: the demo project as gitlab | self-hosted | rust-backend (#735,
 //                      #745; scripts/screenshot/demo-project.js), e.g. its run dialog: --click ".bl-check"
 //                      --click "#btn-bl-assign" --fill "#assign-workflow=feature.yaml"
 //   --po <state>       backlog: the Product Owner's drawer open with its live turn (#180): working (the
@@ -204,6 +204,19 @@ function takeLang(argv, a) {
   return rest;
 }
 
+// Options that only store their value under a key, checked by the view or the seed later.
+const VALUE_OPTIONS = {
+  '--agents-window': 'agentsWindow',
+  '--budget': 'budget',
+  '--live': 'live',
+  '--oracle': 'oracle',
+  '--po': 'po',
+  '--project': 'project',
+  '--release': 'release',
+  '--release-filter': 'releaseFilter',
+  '--roadmap': 'roadmap',
+};
+
 function parseArgs(argv, views = VIEWS) {
   const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true, lang: null };
   argv = takeLang(argv, a);
@@ -258,15 +271,7 @@ function parseArgs(argv, views = VIEWS) {
     else if (k === '--wait') a.wait = ms();
     else if (k === '--timeout') a.timeout = ms();
     else if (k === '--no-demo-shots') a.demoShots = false;
-    else if (k === '--oracle') a.oracle = next();
-    else if (k === '--live') a.live = next();
-    else if (k === '--budget') a.budget = next();
-    else if (k === '--roadmap') a.roadmap = next();
-    else if (k === '--release') a.release = next();
-    else if (k === '--release-filter') a.releaseFilter = next();
-    else if (k === '--po') a.po = next();
-    else if (k === '--demo-project') a.demoProject = next();
-    else if (k === '--agents-window') a.agentsWindow = next();
+    else if (Object.hasOwn(VALUE_OPTIONS, k)) a[VALUE_OPTIONS[k]] = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
   // #263: the Agents window on an agent, captured instead of the main window (--size sizes it too)
