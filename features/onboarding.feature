@@ -413,8 +413,7 @@ Feature: Bring a project in with a guided wizard
     When I open the city from the review
     Then the project wizard closes right away
     And the project page of "city-731" is open
-    And the project tab "Architecture" is selected
-    And the "City" view of the Architecture tab is the one selected
+    And the project tab "City" is selected
     And the Architecture tab shows the project city
     And the city is drawn from its plan, with its districts
     And the Architecture tab does not say there is no city plan yet
@@ -456,6 +455,28 @@ Feature: Bring a project in with a guided wizard
     And the wizard's "project map" analysis gives a reason that mentions "city plan"
     And the wizard's "project map" analysis shows no amount
     And the wizard lets me continue to the review
+
+  # #730: the analysis no longer ranks the refactors (no Product Owner job, no "refactor ranking" row); the
+  # findings of the Oracle's report are not sent anywhere on their own. The review lists them, each with
+  # "Create issue" and "Create issue and prioritize". The simulated Oracle reports the sample repository's top
+  # hotspot as a finding (packages/engine/domains/oracle/oracle-architecture.js mockReport).
+  @issue-730
+  Scenario: The analysis has no refactor ranking row, and the review lists the Oracle's findings with their Create issue buttons
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "health-730"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard's analysis has no refactor ranking row
+    When I start the analysis in the wizard
+    Then the progress tray shows the project "health-730" as analyzed
+    And the wizard's analysis has no refactor ranking row
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review lists the Oracle's findings, each with "Create issue" and "Create issue and prioritize"
+    And no finding of the review has an issue yet
 
   # #724: the progress tray never covers the wizard. The simulated clone is held (an E2E hook, see
   # onboarding.steps.js) so the import is still running while it is checked.

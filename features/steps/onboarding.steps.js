@@ -930,7 +930,8 @@ Then('the wizard shows no import status card and its repository fields are read-
 // MULTIAGENT_SIMULATION_ONLY=1: MULTIAGENT_E2E_CITY_PLAN_FAIL=1 makes drawing the city plan throw
 // "The simulated city plan failed (e2e)." so the job ends `failed` with that reason (a Retry fails again).
 
-const architectureTab = (page) => projectPage(page).locator('#project-panel-architecture');
+// #730: the City is a tab of its own (#project-panel-city); the Architecture tab is gone
+const architectureTab = (page) => projectPage(page).locator('#project-panel-architecture, #project-panel-city').filter({ visible: true }).first();
 const cityPart = (page, id) => architectureTab(page).getByTestId(id).filter({ visible: true }).first();
 
 Given('the app is open where drawing the city plan fails', async ({ e2e }) => {
@@ -974,4 +975,48 @@ Then("the wizard's {string} analysis gives a reason that mentions {string}", asy
   const error = jobRow(e2e.window, words).getByTestId(`wizard-job-error-${jobId(words)}`);
   await expect(error).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
   await expect(error).toContainText(new RegExp(escapeRe(text), 'i'));
+});
+
+// ---- #730: no refactor ranking in the analysis; the review files the Oracle's findings -----------------------
+// The analysis's jobs are the free part and the project map (the city plan, then the Oracle): no "ranking" job,
+// so wizard-cost has no data-part="ranking" row and no word of a ranking or of the Product Owner. The findings of
+// the Oracle's report are sent nowhere on their own. What the review exposes (to be added by #730):
+// - data-testid="wizard-review-findings": the findings' list, one data-testid="wizard-review-finding" per
+//   finding (its title), each with the buttons data-testid="wizard-review-create-issue" ("Create issue")
+//   and "wizard-review-create-issue-prioritize" ("Create issue and prioritize"); once filed, the link
+//   data-testid="wizard-review-finding-issue" ("#<n>", and the roadmap stage when prioritized) takes the
+//   buttons' place (the same ids as fronts/build/test/project-wizard-findings-730.test.js).
+
+const REVIEW_FINDING_BUTTONS = { 'Create issue': 'wizard-review-create-issue', 'Create issue and prioritize': 'wizard-review-create-issue-prioritize' };
+const reviewFindings = (page) => review(page).getByTestId('wizard-review-findings').getByTestId('wizard-review-finding');
+
+Then("the wizard's analysis has no refactor ranking row", async ({ e2e }) => {
+  const cost = wizard(e2e.window).getByTestId('wizard-cost');
+  await expect(cost).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(cost.locator('[data-part="projectMap"]'), 'the project map row').toBeVisible();
+  await expect(cost.locator('[data-part="ranking"]'), 'no ranking row').toHaveCount(0);
+  await expect(cost.getByText(/ranking|Product Owner/i), 'no word of a ranking').toHaveCount(0);
+});
+
+Then("the review lists the Oracle's findings, each with {string} and {string}", async ({ e2e }, a, b) => {
+  const rows = reviewFindings(e2e.window);
+  await expect(rows.first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  for (const row of await rows.all()) {
+    await expect(row, 'the finding has a title').toHaveText(/\S/);
+    for (const label of [a, b]) {
+      const id = REVIEW_FINDING_BUTTONS[label];
+      if (!id) throw new Error(`unknown finding button "${label}": one of ${Object.keys(REVIEW_FINDING_BUTTONS).join(', ')}`);
+      const button = row.getByTestId(id);
+      await expect(button, `the finding's "${label}"`).toHaveRole('button');
+      await expect(button).toHaveAccessibleName(new RegExp(`^\\s*${escapeRe(label)}\\s*$`, 'i'));
+      await expect(button).toBeEnabled();
+    }
+  }
+  // the old refactor backlog with its pick is gone
+  await expect(review(e2e.window).getByTestId('wizard-review-refactor')).toHaveCount(0);
+});
+
+Then('no finding of the review has an issue yet', async ({ e2e }) => {
+  await expect(reviewFindings(e2e.window).first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(review(e2e.window).getByTestId('wizard-review-finding-issue')).toHaveCount(0);
 });

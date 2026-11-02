@@ -93,7 +93,9 @@ const projectPage = (page) => visible(page.getByTestId('project-page')).first();
 // Where the one visible city is (#430, #556): "Show on the map" opens it in the city modal attached to
 // the body (data-testid="city-modal"), over the screen it was asked from; otherwise it is the project's
 // Architecture tab. The modal comes last in the document, so it wins when both are shown.
-const tab = (page) => visible(page.locator('[data-testid="city-modal"], [data-testid="project-page"] #project-panel-architecture')).last();
+// #730: the Architecture tab is split into the City tab (#project-panel-city) and the Health tab
+// (#project-panel-health, the facts); the one shown is the one these steps read.
+const tab = (page) => visible(page.locator('[data-testid="city-modal"], [data-testid="project-page"] :is(#project-panel-architecture, #project-panel-city, #project-panel-health)')).last();
 const byId = (page, id) => visible(tab(page).getByTestId(id)).first();
 const analyzeButton = (page) => tab(page).getByTestId('architecture-analyze');
 const cityModeButton = (page, mode) => visible(tab(page).getByTestId(`architecture-mode-${mode.toLowerCase()}`)).first();

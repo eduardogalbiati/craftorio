@@ -33,8 +33,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Given the app is open
     When I open "Projects" in the sidebar
     And I open the project "demo-app" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the project tab "Architecture" is selected
+    And I open the "Health" project tab
+    Then the project tab "Health" is selected
     And the Architecture tab says the project folder is not a git repository
     And the Architecture tab offers no "Analyze this project" button
 
@@ -719,3 +719,27 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I click "Analisar este projeto" on the city
     Then the city says the analysis failed with "O projeto não tem pasta nesta máquina", to clone the project again or to point its folder from the "Visão geral" tab
     And the city's retry shows no cost estimate in US$
+
+  # #730: the Health tab (Saúde) takes over the Architecture tab's facts and the Refactor tab: the git facts on
+  # top, then the Oracle's latest report (its summary, a verdict per area) and its findings. A finding's "Create
+  # issue" files it as a `refactor` issue and nothing more; afterwards the finding shows the issue's link where its
+  # buttons were. In simulation the issue is filed into the project's synced backlog with the next free number,
+  # never with gh/glab (fronts/analyser/engine/channels/refactor.js simulatedFiler): the backlog issue below gives
+  # the project its synced GitHub backlog (#1), so the finding's issue is #2.
+  @issue-730
+  Scenario: Health shows the git facts above the Oracle's report, and a finding's "Create issue" turns into its issue's link
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Health" project tab
+    Then the project tab "Health" is selected
+    And the Health tab shows the git facts of "src/billing.js" and "tools/export.py" above the Oracle's report
+    And the Health tab shows the report summary "Billing rules are split between the API and the export script." with a verdict for the areas "src" and "tools"
+    And the Health finding "Billing module changes in every commit" offers "Create issue" and "Create issue and prioritize"
+    When I click "Create issue" on the Health finding "Billing module changes in every commit"
+    Then the Health finding "Billing module changes in every commit" shows the link to its issue instead of its buttons
+    And the synced backlog of "billing-service" has the open issue of "Billing module changes in every commit" labelled "refactor"
+    And the roadmap of "billing-service" does not plan the issue of "Billing module changes in every commit"
+    And the Health finding "Discount rule duplicated in the API and the export" offers "Create issue" and "Create issue and prioritize"

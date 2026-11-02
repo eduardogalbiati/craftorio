@@ -8,7 +8,7 @@ Feature: Projects, a screen of the menu with a page per project
   commits not pushed on its local main, and its folder is a plain folder, not a git repository.
 
   @issue-354
-  Scenario: Projects opens from the menu, and a project's page has the Overview, Conflict map, Architecture and Refactor tabs
+  Scenario: Projects opens from the menu, and a project's page has the Overview, City, Health and Conflict map tabs
     Given the app is open
     Then "Backlog" comes right after "Projects" in the sidebar
     When I open "Settings" in the sidebar
@@ -17,7 +17,7 @@ Feature: Projects, a screen of the menu with a page per project
     Then the Projects screen offers "Open folder" and "New project"
     And the Projects screen lists the project "demo-app"
     When I open the project "demo-app" from the Projects screen
-    Then the project page of "demo-app" has the tabs "Overview", "Conflict map", "Architecture" and "Refactor"
+    Then the project page of "demo-app" has the tabs "Overview", "City", "Health" and "Conflict map"
     And the project tab "Overview" is selected
     And the Overview shows the repository "https://github.com/example/demo-app" and 2 commits not pushed
     When I open the "Conflict map" project tab
@@ -91,3 +91,21 @@ Feature: Projects, a screen of the menu with a page per project
     And I open the project "shop-api" from the Projects screen
     Then the project's Workflows block shows exactly the cards "software-development" and "issue-tracker"
     And the workflow card "software-development" has the "Default" badge
+
+  # #730: a project's page has the tabs Visão geral · Cidade · Saúde · Mapa de conflitos (Overview, City, Health,
+  # Conflict map), in this order. The Architecture tab and its Fatos | Cidade switch are gone (the City is a tab
+  # of its own, the facts are on Health), and so is the Refactor tab (the findings are filed from Health).
+  @issue-730
+  Scenario: In Português (Brasil) a project's page has the tabs Visão geral, Cidade, Saúde and Mapa de conflitos in this order, and no Refatoração
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Projetos" in the sidebar
+    And I open the project "demo-app" from the Projects screen
+    Then the project page of "demo-app" has the tabs "Visão geral", "Cidade", "Saúde" and "Mapa de conflitos"
+    And the project page's tabs are "project-tab-overview", "project-tab-city", "project-tab-health" and "project-tab-conflicts", in this order
+    And the project page has no "Refatoração" tab and no "Arquitetura" tab
+    When I open the "Cidade" project tab
+    Then the project tab "Cidade" is selected
+    And the City tab has no Facts and City switch

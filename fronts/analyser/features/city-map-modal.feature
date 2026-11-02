@@ -56,7 +56,7 @@ Feature: "Show on the map" opens the project city in a modal over the current sc
     When I follow the city modal's "Open in Projects" link
     Then no city modal is open
     And the project page of "shop" is open
-    And the project tab "Architecture" is selected
+    And the project tab "City" is selected
 
   @issue-428
   Scenario: The stage card opens at the top of the city's left column and the city has no "Arcs" note
