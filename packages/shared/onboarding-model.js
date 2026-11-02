@@ -193,11 +193,15 @@
 
   // #739: the project's display name from its repository URL (the wizard's URL field and its list pick):
   // the last path part, dashes and underscores as spaces, each word capitalized ("ai-memory" → "Ai Memory");
-  // "" until the URL names an owner and a repository after its scheme and host (a URL being typed, a host alone)
+  // "" until the URL names an owner and a repository after its scheme and host (a URL being typed, a host alone);
+  // the short form owner/repo has no host, and its owner may hold a dot (a GitLab group "my.company")
   function displayNameFromUrl(url) {
+    const text = String(url ?? '');
     const parts = repoUrlParts(url);
-    if (String(url ?? '').includes('://')) parts.shift(); // the scheme (https, ssh)
-    if (/[.@]/.test(parts[0] || '')) parts.shift(); // the host (github.com, git@gitlab.com)
+    const full = text.includes('://') || text.includes('@');
+    if (text.includes('://')) parts.shift(); // the scheme (https, ssh)
+    // the host (github.com, git@gitlab.com): always after a scheme or in an scp form, else only before owner/repo
+    if (/[.@]/.test(parts[0] || '') && (full || parts.length > 2)) parts.shift();
     if (parts.length < 2) return '';
     return parts.pop().split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
