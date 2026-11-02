@@ -205,8 +205,16 @@ function updateProject(dir, id, patch) {
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
   // #745: the project's git platform (github / gitlab) for a self-hosted host; null: read from the URL
   if (patch.platform !== undefined) next.platform = cleanPlatform(patch.platform);
-  // #738: the owner's fork of the repository (Fork + PR): { url (origin), upstream (the original) }, null: none
-  if (patch.fork !== undefined) next.fork = patch.fork?.url ? { url: String(patch.fork.url).trim(), upstream: String(patch.fork.upstream || cur.repo || '').trim() || null } : null;
+  // #738: the owner's fork of the repository (Fork + PR): { url (origin), upstream (the original), dependentPr? },
+  // null: none. dependentPr: how a dependent roadmap item's PR opens, 'wait-and-rebase' (default, not stored)
+  // or 'depends-on' (at once, "Depends on #<parent's PR>")
+  if (patch.fork !== undefined) {
+    next.fork = patch.fork?.url ? {
+      url: String(patch.fork.url).trim(),
+      upstream: String(patch.fork.upstream || cur.repo || '').trim() || null,
+      ...(patch.fork.dependentPr === 'depends-on' ? { dependentPr: 'depends-on' } : {}),
+    } : null;
+  }
   // #735: backend / frontend / full-stack as the owner confirmed it, and the run defaults edited on the project page
   if (patch.kind !== undefined) next.kind = cleanKind(patch.kind);
   if (patch.runDefaults !== undefined) next.runDefaults = cleanRunDefaults(patch.runDefaults);

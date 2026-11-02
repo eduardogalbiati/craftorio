@@ -113,7 +113,7 @@ function openQuestions(profile) {
     out.push({ id: 'release', label: 'Release style', question: 'How the project releases: no tag history settles it.', type: 'choice', options: choice([['milestone', 'Milestone'], ['per-merge', 'Per merge'], ['train', 'Release train'], ['rc-stable', 'Release candidate, then stable']]), default: remote ? 'train' : 'milestone' });
   }
   if (!modeOf(profile)) {
-    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, or through pull requests.', type: 'choice', options: profileChoices('mode'), default: 'local' });
+    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, through pull requests, or through pull requests from your fork (no push access to the repository).', type: 'choice', options: profileChoices('mode'), default: 'local' });
   }
   if (!CI_STYLES.includes(profile?.ci)) {
     out.push({ id: 'ci', label: 'CI', question: 'What the project\'s CI runs on: no CI file settles it.', type: 'choice', options: profileChoices('ci'), default: 'none' });
@@ -216,7 +216,16 @@ const REPO_INPUTS = {
   repo_path: { label: 'Repository', type: 'string', required: true, description: 'Local repository path (a git repository).' },
   base_branch: { label: 'Base branch', type: 'string', default: 'main', description: 'The branch the work starts from and lands on.' },
 };
-const worktreeOf = (s) => ({ repo: '{{ inputs.repo_path }}', base: '{{ inputs.base_branch }}', ...(s.mode === 'local' ? { remote: false } : {}) });
+// #738 Fork + PR: the worktree syncs the fork's base with upstream's first (worktree.js syncForkBase)
+const worktreeOf = (s) => ({ repo: '{{ inputs.repo_path }}', base: '{{ inputs.base_branch }}', ...(s.mode === 'local' ? { remote: false } : {}), ...(s.mode === 'fork' ? { fork: true } : {}) });
+// #738: a fork set tells pr-pipeline its mode (the fork block of its prompts) and takes a dependent
+// roadmap item's parent branch and parent PR (the roadmap sets them)
+const FORK_INPUTS = {
+  mode: { label: 'Mode', type: 'string', enum: ['fork'], default: 'fork', options: { fork: 'Fork + PR' }, description: 'Fork + PR: the branch is pushed to your fork (origin), the pull request opened against the original (upstream).' },
+  parent_branch: { label: 'Parent branch', type: 'string', default: '', description: 'The branch on your fork this run starts from (the earlier item of a split implementation). Empty: the fork\'s default branch, synced with the original.' },
+  depends_on: { label: 'Depends on', type: 'string', default: '', description: 'The earlier pull request this one depends on (e.g. #12), written in the pull request\'s body.' },
+};
+const modeInputs = (s) => (s.mode === 'fork' ? FORK_INPUTS : {});
 const withE2e = (s) => s.tests === 'unit+e2e' && !!s.e2eCommand;
 
 // the project's E2E command as a step, after the unit suite (#630: tests unit+e2e)
@@ -271,13 +280,18 @@ function changeAgents(s, facts, order) {
     developer: agent({ effort: 'high', tools: build, skills: facts.skills, system: `You are the developer. You implement the task on the run's branch with small, cohesive changes that follow the project's conventions, with their tests. ${order} ${facts1} Never push, except in the push main step.` }),
     reviewer: agent({ effort: review.effort, tools: ['bash:git', 'read'], system: `You are the code reviewer (${s.review} rigour). You read the change's diff and approve it or list what to change; you change nothing. ${facts1}` }),
     verifier: agent({ model: FAST_MODEL, effort: 'medium', tools: toolsOf(s, facts, ['bash:git', 'read']), skills: facts.skills, system: `You are the verifier. You check, with one command and its observed result, that the change does what the task asked. ${facts1}${s.screenshots ? ' Capture the screens the change touches (the project\'s screenshot command, else a short description of each state) and name them in your evidence.' : ''}` }),
-    ...(local ? {} : { ci_pusher: agent({ model: FAST_MODEL, effort: 'medium', tools: ['bash:gh', 'bash:git', 'bash:glab', 'read'], system: 'You are the CI pusher. You push the run\'s branch, open its pull request and read its CI.' }) }),
+    ...(local ? {} : { ci_pusher: agent({ model: FAST_MODEL, effort: 'medium', tools: ['bash:gh', 'bash:git', 'bash:glab', 'read'], system: s.mode === 'fork'
+      // #738: the owner can't push to the original: the branch goes to the fork, the PR to upstream
+      ? 'You are the CI pusher. You push the run\'s branch to origin (the owner\'s fork), open its pull request against the original repository (upstream) and read its CI. Never push to upstream. The pull request follows the repository\'s CONTRIBUTING.md and its pull request template.'
+      : 'You are the CI pusher. You push the run\'s branch, open its pull request and read its CI.' }) }),
   };
 }
 
 const landsText = (s) => (s.mode === 'local'
   ? 'then merges it into the local base branch and pushes it (push_main). No pull request.'
-  : `then opens a pull request${s.ci === 'pr+release' ? ' and waits for its CI' : ''}; the team merges it.`);
+  : s.mode === 'fork'
+    ? `then pushes it to your fork and opens a pull request against the original${s.ci === 'pr+release' ? ', waits for its CI' : ''}; the maintainers merge it.`
+    : `then opens a pull request${s.ci === 'pr+release' ? ' and waits for its CI' : ''}; the team merges it.`);
 const CHANGE_INPUTS = {
   task: { label: 'Task', type: 'string', required: true, description: 'Feature or bug to implement.' },
   issue: { label: 'Issue', type: 'string', default: '', description: 'URL of the issue this run implements (set by the Backlog screen).' },
@@ -291,7 +305,7 @@ function featureWorkflow(s, facts) {
     tags: ['dev', 'review', 'test', s.mode],
     budget: s.budget,
     worktree: worktreeOf(s),
-    inputs: { ...CHANGE_INPUTS, ...REPO_INPUTS },
+    inputs: { ...CHANGE_INPUTS, ...REPO_INPUTS, ...modeInputs(s) },
   });
   // spec D14: with E2E the scenarios come first; unit only: implement, then the unit tests
   const order = withE2e(s)
@@ -319,6 +333,7 @@ function fixWorkflow(s, facts) {
       ...CHANGE_INPUTS,
       hotfix: { label: 'Hotfix', type: 'boolean', default: false, description: 'An urgent fix: branched from the last release tag and shipped as a patch release.' },
       ...REPO_INPUTS,
+      ...modeInputs(s),
     },
   });
   const order = withE2e(s)

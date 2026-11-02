@@ -136,7 +136,7 @@ kind: Workflow
 metadata:
   name: feature
   version: 0.3.0
-  description: "Tests first: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build and verification. Local mode: the local merge, then push main. Remote mode: a pull request and its CI; the team merges it."
+  description: "Tests first: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build and verification. Local mode: the local merge, then push main. Remote mode: a pull request and its CI; the team merges it. Fork + PR mode: the branch on your fork, a pull request to the original and its CI; the maintainers merge it."
   tags: [dev, review, test, tests-first, tdd, build, local, remote, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
   category: build
@@ -183,10 +183,24 @@ inputs:
   mode:
     label: "Mode"
     type: string
-    enum: [local, remote]
+    enum: [local, remote, fork]
     default: local
-    options: { local: "Local", remote: "Remote (pull request)" }
-    description: "Local: merged into the local base branch, then the run pushes it (push main). Remote: the run pushes its branch, opens a pull request and waits for its CI; the team merges it on the platform."
+    options: { local: "Local", remote: "Remote (pull request)", fork: "Fork + PR" }
+    description: "Local: merged into the local base branch, then the run pushes it (push main). Remote: the run pushes its branch, opens a pull request and waits for its CI; the team merges it on the platform. Fork + PR (no push access to the original): the run pushes its branch to your fork (origin) and opens the pull request against the original (upstream); the maintainers merge it."
+  # #738 Fork + PR: a dependent roadmap item (part 2 of a split) starts from its parent's branch on the
+  # fork (set by the roadmap); depends_on names the parent's pull request for the PR's body
+  parent_branch:
+    label: "Parent branch"
+    type: string
+    default: ""
+    show_if: "mode == 'fork'"
+    description: "Fork + PR: the branch on your fork this run starts from (the earlier item of a split implementation). Empty: the fork's default branch, synced with the original."
+  depends_on:
+    label: "Depends on"
+    type: string
+    default: ""
+    show_if: "mode == 'fork'"
+    description: "Fork + PR: the earlier pull request this one depends on (e.g. #12), written in the pull request's body."
   # validated: the run stops at developer_check after the developer (the old input `mode`, #630).
   validation:
     label: "Validation"
@@ -223,8 +237,8 @@ inputs:
     enum: [gh, gl]
     default: gh
     options: { gh: GitHub, gl: GitLab }
-    show_if: "mode == 'remote'"
-    description: "Where Remote mode opens the pull request (merge request on GitLab)."
+    show_if: "mode != 'local'"
+    description: "Where Remote and Fork + PR modes open the pull request (merge request on GitLab)."
   # owner 2026-10-04: the developer's model per run (Fable 5.1 for the hardest work), the mapper's too;
   # one case of the per-run agent choice (#262, the Start drawer's Agents): a Fable turn gets 3x the
   # turn timeout from `models`, whichever way it was chosen
@@ -382,10 +396,13 @@ orchestrator:
   # mode (remote false: no fetch), at the fetched origin/<base> in Remote mode (#630: the PR starts
   # from what the remote has). Removed when the run succeeds (in Local mode its branch is deleted
   # once merged into the local <base>), kept otherwise so "resume from step" continues there.
+  # #738 Fork + PR: the fork's <base> is fast-forwarded to upstream/<base> and pushed to origin first;
+  # the run starts there, or at origin/<parent_branch> for a dependent roadmap item.
   worktree:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
-    remote: "{{ inputs.mode == 'remote' }}"
+    remote: "{{ inputs.mode != 'local' }}"
+    fork: "{{ inputs.mode == 'fork' }}"
   # AI supervisor: called when a step fails; explains it and picks a recovery the engine
   # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
   # On call: gates with kind: escalation and stalls (the same answer 3 visits in a row, refused
@@ -2293,7 +2310,7 @@ steps:
               verdict:  { type: string, enum: [verified, not_verified, inconclusive] }
               evidence: { type: string }
     transitions:
-      - when: "output.verdict != 'not_verified' and inputs.mode == 'remote'"
+      - when: "output.verdict != 'not_verified' and inputs.mode != 'local'"
         goto: ci
       - when: "output.verdict != 'not_verified'"
         merge: local
@@ -2335,7 +2352,7 @@ steps:
       {% if steps.e2e.output %}E2E run: {{ steps.e2e.output.message }}{% endif %}
       Merge anyway: merge it into the local {{ inputs.base_branch }} as it is. Stop the run: the run ends as failed (its branch keeps the work to resume it).
     transitions:
-      - when: "approved and inputs.mode == 'remote'"
+      - when: "approved and inputs.mode != 'local'"
         goto: ci
       - when: "approved"
         merge: local

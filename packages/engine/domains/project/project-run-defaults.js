@@ -26,7 +26,10 @@ const oracleSeeds = require('../oracle/oracle-seeds');
 const { checkCommand } = require('../../engine/check-step');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { detectLanguage, listBranches } = require('./project-inputs');
-const { PROJECT_KINDS: KINDS } = require('@multiagent/shared/onboarding-model');
+const { PROFILE, PROJECT_KINDS: KINDS } = require('@multiagent/shared/onboarding-model');
+
+// #738: local, remote and fork (Fork + PR), the profile's modes
+const MODES = PROFILE.mode;
 const WAYS_OF_WORKING = 'ways-of-working';
 
 // what the project page may override (`project.runDefaults`)
@@ -93,10 +96,10 @@ function projectFacts(folder) {
   return { node: !!pkg, webFramework, server, uiFolders: ui, e2eCommand, e2eSuite, stepsFolders: STEPS_FOLDERS.filter((f) => isDir(path.join(folder, f))), kind };
 }
 
-// #729: the mode the wizard picked for the project's workflows (variant local-* / remote-*), or null
+// #729: the mode the wizard picked for the project's workflows (variant local-* / remote-* / fork-*, #738), or null
 function wizardMode(project) {
   const variants = (project?.workflows || []).map((w) => String(w?.variant || ''));
-  const picked = variants.map((v) => (v.match(/^(local|remote)\b/) || [])[1]).filter(Boolean);
+  const picked = variants.map((v) => (v.match(/^(local|remote|fork)\b/) || [])[1]).filter(Boolean);
   return picked[0] || null;
 }
 
@@ -115,7 +118,7 @@ function runDefaultsWith({ project, profile = null, defaultBranch = null } = {})
   const facts = projectFacts(folder);
   const p = profile || {};
   const kind = [project?.kind, p.kind].find((k) => KINDS.includes(k)) || facts.kind;
-  const mode = wizardMode(project) || (['local', 'remote'].includes(p.mode) ? p.mode : null);
+  const mode = wizardMode(project) || (MODES.includes(p.mode) ? p.mode : null);
   const suite = str(p.e2eCommand) || facts.e2eCommand;
   const noUi = kind === 'backend';
   const e2eOff = noUi || !suite || p.tests === 'unit';

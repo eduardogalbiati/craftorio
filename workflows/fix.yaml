@@ -9,6 +9,8 @@
 #   - Local mode: the run's branch is merged into the local base (resolve_merge / merge_blocked on a
 #     conflict, fragments/local-merge-pipeline.yaml), then push_main pushes it (the project auto-push
 #     is gone, #617). Remote mode: fragments/pr-pipeline.yaml, the team merges the PR/MR.
+#   - Fork + PR mode (#738, no push access to the original): the same pr-pipeline, the branch pushed
+#     to the owner's fork (origin) and the PR opened against the original (upstream).
 #   - Hotfix mode (input `hotfix`): the urgent lane; the fix starts from the last release tag and ships
 #     as a patch (spec R7: with tags, a hotfix branches from the last tag).
 # =============================================================================
@@ -51,10 +53,23 @@ inputs:
   mode:
     label: "Mode"
     type: string
-    enum: [local, remote]
+    enum: [local, remote, fork]
     default: local
-    options: { local: "Local", remote: "Remote (pull request)" }
-    description: "Local: merged into the local base branch, then the run pushes it (push main). Remote: the run pushes its branch, opens a pull request and waits for its CI; the team merges it on the platform."
+    options: { local: "Local", remote: "Remote (pull request)", fork: "Fork + PR" }
+    description: "Local: merged into the local base branch, then the run pushes it (push main). Remote: the run pushes its branch, opens a pull request and waits for its CI; the team merges it on the platform. Fork + PR (no push access to the original): the run pushes its branch to your fork (origin) and opens the pull request against the original (upstream); the maintainers merge it."
+  # #738 Fork + PR: a dependent roadmap item starts from its parent's branch on the fork (set by the roadmap)
+  parent_branch:
+    label: "Parent branch"
+    type: string
+    default: ""
+    show_if: "mode == 'fork'"
+    description: "Fork + PR: the branch on your fork this run starts from (the earlier item of a split implementation). Empty: the fork's default branch, synced with the original."
+  depends_on:
+    label: "Depends on"
+    type: string
+    default: ""
+    show_if: "mode == 'fork'"
+    description: "Fork + PR: the earlier pull request this one depends on (e.g. #12), written in the pull request's body."
   hotfix:
     label: "Hotfix"
     type: boolean
@@ -66,8 +81,8 @@ inputs:
     enum: [gh, gl]
     default: gh
     options: { gh: GitHub, gl: GitLab }
-    show_if: "mode == 'remote'"
-    description: "Where Remote mode opens the pull request (merge request on GitLab)."
+    show_if: "mode != 'local'"
+    description: "Where Remote and Fork + PR modes open the pull request (merge request on GitLab)."
   test_command:
     type: string
     default: ""
@@ -101,10 +116,12 @@ orchestrator:
   provider: claude
   model: claude-sonnet-5
   # #630: the local <base> in Local mode (no fetch), the fetched origin/<base> in Remote mode
+  # #738: Fork + PR syncs the fork's <base> with upstream's first (or starts at origin/<parent_branch>)
   worktree:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
-    remote: "{{ inputs.mode == 'remote' }}"
+    remote: "{{ inputs.mode != 'local' }}"
+    fork: "{{ inputs.mode == 'fork' }}"
   supervisor:
     enabled: true
     on_call: true
@@ -191,7 +208,7 @@ steps:
     fragment: dev-pipeline
     agent: verifier
     transitions:
-      - when: "output.verdict != 'not_verified' and inputs.mode == 'remote'"
+      - when: "output.verdict != 'not_verified' and inputs.mode != 'local'"
         goto: ci
       - when: "output.verdict != 'not_verified'"
         merge: local
@@ -204,7 +221,7 @@ steps:
   - id: verify_failed
     fragment: dev-pipeline
     transitions:
-      - when: "approved and inputs.mode == 'remote'"
+      - when: "approved and inputs.mode != 'local'"
         goto: ci
       - when: "approved"
         merge: local

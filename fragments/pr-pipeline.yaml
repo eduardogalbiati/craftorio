@@ -6,6 +6,9 @@
 # composed set's ci none or release): it opens the PR/MR with no wait. A step `{ id, fragment: pr-pipeline }`
 # gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js,
 # expandFragments). Reads the inputs base_branch and issue and the steps develop, ci and pr_open.
+# #738 Fork + PR (inputs.mode fork): the branch goes to `origin` (the owner's fork), the PR to the
+# original (`upstream`), never a push to upstream; the PR follows CONTRIBUTING.md and the PR template,
+# with `Depends on <inputs.depends_on>` for a dependent roadmap item.
 
 steps:
   ci:
@@ -28,11 +31,21 @@ steps:
       {% if delegate_result %}The developer fixed a previous failure and pushed: {{ delegate_result.text }}
       Check CI for that new commit, not an older run.
       {% endif %}
-      1. Push the branch to the remote.
+      {% if inputs.mode == 'fork' %}Fork + PR: `origin` is the owner's fork, `upstream` the original repository (no push access to it).
+      1. Push the branch to `origin` (the fork): `git push -u origin {{ steps.develop.output.branch }}`.
+         Never push anything to `upstream`: the maintainers merge the pull request.
+      2. Make sure a pull request from the fork to the original is open (reuse it if it exists; else
+         `gh pr create --repo <upstream owner/name> --head <fork owner>:{{ steps.develop.output.branch }} --base {{ inputs.base_branch }}`,
+         with a short title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}{% if inputs.depends_on %}, and a
+         line `Depends on {{ inputs.depends_on }}`{% endif %}. Follow the repository's CONTRIBUTING.md (or
+         .github/CONTRIBUTING.md): its commit format and required checks; fill the sections of its pull
+         request template (.github/pull_request_template.md or PULL_REQUEST_TEMPLATE) when it has one.
+      {% else %}1. Push the branch to the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
          title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
-      3. Check its mergeability first: a conflict with the base never starts CI, answer ci_status:
+      {% endif %}3. Check its mergeability first: a conflict with the base never starts CI, answer ci_status:
          failed with a failure_log saying so.
       4. Check its CI: running or not started → pending; a failure → failed with failure_log (job,
          step, error, probable cause); everything passed → success; CI that cannot run for account
@@ -90,11 +103,21 @@ steps:
       Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}The developer resolved the conflict and pushed: {{ delegate_result.text }}
       {% endif %}
-      1. Push the branch to the remote.
+      {% if inputs.mode == 'fork' %}Fork + PR: `origin` is the owner's fork, `upstream` the original repository (no push access to it).
+      1. Push the branch to `origin` (the fork): `git push -u origin {{ steps.develop.output.branch }}`.
+         Never push anything to `upstream`: the maintainers merge the pull request.
+      2. Make sure a pull request from the fork to the original is open (reuse it if it exists; else
+         `gh pr create --repo <upstream owner/name> --head <fork owner>:{{ steps.develop.output.branch }} --base {{ inputs.base_branch }}`,
+         with a short title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}{% if inputs.depends_on %}, and a
+         line `Depends on {{ inputs.depends_on }}`{% endif %}. Follow the repository's CONTRIBUTING.md (or
+         .github/CONTRIBUTING.md): its commit format and required checks; fill the sections of its pull
+         request template (.github/pull_request_template.md or PULL_REQUEST_TEMPLATE) when it has one.
+      {% else %}1. Push the branch to the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
          title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
-      3. Check its mergeability: a conflict with the base → conflict: true with what conflicts in
+      {% endif %}3. Check its mergeability: a conflict with the base → conflict: true with what conflicts in
          `detail`. The project's CI does not run on pull requests: do not wait for checks.
       pr_number is the PR number (GitHub) or the MR iid (GitLab).
     output_schema:
