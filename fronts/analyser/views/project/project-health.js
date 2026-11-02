@@ -77,9 +77,12 @@
   }
 
   // a Refactor proposal made from this finding before #730, readable until migrated
+  // (#435: its issue as a link, and its roadmap stage when it has one)
   function proposalHtml(p) {
     if (!p) return '';
-    const issue = p.issue ? (p.issueUrl ? ` <a href="${esc(p.issueUrl)}" target="_blank" rel="noopener">#${esc(p.issue)}</a>` : ` #${esc(p.issue)}`) : '';
+    const where = esc(stageText(p.where) || `#${p.issue}`);
+    const link = p.issueUrl ? `<a data-testid="architecture-refactor-where" href="${esc(p.issueUrl)}" target="_blank" rel="noopener" title="${where}">${where}</a>` : `<span data-testid="architecture-refactor-where">${where}</span>`;
+    const issue = p.issue ? ` <span data-testid="refactor-proposal-where">${link}</span>` : '';
     return `<div class="small muted arch-finding-proposal" data-testid="architecture-finding-proposal">${t('project_architecture.finding_proposal')} <span title="${esc(p.title)}">${esc(p.title)}</span> <span class="badge">${esc(p.status || '')}</span>${issue}</div>`;
   }
 

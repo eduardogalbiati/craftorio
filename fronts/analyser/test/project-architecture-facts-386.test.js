@@ -127,14 +127,15 @@ function loadWindow({ model = makeModel(), findings = FINDINGS, gate = GATE, rep
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   vm.runInContext(fs.readFileSync(pageFileOf('date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
-  for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {
+  // #730: the facts and the findings moved to the Health tab (project-health.js)
+  for (const f of ['project-health.js']) {
     vm.runInContext(fs.readFileSync(pageFileOf(`views/project/${f}`), 'utf8'), sandbox, { filename: f });
   }
-  dom.document.addEventListener('click', (e) => sandbox.ProjectArchitecture.onClick(e));
+  dom.document.addEventListener('click', (e) => sandbox.ProjectHealth.onClick(e));
   const box = dom.document.createElement('div');
   dom.document.body.appendChild(box);
   const click = (el) => el.dispatchEvent(new dom.classes.MouseEvent('click', { bubbles: true, cancelable: true }));
-  return { PA: sandbox.ProjectArchitecture, box, calls, toasts, click };
+  return { PA: sandbox.ProjectHealth, box, calls, toasts, click };
 }
 
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r)); };
@@ -278,53 +279,7 @@ test('#386 the report summary leads, the verdict per area as compact chips, not 
   assert.equal(items.some((s) => s.includes('Stable core with small units.')), false, `no area verdict in a list item: ${JSON.stringify(items)}`);
 });
 
-// ---------- Send all to Refactor ----------
-
-test('#386 "Send all to Refactor" sends the findings not sent yet, says how many, then sends none again', async () => {
-  const w = await open();
-  const all = q(w.box, 'architecture-send-all');
-  assert.match(text(all), /Send all to Refactor/);
-  assert.ok(qa(w.box, 'architecture-send-refactor').length >= 4, 'the per-finding control stays');
-  w.click(all);
-  await settle();
-  await settle();
-  assert.deepEqual(w.calls.send.map((c) => c.index).sort(), [0, 1, 2, 4], 'the four unsent findings, by their index in the report; not the sent one, not the gone one');
-  assert.ok(w.calls.send.every((c) => c.projectId === 'p1' && c.reportId === 'r1'));
-  assert.ok(w.toasts.some((t) => /\b4\b/.test(t) && /finding/i.test(t)), `a toast says 4 went: ${JSON.stringify(w.toasts)}`);
-  const toastsBefore = w.toasts.length;
-  const again = q(w.box, 'architecture-send-all');
-  w.click(again);
-  await settle();
-  await settle();
-  assert.equal(w.calls.send.length, 4, 'nothing is sent twice');
-  // a disabled button (nothing left to send) says none by itself; an enabled one says it in a toast
-  const last = again.disabled ? `${text(again)} ${again.getAttribute('title') || ''}` : w.toasts.slice(toastsBefore).join(' | ');
-  if (!again.disabled) assert.match(last, /\b0\b|\bno\b|none|nothing|already/i, `the second click says none went: ${last}`);
-});
-
-test('#386 "Send all" with a filter sends the filtered findings only', async () => {
-  const w = await open();
-  w.click(q(w.box, 'architecture-filter-high'));
-  await settle();
-  w.click(q(w.box, 'architecture-send-all'));
-  await settle();
-  await settle();
-  assert.deepEqual(w.calls.send.map((c) => c.index), [1], 'the one high finding not sent yet');
-  assert.ok(w.toasts.some((t) => /\b1\b/.test(t) && /finding/i.test(t)), JSON.stringify(w.toasts));
-});
-
-test('#386 "Send all" stops at the first failed send: the toast counts what went, the error shows, the sent ones keep their mark', async () => {
-  const w = await open({ failSendAt: 2 });
-  w.click(q(w.box, 'architecture-send-all'));
-  await settle();
-  await settle();
-  assert.equal(w.calls.send.length, 3, 'two sends, then the failed one, then nothing more');
-  assert.ok(w.toasts.some((t) => /\b2\b/.test(t) && /finding/i.test(t)), `a toast says 2 went: ${JSON.stringify(w.toasts)}`);
-  assert.ok(visibleText(w.box).includes('the Refactor store is locked'), 'the error is shown');
-  const marks = qa(w.box, 'architecture-send-refactor').filter((el) => text(el) === 'Sent to Refactor').length;
-  assert.equal(marks, 3, 'the one sent before and the two sent now');
-  assert.ok(!q(w.box, 'architecture-send-all').disabled, 'two findings are left to send');
-});
+// #730: "Send all to Refactor" became "Create issues" (fronts/analyser/test/project-health-730.test.js).
 
 test('#386 clicking an active filter turns it off, "All" clears both filters', async () => {
   const count = (box) => shownFindings(box).length;

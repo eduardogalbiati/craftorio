@@ -8,7 +8,8 @@
 // - a project really without a folder gets a translated message (pt-BR "O projeto não tem pasta nesta
 //   máquina…", saying to clone again or point the folder from the Overview), in both catalogs, and no
 //   cost estimate ("≈ US$") next to the "Analyze again" of that error.
-// Loaded as project-architecture-action-381.test.js loads the tab (a vm sandbox with the mini DOM).
+// Loaded as project-architecture-action-381.test.js loads the tab (a vm sandbox with the mini DOM); #730: the
+// action lives in the City tab's notes (project-city-analyze), no Facts / City switch any more.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -92,13 +93,13 @@ function inLanguage(t, lang) {
 async function analyzeFacts(w) {
   w.PA.show('p1', w.box);
   await settle();
-  w.click(q(w.box, 'architecture-analyze'));
+  w.click(q(w.box, 'project-city-analyze'));
   await settle();
 }
 
 function assertStartedOnFolder(w) {
-  assert.equal(text(q(w.box, 'architecture-state-error')).includes(OLD_MESSAGE), false, 'not the "no folder" error');
-  assert.equal(q(w.box, 'architecture-state-error') === null, true, 'no error at all');
+  assert.equal(text(q(w.box, 'project-city-analysis-error')).includes(OLD_MESSAGE), false, 'not the "no folder" error');
+  assert.equal(q(w.box, 'project-city-analysis-error') === null, true, 'no error at all');
   assert.equal(w.calls.startRun.length, 1, 'the analyze-project run is started');
   const [spec] = w.calls.startRun;
   assert.equal(spec.file, 'analyze-project.yaml');
@@ -127,8 +128,6 @@ test('#732 the City view\'s "Analyze this project" finds the folder the same way
   inLanguage(t, 'en');
   const w = loadWindow({ projects: [{ ...NO_FOLDER }], pvProject: { ...WITH_FOLDER } });
   w.PA.show('p1', w.box);
-  await settle();
-  w.click(q(w.box, 'architecture-mode-city'));
   await settle();
   w.click(q(w.box, 'project-city-analyze'));
   await settle();
@@ -160,7 +159,7 @@ test('#732 a project really without a folder: pt-BR says "O projeto não tem pas
   inLanguage(t, 'pt-BR');
   const w = loadWindow({ projects: [{ ...NO_FOLDER }], pvProject: { ...NO_FOLDER } });
   await analyzeFacts(w);
-  const error = text(q(w.box, 'architecture-state-error'));
+  const error = text(q(w.box, 'project-city-analysis-error'));
   assert.match(error, /O projeto não tem pasta nesta máquina/);
   assert.match(error, /Visão geral|clon/i, 'says what to do');
   assert.equal(error.includes(OLD_MESSAGE), false, 'not the old English sentence');
@@ -172,7 +171,7 @@ test('#732 a project without a folder in English: the message comes from the cat
   const { key } = noFolderKey();
   const w = loadWindow({ projects: [], pvProject: { ...NO_FOLDER } });
   await analyzeFacts(w);
-  const error = text(q(w.box, 'architecture-state-error'));
+  const error = text(q(w.box, 'project-city-analysis-error'));
   assert.equal(error.includes(OLD_MESSAGE), false, 'not the old hard-coded sentence');
   assert.equal(typeof key, 'string', 'the message has a catalog key');
   assert.equal(error.includes(I18n.t(key)), true, 'the English catalog text is shown');
@@ -183,8 +182,6 @@ test('#732 the "no folder" error on the City view shows no cost estimate next to
   inLanguage(t, 'pt-BR');
   const w = loadWindow({ projects: [{ ...NO_FOLDER }], pvProject: { ...NO_FOLDER }, estimate: { usd: 0.4, basis: 3 } });
   w.PA.show('p1', w.box);
-  await settle();
-  w.click(q(w.box, 'architecture-mode-city'));
   await settle();
   w.click(q(w.box, 'project-city-analyze'));
   await settle();
@@ -204,8 +201,6 @@ test('#732 the fresh project list says the folder is gone from this machine (exi
     apiExtra: { listProjects: async () => [JSON.parse(JSON.stringify(gone))] },
   });
   w.PA.show('p1', w.box);
-  await settle();
-  w.click(q(w.box, 'architecture-mode-city'));
   await settle();
   w.click(q(w.box, 'project-city-analyze'));
   await settle();
@@ -240,13 +235,13 @@ test('#732 a "no folder" error is cleared, and the estimate comes back, when an 
   inLanguage(t, 'en');
   const w = loadWindow({ projects: [{ ...NO_FOLDER }], pvProject: { ...NO_FOLDER } });
   await analyzeFacts(w);
-  assert.equal(q(w.box, 'architecture-state-error') === null, false, 'the "no folder" error is shown');
-  assert.equal(q(w.box, 'architecture-estimate') === null, true, 'no estimate on the button while that error stands');
+  assert.equal(q(w.box, 'project-city-analysis-error') === null, false, 'the "no folder" error is shown');
+  assert.equal(w.box.querySelector('.pc-estimate') === null, true, 'no estimate next to the action while that error stands');
   w.PA.onRunEvent({ type: 'workflow.started', run_id: 'run-ext', project_id: 'p1', workflow: 'analyze-project' });
   await settle();
-  assert.equal(q(w.box, 'architecture-state-error') === null, true, 'the error is gone once a run started');
+  assert.equal(q(w.box, 'project-city-analysis-error') === null, true, 'the error is gone once a run started');
   w.PA.onRunEvent({ type: 'workflow.finished', run_id: 'run-ext', status: 'success' });
   await settle();
-  assert.equal(q(w.box, 'architecture-state-error') === null, true, 'no error after the run');
-  assert.match(text(q(w.box, 'architecture-estimate')), /US\$/, 'the estimate is back on the button');
+  assert.equal(q(w.box, 'project-city-analysis-error') === null, true, 'no error after the run');
+  assert.match(text(w.box.querySelector('.pc-estimate')), /US\$/, 'the estimate is back next to the action');
 });

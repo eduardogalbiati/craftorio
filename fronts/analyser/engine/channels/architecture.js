@@ -164,7 +164,7 @@ module.exports = (ctx) => {
     return { issue: Number(x.issue), issueUrl: x.issueUrl || null, stage: placed?.stage || null, waiting: isWaitingStage(placed) };
   };
   // #730: a Refactor proposal made from a finding before #730, readable under it
-  const proposalView = (x) => (x ? { id: x.id, title: x.title || null, status: x.status || null, issue: x.issue ?? null, issueUrl: x.issueUrl || null } : null);
+  const proposalView = (x, stages) => (x ? { id: x.id, title: x.title || null, status: x.status || null, issue: x.issue ?? null, issueUrl: x.issueUrl || null, where: filedAt(x, stages) } : null);
 
   function reportView({ projectId, reportId = null }) {
     const p = projectOf(projectId);
@@ -177,12 +177,12 @@ module.exports = (ctx) => {
     // `filed` (#730): the finding's issue and its roadmap stage; `proposal`: the proposal it became before #730
     const filed = arch.readFiled(root(), p.id);
     const old = new Map(proposals.listProposals(refactorRoot(), p.id).filter((x) => x.source === 'architecture').map((x) => [x.key, x]));
-    const stages = Object.keys(filed).length ? stagesOf(p) : new Map();
+    const stages = Object.keys(filed).length || old.size ? stagesOf(p) : new Map();
     return {
       report: saved, previousId: previous ? previous.id : null, gone: marked.gone,
       findings: marked.findings.map((f) => {
         const key = arch.findingKey(f);
-        return { ...f, filed: filedAt(filed[key], stages), proposal: proposalView(old.get(key)) };
+        return { ...f, filed: filedAt(filed[key], stages), proposal: proposalView(old.get(key), stages) };
       }),
       runsSince: saved ? runsSince(p, saved.date) : null,
       running: running && running.projectId === p.id ? { ...running } : null,

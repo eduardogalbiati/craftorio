@@ -187,12 +187,11 @@ function loadTab(model) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'packages', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   vm.runInContext(fs.readFileSync(pageFileOf('date-range.js'), 'utf8'), sandbox, { filename: 'date-range.js' });
-  for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {
-    vm.runInContext(fs.readFileSync(pageFileOf(`views/project/${f}`), 'utf8'), sandbox, { filename: f });
-  }
+  // #730: the facts moved to the Health tab (project-health.js)
+  vm.runInContext(fs.readFileSync(pageFileOf('views/project/project-health.js'), 'utf8'), sandbox, { filename: 'project-health.js' });
   const box = dom.document.createElement('div');
   dom.document.body.appendChild(box);
-  return { PA: sandbox.ProjectArchitecture, box };
+  return { PA: sandbox.ProjectHealth, box };
 }
 
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r)); };

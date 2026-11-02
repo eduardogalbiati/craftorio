@@ -1,7 +1,6 @@
-// #373: the Architecture tab (fronts/analyser/views/project/project-architecture.js) gets a City view
-// next to the facts: a "Facts | City" switch (data-testid architecture-mode-facts / -city), City
-// shows the project city (data-testid project-city), Facts brings the facts tables back, and the
-// choice is remembered per window (showing the tab again keeps it).
+// #373: the project city (data-testid project-city) in fronts/analyser/views/project/project-architecture.js.
+// #730: the City tab of its own: the city shows at once, no "Facts | City" switch, no facts tables (they
+// are the Health tab's, views/project/project-health.js), and it is kept while the tabs switch.
 // The tab runs in a mini DOM (test/mini-dom.js) with stubbed api channels; clicks reach the tab the
 // way project.js routes them (ProjectArchitecture.onClick). No WebGL here (getContext gives null)
 // and no generated 3D bundle runs: only the DOM and the state are checked. The renderer's city
@@ -133,76 +132,37 @@ async function openTab(w, id = 'p1', box = w.newBox()) {
   return box;
 }
 
-async function chooseCity(w, box) {
-  const btn = q(box, 'architecture-mode-city');
-  assert.ok(btn, 'a City button');
-  click(w, btn);
-  await settle();
-}
 
-test('#373 the Architecture tab shows a "Facts | City" switch, Facts first', async () => {
+test('#373 #730 the City tab shows the project city at once: no Facts / City switch, no facts tables', async () => {
   const w = loadWindow();
   const box = await openTab(w);
-  assert.equal(has(box, 'architecture-mode-facts'), true, 'a Facts button');
-  assert.equal(has(box, 'architecture-mode-city'), true, 'a City button');
-  assert.equal(text(q(box, 'architecture-mode-facts')), 'Facts');
-  assert.equal(text(q(box, 'architecture-mode-city')), 'City');
-  assert.equal(shown(box, 'architecture-hotspots'), true, 'the facts tables on first open');
-  assert.equal(shown(box, 'project-city'), false, 'no city on first open');
-});
-
-test('#373 choosing City shows the project city in place of the facts tables', async () => {
-  const w = loadWindow();
-  const box = await openTab(w);
-  await chooseCity(w, box);
   assert.equal(shown(box, 'project-city'), true, 'the city container');
-  assert.equal(shown(box, 'architecture-hotspots'), false, 'the facts tables give way to the city');
-  assert.equal(has(box, 'architecture-mode-facts'), true, 'the switch stays to go back');
+  for (const gone of ['architecture-mode-facts', 'architecture-mode-city', 'architecture-hotspots', 'architecture-facts']) {
+    assert.equal(has(box, gone), false, `${gone} is not on the City tab`);
+  }
 });
 
-test('#373 choosing Facts again brings the facts tables back', async () => {
-  const w = loadWindow();
-  const box = await openTab(w);
-  await chooseCity(w, box);
-  click(w, q(box, 'architecture-mode-facts'));
-  await settle();
-  assert.equal(shown(box, 'architecture-hotspots'), true, 'the facts tables');
-  assert.equal(shown(box, 'project-city'), false, 'no city');
-});
-
-test('#373 the choice is remembered in the window: showing the tab again keeps City', async () => {
+test('#373 showing the tab again keeps the same project\'s city', async () => {
   const w = loadWindow();
   const first = await openTab(w, 'p1');
-  await chooseCity(w, first);
+  const city = q(first, 'project-city');
   first.innerHTML = '';
   const again = await openTab(w, 'p1');
-  assert.equal(shown(again, 'project-city'), true, 'City again for the same project');
-  assert.equal(shown(again, 'architecture-hotspots'), false);
+  assert.equal(shown(again, 'project-city'), true, 'the city again for the same project');
+  assert.equal(q(again, 'project-city'), city, 'the same city element, moved back');
 });
 
-test('#373 the choice is per window: another project\'s Architecture tab opens in City too', async () => {
+test('#373 another project\'s City tab shows its own city', async () => {
   const w = loadWindow();
   const first = await openTab(w, 'p1');
-  await chooseCity(w, first);
   first.innerHTML = '';
   const other = await openTab(w, 'p2');
-  assert.equal(shown(other, 'project-city'), true, 'City for another project in the same window');
+  assert.equal(shown(other, 'project-city'), true, 'a city for another project in the same window');
 });
 
-test('#373 a new window starts on Facts', async () => {
-  const w1 = loadWindow();
-  await chooseCity(w1, await openTab(w1));
-  const w2 = loadWindow();
-  const box = await openTab(w2);
-  assert.equal(shown(box, 'architecture-hotspots'), true);
-  assert.equal(shown(box, 'project-city'), false);
-});
-
-test('#373 without WebGL the City view says so and points to the facts', async () => {
+test('#373 without WebGL the City view says so', async () => {
   const w = loadWindow();
   const box = await openTab(w);
-  await chooseCity(w, box);
   const city = text(q(box, 'project-city'));
   assert.match(city, /WebGL/, `the city says WebGL is missing: ${city.slice(0, 200)}`);
-  assert.match(city, /Facts/, 'and points to the facts');
 });

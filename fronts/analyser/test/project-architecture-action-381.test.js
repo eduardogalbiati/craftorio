@@ -1,10 +1,10 @@
-// #381: the Architecture tab's one action (fronts/analyser/views/project/project-architecture.js) in a
-// mini DOM: "Analyze this project" with its combined estimate (the map's chain estimate plus the
-// Oracle's, or "no estimate yet"), a click starts the project map run at once (run:start with mode
-// auto and the analysis on, no confirmation), the tab follows the run's events (the step while it
-// runs, the city and the report read again when it ends, its error when it fails), a run started
-// elsewhere shows the same way, and the old "Map this project" / "Analyze with the Oracle" controls
-// are gone.
+// #381: the City tab's one action (fronts/analyser/views/project/project-architecture.js, #730: the City
+// tab of its own, the action in the city's notes, views/project/project-city-notes.js) in a mini DOM:
+// "Analyze this project" with its combined estimate (the map's chain estimate plus the Oracle's, or
+// "no estimate yet"), a click starts the project map run at once (run:start with mode auto and the
+// analysis on, no confirmation), the tab follows the run's events (the step while it runs, the city
+// and the facts read again when it ends, its error when it fails), a run started elsewhere shows the
+// same way, and the old "Map this project" / "Analyze with the Oracle" controls are gone.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -25,17 +25,16 @@ const factsModel = () => buildModel({
   files: FILES.map((f) => ({ ...f })), log: `\x01${hash} 2026-01-05T12:00:00Z\n\n${FILES.map((f) => `A\t${f.path}`).join('\n')}\n`,
   ignoreRevs: [], attributes: '', exclude: [], includeMass: true, complexity: null,
 });
-const PLAN = { version: 1, project: 'fixture', zones: [{ id: 'core', name: 'Core', kind: 'industrial' }], districts: [{ id: 'engine', name: 'Engine', zone: 'core', include: ['**'] }] };
 
-function loadWindow({ estimate = null, mapEstimate = null, plan = null, startRun = null } = {}) {
-  const calls = { startRun: [], city: 0, report: 0 };
+function loadWindow({ estimate = null, mapEstimate = null, startRun = null } = {}) {
+  const calls = { startRun: [], city: 0, facts: 0 };
   const listeners = [];
   const api = {
-    architectureFacts: async () => ({ state: 'ok', model: factsModel(), exclude: [], gate: [] }),
-    architectureReport: async () => { calls.report++; return { report: null, findings: [], gone: [], runsSince: 0 }; },
+    architectureFacts: async () => { calls.facts++; return { state: 'ok', model: factsModel(), exclude: [], gate: [] }; },
+    architectureReport: async () => ({ report: null, findings: [], gone: [], runsSince: 0 }),
     listArchitectureReports: async () => [],
     architectureEstimate: async () => ({ estimate }),
-    architectureCity: async () => { calls.city++; return { state: 'ok', ...buildCity({ plan, facts: factsModel() }), refresh: { suggested: false, unmatchedShare: 0, newFolders: [] }, mapRun: null }; },
+    architectureCity: async () => { calls.city++; return { state: 'ok', ...buildCity({ plan: null, facts: factsModel() }), refresh: { suggested: false, unmatchedShare: 0, newFolders: [] }, mapRun: null }; },
     chainEstimate: async () => mapEstimate,
     startRun: async (spec) => { calls.startRun.push(spec); return startRun ? startRun(spec) : { runId: 'run-1' }; },
     onEvent: (fn) => { listeners.push(fn); return () => {}; },
@@ -71,36 +70,37 @@ function loadWindow({ estimate = null, mapEstimate = null, plan = null, startRun
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r)); };
 const q = (box, id) => box.querySelector(`[data-testid="${id}"]`);
 const text = (el) => String(el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+const estimateOf = (box) => q(box, 'project-city-no-plan')?.querySelector('.pc-estimate');
 
-test('#381 one action, "Analyze this project", with the combined estimate of the map and the Oracle\'s turn', async () => {
-  const w = loadWindow({ estimate: { usd: 0.4, basis: 3 }, mapEstimate: { items: [{ basis: 2, costUsd: 0.25, minutes: 3 }] } });
+async function open(opts) {
+  const w = loadWindow(opts);
   w.PA.show('p1', w.box);
   await settle();
-  const button = q(w.box, 'architecture-analyze');
-  assert.match(text(button), /Analyze this project/);
-  assert.match(text(q(w.box, 'architecture-estimate')), /≈ US\$ 0\.65/, 'the map plus the Oracle');
-  assert.match(button.title, /simulations only/);
-  for (const gone of ['architecture-map', 'architecture-map-confirm']) assert.equal(q(w.box, gone), null, `${gone} is gone`);
+  return w;
+}
+
+test('#381 one action, "Analyze this project", with the combined estimate of the map and the Oracle\'s turn', async () => {
+  const w = await open({ estimate: { usd: 0.4, basis: 3 }, mapEstimate: { items: [{ basis: 2, costUsd: 0.25, minutes: 3 }] } });
+  assert.match(text(q(w.box, 'project-city-analyze')), /Analyze this project/);
+  assert.match(text(estimateOf(w.box)), /≈ US\$ 0\.65/, 'the map plus the Oracle');
+  assert.match(estimateOf(w.box).getAttribute('title'), /simulations only/);
+  for (const gone of ['architecture-map', 'architecture-map-confirm', 'architecture-mode-facts', 'architecture-mode-city']) assert.equal(q(w.box, gone), null, `${gone} is gone`);
   assert.equal(text(w.box).includes('Analyze with the Oracle'), false);
   assert.equal(text(w.box).includes('Map this project'), false);
 });
 
-test('#381 no estimate yet: the button says so, and still starts the run', async () => {
-  const w = loadWindow();
-  w.PA.show('p1', w.box);
-  await settle();
-  assert.match(text(q(w.box, 'architecture-estimate')), /no estimate yet/);
-  assert.match(q(w.box, 'architecture-analyze').title, /first real run shows its cost/);
-  w.click(q(w.box, 'architecture-analyze'));
+test('#381 no estimate yet: the action says so, and still starts the run', async () => {
+  const w = await open();
+  assert.match(text(estimateOf(w.box)), /no estimate yet/);
+  assert.match(estimateOf(w.box).getAttribute('title'), /first real run shows its cost/);
+  w.click(q(w.box, 'project-city-analyze'));
   await settle();
   assert.equal(w.calls.startRun.length, 1);
 });
 
 test('#381 a click starts the project map run at once: mode auto, the analysis on, the project\'s folder; then the tab shows it running', async () => {
-  const w = loadWindow();
-  w.PA.show('p1', w.box);
-  await settle();
-  w.click(q(w.box, 'architecture-analyze'));
+  const w = await open();
+  w.click(q(w.box, 'project-city-analyze'));
   await settle();
   const [spec] = w.calls.startRun;
   assert.equal(spec.file, 'analyze-project.yaml', '#631: project-map merged into analyze-project');
@@ -108,75 +108,57 @@ test('#381 a click starts the project map run at once: mode auto, the analysis o
   assert.equal(spec.mock, true, 'a simulation in a simulation-only app');
   assert.equal(spec.projectId, 'p1');
   assert.equal(q(w.box, 'architecture-map-confirm'), null, 'no confirmation');
-  assert.match(text(q(w.box, 'architecture-analyzing')), /Analyzing this project/);
-  assert.equal(q(w.box, 'architecture-analyze').disabled, true);
+  assert.match(text(q(w.box, 'project-city-analyzing')), /Analyzing this project/);
+  assert.equal(q(w.box, 'project-city-analyze'), null, 'no second start while it runs');
   w.emit({ type: 'step.started', run_id: 'run-1', step_id: 'plan' });
-  assert.match(text(q(w.box, 'architecture-analyzing')), /cartographer writes the city plan/);
+  assert.match(text(q(w.box, 'project-city-analyzing')), /cartographer writes the city plan/);
   w.emit({ type: 'step.started', run_id: 'run-1', step_id: 'analyze' });
-  assert.match(text(q(w.box, 'architecture-analyzing')), /Oracle analyses the hotspots/);
+  assert.match(text(q(w.box, 'project-city-analyzing')), /Oracle analyses the hotspots/);
   w.emit({ type: 'step.started', run_id: 'other', step_id: 'facts' });
-  assert.match(text(q(w.box, 'architecture-analyzing')), /Oracle analyses the hotspots/, 'another run\'s events are not this one\'s');
+  assert.match(text(q(w.box, 'project-city-analyzing')), /Oracle analyses the hotspots/, 'another run\'s events are not this one\'s');
 });
 
-test('#381 when the run ends with success the tab reads the city and the report again and shows no running state', async () => {
-  const w = loadWindow();
-  w.PA.show('p1', w.box);
+test('#381 when the run ends with success the tab reads the city again and shows no running state', async () => {
+  const w = await open();
+  w.click(q(w.box, 'project-city-analyze'));
   await settle();
-  w.click(q(w.box, 'architecture-analyze'));
-  await settle();
-  const before = { city: w.calls.city, report: w.calls.report };
+  const before = w.calls.city;
   w.emit({ type: 'workflow.finished', run_id: 'run-1', status: 'success' });
   await settle();
-  assert.equal(q(w.box, 'architecture-analyzing'), null, 'not shown as running once finished');
-  assert.ok(w.calls.city > before.city && w.calls.report > before.report, 'the city and the report are read again');
-  assert.equal(q(w.box, 'architecture-state-error'), null);
-  assert.equal(q(w.box, 'architecture-analyze').disabled, false);
+  assert.equal(q(w.box, 'project-city-analyzing'), null, 'not shown as running once finished');
+  assert.ok(w.calls.city > before, 'the city is read again');
+  assert.equal(q(w.box, 'project-city-analysis-error'), null);
+  assert.equal(q(w.box, 'project-city-analyze').disabled, false);
 });
 
 test('#381 when the run fails the tab shows its error and the action again', async () => {
-  const w = loadWindow();
-  w.PA.show('p1', w.box);
-  await settle();
-  w.click(q(w.box, 'architecture-analyze'));
+  const w = await open();
+  w.click(q(w.box, 'project-city-analyze'));
   await settle();
   w.emit({ type: 'workflow.finished', run_id: 'run-1', status: 'failed', error: 'The Oracle refused the analysis: the daily budget is reached.' });
   await settle();
-  assert.match(text(q(w.box, 'architecture-state-error')), /daily budget/);
-  assert.equal(q(w.box, 'architecture-analyzing'), null);
-  assert.equal(q(w.box, 'architecture-analyze').disabled, false);
+  const error = q(w.box, 'project-city-analysis-error');
+  assert.match(text(error), /daily budget/);
+  assert.equal(q(w.box, 'project-city-analyzing'), null);
+  assert.equal(q(error, 'project-city-analyze').disabled, false, 'Analyze again');
 });
 
 test('#381 a run that fails to start shows the error, nothing stuck as running', async () => {
-  const w = loadWindow({ startRun: () => { throw new Error('No workflow slot is free.'); } });
-  w.PA.show('p1', w.box);
+  const w = await open({ startRun: () => { throw new Error('No workflow slot is free.'); } });
+  w.click(q(w.box, 'project-city-analyze'));
   await settle();
-  w.click(q(w.box, 'architecture-analyze'));
-  await settle();
-  assert.match(text(q(w.box, 'architecture-state-error')), /No workflow slot/);
-  assert.equal(q(w.box, 'architecture-analyzing'), null);
+  assert.match(text(q(w.box, 'project-city-analysis-error')), /No workflow slot/);
+  assert.equal(q(w.box, 'project-city-analyzing'), null);
 });
 
 test('#381 a project map run started elsewhere for this project shows as running too', async () => {
-  const w = loadWindow();
-  w.PA.show('p1', w.box);
-  await settle();
+  const w = await open();
   // #631: the analysis run is analyze-project (project-map merged into it)
   w.emit({ type: 'workflow.started', run_id: 'run-9', project_id: 'p1', workflow: 'analyze-project' });
-  assert.match(text(q(w.box, 'architecture-analyzing')), /Analyzing this project/);
-  w.emit({ type: 'workflow.started', run_id: 'run-10', project_id: 'p2', workflow: 'analyze-project' });
-  assert.match(q(w.box, 'architecture-analyzing').title, /run-9/, 'another project\'s run is not this one\'s');
-});
-
-test('#381 the City view gets the same action and the same state', async () => {
-  const w = loadWindow({ estimate: { usd: 0.4, basis: 3 } });
-  w.PA.show('p1', w.box);
-  await settle();
-  w.click(q(w.box, 'architecture-mode-city'));
-  await settle();
-  const note = q(w.box, 'project-city-no-plan');
-  assert.match(text(note), /Analyze this project.*≈ US\$ 0\.40/);
-  w.click(q(w.box, 'project-city-analyze'));
-  await settle();
-  assert.equal(w.calls.startRun.length, 1, 'the city\'s button starts the same run');
   assert.match(text(q(w.box, 'project-city-analyzing')), /Analyzing this project/);
+  w.emit({ type: 'workflow.started', run_id: 'run-10', project_id: 'p2', workflow: 'analyze-project' });
+  w.emit({ type: 'step.started', run_id: 'run-10', step_id: 'plan' });
+  assert.equal(/cartographer writes the city plan/.test(text(q(w.box, 'project-city-analyzing'))), false, 'another project\'s run is not this one\'s');
+  w.emit({ type: 'step.started', run_id: 'run-9', step_id: 'plan' });
+  assert.match(text(q(w.box, 'project-city-analyzing')), /cartographer writes the city plan/);
 });
