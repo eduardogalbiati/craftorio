@@ -59,7 +59,8 @@ test('#725 Retry reruns a failed profile while the project map still runs', asyn
   assert.equal(calls.profile, 2);
   release();
   const end = await until(ob, s.projectId, (x) => x.status === 'analyzed', 'the analysis ends');
-  assert.equal(end.jobs.ranking.status, 'done');
+  assert.equal(end.jobs.projectMap.status, 'done');
+  assert.equal(end.jobs.ranking, undefined, '#730: no ranking job');
   assert.equal(calls.projectMap, 1, 'the map was not run again');
 });
 

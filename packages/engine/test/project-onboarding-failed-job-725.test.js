@@ -26,7 +26,7 @@ const path = require('path');
 const { createOnboarding } = require('../service/areas/project-onboarding');
 
 const GITHUB = 'https://github.com/acme/widgets.git';
-const JOBS = ['clone', 'facts', 'profile', 'projectMap', 'ranking'];
+const JOBS = ['clone', 'facts', 'profile', 'projectMap']; // #730: no ranking job
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'onboarding-725-'));
@@ -55,12 +55,11 @@ const git = async (args) => {
 
 // fake analyses (the system boundary): behave[name]() is the job's answer (throw to fail), changeable mid-test
 function fakeJobs(behave = {}) {
-  const calls = { facts: 0, profile: 0, projectMap: 0, ranking: 0 };
+  const calls = { facts: 0, profile: 0, projectMap: 0 };
   const defaults = {
     facts: () => ({ commits: 3 }),
     profile: () => ({ profile: { mode: 'remote', ci: 'release', tests: 'unit' } }),
     projectMap: () => ({ findings: [] }),
-    ranking: () => ({ list: [] }),
   };
   const jobs = Object.fromEntries(Object.keys(defaults).map((name) => [name, async () => {
     calls[name] += 1;
@@ -99,15 +98,9 @@ const fail = (message) => () => { throw new Error(message); };
 const CLI_MISSING = 'The Product Owner needs claude, which is not installed.';
 
 // ---- 6. a failed job is a state ------------------------------------------------------------------
+// #730: the ranking job is gone; the project map is the onboarding's paid job
 
-test('#725 a failed ranking after a done project map does not send the onboarding back to ready', async (t) => {
-  const { end } = await analyzed(t, fakeJobs({ ranking: fail(CLI_MISSING) }));
-  assert.equal(end.jobs.projectMap.status, 'done');
-  assert.equal(end.jobs.ranking.status, 'failed');
-  assert.notEqual(end.status, 'ready', `the status after a failed paid job: ${end.status}`);
-});
-
-test('#725 a failed project map (ranking skipped) does not send the onboarding back to ready either', async (t) => {
+test('#725 a failed project map does not send the onboarding back to ready', async (t) => {
   const { end } = await analyzed(t, fakeJobs({ projectMap: fail('Timed out after 900s') }));
   assert.equal(end.jobs.projectMap.status, 'failed');
   assert.notEqual(end.status, 'ready', `the status after a failed paid job: ${end.status}`);
@@ -125,14 +118,14 @@ const CASES = [
 ];
 
 for (const c of CASES) {
-  test(`#725 a ranking failed with "${c.error}" carries code ${c.code}, a short reason and the full error`, async (t) => {
-    const { end } = await analyzed(t, fakeJobs({ ranking: c.behave }));
-    const job = end.jobs.ranking;
+  test(`#725 a project map failed with "${c.error}" carries code ${c.code}, a short reason and the full error`, async (t) => {
+    const { end } = await analyzed(t, fakeJobs({ projectMap: c.behave }));
+    const job = end.jobs.projectMap;
     assert.equal(job.status, 'failed');
-    assert.equal(job.code, c.code, `jobs.ranking.code for: ${job.error}`);
-    assert.equal(typeof job.reason, 'string', 'jobs.ranking.reason');
+    assert.equal(job.code, c.code, `jobs.projectMap.code for: ${job.error}`);
+    assert.equal(typeof job.reason, 'string', 'jobs.projectMap.reason');
     assert.equal(job.reason.trim().length > 0 && job.reason.length <= 160, true, `a short reason: "${job.reason}"`);
-    assert.equal(String(job.error || '').includes(c.error), true, `the full error stays in jobs.ranking.error: "${job.error}"`);
+    assert.equal(String(job.error || '').includes(c.error), true, `the full error stays in jobs.projectMap.error: "${job.error}"`);
     if (c.cli) assert.equal(job.cli, c.cli, 'the missing command');
     if (c.words) assert.match(job.reason, c.words);
   });
@@ -140,37 +133,24 @@ for (const c of CASES) {
 
 // ---- 7. no paying twice --------------------------------------------------------------------------
 
-test('#725 analyze again after a failed ranking runs only the ranking: the done project map is not run again', async (t) => {
-  const fake = fakeJobs({ ranking: fail(CLI_MISSING) });
+test('#725 Retry after a failed project map runs only the map: the free jobs are not run again', async (t) => {
+  const fake = fakeJobs({ projectMap: fail(CLI_MISSING) });
   const { ob, id } = await analyzed(t, fake);
-  delete fake.behave.ranking; // claude installed
-  await ob.analyze(id);
-  const end = await until(ob, id, (x) => ended(x) && x.jobs.ranking.status === 'done', 'the second analysis ends with the ranking done');
-  assert.equal(fake.calls.projectMap, 1, 'the project map ran once overall');
-  assert.equal(fake.calls.ranking, 2, 'the ranking ran again');
-  assert.equal(end.jobs.projectMap.status, 'done');
-  assert.equal(end.status, 'analyzed');
-});
-
-test('#725 Retry after a failed ranking runs only the ranking: the done project map is not run again', async (t) => {
-  const fake = fakeJobs({ ranking: fail(CLI_MISSING) });
-  const { ob, id } = await analyzed(t, fake);
-  delete fake.behave.ranking;
+  delete fake.behave.projectMap; // claude installed
   await ob.retry(id);
-  const end = await until(ob, id, (x) => ended(x) && x.jobs.ranking.status === 'done', 'the retry ends with the ranking done');
-  assert.equal(fake.calls.projectMap, 1, 'the project map ran once overall');
-  assert.equal(fake.calls.ranking, 2, 'the ranking ran again');
+  const end = await until(ob, id, (x) => ended(x) && x.jobs.projectMap.status === 'done', 'the retry ends with the map done');
+  assert.equal(fake.calls.projectMap, 2, 'the project map ran again');
+  assert.equal(fake.calls.facts, 1, 'the facts were not read again');
   assert.equal(end.status, 'analyzed');
 });
 
-test('#725 analyze again after a failed project map runs the map and the ranking once more, and the free jobs not again', async (t) => {
+test('#725 analyze again after a failed project map runs the map once more, and the free jobs not again', async (t) => {
   const fake = fakeJobs({ projectMap: fail('Timed out after 900s') });
   const { ob, id } = await analyzed(t, fake);
   delete fake.behave.projectMap;
   await ob.analyze(id);
-  const end = await until(ob, id, (x) => ended(x) && x.jobs.ranking.status === 'done', 'the second analysis ends with the ranking done');
+  const end = await until(ob, id, (x) => ended(x) && x.jobs.projectMap.status === 'done', 'the second analysis ends with the map done');
   assert.equal(fake.calls.projectMap, 2);
-  assert.equal(fake.calls.ranking, 1, 'the ranking ran once (skipped the first time)');
   assert.equal(fake.calls.facts, 1, 'the facts were not read again');
   assert.equal(fake.calls.profile, 1, 'the profile was not asked again');
   assert.equal(end.status, 'analyzed');

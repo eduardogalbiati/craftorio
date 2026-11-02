@@ -40,7 +40,7 @@ const slots = require('../engine/machine-slot');
 
 const GITHUB = 'https://github.com/acme/widgets.git';
 const GITLAB = 'https://gitlab.com/acme/widgets.git';
-const JOBS = ['clone', 'facts', 'profile', 'projectMap', 'ranking'];
+const JOBS = ['clone', 'facts', 'profile', 'projectMap']; // #730: no ranking job
 
 function tmp(t, prefix = 'onboarding-640-') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -161,11 +161,11 @@ test('#640 no analysis starts before the clone is ready (a slow fake clone)', as
   gate.resolve();
   const end = await until(ob, s.projectId, (x) => x.status === 'analyzed' && idle(x), 'the analysis ends');
   assert.equal(fake.calls.projectMap, 1);
-  assert.equal(fake.calls.ranking, 1);
-  assert.equal(end.jobs.ranking.status, 'done');
+  assert.equal(fake.calls.ranking, 0, '#730: no ranking job');
+  assert.equal(end.jobs.projectMap.status, 'done');
 });
 
-test('#640 the facts come first, the profile and the project map run in parallel, the ranking after the map', async (t) => {
+test('#640 the facts come first, the profile and the project map run in parallel', async (t) => {
   const profileGate = deferred();
   const fake = fakeJobs({ gates: { profile: profileGate } });
   const { ob } = setup(t, { jobs: fake });
@@ -181,7 +181,7 @@ test('#640 the facts come first, the profile and the project map run in parallel
   const at = (e) => fake.log.indexOf(e);
   assert.ok(at('facts:end') < at('profile:start'), `facts before the profile: ${fake.log.join(', ')}`);
   assert.ok(at('facts:end') < at('projectMap:start'), `facts before the project map: ${fake.log.join(', ')}`);
-  assert.ok(at('projectMap:end') < at('ranking:start'), `the ranking after the project map: ${fake.log.join(', ')}`);
+  assert.equal(at('ranking:start'), -1, `#730: no ranking job: ${fake.log.join(', ')}`);
 });
 
 test('#630 the profile job keeps its profile in the state (jobs.profile.profile)', async (t) => {
@@ -208,7 +208,7 @@ test('#640 "analyze later": without analyze the project ends ready and nothing p
   assert.equal(fake.calls.ranking, 0, 'the ranking never ran');
 });
 
-test('#640 analyze on a ready project runs the project map and the ranking once and ends analyzed', async (t) => {
+test('#640 #730 analyze on a ready project runs the project map once and ends analyzed, no ranking', async (t) => {
   const fake = fakeJobs();
   const { ob } = setup(t, { jobs: fake });
   const s = await ob.start({ name: 'Widgets', repo: GITHUB });
@@ -216,9 +216,9 @@ test('#640 analyze on a ready project runs the project map and the ranking once 
   await soon(ob.analyze(s.projectId), 'onboarding analyze');
   const end = await until(ob, s.projectId, (x) => x.status === 'analyzed' && idle(x), 'the analysis ends');
   assert.equal(fake.calls.projectMap, 1);
-  assert.equal(fake.calls.ranking, 1);
+  assert.equal(fake.calls.ranking, 0);
   assert.equal(end.jobs.projectMap.status, 'done');
-  assert.equal(end.jobs.ranking.status, 'done');
+  assert.equal(end.jobs.ranking, undefined);
 });
 
 // ---- slots and events ----------------------------------------------------------------------------

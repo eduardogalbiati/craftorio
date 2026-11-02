@@ -23,8 +23,9 @@ const { createServer } = require('../../server');
 // moves files between packages and never changes a channel, so the shipped compositions keep it. A
 // channel change made on purpose updates this pin with its PR (#642: refactor:addToRoadmap's `file` flag;
 // #647: the docs:* channels and run:request-edit; #670: po:file-spec; #669: onboarding:accounts and
-// onboarding:repos; #671: docs:read-at; #630: backlog:auto-push removed; #632: onboarding:create).
-const MAIN_CONTRACT = 'd94071e89e3c';
+// onboarding:repos; #671: docs:read-at; #630: backlog:auto-push removed; #632: onboarding:create;
+// #730: architecture:createIssue).
+const MAIN_CONTRACT = '0efd01c921a3';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;

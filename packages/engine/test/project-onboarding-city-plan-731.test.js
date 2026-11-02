@@ -131,7 +131,7 @@ function areaWith(t, oracle) {
   return { area, ws, archRoot: path.join(ws.root, 'architecture') };
 }
 
-const JOBS = ['clone', 'facts', 'profile', 'projectMap', 'ranking'];
+const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
 const ended = (s) => !['cloning', 'analyzing'].includes(s.status) && JOBS.every((j) => !['running', 'waiting'].includes(s.jobs?.[j]?.status));
 
 async function until(status, pred, what, tries = 600) {
@@ -221,7 +221,7 @@ test('#731 a plan the validator refuses fails the job with a reason, and Retry d
   assert.equal(job.reason.trim().length > 0 && job.reason.length <= 160, true, `a short reason: "${job.reason}"`);
   assert.equal(typeof job.code, 'string', 'jobs.projectMap.code');
   assert.equal(String(job.error || '').length > 0, true, 'the full error');
-  assert.equal(end.jobs.ranking.status, 'skipped', 'no ranking without the map');
+  assert.equal(end.jobs.ranking, undefined, '#730: no ranking job');
   const arch = require('../domains/oracle/oracle-architecture');
   assert.equal(arch.readPlan(archRoot, id).plan, null, 'no plan saved');
   assert.equal(turns.plan >= 1, true, 'the cartographer was asked');
