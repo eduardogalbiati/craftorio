@@ -262,7 +262,7 @@ test('#354 choosing another project in the header switches the open project page
 });
 
 test('#354 #730 the Health tab of a project with no report says it was never analysed (no Refactor tab)', async () => {
-  const app = page();
+  const app = page({ api: { architectureFacts: async () => ({ state: 'ok', model: null }), architectureReport: async () => ({ report: null, findings: [] }), listArchitectureReports: async () => [] } });
   await app.boot();
   await openProject(app, 'p1');
   assert.equal(tabs(app).some((t) => t.label === 'Refactor'), false);

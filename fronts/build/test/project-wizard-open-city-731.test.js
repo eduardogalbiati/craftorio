@@ -137,7 +137,8 @@ async function reviewDone() {
 
 const wizardClosed = (app) => H.findEl(wizardMarkup(app), (e) => 'data-step' in e.attrs) === null;
 
-test('#731 "Open the city" finishes the wizard and lands on the project\'s Architecture tab, on its City view', { timeout: 20000 }, async () => {
+// #730: the City is a tab of its own (no Facts / City switch)
+test('#731 #730 "Open the city" finishes the wizard and lands on the project\'s City tab', { timeout: 20000 }, async () => {
   const app = await reviewDone();
   // the City's mode and panel controls do not attach on this fake DOM (their header is not there): the test is
   // about where "Open the city" lands, so the city is drawn without them
@@ -148,8 +149,5 @@ test('#731 "Open the city" finishes the wizard and lands on the project\'s Archi
   assert.equal(wizardClosed(app), true, 'the wizard closed');
   assert.equal(String(app.state().view), 'project', 'the project page is open');
   assert.equal(String(app.state().pv?.id), PID, 'on the new project');
-  assert.equal(String(app.state().pv?.tab), 'architecture', 'on its Architecture tab');
-  let mode = null;
-  try { mode = app.sandbox.sessionStorage?.getItem('multiagent.architecture.view') ?? null; } catch { mode = null; }
-  assert.equal(String(mode), 'city', 'the Architecture tab shows its City view');
+  assert.equal(String(app.state().pv?.tab), 'city', 'on its City tab');
 });

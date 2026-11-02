@@ -163,7 +163,8 @@ test('#642 after Finish the project page shows the Next steps card with the refa
 
 for (const [id, where, expected, want] of [
   ['refactors', 'the Roadmap', (s) => ({ view: String(s.view) }), { view: 'roadmap' }],
-  ['cadence', 'the project\'s Refactor tab', (s) => ({ view: String(s.view), project: String(s.pv?.id), tab: String(s.pv?.tab) }), { view: 'project', project: PID, tab: 'refactor' }],
+  // #730: no Refactor tab; the cadence entry leads to the Health tab (the findings)
+  ['cadence', 'the project\'s Health tab', (s) => ({ view: String(s.view), project: String(s.pv?.id), tab: String(s.pv?.tab) }), { view: 'project', project: PID, tab: 'health' }],
   ['idea', 'the Inbox', (s) => ({ view: String(s.view) }), { view: 'inbox' }],
 ]) {
   test(`#642 the "${id}" entry of Next steps leads to ${where}`, { timeout: 20000 }, async () => {
