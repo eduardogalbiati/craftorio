@@ -153,6 +153,76 @@ async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
 }
 
 /**
+ * #738 Fork + PR: the fork's default branch follows the original. Fetches `upstream` <base> and `origin`
+ * (the fork: its branches, a dependent item's parent among them), fast-forwards the local <base> to
+ * upstream/<base> (merge --ff-only where it is checked out and clean, else the ref moves; a local <base>
+ * with commits of its own is left alone) and pushes upstream/<base> to origin's <base>. Never pushes to
+ * upstream; a fetch or a push that fails only warns. → 'upstream/<base>', or null when it is not there.
+ */
+async function syncForkBase(root, base, log = () => {}) {
+  const warn = (what, e) => log('warn', `worktree (fork): ${what} (${String(e?.message || e).split('\n')[0]})`);
+  await git(['fetch', '--end-of-options', 'upstream', base], root, { timeout: FETCH_TIMEOUT_MS, auth: true }).catch((e) => warn(`could not fetch upstream/${base}`, e));
+  await git(['fetch', 'origin'], root, { timeout: FETCH_TIMEOUT_MS, auth: true }).catch((e) => warn('could not fetch origin', e));
+  const upstream = `refs/remotes/upstream/${base}`;
+  if (!(await refExists(root, upstream))) {
+    log('warn', `worktree (fork): upstream/${base} not found; is the original repository the "upstream" remote?`);
+    return null;
+  }
+  const local = `refs/heads/${base}`;
+  const tip = await git(['rev-parse', upstream], root);
+  if (!(await refExists(root, local))) {
+    await tryGit(['branch', '--end-of-options', base, upstream], root);
+  } else if (await git(['merge-base', '--is-ancestor', local, upstream], root).then(() => true, () => false)) {
+    const checkout = (await listWorktrees(root)).find((w) => w.branch === base);
+    if (!checkout) await tryGit(['update-ref', local, tip, await git(['rev-parse', local], root)], root);
+    else if (await tryGit(['status', '--porcelain', '--untracked-files=no'], checkout.dir)) log('warn', `worktree (fork): ${checkout.dir} has uncommitted changes on ${base}; the local ${base} was not fast-forwarded`);
+    else await git(['merge', '--ff-only', '-q', upstream], checkout.dir).catch((e) => warn(`could not fast-forward ${base}`, e));
+  } else {
+    log('warn', `worktree (fork): the local ${base} has commits that are not in upstream/${base}; it was left as it is`);
+  }
+  // the fork's default branch only ever carries the original's commits: a fast-forward push, never forced
+  await git(['push', '--end-of-options', 'origin', `${upstream}:refs/heads/${base}`], root, { timeout: FETCH_TIMEOUT_MS, auth: true })
+    .then(() => log('info', `worktree (fork): origin/${base} synced with upstream/${base} (${tip.slice(0, 8)})`), (e) => warn(`could not push ${base} to origin (the fork)`, e));
+  return `upstream/${base}`;
+}
+
+// #738: the start point of a Fork + PR run: the fork synced (syncForkBase), then origin/<parentBranch> (a
+// dependent roadmap item starts from its parent's branch on the fork) or upstream/<base>; else baseRef's
+async function forkBaseRef(root, base, parentBranch, log) {
+  const synced = base ? await syncForkBase(root, base, log) : null;
+  if (parentBranch) {
+    if (validBranchName(parentBranch) && await refExists(root, `refs/remotes/origin/${parentBranch}`)) return `origin/${parentBranch}`;
+    log('warn', `worktree (fork): the parent branch "${parentBranch}" is not on origin; starting from the base`);
+  }
+  return synced || baseRef(root, base, log, { remote: true });
+}
+
+/**
+ * #738 "wait and rebase": once a dependent item's parent merged upstream, the run's branch (its commits
+ * after origin/<parentBranch>) is rebased onto the synced upstream/<base>; the branch keeps its name. A
+ * conflict aborts the rebase and throws, leaving the branch as it was. Nothing is pushed to upstream.
+ * @returns {Promise<{ base: string, commit: string }>} the ref rebased onto and the new HEAD
+ */
+async function restackOnBase({ repo, dir, base, parentBranch, log = () => {} }) {
+  checkBase(base);
+  const root = await repoRoot(repo);
+  if (!root) throw new Error(`restack: ${repo} is not a git repository.`);
+  const onto = await syncForkBase(root, base, log);
+  if (!onto) throw new Error(`restack: upstream/${base} was not found.`);
+  const parent = parentBranch && validBranchName(parentBranch) && await refExists(root, `refs/remotes/origin/${parentBranch}`) ? `origin/${parentBranch}` : null;
+  try {
+    await git([...(await identityArgs(root)), 'rebase', ...(parent ? ['--onto', onto, parent] : [onto])], dir);
+  } catch (e) {
+    const files = String(await tryGit(['diff', '--name-only', '--diff-filter=U'], dir) || '').split('\n').filter(Boolean);
+    if (await rebaseInProgress(dir)) await tryGit(['rebase', '--abort'], dir);
+    throw new Error(`restack: the branch conflicts with ${onto}${files.length ? ` in ${files.join(', ')}` : ''}; it was left as it was (${String(e.message).split('\n')[0]}).`);
+  }
+  const commit = await git(['rev-parse', 'HEAD'], dir);
+  log('info', `restack: rebased onto ${onto}${parent ? ` (the commits after ${parent})` : ''}, now at ${commit.slice(0, 8)}`);
+  return { base: onto, commit };
+}
+
+/**
  * Creates (or, when resuming, reuses/recreates) the run's worktree.
  * @param {object} o
  * @param {string} o.repo    repository folder (a subfolder of a repository also works)
@@ -161,10 +231,13 @@ async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
  * @param {string} [o.branch] resume: the previous run's branch, used if the folder has to be recreated
  * @param {Function} [o.log] (level, message)
  * @param {boolean} [o.remote] false: start from the local base, without fetching origin
- * @returns {Promise<object|null>} { dir, workDir, repo, base, remote, ref, commit, reused, recreated } or
+ * @param {boolean} [o.fork] #738 Fork + PR: sync the fork's <base> with upstream's first (syncForkBase) and
+ *   start from upstream/<base>
+ * @param {string} [o.parentBranch] #738 fork mode: a dependent item starts from origin/<parentBranch>
+ * @returns {Promise<object|null>} { dir, workDir, repo, base, remote, fork, ref, commit, reused, recreated } or
  *   null when `repo` is not a git repository (the caller then works in the repository folder).
  */
-async function prepareWorktree({ repo, base, dir, branch = null, log = () => {}, remote = true }) {
+async function prepareWorktree({ repo, base, dir, branch = null, log = () => {}, remote = true, fork = false, parentBranch = null }) {
   checkBase(base);
   const root = await repoRoot(repo);
   if (!root) return null;
@@ -174,7 +247,7 @@ async function prepareWorktree({ repo, base, dir, branch = null, log = () => {},
   // repo_path may point to a subfolder of the repository: keep the same subfolder in the worktree
   const workDir = (d) => path.join(d, path.relative(root, canonicalPath(repo)));
   await tryGit(['worktree', 'prune'], root); // forget worktrees whose folder is gone
-  const info = { dir, workDir: workDir(dir), repo: root, base: base || null, remote, reused: false, recreated: false };
+  const info = { dir, workDir: workDir(dir), repo: root, base: base || null, remote, ...(fork ? { fork: true } : {}), reused: false, recreated: false };
 
   if (await isWorktree(root, dir)) {
     info.reused = true;
@@ -190,7 +263,7 @@ async function prepareWorktree({ repo, base, dir, branch = null, log = () => {},
       info.ref = branch;
       info.recreated = true;
     } else {
-      info.ref = await baseRef(root, base, log, { remote });
+      info.ref = fork ? await forkBaseRef(root, base, parentBranch, log) : await baseRef(root, base, log, { remote });
       await git(['worktree', 'add', '--detach', dir, info.ref], root);
       info.recreated = !!branch;
     }
@@ -625,8 +698,10 @@ module.exports = {
   prepareBaseWorktree,
   removeRunTmp,
   removeScratch,
+  restackOnBase,
   restoreWork,
   retireWorktree,
+  syncForkBase,
   syncWithBase,
   worktreeRuns,
 };

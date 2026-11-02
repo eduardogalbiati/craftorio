@@ -14,7 +14,9 @@
 //     no-folder | refused | timeout | failed, reason (≤ 160 characters), cli? } (failureOf); once the paid
 //     part ended the status is analyzed even with a failed job, and analyzing again runs only what is not done;
 //     cli: { provider: github | gitlab, status: checking | ok | missing | signed-out, reason? } | null,
-//     remote?: { provider, status: creating | created | missing | signed-out | failed, url?, reason? } }
+//     remote?: { provider, status: creating | created | missing | signed-out | failed, url?, reason? },
+//     #738: access?: { push } (gh's permissions.push, once read), fork?: { status: suggested | created | reused |
+//     declined | failed, repo?, url?, reason? } (only without push: the wizard's "Create a fork / Work locally") }
 // #632 (spec R4): create() makes a new project instead of importing one: git init on main, README and
 // .gitignore in a first commit, then its private remote only when asked and gh / glab is signed in (`remote`);
 // it is ready at once, nothing is cloned, and the three answers are its profile (jobs.profile.profile); its
@@ -175,6 +177,42 @@ async function machineRemote(provider, { name, folder }) {
   return { ok: true, url };
 }
 
+// #738: the simulated gh of an E2E run (features/steps/onboarding.steps.js): MULTIAGENT_E2E_REPO_PUSH=0|1 is
+// the imported repository's permissions.push, whatever its host (a local file:// one too); with it, the
+// signed-in user is e2e-owner, who has no fork yet, and `gh repo fork` answers a fork URL without the network.
+// Without the hook a simulated run reads nothing (null: unknown).
+const E2E_LOGIN = 'e2e-owner';
+function e2ePlatformCli(args) {
+  const hook = process.env.MULTIAGENT_E2E_REPO_PUSH;
+  if (hook !== '0' && hook !== '1') return null;
+  const a = args.map(String);
+  const api = a[0] === 'api' ? a.find((x, i) => i > 0 && !x.startsWith('-')) || '' : null;
+  if (api === 'user') return { ok: true, out: JSON.stringify({ login: E2E_LOGIN }) };
+  if (api && api.startsWith(`repos/${E2E_LOGIN}/`)) return { ok: false, out: 'gh: Not Found (HTTP 404)' };
+  if (api && api.startsWith('repos/')) return { ok: true, out: JSON.stringify({ full_name: api.slice(6), fork: false, permissions: { pull: true, push: hook === '1' } }) };
+  if (a[0] === 'repo' && a[1] === 'fork') return { ok: true, out: `https://github.com/${E2E_LOGIN}/${String(a[2] || '').split('/').pop()}\n` };
+  return null;
+}
+
+// #738: gh / glab for a provider, args as given (the system boundary the tests replace) → { ok, out }; a
+// simulated run never calls them (e2ePlatformCli's answers, else { ok: false })
+async function machinePlatformCli(provider, args, { cwd } = {}) {
+  if (simulation.simulationOnly()) return e2ePlatformCli(args) || { ok: false, out: 'Simulation only: gh / glab are not called.' };
+  const id = issues.PLATFORMS[provider]?.cli;
+  const r = id ? await resolveCommandAsync(id) : null;
+  if (!r) return { ok: false, out: `${id || provider} is not installed.` };
+  return runTool(r.file, args, {}, { cwd, timeout: 60000 });
+}
+
+// #738: a CLI's JSON answer, null when it failed or answered something else
+function jsonOf(answer) {
+  if (!answer?.ok) return null;
+  try { return JSON.parse(String(answer.out)); } catch { return null; }
+}
+
+// #738: the repository's owner/name, the one rule of the wizard's notice (onboarding-model.js forkSuggestion)
+const ownerRepoOf = (repo) => OnboardingModel.forkSuggestion({ repo, push: false }).repo;
+
 const README = (name) => `# ${name}\n`;
 const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Store', 'Thumbs.db', 'dist/', 'build/', 'coverage/', '*.log', ''].join('\n');
 
@@ -186,7 +224,7 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
  * acquireSlot's); emit(event, state); #632: remote(provider, { name, folder }) → { ok, url?, error? } creates
  * a new project's private repository (default: gh / glab, machineRemote).
  */
-function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote }) {
+function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli }) {
   const states = new Map();
   // per project: { wanted (analyze was asked), facts (the facts job's promise), free, paid (the running parts), cli }
   const work = new Map();
@@ -226,8 +264,10 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       if (result?.refused) throw Object.assign(new Error(result.refused.text || String(result.refused.reason || result.refused)), { refused: true });
       // #725: a profile job without a profile failed (its Retry runs it again)
       if (name === 'profile' && !result?.profile) throw Object.assign(new Error('The ways of working analysis answered no profile.'), { noProfile: true });
-      // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile)
-      change(id, {}, { [name]: { status: 'done', ...(result?.profile ? { profile: result.profile } : {}) } });
+      // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile); #738: its mode
+      // follows the fork choice (no push access: an external contribution)
+      const profile = result?.profile ? withForkMode(result.profile, states.get(id)?.fork) : null;
+      change(id, {}, { [name]: { status: 'done', ...(profile ? { profile } : {}) } });
       return { result };
     } catch (e) {
       // #725: the full error (the wizard's tooltip) and its short reason
@@ -318,9 +358,88 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const reachable = access.status === 'reachable' || p.status === 'ready';
     states.set(p.id, { projectId: p.id, status: 'cloning', jobs: Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), cli: null });
     if (!reachable) noAccess(p.id, access);
+    // #738: read before the profile job, so its mode already says fork
+    else await readPush(p.id, p.repo);
     checkCli(p.id, p.repo);
     if (reachable) cloning(p.id);
     return status(p.id);
+  }
+
+  // #738: the push permission of a GitHub repository (`gh api repos/<owner>/<repo>`, its permissions.push):
+  // access: { push } once read; without push the state suggests a fork (the wizard's notice). Not read on
+  // another host (GitLab: unknown) nor when gh does not answer; never fails the import. A simulated run's
+  // E2E hook stands for gh on any host.
+  async function readPush(id, repo) {
+    const e2e = simulation.simulationOnly() && ['0', '1'].includes(process.env.MULTIAGENT_E2E_REPO_PUSH);
+    const provider = providerOf(repo) || (e2e ? 'github' : null);
+    if (provider !== 'github') return;
+    const name = ownerRepoOf(repo);
+    const info = jsonOf(await Promise.resolve().then(() => platformCli(provider, ['api', `repos/${name}`], {})).catch(() => null));
+    const push = info?.permissions?.push;
+    if (typeof push !== 'boolean') return;
+    change(id, { access: { push }, ...(push ? {} : { fork: { status: 'suggested', repo: name } }) });
+  }
+
+  // #738: the profile with the mode of the fork choice: fork while suggested or made, local once declined
+  function withForkMode(profile, fork) {
+    if (!fork) return profile;
+    return { ...profile, mode: fork.status === 'declined' ? 'local' : 'fork' };
+  }
+
+  // #738: the fork's state, and the profile job's mode with it when the profile is there
+  function forkChange(id, fork) {
+    const s = states.get(id);
+    const job = s?.jobs?.profile;
+    change(id, { fork }, job?.profile ? { profile: { ...job, profile: withForkMode(job.profile, fork) } } : {});
+  }
+
+  function forkable(projectId) {
+    const s = states.get(projectId);
+    if (!s) throw clientError(`No onboarding runs for the project ${projectId}.`);
+    if (!s.fork) throw clientError(`The project ${projectId} needs no fork: you can push to its repository.`);
+    return s;
+  }
+
+  // #738: the owner's fork of owner/name → { status: 'reused' | 'created', url } (an existing fork of that
+  // repository is reused; `gh repo fork` never sets remotes: forkProject does it with git), or throws
+  async function makeFork(name) {
+    const login = jsonOf(await platformCli('github', ['api', 'user'], {}))?.login;
+    if (!login) throw new Error('gh did not say which account is signed in (gh auth login).');
+    const mine = jsonOf(await platformCli('github', ['api', `repos/${login}/${name.split('/').pop()}`], {}));
+    if (mine?.fork && mine.parent?.full_name === name) return { status: 'reused', url: String(mine.html_url || `https://github.com/${mine.full_name}`).replace(/\.git$/, '') };
+    const made = await platformCli('github', ['repo', 'fork', name, '--clone=false'], {});
+    if (!made?.ok) throw new Error(String(made?.out || 'gh repo fork failed.').trim());
+    const url = (String(made.out).match(/https:\/\/\S+/g) || []).slice(-1)[0]?.replace(/\.git$/, '') || `https://github.com/${login}/${name.split('/').pop()}`;
+    return { status: 'created', url };
+  }
+
+  /**
+   * #738 "Create a fork": the owner's fork (reused when it exists), then in the project's clone origin = the
+   * fork and upstream = the original; the project keeps fork: { url, upstream }. A failure leaves the
+   * suggestion with its reason (fork: { status: 'failed' }), so the owner can try again or work locally.
+   */
+  async function fork(projectId) {
+    const s = forkable(projectId);
+    const p = projects.readProject(projectsDir, projectId);
+    const name = s.fork.repo || ownerRepoOf(p.repo);
+    try {
+      const made = await makeFork(name);
+      const remotes = String(await git(['remote'], p.folder)).split(/\s+/).filter(Boolean);
+      await git(['remote', 'set-url', 'origin', `${made.url}.git`], p.folder);
+      await git(['remote', remotes.includes('upstream') ? 'set-url' : 'add', 'upstream', p.repo], p.folder);
+      projects.updateProject(projectsDir, projectId, { fork: { url: made.url, upstream: p.repo } });
+      forkChange(projectId, made);
+    } catch (e) {
+      forkChange(projectId, { status: 'failed', repo: name, reason: String(e?.message || e) });
+    }
+    return status(projectId);
+  }
+
+  /** #738 "Work locally": no fork, origin stays the original, the profile's mode is local (no pull request). */
+  async function workLocally(projectId) {
+    forkable(projectId);
+    forkChange(projectId, { status: 'declined' });
+    return status(projectId);
   }
 
   /** The project's state, as the last onboarding:changed pushed it. */
@@ -441,7 +560,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(p.id);
   }
 
-  return { analyze, create, retry, start, status };
+  return { analyze, create, fork, retry, start, status, workLocally };
 }
 
 module.exports = (ctx) => {
@@ -484,15 +603,18 @@ module.exports = (ctx) => {
     onboardingAccounts: () => cliAccounts(),
     onboardingAnalyze: ({ projectId }) => onboarding().analyze(projectId),
     onboardingCreate: (data) => onboarding().create(data),
+    onboardingFork: ({ projectId }) => onboarding().fork(projectId),
     onboardingRepos: ({ provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
     onboardingStart: (data) => onboarding().start(data),
     onboardingStatus: ({ projectId }) => onboarding().status(projectId),
+    onboardingWorkLocally: ({ projectId }) => onboarding().workLocally(projectId),
   };
 };
 
 module.exports.cliAccounts = cliAccounts;
 module.exports.createOnboarding = createOnboarding;
+module.exports.machinePlatformCli = machinePlatformCli;
 module.exports.machineRemote = machineRemote;
 module.exports.machineRepos = machineRepos;
 module.exports.SLOT = SLOT;

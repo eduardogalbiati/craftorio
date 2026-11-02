@@ -33,5 +33,9 @@ module.exports = (ctx) => [
   { channel: 'onboarding:repos', method: 'onboardingRepos', params: ['provider'], schema: { params: args({ provider: text(40, 'The platform: github or gitlab.') }, ['provider']), result: listOf(shape({ name: STRING }, ['name'])) }, fn: (opts) => ctx.onboardingRepos(opts) },
   // runs again what failed (access check and clone, a failed job) and checks gh / glab again
   { channel: 'onboarding:retry', method: 'retryOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingRetry(opts) },
+  // #738: no push access to the imported repository: "Create a fork" (origin = the owner's fork, upstream =
+  // the original; Fork + PR) or "Work locally" (the Local way of working, no pull request)
+  { channel: 'onboarding:fork', method: 'forkOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingFork(opts) },
+  { channel: 'onboarding:work-locally', method: 'workLocallyOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingWorkLocally(opts) },
   { event: 'onboarding:changed', method: 'onOnboardingChanged' },
 ];

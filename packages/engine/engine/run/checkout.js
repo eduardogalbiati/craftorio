@@ -55,6 +55,10 @@ const methods = {
     // remote: false = a local workflow: start from the local base (no fetch) and merge back into it;
     // #630: a template too (feature/fix: "{{ inputs.mode == 'remote' }}", the fetched origin/<base> in Remote mode)
     const remote = cfg.remote !== false && render(String(cfg.remote ?? ''), this.ctx).trim().toLowerCase() !== 'false';
+    // #738 Fork + PR (a template too: "{{ inputs.mode == 'fork' }}"): the fork's base is synced with upstream's
+    // first; a dependent roadmap item (inputs.parent_branch) starts from its parent's branch on the fork
+    const fork = cfg.fork === true || render(String(cfg.fork ?? ''), this.ctx).trim().toLowerCase() === 'true';
+    const parentBranch = fork ? String(this.ctx.inputs?.parent_branch ?? '').trim() || null : null;
     this.ctx.worktree_dir = repo;
     const log = (level, message) => this.emitEvent('log', { level, message });
     if (!this.worktreesDir) {
@@ -65,7 +69,7 @@ const methods = {
     // #607: a recovered run continues in its own worktree (same id, same folder and branch)
     const prev = this.resume?.worktree || this.recovered?.worktree;
     const dir = prev?.dir || path.join(this.worktreesDir, this.runId);
-    const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log, remote });
+    const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log, remote, fork, parentBranch });
     if (!info) {
       log('info', `worktree: ${repo} is not a git repository; agents work in it directly`);
       this.logRepoCommands(repo);
@@ -83,7 +87,7 @@ const methods = {
     }
     const how = info.reused ? 'reusing' : info.recreated ? 'recreated' : 'created';
     this.emitEvent('worktree.ready', {
-      dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated,
+      dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated, ...(info.fork ? { fork: true } : {}),
     });
     log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
     this.logRepoCommands(info.workDir);
@@ -312,7 +316,8 @@ const methods = {
   // The run's base branch, local and remote: commits reachable from it are not the agent's.
   baseRefs() {
     const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
-    return base ? [`refs/heads/${base}`, `refs/remotes/origin/${base}`] : [];
+    // #738: in Fork + PR the original's base (upstream) is not the agent's either
+    return base ? [`refs/heads/${base}`, `refs/remotes/origin/${base}`, ...(this.worktree?.fork ? [`refs/remotes/upstream/${base}`] : [])] : [];
   },
 
   // #403: before a suite or E2E round of a local workflow (worktree.remote: false), the local base is

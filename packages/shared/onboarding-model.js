@@ -7,7 +7,7 @@
 // - canGoNext(state), next(state), back(state), skipAnalysis(state): pure moves, a new state each;
 //   skipAnalysis ("Skip, analyze later") goes from analysis to review with analyzeLater: true;
 // - suggestWorkflows(profile): { suggestions: [{ id, reason, value, choices }], defaulted }: feature, fix
-//   and release (#630) for { mode: 'local' | 'remote', ci: 'none' | 'release' | 'pr+release', tests:
+//   and release (#630) for { mode: 'local' | 'remote' | 'fork' (#738), ci: 'none' | 'release' | 'pr+release', tests:
 //   'unit' | 'unit+e2e' }, each with its reason and its selector (the value the profile picks among
 //   choices [{ value, label }]); an empty or unknown profile gets the default profile's and
 //   defaulted: true; ciChoice(profile) is step 3's CI row, profileLine(profile) the profile in one line;
@@ -23,6 +23,8 @@
 // - #632 "Create new project" (source 'new'): its repository step needs only the name; CREATE_ANSWERS
 //   (mode / ci / release, each field's values) and CREATE_DEFAULTS are its three questions, slugify(name)
 //   the new project's id and folder name (<workspace>/projects/<slug>).
+// - #738 forkSuggestion({ repo, push }): the "no push access" notice (Create a fork / Work locally), null
+//   unless push === false.
 // #726: every text is an i18n key, never English: the choices' and PROFILE_LABELS' labels are keys
 // (onboarding.choice_* / onboarding.profile_*), a reason is a key or { key, params } whose params are keys
 // or { key, params } too (onboarding.why_*), profileLine an array of keys; the interface resolves them
@@ -36,7 +38,8 @@
     { id: 'review', needs: [] },
   ];
   const DEFAULT = 'feature';
-  const PROFILE = { mode: ['local', 'remote'], ci: ['none', 'release', 'pr+release'], tests: ['unit', 'unit+e2e'] };
+  // #738: mode fork ("Fork + PR"): the owner cannot push to the original, runs push to their fork
+  const PROFILE = { mode: ['local', 'remote', 'fork'], ci: ['none', 'release', 'pr+release'], tests: ['unit', 'unit+e2e'] };
 
   const filled = (v) => typeof v === 'string' && v.trim().length > 0;
   const stepIndex = (s) => Math.max(0, STEPS.findIndex((x) => x.id === s?.step));
@@ -90,7 +93,7 @@
   const PROJECT_KINDS = Object.keys(KIND_LABELS);
   // #630 (spec R7, mock-4): each suggested workflow's selector, value → label key (#726), and the value
   // the profile picks; the CI row is the profile's ci itself (ciChoice)
-  const VARIANTS = ['remote-e2e', 'remote-code', 'local-e2e', 'local-code'];
+  const VARIANTS = ['remote-e2e', 'remote-code', 'local-e2e', 'local-code', 'fork-e2e', 'fork-code'];
   const CHOICES = {
     feature: keysOf('choice_feature', VARIANTS),
     fix: keysOf('choice_fix', VARIANTS),
@@ -100,7 +103,8 @@
   const DEFAULT_PROFILE = { mode: 'local', ci: 'none', tests: 'unit' };
   // #632 (spec R4, mock-3): the three answers of "Create new project", each field's values in the wizard's
   // order, and the ones picked by default
-  const CREATE_ANSWERS = { mode: PROFILE.mode, ci: PROFILE.ci, release: Object.keys(CHOICES.release) };
+  // #738: a new project has no original repository to fork, so it is local or remote only
+  const CREATE_ANSWERS = { mode: PROFILE.mode.filter((m) => m !== 'fork'), ci: PROFILE.ci, release: Object.keys(CHOICES.release) };
   const CREATE_DEFAULTS = { mode: 'local', ci: 'release', release: 'milestone' };
   const choicesOf = (kind) => Object.entries(CHOICES[kind]).map(([value, label]) => ({ value, label }));
 
@@ -109,14 +113,13 @@
   function suggestWorkflows(profile) {
     const valid = validProfile(profile);
     const p = valid ? profile : DEFAULT_PROFILE;
-    const remote = p.mode === 'remote';
     const e2e = p.tests === 'unit+e2e';
     const variant = `${p.mode}-${e2e ? 'e2e' : 'code'}`;
     const release = CHOICES.release[profile?.release] ? profile.release : 'milestone';
     // #726: each reason is { key, params }, a param a key or { key, params } itself (the interface resolves them)
     const tests = e2e ? 'e2e' : 'unit';
     const why = [
-      ['feature', variant, { key: 'onboarding.why_feature', params: { lands: `onboarding.why_lands_${remote ? 'remote' : 'local'}`, tests: `onboarding.why_feature_${tests}` } }],
+      ['feature', variant, { key: 'onboarding.why_feature', params: { lands: `onboarding.why_lands_${p.mode}`, tests: `onboarding.why_feature_${tests}` } }],
       ['fix', variant, { key: `onboarding.why_fix_${tests}`, params: { hotfix: 'onboarding.why_fix_hotfix' } }],
       ['release', release, { key: p.ci === 'none' ? 'onboarding.why_release_none' : `onboarding.why_release_ci${e2e ? '_e2e' : ''}` }],
     ];
@@ -196,6 +199,18 @@
     return parts.pop().split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
+  // #738: the wizard's notice when the owner cannot push to the imported repository (push === false; true
+  // or unknown: null): its text names owner/repo, its choices Create a fork and Work locally (mode local)
+  function forkSuggestion({ repo, push } = {}) {
+    if (push !== false) return null;
+    const name = repoUrlParts(repo).slice(-2).join('/');
+    return {
+      repo: name,
+      text: { key: 'onboarding.fork_notice', params: { repo: name } },
+      choices: [{ id: 'fork', label: 'onboarding.fork_create' }, { id: 'local', label: 'onboarding.fork_work_locally' }],
+    };
+  }
+
   // #632: a project's id and a new project's folder name, the one rule (packages/engine/domains/project/projects.js
   // uses it): "Field Notes" → field-notes
   function slugify(name) {
@@ -219,6 +234,7 @@
     ciChoice,
     costSummary,
     displayNameFromUrl,
+    forkSuggestion,
     initialState,
     next,
     profileLine,
