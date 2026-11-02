@@ -112,8 +112,9 @@ async function open({ args, click, js, pause, win }) {
   await waitFor(js, '[data-testid="wizard-cost"] [data-testid="wizard-cost-total"]', IMPORT_WAIT_MS);
   await pause(1000); // the project map's estimate
   if (mode === 'analysis') return;
-  await click('[data-testid="wizard-analyze"]');
-  // Next comes back once the analysis started; the review is captured when every analysis ended
+  // #725: the workflows column's Analyze the repository starts the analysis; Continue is always there,
+  // the review is captured when every analysis ended
+  await click('[data-testid="wizard-workflows-choice-analyze"]');
   await waitFor(js, '[data-testid="tray-item"][data-status="analyzed"], [data-testid="tray-item"][data-status="failed"]', ANALYSIS_WAIT_MS);
   await click('[data-testid="wizard-next"]');
   await waitFor(js, '[data-testid="wizard-review"]', 5000);

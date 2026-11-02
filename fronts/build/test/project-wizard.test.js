@@ -29,7 +29,7 @@
 //   api.retryOnboarding(projectId);
 // - step 3: data-testid="wizard-cost" with data-testid="wizard-cost-total" (visible text, never blank)
 //   and one element per paid part data-part="projectMap" / data-part="ranking"; the buttons
-//   data-testid="wizard-analyze" (api.analyzeOnboarding(projectId)) and data-testid="wizard-skip"
+//   data-testid="wizard-workflows-choice-analyze" (#725, api.analyzeOnboarding(projectId)) and data-testid="wizard-skip"
 //   (to step 'review', no analysis call);
 // - the tray: one data-testid="tray-item" per project, data-project="<id>" data-status="<engine
 //   status>"; a failed item shows the reason and data-act="retry" (api.retryOnboarding(projectId)).
@@ -289,7 +289,7 @@ test('#641 step 3 shows the cost total and both paid parts before any analysis i
 
 test('#641 Start analysis calls api.analyzeOnboarding(projectId)', async () => {
   const app = await atAnalysis();
-  await press(app, 'wizard-analyze');
+  await press(app, 'wizard-workflows-choice-analyze'); // #725: Analyze the repository, in the workflows column
   const calls = app.callsTo('analyzeOnboarding');
   assert.equal(calls.length, 1, 'one api.analyzeOnboarding call');
   assert.equal(calls[0][0], PID);

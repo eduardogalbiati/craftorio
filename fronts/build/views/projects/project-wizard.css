@@ -113,6 +113,18 @@
 .wizard-workflow { padding: 10px 12px; }
 .wizard-workflow-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
 .wizard-workflow select { max-width: 60%; }
+/* #725: a failed job's reason and Retry under its row; the workflows column's two choices, and its rows
+   dimmed under the analyzing notice */
+.wizard-job-error { color: var(--red); }
+.wizard-job > .btn { grid-column: 2 / -1; justify-self: start; }
+.wizard-workflows-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.card.wizard-workflows-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; text-align: left; font-size: 13px; cursor: pointer; }
+.card.wizard-workflows-choice:hover { border-color: var(--accent); }
+.wizard-workflows-choice:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.wizard-workflows-stage { position: relative; }
+.wizard-workflows[aria-busy="true"] { opacity: .45; pointer-events: none; user-select: none; }
+.wizard-workflows-analyzing { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; text-align: center; font-size: 13px; color: var(--text); background: color-mix(in srgb, var(--bg) 55%, transparent); border-radius: var(--radius); }
+@media (prefers-reduced-motion: reduce) { .wizard-workflows-analyzing .spinner { animation-duration: 2.4s; } }
 
 /* #642 / #669: the review, three cards (mock-6), then the backlog and the idea */
 .wizard-review { display: flex; flex-direction: column; gap: 14px; }

@@ -408,12 +408,13 @@ test('#669 step 3: the "Suggested workflows" column is shown', { timeout: 20000 
   assert.equal(headings(wizardMarkup(app)).includes('Suggested workflows'), true, `the headings: ${JSON.stringify(headings(wizardMarkup(app)))}`);
 });
 
-test('#669 step 3: the footer holds Back and "Analyze and continue"', { timeout: 20000 }, async () => {
+// #725: "Analyze and continue" left the footer: Continue is always there (analyzing starts from the column)
+test('#669 step 3: the footer holds Back and Continue', { timeout: 20000 }, async () => {
   const app = await atAnalysis();
   const foot = footer(app);
   assert.equal(foot === null, false, 'data-testid="wizard-footer"');
   assert.equal(textOf(byTestId(foot.outer, 'wizard-back')), 'Back');
-  assert.equal(buttons(foot.outer).includes('Analyze and continue'), true, `the footer's buttons: ${JSON.stringify(buttons(foot.outer))}`);
+  assert.equal(buttons(foot.outer).includes('Continue'), true, `the footer's buttons: ${JSON.stringify(buttons(foot.outer))}`);
 });
 
 // ---- step 4 (mock-6) --------------------------------------------------------------------------------
@@ -514,7 +515,7 @@ test('#669 i18n: the mockups\' new English strings are in en.json and translated
     'Cloned into your workspace in the background', 'Its history shows how you work today', 'City and refactor backlog ready at the end',
     'A git repository in your workspace', 'Optionally a private GitHub repository', 'Three questions pick its workflows',
     'Other sources', 'Any git URL', 'A folder on this computer',
-    'Next: clone and continue', 'Analyze and continue', 'Suggested workflows', 'Open the city',
+    'Next: clone and continue', 'Continue', 'Suggested workflows', 'Open the city',
     'Capture the first idea', 'Keep refactoring', 'Set up release CI', 'Investigate screenshots', 'Add spike to roadmap',
   ];
   const problems = [];

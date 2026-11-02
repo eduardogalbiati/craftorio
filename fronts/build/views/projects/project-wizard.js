@@ -88,7 +88,19 @@
   const money = (n) => (n > 0 && n < 0.01 ? `< ${usd(0.01)}` : usd(n));
   const costText = (n) => (n == null ? t('onboarding.cost_not_known') : money(n));
   const statusText = (s) => t(`onboarding.status_${s}`);
-  const canNext = () => M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy;
+  // #725: Continue on the analysis step never waits for the analysis (running, done or failed)
+  const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model)
+    : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
+  // #725: a failed job in the interface's language from the engine's code (failureOf), its reason else
+  const FAILURES = ['cli-missing', 'invalid-ranking', 'no-folder', 'refused', 'timeout'];
+  const jobReason = (job) => {
+    const reason = job?.reason || job?.error || t('onboarding.no_reason');
+    return FAILURES.includes(job?.code)
+      ? t(`onboarding.job_failed_${job.code.replace(/-/g, '_')}`, { cli: job.cli || '', reason })
+      : t('onboarding.job_failed', { reason });
+  };
+  const failedPaid = (s) => PAID.find((id) => s?.jobs?.[id]?.status === 'failed') || null;
+  const retryButton = (id) => `<button type="button" class="btn sm" data-act="retry" data-testid="wizard-job-retry-${id}">${esc(t('onboarding.retry'))}</button>`;
 
   function stepper() {
     const at = M.STEPS.findIndex((s) => s.id === cur.model.step);
@@ -361,8 +373,12 @@
     const jobs = cur.onboarding?.jobs || {};
     const loading = cur.estimate === undefined;
     const sum = M.costSummary(PAID.map((id) => ({ id, estimate: id === 'projectMap' ? cur.estimate : null, checked: true })));
+    // #725: a failed job has no amount ("—"); a done one its cost, "free" when it is not known
     const amount = (id) => {
+      const s = jobs[id]?.status;
       const p = sum.parts.find((x) => x.id === id);
+      if (s === 'failed') return '—';
+      if (s === 'done') return p && Number.isFinite(p.estimate) ? money(p.estimate) : t('onboarding.cost_free');
       return p ? (loading ? t('onboarding.estimating') : costText(p.estimate)) : t('onboarding.cost_free');
     };
     const row = (id) => {
@@ -373,10 +389,14 @@
       const testid = id === 'profile' ? ' data-testid="wizard-profile"' : '';
       // mock-4's pick of a paid analysis: both run in this phase (shown checked, disabled)
       const pick = PAID.includes(id) ? `<input type="checkbox" checked disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
+      // #725: a failed job says why under its title (the full error on hover), with its Retry
+      const failed = s === 'failed' && id !== 'clone'
+        ? `<span class="small wizard-job-error" data-testid="wizard-job-error-${id}" title="${esc(jobs[id].error || jobs[id].reason || '')}">${esc(jobReason(jobs[id]))}</span>` : '';
+      const retry = failed ? retryButton(id) : '';
       return `<li class="wizard-job"${PAID.includes(id) ? ` data-part="${id}"` : ''}>
           <span class="wizard-dot job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
-          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut"${testid} title="${esc(line)}">${esc(line)}</span></span>
-          <span class="wizard-amount muted">${esc(amount(id))}</span>
+          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut"${testid} title="${esc(line)}">${esc(line)}</span>${failed}</span>
+          <span class="wizard-amount muted">${esc(amount(id))}</span>${retry}
         </li>`;
     };
     const unknown = !loading && sum.total != null && sum.unknown.length
@@ -411,26 +431,62 @@
     }));
   }
 
+  // #725: the column's state (OnboardingModel.workflowsColumnState): choose, analyzing, failed, analyzed, manual
+  // a new project's (#632) profile is its three answers: its rows show at once
+  const columnState = () => M.workflowsColumnState({ mode: cur.workflowsMode || (cur.model.source === 'new' ? 'analyze' : undefined), profileJob: { ...jobOf('profile'), profile: profileOf() } });
+
+  // #725: one of the two ways in (Analyze the repository / Define manually): a card with its hint, or a
+  // plain button (`inline`, beside Retry)
+  const choiceButton = (id, inline = false) => `<button type="button" class="${inline ? 'btn' : 'card wizard-workflows-choice'}" data-act="workflows-${id}" data-testid="wizard-workflows-choice-${id}">
+      <strong>${esc(t(`onboarding.workflows_choice_${id}`))}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}</button>`;
+
+  // mock-4's right column (#630), by its state (#725): the two choices first; then the rows (feature, fix,
+  // release and CI, each with its selector on the profile's pick, the owner's pick kept in cur.workflows),
+  // dimmed under a loading notice while the profile job runs, with the profile's reasons once it is done,
+  // without reasons when defined by hand; a failed profile job gives its reason, Retry and Define manually
   function workflowsColumn() {
     const name = cur.model.name;
+    const state = columnState();
     const all = workflowChoices();
+    const busy = state === 'analyzing';
     const select = (kind, choices, value) => {
-      const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"`;
+      const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"${busy ? ' disabled' : ''}`;
       const options = choices.map((c) => [c.value, c.label]);
       return window.Select.markup(attrs, options, value);
     };
     const row = (kind) => {
       const s = all.find((x) => x.id === kind);
+      const reason = state === 'analyzed'
+        ? `<p class="muted small wizard-workflow-reason" data-testid="wizard-workflow-reason">${esc(t('onboarding.workflow_why', { reason: s.reason }))}</p>` : '';
       return `<li class="card wizard-workflow" data-testid="wizard-workflow" data-kind="${esc(kind)}">
         <label class="wizard-workflow-head"><strong>${esc(t(`onboarding.workflow_${kind}`))}</strong>
           ${select(kind, s.choices, cur.workflows?.[kind] || s.value)}</label>
-        <p class="muted small wizard-workflow-reason" data-testid="wizard-workflow-reason">${esc(t('onboarding.workflow_why', { reason: s.reason }))}</p>
+        ${reason}
       </li>`;
     };
-    return `<h3>${esc(t('onboarding.workflows_title'))}</h3>
-      <p class="muted">${esc(t('onboarding.workflows_line', { name }))}</p>
-      <ul class="wizard-workflows">${WORKFLOW_KINDS.map(row).join('')}</ul>
-      <p class="muted small">${esc(t('onboarding.workflows_more'))}</p>`;
+    const head = `<h3>${esc(t('onboarding.workflows_title'))}</h3>
+      <p class="muted">${esc(t(state === 'choose' ? 'onboarding.workflows_choose_line' : 'onboarding.workflows_line', { name }))}</p>`;
+    let body;
+    if (state === 'choose') body = `<div class="wizard-workflows-choices">${choiceButton('analyze')}${choiceButton('manual')}</div>`;
+    else if (state === 'failed') {
+      const job = jobOf('profile');
+      const why = job.status === 'failed' ? jobReason(job) : t('onboarding.workflows_no_profile');
+      body = `<div class="wizard-alert error" role="alert" data-testid="wizard-workflows-failed">
+          <strong>${esc(t('onboarding.workflows_failed'))}</strong>
+          <p title="${esc(job.error || '')}">${esc(why)}</p>
+          <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry" data-testid="wizard-workflows-retry">${esc(t('onboarding.retry'))}</button>${choiceButton('manual', true)}</div>
+        </div>`;
+    } else {
+      const list = `<ul class="wizard-workflows" data-testid="wizard-workflows-rows"${busy ? ' aria-busy="true" aria-disabled="true" inert' : ''}>${WORKFLOW_KINDS.map(row).join('')}</ul>`;
+      const overlay = busy ? `<div class="wizard-workflows-analyzing" data-testid="wizard-workflows-analyzing" role="status">
+          <span class="spinner" data-testid="wizard-workflows-spinner" role="progressbar" aria-label="${esc(t('onboarding.workflows_analyzing', { name }))}"></span>
+          <span>${esc(t('onboarding.workflows_analyzing', { name }))}</span></div>` : '';
+      // Define manually keeps Analyze the repository on offer
+      const analyze = state === 'manual' ? `<div class="wizard-workflows-choices">${choiceButton('analyze')}</div>` : '';
+      body = `<div class="wizard-workflows-stage">${list}${overlay}</div>${analyze}`;
+    }
+    return `<div class="wizard-column wizard-workflows-column" data-testid="wizard-workflows-column" data-state="${state}">${head}${body}
+      <p class="muted small">${esc(t('onboarding.workflows_more'))}</p></div>`;
   }
 
   function analysisStep() {
@@ -447,7 +503,7 @@
           ${cliWarning(o.cli)}
           ${remoteWarning(o.remote)}
         </div>
-        <div class="wizard-column">${workflowsColumn()}</div>
+        ${workflowsColumn()}
       </div>`;
   }
 
@@ -468,7 +524,8 @@
   function reviewSection(id, title, job, read, body, pendingKey, action = '') {
     const state = sectionState(job, read);
     const words = {
-      failed: () => t('onboarding.review_section_failed', { error: jobOf(job).error || t('onboarding.no_reason') }),
+      // #725: the failed job's reason, as its row of step 3 says it
+      failed: () => jobReason(jobOf(job)),
       later: () => t('onboarding.review_section_later'),
       pending: () => t(pendingKey),
       skipped: () => t('onboarding.review_section_skipped'),
@@ -549,7 +606,7 @@
         <div class="wizard-review-grid">
           ${projectCard()}
           ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city', openCity)}
-          ${reviewSection('refactors', 'onboarding.review_refactors_title', 'ranking', r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors')}
+          ${reviewSection('refactors', 'onboarding.review_refactors_title', 'ranking', r.proposals !== undefined && r.facts !== undefined, refactorsBody, 'onboarding.review_pending_refactors', jobOf('ranking').status === 'failed' ? retryButton('ranking') : '')}
         </div>
         <div class="wizard-review-more">
           ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
@@ -575,22 +632,21 @@
   function render() {
     if (!root || !cur) return;
     const step = cur.model.step;
-    const started = ['analyzing', 'analyzed'].includes(cur.onboarding?.status);
-    // the analysis step offers "Analyze and continue" until the analysis started; review is the last step
-    const showNext = step === 'start' || step === 'repository' || (step === 'analysis' && started);
+    // #725: Continue to the review at any point of the analysis step (analyzing starts from the workflows
+    // column); review is the last step
+    const showNext = step !== 'review';
     // #632: a new project is not cloned (mock-3's plain Next)
-    const nextLabel = step === 'repository' && cur.model.source !== 'new' ? 'onboarding.next_clone' : 'onboarding.next';
+    const nextLabel = step === 'analysis' ? 'onboarding.continue'
+      : step === 'repository' && cur.model.source !== 'new' ? 'onboarding.next_clone' : 'onboarding.next';
     const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${canNext() ? '' : ' disabled'}>${esc(t(nextLabel))}</button>` : '';
-    const analyze = step === 'analysis' && !started
-      ? `<button type="button" class="btn primary" data-act="analyze" data-testid="wizard-analyze"${cur.busy ? ' disabled' : ''}>${esc(t('onboarding.analyze_continue'))}</button>` : '';
     const back = step === 'start'
       ? `<button type="button" class="btn" data-act="cancel" data-testid="wizard-cancel">${esc(t('onboarding.cancel'))}</button>`
       : `<button type="button" class="btn" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
     // Finish never waits: not disabled by an analysis still running nor by a call in flight
     const finish = step === 'review' ? `<button type="button" class="btn primary" data-act="finish" data-testid="wizard-finish">${esc(t('onboarding.finish'))}</button>` : '';
     // mock-4's footer: the clone's progress on the left, Back beside the step's action on the right
-    const foot = step === 'analysis' ? `${cur.model.source === 'new' ? '' : cloneProgress()}<span class="wizard-spacer"></span>${back}${next}${analyze}`
-      : `${back}<span class="wizard-spacer"></span>${next}${analyze}${finish}`;
+    const foot = step === 'analysis' ? `${cur.model.source === 'new' ? '' : cloneProgress()}<span class="wizard-spacer"></span>${back}${next}`
+      : `${back}<span class="wizard-spacer"></span>${next}${finish}`;
     root.innerHTML = `<div class="wizard-panel wizard-at-${step}" tabindex="-1">
         <header class="wizard-head">
           ${stepper()}
@@ -624,7 +680,8 @@
     if (finished.has(state.projectId) && ['analyzed', 'failed'].includes(state.status)) {
       finished.delete(state.projectId);
       const name = names.get(state.projectId) || state.projectId;
-      showToast(t(state.status === 'analyzed' ? 'onboarding.finished_analyzed' : 'onboarding.finished_failed', { name }));
+      // #725: analyzed with a failed paid job is a stopped analysis too
+      showToast(t(state.status === 'analyzed' && !failedPaid(state) ? 'onboarding.finished_analyzed' : 'onboarding.finished_failed', { name }));
     }
     if (cur && cur.projectId === state.projectId) {
       cur.onboarding = state;
@@ -744,6 +801,8 @@
       return;
     }
     if (cur.model.step === 'repository') toAnalysis();
+    // #725: Continue before the analysis was started is "analyze later" (the review says so, not pending)
+    else if (cur.model.step === 'analysis' && !['analyzing', 'analyzed'].includes(cur.onboarding?.status)) cur.model = M.skipAnalysis(cur.model);
     else cur.model = M.next(cur.model);
     if (cur.model.step === 'review') loadReview();
     render();
@@ -823,12 +882,19 @@
     else if (act === 'next') await next();
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
-    else if (act === 'analyze' && cur.projectId) await call(() => api.analyzeOnboarding(cur.projectId));
+    // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part
+    // too), or runs again a failed profile job
+    else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
+    else if (act === 'workflows-analyze' && cur.projectId) {
+      cur.workflowsMode = 'analyze';
+      const again = jobOf('profile').status === 'failed';
+      await call(() => (again ? api.retryOnboarding(cur.projectId) : api.analyzeOnboarding(cur.projectId)));
+    }
     else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); loadReview(); render(); }
     else if (act === 'finish') finish();
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
-      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, ...freshReview() };
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, workflowsMode: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }
@@ -900,7 +966,7 @@
       document.body.appendChild(root);
     }
     // Import is selected when the wizard opens (mock-1); #632: the create step's choices start at mock-3's
-    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, ...freshReview() };
+    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, ...freshReview() };
     root.hidden = false;
     render();
     root.querySelector('.wizard-panel')?.focus?.();
@@ -933,8 +999,11 @@
     tray.hidden = states.size === 0;
     const item = (s) => {
       const name = names.get(s.projectId) || s.projectId;
-      const failed = s.status === 'failed'
-        ? `<p class="small tray-reason">${esc(s.reason || t('onboarding.no_reason'))}</p>
+      // #725: a failed paid analysis (the onboarding analyzed) says why too, with its Retry
+      const job = s.status === 'failed' ? null : failedPaid(s);
+      const why = s.status === 'failed' ? (s.reason || t('onboarding.no_reason')) : job ? jobReason(s.jobs[job]) : '';
+      const failed = why
+        ? `<p class="small tray-reason"${job ? ` title="${esc(s.jobs[job].error || '')}"` : ''}>${esc(why)}</p>
            <button type="button" class="btn small" data-act="retry" data-project="${esc(s.projectId)}">${esc(t('onboarding.retry'))}</button>` : '';
       const dismiss = ACTIVE.includes(s.status) ? ''
         : `<button type="button" class="btn ghost small tray-dismiss" data-act="dismiss" data-project="${esc(s.projectId)}" aria-label="${esc(t('onboarding.dismiss', { name }))}">×</button>`;

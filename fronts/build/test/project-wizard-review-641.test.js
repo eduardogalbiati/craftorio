@@ -181,7 +181,8 @@ test('#641 the gh warning is still shown on the analysis step after the clone is
   assert.ok(warn, 'data-testid="wizard-cli-warning" on the analysis step');
   assert.equal(warn.attrs['data-error'], 'cli-missing');
   assert.ok(textOf(warn).includes(CLI_MISSING.reason), 'the reason in words');
-  assert.ok(byTestId(wizardMarkup(app), 'wizard-analyze'), 'Start analysis is still offered');
+  // #725: the analysis starts from the workflows column's Analyze the repository
+  assert.ok(byTestId(wizardMarkup(app), 'wizard-workflows-choice-analyze'), 'Start analysis is still offered');
 });
 
 // ---- the cost --------------------------------------------------------------------------------------

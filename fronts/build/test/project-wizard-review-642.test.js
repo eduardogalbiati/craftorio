@@ -196,7 +196,7 @@ async function reviewDone(opts) {
 // The review with the project map still running and the ranking not started
 async function reviewRunning(opts) {
   const app = await atAnalysis({ pending: true, ...opts });
-  await press(app, 'wizard-analyze');
+  await press(app, 'wizard-workflows-choice-analyze'); // #725: the analysis starts from the workflows column
   await emit(app, ANALYZING);
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review');

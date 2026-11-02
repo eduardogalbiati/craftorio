@@ -144,6 +144,8 @@ async function atWorkflows(api) {
   await emit(app, CLONING);
   await emit(app, READY);
   assert.equal(currentStep(app), 'analysis', 'the wizard went on to step 3 once the clone was ready');
+  // #725: the rows show once a way in is chosen: Analyze the repository, then the profile job's answer
+  await press(app, 'wizard-workflows-choice-analyze');
   await emit(app, PROFILED);
   return app;
 }

@@ -8,6 +8,9 @@
 // other heavy work on the machine. The state of each project is kept in memory:
 //   { projectId, status: cloning | ready | analyzing | analyzed | failed, code?: no-access | clone-failed,
 //     reason?, jobs: { clone, facts, profile, projectMap, ranking: { status: waiting | running | done | failed | skipped, error? } },
+//     #725: a failed job is { status: 'failed', error (the full error), code: cli-missing | invalid-ranking |
+//     no-folder | refused | timeout | failed, reason (≤ 160 characters), cli? } (failureOf); once the paid
+//     part ended the status is analyzed even with a failed job, and analyzing again runs only what is not done;
 //     cli: { provider: github | gitlab, status: checking | ok | missing | signed-out, reason? } | null,
 //     remote?: { provider, status: creating | created | missing | signed-out | failed, url?, reason? } }
 // #632 (spec R4): create() makes a new project instead of importing one: git init on main, README and
@@ -43,6 +46,7 @@ const { toolSignIn } = require('./settings');
 
 const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap', 'ranking'];
+const PAID = ['projectMap', 'ranking'];
 
 // a readable reason for an access check that did not reach the repository
 function accessReason(access) {
@@ -51,6 +55,37 @@ function accessReason(access) {
     : access.status === 'no-network' ? 'The repository could not be reached: check the network connection and retry.'
       : 'The repository could not be reached with your credentials: check the URL, or sign in with access to it, and retry.';
   return detail ? `${lead} (${detail})` : lead;
+}
+
+// #725: a failed job's { code, reason, cli? } from its error: the known failures (refactor-priority.js's CLI
+// missing, invalid ranking and no folder, a refused job, providers.js's timeout) get their code, so the
+// wizard words them in its language; reason: the error's first line, at most 160 characters
+const cut = (text, n = 160) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+function failureOf(e) {
+  const error = String(e?.message || e || '');
+  const line = cut(error.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || 'The job failed without a reason.');
+  const cli = error.match(/needs (\S+), which is not installed/);
+  if (cli) return { code: 'cli-missing', cli: cli[1], reason: line };
+  if (e?.refused) return { code: 'refused', reason: line };
+  if (/ranking (could not be read|is not valid)/.test(error)) return { code: 'invalid-ranking', reason: line };
+  if (/has no folder on this machine/.test(error)) return { code: 'no-folder', reason: line };
+  if (/^Timed out after/.test(error)) return { code: 'timeout', reason: line };
+  return { code: 'failed', reason: line };
+}
+
+// #725: the E2E hooks of a simulated run (features/steps/onboarding.steps.js): the jobs named in
+// MULTIAGENT_E2E_ONBOARDING_HOLD never end, those in MULTIAGENT_E2E_ONBOARDING_FAIL throw
+function e2eJobs(jobs) {
+  if (!simulation.simulationOnly()) return jobs;
+  const listed = (name) => String(process.env[name] || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const hold = listed('MULTIAGENT_E2E_ONBOARDING_HOLD');
+  const fail = listed('MULTIAGENT_E2E_ONBOARDING_FAIL');
+  if (!hold.length && !fail.length) return jobs;
+  return Object.fromEntries(Object.entries(jobs).map(([name, run]) => [name, async (input) => {
+    if (hold.includes(name)) return new Promise(() => {});
+    if (fail.includes(name)) throw new Error(`The simulated ${name} failed (e2e).`);
+    return run(input);
+  }]));
 }
 
 // 'github' | 'gitlab' (a platform with a CLI) from the repository's URL, null for another host
@@ -167,12 +202,13 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       if (heavy) slot = await slots.acquireSlot(SLOT, { dir: slotsDir, pollMs, holder: `onboarding ${id} (${name})`, inherit: '' });
       change(id, {}, { [name]: { status: 'running' } });
       const result = await jobs[name](input());
-      if (result?.refused) throw new Error(result.refused.text || String(result.refused));
+      if (result?.refused) throw Object.assign(new Error(result.refused.text || String(result.refused.reason || result.refused)), { refused: true });
       // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile)
       change(id, {}, { [name]: { status: 'done', ...(result?.profile ? { profile: result.profile } : {}) } });
       return { result };
     } catch (e) {
-      change(id, {}, { [name]: { status: 'failed', error: String(e?.message || e) } });
+      // #725: the full error (the wizard's tooltip) and its short reason
+      change(id, {}, { [name]: { status: 'failed', error: String(e?.message || e), ...failureOf(e) } });
       return null;
     } finally {
       slot?.release();
@@ -189,20 +225,25 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       .finally(() => { w.free = null; });
   }
 
-  // the paid part: the project map once the facts are known, the ranking after it; analyzed once all ended
+  // the paid part: the project map once the facts are known, the ranking after it; analyzed once all ended.
+  // #725: only the jobs not done run (a done project map is not paid twice), and a failed job is a state of
+  // the analysis: the onboarding ends analyzed with it, never back to ready
   function startPaid(id) {
     const w = workOf(id);
     w.wanted = false;
-    change(id, { status: 'analyzing' }, { projectMap: { status: 'waiting' }, ranking: { status: 'waiting' } });
+    const s0 = states.get(id);
+    const done = (job) => s0?.jobs?.[job]?.status === 'done';
+    const todo = Object.fromEntries(PAID.filter((job) => !done(job)).map((job) => [job, { status: 'waiting' }]));
+    change(id, { status: 'analyzing' }, todo);
     w.paid = (async () => {
       const facts = await w.facts;
       const input = () => ({ ...inputOf(id), facts: facts?.result ?? null });
-      const map = await runJob(id, 'projectMap', input, { heavy: true });
-      if (map) await runJob(id, 'ranking', () => ({ ...input(), map: map.result }), { heavy: true });
-      else change(id, {}, { ranking: { status: 'skipped' } });
+      const map = done('projectMap') ? { result: w.map ?? null } : await runJob(id, 'projectMap', input, { heavy: true });
+      if (map) w.map = map.result;
+      if (map && !done('ranking')) await runJob(id, 'ranking', () => ({ ...input(), map: map.result }), { heavy: true });
+      else if (!map) change(id, {}, { ranking: { status: 'skipped' } });
       await w.free;
-      const s = states.get(id);
-      if (s) change(id, { status: s.jobs.projectMap.status === 'done' && s.jobs.ranking.status === 'done' ? 'analyzed' : 'ready' });
+      if (states.get(id)) change(id, { status: 'analyzed' });
     })().catch((e) => stopped(id, e)).finally(() => { w.paid = null; });
   }
 
@@ -396,7 +437,7 @@ module.exports = (ctx) => {
       // the Product Owner's turn comes from the analyser front (ctx.refactorPriorityOptions); without it, the simulated ranking
       ranking: ({ projectId }) => priority.rankProject({ refactorRoot: path.join(ws.root, 'refactor'), backlogDir: ws.backlog, projectId, model: null, mock: simulation.simulationOnly() || !ctx.refactorPriorityOptions, options: () => ctx.refactorPriorityOptions?.(projectId) }),
     };
-    const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs, emit: (event, state) => ctx.events.emit(event, state) });
+    const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs: e2eJobs(jobs), emit: (event, state) => ctx.events.emit(event, state) });
     current = { ws, ob };
     return ob;
   }

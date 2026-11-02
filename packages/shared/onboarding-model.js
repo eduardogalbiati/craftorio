@@ -13,6 +13,8 @@
 //   defaulted: true; ciChoice(profile) is step 3's CI row, profileLine(profile) the profile in one line;
 //   PROFILE (each field's values) and PROFILE_LABELS (value → label) are the one list of the profile's
 //   mode / ci / tests (the engine's workflow-compose.js reads them too);
+// - #725 workflowsColumnState({ mode, profileJob }): step 3's right column, 'choose' | 'analyzing' |
+//   'failed' | 'analyzed' | 'manual', from the owner's choice and the profile job;
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
 //   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
 // - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
@@ -150,6 +152,18 @@
     return Object.keys(PROFILE).map((k) => PROFILE_LABELS[k][p[k]]).join(' · ');
   }
 
+  // #725: the state of step 3's "Suggested workflows" column from the owner's choice (mode: undefined |
+  // 'analyze' | 'manual') and the profile job ({ status, profile }): choose (the two choices, no row yet),
+  // analyzing (the profile job not ended), failed (it failed, or answered no valid profile), analyzed or manual
+  function workflowsColumnState({ mode, profileJob } = {}) {
+    if (mode === 'manual') return 'manual';
+    if (mode !== 'analyze') return 'choose';
+    const status = profileJob?.status;
+    if (status === 'failed' || status === 'skipped') return 'failed';
+    if (status !== 'done') return 'analyzing';
+    return validProfile(profileJob.profile) ? 'analyzed' : 'failed';
+  }
+
   function costSummary(analyses) {
     const parts = (analyses || []).filter((a) => a?.checked)
       .map((a) => ({ id: a.id, estimate: Number.isFinite(a.estimate) ? a.estimate : null }));
@@ -194,6 +208,7 @@
     skipAnalysis,
     slugify,
     suggestWorkflows,
+    workflowsColumnState,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.OnboardingModel = api;
