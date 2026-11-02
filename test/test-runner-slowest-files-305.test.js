@@ -12,13 +12,18 @@ const root = path.join(__dirname, '..');
 const FAST = ['slowfx-alpha', 'slowfx-bravo', 'slowfx-charlie', 'slowfx-delta', 'slowfx-echo'];
 const SLOW = 'slowfx-zulu';
 const DURATION = /\d+(\.\d+)?\s*(ms|s)\b/;
+const SLOW_WAIT_MS = 3000;
 
-// Six test files in a temp folder: five instant ones and one that waits 1.5 s.
+// Six test files in a temp folder: five instant ones and one that waits 3 s.
+// #508: a file's wall time includes its process start, which on a busy Windows host (a suite running
+// beside it, the antivirus reading freshly written files) takes up to a few seconds even for an
+// instant file. So the assertions never rely on the slow file beating the others by a margin: the
+// listing must be sorted by the times it shows, and the slow file's time is at least its own wait.
 function fixtures(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-times-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
   for (const name of FAST) fs.writeFileSync(path.join(dir, `${name}.test.js`), "const test = require('node:test');\ntest('instant', () => {});\n");
-  fs.writeFileSync(path.join(dir, `${SLOW}.test.js`), "const test = require('node:test');\ntest('waits', () => new Promise((r) => setTimeout(r, 1500)));\n");
+  fs.writeFileSync(path.join(dir, `${SLOW}.test.js`), `const test = require('node:test');\ntest('waits', () => new Promise((r) => setTimeout(r, ${SLOW_WAIT_MS})));\n`);
   return [...FAST, SLOW].map((n) => path.join(dir, `${n}.test.js`));
 }
 
@@ -36,17 +41,26 @@ function slowestSection(text) {
   return lines.slice(at, at + 6);
 }
 
+// The wall time a listing line shows for a fixture, in ms (the file's path is left out, so digits in
+// the temp folder's name are never read as a time).
+function shownMs(line, name) {
+  const rest = line.split(/\s+/).filter((tok) => !tok.includes(name)).join(' ');
+  const m = rest.match(DURATION);
+  assert.ok(m, `${name} is listed with its wall time: ${line}`);
+  return Number(m[0].match(/\d+(\.\d+)?/)[0]) * (m[2] === 's' ? 1000 : 1);
+}
+
 function assertSlowest(section) {
   const text = section.join('\n');
-  const listed = [...FAST, SLOW].filter((n) => text.includes(n));
+  const listed = [...FAST, SLOW].filter((n) => text.includes(n)).sort((a, b) => text.indexOf(a) - text.indexOf(b));
   assert.equal(listed.length, 5, `five of the six files are listed, got: ${listed.join(', ')}`);
-  assert.ok(listed.includes(SLOW), 'the slow file is listed');
-  const first = Math.min(...listed.map((n) => text.indexOf(n)));
-  assert.equal(text.indexOf(SLOW), first, 'the slowest file comes first');
-  for (const n of listed) {
-    const line = section.find((l) => l.includes(n));
-    assert.match(line, DURATION, `${n} is listed with its wall time`);
+  assert.ok(listed.includes(SLOW), `the slow file is listed:\n${text}`);
+  const times = listed.map((n) => shownMs(section.find((l) => l.includes(n)), n));
+  for (let i = 1; i < times.length; i++) {
+    assert.ok(times[i - 1] >= times[i], `the slowest file comes first, each line no faster than the next:\n${text}`);
   }
+  // the slow file's wall time covers its own wait (shown rounded to a tenth of a second)
+  assert.ok(times[listed.indexOf(SLOW)] >= SLOW_WAIT_MS - 50, `the slow file's wall time is at least its ${SLOW_WAIT_MS} ms wait:\n${text}`);
 }
 
 test('npm test ends with the five slowest test files and their wall time, the slowest first', (t) => {
