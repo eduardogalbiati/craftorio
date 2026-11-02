@@ -11,6 +11,9 @@
 // #724 #739 #743: the onboarding E2E steps use the wizard's new test ids: 156.
 // #726: the "Why" label's test id wizard-workflow-why: 157.
 // #731: the onboarding E2E steps check the project's City and Architecture tab test ids: 160.
+// #723: that list follows this checkout's features and renderer, not simulation: the snapshot now
+// keeps the test-id check's status and shape and replaces its `message` and `missing` list
+// (test/simulated-run-events-353.js), so a new test id no longer turns this test red.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

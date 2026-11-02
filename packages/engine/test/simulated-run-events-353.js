@@ -33,10 +33,22 @@ function normalise(value, dirs) {
   return typeof value === 'string' ? normaliseString(value, dirs).replace(/\b[0-9a-f]{40}\b/g, '<sha>') : value;
 }
 
+// #723: the test-id check (output kind `test_ids`) scans this checkout's E2E step definitions and
+// renderer, so its list of missing ids (and the message that lists them) changes with every issue
+// that adds a test id, not with simulation: the snapshot keeps its status and shape, not the list.
+const REPO_DEPENDENT = { test_ids: ['message', 'missing'] };
+function dropRepoDependent(output) {
+  const keys = output && typeof output === 'object' && !Array.isArray(output) ? REPO_DEPENDENT[output.kind] : null;
+  if (!keys) return output;
+  const out = { ...output };
+  for (const k of keys) if (out[k] != null) out[k] = '<repo-dependent>';
+  return out;
+}
+
 // One event's snapshot entry: the KEEP fields it has (a session's provider from its record too).
 function project(ev, dirs) {
   const out = {};
-  for (const k of KEEP) if (ev[k] !== undefined) out[k] = normalise(ev[k], dirs);
+  for (const k of KEEP) if (ev[k] !== undefined) out[k] = normalise(k === 'output' ? dropRepoDependent(ev[k]) : ev[k], dirs);
   if (ev.session && typeof ev.session === 'object') {
     for (const k of ['provider', 'simulates']) if (ev.session[k] !== undefined) out[`session.${k}`] = ev.session[k];
   }
