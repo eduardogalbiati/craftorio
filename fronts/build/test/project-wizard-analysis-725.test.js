@@ -26,12 +26,13 @@
 //   'no-folder' | 'refused' | 'timeout' | ..., reason: <a short English sentence>, cli?: 'claude' }; the wizard
 //   words it in the interface's language from `code` (pt-BR: "Falhou: o Product Owner precisa do claude, que
 //   não está instalado."). After a failed paid job the onboarding no longer goes back to `ready`: the fixture
-//   ends `analyzed` with the ranking failed (the wizard reads the job, not the top status).
-// - left column's job rows (wizard-cost's li data-part="ranking"): data-testid="wizard-job-error-ranking" (the
-//   reason in words, error color, title = the full error) and data-testid="wizard-job-retry-ranking"
+//   ends `analyzed` with the project map failed (the wizard reads the job, not the top status; #730: the
+//   ranking job is gone, these tests fail the project map instead).
+// - left column's job rows (wizard-cost's li data-part="projectMap"): data-testid="wizard-job-error-projectMap"
+//   (the reason in words, error color, title = the full error) and data-testid="wizard-job-retry-projectMap"
 //   (api.retryOnboarding); its amount (.wizard-amount) reads "—" for a failed job; a done job its cost or
 //   "grátis", never "Ainda não estimado".
-// - review: wizard-review-refactors data-state="failed" with the same reason and data-testid="wizard-job-retry-ranking".
+// - review: wizard-review-findings data-state="failed" with the same reason and data-testid="wizard-job-retry-projectMap".
 // - tray (#onboarding-tray, the wizard closed): the tray-item shows the failed job's reason and a
 //   data-act="retry" button (api.retryOnboarding with the project).
 const test = require('node:test');
@@ -335,7 +336,9 @@ test('#725 amounts: a failed job reads "—", a done job its cost or "grátis", 
   await emit(app, MAP_FAILED);
   await app.settle(10);
   assert.equal(amountOf(part(app, 'projectMap')), '—', 'the failed project map\'s amount');
-  const facts = amountOf(part(app, 'facts'));
+  // the free jobs carry no data-part: the facts are the second job row (clone, facts, profile, project map)
+  const rows = H.findAll(byTestId(wizardMarkup(app), 'wizard-cost')?.outer || '', (e) => e.name === 'li' && /\bwizard-job\b/.test(e.attrs.class || ''));
+  const facts = amountOf(rows[1]);
   assert.doesNotMatch(facts, /ainda não estimado/i, `the done facts' amount: "${facts}"`);
   assert.match(facts, /\d|grátis/i, `the done facts' amount is its cost or "grátis": "${facts}"`);
 });

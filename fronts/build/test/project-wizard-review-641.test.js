@@ -187,14 +187,14 @@ test('#641 the gh warning is still shown on the analysis step after the clone is
 
 // ---- the cost --------------------------------------------------------------------------------------
 
-test('#641 the cost shows the project map\'s estimate as an amount, the ranking as not known, and says the total leaves it out', async () => {
+test('#641 the cost shows the project map\'s estimate as an amount, the whole total (#730: no ranking part)', async () => {
   const app = await atAnalysis({ estimate: { estimate: { usd: 0.42, basis: 'files' } } });
   await app.settle(10);
   assert.equal(textOf(part(app, 'projectMap')).includes('$0.42'), true, `the project map part: ${textOf(part(app, 'projectMap'))}`);
-  assert.match(textOf(part(app, 'ranking')), /Not known yet/);
+  assert.ok(!part(app, 'ranking'), 'no ranking part since #730');
   const cost = byTestId(wizardMarkup(app), 'wizard-cost');
   assert.equal(textOf(byTestId(cost.outer, 'wizard-cost-total')), '$0.42');
-  assert.match(textOf(cost), /no estimate yet/i, 'the note of a partial total');
+  assert.doesNotMatch(textOf(cost), /no estimate yet/i, '#730: the project map is the only paid part, so the total is whole');
 });
 
 test('#641 with no estimate at all the cost says "Not known yet", never $0', async () => {

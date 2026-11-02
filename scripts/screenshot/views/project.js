@@ -66,6 +66,14 @@ const ARCH_COMMITS = [
 ];
 
 const finding = (kind, title, files, severity, evidence, refactor) => ({ kind, title, files, severity, evidence, refactor });
+// #730: the City tab's demo-city modes; the legacy --tab architecture / refactor open City or Health
+const CITY_MODES = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage'];
+const CITY_TAB_MODES = [...CITY_MODES, 'analyzing', 'city-large', 'city-no-folder', 'error', 'map-refresh', 'no-folder'];
+function tabOf(args) {
+  if (args.tab === 'architecture') return CITY_TAB_MODES.includes(args.mode) ? 'city' : 'health';
+  if (args.tab === 'refactor') return 'health';
+  return args.tab;
+}
 const DUPLICATED = finding('duplicated-rule', 'Discount rule duplicated in the API and the export', [{ path: 'src/billing.js', lines: '1-3' }, { path: 'tools/export.py', lines: '1-2' }], 'medium', 'Both files apply 10% off above 100; they changed together in 4 of 4 commits.', 'Keep the rule in one module the export calls.');
 
 // The two saved reports (the steps' shape, packages/engine/domains/oracle/oracle-architecture.js saveReport) and six real runs since
@@ -289,7 +297,8 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
     require('@multiagent/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
     return;
   }
-  const city = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage'].includes(args.mode);
+  // #730: the City tab with no --mode draws the demo city
+  const city = CITY_MODES.includes(args.mode) || (args.tab === 'city' && !args.mode);
   const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
   if (args.mode === 'city-release') demoReleaseCity(project.folder);
@@ -304,17 +313,27 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   }
 }
 
-// #357: the Refactor tab's proposals on the Architecture demo (the roadmap's #10 planned, #11 done),
-// the Product Owner's ranking and the cadence on with 6 of its runs counted ("next in 4 runs")
+// #730: the Health tab's latest report with its "billing.js grows" finding filed as the roadmap's #10
+// (its link and stage instead of the buttons) and the duplicated rule's proposal from before #730
+function demoHealth(ws, projectId) {
+  const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
+  const grows = finding('oversized-unit', 'billing.js grows', [{ path: 'src/billing.js', lines: '1-124' }]);
+  arch.recordFiled(path.join(ws.root, 'architecture'), projectId, arch.findingKey(grows), { issue: 10, issueUrl: 'https://github.com/demo/demo-app/issues/10', reportId: '2026-10-01T09-00-00-000Z', at: '2026-10-02T09:00:00.000Z' });
+  demoRefactor(ws, projectId);
+}
+
+// #357: the proposals made before #730 on the Architecture demo (keyed as the findings they came from,
+// so the Health tab lists them under those findings) and the cadence on with 6 of its runs counted
 function demoRefactor(ws, projectId) {
+  const { findingKey } = require('@multiagent/engine/domains/oracle/oracle-architecture');
   const runs = require('@multiagent/engine/domains/run/runs');
   const cadence = require('@multiagent/engine/domains/refactor/refactor-cadence');
   const dir = path.join(ws.root, 'refactor', projectId);
   const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
-  const arch = (id, f, extra) => ({ id, source: 'architecture', key: `demo:${id}`, reportId: 'demo-report-2', kind: f.kind, title: f.title, files: f.files, evidence: f.evidence, severity: f.severity, refactor: f.refactor, createdAt: at(20), status: 'proposed', ...extra });
+  const arch = (id, f, extra) => ({ id, source: 'architecture', key: findingKey(f), reportId: 'demo-report-2', kind: f.kind, title: f.title, files: f.files, evidence: f.evidence, severity: f.severity, refactor: f.refactor, createdAt: at(20), status: 'proposed', ...extra });
   const owner = (id, target, improvement, extra) => ({ id, source: 'owner', key: `demo:${id}`, title: improvement, target, improvement, evidence: 'Hotspot rank 2, in the Danger Zone since July.', files: [target], createdAt: at(12), status: 'proposed', ...extra });
   const proposals = [
-    arch('architecture-demo-1', DUPLICATED, { rank: 1, complexity: 2, rankReason: 'Highest Danger Zone score, and no unfinished roadmap item touches its files.', issue: 10, before: { quadrant: 'danger-zone', score: 82, file: 'src/billing.js', at: at(2) } }),
+    arch('architecture-demo-1', DUPLICATED, { rank: 1, complexity: 2, rankReason: 'Highest Danger Zone score, and no unfinished roadmap item touches its files.' }),
     arch('architecture-demo-2', finding('god-module', 'Billing module holds 120 rate constants and the discount rule', [{ path: 'src/billing.js' }], 'high', 'The file grew in each of its 5 commits; 120 constants sit next to the rule.', 'Move the rates to a data file the rule reads.'), { rank: 2, complexity: 3, rankReason: 'Same hotspot as #1: after it, to avoid a conflict in src/billing.js.' }),
     owner('owner-demo-3', 'src/api.js', 'Split the request parsing out of the API handlers', { rank: 3, complexity: 1, rankReason: 'Small and isolated: a cheap win on a busy file.', issue: 11, before: { quadrant: 'danger-zone', score: 64, file: 'src/api.js', at: at(9) }, outcome: { leftDangerZone: true, scoreDrop: 33, improved: true, after: { quadrant: 'healthy', score: 31 }, at: at(8) } }),
     owner('owner-demo-4', 'tools/export.py', 'Give the export one entry point per format with a very long title that is cut at the edge of the row', { rank: 4, complexity: 4, rankReason: 'Low churn: little value until the export changes again.', issue: 21, before: { quadrant: 'danger-zone', score: 58, file: 'tools/export.py', at: at(30) }, outcome: { leftDangerZone: false, scoreDrop: 0, improved: false, after: { quadrant: 'danger-zone', score: 58 }, at: at(28) } }),
@@ -322,8 +341,6 @@ function demoRefactor(ws, projectId) {
   ];
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'proposals.json'), JSON.stringify({ proposals }, null, 2));
-  const ranking = proposals.filter((p) => p.rank).map((p) => ({ id: p.id, rank: p.rank, reason: p.rankReason, complexity: p.complexity }));
-  fs.writeFileSync(path.join(dir, 'ranking.json'), JSON.stringify({ at: at(1), costUsd: 0.18, ranking }, null, 2));
   // the cadence counts from the 7th latest real run: 6 counted, "next in 4 runs"
   const project = { id: projectId };
   const list = runs.listRuns(ws.runs);
@@ -350,10 +367,11 @@ function seed({ appDir, args, projects, ws, project }) {
     });
     return;
   }
-  if (args.tab === 'architecture') return seedArchitecture(args, ws, project, { appDir, projects });
-  if (args.tab === 'refactor') {
-    seedArchitecture({ mode: args.mode === 'never' ? 'never' : null }, ws, project, { appDir, projects });
-    if (args.mode !== 'never' && args.mode !== 'empty') demoRefactor(ws, project.id);
+  const tab = tabOf(args);
+  if (tab === 'city') return seedArchitecture({ ...args, tab }, ws, project, { appDir, projects });
+  if (tab === 'health') {
+    seedArchitecture({ ...args, tab }, ws, project, { appDir, projects });
+    if (!args.mode) demoHealth(ws, project.id);
     return;
   }
   if (args.tab !== 'conflicts' || args.mode === 'not-git') return;

@@ -7,17 +7,14 @@
 //   run, with words saying so, never blank):
 //   - data-testid="wizard-review-city": the project map (api.architectureCity(projectId));
 //   - data-testid="wizard-review-backlog": the project's backlog (api.getBacklog(projectId) → { issues });
-//   - data-testid="wizard-review-refactors": the refactor backlog (api.refactorProposals(projectId)), one
-//     data-testid="wizard-review-refactor" data-refactor="<proposal id>" per proposal showing its file's
-//     score (0-100) and quadrant as on the Facts view (api.architectureFacts(projectId) → { model: { files:
-//     [{ file, quadrant, score }] } }), and a checkbox data-testid="wizard-review-refactor-pick"
-//     data-refactor="<proposal id>", unchecked at first (R11: nothing enters the roadmap without a click),
-//     chosen by its change event (e.target.checked);
+//   - data-testid="wizard-review-findings" (#730, in place of the refactor backlog): the findings of the
+//     Oracle's report (api.architectureReport(projectId)), one data-testid="wizard-review-finding"
+//     data-finding="<index>" per finding; filing one as an issue is project-wizard-findings-730.test.js's
+//     (R11: nothing is filed or enters the roadmap without a click);
 //   - the idea field id="wizard-review-idea" (data-testid="wizard-review-idea"), read from its input / change;
 // - Finish: data-testid="wizard-finish", never disabled, never waits for an analysis still running; it
-//   sends each chosen refactor to the roadmap as a planned item (api.addRefactorToRoadmap(projectId,
-//   proposalId), never with runNow, nothing started: no startRoadmap / startRun / runPipeline /
-//   analyzeOnboarding), keeps a non-blank idea as a local item of the project's backlog (an Inbox idea:
+//   files no issue and sends nothing to the roadmap (no api.createFindingIssue / addRefactorToRoadmap /
+//   saveRoadmap), nothing started: no startRoadmap / startRun / runPipeline / analyzeOnboarding, keeps a non-blank idea as a local item of the project's backlog (an Inbox idea:
 //   api.createDiscoveryCard(projectId, title, …) with the typed text), closes the wizard and opens the
 //   project's page (state.view 'project', state.pv.id the project).
 // Harness equivalents as in project-wizard-review-641.test.js (clickRendered, typed values through the
@@ -34,18 +31,22 @@ const NAME = 'New one';
 const PROJECT = { id: PID, name: NAME, repo: REPO, folder: 'C:/ws/repos/new', exists: true };
 const jobs = (over = {}) => ({
   clone: { status: 'running' }, facts: { status: 'waiting' }, profile: { status: 'waiting' },
-  projectMap: { status: 'waiting' }, ranking: { status: 'waiting' }, ...over,
+  projectMap: { status: 'waiting' }, ...over,
 });
 const CLI_OK = { provider: 'github', status: 'ok' };
 const CLONING = { projectId: PID, status: 'cloning', jobs: jobs(), cli: CLI_OK };
 const READY = { projectId: PID, status: 'ready', jobs: jobs({ clone: { status: 'done' } }), cli: CLI_OK };
 const ANALYZING = { projectId: PID, status: 'analyzing', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'running' } }), cli: CLI_OK };
-const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'done' }, ranking: { status: 'done' } }), cli: CLI_OK };
+const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'done' } }), cli: CLI_OK };
 
-const PROPOSALS = [
-  { id: 'rf-1', title: 'Split checkout.js', target: 'src/checkout.js', targetFiles: ['src/checkout.js'], files: ['src/checkout.js'], rank: 1 },
-  { id: 'rf-2', title: 'Tests for refund.py', target: 'payments/refund.py', targetFiles: ['payments/refund.py'], files: ['payments/refund.py'], rank: 2 },
+const FINDINGS = [
+  { kind: 'hotspot', severity: 'high', title: 'Split checkout.js', files: [{ path: 'src/checkout.js' }], evidence: 'git', status: 'open' },
+  { kind: 'tests', severity: 'medium', title: 'Tests for refund.py', files: [{ path: 'payments/refund.py' }], evidence: 'git', status: 'open' },
 ];
+const REPORT_VIEW = {
+  report: { id: 'r1', date: '2026-10-20T10:00:00Z', head: null, simulated: true, report: { summary: 'A shop.', areas: [], findings: FINDINGS.map(({ status, ...f }) => f) } },
+  previousId: null, gone: [], runsSince: 0, findings: FINDINGS,
+};
 const FACTS = {
   state: 'ok',
   exclude: [],
@@ -78,9 +79,11 @@ function page({ pending = false, api = {} } = {}) {
       architectureEstimate: async () => ({ estimate: null }),
       architectureCity: read(CITY),
       architectureFacts: read(FACTS),
-      refactorProposals: read(PROPOSALS),
+      architectureReport: read(REPORT_VIEW),
+      refactorProposals: async () => [],
       getBacklog: read(BACKLOG),
-      addRefactorToRoadmap: async (projectId, id) => ({ proposal: { ...PROPOSALS.find((p) => p.id === id), roadmapStatus: 'planned' }, stage: 1, waiting: true }),
+      createFindingIssue: async () => ({ filed: { issue: 1, issueUrl: 'https://github.com/o/new/issues/1', stage: null, waiting: false } }),
+      addRefactorToRoadmap: async () => ({ proposal: {}, stage: 1, waiting: true }),
       createDiscoveryCard: async (projectId, title, text) => ({ id: 'card-1', projectId, title, text, type: 'idea', column: 'inbox' }),
       ...api,
     },
@@ -109,7 +112,7 @@ const wizardMarkup = (app) => markupOf(app, 'project-wizard');
 const byTestId = (html, id) => H.findEl(html, (e) => e.attrs['data-testid'] === id);
 const textOf = (el) => (el ? H.visibleText(el.inner) : '');
 const section = (app, id) => byTestId(wizardMarkup(app), id);
-const refactorRow = (app, id) => H.findEl(wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-review-refactor' && e.attrs['data-refactor'] === id);
+const findingRow = (app, index) => H.findEl(wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-review-finding' && e.attrs['data-finding'] === String(index));
 
 function currentStep(app) {
   const el = H.findEl(wizardMarkup(app), (e) => e.attrs['data-step'] && e.attrs['aria-current'] === 'step');
@@ -144,23 +147,6 @@ async function typeInto(app, sel, value) {
   await fire(app, el, ['input', 'change', 'blur']);
 }
 
-// Ticks the refactor's checkbox: a change event with e.target.checked = true
-let picks = 0;
-async function pick(app, id) {
-  const box = H.findEl(wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-review-refactor-pick' && e.attrs['data-refactor'] === id);
-  assert.ok(box, `a data-testid="wizard-review-refactor-pick" data-refactor="${id}" checkbox`);
-  const el = app.el(box.attrs.id ? `#${box.attrs.id}` : `[data-test-pick-${(picks += 1)}]`);
-  for (const [k, v] of Object.entries(box.attrs)) {
-    if (k.startsWith('data-')) el.dataset[k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = v;
-    else if (k === 'class') el.className = v;
-    else if (k !== 'id') el.attrs[k] = v;
-  }
-  el.tagName = 'INPUT';
-  el.type = 'checkbox';
-  el.checked = true;
-  await fire(app, el, ['change', 'input']);
-}
-
 async function emit(app, state) {
   for (const fn of app.apiHandlers.onOnboardingChanged || []) fn(clone(state));
   await app.settle(10);
@@ -193,7 +179,7 @@ async function reviewDone(opts) {
   return app;
 }
 
-// The review with the project map still running and the ranking not started
+// The review with the project map still running
 async function reviewRunning(opts) {
   const app = await atAnalysis({ pending: true, ...opts });
   await press(app, 'wizard-workflows-choice-analyze'); // #725: the analysis starts from the workflows column
@@ -215,20 +201,19 @@ const runStarts = (app) => RUN_STARTS.reduce((n, name) => n + app.callsTo(name).
 
 // ---- what the review shows -------------------------------------------------------------------------
 
-test('#642 with the analyses done, the review shows the city, the backlog, and each refactor with its file\'s score and quadrant', { timeout: 20000 }, async () => {
+test('#642 with the analyses done, the review shows the city, the backlog, and each finding of the Oracle\'s report (#730)', { timeout: 20000 }, async () => {
   const app = await reviewDone();
   assert.equal(section(app, 'wizard-review') === null, false, 'data-testid="wizard-review"');
   assert.equal(section(app, 'wizard-review-city')?.attrs['data-state'], 'ready', 'the city is shown');
   const backlog = section(app, 'wizard-review-backlog');
   assert.equal(backlog?.attrs['data-state'], 'ready', 'the backlog is shown');
   assert.equal(textOf(backlog).includes('Login fails on Safari'), true, `the backlog's issue: ${textOf(backlog)}`);
-  assert.equal(section(app, 'wizard-review-refactors')?.attrs['data-state'], 'ready', 'the refactor backlog is shown');
-  const first = textOf(refactorRow(app, 'rf-1'));
-  assert.equal(first.includes('82'), true, `rf-1 shows its file's score: ${first}`);
-  assert.equal(first.includes('Danger Zone'), true, `rf-1 shows its file's quadrant: ${first}`);
-  const second = textOf(refactorRow(app, 'rf-2'));
-  assert.equal(second.includes('41'), true, `rf-2 shows its file's score: ${second}`);
-  assert.equal(second.includes('Cowboy Code'), true, `rf-2 shows its file's quadrant: ${second}`);
+  assert.equal(section(app, 'wizard-review-findings')?.attrs['data-state'], 'ready', 'the findings are shown');
+  assert.ok(!section(app, 'wizard-review-refactors'), 'no refactor backlog since #730');
+  const first = textOf(findingRow(app, 0));
+  assert.equal(first.includes('Split checkout.js'), true, `the first finding: ${first}`);
+  const second = textOf(findingRow(app, 1));
+  assert.equal(second.includes('Tests for refund.py'), true, `the second finding: ${second}`);
 });
 
 test('#642 with the analyses still running, the review shows them pending, and Finish closes the wizard on the project page without waiting', { timeout: 20000 }, async () => {
@@ -236,9 +221,9 @@ test('#642 with the analyses still running, the review shows them pending, and F
   const city = section(app, 'wizard-review-city');
   assert.equal(city?.attrs['data-state'], 'pending', 'the city waits for the project map');
   assert.equal(textOf(city).length > 0, true, 'the pending city says so in words');
-  const refactors = section(app, 'wizard-review-refactors');
-  assert.equal(refactors?.attrs['data-state'], 'pending', 'the refactor backlog waits for the ranking');
-  assert.equal(textOf(refactors).length > 0, true, 'the pending refactor backlog says so in words');
+  const findings = section(app, 'wizard-review-findings');
+  assert.equal(findings?.attrs['data-state'], 'pending', 'the findings wait for the project map');
+  assert.equal(textOf(findings).length > 0, true, 'the pending findings say so in words');
   const done = byTestId(wizardMarkup(app), 'wizard-finish');
   assert.equal(done === null, false, 'data-testid="wizard-finish"');
   assert.equal('disabled' in done.attrs, false, 'Finish is enabled while the analyses run');
@@ -248,27 +233,17 @@ test('#642 with the analyses still running, the review shows them pending, and F
   assert.equal(String(app.state().pv?.id), PID, 'on the new project');
 });
 
-// ---- the chosen refactors --------------------------------------------------------------------------
+// ---- Finish files nothing on its own (#730) --------------------------------------------------------
 
-test('#642 Finish sends the chosen refactor to the roadmap as a planned item, not the unchosen one, and starts nothing', { timeout: 20000 }, async () => {
-  const app = await reviewDone();
-  await pick(app, 'rf-2');
-  await finish(app);
-  const calls = app.callsTo('addRefactorToRoadmap');
-  assert.equal(calls.length, 1, 'one refactor sent to the roadmap');
-  assert.equal(String(calls[0][0]), PID, 'on the new project');
-  assert.equal(String(calls[0][1]), 'rf-2', 'the chosen one');
-  assert.equal(calls[0][2]?.runNow === true, false, 'planned, never run now');
-  assert.equal(runStarts(app), 0, 'no roadmap, run or pipeline started');
-  assert.equal(app.callsTo('analyzeOnboarding').length, 0, 'no analysis started');
-});
-
-test('#642 Finish with no refactor chosen sends nothing to the roadmap (none is chosen by default)', { timeout: 20000 }, async () => {
+test('#642 Finish files no issue, sends nothing to the roadmap and starts nothing', { timeout: 20000 }, async () => {
   const app = await reviewDone();
   await finish(app);
   assert.equal(wizardClosed(app), true, 'the wizard closed');
+  assert.equal(app.callsTo('createFindingIssue').length, 0, 'no issue filed without a click');
   assert.equal(app.callsTo('addRefactorToRoadmap').length, 0, 'no refactor sent');
   assert.equal(app.callsTo('saveRoadmap').length, 0, 'no roadmap edit');
+  assert.equal(runStarts(app), 0, 'no roadmap, run or pipeline started');
+  assert.equal(app.callsTo('analyzeOnboarding').length, 0, 'no analysis started');
 });
 
 // ---- the idea --------------------------------------------------------------------------------------

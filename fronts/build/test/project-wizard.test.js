@@ -28,7 +28,7 @@
 //   action button (a <button> or a data-act); failures have data-act="retry" which calls
 //   api.retryOnboarding(projectId);
 // - step 3: data-testid="wizard-cost" with data-testid="wizard-cost-total" (visible text, never blank)
-//   and one element per paid part data-part="projectMap" / data-part="ranking"; the buttons
+//   and one element per paid part data-part="projectMap" (#730: no "ranking" part any more); the buttons
 //   data-testid="wizard-workflows-choice-analyze" (#725, api.analyzeOnboarding(projectId)) and data-testid="wizard-skip"
 //   (to step 'review', no analysis call);
 // - the tray: one data-testid="tray-item" per project, data-project="<id>" data-status="<engine
@@ -276,7 +276,7 @@ test('#641 no gh CLI: a warning (cli-missing) with its reason and an action, and
 
 // ---- step 3: the analysis --------------------------------------------------------------------------
 
-test('#641 step 3 shows the cost total and both paid parts before any analysis is started', async () => {
+test('#641 step 3 shows the cost total and its paid part before any analysis is started', async () => {
   const app = await atAnalysis();
   const cost = byTestId(wizardMarkup(app), 'wizard-cost');
   assert.ok(cost, 'data-testid="wizard-cost"');
@@ -284,7 +284,7 @@ test('#641 step 3 shows the cost total and both paid parts before any analysis i
   assert.ok(total, 'data-testid="wizard-cost-total"');
   assert.notEqual(H.visibleText(total.inner), '', 'the total is never blank');
   assert.ok(H.findEl(cost.outer, (e) => e.attrs['data-part'] === 'projectMap'), 'the project map part');
-  assert.ok(H.findEl(cost.outer, (e) => e.attrs['data-part'] === 'ranking'), 'the refactor ranking part');
+  assert.ok(!H.findEl(cost.outer, (e) => e.attrs['data-part'] === 'ranking'), 'no refactor ranking part since #730');
   assert.equal(app.callsTo('analyzeOnboarding').length, 0, 'nothing started yet');
 });
 
