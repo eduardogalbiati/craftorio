@@ -191,7 +191,7 @@
       const danger = measured ? facts.files.filter((r) => r.quadrant === 'Danger Zone').length : null;
       const plan = model.grouping === 'plan' ? t('project_city.plan_covers', { share: pct(validation?.coverage ?? 1) }) : t('project_city.no_plan_folders_as_districts');
       const facts1 = [
-        plural(model.buildings.length, 'project_city.files_count'), plural(model.zones.length, 'project_city.zones_count'), plural(model.districts.length, 'project_city.districts_count'),
+        plural(model.buildings?.length || 0, 'project_city.files_count'), plural(model.zones?.length || 0, 'project_city.zones_count'), plural(model.districts?.length || 0, 'project_city.districts_count'),
         danger == null ? t('project_city.danger_zone_not_measured') : t('project_city.in_the_danger_zone_count', { count: danger }), plan, model.commit ? String(model.commit).slice(0, 10) : '',
       ].filter(Boolean).join(' · ');
       const title = model.project || c.name || projectId;

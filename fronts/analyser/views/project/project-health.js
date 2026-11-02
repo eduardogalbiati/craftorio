@@ -458,7 +458,7 @@
   // a click → its action, or null
   function clickAction(e) {
     const create = e.target.closest('[data-arch-create]');
-    if (create) return () => createIssue(+create.dataset.archCreate, create.hasAttribute('data-prioritize'));
+    if (create) return () => createIssue(+create.dataset.archCreate, create.dataset.prioritize !== undefined);
     if (e.target.closest('[data-arch-create-all]')) return createAll;
     if (e.target.closest('[data-arch-rerun]')) return rerun;
     const filter = e.target.closest('[data-arch-filter]');

@@ -69,11 +69,15 @@
         const offered = explore || cur.name === 'live';
         live.checked = cur.name === 'live';
         live.disabled = !offered;
-        live.closest('label').hidden = !offered;
-        live.closest('label').classList.toggle('on', cur.name === 'live');
+        const chip = live.closest('label');
+        if (chip) {
+          chip.hidden = !offered;
+          chip.classList.toggle('on', cur.name === 'live');
+        }
       }
       if (!head.querySelector('[data-pc-mode-close]')) head.insertAdjacentHTML('beforeend', closeHtml());
-      head.querySelector('[data-pc-mode-close]').hidden = explore;
+      const close = head.querySelector('[data-pc-mode-close]');
+      if (close) close.hidden = explore;
     }
 
     function apply() {

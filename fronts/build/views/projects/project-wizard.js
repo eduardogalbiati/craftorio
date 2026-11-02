@@ -855,7 +855,7 @@
     else if (act === 'open-city') finish({ city: true });
     else if (act === 'create-issue') {
       const button = e.target.closest('[data-act]');
-      await createIssue(Number(button.dataset.finding), button.hasAttribute('data-prioritize'));
+      await createIssue(Number(button.dataset.finding), button.dataset.prioritize !== undefined);
     }
     else if (act === 'next') await next();
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
