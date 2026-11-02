@@ -71,7 +71,7 @@ Feature: Bring a project in with a guided wizard
     Then the project wizard closes right away
     And the project page of "review-642" is open
     And the project page shows the Next steps card
-    And the Next steps card offers "roadmap", "idea" and "Keep refactoring"
+    And the Next steps card offers "issue with the PO", "idea" and "Keep refactoring"
     And the Next steps card shows "release CI" and "screenshots" as coming later
     When I open "Inbox" in the sidebar
     Then the Inbox lists the idea "Export the city as an image"
@@ -552,3 +552,53 @@ Feature: Bring a project in with a guided wizard
     And the wizard has the size I noted
     And the wizard is on its "analysis" step
     And the wizard has the size I noted
+
+  # #744: the Next steps card starts with "Create an issue with the PO"; its "Open the PO" opens the Product
+  # Owner's chat on Register an issue, for the project, its message box focused. A project whose analysis was
+  # skipped has no refactor proposals, so the card shows no refactors step (never "File and add 0"). A step
+  # that cannot be used yet (release CI, screenshots) says why, in its button's tooltip and in a visible line.
+  @issue-744
+  Scenario: The Next steps card starts with "Create an issue with the PO", whose "Open the PO" opens the Product Owner on an issue for the project
+    Given the app is open
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "po-744"
+    And I go to the next step of the wizard
+    And I skip the analysis for later
+    Then the wizard is on its "review" step
+    When I finish the wizard
+    Then the project page shows the Next steps card
+    And the first step of the Next steps card is "Create an issue with the PO" with the button "Open the PO"
+    When I click "Open the PO" in the Next steps card
+    Then the Product Owner's chat is open on "Register an issue" for the project "po-744"
+    And the Product Owner's message box is focused
+
+  @issue-744
+  Scenario: With no refactor proposals the Next steps card has no refactors step
+    Given the app is open
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "norefactor-744"
+    And I go to the next step of the wizard
+    And I skip the analysis for later
+    Then the wizard is on its "review" step
+    When I finish the wizard
+    Then the project page shows the Next steps card
+    And the Next steps card has no refactors step and no button that adds 0
+
+  @issue-744
+  Scenario: A step of the Next steps card that cannot be used yet says why, in its tooltip and in a visible line
+    Given the app is open
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "later-744"
+    And I go to the next step of the wizard
+    And I skip the analysis for later
+    Then the wizard is on its "review" step
+    When I finish the wizard
+    Then the project page shows the Next steps card
+    And the Next steps card shows "release CI" and "screenshots" as coming later
+    And every disabled step of the Next steps card says why, in its tooltip and in a visible line

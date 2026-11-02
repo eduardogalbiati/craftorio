@@ -987,3 +987,69 @@ Then('no finding of the review has an issue yet', async ({ e2e }) => {
   await expect(reviewFindings(e2e.window).first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
   await expect(review(e2e.window).getByTestId('wizard-review-finding-issue')).toHaveCount(0);
 });
+
+// ---- #744: the Next steps card's PO step, no empty refactors step, the reason of a disabled step ---------------------
+// What the card exposes (project-next-steps, as #642):
+// - its entries keep data-testid="next-step-<id>" (the PO's first: next-step-po-issue, as the unit tests of
+//   #744 name it), each holding its button; the testids nested in an entry (next-step-po-issue-open,
+//   next-step-po-issue-link, next-step-reason) hold no button, so the entries are the "next-step-…" holding one;
+// - the PO entry reads "Create an issue with the PO", its button "Open the PO": the Product Owner's drawer
+//   (aside "Product Owner") opens on "Register an issue" (its "Registering an issue for <name>" line, the
+//   mode group's "Register an issue" active), for the card's project, its message box (agent-chat-input) focused;
+// - with no refactor proposals (once read) there is no next-step-refactors entry and no "… and add 0" button;
+// - a disabled button's reason: its title (or its wrapper's, as a disabled button gets no hover), the same text
+//   shown as a line of the entry.
+const nextStepsEntries = (page) => nextSteps(page).getByTestId(/^next-step-/).filter({ has: page.getByRole('button') });
+const poChat = (page) => page.getByRole('complementary', { name: 'Product Owner', exact: true });
+
+Then('the first step of the Next steps card is {string} with the button {string}', async ({ e2e }, title, label) => {
+  const first = nextStepsEntries(e2e.window).first();
+  await expect(first).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(first).toContainText(title);
+  const button = first.getByRole('button', { name: label, exact: true });
+  await expect(button).toBeVisible();
+  await expect(button).toBeEnabled();
+});
+
+When('I click {string} in the Next steps card', async ({ e2e }, label) => {
+  await nextSteps(e2e.window).getByRole('button', { name: label, exact: true }).click();
+});
+
+Then("the Product Owner's chat is open on {string} for the project {string}", async ({ e2e }, mode, name) => {
+  const page = e2e.window;
+  const drawer = poChat(page);
+  await expect(drawer).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(drawer).toContainText(`Registering an issue for ${name}`, { timeout: LOAD_TIMEOUT });
+  const modeButton = drawer.getByRole('group', { name: 'What to do with the Product Owner' }).getByRole('button', { name: mode, exact: true });
+  await expect.poll(() => modeButton.evaluate((b) => b.classList.contains('active') || b.getAttribute('aria-pressed') === 'true'), { message: `"${mode}" is the chosen mode` }).toBe(true);
+});
+
+Then("the Product Owner's message box is focused", async ({ e2e }) => {
+  await expect(poChat(e2e.window).getByTestId('agent-chat-input')).toBeFocused({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the Next steps card has no refactors step and no button that adds 0', async ({ e2e }) => {
+  const card = nextSteps(e2e.window);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // the proposals read: no "Reading the proposals…" left
+  await expect(card).not.toContainText(/Reading the proposals/i, { timeout: LOAD_TIMEOUT });
+  await expect(card.getByTestId('next-step-refactors')).toHaveCount(0);
+  await expect(card.getByRole('button', { name: /\badd 0\b/i })).toHaveCount(0);
+  await expect(card).not.toContainText(/\badd 0\b/i);
+});
+
+Then('every disabled step of the Next steps card says why, in its tooltip and in a visible line', async ({ e2e }) => {
+  const entries = nextStepsEntries(e2e.window);
+  await expect(entries.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  let disabled = 0;
+  for (const entry of await entries.all()) {
+    const button = entry.getByRole('button').first();
+    if (await button.isEnabled()) continue;
+    disabled += 1;
+    const name = (await entry.innerText()).split(/\r?\n/)[0].trim();
+    const reason = ((await button.getAttribute('title')) || (await button.locator('xpath=..').getAttribute('title')) || '').trim();
+    expect(reason, `the tooltip of the disabled step "${name}"`).not.toBe('');
+    await expect(entry.getByText(reason, { exact: true }).filter({ visible: true }).first(), `the reason line of "${name}"`).toBeVisible();
+  }
+  expect(disabled, 'disabled steps on the card').toBeGreaterThan(0);
+});

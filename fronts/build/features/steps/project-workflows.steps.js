@@ -495,3 +495,48 @@ Then('the project page lists the proposed workflows as repository workflows', as
   expect(names.length, 'proposed workflows seen in the interview').toBeGreaterThan(0);
   for (const name of names) await expect(listed.filter({ hasText: name }).first(), `the repository workflow "${name}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
+
+// ---- #733: the drawer opens on the project's last analysis -------------------------------------------------------------
+// With a saved ways-of-working analysis (the onboarding's profile job, or an Analyze in the drawer) the drawer opens
+// on it with no click: ways-of-working-profile (its evidence), the "Open questions" section (a region of that
+// name, as today), ways-of-working-proposed; a line "Analyzed on <date>"; a secondary button "Analyze again"
+// (not the footer's primary). With none: the first screen, its intro (data-testid="ways-of-working-intro", NEW),
+// the cost and Analyze, and no "Analyzed on".
+const ANALYZED_ON = /Analyzed on\s+\S*\d/i;
+
+Then('the interview shows the saved profile with its evidence, its open questions and the proposed workflows', async ({ e2e }) => {
+  const drawer = interview(e2e.window);
+  // no click: the saved analysis shows as the drawer opens
+  await expect(interviewPart(e2e.window, 'ways-of-working-profile')).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  const evidence = visible(drawer.getByTestId('ways-of-working-evidence'));
+  await expect(evidence.first(), 'the profile\'s evidence').toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(evidence.first()).not.toHaveText(/^\s*$/);
+  await expect(drawer.getByRole('region', { name: 'Open questions', exact: true }), 'the open questions').toBeVisible();
+  const proposed = interviewPart(e2e.window, 'ways-of-working-proposed');
+  await expect(proposed).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(visible(proposed.getByTestId('ways-of-working-proposed-workflow')).first(), 'a proposed workflow').toBeVisible();
+});
+
+Then('the interview says when the repository was analyzed', async ({ e2e }) => {
+  await expect(visible(interview(e2e.window).getByText(ANALYZED_ON)).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the interview does not say when the repository was analyzed', async ({ e2e }) => {
+  const drawer = interview(e2e.window);
+  await expect(drawer).toBeVisible();
+  await expect(visible(drawer.getByText(/Analyzed on/i))).toHaveCount(0);
+  await expect(visible(drawer.getByRole('button', { name: /Analyze again/i }))).toHaveCount(0);
+});
+
+Then('the interview offers {string} as a secondary action', async ({ e2e }, label) => {
+  const button = visible(interview(e2e.window).getByRole('button', { name: label, exact: true })).first();
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toBeEnabled();
+  await expect(button, `"${label}" is not the primary action`).not.toHaveClass(/\bprimary\b/);
+});
+
+Then('the interview introduces the analysis', async ({ e2e }) => {
+  const intro = interviewPart(e2e.window, 'ways-of-working-intro');
+  await expect(intro).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(intro).toHaveText(/\S/);
+});
