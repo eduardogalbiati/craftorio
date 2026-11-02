@@ -97,13 +97,14 @@ const fence = (x) => `\`\`\`json\n${JSON.stringify(x, null, 2)}\n\`\`\``;
 
 // the model turns, mocked at the Oracle's oneTurn: counts and answers per turn kind
 function fakeTurns() {
-  const turns = { plan: 0, oracle: 0, planAnswer: PLAN };
+  // oracleText: null answers the report; a string answers that text instead (no report in it: the turn fails)
+  const turns = { plan: 0, oracle: 0, planAnswer: PLAN, oracleText: null };
   const oracle = {
     budgetRefusal: () => null,
     oneTurn: async ({ prompt }) => {
       if (String(prompt).includes(ORACLE_PROMPT)) {
         turns.oracle += 1;
-        return { text: fence(REPORT), costUsd: ORACLE_COST, tokens: { input: 10, output: 10 } };
+        return { text: turns.oracleText ?? fence(REPORT), costUsd: ORACLE_COST, tokens: { input: 10, output: 10 } };
       }
       turns.plan += 1;
       return { text: fence({ city_plan: turns.planAnswer }), costUsd: PLAN_COST, tokens: { input: 10, output: 10 } };
@@ -234,6 +235,43 @@ test('#731 a plan the validator refuses fails the job with a reason, and Retry d
   assert.equal(turns.oracle, 1, 'the Oracle\'s report is paid once over the failed run and its Retry');
   assert.equal(arch.listReports(archRoot, id).length, 1, 'one report saved');
   assert.equal((await cityOf(ws, archRoot, id)).grouping, 'plan');
+});
+
+// the review of #731: the plan is saved, then the Oracle's report fails; its Retry reuses the drawn plan
+// (and its cost) instead of paying the cartographer again. Two failed Oracle turns, then one that answers.
+test('#731 a Retry after a saved plan and a failed Oracle report reuses the plan: the cartographer is paid once, its cost goes into the report', { timeout: 120000 }, async (t) => {
+  const { turns, oracle } = fakeTurns();
+  turns.oracleText = 'I could not write the report this time.';
+  const { area, ws, archRoot } = areaWith(t, oracle);
+  const { id, end, status } = await onboarded(area, repoWith(t));
+  const arch = require('../domains/oracle/oracle-architecture');
+  assert.equal(end.jobs.projectMap.status, 'failed', `the projectMap job: ${JSON.stringify(end.jobs.projectMap)}`);
+  assert.equal(String(end.jobs.projectMap.reason || '').length > 0, true, 'the failed report says why');
+  assert.equal(turns.plan, 1, 'the cartographer drew the plan once');
+  assert.equal(turns.oracle, 1, 'the Oracle was asked once');
+  assert.equal(arch.readPlan(archRoot, id).plan === null, false, 'the plan was saved before the Oracle failed');
+  assert.equal(arch.listReports(archRoot, id).length, 0, 'no report saved');
+
+  // a first Retry: the Oracle fails again, the plan drawn is reused
+  await area.onboardingRetry({ projectId: id });
+  await pause(100);
+  const again = await until(status, (x) => turns.oracle >= 2 && ended(x), 'the first retry ends');
+  assert.equal(again.jobs.projectMap.status, 'failed');
+  assert.equal(turns.oracle, 2, 'the Oracle was asked again');
+  assert.equal(turns.plan, 1, 'the cartographer is not paid again on the Retry');
+
+  // a second Retry: the Oracle answers; the plan is still the first one, and its cost is in the report
+  turns.oracleText = null;
+  await area.onboardingRetry({ projectId: id });
+  const after = await until(status, (x) => ended(x) && x.jobs.projectMap.status === 'done', 'the second retry ends with the map done');
+  assert.equal(after.jobs.projectMap.status, 'done');
+  assert.equal(turns.plan, 1, 'one cartographer turn over the run and its two Retries');
+  assert.equal(turns.oracle, 3);
+  const reports = arch.listReports(archRoot, id);
+  assert.equal(reports.length, 1, 'one report saved');
+  const estimate = arch.estimateCost(reports);
+  assert.equal(Math.round(estimate.usd * 100) / 100, 0.8, `the plan's $0.30 (once) plus the Oracle's $0.50: ${estimate.usd}`);
+  assert.equal((await cityOf(ws, archRoot, id)).districts, 'API Gate,Engine Works,Manual Hall');
 });
 
 // ---- 2. the whole service, simulated: the City is ready after the onboarding ----------------------------
