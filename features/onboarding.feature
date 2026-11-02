@@ -31,7 +31,7 @@ Feature: Bring a project in with a guided wizard
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
     And the wizard shows the import of "sample-641" as done
-    And the wizard shows the analysis cost in total and for the project map and the refactor ranking
+    And the wizard shows the analysis cost in total and for the project map
     And the wizard offers to start the analysis
     When I skip the analysis for later
     Then the wizard is on its "review" step
@@ -50,10 +50,10 @@ Feature: Bring a project in with a guided wizard
     # #724: once the wizard closes the tray keeps only the imports running or failed; this one is cloned
     And the progress tray does not list the project "tray-641"
 
-  # The simulated analysis (MULTIAGENT_SIMULATION_ONLY=1) maps the sample repository's code and ranks its
-  # refactors without a model call; the refactor picked and its title are whatever the simulation proposes.
-  @issue-642
-  Scenario: The review shows the city and the backlogs with each file's score, and Finish plans the picked refactor and keeps the idea
+  # The simulated analysis (MULTIAGENT_SIMULATION_ONLY=1) maps the sample repository's code without a model
+  # call. #730: the review no longer ranks refactors to pick (its findings are filed one by one, see below).
+  @issue-642 @issue-730
+  Scenario: The review shows the city and the backlogs, and Finish keeps the idea
     Given the app is open
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -65,17 +65,14 @@ Feature: Bring a project in with a guided wizard
     When I go to the next step of the wizard
     Then the wizard is on its "review" step
     And the review shows the project's city and its backlog
-    And every row of the review's refactor backlog shows a file's score from 0 to 100 and its quadrant
-    When I pick the first refactor of the review
-    And I type the idea "Export the city as an image" in the review
+    And the review lists the Oracle's findings, each with "Create issue" and "Create issue and prioritize"
+    When I type the idea "Export the city as an image" in the review
     And I finish the wizard
     Then the project wizard closes right away
     And the project page of "review-642" is open
     And the project page shows the Next steps card
     And the Next steps card offers "roadmap", "idea" and "Keep refactoring"
     And the Next steps card shows "release CI" and "screenshots" as coming later
-    When I open the "roadmap" entry of the Next steps card
-    Then the roadmap shows the refactor I picked as a planned item
     When I open "Inbox" in the sidebar
     Then the Inbox lists the idea "Export the city as an image"
 
@@ -111,7 +108,7 @@ Feature: Bring a project in with a guided wizard
     When I finish the wizard
     Then the project page shows the Next steps card
     When I open the "Keep refactoring" entry of the Next steps card
-    Then the project tab "Refactor" is selected
+    Then the project tab "Health" is selected
     When I open "Projects" in the sidebar
     And I open the project "dismiss-642" from the Projects screen
     Then the project page shows the Next steps card
@@ -139,13 +136,13 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "sample-644"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard shows the analysis cost in total and for the project map and the refactor ranking
+    And the wizard shows the analysis cost in total and for the project map
     When I start the analysis in the wizard
     Then the progress tray shows the project "sample-644" as analyzed
     When I go to the next step of the wizard
     Then the wizard is on its "review" step
     And the review shows the project's city and its backlog
-    And every row of the review's refactor backlog shows a file's score from 0 to 100 and its quadrant
+    And the review lists the Oracle's findings, each with "Create issue" and "Create issue and prioritize"
     When I finish the wizard
     Then the project wizard closes right away
     And the project page of "sample-644" is open
@@ -319,20 +316,20 @@ Feature: Bring a project in with a guided wizard
     And I can change the suggested "ci" workflow
     And the wizard lets me continue to the review
 
-  # Analyze the repository starts the analysis (the paid project map and refactor ranking included); the
-  # simulated ranking is made to fail (an E2E hook, see onboarding.steps.js). Its row says why and retries
-  # that job only; nothing offers to analyze everything again.
-  @issue-725
+  # Analyze the repository starts the analysis (the paid project map included; #730: no refactor ranking);
+  # the simulated project map is made to fail (an E2E hook, see onboarding.steps.js). Its row says why and
+  # retries that job only; nothing offers to analyze everything again.
+  @issue-725 @issue-730
   Scenario: A paid analysis that failed says why and offers to retry it, and Continue stays available
-    Given the app is open where the "refactor ranking" analysis fails
+    Given the app is open where the "project map" analysis fails
     And a local git repository with some code is ready to import
     When I open the project wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "failed-725"
     And I go to the next step of the wizard
     And I choose "Analyze the repository" in the wizard's suggested workflows
-    Then the wizard's "refactor ranking" analysis says why it failed and offers to retry it
-    And the wizard's "refactor ranking" analysis shows no amount
+    Then the wizard's "project map" analysis says why it failed and offers to retry it
+    And the wizard's "project map" analysis shows no amount
     And the wizard lets me continue to the review
     And the wizard does not offer to analyze everything again
 
@@ -414,14 +411,13 @@ Feature: Bring a project in with a guided wizard
     Then the project wizard closes right away
     And the project page of "city-731" is open
     And the project tab "City" is selected
-    And the Architecture tab shows the project city
+    And the City tab shows the project city
     And the city is drawn from its plan, with its districts
-    And the Architecture tab does not say there is no city plan yet
-    When I switch the Architecture tab to "Facts"
-    Then the Architecture tab offers "Analyze this project" only as a refresh of the city plan
+    And the City tab does not say there is no city plan yet
+    And the City tab offers "Analyze this project" only as a refresh of the city plan
 
-  @issue-731
-  Scenario: After the onboarding's analysis, the project's Architecture tab already has its city plan
+  @issue-731 @issue-730
+  Scenario: After the onboarding's analysis, the project's City tab already has its city plan
     Given the app is open
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -433,12 +429,10 @@ Feature: Bring a project in with a guided wizard
     When I go to the next step of the wizard
     And I finish the wizard
     Then the project page of "plan-731" is open
-    When I open the "Architecture" project tab
-    And I switch the Architecture tab to "Facts"
-    Then the Architecture tab offers "Analyze this project" only as a refresh of the city plan
-    And the Architecture tab does not say there is no city plan yet
-    When I switch the Architecture tab to "City"
-    Then the city is drawn from its plan, with its districts
+    When I open the "City" project tab
+    Then the City tab offers "Analyze this project" only as a refresh of the city plan
+    And the City tab does not say there is no city plan yet
+    And the city is drawn from its plan, with its districts
 
   # The simulated city plan is made to fail (an E2E hook, see onboarding.steps.js): the project map's row
   # says why and retries that job only (#725).

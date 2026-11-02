@@ -3,7 +3,7 @@ Feature: "Show on the map" opens the project city in a modal over the current sc
   project's City view full screen in a modal over the screen it came from, instead of moving to
   Projects › <project> › Architecture (#430). Close and Esc close the modal and leave the screen as it
   was (same view, same filters, same stage). There is one modal at a time; it offers an "Open in
-  Projects" link to the project's Architecture tab. The impact or stage card opens at the top of the
+  Projects" link to the project's City tab (#730). The impact or stage card opens at the top of the
   city's left column, where the notes are, not over the middle of the city; the city has no "Arcs"
   note; with no building changed by two items of a stage the conflicts block is one muted line, not a
   red box (#428). The project is the seeded "billing-service" (src/billing.js in the district Billing,
@@ -45,7 +45,7 @@ Feature: "Show on the map" opens the project city in a modal over the current sc
     And the project page is not shown
 
   @issue-430
-  Scenario: The city modal of a release offers "Open in Projects", which leads to the project's Architecture tab
+  Scenario: The city modal of a release offers "Open in Projects", which leads to the project's City tab
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
     When I open "Releases" in the sidebar

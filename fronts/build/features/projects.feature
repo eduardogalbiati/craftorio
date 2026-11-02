@@ -1,8 +1,8 @@
 Feature: Projects, a screen of the menu with a page per project
   Projects is back in the menu (Code & Build, before Backlog) and is no longer a page of Settings.
   The Projects screen lists the project cards; a card opens the project's page, whose tabs are
-  Overview (folder, repository, unpushed commits, runs), Conflict map (the files most runs edit),
-  Architecture and Refactor. The Roadmap and Analytics › Performance no longer draw a conflict map of
+  Overview (folder, repository, unpushed commits, runs), City, Health and Conflict map (the files most
+  runs edit), since #730. The Roadmap and Analytics › Performance no longer draw a conflict map of
   their own: a one-line link leads to the project's Conflict map tab.
   The demo project "demo-app" (features/support/app.js) points to github.com/example/demo-app, has 2
   commits not pushed on its local main, and its folder is a plain folder, not a git repository.
@@ -37,16 +37,6 @@ Feature: Projects, a screen of the menu with a page per project
     When I follow the link "Conflict map: in Projects › demo-app"
     Then the project page of "demo-app" is open
     And the project tab "Conflict map" is selected
-
-  @issue-354 @issue-357
-  Scenario: The Refactor tab of a project with no Architecture report leads to the Architecture tab
-    Given the app is open
-    When I open "Projects" in the sidebar
-    And I open the project "demo-app" from the Projects screen
-    And I open the "Refactor" project tab
-    Then the Refactor tab says the project has no Architecture report yet
-    When I open the Architecture tab from the Refactor tab
-    Then the project tab "Architecture" is selected
 
   # #486: a new project chooses its workflows. Once its folder (or repository) is given, the project
   # dialog shows a Workflows block: a repository's workflows manifest (.multiagent/project.yaml) checks

@@ -1,5 +1,5 @@
 Feature: Analysis seeds give the owner ready-made analyses of a project, re-runnable and free once turned into a tool
-  The Architecture tab of a project's page has a Seeds section (#360): one row per bundled seed
+  The Health tab of a project's page has a Seeds section (#360, under Architecture before #730): one row per bundled seed
   (churn-complexity, dependency-map, quality-gate-report, pipeline-anatomy) with its status (Never run,
   Running, Stale with the commits since, Tool available and free, or the error), Run, Open result,
   History and "Make it a tool". Open result shows the saved page in a sandboxed frame with no network.
@@ -12,7 +12,7 @@ Feature: Analysis seeds give the owner ready-made analyses of a project, re-runn
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
+    And I open the "Health" project tab
     Then the Seeds section lists the seed "churn-complexity" as "Never run"
     When I run the seed "churn-complexity"
     Then the status of the seed "churn-complexity" no longer says "Never run"
@@ -26,7 +26,7 @@ Feature: Analysis seeds give the owner ready-made analyses of a project, re-runn
     And the project "billing-service" has the tool "node tools/churn.js" recorded for the seed "churn-complexity"
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
+    And I open the "Health" project tab
     Then the Seeds section lists the seed "churn-complexity" as "Tool available"
 
   @issue-360
@@ -35,6 +35,6 @@ Feature: Analysis seeds give the owner ready-made analyses of a project, re-runn
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
+    And I open the "Health" project tab
     And I click "Make it a tool" on the seed "churn-complexity"
     Then the app says the tool issue for "churn-complexity" is only a preview

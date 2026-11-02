@@ -26,7 +26,14 @@ const factsModel = () => buildModel({
   ignoreRevs: [], attributes: '', exclude: [], includeMass: true, complexity: null,
 });
 
-function loadWindow({ estimate = null, mapEstimate = null, startRun = null } = {}) {
+// #730: a city plan whose districts cover every file of FILES (no Outskirts)
+const PLAN = {
+  version: 1, project: 'fixture', summary: 'An engine and its docs.',
+  zones: [{ id: 'core', name: 'Core', kind: 'commercial' }],
+  districts: [{ id: 'engine', name: 'Engine', zone: 'core', include: ['src/**'] }, { id: 'docs', name: 'Docs', zone: 'core', include: ['docs/**'] }],
+};
+
+function loadWindow({ estimate = null, mapEstimate = null, startRun = null, plan = null } = {}) {
   const calls = { startRun: [], city: 0, facts: 0 };
   const listeners = [];
   const api = {
@@ -34,7 +41,7 @@ function loadWindow({ estimate = null, mapEstimate = null, startRun = null } = {
     architectureReport: async () => ({ report: null, findings: [], gone: [], runsSince: 0 }),
     listArchitectureReports: async () => [],
     architectureEstimate: async () => ({ estimate }),
-    architectureCity: async () => { calls.city++; return { state: 'ok', ...buildCity({ plan: null, facts: factsModel() }), refresh: { suggested: false, unmatchedShare: 0, newFolders: [] }, mapRun: null }; },
+    architectureCity: async () => { calls.city++; return { state: 'ok', ...buildCity({ plan, facts: factsModel() }), refresh: { suggested: false, unmatchedShare: 0, newFolders: [] }, mapRun: null }; },
     chainEstimate: async () => mapEstimate,
     startRun: async (spec) => { calls.startRun.push(spec); return startRun ? startRun(spec) : { runId: 'run-1' }; },
     onEvent: (fn) => { listeners.push(fn); return () => {}; },
@@ -87,6 +94,22 @@ test('#381 one action, "Analyze this project", with the combined estimate of the
   for (const gone of ['architecture-map', 'architecture-map-confirm', 'architecture-mode-facts', 'architecture-mode-city']) assert.equal(q(w.box, gone), null, `${gone} is gone`);
   assert.equal(text(w.box).includes('Analyze with the Oracle'), false);
   assert.equal(text(w.box).includes('Map this project'), false);
+});
+
+// #730 (task "Cidade"): the City keeps its "Analyze" once the project has a plan, as a refresh of the plan
+// (its title says so, as the Facts view's action did before #730) with its estimate, and a click starts the run
+test('#730 with a city plan the City still offers "Analyze this project" as a refresh, with its estimate', async () => {
+  const w = await open({ plan: PLAN, estimate: { usd: 0.4, basis: 3 }, mapEstimate: { items: [{ basis: 2, costUsd: 0.25, minutes: 3 }] } });
+  assert.equal(q(w.box, 'project-city-no-plan'), null, 'the city is drawn from its plan');
+  const button = w.box.querySelector('[data-testid="architecture-analyze"], [data-testid="project-city-analyze"]');
+  assert.equal(button === null, false, 'an "Analyze this project" button on the City with a plan');
+  assert.match(text(button), /Analyze this project/);
+  assert.equal(button.disabled, false);
+  assert.match(String(button.getAttribute('title')), /refresh/i, 'its title says it refreshes the plan');
+  assert.match(text(w.box), /≈ US\$ 0\.65/, 'its estimate, the map plus the Oracle');
+  w.click(button);
+  await settle();
+  assert.equal(w.calls.startRun.length, 1, 'a click starts the project map run');
 });
 
 test('#381 no estimate yet: the action says so, and still starts the run', async () => {

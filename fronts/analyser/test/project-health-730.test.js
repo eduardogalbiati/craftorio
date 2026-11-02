@@ -58,7 +58,8 @@ function projectScripts() {
   return pageScripts().filter((name) => SHARED.test(name) || name === 'date-range.js' || (name.startsWith('views/project/') && name !== 'views/project/project.js'));
 }
 
-function healthWindow({ findings = FINDINGS, estimate = { usd: 0.5, basis: 2 } } = {}) {
+// `gate`: a promise createFindingIssue waits for before answering (an issue still being created)
+function healthWindow({ findings = FINDINGS, estimate = { usd: 0.5, basis: 2 }, gate = null } = {}) {
   const calls = { create: [], analyze: [], startRun: [], report: [] };
   const filed = new Map(findings.map((f, i) => [i, f.filed]));
   const view = () => ({
@@ -80,6 +81,7 @@ function healthWindow({ findings = FINDINGS, estimate = { usd: 0.5, basis: 2 } }
     createFindingIssue: async (projectId, reportId, findingIndex, opts) => {
       calls.create.push({ projectId: String(projectId), reportId: String(reportId), findingIndex: Number(findingIndex), prioritize: !!opts?.prioritize });
       const n = 500 + calls.create.length;
+      if (gate) await gate;
       const out = { issue: n, issueUrl: URL_OF(n), stage: opts?.prioritize ? 4 : null, waiting: !!opts?.prioritize };
       filed.set(Number(findingIndex), out);
       return { filed: out };
@@ -220,6 +222,29 @@ test('#730 Create issue and prioritize files and plans it, then the finding show
   assert.equal(text(q(row, 'architecture-finding-stage')).includes('4'), true, `the stage: ${text(q(row, 'architecture-finding-stage'))}`);
   assert.equal(has(row, 'architecture-create-issue'), false);
   assert.equal(has(row, 'architecture-create-issue-prioritize'), false);
+});
+
+test('#730 while an issue is being created the finding buttons are disabled and more clicks file nothing more', async (t) => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const w = await openHealth(t, { gate });
+  const run = () => findingOf(w.box, 'src/engine/run.js');
+  const queue = () => findingOf(w.box, 'src/engine/queue.js');
+  w.click(q(run(), 'architecture-create-issue'));
+  await settle();
+  assert.equal(q(run(), 'architecture-create-issue')?.disabled, true, 'Create issue is disabled while the issue is being created');
+  assert.equal(q(run(), 'architecture-create-issue-prioritize')?.disabled, true, 'so is Create issue and prioritize');
+  assert.equal(q(queue(), 'architecture-create-issue')?.disabled, true, 'and the other finding\'s buttons');
+  assert.equal(q(w.box, 'architecture-create-issues')?.disabled, true, 'and Create issues');
+  w.click(q(run(), 'architecture-create-issue'));
+  w.click(q(run(), 'architecture-create-issue-prioritize'));
+  w.click(q(queue(), 'architecture-create-issue'));
+  w.click(q(w.box, 'architecture-create-issues'));
+  release();
+  await settle();
+  assert.deepEqual(w.calls.create, [{ projectId: 'p1', reportId: 'r1', findingIndex: 0, prioritize: false }], 'one issue, for the first click only');
+  assert.equal(q(run(), 'architecture-finding-issue')?.getAttribute('href'), URL_OF(501));
+  assert.equal(q(queue(), 'architecture-create-issue')?.disabled, false, 'the other finding can be filed again afterwards');
 });
 
 test('#730 a finding already filed and prioritized shows its issue\'s link and its stage, no buttons', async (t) => {

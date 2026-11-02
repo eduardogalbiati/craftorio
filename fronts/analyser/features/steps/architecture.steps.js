@@ -1,12 +1,12 @@
-// Steps of fronts/analyser/features/architecture.feature (#356, #381): a project's Architecture tab, its git facts
-// (the hotspot table), the one action "Analyze this project" with its cost estimate (the project map
-// run with the Oracle's analysis as its last step, no gate), a saved report (summary, findings marked
-// new/gone, "Send to Refactor"), and its states. Locators are roles and data-testid only
+// Steps of fronts/analyser/features/architecture.feature (#356, #381, #730): a project's City and Health tabs,
+// its git facts (the hotspot table), the one action "Analyze this project" with its cost estimate (the
+// project map run with the Oracle's analysis as its last step, no gate), a saved report (summary, findings
+// marked new/gone, "Create issue"), and its states. Locators are roles and data-testid only
 // (skills/ui-conventions).
 //
-// What the tab exposes (the renderer's contract for these steps, fronts/analyser/views/project/):
-// - #project-panel-architecture holds the tab; data-testid="architecture-state-not-git" /
-//   "architecture-state-never" / ...: the tab's states;
+// What the tabs expose (the renderer's contract for these steps, fronts/analyser/views/project/):
+// - #project-panel-city / #project-panel-health hold the tabs; data-testid="architecture-state-not-git" /
+//   "architecture-state-never" / ...: the Health tab's states;
 // - data-testid="architecture-analyze": the "Analyze this project" button, its text or title has
 //   the estimate "≈ US$" (or "no estimate yet" before the first real run); a click starts the run
 //   at once (run:start, project-map.yaml), seen in the scratch workspace's runs/ folder (its records
@@ -14,11 +14,17 @@
 //   gone once it ends; "architecture-map-refresh-advised": the refresh advice (> 5% of the drawn
 //   files match no district, or a new top-level folder), which starts nothing;
 // - data-testid="architecture-report-summary", "architecture-findings" (rows "architecture-finding",
-//   each with its "new"/"gone" mark and its "architecture-send-refactor" control);
+//   each with its "new"/"gone" mark and its "architecture-create-issue" control);
 // - data-testid="architecture-hotspots": the hotspot table; "architecture-limits": what the numbers
 //   cannot tell.
-// - The project city (#373): the "Facts | City" switch, buttons data-testid="architecture-mode-facts"
-//   / "architecture-mode-city" named "Facts" / "City" with aria-pressed; data-testid="project-city"
+// - #730: the Architecture tab and its "Facts | City" switch are gone: the City tab (#project-panel-city)
+//   holds the city and its "Analyze this project" (data-testid="project-city-analyze" in the city's notes,
+//   or "architecture-analyze" when the city did not load; "project-city-analyzing" / "architecture-analyzing"
+//   while the run goes on); the Health tab (#project-panel-health) the facts, the report and the findings,
+//   each with "architecture-create-issue" / "architecture-create-issue-prioritize", then once filed the link
+//   "architecture-finding-issue" and the badge "architecture-finding-stage" ("#432 · stage 117, waiting for
+//   your OK"); "architecture-create-issues" files the findings shown that have none yet.
+// - The project city (#373): data-testid="project-city"
 //   (a canvas inside), "project-city-header" (project, "<n> files", "<n> zones", "<n> districts"),
 //   the select labelled "Colour by" and its legend "project-city-legend"; without a plan
 //   "project-city-no-plan" holds the "Analyze this project" button and its "≈ US$" estimate;
@@ -60,18 +66,15 @@
 //   "architecture-finding-score" and "architecture-finding-summary"; its "architecture-finding-details"
 //   (evidence, refactor) stay hidden until its "Read more" button "architecture-finding-more".
 //   Filters "architecture-filter-high|medium|low|new|kept" (buttons with counts);
-//   "architecture-send-all" ("Send all to Refactor") skips findings already sent, its toast says how
-//   many went ("Sent 3 findings to the Refactor tab"). The quality gate "architecture-gate" is one row
-//   of "architecture-gate-chip"; "architecture-limits" is hidden until the ⓘ button
-//   "architecture-caveats" is clicked.
-// - Send to Refactor waits for the owner's OK (#435, #447): after the click "architecture-send-refactor"
-//   stays a <button class="btn sm">, disabled, its text "Sent to Refactor", its title (tooltip) naming
-//   the issue (#<n>) and the stage (stage <m>, waiting for your OK), at the same place and size; next
-//   to it, in the same finding line, the link data-testid="architecture-refactor-where" ("#432 · stage
-//   117, waiting for your OK"). The finding's new/kept badge is data-testid="architecture-finding-status"
-//   (in the interface language). The Refactor tab's row shows data-testid="refactor-proposal-where" with
-//   the same words. The roadmap's waiting stage is the last "roadmap-stage", data-disabled="true" with
-//   its "roadmap-stage-disabled" badge, its "Stage name" input "Refactor (waiting for your OK)".
+//   "architecture-create-issues" ("Create issues", #730) skips findings already filed, its toast says how
+//   many ("Created 3 issues"). The quality gate "architecture-gate" is one row of
+//   "architecture-gate-chip"; "architecture-limits" is hidden until the ⓘ button "architecture-caveats"
+//   is clicked.
+// - "Create issue and prioritize" waits for the owner's OK (#435, #730): the finding's badge
+//   data-testid="architecture-finding-stage" reads "#432 · stage 117, waiting for your OK". The finding's
+//   new/kept badge is data-testid="architecture-finding-status" (in the interface language). The
+//   roadmap's waiting stage is the last "roadmap-stage", data-disabled="true" with its
+//   "roadmap-stage-disabled" badge, its "Stage name" input "Refactor (waiting for your OK)".
 //
 // The git project is seeded in the scenario's scratch folder after the app opened (like app.steps.js's
 // second project): a repository on main with a .js and a .py file and three commits, the project
@@ -89,7 +92,6 @@ const LOAD_TIMEOUT = 30000;
 const ANALYSIS_TIMEOUT = 60000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const visible = (locator) => locator.filter({ visible: true });
-const projectPage = (page) => visible(page.getByTestId('project-page')).first();
 // Where the one visible city is (#430, #556): "Show on the map" opens it in the city modal attached to
 // the body (data-testid="city-modal"), over the screen it was asked from; otherwise it is the project's
 // Architecture tab. The modal comes last in the document, so it wins when both are shown.
@@ -97,8 +99,9 @@ const projectPage = (page) => visible(page.getByTestId('project-page')).first();
 // (#project-panel-health, the facts); the one shown is the one these steps read.
 const tab = (page) => visible(page.locator('[data-testid="city-modal"], [data-testid="project-page"] :is(#project-panel-architecture, #project-panel-city, #project-panel-health)')).last();
 const byId = (page, id) => visible(tab(page).getByTestId(id)).first();
-const analyzeButton = (page) => tab(page).getByTestId('architecture-analyze');
-const cityModeButton = (page, mode) => visible(tab(page).getByTestId(`architecture-mode-${mode.toLowerCase()}`)).first();
+// #730: the City's action is the city's own button, or the tab's when the city did not load
+const analyzeButton = (page) => visible(tab(page).locator('[data-testid="architecture-analyze"], [data-testid="project-city-analyze"]')).first();
+const analyzing = (page) => visible(tab(page).locator('[data-testid="architecture-analyzing"], [data-testid="project-city-analyzing"]'));
 const cityBox = (page) => visible(tab(page).getByTestId('project-city')).first();
 
 const SUMMARY = 'Billing rules are split between the API and the export script.';
@@ -253,14 +256,7 @@ Given('the workspace has a git project {string} with a JavaScript and a Python f
 
 // --- The project city (#373) ---
 
-When('I switch the Architecture tab to {string}', async ({ e2e }, mode) => {
-  const button = cityModeButton(e2e.window, mode);
-  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(button).toHaveAccessibleName(new RegExp(`^\\s*${escapeRe(mode)}\\s*$`, 'i'));
-  await button.click();
-});
-
-Then('the Architecture tab shows the project city', async ({ e2e }) => {
+Then('the City tab shows the project city', async ({ e2e }) => {
   const city = byId(e2e.window, 'project-city');
   await expect(city).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(city.locator('canvas').first(), 'the city is drawn in a canvas').toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -292,12 +288,6 @@ Then('the city legend lists {string} and {string}', async ({ e2e }, a, b) => {
   const legend = byId(e2e.window, 'project-city-legend');
   await expect(legend).toBeVisible({ timeout: LOAD_TIMEOUT });
   for (const entry of [a, b]) await expect(legend, `the legend's "${entry}"`).toContainText(entry);
-});
-
-Then('the {string} view of the Architecture tab is the one selected', async ({ e2e }, mode) => {
-  await expect(cityModeButton(e2e.window, mode)).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
-  const other = mode.toLowerCase() === 'city' ? 'Facts' : 'City';
-  await expect(cityModeButton(e2e.window, other)).toHaveAttribute('aria-pressed', 'false');
 });
 
 Then('the city offers {string} with a cost estimate in US$', async ({ e2e }, label) => {
@@ -394,77 +384,64 @@ When('I follow the city\'s link to the Conflict map', async ({ e2e }) => {
   await link.click();
 });
 
-Then('the Architecture tab says the project folder is not a git repository', async ({ e2e }) => {
+Then('the Health tab says the project folder is not a git repository', async ({ e2e }) => {
   const state = byId(e2e.window, 'architecture-state-not-git');
   await expect(state).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(state).toContainText(/not a git repository/i);
 });
 
-Then('the Architecture tab offers no {string} button', async ({ e2e }, label) => {
+Then('the Health tab offers no {string} button', async ({ e2e }, label) => {
   await expect(byId(e2e.window, 'architecture-state-not-git')).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(visible(analyzeButton(e2e.window))).toHaveCount(0);
   await expect(visible(tab(e2e.window).getByRole('button', { name: new RegExp(escapeRe(label), 'i') }))).toHaveCount(0);
 });
 
-Then('the Architecture tab shows the report summary {string}', async ({ e2e }, text) => {
+Then('the Health tab shows the report summary {string}', async ({ e2e }, text) => {
   const summary = byId(e2e.window, 'architecture-report-summary');
   await expect(summary).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(summary).toContainText(text);
 });
 
-Then('the Architecture tab lists the finding {string} marked {string} with a {string} control', async ({ e2e }, title, mark, control) => {
+// #730: the finding's control is "Create issue" (architecture-create-issue), where "Send to Refactor" was
+Then('the Health tab lists the finding {string} marked {string} with a {string} control', async ({ e2e }, title, mark, control) => {
   const findings = byId(e2e.window, 'architecture-findings');
   await expect(findings).toBeVisible({ timeout: LOAD_TIMEOUT });
   const row = findings.getByTestId('architecture-finding').filter({ hasText: title }).first();
   await expect(row).toBeVisible();
   await expect(row).toContainText(new RegExp(`\\b${escapeRe(mark)}\\b`, 'i'));
-  const send = row.getByTestId('architecture-send-refactor');
-  await expect(send).toBeVisible();
-  await expect(send).toContainText(new RegExp(escapeRe(control), 'i'));
+  const create = row.getByTestId('architecture-create-issue');
+  await expect(create).toBeVisible();
+  await expect(create).toHaveText(new RegExp(`^\\s*${escapeRe(control)}\\s*$`, 'i'));
 });
 
-Then('the Architecture hotspot table lists {string} and {string} below the report summary', async ({ e2e }, a, b) => {
+// #730: the git facts lead the Health tab, the Oracle's report comes below them
+Then('the Health hotspot table lists {string} and {string} above the report summary', async ({ e2e }, a, b) => {
   const page = e2e.window;
   const hotspots = byId(page, 'architecture-hotspots');
   await expect(hotspots).toBeVisible({ timeout: LOAD_TIMEOUT });
   for (const file of [a, b]) await expect(hotspots, `the hotspot table's "${file}"`).toContainText(file, { timeout: LOAD_TIMEOUT });
   const summaryBox = await byId(page, 'architecture-report-summary').boundingBox();
   const tableBox = await hotspots.boundingBox();
-  expect(tableBox.y, 'the hotspot table comes below the report summary').toBeGreaterThan(summaryBox.y);
+  expect(tableBox.y, 'the hotspot table comes above the report summary').toBeLessThan(summaryBox.y);
 });
 
-Then('the Architecture tab says what the numbers cannot tell', async ({ e2e }) => {
+Then('the Health tab says what the numbers cannot tell', async ({ e2e }) => {
   const limits = tab(e2e.window).getByTestId('architecture-limits').first();
   await expect(limits).toBeAttached({ timeout: LOAD_TIMEOUT });
   await expect(limits).not.toBeEmpty();
 });
 
-Then('the Architecture tab says the project was never analysed', async ({ e2e }) => {
+Then('the Health tab says the project was never analysed', async ({ e2e }) => {
   await expect(byId(e2e.window, 'architecture-state-never')).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
-Then('the {string} button shows a cost estimate in US$', async ({ e2e }, label) => {
-  const button = analyzeButton(e2e.window);
-  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(button).toContainText(new RegExp(escapeRe(label), 'i'));
-  // the estimate is in its text or its title
-  await expect.poll(async () => `${await button.innerText()} ${(await button.getAttribute('title')) || ''}`, { timeout: LOAD_TIMEOUT })
-    .toMatch(/≈\s*US\$\s*\d/);
-});
-
-Then('the Architecture tab offers the {string} button', async ({ e2e }, label) => {
+Then('the City tab offers the {string} button', async ({ e2e }, label) => {
   const button = analyzeButton(e2e.window);
   await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(button).toContainText(new RegExp(escapeRe(label), 'i'));
 });
 
-When('I click {string} on the Architecture tab', async ({ e2e }, label) => {
-  const button = analyzeButton(e2e.window);
-  await expect(button).toContainText(new RegExp(escapeRe(label), 'i'));
-  await button.click();
-});
-
-Then('the Architecture tab shows a report summary', async ({ e2e }) => {
+Then('the Health tab shows a report summary', async ({ e2e }) => {
   const summary = byId(e2e.window, 'architecture-report-summary');
   await expect(summary).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
   await expect(summary).not.toBeEmpty();
@@ -482,30 +459,32 @@ function projectMapRuns(e2e) {
   }));
 }
 
-// #381: the estimate is on the button (≈ US$ from past real runs), or the button says there is none yet
+// #381: the estimate is next to the button (≈ US$ from past real runs: in the button, its title, or the
+// city's actions row beside it), or it says there is none yet
 Then('the {string} button shows its cost estimate or says there is none yet', async ({ e2e }, label) => {
   const button = analyzeButton(e2e.window);
   await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(button).toContainText(new RegExp(escapeRe(label), 'i'));
   await expect(button).toBeEnabled();
-  await expect.poll(async () => `${await button.innerText()} ${(await button.getAttribute('title')) || ''}`, { timeout: LOAD_TIMEOUT })
+  const row = button.locator('xpath=..');
+  await expect.poll(async () => `${await row.innerText()} ${(await button.getAttribute('title')) || ''}`, { timeout: LOAD_TIMEOUT })
     .toMatch(/≈\s*US\$\s*\d|no estimate yet/i);
 });
 
-Then('the Architecture tab shows the analysis running', async ({ e2e }) => {
-  const running = byId(e2e.window, 'architecture-analyzing');
+Then('the City tab shows the analysis running', async ({ e2e }) => {
+  const running = analyzing(e2e.window).first();
   await expect(running).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
   await expect(running).toContainText(/Analyzing this project/i);
 });
 
-Then('the Architecture tab no longer shows the analysis running', async ({ e2e }) => {
-  await expect(visible(tab(e2e.window).getByTestId('architecture-analyzing'))).toHaveCount(0, { timeout: ANALYSIS_TIMEOUT });
+Then('the City tab no longer shows the analysis running', async ({ e2e }) => {
+  await expect(analyzing(e2e.window)).toHaveCount(0, { timeout: ANALYSIS_TIMEOUT });
 });
 
 Then('no project map run has started', async ({ e2e }) => {
   // give a run that was wrongly started time to write its folder
   await e2e.window.waitForTimeout(1500);
-  await expect(visible(tab(e2e.window).getByTestId('architecture-analyzing'))).toHaveCount(0);
+  await expect(analyzing(e2e.window)).toHaveCount(0);
   expect(projectMapRuns(e2e), 'project map runs in the workspace').toEqual([]);
 });
 
@@ -800,40 +779,41 @@ async function hotspotCell(page, file, column) {
   return row.getByRole('cell').nth(index);
 }
 
-Then('the Architecture hotspot table shows a measured complexity for {string}', async ({ e2e }, file) => {
+Then('the Health hotspot table shows a measured complexity for {string}', async ({ e2e }, file) => {
   const cell = await hotspotCell(e2e.window, file, 'Complexity');
   await expect(cell).toHaveText(/^\s*\d+\s*$/, { timeout: LOAD_TIMEOUT });
   // a file with a function has a cyclomatic complexity of at least 1
   expect(Number((await cell.innerText()).trim()), `the complexity of "${file}"`).toBeGreaterThan(0);
 });
 
-Then('the Architecture hotspot table shows the complexity of {string} as not measured, not zero', async ({ e2e }, file) => {
+Then('the Health hotspot table shows the complexity of {string} as not measured, not zero', async ({ e2e }, file) => {
   const cell = await hotspotCell(e2e.window, file, 'Complexity');
   await expect(cell).toBeVisible();
   await expect(cell, `the complexity of "${file}" is not a number`).not.toHaveText(/^\s*\d+(\.\d+)?\s*$/);
 });
 
-Then('the Architecture tab lists {string} as the only language whose complexity is not measured', async ({ e2e }, language) => {
+Then('the Health tab lists {string} as the only language whose complexity is not measured', async ({ e2e }, language) => {
   const note = byId(e2e.window, 'architecture-measure-note');
   await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(note.getByTestId('architecture-unmeasured-language')).toHaveText([new RegExp(`^\\s*${escapeRe(language)}\\s*$`, 'i')]);
 });
 
-Then('the Architecture tab says how to measure it with {string}, which needs Python', async ({ e2e }, command) => {
+Then('the Health tab says how to measure it with {string}, which needs Python', async ({ e2e }, command) => {
   const note = byId(e2e.window, 'architecture-measure-note');
   await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(note).toContainText(command);
   await expect(note).toContainText(/needs?\s+Python|requires?\s+Python|Python\s+is\s+(needed|required)/i);
 });
 
-Then('the Architecture tab advises refreshing the map', async ({ e2e }) => {
+Then('the City tab advises refreshing the map', async ({ e2e }) => {
   const advice = byId(e2e.window, 'architecture-map-refresh-advised');
   await expect(advice).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(advice).toContainText(/refresh/i);
 });
 
-Then('the Architecture tab does not advise refreshing the map', async ({ e2e }) => {
-  await expect(analyzeButton(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+Then('the City tab does not advise refreshing the map', async ({ e2e }) => {
+  await expect(cityBox(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(byId(e2e.window, 'project-city-header')).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(visible(tab(e2e.window).getByTestId('architecture-map-refresh-advised'))).toHaveCount(0);
 });
 
@@ -842,7 +822,7 @@ Then('the Architecture tab does not advise refreshing the map', async ({ e2e }) 
 const overview = (page) => byId(page, 'architecture-overview');
 const findingRow = (page, title) => visible(tab(page).getByTestId('architecture-finding')).filter({ hasText: title }).first();
 
-Then('the Architecture tab leads with a one-line verdict above the findings', async ({ e2e }) => {
+Then('the Health tab leads with a one-line verdict above the findings', async ({ e2e }) => {
   const page = e2e.window;
   const lead = overview(page);
   await expect(lead).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -889,18 +869,18 @@ Then('the summary shows a languages bar whose legend gives {string} and {string}
   }
 });
 
-Then('the Architecture tab keeps what the numbers cannot tell out of sight', async ({ e2e }) => {
+Then('the Health tab keeps what the numbers cannot tell out of sight', async ({ e2e }) => {
   await expect(byId(e2e.window, 'architecture-caveats')).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(visible(tab(e2e.window).getByTestId('architecture-limits'))).toHaveCount(0);
 });
 
-When('I open the caveats of the Architecture tab', async ({ e2e }) => {
+When('I open the caveats of the Health tab', async ({ e2e }) => {
   const button = byId(e2e.window, 'architecture-caveats');
   await expect(button).toHaveRole('button');
   await button.click();
 });
 
-Then('the Architecture tab shows what the numbers cannot tell', async ({ e2e }) => {
+Then('the Health tab shows what the numbers cannot tell', async ({ e2e }) => {
   const limits = byId(e2e.window, 'architecture-limits');
   await expect(limits).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(limits).not.toBeEmpty();
@@ -943,7 +923,7 @@ When('I filter the findings by {string} severity', async ({ e2e }, severity) => 
   await filter.click();
 });
 
-Then('the Architecture tab lists only the 2 high-severity findings', async ({ e2e }) => {
+Then('the Health tab lists only the 2 high-severity findings', async ({ e2e }) => {
   const page = e2e.window;
   await expect(byId(page, 'architecture-filter-high'), 'the "high" filter counts its findings').toContainText(/\b2\b/);
   await expect(visible(tab(page).getByTestId('architecture-finding'))).toHaveCount(HIGH_TITLES.length, { timeout: LOAD_TIMEOUT });
@@ -951,37 +931,27 @@ Then('the Architecture tab lists only the 2 high-severity findings', async ({ e2
   for (const title of OTHER_TITLES) await expect(visible(tab(page).getByTestId('architecture-finding')).filter({ hasText: title }), `"${title}" is filtered out`).toHaveCount(0);
 });
 
-When('I send the finding {string} to Refactor', async ({ e2e }, title) => {
-  const send = findingRow(e2e.window, title).getByTestId('architecture-send-refactor');
-  await expect(send).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await send.click();
-  await expect(send).toContainText(/sent to refactor/i, { timeout: LOAD_TIMEOUT });
-});
-
-When('I send all the findings to Refactor', async ({ e2e }) => {
-  const button = byId(e2e.window, 'architecture-send-all');
+// #730: "Create issues" (architecture-create-issues) files the findings shown that have no issue yet
+When('I create the issues of all the findings of the Health tab', async ({ e2e }) => {
+  const button = byId(e2e.window, 'architecture-create-issues');
   await expect(button).toHaveRole('button');
-  await expect(button).toHaveAccessibleName(/send all to refactor/i);
+  await expect(button).toHaveAccessibleName(/^\s*create issues\s*$/i);
+  await expect(button).toBeEnabled({ timeout: LOAD_TIMEOUT });
   await button.click();
 });
 
-Then('every finding of the Architecture tab is marked sent to Refactor', async ({ e2e }) => {
+// each finding has its issue's link (#<n>) in place of its buttons, and no two findings share an issue
+Then('every finding of the Health tab shows the link to its own issue', async ({ e2e }) => {
   const rows = visible(tab(e2e.window).getByTestId('architecture-finding'));
   await expect(rows).toHaveCount(SEVERITY_FINDINGS.length, { timeout: LOAD_TIMEOUT });
+  const issues = [];
   for (let i = 0; i < SEVERITY_FINDINGS.length; i += 1) {
-    await expect(rows.nth(i).getByTestId('architecture-send-refactor')).toContainText(/sent to refactor/i, { timeout: LOAD_TIMEOUT });
+    const link = rows.nth(i).getByTestId('architecture-finding-issue');
+    await expect(link).toHaveText(/#\d+/, { timeout: LOAD_TIMEOUT });
+    await expect(rows.nth(i).getByTestId('architecture-create-issue')).toHaveCount(0);
+    issues.push((await link.innerText()).trim());
   }
-});
-
-// the Refactor tab's proposals, read from the scratch workspace (<workspace>/refactor/<id>/proposals.json)
-Then('the Refactor tab of {string} has {int} proposals from the Architecture tab', async ({ e2e }, name, count) => {
-  const projects = require(path.join(root, 'packages', 'engine', 'domains', 'project', 'projects'));
-  const { listProposals } = require(path.join(root, 'packages', 'engine', 'domains', 'refactor', 'refactor-proposals'));
-  const wsDir = path.join(e2e.scratch, 'workspace');
-  const project = projects.listProjects(path.join(wsDir, 'projects')).find((p) => p.name === name);
-  expect(project, `the project "${name}"`).toBeTruthy();
-  await expect.poll(() => listProposals(path.join(wsDir, 'refactor'), project.id).filter((p) => p.source === 'architecture').length, { timeout: LOAD_TIMEOUT })
-    .toBe(count);
+  expect(new Set(issues).size, `one issue per finding: ${issues.join(', ')}`).toBe(SEVERITY_FINDINGS.length);
 });
 
 // --- City v2 buildings (#449) ---
@@ -1249,71 +1219,15 @@ Then('the city shows no {string} button for the legend', async ({ e2e }, label) 
   await expect(visible(e2e.window.getByTestId('city-legend-open')), `no "${label}" button`).toHaveCount(0);
 });
 
-// --- Send to Refactor waits for the owner's OK (#435, #447) ---
+// --- "Create issue and prioritize" waits for the owner's OK (#435, #730) ---
 
 // "#432 · stage 117, waiting for your OK": the issue, the stage, and that it waits for the owner
 const WHERE = /#\d+\s*·\s*stage\s+\d+\s*,\s*waiting for your OK/i;
-const ISSUE_REF = /#\d+/;
-const STAGE_WAITING = /stage\s+\d+[^]*waiting for your OK/i;
-// the place and size of a finding's Send to Refactor button before the click, per scenario
-const notedBoxes = new WeakMap();
-const sendButtonOf = (page, title) => findingRow(page, title).getByTestId('architecture-send-refactor');
 
-When('I note the place and size of the Send to Refactor button of the finding {string}', async ({ e2e }, title) => {
-  const button = sendButtonOf(e2e.window, title);
-  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(button).toBeEnabled();
-  await expect(button).toHaveText(/^\s*Send to Refactor\s*$/);
-  if (!notedBoxes.has(e2e)) notedBoxes.set(e2e, new Map());
-  notedBoxes.get(e2e).set(title, await button.boundingBox());
-});
-
-Then('the Send to Refactor button of the finding {string} is the same small button, disabled, reading {string}, in the same place and size', async ({ e2e }, title, text) => {
-  const button = sendButtonOf(e2e.window, title);
-  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(button, 'still a button, not a badge').toHaveRole('button');
-  await expect(button).toHaveClass(/(^|\s)btn(\s|$)/);
-  await expect(button).toHaveClass(/(^|\s)sm(\s|$)/);
-  await expect(button).toBeDisabled({ timeout: LOAD_TIMEOUT });
-  await expect(button).toHaveText(new RegExp(`^\\s*${escapeRe(text)}\\s*$`));
-  const before = notedBoxes.get(e2e)?.get(title);
-  expect(before, `the place and size of the button of "${title}" noted before the click`).toBeTruthy();
-  const after = await button.boundingBox();
-  expect(Math.abs(after.x - before.x), 'the same left edge').toBeLessThanOrEqual(2);
-  expect(Math.abs(after.y - before.y), 'the same top edge').toBeLessThanOrEqual(2);
-  expect(Math.abs(after.height - before.height), 'the same height').toBeLessThanOrEqual(2);
-  // "Send" and "Sent" differ by one letter: the width stays within a few pixels
-  expect(Math.abs(after.width - before.width), 'the same width').toBeLessThanOrEqual(Math.max(6, before.width * 0.1));
-});
-
-Then('the Send to Refactor button of the finding {string} has a tooltip naming its issue and a stage waiting for your OK', async ({ e2e }, title) => {
-  const button = sendButtonOf(e2e.window, title);
-  await expect(button).toHaveAttribute('title', ISSUE_REF, { timeout: LOAD_TIMEOUT });
-  await expect(button).toHaveAttribute('title', STAGE_WAITING);
-});
-
-Then('next to the Send to Refactor button of the finding {string} a link names its issue and a stage waiting for your OK', async ({ e2e }, title) => {
-  const row = findingRow(e2e.window, title);
-  const button = row.getByTestId('architecture-send-refactor');
-  const where = row.getByTestId('architecture-refactor-where');
-  await expect(where).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(where).toHaveRole('link');
-  await expect(where).toHaveText(WHERE);
-  // on the button's line, right beside it
-  const b = await button.boundingBox();
-  const w = await where.boundingBox();
-  expect(w.y < b.y + b.height && b.y < w.y + w.height, 'the link is on the button\'s line').toBe(true);
-  const gap = w.x >= b.x ? w.x - (b.x + b.width) : b.x - (w.x + w.width);
-  expect(gap, 'the link sits next to the button').toBeLessThanOrEqual(24);
-});
-
-Then('the Refactor proposal {string} names its issue and a stage waiting for your OK', async ({ e2e }, title) => {
-  const refactorTab = projectPage(e2e.window).locator('#project-panel-refactor');
-  const row = visible(refactorTab.getByTestId('refactor-proposal')).filter({ hasText: title }).first();
-  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const where = row.getByTestId('refactor-proposal-where');
-  await expect(where).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(where).toHaveText(WHERE);
+Then('the Health finding {string} names its issue and a stage waiting for your OK', async ({ e2e }, title) => {
+  const stage = findingRow(e2e.window, title).getByTestId('architecture-finding-stage');
+  await expect(stage).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(stage).toHaveText(WHERE);
 });
 
 Then('the roadmap\'s last stage comes after {string}, is disabled, is named like {string} and holds {string}', async ({ e2e }, earlier, name, item) => {
@@ -1366,14 +1280,6 @@ Then('the status badge of the finding {string} reads {string}', async ({ e2e }, 
 // so a project the onboarding just created analyses at once; a project with no folder on this machine
 // gets the reason in the interface language with what to do (clone it again, or point its folder from
 // the Overview), and its retry shows no "≈ US$" estimate (a retry that cannot work costs nothing).
-
-// the City mode button by its data-testid, whatever the interface language ("City" / "Cidade")
-When('I switch the Architecture tab to its City view', async ({ e2e }) => {
-  const button = visible(tab(e2e.window).getByTestId('architecture-mode-city')).first();
-  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await button.click();
-  await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
-});
 
 When('I click {string} on the city', async ({ e2e }, label) => {
   const button = visible(tab(e2e.window).getByTestId('project-city-analyze')).first();

@@ -1,4 +1,4 @@
-Feature: A project's Architecture tab tells the owner where the code hurts and what to refactor first
+Feature: A project's City and Health tabs tell the owner where the code hurts and what to refactor first
   The Architecture tab of a project's page (Projects › <project> › Architecture) shows facts read
   from git (a hotspot table: file, lines, commits, rank, top co-changing file) and what those numbers
   cannot tell. One action, "Analyze this project" (#381), shows its cost estimate (≈ US$, or "no
@@ -27,6 +27,10 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
   cards with a 0-100 score, the Danger Zone count, a languages bar with percentages), each finding one
   line with a score and its details behind "Read more", filters by severity, "Send all to Refactor"
   that skips findings already sent, and the caveats behind an ⓘ button.
+  #730: the Architecture tab and its "Facts | City" switch are gone. The City tab holds the city with its
+  "Analyze this project" (a refresh once there is a plan, with the refresh advice and the estimate); the
+  Health tab holds the facts, the Oracle's report and its findings, each with "Create issue" and "Create
+  issue and prioritize" instead of "Send to Refactor", and "Create issues" instead of "Send all to Refactor".
 
   @issue-356
   Scenario: A project whose folder is not a git repository has no facts and nothing to analyse
@@ -35,8 +39,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the project "demo-app" from the Projects screen
     And I open the "Health" project tab
     Then the project tab "Health" is selected
-    And the Architecture tab says the project folder is not a git repository
-    And the Architecture tab offers no "Analyze this project" button
+    And the Health tab says the project folder is not a git repository
+    And the Health tab offers no "Analyze this project" button
 
   @issue-356
   Scenario: A saved report leads the tab, its findings marked new, above the git hotspots
@@ -44,27 +48,28 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture tab shows the report summary "Billing rules are split between the API and the export script."
-    And the Architecture tab lists the finding "Discount rule duplicated in the API and the export" marked "new" with a "Send to Refactor" control
-    And the Architecture hotspot table lists "src/billing.js" and "tools/export.py" below the report summary
-    And the Architecture tab says what the numbers cannot tell
-    And the "Analyze this project" button shows a cost estimate in US$
+    And I open the "Health" project tab
+    Then the Health tab shows the report summary "Billing rules are split between the API and the export script."
+    And the Health tab lists the finding "Discount rule duplicated in the API and the export" marked "new" with a "Create issue" control
+    And the Health hotspot table lists "src/billing.js" and "tools/export.py" above the report summary
+    And the Health tab says what the numbers cannot tell
 
-  @issue-356 @issue-381
-  Scenario: Analyzing a never-analysed project starts one run and shows its report when it ends
+  # #730: the run starts on the City; the Health tab reads the saved report the first time it is opened.
+  @issue-356 @issue-381 @issue-730
+  Scenario: Analyzing a never-analysed project from its City starts one run, and Health shows its report when it ends
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture tab says the project was never analysed
-    And the Architecture tab offers the "Analyze this project" button
-    When I click "Analyze this project" on the Architecture tab
+    And I open the "City" project tab
+    Then the City tab offers the "Analyze this project" button
+    When I click "Analyze this project" on the city
     Then a project map run has started
-    And the Architecture tab shows the analysis running
-    Then the Architecture tab shows a report summary
-    And the Architecture tab no longer shows the analysis running
+    And the City tab shows the analysis running
+    And the project map run waits at no gate
+    And the City tab no longer shows the analysis running
+    When I open the "Health" project tab
+    Then the Health tab shows a report summary
 
   @issue-372 @issue-381
   Scenario: "Analyze this project" shows its estimate and starts the project map run with no confirmation and no gate
@@ -72,34 +77,34 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no project map
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture tab offers the "Analyze this project" button
+    And I open the "City" project tab
+    Then the City tab offers the "Analyze this project" button
     And the "Analyze this project" button shows its cost estimate or says there is none yet
     And no project map run has started
-    When I click "Analyze this project" on the Architecture tab
+    When I click "Analyze this project" on the city
     Then a project map run has started
     And the project map run waits at no gate
 
-  @issue-372
-  Scenario: A project with a saved map offers the same action and starts nothing on its own
+  @issue-372 @issue-730
+  Scenario: A project with a saved map offers the action as a refresh and starts nothing on its own
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a project map that covers both files
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture tab offers the "Analyze this project" button
-    And the Architecture tab does not advise refreshing the map
+    And I open the "City" project tab
+    Then the City tab offers the "Analyze this project" button
+    And the City tab does not advise refreshing the map
     And no project map run has started
 
   @issue-372
-  Scenario: The tab advises refreshing the map when files match no district and a new top-level folder appears
+  Scenario: The City advises refreshing the map when files match no district and a new top-level folder appears
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a project map that only covers the JavaScript file
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture tab advises refreshing the map
-    And the Architecture tab offers the "Analyze this project" button
+    And I open the "City" project tab
+    Then the City tab advises refreshing the map
+    And the City tab offers the "Analyze this project" button
     And no project map run has started
 
   @issue-373
@@ -108,26 +113,11 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     And the city header names "billing-service" with 2 files, 2 zones and 2 districts
     When I colour the city by "Zone"
     Then the city legend lists "Backend" and "Tooling"
-
-  @issue-373
-  Scenario: The City view stays chosen after leaving the Architecture tab and coming back
-    Given the app is open
-    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
-    When I open "Projects" in the sidebar
-    And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
-    When I open the "Overview" project tab
-    And I open the "Architecture" project tab
-    Then the Architecture tab shows the project city
-    And the "City" view of the Architecture tab is the one selected
 
   @issue-373 @issue-381
   Scenario: A project without a city plan shows its folders as a city and offers to analyze it
@@ -135,9 +125,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     And the city header counts 2 files
     And the city offers "Analyze this project" with a cost estimate in US$
 
@@ -147,9 +136,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     When I expand the city
     Then the city covers the whole window
     When I press Escape on the city
@@ -161,9 +149,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     When I turn the city's Live switch on
     Then the city says "No agent is working on this project"
 
@@ -175,9 +162,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And a run in progress of "demo-app" where the "tester" agent of step "write_tests" edits "src/billing.js"
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     When I turn the city's Live switch on
     Then the city shows the agent "developer · implement"
     And the city does not show the agent "tester · write_tests"
@@ -191,9 +177,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And a run in progress of "billing-service" where the "refactorer" agent of step "refactor" edits "src/billing.js"
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     When I turn the city's Live switch on
     Then the city shows the agent "developer · implement"
     And the city shows the agent "refactorer · refactor"
@@ -336,8 +321,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture hotspot table shows a measured complexity for "src/billing.js"
+    And I open the "Health" project tab
+    Then the Health hotspot table shows a measured complexity for "src/billing.js"
 
   @issue-385
   Scenario: Without lizard the tab names the language not measured and how to install the tool, never a zero
@@ -346,25 +331,25 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture tab lists "Python" as the only language whose complexity is not measured
-    And the Architecture tab says how to measure it with "pip install lizard", which needs Python
-    And the Architecture hotspot table shows the complexity of "tools/export.py" as not measured, not zero
+    And I open the "Health" project tab
+    Then the Health tab lists "Python" as the only language whose complexity is not measured
+    And the Health tab says how to measure it with "pip install lizard", which needs Python
+    And the Health hotspot table shows the complexity of "tools/export.py" as not measured, not zero
 
   @issue-386
-  Scenario: The Facts view leads with a one-row summary and keeps its caveats behind a button
+  Scenario: The Health tab leads with a one-row summary and keeps its caveats behind a button
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the Architecture tab leads with a one-line verdict above the findings
+    And I open the "Health" project tab
+    Then the Health tab leads with a one-line verdict above the findings
     And the summary shows at most 3 risk cards, each with a score from 0 to 100
     And the summary shows how many files are in the Danger Zone
     And the summary shows a languages bar whose legend gives "JavaScript" and "Python" in percent
-    And the Architecture tab keeps what the numbers cannot tell out of sight
-    When I open the caveats of the Architecture tab
-    Then the Architecture tab shows what the numbers cannot tell
+    And the Health tab keeps what the numbers cannot tell out of sight
+    When I open the caveats of the Health tab
+    Then the Health tab shows what the numbers cannot tell
 
   @issue-386
   Scenario: A finding shows one line and opens its details on demand
@@ -372,26 +357,30 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
+    And I open the "Health" project tab
     Then the finding "Discount rule duplicated in the API and the export" shows a score and a one-line summary
     And the details of the finding "Discount rule duplicated in the API and the export" are hidden
     When I click "Read more" on the finding "Discount rule duplicated in the API and the export"
     Then the details of the finding "Discount rule duplicated in the API and the export" show its evidence and its refactor
     When I filter the findings by "high" severity
-    Then the Architecture tab lists only the 2 high-severity findings
+    Then the Health tab lists only the 2 high-severity findings
 
-  @issue-386
-  Scenario: Send all to Refactor sends only the findings not sent yet
+  # #730: "Create issues" replaces "Send all to Refactor": it files the findings shown that have no issue
+  # yet, into the project's synced backlog in simulation (the backlog issue gives it one), never with gh/glab.
+  @issue-386 @issue-730
+  Scenario: Create issues files only the findings that have no issue yet
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I send the finding "Billing module changes in every commit" to Refactor
-    And I send all the findings to Refactor
-    Then the toast says "Sent 3 findings to the Refactor tab"
-    And every finding of the Architecture tab is marked sent to Refactor
-    And the Refactor tab of "billing-service" has 4 proposals from the Architecture tab
+    And I open the "Health" project tab
+    And I click "Create issue" on the Health finding "Billing module changes in every commit"
+    Then the Health finding "Billing module changes in every commit" shows the link to its issue instead of its buttons
+    When I create the issues of all the findings of the Health tab
+    Then the toast says "Created 3 issues"
+    And every finding of the Health tab shows the link to its own issue
+    And the synced backlog of "billing-service" has the open issue of "Discount rule duplicated in the API and the export" labelled "refactor"
 
   # City v2 (#449): each file is a building of one of six kinds (shed, pavilion, hall, block, tower,
   # complex) instead of a plain box; its cards and the overlays behave as before.
@@ -401,9 +390,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     And the city header names "billing-service" with 2 files, 2 zones and 2 districts
     And the city draws its 2 files as buildings of the new kinds
     When I search the city for "src/billing.js"
@@ -431,25 +419,23 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And a run in progress of "billing-service" where the "developer" agent of step "implement" edits "src/billing.js"
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     When I turn the city's Live switch on
     Then the city shows the agent "developer · implement"
     And the city highlights the building "src/billing.js" and greys "tools/export.py"
 
   # City life (#450): a "City life" switch in the city header (a tree and a lamp) shows or hides the
   # trees, benches, lamps, cars and lamp pools without rebuilding the city, on by default in the
-  # Architecture tab; a "Glow" switch turns the bloom off.
+  # City tab; a "Glow" switch turns the bloom off.
   @issue-450
   Scenario: City life is on by default and turning it off hides the trees and cars without rebuilding the city
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     And the "City life" switch of the city is on
     And the city shows its trees, benches, lamps and cars
     When I turn the "City life" switch of the city off
@@ -463,9 +449,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     When I turn the "City life" switch of the city off
     Then the city shows no trees, benches, lamps or cars
     When I turn the "City life" switch of the city on
@@ -479,9 +464,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     And the "Glow" switch of the city is on
     When I turn the "Glow" switch of the city off
     Then the "Glow" switch of the city is off
@@ -498,9 +482,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And a run in progress of "billing-service" where the "developer" agent of step "implement" edits "src/billing.js"
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     And the city is in the "Explore" mode titled "billing-service"
     And the city shows the "Most connected" panel
     And the city shows no "Agents at work" panel
@@ -555,8 +538,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the Backlog screen is shown
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
+    And I open the "City" project tab
     Then the city is in the "Explore" mode titled "billing-service"
     And the city shows no "Impact preview" panel
     And the city shows the "Most connected" panel
@@ -587,9 +569,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    And I open the "City" project tab
+    Then the City tab shows the project city
     When I colour the city by "Zone"
     Then the city legend has the "Backend" row
     When I close the city legend
@@ -612,8 +593,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then no city modal is open
     When I open "Projects" in the sidebar
     And I open the project "shop" from the Projects screen
-    And I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
+    And I open the "City" project tab
     Then the city is in the "Explore" mode titled "shop"
     And the city's "Most connected" panel is expanded
     When I open "Releases" in the sidebar
@@ -622,29 +602,14 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the city is in the "Release" mode titled "Release 1.1.1 → 1.1.2"
     And the city's "Release" panel shows only its title row
 
-  # Send to Refactor waits for the owner's OK (#435, #447): the click files an issue and plans it in a
-  # disabled stage at the end of the roadmap, named like "Refactor (waiting for your OK)". The button
-  # stays where it was, the same `btn sm` button, disabled, reading "Sent to Refactor", its tooltip
-  # saying where it went; next to it a link names the issue and the stage ("#432 · stage 117, waiting
-  # for your OK"). The Refactor tab says the same per proposal. The backlog issue gives the project a
-  # synced GitHub backlog; in simulation the issue is never filed with gh. The new/kept badges follow
-  # the interface language.
-  @issue-435 @issue-447
-  Scenario: A finding sent to Refactor keeps a disabled "Sent to Refactor" button in place and links its issue and waiting stage
-    Given the app is open
-    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
-    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
-    When I open "Projects" in the sidebar
-    And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I note the place and size of the Send to Refactor button of the finding "Billing module changes in every commit"
-    And I send the finding "Billing module changes in every commit" to Refactor
-    Then the Send to Refactor button of the finding "Billing module changes in every commit" is the same small button, disabled, reading "Sent to Refactor", in the same place and size
-    And the Send to Refactor button of the finding "Billing module changes in every commit" has a tooltip naming its issue and a stage waiting for your OK
-    And next to the Send to Refactor button of the finding "Billing module changes in every commit" a link names its issue and a stage waiting for your OK
-
-  @issue-435
-  Scenario: The sent finding waits in a disabled refactor stage at the end of the roadmap, and the Refactor tab says where it went
+  # "Create issue and prioritize" waits for the owner's OK (#435, #730, which replaced Send to Refactor): the
+  # click files a `refactor` issue and plans it in a disabled stage at the end of the roadmap, named like
+  # "Refactor (waiting for your OK)". The finding then shows its issue's link and a badge naming the issue
+  # and the stage ("#432 · stage 117, waiting for your OK") where its buttons were. The backlog issues give
+  # the project a synced GitHub backlog; in simulation the issue is never filed with gh. The new/kept
+  # badges follow the interface language (#447).
+  @issue-435 @issue-730
+  Scenario: "Create issue and prioritize" files the finding and plans it in a disabled refactor stage at the end of the roadmap
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
     And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
@@ -652,10 +617,10 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the roadmap of "billing-service" has the planned stage "Billing fixes" with the items "Change the discount rule" and "Round the export totals"
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Architecture" project tab
-    And I send the finding "Billing module changes in every commit" to Refactor
-    And I open the "Refactor" project tab
-    Then the Refactor proposal "Billing module changes in every commit" names its issue and a stage waiting for your OK
+    And I open the "Health" project tab
+    And I click "Create issue and prioritize" on the Health finding "Billing module changes in every commit"
+    Then the Health finding "Billing module changes in every commit" shows the link to its issue instead of its buttons
+    And the Health finding "Billing module changes in every commit" names its issue and a stage waiting for your OK
     When I open "Backlog" in the sidebar
     And I choose the project "billing-service" in the header
     And I open the Roadmap
@@ -670,7 +635,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose "Português (Brasil)" as the "Interface" language
     And I open "Projetos" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Arquitetura" project tab
+    And I open the "Saúde" project tab
     Then the status badge of the finding "Billing module changes in every commit" reads "novo"
     And the status badge of the finding "Discount rule duplicated in the API and the export" reads "mantido"
 
@@ -691,9 +656,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page of "city-732" is open
-    When I open the "Architecture" project tab
-    And I switch the Architecture tab to "City"
-    Then the Architecture tab shows the project city
+    When I open the "City" project tab
+    Then the City tab shows the project city
     And no project map run has started
     When I click "Analyze this project" on the city
     Then the city shows no analysis error
@@ -711,9 +675,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I choose "Português (Brasil)" as the "Interface" language
     And I open "Projetos" in the sidebar
     And I open the project "billing-service" from the Projects screen
-    And I open the "Arquitetura" project tab
-    And I switch the Architecture tab to its City view
-    Then the Architecture tab shows the project city
+    And I open the "Cidade" project tab
+    Then the City tab shows the project city
     And the city offers "Analisar este projeto" with a cost estimate in US$
     When the folder of the project "billing-service" is gone from this machine
     And I click "Analisar este projeto" on the city

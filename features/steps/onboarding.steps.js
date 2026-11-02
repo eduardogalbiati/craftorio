@@ -9,7 +9,7 @@
 // - wizard-repo, wizard-name: step 2's inputs; wizard-provider; wizard-import-status;
 // - wizard-error (data-error="no-access" | "clone-failed"), with a role="button" named /Retry/;
 //   wizard-cli-warning (gh / glab missing: a warning, the import goes on);
-// - wizard-cost, wizard-cost-total and its parts data-part="projectMap" | "ranking"; wizard-analyze, wizard-skip;
+// - wizard-cost, wizard-cost-total and its part data-part="projectMap" (#730: no "ranking"); wizard-analyze, wizard-skip;
 // - data-testid="onboarding-tray": the progress tray, outside the wizard; each project a
 //   data-testid="tray-item" with data-status="cloning|analyzing|ready|analyzed|failed", holding the
 //   project's name, and when failed the reason in words and a role="button" named /Retry/.
@@ -162,15 +162,14 @@ Then('the progress tray shows the project {string} as {word}', async ({ e2e }, n
   await expect(trayItem(e2e.window, name)).toHaveAttribute('data-status', status, { timeout: IMPORT_TIMEOUT });
 });
 
-Then('the wizard shows the analysis cost in total and for the project map and the refactor ranking', async ({ e2e }) => {
+// #730: the project map is the only paid part (no refactor ranking)
+Then('the wizard shows the analysis cost in total and for the project map', async ({ e2e }) => {
   const cost = wizard(e2e.window).getByTestId('wizard-cost');
   await expect(cost).toBeVisible();
   await expect(cost.getByTestId('wizard-cost-total')).toContainText(AMOUNT);
-  for (const part of ['projectMap', 'ranking']) {
-    const row = cost.locator(`[data-part="${part}"]`);
-    await expect(row, `the cost's ${part} part`).toBeVisible();
-    await expect(row).toContainText(AMOUNT);
-  }
+  const row = cost.locator('[data-part="projectMap"]');
+  await expect(row, "the cost's project map part").toBeVisible();
+  await expect(row).toContainText(AMOUNT);
 });
 
 Then('the wizard offers to start the analysis', async ({ e2e }) => {
@@ -299,14 +298,12 @@ When('I cancel the project wizard', async ({ e2e }) => {
 
 // ---- #642: the review, Finish and the project page's "Next steps" card ----------------------------------
 
-// the simulated analysis: the free part, the project map and the refactor ranking, without a model call
+// the simulated analysis: the free part and the project map (#730: no refactor ranking), without a model call
 const ANALYSIS_TIMEOUT = 90000;
 // Finish never waits for an analysis: the wizard is gone well before any job could end
 const FINISH_TIMEOUT = 5000;
-const QUADRANT = /Danger Zone|Cowboy Code|Fertile Ground|Healthy Closure/;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const review = (page) => wizard(page).getByTestId('wizard-review');
-const refactorRows = (page) => review(page).getByTestId('wizard-review-refactors').getByTestId('wizard-review-refactor');
 const projectPage = (page) => page.getByTestId('project-page').filter({ visible: true }).first();
 const nextSteps = (page) => projectPage(page).getByTestId('project-next-steps');
 // an entry of the card (mock-7): its title and line say what it does ("roadmap", "idea"…), its button
@@ -325,28 +322,6 @@ Then("the review shows the project's city and its backlog", async ({ e2e }) => {
   await expect(review(page)).toBeVisible();
   await expect(review(page).getByTestId('wizard-review-city')).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
   await expect(review(page).getByTestId('wizard-review-backlog')).toBeVisible();
-});
-
-Then("every row of the review's refactor backlog shows a file's score from 0 to 100 and its quadrant", async ({ e2e }) => {
-  const rows = refactorRows(e2e.window);
-  await expect(rows.first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
-  for (const row of await rows.all()) {
-    const text = await row.innerText();
-    const scores = (text.match(/\b\d{1,3}\b/g) || []).map(Number).filter((n) => n <= 100);
-    expect(scores.length, `a score from 0 to 100 in the row "${text}"`).toBeGreaterThan(0);
-    expect(text, `the quadrant in the row "${text}"`).toMatch(QUADRANT);
-  }
-});
-
-// the pick is the row's checkbox, named by the refactor's title (kept to find it on the roadmap)
-When('I pick the first refactor of the review', async ({ e2e }) => {
-  const row = refactorRows(e2e.window).first();
-  const pick = row.getByRole('checkbox');
-  await pick.check();
-  await expect(pick).toBeChecked();
-  const label = await pick.getAttribute('aria-label');
-  e2e.pickedRefactor = (label || await row.innerText()).split('\n')[0].trim();
-  expect(e2e.pickedRefactor, "the picked refactor's title").not.toBe('');
 });
 
 When('I type the idea {string} in the review', async ({ e2e }, idea) => {
@@ -391,12 +366,6 @@ When('I open the {string} entry of the Next steps card', async ({ e2e }, words) 
 
 When('I dismiss the Next steps card', async ({ e2e }) => {
   await nextSteps(e2e.window).getByTestId('next-steps-dismiss').click();
-});
-
-Then('the roadmap shows the refactor I picked as a planned item', async ({ e2e }) => {
-  if (!e2e.pickedRefactor) throw new Error('no refactor picked: use "I pick the first refactor of the review" first');
-  const item = e2e.window.locator('[data-testid="roadmap-item"][data-status="planned"]').filter({ hasText: e2e.pickedRefactor }).first();
-  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
 // the idea typed in the review is kept as a local idea card of the Inbox (no issue on a provider)
@@ -560,7 +529,7 @@ Then("the workspace's {string} has no remote", async ({ e2e }, rel) => {
 //   so it ends `failed` with that error as its reason (a Retry fails again the same way).
 
 // the analyses in the owner's words → the onboarding's job ids
-const ONBOARDING_JOB = { 'ways of working': 'profile', 'project map': 'projectMap', 'refactor ranking': 'ranking' };
+const ONBOARDING_JOB = { 'ways of working': 'profile', 'project map': 'projectMap' };
 const jobId = (words) => {
   const id = ONBOARDING_JOB[words];
   if (!id) throw new Error(`unknown analysis "${words}": one of ${Object.keys(ONBOARDING_JOB).join(', ')}`);
@@ -921,10 +890,10 @@ Then('the wizard shows no import status card and its repository fields are read-
 // Architecture tab's "Analyze this project" does), then runs the Oracle. Once it is done the project's City
 // is grouped by the plan's districts, not by folder. What the screen exposes (existing test ids):
 // - the review's "Open the city" (wizard-open-city) finishes the wizard and opens the project's
-//   Architecture tab on its City view (window.ProjectArchitecture.openCity);
-// - the City view: project-city-header ("<n> districts", "plan covers <share>"), no project-city-no-plan;
-// - the Facts view's action: architecture-action holds "City plan: <n> districts, …" and the button
-//   architecture-analyze, whose title is the refresh one ("a refresh keeps the names you saw").
+//   City tab (#730; window.ProjectArchitecture.openCity);
+// - the City tab: project-city-header ("<n> districts", "plan covers <share>"), no project-city-no-plan;
+//   its "Analyze this project" (architecture-analyze or project-city-analyze) is offered with a plan too,
+//   its title the refresh one ("a refresh keeps the names you saw").
 //
 // E2E HOOK THE DEVELOPER MUST ADD, read by the simulated onboarding's projectMap job only when
 // MULTIAGENT_SIMULATION_ONLY=1: MULTIAGENT_E2E_CITY_PLAN_FAIL=1 makes drawing the city plan throw
@@ -953,20 +922,18 @@ Then('the city is drawn from its plan, with its districts', async ({ e2e }) => {
   await expect(architectureTab(e2e.window).getByTestId('project-city-no-plan')).toHaveCount(0);
 });
 
-Then('the Architecture tab does not say there is no city plan yet', async ({ e2e }) => {
+Then('the City tab does not say there is no city plan yet', async ({ e2e }) => {
   const tab = architectureTab(e2e.window);
   await expect(tab).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(tab.getByTestId('project-city-no-plan')).toHaveCount(0);
   await expect(tab.getByText(/no city plan yet/i).filter({ visible: true })).toHaveCount(0);
 });
 
-// the Facts view's action: the plan's districts next to the button, the button's title the refresh one
-Then('the Architecture tab offers {string} only as a refresh of the city plan', async ({ e2e }, label) => {
-  const action = cityPart(e2e.window, 'architecture-action');
-  await expect(action).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(action).toContainText(/City plan:\s*[1-9]\d*\s+districts?/i, { timeout: LOAD_TIMEOUT });
-  const button = action.getByTestId('architecture-analyze');
-  await expect(button).toBeVisible();
+// #730: the City tab's action (its own "architecture-analyze", or the city's "project-city-analyze"), shown
+// with a plan too, its title the refresh one ("a refresh keeps the names you saw")
+Then('the City tab offers {string} only as a refresh of the city plan', async ({ e2e }, label) => {
+  const button = architectureTab(e2e.window).locator('[data-testid="architecture-analyze"], [data-testid="project-city-analyze"]').filter({ visible: true }).first();
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(button).toContainText(label);
   await expect(button, 'the refresh title').toHaveAttribute('title', /refresh/i);
 });
