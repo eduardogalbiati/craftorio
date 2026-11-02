@@ -124,6 +124,13 @@ test('#733 the saved analysis shows "Analyzed on <date> · <cost>"', async (t) =
   assert.equal(line.includes('0.05'), true, `the cost in "${line}"`);
 });
 
+test('#733 an analysis that cost nothing (git settled it, or simulated) reads "free" on its Analyzed on line', async (t) => {
+  const w = await opened(t, { last: { ...LAST, costUsd: 0 } });
+  const line = w.text(w.q('ways-of-working-analyzed-on'));
+  assert.equal(/\bfree\b/i.test(line), true, `"free" in "${line}"`);
+  assert.equal(line.includes('0.00'), false, `no zero cost in "${line}"`);
+});
+
 // ---- criterion 2: Analyze again -------------------------------------------------------------------
 
 test('#733 "Analyze again" is a secondary action with the estimate, and it re-runs the interview', async (t) => {

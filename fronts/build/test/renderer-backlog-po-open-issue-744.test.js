@@ -37,3 +37,47 @@ test('#744 openPoIssue opens the drawer in issue mode (Register an issue)', { ti
   assert.equal(issue ? issue.classList.contains('active') : 'no #po-mode issue button', true);
   assert.equal(page.$('#po-chips').classList.contains('hidden'), true, 'the plan pills are hidden');
 });
+
+// ---- the step marked done: an issue filed after "Open the PO" is saved for the Next steps card ----------
+// project.js reads localStorage multiagent.nextStepsPoIssue = { <projectId>: { issue, url } }.
+const MARK_KEY = 'multiagent.nextStepsPoIssue';
+const DRAFT = [{ role: 'po', mode: 'issue', ts: 1, text: 'Here is the draft.', issue: { draft: { title: 'Export the city', body: 'As an owner…', labels: [], related: [] } } }];
+const FILED = { number: 42, url: 'https://github.com/o/demo/issues/42' };
+
+function filingApi() {
+  return {
+    listProjects: async () => JSON.parse(JSON.stringify(PROJECTS)),
+    productOwnerHistory: async () => JSON.parse(JSON.stringify(DRAFT)),
+    fileProductOwnerDraft: async () => ({ messages: [], filed: { ...FILED } }),
+  };
+}
+
+async function createTheDraft(page) {
+  const create = page.$('#po-drawer [data-po-act="create"]');
+  assert.equal(create !== null, true, 'the draft\'s Create button is shown');
+  create.dispatchEvent(new page.dom.classes.MouseEvent('click', { bubbles: true, cancelable: true }));
+  await settle(30);
+  assert.equal(page.callsTo('fileProductOwnerDraft').length, 1, 'the draft was filed');
+}
+
+test('#744 an issue filed after "Open the PO" is saved as the Next steps step\'s issue for that project', { timeout: 30000 }, async () => {
+  const page = await loadPage({ api: filingApi() });
+  await page.sandbox.Actions.call('openPoIssue', 'p1');
+  await settle(20);
+  await createTheDraft(page);
+  const saved = JSON.parse(page.sandbox.localStorage.getItem(MARK_KEY) || '{}');
+  assert.deepEqual(JSON.parse(JSON.stringify(saved)), { p1: { issue: 42, url: FILED.url } });
+});
+
+test('#744 an issue filed from the Product Owner opened elsewhere (not from Next steps) marks no step', { timeout: 30000 }, async () => {
+  const page = await loadPage({ api: filingApi() });
+  const actions = page.sandbox.BacklogActions;
+  actions.projectId = () => 'p1';
+  actions.project = () => JSON.parse(JSON.stringify(PROJECTS[0]));
+  await page.sandbox.BacklogPO.open();
+  await settle(20);
+  page.sandbox.BacklogPO.setMode?.('issue');
+  await settle(5);
+  await createTheDraft(page);
+  assert.equal(page.sandbox.localStorage.getItem(MARK_KEY), null);
+});
