@@ -201,6 +201,13 @@ inputs:
     default: ""
     show_if: "mode == 'fork'"
     description: "Fork + PR: the earlier pull request this one depends on (e.g. #12), written in the pull request's body."
+  # parent_pr (wait and rebase, set by the roadmap): the ci step waits for it to merge (wait.parent)
+  parent_pr:
+    label: "Parent pull request"
+    type: string
+    default: ""
+    show_if: "mode == 'fork'"
+    description: "Fork + PR: the URL of the earlier pull request to wait for. The pull request opens once it merged upstream, rebased onto the synced default branch."
   # validated: the run stops at developer_check after the developer (the old input `mode`, #630).
   validation:
     label: "Validation"

@@ -225,6 +225,7 @@ const FORK_INPUTS = {
   mode: { label: 'Mode', type: 'string', enum: ['fork'], default: 'fork', options: { fork: 'Fork + PR' }, description: 'Fork + PR: the branch is pushed to your fork (origin), the pull request opened against the original (upstream).' },
   parent_branch: { label: 'Parent branch', type: 'string', default: '', description: 'The branch on your fork this run starts from (the earlier item of a split implementation). Empty: the fork\'s default branch, synced with the original.' },
   depends_on: { label: 'Depends on', type: 'string', default: '', description: 'The earlier pull request this one depends on (e.g. #12), written in the pull request\'s body.' },
+  parent_pr: { label: 'Parent pull request', type: 'string', default: '', description: 'The URL of the earlier pull request to wait for: the pull request opens once it merged upstream, rebased onto the synced default branch.' },
 };
 const modeInputs = (s) => (s.mode === 'fork' ? FORK_INPUTS : {});
 const withE2e = (s) => s.tests === 'unit+e2e' && !!s.e2eCommand;

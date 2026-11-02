@@ -178,6 +178,8 @@
     waitOutput('output'),
     waitOutput('infra_output'),
     entry('steps[].wait.grace', 'all', 'duration', 'wait.grace must be a duration such as 10m.'),
+    // #738: a PR/MR URL (a template) the step waits to see merged before its own probe (a split implementation's parent)
+    entry('steps[].wait.parent', 'all', 'any', 'wait.parent is the PR/MR URL (a template) the step waits to see merged first.'),
     entry('steps[].choices', GATE, 'any', 'choices is only valid for human_approval.', { present: 'truthy' }),
     entry('steps[].full_suite', AGENT_STEPS, 'one of', 'full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).', { values: ['warn'] }),
     entry('steps[].commit_tests', AGENT_STEPS, 'one of', 'commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209).', { values: [true] }),

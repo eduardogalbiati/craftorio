@@ -40,10 +40,11 @@ function assertEarlierDependencies(stages) {
  * The base of a dependent item's run: the parent's run branch on the fork, whether the parent merged
  * upstream, and the project's policy for its pull request: 'wait-and-rebase' (the default: it opens once
  * the parent merged) or 'depends-on' (it opens at once, its body saying "Depends on #<parent's PR>").
- * null for an item without a dependency.
+ * parentPr: the URL of the parent's pull request a 'wait-and-rebase' child waits for (the ci step's
+ * wait.parent), null otherwise. null for an item without a dependency.
  * @param {Roadmap} roadmap
  * @param {string} itemId
- * @param {{ runOf: (runId: string) => any, policy?: string }} options runOf(runId) → { branch, merged, prNumber } | null
+ * @param {{ runOf: (runId: string) => any, policy?: string }} options runOf(runId) → { branch, merged, prNumber, prUrl? } | null
  */
 function dependencyBase(roadmap, itemId, { runOf, policy = 'wait-and-rebase' }) {
   const items = roadmap.stages.flatMap((s) => s.items);
@@ -58,6 +59,7 @@ function dependencyBase(roadmap, itemId, { runOf, policy = 'wait-and-rebase' }) 
     parentMerged: !!run?.merged,
     policy: how,
     prNote: how === 'depends-on' && run?.prNumber ? `Depends on #${run.prNumber}` : null,
+    parentPr: how === 'wait-and-rebase' && !run?.merged && run?.prUrl ? run.prUrl : null,
   };
 }
 

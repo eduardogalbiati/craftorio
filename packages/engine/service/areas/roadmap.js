@@ -212,19 +212,21 @@ module.exports = (ctx) => {
     } catch { return false; }
   }
 
-  // #738: a parent item's run for dependencyBase → { branch (develop's output), merged, prNumber } or null
+  // #738: a parent item's run for dependencyBase → { branch (develop's output), merged, prNumber, prUrl } or null
   function parentRun(runId) {
     const r = runId ? findRun(runId) : null;
     if (!r?.runDir) return null;
     let events = [];
     try { events = runs.runEvents(r.runDir); } catch { /* no events: no branch */ }
     const branch = events.filter((e) => e.type === 'step.finished' && typeof e.output?.branch === 'string' && e.output.branch.trim()).at(-1)?.output.branch.trim() || null;
-    return { branch, merged: !!roadmapRun(runId)?.merged, prNumber: prOfEvents(events)?.number || null };
+    const pr = prOfEvents(events);
+    return { branch, merged: !!roadmapRun(runId)?.merged, prNumber: pr?.number || null, prUrl: pr?.url || null };
   }
 
   // #738 split implementations in a Fork + PR run: a dependent item starts from its parent's branch on
   // the fork while the parent is not merged (inputs.parent_branch), from the synced base once it is; with
-  // the project's dependentPr 'depends-on' its PR says "Depends on #<parent's PR>" (inputs.depends_on)
+  // the project's dependentPr 'depends-on' its PR says "Depends on #<parent's PR>" (inputs.depends_on),
+  // else (wait and rebase) its ci step waits for the parent's PR to merge (inputs.parent_pr, wait.parent)
   function dependencyInputs(roadmap, item, inputs, wf, project) {
     if (!item.dependsOn || inputs.mode !== 'fork' || !wf.inputs?.parent_branch) return {};
     const dep = roadmaps.dependencyBase(roadmap, item.id, { runOf: parentRun, policy: project.fork?.dependentPr });
@@ -232,6 +234,7 @@ module.exports = (ctx) => {
     return {
       ...(dep.branch && !dep.parentMerged ? { parent_branch: dep.branch } : {}),
       ...(dep.prNote && !dep.parentMerged && wf.inputs?.depends_on ? { depends_on: dep.prNote.replace(/^Depends on /, '') } : {}),
+      ...(dep.parentPr && wf.inputs?.parent_pr ? { parent_pr: dep.parentPr } : {}),
     };
   }
 

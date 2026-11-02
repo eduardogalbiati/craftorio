@@ -153,8 +153,10 @@ const methods = {
   async pollStep(step, st, t0) {
     const w = step.wait;
     if (st.delegate_result || st.supervisorNote || !st.output || st.output.error) return null;
-    const target = render(w.target, { ...this.ctx, output: st.output }).trim();
     const stats = (this.probeStats[step.id] ??= { polls: 0, agent_calls: 0, completed: 0, errors: 0 });
+    const parent = w.parent && !st.parentMerged ? render(w.parent, { ...this.ctx, output: st.output }).trim() : '';
+    if (parent) return this.pollParent(step, st, parent, stats);
+    const target = render(w.target, { ...this.ctx, output: st.output }).trim();
     let r;
     try {
       if (!target) throw new Error(`${w.probe}: no target yet (${w.target} is empty)`);
@@ -209,6 +211,39 @@ const methods = {
     }
     stats.agent_calls++;
     st.probeNews = { detail: r.detail || state, polls: st.probePolls };
+    return null;
+  },
+
+  // #738 `wait.parent` (a split implementation's parent PR/MR, "wait and rebase"): before the step's own
+  // probe, the engine checks the parent itself. Not merged yet → poll again, without the agent, and the
+  // wait is not counted in the /loop's max_duration (a maintainer may take days); merged → the agent is
+  // called once to rebase and open its PR/MR (st.parentMerged: then the step's own probe runs); closed
+  // or unreadable → the agent is called to say what to do.
+  async pollParent(step, st, parent, stats) {
+    let r;
+    try {
+      r = await this.probe({ probe: 'pr_checks', target: parent, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id });
+    } catch (e) {
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      r = { state: 'error', detail: `the parent PR/MR could not be read (${e.message})` };
+      stats.errors++;
+    }
+    const waiting = !['merged', 'closed', 'error'].includes(r.state);
+    st.probePolls = (st.probePolls || 0) + 1;
+    this.emitEvent('step.probe', {
+      step_id: step.id, probe: 'parent', target: parent, state: r.state, detail: r.detail || r.state, action: waiting ? 'poll' : 'agent', iteration: st.iteration, polls: st.probePolls,
+    });
+    if (waiting) {
+      stats.polls++;
+      st.loopStartedAt = Date.now();
+      return this.loopWait(step, st.output, { probed: true });
+    }
+    if (r.state === 'merged') st.parentMerged = true;
+    stats.agent_calls++;
+    const news = r.state === 'merged'
+      ? `the parent PR/MR ${parent} merged: rebase the branch onto the synced base, push it to origin and open its PR/MR now`
+      : `the parent PR/MR ${parent}: ${r.detail || r.state}`;
+    st.probeNews = { detail: news, polls: st.probePolls };
     return null;
   },
 
