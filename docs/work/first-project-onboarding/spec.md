@@ -60,7 +60,14 @@ flowchart LR
 
 **R6. Ways of working profile, revisited.**
 - `team` leaves.
-- `mode: local | remote`.
+- `mode: local | remote | fork`.
+- **Amended (#738): no push access.** The access check reads the push permission (`gh api repos/<owner>/<repo>`,
+  `permissions.push`). Without it the import step holds on a notice: "You can't push to <owner/repo>. Create a
+  fork in your account to contribute?" with **Create a fork** (`gh repo fork`, an existing fork of the owner
+  reused; in the clone `origin` = the fork, `upstream` = the original; mode `fork`) and **Work locally** (mode
+  `local`: no pull request). In `fork` mode each run fast-forwards the fork's default branch to upstream's and
+  pushes it to the fork, pushes its branch to `origin` only, opens the PR against upstream following its
+  CONTRIBUTING.md and PR template, and waits for that PR's CI; nothing is ever pushed to `upstream`.
 - `ci: none | release | pr+release`, read from the CI files' triggers.
 - `tests: unit | unit+e2e` and `e2eCommand`, read from configs, scripts and the order of the CI jobs.
 - Unchanged: `release`, `testCommand`, `checkCommand` and `languages`.
@@ -69,7 +76,7 @@ flowchart LR
 
 | Field | Rule |
 |---|---|
-| `mode` | local: merge into the local base and **push main as the workflow's last step** (the project auto-push goes away); remote: a PR on GitHub/GitLab, followed and merged there |
+| `mode` | local: merge into the local base and **push main as the workflow's last step** (the project auto-push goes away); remote: a PR on GitHub/GitLab, followed and merged there; fork (#738, no push access): a PR from the owner's fork to the original, merged by its maintainer |
 | `ci` | pr+release: remote feature waits for the PR's CI; release: the release pushes the tag and waits for the CI run; none: the local suite only |
 | `tests` | unit+e2e: feature with E2E first, fix with E2E after; unit: implement, then write the unit tests |
 | `release` | with tags: a hotfix branches from the last tag and ships as a patch; per-merge: from main |

@@ -24,7 +24,8 @@ Where each input of feature, fix and release gets its project value:
 
 | Input | Project value |
 | --- | --- |
-| `mode` | the wizard's variant, else the profile's merge style |
+| `mode` | the wizard's variant (`local-*`, `remote-*`, `fork-*`), else the profile's mode (`fork` when you can't push to the repository, #738) |
+| `parent_branch` | set by the Roadmap for an item that `dependsOn` an earlier one (#738): its branch on the fork |
 | `base_branch` | the repository's default branch |
 | `test_command` (release: `unit_command`) | the profile's test command, else discovery (`package.json`, `go.mod`, `Cargo.toml` → `cargo test`, …) |
 | `check_command` | the profile's check command, else the project's check discovery |

@@ -8,6 +8,8 @@
 //   (wizard-workflows-failed: the reason, wizard-workflows-retry and Define manually), analyzed (the rows
 //   with the profile's reasons, wizard-workflow-reason) and manual (the rows editable, no reason, Analyze
 //   still offered). Each row: wizard-workflow data-kind with wizard-workflow-select (select.js, #383).
+//   #738: above the rows (analyzed and manual), wizard-way-of-working: Local / Remote / Fork + PR, from the
+//   fork choice of a repository the owner can't push to, else the profile's mode.
 // - jobReason(job): a failed job in the interface's language from the engine's code (failureOf in
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
 // - profileOf(), workflowChoices(), pickedWorkflows() (#729: Finish saves them as the project's workflows).
@@ -40,6 +42,25 @@
 
     // #630 (mock-4): the ways-of-working profile { mode, ci, tests } the profile job found, or null
     const profileOf = () => cur().onboarding?.profile || jobOf('profile').profile || null;
+
+    // #738: the way of working (Local / Remote / Fork + PR): the fork choice of a repository the owner
+    // can't push to (made or reused: fork, declined: local) over the profile's mode; null while unknown
+    const wayOf = () => {
+      const fork = cur().onboarding?.fork;
+      if (['created', 'reused'].includes(fork?.status)) return 'fork';
+      if (fork?.status === 'declined') return 'local';
+      return profileOf()?.mode || null;
+    };
+
+    // #738: wizard-way-of-working, the mode's label as a badge (Local adds "no pull request"), shown in the
+    // analyzed and manual states (Define manually keeps the fork choice)
+    function wayOfWorking() {
+      const mode = wayOf();
+      if (!mode) return '';
+      const label = [t(`onboarding.profile_mode_${mode}`), mode === 'local' ? t('onboarding.way_no_pull_request') : ''].filter(Boolean).join(' · ');
+      return `<p class="small wizard-way-of-working"><span class="muted">${esc(t('onboarding.way_of_working'))}</span>
+          <span class="badge" data-testid="wizard-way-of-working" data-mode="${esc(mode)}">${esc(label)}</span></p>`;
+    }
 
     // one row per suggested workflow (feature, fix, release) and the CI row, each with why the profile
     // suggests it and its selector on the profile's pick (#630); the owner's pick stays (cur.workflows)
@@ -109,7 +130,7 @@
             <span>${esc(t('onboarding.workflows_analyzing', { name }))}</span></div>` : '';
         // Define manually keeps Analyze the repository on offer
         const analyze = at === 'manual' ? `<div class="wizard-workflows-choices">${choiceButton('analyze')}</div>` : '';
-        body = `<div class="wizard-workflows-stage">${list}${overlay}</div>${analyze}`;
+        body = `${busy ? '' : wayOfWorking()}<div class="wizard-workflows-stage">${list}${overlay}</div>${analyze}`;
       }
       return `<div class="wizard-column wizard-workflows-column" data-testid="wizard-workflows-column" data-state="${at}">${head}${body}
         <p class="muted small">${esc(t('onboarding.workflows_more'))}</p></div>`;

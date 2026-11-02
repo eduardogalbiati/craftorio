@@ -80,6 +80,12 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    `wizard-workflows-spinner`); then the profile's picks and reasons. A failed profile shows its reason,
    Retry (`wizard-workflows-retry`) and Define manually (`wizard-workflows-failed`). Manual shows the rows
    editable without a reason, Analyze still offered; a running job's row has a spinner instead of its dot.
+   #738: above the rows (analyzed and manual), `wizard-way-of-working`: the way of working's badge
+   (Local, with "no pull request" / Remote / Fork + PR), from the fork choice when there was one, else the
+   profile's mode. Before this step, a repository the owner can't push to (`fork.status` suggested or
+   failed in the onboarding state) holds the import step on `wizard-fork-notice`: "You can't push to
+   <owner/repo>…", Create a fork (`wizard-create-fork`, `api.forkOnboarding`) and Work locally
+   (`wizard-work-locally`, `api.workLocallyOnboarding`); the answer moves on to analysis.
    The footer shows the clone's progress (`wizard-clone-progress`, `data-status` the clone job's, with
    `wizard-spinner` while it runs) on the left, Back and Continue (`wizard-next`) on the right: always enabled,
    the analysis goes on in the background and the review shows what is pending. Nothing paid starts

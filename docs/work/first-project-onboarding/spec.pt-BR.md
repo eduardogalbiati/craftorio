@@ -60,7 +60,14 @@ flowchart LR
 
 **R6. Perfil de trabalho (Ways of working revisitado).**
 - `team` sai.
-- `mode: local | remote`.
+- `mode: local | remote | fork`.
+- **Emenda (#738): sem permissão de push.** A checagem de acesso lê a permissão de push (`gh api repos/<owner>/<repo>`,
+  `permissions.push`). Sem ela, o passo de importação para num aviso: "You can't push to <owner/repo>. Create a
+  fork in your account to contribute?" com **Create a fork** (`gh repo fork`, um fork existente do dono é
+  reaproveitado; no clone `origin` = o fork, `upstream` = o original; modo `fork`) e **Work locally** (modo
+  `local`: sem pull request). No modo `fork`, cada run avança o branch padrão do fork até o do upstream e o envia
+  ao fork, envia o próprio branch só ao `origin`, abre o PR contra o upstream seguindo o CONTRIBUTING.md e o
+  template de PR dele, e espera o CI desse PR; nada é enviado ao `upstream`.
 - `ci: none | release | pr+release`, lido dos gatilhos dos arquivos de CI.
 - `tests: unit | unit+e2e` e `e2eCommand`, lidos de configs, scripts e da ordem dos jobs no CI.
 - Ficam como estão: `release`, `testCommand`, `checkCommand` e `languages`.
@@ -69,7 +76,7 @@ flowchart LR
 
 | Campo | Regra |
 |---|---|
-| `mode` | local: merge na base local e **push do main como último passo do workflow** (o auto-push do projeto sai); remote: PR no GitHub/GitLab, acompanhado e mesclado lá |
+| `mode` | local: merge na base local e **push do main como último passo do workflow** (o auto-push do projeto sai); remote: PR no GitHub/GitLab, acompanhado e mesclado lá; fork (#738, sem permissão de push): PR do fork do dono para o original, mesclado pelo mantenedor |
 | `ci` | pr+release: o feature remoto espera o CI do PR; release: a release faz push da tag e espera o run de CI; none: só a suíte local |
 | `tests` | unit+e2e: feature com E2E primeiro, fix com E2E depois; unit: implementa e depois escreve o unitário |
 | `release` | com tags: o hotfix sai da última tag e vira patch; per-merge: sai de main |

@@ -188,6 +188,21 @@
       </div>`;
   }
 
+  // #738: the repository can't be pushed to (gh's permissions.push false): suggest a fork, or working
+  // locally; a failed fork keeps the notice with its reason (the owner tries again or works locally)
+  const forkPending = (o) => ['suggested', 'failed'].includes(o?.fork?.status);
+  function forkNotice(o) {
+    if (!forkPending(o)) return '';
+    const failed = o.fork.status === 'failed' ? `<p class="small">${esc(t('onboarding.fork_failed', { error: o.fork.reason || t('onboarding.no_reason') }))}</p>` : '';
+    const off = cur.busy ? ' disabled' : '';
+    return `<div class="wizard-alert warn" data-testid="wizard-fork-notice">
+        <strong>${esc(t('onboarding.fork_notice', { repo: o.fork.repo || '' }))}</strong>
+        ${failed}
+        <div class="wizard-actions"><button type="button" class="btn primary" data-act="fork-create" data-testid="wizard-create-fork"${off}>${esc(t('onboarding.fork_create'))}</button>
+          <button type="button" class="btn" data-act="work-locally" data-testid="wizard-work-locally"${off}>${esc(t('onboarding.fork_work_locally'))}</button></div>
+      </div>`;
+  }
+
   // the provider: read from the URL, else the one picked on the toggle (GitHub by default)
   const pickedProvider = () => platformOfRepo(cur.model.repository)?.id || cur.provider || window.Platforms?.DEFAULT_PLATFORM || providers()[0];
 
@@ -297,6 +312,7 @@
       </div>
       <p class="mono muted small text-cut" id="wizard-clone-into" data-testid="wizard-clone-into">${esc(cloneInto())}</p>
       ${o?.status === 'failed' ? errorBlock(o) : ''}
+      ${forkNotice(o)}
       ${o ? cliWarning(o.cli) : ''}`;
   }
 
@@ -655,7 +671,8 @@
     }
     if (cur && cur.projectId === state.projectId) {
       cur.onboarding = state;
-      if (cur.model.step === 'repository' && CLONED.includes(state.status)) toAnalysis();
+      // #738: the fork suggestion holds the repository step until the owner chooses
+      if (cur.model.step === 'repository' && CLONED.includes(state.status) && !forkPending(state)) toAnalysis();
       if (cur.model.step === 'review') loadReview(); // an analysis done meanwhile: read what it made
       renderSoon();
     }
@@ -863,6 +880,9 @@
     else if (act === 'next') await next();
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
+    // #738: the fork suggestion's two choices; the answer (cloned, the fork chosen) moves on to analysis
+    else if (act === 'fork-create' && cur.projectId) await call(() => api.forkOnboarding(cur.projectId));
+    else if (act === 'work-locally' && cur.projectId) await call(() => api.workLocallyOnboarding(cur.projectId));
     // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part
     // too), or runs again a failed profile job
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }

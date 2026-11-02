@@ -10,7 +10,15 @@ actions, or any code that deletes or checks out branches.
   `origin/<base>`). Removed on success. Approval actions run in
   `worktree_dir`. Falls back to the repo path when it isn't a git repo; mock runs never create
   worktrees. `feature`, `fix` and `release` use it (#630: `remote` may be a template, e.g. feature's
-  `{{ inputs.mode == 'remote' }}`, rendered with the run's inputs).
+  `{{ inputs.mode != 'local' }}`, rendered with the run's inputs).
+- **Fork + PR (#738)**: `orchestrator.worktree.fork` (feature's `{{ inputs.mode == 'fork' }}`): the project's
+  `origin` is the owner's fork, `upstream` the original. Before the worktree is created, `syncForkBase` fetches
+  `upstream/<base>` and `origin`, fast-forwards the local `<base>` to `upstream/<base>` and pushes it to
+  `origin` only (the fork's default branch never carries the owner's own commits). An independent item starts
+  from `upstream/<base>`; a dependent item (`inputs.parent_branch`, set by the roadmap from the item it
+  `dependsOn`) starts from `origin/<parent branch>`. Once the parent merged upstream, `restackOnBase` syncs the
+  base and rebases the branch with `rebase --onto upstream/<base> origin/<parent branch>` (a conflict aborts).
+  Nothing is ever pushed to `upstream`.
 - **Lifecycle: the branch is the record, the folder is temporary (#202)**. No worktree folder is
   kept for an ended run. Success: `removeWorktree` (the folder, and the local branch once merged).
   Failed, cancelled, stopped: `retireWorktree` (from `finishWorktree`) gives a detached worktree a

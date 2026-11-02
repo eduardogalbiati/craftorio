@@ -28,7 +28,8 @@ settle it: the interview asks the owner what stays `null`, so a guess costs more
 - **How changes land** (`mode`, its evidence under `merge`): commits straight on the main branch vs
   merge commits of pull requests (`git log --first-parent --merges`, "Merge pull request" / "(#123)"
   squash subjects). Straight commits or local merges: `local` (merge `local`); merges or squashes of
-  pull requests: `remote` (merge `pr`).
+  pull requests: `remote` (merge `pr`). `fork` (#738) is not read from the history: the onboarding sets
+  it when the owner can't push to the repository (external contribution, pull requests from their fork).
 - **How it releases** (`release`): tags and releases, their cadence and their relation to merges.
   A tag per closed milestone or group of issues: `milestone`; a tag after (almost) every merge:
   `per-merge`; tags at a fixed cadence whatever is merged: `train`; `-rc.N` tags before each stable
@@ -55,7 +56,7 @@ settle it: the interview asks the owner what stays `null`, so a guess costs more
 ```json
 {
   "profile": {
-    "mode": "local | remote",
+    "mode": "local | remote | fork",
     "release": "milestone | per-merge | train | rc-stable | null",
     "testCommand": "npm test",
     "checkCommand": "npm run check | null",
