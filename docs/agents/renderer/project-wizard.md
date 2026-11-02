@@ -47,8 +47,10 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    picked from the list, with one rule (`displayNameFromUrl` of the model: `acme/ai-memory` → "Ai Memory")
    until the owner types a name; clearing it makes it follow again. "Next: clone and continue"
    calls `onboarding:start`. #743: the access check and the clone read as one wait in place: `wizard-next`
-   is disabled with a spinner (`wizard-spinner`) and "Cloning <name>…", the fields read-only, no status
-   card; the clone done goes straight to the analysis step. The panel (`wizard-panel`) has one fixed size
+   shows a spinner (`wizard-spinner`) and "Cloning <name>…" (`aria-busy`), the fields read-only, no status
+   card; the button is disabled only while `onboarding:start` is in flight, then a click goes on to the
+   analysis step without waiting (#641: the clone keeps running); the clone done goes straight to the
+   analysis step. The panel (`wizard-panel`) has one fixed size
    on every step and state: its body scrolls. A refused access shows `wizard-error`
    `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
    the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A

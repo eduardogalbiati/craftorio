@@ -17,8 +17,8 @@
 //   one wizard-repo-option data-repo="owner/repo" each, a click fills the URL and the name), #wizard-name
 //   (#739: it follows the URL, OnboardingModel.displayNameFromUrl, typed or picked, until the owner types a
 //   name; cleared, it follows again), wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl);
-//   #743: once Next is pressed, the access check and the clone are one wait in place: wizard-next disabled
-//   with wizard-spinner and "Cloning <name>…", the fields read-only, no status card, then the analysis
+//   #743: once Next is pressed, the access check and the clone are one wait in place: wizard-next shows
+//   wizard-spinner and "Cloning <name>…" (disabled only while onboarding:start is in flight, #641), the fields read-only, no status card, then the analysis
 //   step at once), analysis (the jobs
 //   from the clone on in wizard-cost, with wizard-cost-total and the paid parts data-part="projectMap" |
 //   "ranking" before the click, checked and locked, a running row with a spinner (#724),
@@ -118,6 +118,7 @@
     names,
     remember: (s) => remember(s),
     shownInWizard: (pid) => cur?.projectId === pid,
+    spinner: SPINNER,
     states,
     statusText,
     wizardOpen: () => !!cur,

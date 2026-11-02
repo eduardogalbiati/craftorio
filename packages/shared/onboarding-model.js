@@ -179,19 +179,27 @@
     return { total, parts, unknown };
   }
 
+  // a repository URL's parts, the one normalization of repoNameFromUrl and displayNameFromUrl: no query or
+  // fragment, trailing slash nor .git, split on / and : ("git@host:owner/repo.git" → git@host, owner, repo)
+  function repoUrlParts(url) {
+    const clean = String(url ?? '').trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
+    return clean.split(/[/:]/).filter(Boolean);
+  }
+
   function repoNameFromUrl(url) {
-    const clean = String(url).trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
-    const parts = clean.split(/[/:]/).filter(Boolean);
-    const name = parts.slice(-2).join('-') || 'repo'; // owner-repo avoids collisions between forks
+    const name = repoUrlParts(url).slice(-2).join('-') || 'repo'; // owner-repo avoids collisions between forks
     return name.replace(/[^\w.-]/g, '_');
   }
 
   // #739: the project's display name from its repository URL (the wizard's URL field and its list pick):
-  // the last path part, dashes and underscores as spaces, each word capitalized ("ai-memory" → "Ai Memory")
+  // the last path part, dashes and underscores as spaces, each word capitalized ("ai-memory" → "Ai Memory");
+  // "" until the URL names an owner and a repository after its scheme and host (a URL being typed, a host alone)
   function displayNameFromUrl(url) {
-    const clean = String(url ?? '').trim().replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
-    const last = clean.split(/[/:]/).filter(Boolean).pop() || '';
-    return last.split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    const parts = repoUrlParts(url);
+    if (String(url ?? '').includes('://')) parts.shift(); // the scheme (https, ssh)
+    if (/[.@]/.test(parts[0] || '')) parts.shift(); // the host (github.com, git@gitlab.com)
+    if (parts.length < 2) return '';
+    return parts.pop().split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
   // #632: a project's id and a new project's folder name, the one rule (packages/engine/domains/project/projects.js

@@ -78,11 +78,13 @@ function failureOf(e) {
   return { code, ...(code === 'cli-missing' ? { cli: error.match(CLI_MISSING)[1] } : {}), reason: line };
 }
 
+// an E2E hook's comma-separated list of names (the environment variable named)
+const listed = (name) => String(process.env[name] || '').split(',').map((s) => s.trim()).filter(Boolean);
+
 // #725: the E2E hooks of a simulated run (features/steps/onboarding.steps.js): the jobs named in
 // MULTIAGENT_E2E_ONBOARDING_HOLD never end, those in MULTIAGENT_E2E_ONBOARDING_FAIL throw
 function e2eJobs(jobs) {
   if (!simulation.simulationOnly()) return jobs;
-  const listed = (name) => String(process.env[name] || '').split(',').map((s) => s.trim()).filter(Boolean);
   const hold = listed('MULTIAGENT_E2E_ONBOARDING_HOLD');
   const fail = listed('MULTIAGENT_E2E_ONBOARDING_FAIL');
   if (!hold.length && !fail.length) return jobs;
@@ -97,8 +99,7 @@ function e2eJobs(jobs) {
 // MULTIAGENT_E2E_ONBOARDING_HOLD=clone keeps it cloning, MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS slows it
 function e2eCloneWait() {
   if (!simulation.simulationOnly()) return null;
-  const hold = String(process.env.MULTIAGENT_E2E_ONBOARDING_HOLD || '').split(',').map((s) => s.trim());
-  if (hold.includes('clone')) return new Promise(() => {});
+  if (listed('MULTIAGENT_E2E_ONBOARDING_HOLD').includes('clone')) return new Promise(() => {});
   const ms = Number(process.env.MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS);
   return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : null;
 }

@@ -8,15 +8,14 @@
 // - #724: hidden while the wizard is open (wizardOpen(): the wizard shows the progress itself, the markup
 //   stays current for when it closes); closed, it lists what needs attention: running or failed.
 // - #724: a finished import (ready / analyzed, no paid job failed) leaves the tray LEAVE_MS later with the
-//   toast "<name> imported" and Open the project (Actions openProject); none when the wizard shows that
-//   import, nor when Finish's own toast (finished_analyzed) says it. Running again or failed meanwhile, it stays.
+//   toast "<name> imported" and Open the project (Actions openProject); none when the wizard showed that
+//   import as it finished or shows it still, nor when Finish's own toast (finished_analyzed) says it. Running again or failed meanwhile, it stays.
 // Uses app.js globals (api, esc, t, showToast, errMsg) and window.Actions.
 
 (function () {
   const LEAVE_MS = 5000;
-  const SPINNER = (testid) => `<span class="spinner" data-testid="${testid}" aria-hidden="true"></span>`;
 
-  window.ProjectWizardTray = function ({ active, failedPaid, finished, jobReason, names, remember, shownInWizard, states, statusText, wizardOpen }) {
+  window.ProjectWizardTray = function ({ active, failedPaid, finished, jobReason, names, remember, shownInWizard, spinner, states, statusText, wizardOpen }) {
     let tray = null;
     const leaving = new Map(); // projectId → the timer that takes a finished import out of the tray
 
@@ -29,7 +28,8 @@
         return;
       }
       if (leaving.has(pid)) return;
-      const notify = !(finished.has(pid) && s.status === 'analyzed');
+      // the wizard showed it when it finished (or still shows it 5 s later): no toast either way
+      const notify = !(finished.has(pid) && s.status === 'analyzed') && !shownInWizard(pid);
       leaving.set(pid, setTimeout(() => {
         leaving.delete(pid);
         if (!states.has(pid) || !isDone(states.get(pid))) return;
@@ -66,7 +66,7 @@
         const dismiss = active.includes(s.status) ? ''
           : `<button type="button" class="btn ghost small tray-dismiss" data-act="dismiss" data-project="${esc(s.projectId)}" aria-label="${esc(t('onboarding.dismiss', { name }))}">×</button>`;
         return `<li class="tray-item" data-testid="tray-item" data-project="${esc(s.projectId)}" data-status="${esc(s.status)}">
-            <div class="tray-head">${active.includes(s.status) ? SPINNER('tray-spinner') : ''}<strong class="tray-name" title="${esc(name)}">${esc(name)}</strong><span class="badge status-${esc(s.status)}">${esc(statusText(s.status))}</span>${dismiss}</div>
+            <div class="tray-head">${active.includes(s.status) ? spinner('tray-spinner') : ''}<strong class="tray-name" title="${esc(name)}">${esc(name)}</strong><span class="badge status-${esc(s.status)}">${esc(statusText(s.status))}</span>${dismiss}</div>
             ${failed}
           </li>`;
       };
