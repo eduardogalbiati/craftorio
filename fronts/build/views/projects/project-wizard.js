@@ -33,18 +33,15 @@
 //   still offered)) and review (#642, spec R10): wizard-review with the project's card, wizard-review-city (Open the
 //   city: Finish, then the project's City tab) / -findings / -backlog, each data-state="ready" | "pending"
 //   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
-//   | "later" (the analyses were skipped), #730: one wizard-review-finding data-finding="<index>" per finding
-//   of the Oracle's report (architecture:report) with wizard-review-create-issue and
-//   wizard-review-create-issue-prioritize (architecture:createIssue: a refactor issue, and with prioritize a
-//   planned roadmap item), then the issue's link wizard-review-finding-issue once filed, and the idea field
+//   | "later" (the analyses were skipped), #730: one wizard-review-finding data-finding="<index>" per report
+//   finding with wizard-review-create-issue / -prioritize, then its link wizard-review-finding-issue, and the idea field
 //   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation in the
 //   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next (step 3:
 //   "Continue", enabled whatever the analysis does; before any analysis it skips it) or, on the review,
 //   wizard-finish (never disabled,
 //   never waits): it closes the wizard on the project's page with its Next steps
 //   card (openProject with nextSteps, project.js), then sends the idea to the Inbox (no finding is filed
-//   without its own click, #730); an analysis
-//   still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
+//   without its own click, #730); an analysis still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
 //   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform
@@ -66,8 +63,7 @@
 //   change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
 // architecture:estimate (the project map's cost), and for the review architecture:city / facts / report,
-// architecture:createIssue (api.createFindingIssue, never runNow), the backlog and the discovery card
-// (api.createDiscoveryCard, an Inbox idea).
+// architecture:createIssue (never runNow), the backlog and api.createDiscoveryCard (an Inbox idea).
 // Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.Setup (packages/ui-kit/setup.js).
 
 (function () {
@@ -528,8 +524,7 @@
     const reportId = cur?.review.report?.report?.id;
     if (!pid || !reportId || cur.filing != null) return;
     const c = cur;
-    c.filing = index;
-    render();
+    c.filing = index; render();
     try {
       const { filed } = await api.createFindingIssue(pid, reportId, index, { prioritize });
       const f = c.review.report?.findings?.[index];
@@ -889,7 +884,7 @@
   function onInput(e) {
     const id = e.target?.id || e.target?.dataset?.testid;
     if (!cur) return;
-    if (id ==='wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
+    if (id === 'wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
     // #630: the owner's pick of a suggested workflow's variant (kept across renders)
     if (e.target?.dataset?.testid === 'wizard-workflow-select') {
       cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') };

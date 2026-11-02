@@ -199,7 +199,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   `skip` permission, after `settings.oracle.parkAfterMinutes` (default 15) at the gate with nothing
   else of the roadmap running; it still never answers a gate. Why: "my goal today is to work without
   stopping" (one gate held stages 96 to 104 for about 4 hours on the night of 2026-10-14).
-- **2026-10-14** (#387): the developer builds with `design-system` beside `ui-conventions`, whose
+  (#387, 2026-10-14, folded here to keep the log short) The developer builds with `design-system` beside `ui-conventions`, whose
   design section is adapted from Anthropic's `frontend-design` (the app's tokens always win), and
   the UI reviewer's rubric has the same items: a pass/fail line of evidence per item and per
   screenshot, the 5-second message and the biggest weakness even on an approval, and the axe-core
@@ -299,7 +299,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   value the owner set by hand on its own, never stops a run and never changes the memory guard's
   limits; the memory guard's history only suggests (Apply). Why: a new user could not tell how many
   runs at once were safe until the machine froze.
-- **2026-10-11** (#313, #314, #315; and #247, #245, #241 of 2026-10-04): the app is free, open-source software under the MIT licence,
+  (#313, #314, #315 of 2026-10-11; and #247, #245, #241 of 2026-10-04, folded here to keep the log short) The app is free, open-source software under the MIT licence,
   for Windows, macOS and Linux. The trial is removed; sign-in stays required in the packaged app
   only to count the people using it (the account gates nothing). The history is not rewritten.
   Why: without a licence the code is not open source, and the owner wants to know how many people
