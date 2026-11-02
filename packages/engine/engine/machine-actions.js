@@ -24,7 +24,11 @@ const { runProbe } = require('./probes');
 const { captureScreenshots } = require('./screenshot-step');
 const { capturePreview } = require('./preview-capture');
 const suiteStep = require('./suite-step');
-const { affectedTests, relatedTests } = require('./affected-tests');
+const {
+  affectedTests,
+  isTest,
+  relatedTests,
+} = require('./affected-tests');
 const { shipRelease, writeReleaseVersion } = require('../domains/releases/releases');
 const {
   confirmedFailures,
@@ -80,12 +84,13 @@ function real() {
     // #527: the failures a base check confirmed red alone since its last green check, the only ones a
     // run's suite counts as pre-existing (a store it cannot read: none confirmed)
     confirmedOnMain: (root, projectId) => { try { return confirmedFailures(root, projectId); } catch { return []; } },
-    // the test files the run's change can break (#212), plus those that failed in an earlier round
+    // the test files the run's change can break (#212), plus those that failed in an earlier round;
+    // only the failures the unit runner runs (#754 #755: never a .feature an E2E step failed)
     affectedTests({ root, base, failed = [] }) {
       if (!root || !base) return { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: 'the run has no worktree or base branch: the whole suite' };
       const sel = affectedTests({ root, base });
       for (const f of failed) {
-        if (sel.mode !== 'affected' || sel.files.includes(f) || !fs.existsSync(path.join(root, f))) continue;
+        if (sel.mode !== 'affected' || !isTest(f) || sel.files.includes(f) || !fs.existsSync(path.join(root, f))) continue;
         sel.files.push(f);
         sel.reasons[f] = 'failed in an earlier round';
       }
