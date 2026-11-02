@@ -10,6 +10,8 @@
 // `cloneError` the reason of a failed clone; a `cloning` record no job of this process runs (the app closed
 // during the clone) reads `failed`; retryClone clones a failed one again; checkAccess runs `git ls-remote`.
 // #640: cloneJob lets the onboarding (packages/engine/service/areas/project-onboarding.js) wait for a clone.
+// #745: `platform` (github / gitlab) for a host its URL does not name (shared/platforms projectPlatform);
+// #735: `kind` (backend / frontend / full-stack) and `runDefaults` the owner set (project-run-defaults.js).
 
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +22,9 @@ const { cleanConfig } = require('../local/local-preview');
 const { firstBuild } = require('@multiagent/shared/default-workflow');
 // #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery)
 const { slugify } = require('@multiagent/shared/onboarding-model');
+const { findPlatform } = require('@multiagent/shared/platforms');
+// #735: the kinds and the keys a project's run defaults may override (read at call time: no load cycle)
+const runDefaultsModule = () => require('./project-run-defaults');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
@@ -133,7 +138,10 @@ async function createProject(dir, data, { git = execGit, reposDir = null, cloneE
   // none checked for a repository being cloned (its manifest could not be read before): the clone job reads it
   const workflows = cleanWorkflows(data.workflows);
   const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuild(workflows) : null;
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
+  // #745: the platform the wizard picked for a host its URL does not name; #735: the confirmed kind
+  const platform = cleanPlatform(data.platform);
+  const kind = cleanKind(data.kind);
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(platform ? { platform } : {}), ...(kind ? { kind } : {}), ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   if (project.status === 'cloning') startClone(dir, id, { git, defaultWorkflow: data.defaultWorkflow });
   return readProject(dir, id);
@@ -195,6 +203,11 @@ function updateProject(dir, id, patch) {
   if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
   // #360: each analysis seed's deterministic tool, { <seed id>: command }, run instead of the Oracle
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
+  // #745: the project's git platform (github / gitlab) for a self-hosted host; null: read from the URL
+  if (patch.platform !== undefined) next.platform = cleanPlatform(patch.platform);
+  // #735: backend / frontend / full-stack as the owner confirmed it, and the run defaults edited on the project page
+  if (patch.kind !== undefined) next.kind = cleanKind(patch.kind);
+  if (patch.runDefaults !== undefined) next.runDefaults = cleanRunDefaults(patch.runDefaults);
   if (patch.folder !== undefined) moveFolder(next, cur, patch.folder, jobs.has(jobKey(dir, id)));
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);
@@ -216,6 +229,21 @@ function moveFolder(next, cur, value, cloning) {
 
 // { install, command, url, cwd?, env? } with empty fields dropped; null without a command (the action is hidden)
 const cleanLocalPreview = (v) => cleanConfig(v);
+
+// #745: a known platform's id (github, gitlab), else null
+const cleanPlatform = (v) => findPlatform(v)?.id || null;
+// #735: backend / frontend / full-stack, else null (detected from the facts)
+const cleanKind = (v) => (runDefaultsModule().KINDS.includes(v) ? v : null);
+// #735: the run defaults the owner set on the project page, only the known keys, empty ones dropped
+function cleanRunDefaults(v) {
+  const out = {};
+  for (const k of runDefaultsModule().OVERRIDABLE) {
+    const val = v?.[k];
+    if (Array.isArray(val)) out[k] = val.map((s) => String(s).trim()).filter(Boolean);
+    else if (typeof val === 'string' && val.trim()) out[k] = val.trim();
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 // #486: a workflow's name without its .yaml suffix; null when empty
 const cleanWorkflowName = (v) => String(v ?? '').trim().replace(/\.ya?ml$/i, '') || null;

@@ -5,12 +5,15 @@
 // through the shell, else one Oracle turn read-only in its daily budget (packages/engine/domains/oracle/oracle-seeds.js),
 // simulated under mock or MULTIAGENT_SIMULATION_ONLY; saved under <workspace>/architecture/. The
 // state lives per service context (a WeakMap on ctx), read at call time.
+// runDefaultsOf (#735): a project's run defaults over its last ways-of-working profile, for the run
+// dialog's hints, the Backlog's queue and the Roadmap.
 
 const { execFile, exec: execShell } = require('child_process');
 const path = require('path');
 const agents = require('../domains/agents/agents');
 const oracleSeeds = require('../domains/oracle/oracle-seeds');
 const projects = require('../domains/project/projects');
+const runDefaults = require('../domains/project/project-run-defaults');
 const simulation = require('../engine/simulation');
 const { clientError, requireId } = require('./common');
 
@@ -94,9 +97,15 @@ async function runSeed(ctx, { project: p, seed, mock }) {
   }
 }
 
+/** #735: a project's run defaults, from its last ways-of-working analysis' profile and its files. */
+function runDefaultsOf(ctx, project) {
+  return runDefaults.projectRunDefaults({ project, profile: runDefaults.savedProfile(seedsRoot(ctx), project.id) });
+}
+
 module.exports = {
   git,
   projectOf,
+  runDefaultsOf,
   runSeed,
   runState,
   seedsRoot,

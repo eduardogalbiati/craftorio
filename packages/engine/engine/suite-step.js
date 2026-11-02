@@ -126,6 +126,8 @@ function detectTestCommand(dir) {
     if (typeof test === 'string' && test.trim() && !/no test specified/.test(test)) return 'npm test';
   } catch { /* no package.json */ }
   if (exists(dir, 'go.mod')) return 'go test ./...';
+  // #735: a Rust crate (a tooling package.json without a test script does not hide it)
+  if (exists(dir, 'Cargo.toml')) return 'cargo test';
   if (exists(dir, 'pom.xml')) {
     if (process.platform === 'win32' && exists(dir, 'mvnw.cmd')) return 'mvnw.cmd -B test';
     return exists(dir, 'mvnw') ? './mvnw -B test' : 'mvn -B test';

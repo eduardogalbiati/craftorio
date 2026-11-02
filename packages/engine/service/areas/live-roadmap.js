@@ -58,7 +58,7 @@ module.exports = (ctx) => {
     const simulated = !!before.simulated || simulation.simulationOnly();
     record(projectId, { status: 'refilling', message: 'The Product Owner is picking the next issues.' }, p);
     const cached = backlog.readBacklog(ws.backlog, projectId);
-    const platform = cached?.platform || settings.backlogPlatform || backlog.DEFAULT_PLATFORM;
+    const platform = backlog.platformOf(p, cached?.platform || settings.backlogPlatform);
     // the Product Owner reads current issues; a sync that fails leaves the last one
     if (opts.refreshFirst && !simulated && p.repo) {
       try {

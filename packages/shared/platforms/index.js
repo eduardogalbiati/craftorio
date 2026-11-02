@@ -9,6 +9,8 @@
 // - parseRepoUrl(url): a repository URL (https, ssh, scp form) → { host, path: 'owner/repo' } or null;
 // - platformOfRepoUrl(url): the adapter of a repository URL's host (github.com, gitlab.com), or null
 //   (another host, a self-hosted server): the engine's onboarding and the wizard read the provider here (#641);
+// - projectPlatform(project): the adapter of a project (its URL's host, its stored `platform`, a host
+//   naming it), or null: the Backlog and the Roadmap sync with it, never a global setting (#745);
 // - requestRef(name, number): "PR #12" / "MR !12";
 // - rawFileUrl(name, repo, file): a public raw read of one file, GitLab's form for an unknown host.
 // Browser: window.Platforms (loads after the adapters); Node: module.exports.
@@ -53,6 +55,18 @@
     return (parsed && PLATFORMS.find((p) => p.host === parsed.host)) || null;
   }
 
+  // #745: a project's platform, never a global pick: its repository's host when it names one
+  // (github.com, gitlab.com), else the platform stored on the project (the wizard or the Backlog
+  // saves it for a self-hosted host), else a host that says it (gitlab.company.com); null: unknown
+  function projectPlatform(project) {
+    const byUrl = platformOfRepoUrl(project?.repo);
+    if (byUrl) return byUrl;
+    const stored = findPlatform(project?.platform);
+    if (stored) return stored;
+    const host = parseRepoUrl(project?.repo)?.host || '';
+    return PLATFORMS.find((p) => host.split('.').includes(p.id)) || null;
+  }
+
   // "PR #12" / "MR !12" (GitHub's terms when the platform is unknown)
   function requestRef(name, number) {
     const r = platformOrDefault(name).request;
@@ -65,7 +79,7 @@
     return (findPlatform(name) || findPlatform('gitlab')).rawFileUrl(repo, file);
   }
 
-  const api = { DEFAULT_PLATFORM, findPlatform, parseRepoUrl, platformOfRepoUrl, platformOfUrl, platformOrDefault, PLATFORMS, rawFileUrl, requestRef, resolvePlatform };
+  const api = { DEFAULT_PLATFORM, findPlatform, parseRepoUrl, platformOfRepoUrl, platformOfUrl, platformOrDefault, PLATFORMS, projectPlatform, rawFileUrl, requestRef, resolvePlatform };
   if (node) module.exports = api;
   else root.Platforms = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -27,6 +27,7 @@ const seeds = require('../../domains/seed/seeds');
 const simulation = require('../../engine/simulation');
 const { checkCommand } = require('../../engine/check-step');
 const { detectLanguage } = require('../../domains/project/project-inputs');
+const { detectE2eCommand, projectFacts } = require('../../domains/project/project-run-defaults');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { firstBuild } = require('@multiagent/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -48,14 +49,6 @@ function ciOf(folder) {
   try { for (const f of fs.readdirSync(dir)) { found = true; text += readText(path.join(dir, f)); } } catch { /* no GitHub workflows */ }
   if (!found) return 'none';
   return /pull_request|merge_request/.test(text) ? 'pr+release' : 'release';
-}
-
-// #630: the package.json script that runs the E2E suite (e2e, test:e2e...), as `npm run <name>`, or null
-function detectE2eCommand(folder) {
-  let scripts = {};
-  try { scripts = JSON.parse(readText(path.join(folder, 'package.json'))).scripts || {}; } catch { return null; }
-  const name = Object.keys(scripts).find((s) => /(^|:)e2e$/.test(s));
-  return name ? `npm run ${name}` : null;
 }
 
 // The profile of a simulated analysis: what git and the project's files tell without a model; no release style
@@ -84,6 +77,8 @@ async function simulatedProfile(project) {
       tests: e2eCommand ? 'unit+e2e' : 'unit',
       e2eCommand,
       languages: (detectLanguage(folder) || '').split(',').filter(Boolean),
+      // #735: backend / frontend / full-stack, from the UI folders, web frameworks and servers found
+      kind: projectFacts(folder).kind,
     },
     evidence: {
       team: { numbers: { authors: nAuthors, commits: Number(commits) || 0 }, commits: shas },

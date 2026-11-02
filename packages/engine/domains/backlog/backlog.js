@@ -56,6 +56,8 @@ const { storeFor } = require('../workspace/store');
 const TimeZone = require('../analytics/time-zone');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('@multiagent/shared/backlog-archive');
 const { LIVE_ITEM_STATES } = require('@multiagent/shared/roadmap-model');
+const { projectPlatform } = require('@multiagent/shared/platforms');
+const { resolveRunInputs } = require('../project/project-run-defaults');
 
 // the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
 const ENRICH_WORKFLOW = 'writer-reviewer';
@@ -120,6 +122,9 @@ function attachPullRequests(issues, prs) {
 
 const cacheFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.json`);
 
+/** #745: the platform a project syncs with: its own (projectPlatform), else `fallback`, else GitHub. */
+const platformOf = (project, fallback = null) => projectPlatform(project)?.id || fallback || DEFAULT_PLATFORM;
+
 /** The last sync of a project, or null. */
 function readBacklog(dir, projectId) {
   try { return JSON.parse(fs.readFileSync(cacheFile(dir, projectId), 'utf8')); } catch { return null; }
@@ -129,8 +134,10 @@ function readBacklog(dir, projectId) {
  * Fetches the project's issues and caches them.
  * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function }} opts
  */
-async function syncBacklog({ dir, project, platform, exec }) {
+async function syncBacklog({ dir, project, platform: asked, exec }) {
   if (!project.repo) throw new Error('This project has no repository. Add one in Projects to sync its issues.');
+  // #745: the project's platform (its host, or the one stored on it) wins over the one asked
+  const platform = platformOf(project, asked);
   // the issues are what the screen needs: PRs that cannot be read leave a note, not an error
   let pullRequestsError = null;
   const [fetched, prs] = await Promise.all([
@@ -764,11 +771,18 @@ function groupTask(issues) {
  * The inputs of a run started for a queued item: the saved inputs, the task (issue title, URL and
  * body; every issue of a group, see groupTask), the project folder in the path inputs left empty,
  * `issue` (the first issue's URL) and `issues` (every URL, in order) when the workflow has them.
+ * #735: the item's saved inputs over the project's run defaults (`projectDefaults`, packages/engine/
+ * domains/project/project-run-defaults.js), over the workflow's defaults.
  * @param {{ inputs: object }} wf the workflow (its input definitions)
  */
-function runInputs(item, wf, folder) {
-  const inputs = { ...item.inputs };
+function runInputs(item, wf, folder, projectDefaults = null) {
   const defs = wf.inputs || {};
+  const inputs = { ...item.inputs };
+  if (projectDefaults) {
+    // the workflow's own defaults stay the engine's to fill (setup.js resolveInputs)
+    const { values, sources } = resolveRunInputs({ roadmap: item.inputs, project: projectDefaults, workflow: wf });
+    for (const [k, v] of Object.entries(values)) if (sources[k] === 'project') inputs[k] = v;
+  }
   const issues = itemIssues(item);
   if (defs.task) inputs.task = issues.length > 1 ? groupTask(issues) : `${item.title}\n\nIssue: ${item.url}\n\n${item.body || ''}`.trim();
   for (const [k, def] of Object.entries(defs)) {
@@ -837,7 +851,7 @@ function backlogState(data) {
 }
 
 module.exports = {
-  PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
+  PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOf, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,

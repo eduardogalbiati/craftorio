@@ -3,6 +3,7 @@
 
 const projects = require('../../domains/project/projects');
 const projectInputs = require('../../domains/project/project-inputs');
+const { runDefaultsOf } = require('../seed-runs');
 const { clientError, requireId, requireObject } = require('../common');
 const {
   ANY,
@@ -18,8 +19,8 @@ const {
   text,
 } = require('../schemas');
 
-// A project's folder, or null when the project is unknown.
-const folderOf = (ctx, id) => { try { return projects.readProject(ctx.ws.projects, id).folder; } catch { return null; } };
+// A project, or null when the project is unknown.
+const projectOf = (ctx, id) => { try { return id ? projects.readProject(ctx.ws.projects, id) : null; } catch { return null; } };
 
 // a project's fields ({ name, folder, repo, workflows: [{ name, origin }], defaultWorkflow, ... }),
 // checked by packages/engine/domains/project/projects.js
@@ -48,5 +49,16 @@ module.exports = (ctx) => [
   },
   // #486: a repository's workflows manifest before Create Project clones it: its entries, or null
   { channel: 'projects:manifest', method: 'projectManifest', params: 'target', schema: { params: args({ url: STRING, folder: STRING }), result: nullable(OBJECT) }, fn: (target) => projects.projectManifest(manifestTarget(target)) },
-  { channel: 'projects:inputHints', method: 'projectInputHints', params: 'id', schema: { params: nullable(STRING), result: OBJECT }, fn: (id) => projectInputs.inputHints(folderOf(ctx, id)) },
+  // #735: and the project's run defaults (`runDefaults`), what the run dialog prefills before the workflow's own
+  {
+    channel: 'projects:inputHints',
+    method: 'projectInputHints',
+    params: 'id',
+    schema: { params: nullable(STRING), result: OBJECT },
+    fn: async (id) => {
+      const p = projectOf(ctx, id);
+      const hints = await projectInputs.inputHints(p?.folder || null);
+      return { ...hints, runDefaults: p ? await runDefaultsOf(ctx, p) : null };
+    },
+  },
 ];

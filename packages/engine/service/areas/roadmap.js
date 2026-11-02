@@ -19,6 +19,7 @@ const budget = require('../../domains/usage/budget');
 const costEstimate = require('../../domains/usage/cost-estimate');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
+const seedRuns = require('../seed-runs');
 const RoadmapModel = require('@multiagent/shared/roadmap-model');
 const RunProgress = require('@multiagent/shared/run-progress-model');
 const { clientError } = require('../common');
@@ -258,7 +259,7 @@ module.exports = (ctx) => {
         const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);
         // the platform is the source of truth (#168): the issues are read again now, the task is built
         // from what was read and the item's copy updated (a simulation reads the synced cache only)
-        const platform = cache?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+        const platform = backlog.platformOf(project, cache?.platform || workspace.readSettings(ws).backlogPlatform);
         const { issues: read, warnings } = await backlog.freshIssues({ item, platform, repo: project.repo, cache, fromPlatform: fromPlatform(item) });
         roadmaps.refreshCopies(ws.backlog, projectId, read);
         // a closed issue of a group is left out; the others start
@@ -271,7 +272,7 @@ module.exports = (ctx) => {
         }
         const run = { ...item, ...open[0], ...(open.length > 1 ? { issues: open } : { issues: undefined }) };
         const started = await ctx.startWorkflowRun({
-          file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: mockOf(item),
+          file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder, await seedRuns.runDefaultsOf(ctx, project)), mock: mockOf(item),
           projectId, issues: backlog.recordedIssues(open), notices: warnings.map((message) => ({ level: 'warn', message })),
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
           then: item.then || null,

@@ -18,6 +18,7 @@ const roadmaps = require('../../domains/roadmap/roadmap');
 const { normalizeThen } = require('@multiagent/shared/chain-model');
 const { platformOrDefault, requestRef } = require('@multiagent/shared/platforms');
 const runs = require('../../domains/run/runs');
+const seedRuns = require('../seed-runs');
 
 module.exports = (ctx) => {
   // A synced backlog with each issue's runs and place in the queue (computed on every read: runs
@@ -193,7 +194,7 @@ module.exports = (ctx) => {
           const project = projects.readProject(ws.projects, projectId);
           const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);
           const cache = backlog.readBacklog(ws.backlog, projectId);
-          const platform = cache?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+          const platform = backlog.platformOf(project, cache?.platform || workspace.readSettings(ws).backlogPlatform);
           const real = !item.mock && !!project.repo;
           // a PR/MR may have been opened for an issue since it was queued: skip it, don't redo the work
           // (an issue of a group leaves the group, which starts with the others)
@@ -220,7 +221,7 @@ module.exports = (ctx) => {
           const run = { ...item, ...read[0], issues: read.length > 1 ? read : undefined };
           const keys = backlog.itemIssues(item).map((i) => `${projectId}:${i.number}`);
           await ctx.startWorkflowRun({
-            file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: item.mock,
+            file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder, await seedRuns.runDefaultsOf(ctx, project)), mock: item.mock,
             projectId, issues: backlog.recordedIssues(read), notices: warnings.map((message) => ({ level: 'warn', message })),
             allowKeptWork: keys.some((k) => keptWorkAllowed.has(k)),
             then: item.then || null,

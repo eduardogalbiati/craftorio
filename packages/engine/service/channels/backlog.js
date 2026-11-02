@@ -47,7 +47,7 @@ module.exports = (ctx) => {
     const data = backlog.readBacklog(ctx.ws.backlog, projectId);
     const proj = projects.listProjects(ctx.ws.projects).find((p) => p.id === projectId);
     return {
-      platform: data?.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM,
+      platform: backlog.platformOf(proj, data?.platform || workspace.readSettings(ctx.ws).backlogPlatform),
       repo: data?.repo || proj?.repo,
       ...(simulate || simulation.simulationOnly() ? { exec: async () => '' } : {}),
     };
@@ -189,7 +189,7 @@ module.exports = (ctx) => {
         const number = backlog.runIssues(run)[0]?.number;
         const res = await backlog.saveRunToIssue({
           run, mode, preview: !!preview,
-          platform: data?.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM,
+          platform: backlog.platformOf(proj, data?.platform || workspace.readSettings(ctx.ws).backlogPlatform),
           repo: data?.repo || proj?.repo,
           cached: (data?.issues || []).find((i) => i.number === number) || null,
           dir: ctx.ws.backlog, projectId: run.projectId,
