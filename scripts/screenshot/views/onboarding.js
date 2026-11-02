@@ -3,7 +3,8 @@
 // (fronts/build/views/projects/project-wizard.js), driven through its own controls to the state of --mode:
 //   start         step 1, the two sources
 //   repository    step 2 with a URL and a name typed, before Next
-//   cloning       the import's status and the tray while the clone runs (the real onboarding:changed
+//   cloning       the Repository step cloning in place (#743: Next's spinner and "Cloning <name>…", no
+//                 status card; #724: the tray stays hidden behind the open wizard) (the real onboarding:changed
 //                 channel says cloning for the project an import just made: a clone of a local repository
 //                 ends too fast to capture)
 //   access-error  a repository the app cannot reach: wizard-error data-error="no-access", its Retry and Edit
