@@ -45,7 +45,9 @@ async function runRelease(t, { mockSequences = {}, inputs: extra = {} } = {}) {
     if (def?.default !== undefined && def?.default !== '') continue;
     inputs[k] = /path|dir|repo|folder/i.test(k) ? repo : 'Release v1.0';
   }
-  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release v1.0', repo_path: repo, project_path: repo, e2e_command: 'npm run test:e2e', ...inputs, ...extra }, mock: true, runsDir, mockSequences });
+  // #760: e2e_command's default is empty since #735, so the loop above fills it too: the E2E command
+  // is set after it (a test's own `inputs` still win)
+  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release v1.0', repo_path: repo, project_path: repo, ...inputs, e2e_command: 'npm run test:e2e', ...extra }, mock: true, runsDir, mockSequences });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
@@ -122,6 +124,15 @@ test('release (mock): an E2E command that cannot be filtered runs the whole suit
   assert.match(String(r2.command || ''), /^make e2e$/, 'the command ran unfiltered');
   assert.match(JSON.stringify(r2), /cannot/i, 'the output says the command could not be filtered');
   assert.equal(nextAfter(started, 'e2e', 2), 'review');
+});
+
+test('release (mock): an empty E2E command runs npm run test:e2e, focused on the failed files in round 2 (#735, #760)', { timeout: 120000 }, async (t) => {
+  const { started, outputs } = await runRelease(t, { inputs: { e2e_command: '' }, mockSequences: { suite: { unit: ['pass'], e2e: ['fail', 'pass'] } } });
+  const e2e = outputs('e2e');
+  assert.equal(e2e.length, 2, `two E2E rounds (steps: ${started.join(', ')})`);
+  assert.equal(e2e[0].command, 'npm run test:e2e', 'round 1 runs the default E2E command');
+  assert.ok(e2e[1].affected, 'round 2 records its focused run');
+  assert.match(String(e2e[1].affected.command || ''), /^npm run test:e2e -- /, 'the focused run passes the failed files to the default command');
 });
 
 test('release (mock): the first E2E round is whole even after a unit fix, and the unit step stays whole every round (#324)', { timeout: 120000 }, async (t) => {
