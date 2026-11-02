@@ -63,6 +63,7 @@
 .r3d-tag.live { z-index: 1; }
 .r3d-tag.sel span { color: inherit; opacity: .8; }
 .r3d-tag.dim { opacity: .72; font-weight: 550; }
+.r3d-tag.doesnt-apply { opacity: .5; font-style: italic; } /* #735: a step the run's inputs rule out */
 .r3d-tags.far .r3d-tag:not(.sel):not(.live) span { display: none; }
 .r3d-tags.far .r3d-tag.dim:not(.sel) { font-size: 10.5px; padding: 3px 8px 3px 6px; }
 .r3d-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--r3d-grey)); flex: none; }
@@ -151,6 +152,7 @@
 .r3d-row:hover { background: var(--r3d-soft); }
 .r3d-row.sel { background: var(--r3d-accent-soft); }
 .r3d-row.unused { opacity: .55; }
+.r3d-row.doesnt-apply { opacity: .45; }
 .r3d-row .r3d-avatar { flex: none; }
 .r3d-txt { flex: 1; min-width: 0; }
 .r3d-row .r3d-txt b { display: block; font-size: 12.5px; }

@@ -320,9 +320,11 @@ export function List({ shown, onSelect, query }) {
     body = steps.map((st) => {
       const step = m.state[st.id], time = m.stepTime(st.id, now);
       const sub = st.kind === 'gate' ? t('run3d.human_approval_lower') : st.kind === 'machine' ? t('run3d.engine_type', { type: st.type.replace(/_/g, ' ') }) : st.agents.map((a) => agentDef(a).label).join(' + ');
-      const pill = step.status === 'changes' ? t('run3d.changes') : step.status === 'waiting' ? t('run3d.waiting') : m.finished && !step.visits ? t('run3d.not_used') : undefined;
+      const na = m.doesntApply(st.id); // #735: shown dimmed, "Doesn't apply: no UI in this project"
+      const pill = na ? t(na) : step.status === 'changes' ? t('run3d.changes') : step.status === 'waiting' ? t('run3d.waiting') : m.finished && !step.visits ? t('run3d.not_used') : undefined;
       return (
-        <button type="button" key={st.id} className={'r3d-row' + (shown === st.id ? ' sel' : '') + (step.visits ? '' : ' unused')} onClick={() =>
+        <button type="button" key={st.id} className={'r3d-row' + (shown === st.id ? ' sel' : '') + (step.visits ? '' : ' unused') + (na ? ' doesnt-apply' : '')}
+          data-testid={na ? 'run3d-step-doesnt-apply' : undefined} onClick={() =>
           onSelect(st.id)}>
           <StationIcon st={st} />
           <span className="r3d-txt">
@@ -346,8 +348,9 @@ export function List({ shown, onSelect, query }) {
     body = agents.map(({ agent, st: first }) => {
       const st = layout.stations.find((x) => x.agents.includes(agent) && m.robots[`${x.id}:${agent}`]?.busy) || first;
       const def = agentDef(agent), state = robotStateOf(`${st.id}:${agent}`);
+      const na = !def.model && m.doesntApply(agent); // #735: the UI Reviewer of a project without UI
       return (
-        <button type="button" key={agent} className={'r3d-row' + (shown === st.id ? ' sel' : '')} onClick={() =>
+        <button type="button" key={agent} className={'r3d-row' + (shown === st.id ? ' sel' : '') + (na ? ' doesnt-apply' : '')} onClick={() =>
           onSelect(st.id)}>
           <Avatar agent={agent} state={state} />
           <span className="r3d-txt">
@@ -355,7 +358,7 @@ export function List({ shown, onSelect, query }) {
               {def.label}
             </b>
             <small>
-              {def.model ? `${providerLabel(def.provider) || def.provider} · ${window.Robots.plaqueFor(def.model)}` : t('run3d.did_not_run')}
+              {def.model ? `${providerLabel(def.provider) || def.provider} · ${window.Robots.plaqueFor(def.model)}` : na ? t(na) : t('run3d.did_not_run')}
             </small>
           </span>
           <span className="r3d-role" style={{ '--c': def.color }}>
@@ -553,9 +556,10 @@ export function Tags({ shown, onSelect }) {
       {layout.stations.map((st) => {
         const step = m.state[st.id], lead = st.kind === 'agent' && m.leadOf(st), r = lead && m.robots[`${st.id}:${lead}`];
         const live = step.status === 'running' || step.status === 'waiting' || r?.busy;
-        const text = target === st.id ? t('run3d.supervisor_on_it_lower') : step.status === 'waiting' ? t('run3d.waiting_for_you_lower') : r?.busy ? r.act : step.status === 'pending' ? '' : STATUS[step.status].label.toLowerCase();
+        const na = !live && m.doesntApply(st.id);
+        const text = na ? t(na) : target === st.id ? t('run3d.supervisor_on_it_lower') : step.status === 'waiting' ? t('run3d.waiting_for_you_lower') : r?.busy ? r.act : step.status === 'pending' ? '' : STATUS[step.status].label.toLowerCase();
         return (
-          <div key={st.id} ref={tagRef(st.id)} className={'r3d-tag' + (shown === st.id ? ' sel' : '') + (live ? ' live' : step.visits ? '' : ' dim')} onClick={() =>
+          <div key={st.id} ref={tagRef(st.id)} className={'r3d-tag' + (shown === st.id ? ' sel' : '') + (live ? ' live' : step.visits ? '' : ' dim') + (na ? ' doesnt-apply' : '')} onClick={() =>
             onSelect(st.id)}>
             <i className={'r3d-dot' + (live ? ' live' : '')} style={{ '--c': statusColor(r?.busy && step.status !== 'waiting' ? 'running' : step.status) }} />
             {st.label}

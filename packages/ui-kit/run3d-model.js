@@ -18,6 +18,14 @@
 (function (root) {
   // names as people read them (display-name.js, #245): the YAML's display names when the workflow has them, else the slug made readable
   const displayName = typeof module === 'object' && module.exports ? require('@multiagent/shared/display-name.js').displayName : root.displayName;
+  // #735: the steps and agents the run's (resolved) inputs rule out, dimmed on the floor like on the run screen
+  const RunPlan = typeof module === 'object' && module.exports ? require('@multiagent/shared/run-plan.js') : root.RunPlan;
+  function notApplyingOf(steps, inputs) {
+    if (!RunPlan || !inputs) return {};
+    const declared = Object.fromEntries(Object.keys(inputs).map((k) => [k, {}]));
+    const wf = { inputs: declared, steps: steps.map((s) => ({ id: s.id, agent_when: Object.fromEntries(s.agents.map((a) => [a, true])) })) };
+    return Object.fromEntries(RunPlan.stepsThatDontApply(wf, inputs).map((x) => [x.id, x.reason]));
+  }
   const baseOf = (id) => String(id || '').split(':')[0]; // "develop:context_limit" → "develop"
   const subOf = (id) => String(id || '').split(':')[1] || null;
   const isSupervisor = (agent, stepId) => /^_?supervisor$/.test(agent || '') || subOf(stepId) === 'supervisor';
@@ -175,6 +183,7 @@
       this.now = 0;
       this.displayAgents = {};
       this.supervisorModel = '';
+      this.notApplying = {}; // #735: step or agent id → why it can't run with the run's inputs (run-plan.js)
       this.floorOf = null; // a replayed moment stands on the floor of the whole run: the model that has it
       this._layout = null;
       this._layoutKey = '';
@@ -346,6 +355,12 @@
     stepCost(id) { return this.cost((x) => x.step === id); }
     agentCost(agent) { return this.cost((x) => x.agent === agent); }
 
+    /** #735: why a step (or a step's agent) doesn't apply to this run (an i18n key), null when it does or already ran. */
+    doesntApply(id) {
+      const why = this.notApplying[id];
+      return why && !(this.state[id] && this.state[id].visits) ? why : null;
+    }
+
     /** The visits of a step so far. */
     visitsOf(id) { return this.visits.filter((v) => v.step === id).length; }
 
@@ -355,7 +370,7 @@
 
   // what dump() copies: everything the reducers write (not the listeners, the floor's cache or mainGates)
   const DUMPED = ['seq', 'run', 'steps', 'agents', 'sessions', 'state', 'visits', 'robots', 'turnOf', 'turns', 'spend', 'sup', 'gates',
-    'feed', 'feedN', 'activeId', 'merged', 'lastTs', 'now', 'displayAgents', 'supervisorModel'];
+    'feed', 'feedN', 'activeId', 'merged', 'lastTs', 'now', 'displayAgents', 'supervisorModel', 'notApplying'];
 
   const HANDLERS = {
     'workflow.started'(ev) {
@@ -373,6 +388,7 @@
         return { id: s.id, type: s.type || 'agent', agents, label: displayName(s.id, display.steps || {}) };
       });
       this.state = Object.fromEntries(this.steps.map((s) => [s.id, { status: 'pending', visits: 0, note: '', handoff: '', ask: '', t0: 0, t1: null, before: 'pending', asked: false }]));
+      this.notApplying = notApplyingOf(this.steps, ev.inputs);
       this.say('running', `${this.run.workflow} started${this.run.resumedFrom ? ` (resumed at ${this.run.resumedFrom})` : ''}`, 'start');
     },
 
