@@ -58,7 +58,7 @@ const methods = {
     // #738 Fork + PR (a template too: "{{ inputs.mode == 'fork' }}"): the fork's base is synced with upstream's
     // first; a dependent roadmap item (inputs.parent_branch) starts from its parent's branch on the fork
     const fork = cfg.fork === true || render(String(cfg.fork ?? ''), this.ctx).trim().toLowerCase() === 'true';
-    const parentBranch = fork ? String(this.ctx.inputs?.parent_branch ?? '').trim() || null : null;
+    const parentBranch = fork ? String(this.ctx.inputs?.parent_branch ?? '').trim() || undefined : undefined;
     this.ctx.worktree_dir = repo;
     const log = (level, message) => this.emitEvent('log', { level, message });
     if (!this.worktreesDir) {

@@ -113,7 +113,8 @@ function openQuestions(profile) {
     out.push({ id: 'release', label: 'Release style', question: 'How the project releases: no tag history settles it.', type: 'choice', options: choice([['milestone', 'Milestone'], ['per-merge', 'Per merge'], ['train', 'Release train'], ['rc-stable', 'Release candidate, then stable']]), default: remote ? 'train' : 'milestone' });
   }
   if (!modeOf(profile)) {
-    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, through pull requests, or through pull requests from your fork (no push access to the repository).', type: 'choice', options: profileChoices('mode'), default: 'local' });
+    // #738: Fork + PR comes from the onboarding (no push access), never from this question
+    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, or through pull requests.', type: 'choice', options: profileChoices('mode').filter((o) => o.value !== 'fork'), default: 'local' });
   }
   if (!CI_STYLES.includes(profile?.ci)) {
     out.push({ id: 'ci', label: 'CI', question: 'What the project\'s CI runs on: no CI file settles it.', type: 'choice', options: profileChoices('ci'), default: 'none' });

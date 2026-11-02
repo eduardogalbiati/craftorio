@@ -219,7 +219,7 @@
  * @property {object} [then]
  * @property {object} [cost]
  * @property {object} [agentOverrides]
- * @property {string} [dependsOn] #738: the id of the earlier item it builds on (its run starts from that item's branch)
+ * @property {string} [dependsOn] the id of the earlier item it builds on, issue 738 (its run starts from that branch)
  * @property {boolean} [waiting] in memory only, never stored
  * @property {object} [run] in memory only, never stored
  */

@@ -205,16 +205,8 @@ function updateProject(dir, id, patch) {
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
   // #745: the project's git platform (github / gitlab) for a self-hosted host; null: read from the URL
   if (patch.platform !== undefined) next.platform = cleanPlatform(patch.platform);
-  // #738: the owner's fork of the repository (Fork + PR): { url (origin), upstream (the original), dependentPr? },
-  // null: none. dependentPr: how a dependent roadmap item's PR opens, 'wait-and-rebase' (default, not stored)
-  // or 'depends-on' (at once, "Depends on #<parent's PR>")
-  if (patch.fork !== undefined) {
-    next.fork = patch.fork?.url ? {
-      url: String(patch.fork.url).trim(),
-      upstream: String(patch.fork.upstream || cur.repo || '').trim() || null,
-      ...(patch.fork.dependentPr === 'depends-on' ? { dependentPr: 'depends-on' } : {}),
-    } : null;
-  }
+  // #738: the owner's fork of the repository (Fork + PR, cleanFork)
+  if (patch.fork !== undefined) next.fork = cleanFork(patch.fork, cur.repo);
   // #735: backend / frontend / full-stack as the owner confirmed it, and the run defaults edited on the project page
   if (patch.kind !== undefined) next.kind = cleanKind(patch.kind);
   if (patch.runDefaults !== undefined) next.runDefaults = cleanRunDefaults(patch.runDefaults);
@@ -242,6 +234,17 @@ const cleanLocalPreview = (v) => cleanConfig(v);
 
 // #745: a known platform's id (github, gitlab), else null
 const cleanPlatform = (v) => findPlatform(v)?.id || null;
+// #738: the owner's fork of the repository (Fork + PR): { url (origin), upstream (the original), dependentPr? },
+// null: none. dependentPr: how a dependent roadmap item's PR opens, 'wait-and-rebase' (default, not stored)
+// or 'depends-on' (at once, "Depends on #<parent's PR>")
+function cleanFork(v, repo) {
+  if (!v?.url) return null;
+  return {
+    url: String(v.url).trim(),
+    upstream: String(v.upstream || repo || '').trim() || null,
+    ...(v.dependentPr === 'depends-on' ? { dependentPr: 'depends-on' } : {}),
+  };
+}
 // #735: backend / frontend / full-stack, else null (detected from the facts)
 const cleanKind = (v) => (runDefaultsModule().KINDS.includes(v) ? v : null);
 // #735: the run defaults the owner set on the project page, only the known keys, empty ones dropped

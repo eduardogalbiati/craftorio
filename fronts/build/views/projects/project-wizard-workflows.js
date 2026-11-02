@@ -10,6 +10,8 @@
 //   still offered). Each row: wizard-workflow data-kind with wizard-workflow-select (select.js, #383).
 //   #738: above the rows (analyzed and manual), wizard-way-of-working: Local / Remote / Fork + PR, from the
 //   fork choice of a repository the owner can't push to, else the profile's mode.
+// - cliWarning(cli), forkNotice(onboarding), forkPending(onboarding): the repository step's notices (the
+//   CLI missing or signed out; #738 no push access: Create a fork / Work locally).
 // - jobReason(job): a failed job in the interface's language from the engine's code (failureOf in
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
 // - profileOf(), workflowChoices(), pickedWorkflows() (#729: Finish saves them as the project's workflows).
@@ -42,6 +44,34 @@
 
     // #630 (mock-4): the ways-of-working profile { mode, ci, tests } the profile job found, or null
     const profileOf = () => cur().onboarding?.profile || jobOf('profile').profile || null;
+
+    // the repository step's warning when the platform's CLI is missing or signed out (wizard-cli-warning)
+    function cliWarning(cli) {
+      if (!cli || !['missing', 'signed-out'].includes(cli.status)) return '';
+      const name = window.Platforms?.findPlatform?.(cli.provider)?.cli || cli.provider || '';
+      return `<div class="wizard-alert warn" data-testid="wizard-cli-warning" data-error="cli-${esc(cli.status)}">
+          <strong>${esc(t(cli.status === 'missing' ? 'onboarding.cli_missing' : 'onboarding.cli_signed_out', { cli: name }))}</strong>
+          <p>${esc(cli.reason || '')}</p>
+          <p class="muted small">${esc(t('onboarding.cli_hint'))}</p>
+          <div class="wizard-actions"><button type="button" class="btn" data-act="setup">${esc(t('onboarding.open_setup'))}</button></div>
+        </div>`;
+    }
+
+    // #738: the repository can't be pushed to (gh's permissions.push false): wizard-fork-notice suggests a
+    // fork (wizard-create-fork) or working locally (wizard-work-locally) on the repository step; a failed
+    // fork keeps the notice with its reason (the owner tries again or works locally)
+    const forkPending = (o) => ['suggested', 'failed'].includes(o?.fork?.status);
+    function forkNotice(o) {
+      if (!forkPending(o)) return '';
+      const failed = o.fork.status === 'failed' ? `<p class="small">${esc(t('onboarding.fork_failed', { error: o.fork.reason || t('onboarding.no_reason') }))}</p>` : '';
+      const off = cur().busy ? ' disabled' : '';
+      return `<div class="wizard-alert warn" data-testid="wizard-fork-notice">
+          <strong>${esc(t('onboarding.fork_notice', { repo: o.fork.repo || '' }))}</strong>
+          ${failed}
+          <div class="wizard-actions"><button type="button" class="btn primary" data-act="fork-create" data-testid="wizard-create-fork"${off}>${esc(t('onboarding.fork_create'))}</button>
+            <button type="button" class="btn" data-act="work-locally" data-testid="wizard-work-locally"${off}>${esc(t('onboarding.fork_work_locally'))}</button></div>
+        </div>`;
+    }
 
     // #738: the way of working (Local / Remote / Fork + PR): the fork choice of a repository the owner
     // can't push to (made or reused: fork, declined: local) over the profile's mode; null while unknown
@@ -147,6 +177,9 @@
     }
 
     return {
+      cliWarning,
+      forkNotice,
+      forkPending,
       jobReason,
       kindField,
       pickedWorkflows,

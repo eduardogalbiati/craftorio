@@ -78,6 +78,11 @@ const {
   STATES,
 } = require('@multiagent/shared/roadmap-model');
 const { writeJsonSafe } = require('../workspace/state-file');
+const {
+  assertEarlierDependencies,
+  dependencyBase,
+  dependsOnField,
+} = require('./roadmap-dependency');
 
 /** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
 /** @typedef {((runId: string) => any) | null} Alive `alive(runId)`: as for `runIsAlive` */
@@ -304,14 +309,12 @@ function cleanItem(raw, known, previous) {
   const cost = raw.cost && typeof raw.cost === 'object' ? raw.cost : old?.cost || null;
   // #262: the provider / model / effort per agent chosen for the item's run (its Edit's Agents)
   const agentOverrides = raw.agentOverrides && typeof raw.agentOverrides === 'object' && Object.keys(raw.agentOverrides).length ? raw.agentOverrides : null;
-  // #738: the earlier item this one builds on (a split implementation): its run starts from that item's
-  // branch (dependencyBase); '' removes it
-  const dependsOn = String(raw.dependsOn ?? old?.dependsOn ?? '').trim();
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(source ? { source } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
-    ...(agentOverrides ? { agentOverrides } : {}), ...(dependsOn ? { dependsOn } : {}),
+    // #738: the earlier item this one builds on (a split implementation, roadmap-dependency.js)
+    ...(agentOverrides ? { agentOverrides } : {}), ...dependsOnField(raw, old),
     ...issues[0], issues,
     ...runState(state),
   };
@@ -417,49 +420,6 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
   assertUnique(out);
   assertEarlierDependencies(out);
   return out;
-}
-
-/**
- * #738: an item depends only on an item of an earlier stage (its branch exists before the item starts):
- * its own id, an item of its stage or a later one, or an unknown id throws.
- * @param {any[]} stages
- */
-function assertEarlierDependencies(stages) {
-  const stageOf = new Map();
-  stages.forEach((s, n) => { if (!isRelease(s)) for (const x of s.items) stageOf.set(x.id, n); });
-  for (const [n, s] of stages.entries()) {
-    if (isRelease(s)) continue;
-    for (const x of s.items) {
-      if (!x.dependsOn) continue;
-      const at = stageOf.get(x.dependsOn);
-      if (at === undefined || at >= n) throw new Error(`The item of #${x.number} depends on ${x.dependsOn}, which is not an item of an earlier stage: an item can only build on an earlier one.`);
-    }
-  }
-}
-
-/**
- * #738: the base of a dependent item's run (a split implementation in a Fork + PR project): the parent's
- * run branch on the fork, whether the parent merged upstream (then the item is rebased onto the synced
- * default branch: worktree.js restackOnBase), and the project's policy for its pull request: 'wait-and-rebase'
- * (the default: it opens once the parent merged) or 'depends-on' (it opens at once, its body saying
- * "Depends on #<parent's PR>"). null for an item without a dependency.
- * @param {Roadmap} roadmap
- * @param {string} itemId
- * @param {{ runOf: (runId: string) => any, policy?: string }} options runOf(runId) → { branch, merged, prNumber } | null
- */
-function dependencyBase(roadmap, itemId, { runOf, policy = 'wait-and-rebase' }) {
-  const item = findItem(roadmap, itemId);
-  if (!item?.dependsOn) return null;
-  const parent = findItem(roadmap, item.dependsOn);
-  const run = parent?.runId ? runOf(parent.runId) : null;
-  const how = policy === 'depends-on' ? 'depends-on' : 'wait-and-rebase';
-  return {
-    parentId: item.dependsOn,
-    branch: run?.branch || null,
-    parentMerged: !!run?.merged,
-    policy: how,
-    prNote: how === 'depends-on' && run?.prNumber ? `Depends on #${run.prNumber}` : null,
-  };
 }
 
 /**

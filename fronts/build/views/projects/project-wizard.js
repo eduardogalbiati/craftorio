@@ -100,8 +100,13 @@
   // #725: Continue on the analysis step never waits for the analysis (running, done or failed)
   const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model)
     : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
+  // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
+  const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
   const {
+    cliWarning,
+    forkNotice,
+    forkPending,
     jobReason,
     kindField,
     pickedWorkflows,
@@ -174,32 +179,6 @@
         <p>${esc(o.reason || t('onboarding.no_reason'))}</p>
         <p class="muted small">${esc(t(code === 'no-access' ? 'onboarding.no_access_hint' : 'onboarding.failed_hint'))}</p>
         <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry">${esc(t('onboarding.retry'))}</button>${signIn}${edit}</div>
-      </div>`;
-  }
-
-  function cliWarning(cli) {
-    if (!cli || !['missing', 'signed-out'].includes(cli.status)) return '';
-    const name = platformById(cli.provider)?.cli || cli.provider || '';
-    return `<div class="wizard-alert warn" data-testid="wizard-cli-warning" data-error="cli-${esc(cli.status)}">
-        <strong>${esc(t(cli.status === 'missing' ? 'onboarding.cli_missing' : 'onboarding.cli_signed_out', { cli: name }))}</strong>
-        <p>${esc(cli.reason || '')}</p>
-        <p class="muted small">${esc(t('onboarding.cli_hint'))}</p>
-        <div class="wizard-actions"><button type="button" class="btn" data-act="setup">${esc(t('onboarding.open_setup'))}</button></div>
-      </div>`;
-  }
-
-  // #738: the repository can't be pushed to (gh's permissions.push false): suggest a fork, or working
-  // locally; a failed fork keeps the notice with its reason (the owner tries again or works locally)
-  const forkPending = (o) => ['suggested', 'failed'].includes(o?.fork?.status);
-  function forkNotice(o) {
-    if (!forkPending(o)) return '';
-    const failed = o.fork.status === 'failed' ? `<p class="small">${esc(t('onboarding.fork_failed', { error: o.fork.reason || t('onboarding.no_reason') }))}</p>` : '';
-    const off = cur.busy ? ' disabled' : '';
-    return `<div class="wizard-alert warn" data-testid="wizard-fork-notice">
-        <strong>${esc(t('onboarding.fork_notice', { repo: o.fork.repo || '' }))}</strong>
-        ${failed}
-        <div class="wizard-actions"><button type="button" class="btn primary" data-act="fork-create" data-testid="wizard-create-fork"${off}>${esc(t('onboarding.fork_create'))}</button>
-          <button type="button" class="btn" data-act="work-locally" data-testid="wizard-work-locally"${off}>${esc(t('onboarding.fork_work_locally'))}</button></div>
       </div>`;
   }
 
@@ -881,8 +860,7 @@
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
     // #738: the fork suggestion's two choices; the answer (cloned, the fork chosen) moves on to analysis
-    else if (act === 'fork-create' && cur.projectId) await call(() => api.forkOnboarding(cur.projectId));
-    else if (act === 'work-locally' && cur.projectId) await call(() => api.workLocallyOnboarding(cur.projectId));
+    else if (FORK_CALLS[act] && cur.projectId) await call(() => api[FORK_CALLS[act]](cur.projectId));
     // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part
     // too), or runs again a failed profile job
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
