@@ -94,7 +94,9 @@ turned on), and release CI and screenshots, shown disabled (later phases). Its h
 refactor backlog done" once the refactor proposals are there, and the number of the project's workflows
 only when the project has its own set (a wizard import has none, so no count).
 
-The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`.
+The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`;
+its code is `fronts/build/views/projects/project-wizard-tray.js` (`window.ProjectWizardTray`, over the
+wizard's maps of states and names).
 #724: it is hidden while the wizard is open (the wizard shows the import's progress itself, nothing
 covers its footer); with the wizard closed it lists only what needs attention: an import running (with
 `tray-spinner`) or failed (its reason and Retry). A finished import (ready or analyzed, no paid job

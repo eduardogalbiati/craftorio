@@ -58,13 +58,8 @@
 // - the provider (its label, its CLI) is the adapter of window.Platforms.platformOfRepoUrl, the engine's rule too;
 //   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus
 //   back to what opened it.
-// - #onboarding-tray (data-testid="onboarding-tray"): one tray-item per imported project (data-project,
-//   data-status = the engine's status), its name, and when failed (or a paid job failed, #725) the reason and
-//   Retry, a running one tray-spinner; it follows
-//   onboarding:changed (api.onOnboardingChanged, subscribed when the script loads). #724: hidden while the
-//   wizard is open (the wizard shows the progress itself); closed, it lists what needs attention: running or
-//   failed; a finished import (ready / analyzed) leaves it about 5 s later with the toast "<name> imported"
-//   and Open the project (none when the wizard showed it or Finish's own toast says it).
+// - #onboarding-tray (project-wizard-tray.js) follows onboarding:changed (api.onOnboardingChanged, subscribed
+//   when the script loads); #724: hidden while the wizard is open, the wizard shows the progress itself.
 // - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status
 //   change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
@@ -86,7 +81,6 @@
   const ACTIVE = ['cloning', 'analyzing'];
 
   let root = null;
-  let tray = null;
   // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy, provider (the
   // toggle's pick while the URL names none), and the
   // review's: review { backlog, city, facts, proposals } (undefined: not read yet), reading, picked, idea }
@@ -96,8 +90,6 @@
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
   const finished = new Set(); // projectIds finished in the wizard with an analysis still running
-  const leaving = new Map(); // #724: projectId → the timer that takes a finished import out of the tray
-  const LEAVE_MS = 5000;
   const SPINNER = (testid) => `<span class="spinner" data-testid="${testid}" aria-hidden="true"></span>`;
 
   const platformOfRepo = (url) => window.Platforms?.platformOfRepoUrl?.(url) || null;
@@ -117,6 +109,19 @@
     workflowsColumn,
   } = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
   const failedPaid = (s) => PAID.find((id) => s?.jobs?.[id]?.status === 'failed') || null;
+  // #724: the progress tray, hidden while the wizard is open (project-wizard-tray.js)
+  const tray = window.ProjectWizardTray({
+    active: ACTIVE,
+    failedPaid,
+    finished,
+    jobReason,
+    names,
+    remember: (s) => remember(s),
+    shownInWizard: (pid) => cur?.projectId === pid,
+    states,
+    statusText,
+    wizardOpen: () => !!cur,
+  });
   const retryButton = (id) => `<button type="button" class="btn sm" data-act="retry" data-testid="wizard-job-retry-${id}">${esc(t('onboarding.retry'))}</button>`;
 
   function stepper() {
@@ -565,8 +570,9 @@
       </div>`;
   }
 
-  // #743: the repository step's Next while the access check and the clone run: disabled, a spinner and
-  // "Cloning <name>…" in place (no card under the fields), until the analysis step
+  // #743: the repository step's Next while the access check and the clone run: a spinner and
+  // "Cloning <name>…" in place (no card under the fields), until the analysis step; disabled only while
+  // the start call is in flight, then a click goes on to the analysis while the clone runs (#641)
   const cloningInPlace = () => cur.model.step === 'repository' && cur.model.source !== 'new'
     && (cur.busy || cur.onboarding?.status === 'cloning');
 
@@ -581,7 +587,7 @@
       : step === 'repository' && cur.model.source !== 'new' ? 'onboarding.next_clone' : 'onboarding.next';
     const cloning = cloningInPlace();
     const nextText = cloning ? `${SPINNER('wizard-spinner')}${esc(t('onboarding.cloning_wait', { name: cur.model.name.trim() }))}` : esc(t(nextLabel));
-    const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${cloning ? ' aria-busy="true"' : ''}${canNext() && !cloning ? '' : ' disabled'}>${nextText}</button>` : '';
+    const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${cloning ? ' aria-busy="true"' : ''}${canNext() && !cur.busy ? '' : ' disabled'}>${nextText}</button>` : '';
     const back = step === 'start'
       ? `<button type="button" class="btn" data-act="cancel" data-testid="wizard-cancel">${esc(t('onboarding.cancel'))}</button>`
       : `<button type="button" class="btn" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
@@ -613,8 +619,8 @@
     if (!state?.projectId) return;
     states.delete(state.projectId);
     states.set(state.projectId, state);
-    scheduleLeave(state);
-    renderTray();
+    tray.scheduleLeave(state);
+    tray.render();
     // #632: the project being created, pushed before create() answers (its remote: creating)
     if (cur && !cur.projectId && cur.creating && state.name === cur.creating) {
       cur.projectId = state.projectId;
@@ -923,93 +929,20 @@
     cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, nameTyped: false, ...freshReview() };
     root.hidden = false;
     render();
-    renderTray(); // #724: hidden while the wizard is open
+    tray.refresh(); // #724: hidden while the wizard is open
     root.querySelector('.wizard-panel')?.focus?.();
     loadAccounts();
   }
 
   function close() {
     cur = null;
-    if (tray) renderTray(); // #724: back with what still needs attention
+    tray.refresh(); // #724: back with what still needs attention
     if (!root) return;
     root.hidden = true;
     root.innerHTML = '';
     const back = opener;
     opener = null;
     if (back?.isConnected !== false) back?.focus?.();
-  }
-
-  // ---- the progress tray -----------------------------------------------------------------------
-
-  // #724: a finished import (the clone done, its analyses done or never started, none failed) leaves the
-  // tray LEAVE_MS later with the toast "<name> imported"; running again or failed meanwhile, it stays.
-  // No toast when the wizard showed it, nor when Finish's own toast (finished_analyzed) says it
-  const isDone = (s) => ['ready', 'analyzed'].includes(s.status) && !failedPaid(s);
-  function scheduleLeave(s) {
-    const pid = s.projectId;
-    if (!isDone(s)) {
-      clearTimeout(leaving.get(pid));
-      leaving.delete(pid);
-      return;
-    }
-    if (leaving.has(pid)) return;
-    const notify = !(finished.has(pid) && s.status === 'analyzed');
-    leaving.set(pid, setTimeout(() => {
-      leaving.delete(pid);
-      if (!states.has(pid) || !isDone(states.get(pid))) return;
-      states.delete(pid);
-      renderTray();
-      if (!notify || cur?.projectId === pid) return;
-      const name = names.get(pid) || pid;
-      showToast(t('onboarding.imported', { name }), '', null, null, {
-        action: { label: t('onboarding.open_project'), run: () => window.Actions.call('openProject', pid) },
-      });
-    }, LEAVE_MS));
-  }
-
-  function renderTray() {
-    if (!tray) {
-      tray = document.createElement('aside');
-      tray.setAttribute('id', 'onboarding-tray');
-      tray.setAttribute('data-testid', 'onboarding-tray');
-      tray.setAttribute('aria-live', 'polite');
-      tray.setAttribute('aria-label', t('onboarding.tray_title'));
-      tray.className = 'onboarding-tray';
-      tray.addEventListener('click', onTrayClick);
-      document.body.appendChild(tray);
-    }
-    // #724: never over the open wizard (its markup stays current for when it closes)
-    tray.hidden = !!cur || states.size === 0;
-    const item = (s) => {
-      const name = names.get(s.projectId) || s.projectId;
-      // #725: a failed paid analysis (the onboarding analyzed) says why too, with its Retry
-      const job = s.status === 'failed' ? null : failedPaid(s);
-      const why = s.status === 'failed' ? (s.reason || t('onboarding.no_reason')) : job ? jobReason(s.jobs[job]) : '';
-      const failed = why
-        ? `<p class="small tray-reason"${job ? ` title="${esc(s.jobs[job].error || '')}"` : ''}>${esc(why)}</p>
-           <button type="button" class="btn small" data-act="retry" data-project="${esc(s.projectId)}">${esc(t('onboarding.retry'))}</button>` : '';
-      const dismiss = ACTIVE.includes(s.status) ? ''
-        : `<button type="button" class="btn ghost small tray-dismiss" data-act="dismiss" data-project="${esc(s.projectId)}" aria-label="${esc(t('onboarding.dismiss', { name }))}">×</button>`;
-      return `<li class="tray-item" data-testid="tray-item" data-project="${esc(s.projectId)}" data-status="${esc(s.status)}">
-          <div class="tray-head">${ACTIVE.includes(s.status) ? SPINNER('tray-spinner') : ''}<strong class="tray-name" title="${esc(name)}">${esc(name)}</strong><span class="badge status-${esc(s.status)}">${esc(statusText(s.status))}</span>${dismiss}</div>
-          ${failed}
-        </li>`;
-    };
-    tray.innerHTML = `<h3 class="tray-title">${esc(t('onboarding.tray_title'))}</h3>
-      <ul class="tray-items">${[...states.values()].reverse().map(item).join('')}</ul>`;
-  }
-
-  async function onTrayClick(e) {
-    const btn = e.target?.closest?.('[data-act]');
-    const id = btn?.dataset.project;
-    if (!id) return;
-    if (btn.dataset.act === 'dismiss') { states.delete(id); renderTray(); return; }
-    if (btn.dataset.act !== 'retry') return;
-    try {
-      remember(await api.retryOnboarding(id));
-    } catch (err) {
-      showToast(t('onboarding.action_failed'), errMsg(err));
-    }
   }
 
   // #732: the Projects list (state.projects, read by Analyze, the backlog's pickers, the header) follows the
