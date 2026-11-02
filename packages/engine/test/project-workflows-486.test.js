@@ -304,6 +304,32 @@ test('#486 projects:update changes the workflow set and the default (the project
   assert.equal(bare(projectFile(svc, p.id).defaultWorkflow), 'software-development');
 });
 
+// #729: the new-project wizard's step 3 saves each workflow's variant and the CI pick on the record
+test('#729 projects:update keeps each workflow\'s variant and CI pick, and drops empty ones', async (t) => {
+  const { api, service: svc } = service(t);
+  const p = await api['projects:create']({ name: 'wf-729-variant', folder: tempDir(t, 'pj-wf-729-variant-') });
+  const patch = {
+    workflows: [
+      { name: 'feature', origin: 'bundled', category: 'build', variant: 'remote-code' },
+      { name: 'fix', origin: 'bundled', category: 'build', variant: '  ', ci: '' },
+      { name: 'release', origin: 'bundled', category: 'build', variant: ' train ', ci: 'pr+release' },
+      { name: 'backlog-refresh', origin: 'bundled', variant: 42, ci: null },
+    ],
+    defaultWorkflow: 'feature',
+  };
+  const next = await api['projects:update']({ id: p.id, patch });
+  const want = [
+    { name: 'feature', origin: 'bundled', category: 'build', variant: 'remote-code' },
+    { name: 'fix', origin: 'bundled', category: 'build' },
+    { name: 'release', origin: 'bundled', category: 'build', variant: 'train', ci: 'pr+release' },
+    { name: 'backlog-refresh', origin: 'bundled' },
+  ];
+  assert.deepEqual(JSON.parse(JSON.stringify(next.workflows)), want, 'the answer');
+  assert.deepEqual(projectFile(svc, p.id).workflows, want, 'the record on disk');
+  const listed = (await api['projects:list']()).find((x) => x.id === p.id);
+  assert.deepEqual(JSON.parse(JSON.stringify(listed.workflows)), want, 'projects:list');
+});
+
 // ---- the project's default for new items: roadmap.add and the Product Owner ---------------------
 
 const OTHER_WORKFLOW = (issueWorkflow) => issueWorkflow.replace('name: fixture-issue', 'name: fixture-other');

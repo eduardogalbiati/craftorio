@@ -304,6 +304,114 @@ test('#729 Add a workflow: picking one saves the set with it and shows its card'
   assert.deepEqual(cardIds(app), ['feature', 'fix', 'backlog-refresh'], 'its card is shown');
 });
 
+// ---- after the review of #729: Undo, closing the dialog, the search's caret, the CI pick ----------------
+
+// The toasts shown, with their action ({ label, run }) when they have one
+function captureToasts(app) {
+  const toasts = [];
+  app.sandbox.showToast = (title, detail, _runId, _gate, opts) => { toasts.push({ title: String(title ?? ''), action: opts?.action || null }); };
+  return toasts;
+}
+
+// The selectors focused from now on (the fake DOM's focus() does nothing: each queried element records it)
+function captureFocus(app) {
+  const focused = [];
+  const doc = app.sandbox.document;
+  const query = doc.querySelector.bind(doc);
+  doc.querySelector = (sel) => {
+    const el = query(sel);
+    if (el && !el.__focus729) { el.__focus729 = true; el.focus = () => { focused.push(String(sel)); }; }
+    return el;
+  };
+  return focused;
+}
+
+const dialogOpen = (app) => byTestId(pageScope(app), 'pj-wf-add-dialog').length > 0;
+
+test('#729 Remove: the toast\'s Undo puts the set (variants included) and the default back', { timeout: 20000 }, async () => {
+  const app = await overviewOf({ workflows: [FEATURE, FIX], defaultWorkflow: 'feature' });
+  const toasts = captureToasts(app);
+  await fire(app, buttonIn(cardOf(app, 'feature'), 'pj-wf-remove'), 'click');
+  assert.deepEqual(cardIds(app), ['fix'], 'removed');
+  const undo = toasts.find((x) => x.action && typeof x.action.run === 'function');
+  assert.ok(undo, `a toast with an action (${toasts.map((x) => x.title).join(' | ')})`);
+  assert.match(String(undo.action.label), /undo/i);
+  await undo.action.run();
+  await app.settle(30);
+  const calls = app.callsTo('updateProject');
+  assert.equal(calls.length, 2, 'the remove, then the undo');
+  const back = calls[1][1];
+  assert.deepEqual(names(back.workflows), ['feature', 'fix'], 'the set as it was, in its order');
+  assert.equal(String(Array.from(back.workflows)[0].variant), 'remote-code', 'feature\'s variant back');
+  assert.equal(String(back.defaultWorkflow), 'feature', 'the default back');
+  assert.deepEqual(cardIds(app), ['feature', 'fix'], 'both cards again');
+  assert.equal(has(cardOf(app, 'feature'), 'pj-wf-default-badge'), true, 'feature badged Default again');
+});
+
+test('#729 Add a workflow: Escape closes the dialog without saving and gives the focus back to "+ Add a workflow"', { timeout: 20000 }, async () => {
+  const app = await overviewOf({ workflows: [FEATURE], defaultWorkflow: 'feature' });
+  await openAdd(app);
+  assert.equal(dialogOpen(app), true, 'the dialog is open');
+  const focused = captureFocus(app);
+  const dialog = byTestId(pageScope(app), 'pj-wf-add-dialog')[0];
+  const target = app.el(dialog.attrs.id ? `#${dialog.attrs.id}` : '[data-testid="pj-wf-add-dialog"]');
+  const ev = { type: 'keydown', key: 'Escape', target, currentTarget: target, preventDefault() {}, stopPropagation() { this.stopped = true; }, stopImmediatePropagation() { this.stopped = true; } };
+  for (const node of [target, app.el('#project-workflows'), app.el('#view-project')]) {
+    if (ev.stopped) break;
+    ev.currentTarget = node;
+    await node.onkeydown?.(ev);
+    for (const fn of node.listeners.keydown || []) await fn(ev);
+  }
+  if (!ev.stopped) app.sandbox.document.dispatchEvent(ev);
+  await app.settle(30);
+  assert.equal(dialogOpen(app), false, 'the dialog is closed');
+  assert.equal(app.callsTo('updateProject').length, 0, 'nothing saved');
+  assert.equal(focused.some((s) => /pj-wf-add(?![-\w])/.test(s)), true, `"+ Add a workflow" has the focus again (${focused.join(', ')})`);
+});
+
+test('#729 Add a workflow: a click on the backdrop closes the dialog, a click inside it does not', { timeout: 20000 }, async () => {
+  const app = await overviewOf({ workflows: [FEATURE], defaultWorkflow: 'feature' });
+  await openAdd(app);
+  const html = pageScope(app);
+  const dialog = byTestId(html, 'pj-wf-add-dialog')[0];
+  const title = H.findEl(dialog.outer, (e) => /^h\d$/.test(e.name));
+  assert.ok(title, 'the dialog has a title');
+  await fire(app, title, 'click');
+  assert.equal(dialogOpen(app), true, 'a click on the dialog\'s title keeps it open');
+  const backdrop = byTestId(pageScope(app), 'pj-wf-add-dialog')[0].parent;
+  assert.ok(backdrop, 'the dialog sits on a backdrop');
+  assert.notEqual(backdrop.attrs.id, 'project-workflows', 'a backdrop of its own, not the block');
+  await fire(app, backdrop, 'click');
+  assert.equal(dialogOpen(app), false, 'a click on the backdrop closes it');
+  assert.equal(app.callsTo('updateProject').length, 0, 'nothing saved');
+});
+
+test('#729 Add a workflow: the search keeps its caret where it was across the list\'s redraw', { timeout: 20000 }, async () => {
+  const app = await overviewOf({ workflows: [FEATURE], defaultWorkflow: 'feature' });
+  await openAdd(app);
+  const search = byTestId(pageScope(app), 'pj-wf-add-search')[0];
+  assert.ok(search?.attrs.id, 'the search field has an id (it is found again after the redraw)');
+  const live = app.el(`#${search.attrs.id}`);
+  const ranges = [];
+  live.setSelectionRange = (a, b) => { ranges.push([a, b]); };
+  live.selectionStart = 2; // the owner typed "retro" then moved the caret after "re"
+  live.selectionEnd = 2;
+  await fire(app, search, 'input', { value: 'retro' });
+  await wait(400);
+  await app.settle(20);
+  assert.deepEqual(options(app), ['retrospective'], 'the list was drawn again, filtered');
+  assert.equal(ranges.length > 0, true, 'the caret is put back');
+  assert.deepEqual(ranges.at(-1), [2, 2], 'where the owner left it, not at the end');
+});
+
+test('#729 Overview: the release card shows its CI pick by its label', { timeout: 20000 }, async () => {
+  const RELEASE = { name: 'release', origin: 'bundled', category: 'build', variant: 'train', ci: 'pr+release' };
+  const app = await overviewOf({ workflows: [FEATURE, RELEASE], defaultWorkflow: 'feature' });
+  const release = textOf(cardOf(app, 'release'));
+  assert.equal(release.includes('CI: On pull requests and releases'), true, `the release card: ${release}`);
+  assert.equal(textOf(cardOf(app, 'feature')).includes('CI:'), false, 'no CI line on a card without a CI pick');
+});
+
 // ---- the empty state -----------------------------------------------------------------------------------
 
 const I18N = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n');

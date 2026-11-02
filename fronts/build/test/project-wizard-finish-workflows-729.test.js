@@ -200,3 +200,57 @@ test('#729 Finish still closes the wizard on the project page when saving the wo
   assert.equal(String(app.state().view), 'project', 'the project page is open');
   assert.equal(String(app.state().pv?.id), PID, 'on the new project');
 });
+
+// ---- after the review of #729 ----------------------------------------------------------------------
+
+// The service as the app sees it: projects:update writes the record that projects:list then answers
+function persisted(over = {}) {
+  let record = clone(PROJECT);
+  return {
+    listProjects: async () => [clone(record)],
+    listProjectRuns: async () => ({ runs: [], project: clone(record), local: null }),
+    updateProject: async (id, patch) => { record = { ...record, ...JSON.parse(JSON.stringify(patch)) }; return clone(record); },
+    ...over,
+  };
+}
+const cardsOn = (app) => H.findAll(String(app.el('#project-workflows').innerHTML || ''), (e) => e.attrs['data-testid'] === 'pj-wf-card')
+  .map((c) => ({ id: String(c.attrs['data-workflow-id'] ?? ''), text: H.visibleText(c.inner) }));
+
+test('#729 after Finish, the app\'s project list (the Backlog\'s pickers) has the saved workflows and default, with no onboarding event', { timeout: 30000 }, async () => {
+  const app = await atWorkflows(persisted());
+  await pickVariant(app, 'feature', 'remote-code');
+  await finish(app);
+  const record = (app.state().projects || []).find((p) => p.id === PID);
+  assert.ok(record, 'the new project is in state.projects');
+  assert.deepEqual(Array.from(record.workflows || [], (w) => String(w?.name)), ['feature', 'fix', 'release'], 'its workflows');
+  assert.equal(String(record.defaultWorkflow), 'feature', 'its default');
+});
+
+test('#729 after Finish, the project page shows the three cards with the variants and the CI pick', { timeout: 30000 }, async () => {
+  const app = await atWorkflows(persisted());
+  await pickVariant(app, 'feature', 'remote-code');
+  await pickVariant(app, 'release', 'train');
+  await pickVariant(app, 'ci', 'pr+release');
+  await finish(app);
+  await app.settle(30);
+  const cards = cardsOn(app);
+  assert.deepEqual(cards.map((c) => c.id), ['feature', 'fix', 'release'], 'one card per workflow picked');
+  const feature = cards.find((c) => c.id === 'feature').text;
+  assert.equal(feature.includes('Remote PRs · code first'), true, `feature's variant: ${feature}`);
+  const release = cards.find((c) => c.id === 'release').text;
+  assert.equal(release.includes('CI: On pull requests and releases'), true, `release's CI pick: ${release}`);
+});
+
+test('#729 Finish saves each workflow\'s category as its installed YAML declares it', { timeout: 30000 }, async () => {
+  const INSTALLED = [
+    { file: 'feature.yaml', name: 'feature', category: 'build', origin: 'bundled', inputs: { task: {} } },
+    { file: 'fix.yaml', name: 'fix', category: 'plan', origin: 'bundled', inputs: { task: {} } },
+    { file: 'release.yaml', name: 'Release', category: 'monitor', origin: 'bundled', inputs: {} },
+  ];
+  const app = await atWorkflows(persisted({ listWorkflows: async () => clone(INSTALLED) }));
+  await finish(app);
+  const patch = savedPatch(app);
+  assert.equal(entry(patch, 'feature')?.category, 'build');
+  assert.equal(entry(patch, 'fix')?.category, 'plan', 'fix\'s category from fix.yaml');
+  assert.equal(entry(patch, 'release')?.category, 'monitor', 'release\'s category from release.yaml');
+});
