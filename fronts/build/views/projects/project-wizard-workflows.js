@@ -121,8 +121,7 @@
       const value = cur().kind || '';
       const kinds = [['', t('onboarding.kind_detect')], ...Object.entries(M.KIND_LABELS || {}).map(([v, key]) => [v, t(key)])];
       const attrs = `data-testid="wizard-kind-select" aria-label="${esc(t('ways_of_working.f_kind'))}"`;
-      const control = window.Select?.markup ? window.Select.markup(attrs, kinds, value)
-        : `<select ${attrs}>${kinds.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+      const control = window.Select.markup(attrs, kinds, value);
       return `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${control}</div>`;
     }
 

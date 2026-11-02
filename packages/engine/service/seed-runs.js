@@ -102,9 +102,17 @@ function runDefaultsOf(ctx, project) {
   return runDefaults.projectRunDefaults({ project, profile: runDefaults.savedProfile(seedsRoot(ctx), project.id) });
 }
 
+/** #735: runDefaultsOf without the git read of the default branch (base_branch null: the workflow's
+ * own default), synchronous, so a run start (run:start, the Backlog's queue, the Roadmap) reserves
+ * its run at once, with no await between reading its state and starting it. */
+function runDefaultsNow(ctx, project) {
+  return runDefaults.runDefaultsWith({ project, profile: runDefaults.savedProfile(seedsRoot(ctx), project.id) });
+}
+
 module.exports = {
   git,
   projectOf,
+  runDefaultsNow,
   runDefaultsOf,
   runSeed,
   runState,

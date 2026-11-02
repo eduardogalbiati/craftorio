@@ -272,7 +272,7 @@ module.exports = (ctx) => {
         }
         const run = { ...item, ...open[0], ...(open.length > 1 ? { issues: open } : { issues: undefined }) };
         const started = await ctx.startWorkflowRun({
-          file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder, await seedRuns.runDefaultsOf(ctx, project)), mock: mockOf(item),
+          file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder, seedRuns.runDefaultsNow(ctx, project)), mock: mockOf(item),
           projectId, issues: backlog.recordedIssues(open), notices: warnings.map((message) => ({ level: 'warn', message })),
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
           then: item.then || null,
