@@ -10,6 +10,7 @@
 // #725: the E2E steps use new wizard test ids, so the testid_check step's message lists 151 (was 146).
 // #724 #739 #743: the onboarding E2E steps use the wizard's new test ids: 156.
 // #726: the "Why" label's test id wizard-workflow-why: 157.
+// #731: the onboarding E2E steps check the project's City and Architecture tab test ids: 160.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
