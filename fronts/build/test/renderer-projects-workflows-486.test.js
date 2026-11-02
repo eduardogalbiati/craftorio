@@ -115,18 +115,8 @@ test('#486 Create Project without a manifest: "Create one for this project" open
   assert.equal(app.state().view, 'workflows', 'the Builder (Workflows › Builder) is open');
 });
 
-test('#486 the project\'s page (Overview) shows its workflow set, checked, for editing', async () => {
-  const projects = [{ ...PROJECTS[0], workflows: [{ name: 'software-development-local-hero', origin: 'bundled' }], defaultWorkflow: 'software-development-local-hero' }];
-  const app = page({ projects });
-  await app.boot();
-  app.run('openProjectView("p1")');
-  await app.settle(20);
-  const overview = region(app, 'project-overview');
-  assert.ok(H.findEl(overview, (e) => e.attrs['data-testid'] === 'project-workflows-block'), 'the Overview has the Workflows block');
-  const boxes = checkboxes(overview);
-  assert.equal(boxes.get('software-development-local-hero'), true, 'the project\'s workflow is checked');
-  assert.equal(boxes.get('my-flow'), false, 'a workflow outside the set is offered unchecked');
-});
+// #729: the Overview's block shows the project's workflows as cards (no checkbox); its rendering,
+// Make default, Remove and "+ Add a workflow" are in project-workflows-cards-729.test.js.
 
 // ---- the manifest's errors and a private repository ----------------------------------------------
 
@@ -161,80 +151,6 @@ test('#486 Create Project on a private repository: says the manifest will be rea
   assert.match(H.visibleText(markup), /after cloning/i);
   const boxes = checkboxes(markup);
   for (const w of WORKFLOWS) assert.equal(boxes.get(w.name), false, `${w.name} is offered unchecked`);
-});
-
-// ---- the Overview saves the set and the default (api.updateProject is the boundary) ---------------
-
-const HERO = { name: 'software-development-local-hero', origin: 'bundled', category: 'build' };
-const MINE = { name: 'my-flow', origin: 'custom', category: 'build' };
-
-async function overviewOf(project) {
-  const projects = [{ ...PROJECTS[0], ...project }];
-  const app = page({ projects });
-  await app.boot();
-  app.run('openProjectView("p1")');
-  await app.settle(20);
-  return app;
-}
-
-// Checks or clears one box of the Overview's block: the fake DOM has no querySelectorAll, so the
-// block's boxes are built from its rendered markup, and the page's delegated change listener runs
-async function toggleBox(app, name, on) {
-  const box = app.el('#project-workflows');
-  const inputs = H.findAll(String(box.innerHTML), (e) => e.name === 'input' && e.attrs.type === 'checkbox' && e.attrs['data-workflow'])
-    .map((e) => ({ checked: 'checked' in e.attrs, dataset: { workflow: e.attrs['data-workflow'], origin: e.attrs['data-origin'] || '', category: e.attrs['data-category'] || '' } }));
-  const target = inputs.find((i) => i.dataset.workflow === name);
-  assert.ok(target, `the block has a ${name} box`);
-  target.checked = on;
-  target.closest = (sel) => (/input\[data-workflow\]/.test(String(sel)) ? target : null);
-  box.querySelectorAll = () => inputs;
-  const view = app.el('#view-project');
-  const listeners = view.listeners.change || [];
-  assert.ok(listeners.length, 'the project page listens to change');
-  const ev = { type: 'change', target, currentTarget: view, preventDefault() {}, stopPropagation() {} };
-  for (const fn of listeners) await fn(ev);
-  await app.settle(20);
-}
-
-const lastPatch = (app) => {
-  const calls = app.callsTo('updateProject');
-  assert.equal(calls.length, 1, 'one api.updateProject call');
-  assert.equal(calls[0][0], 'p1');
-  return calls[0][1];
-};
-// Array.from: the page's arrays come from its own realm (deepEqual compares prototypes)
-const wfKeys = (list) => Array.from(list || [], (w) => `${w.name}:${w.origin}:${w.category || ''}`);
-const headerRecord = (app) => (app.state().projects || []).find((p) => p.id === 'p1');
-
-test('#486 Overview: checking a box saves the set and the kept default through api.updateProject, and updates state.projects', async () => {
-  const app = await overviewOf({ workflows: [HERO], defaultWorkflow: HERO.name });
-  await toggleBox(app, 'my-flow', true);
-  const patch = lastPatch(app);
-  assert.deepEqual(Object.keys(patch).sort(), ['defaultWorkflow', 'workflows']);
-  assert.deepEqual(wfKeys(patch.workflows), ['software-development-local-hero:bundled:build', 'my-flow:custom:build']);
-  assert.equal(patch.defaultWorkflow, HERO.name);
-  assert.deepEqual(wfKeys(headerRecord(app)?.workflows), ['software-development-local-hero:bundled:build', 'my-flow:custom:build'], 'state.projects has the new set');
-});
-
-test('#486 Overview: clearing the default\'s box saves the set and the first remaining development workflow as the default', async () => {
-  const app = await overviewOf({ workflows: [HERO, MINE], defaultWorkflow: MINE.name });
-  await toggleBox(app, 'my-flow', false);
-  const patch = lastPatch(app);
-  assert.deepEqual(wfKeys(patch.workflows), ['software-development-local-hero:bundled:build']);
-  assert.equal(patch.defaultWorkflow, HERO.name);
-  assert.equal(headerRecord(app)?.defaultWorkflow, HERO.name, 'state.projects has the new default');
-});
-
-test('#486 Overview: "Make default" saves only the defaultWorkflow', async () => {
-  const app = await overviewOf({ workflows: [HERO, MINE], defaultWorkflow: HERO.name });
-  const btn = H.findEl(String(app.el('#project-workflows').innerHTML), (e) => e.name === 'button' && e.attrs['data-pwf-default'] === 'my-flow');
-  assert.ok(btn, 'my-flow (checked, not the default) has a Make default button');
-  assert.match(H.visibleText(btn.inner), /make default/i);
-  await clickRendered(app, btn, ['#project-workflows']);
-  const patch = lastPatch(app);
-  assert.deepEqual(Object.keys(patch), ['defaultWorkflow']);
-  assert.equal(patch.defaultWorkflow, 'my-flow');
-  assert.equal(headerRecord(app)?.defaultWorkflow, 'my-flow', 'state.projects has the new default');
 });
 
 // ---- the backlog's Assign dialog: the header project's set first, on its default ------------------

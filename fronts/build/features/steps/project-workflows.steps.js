@@ -147,20 +147,161 @@ When('I create the project', async ({ e2e }) => {
   await expect(visible(e2e.window.getByTestId('project-dialog'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 });
 
-Then('the Overview\'s Workflows block shows {string} {word}', async ({ e2e }, name, state) => {
-  const block = overviewBlock(e2e.window);
-  await expect(block).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const box = workflowBox(block, name);
-  await expect(box, `the workflow "${name}" on the Overview`).toBeVisible({ timeout: LOAD_TIMEOUT });
-  if (state === 'checked') await expect(box).toBeChecked();
-  else if (state === 'unchecked') await expect(box).not.toBeChecked();
-  else throw new Error(`"${state}": expected "checked" or "unchecked"`);
+// #729: the Overview's block no longer lists checkboxes; #486's "checked on the Overview" became
+// "a card on the Overview" (steps below: "shows exactly the card(s)", "shows no card", the Default badge).
+
+// ---- the project's workflows as cards (#729, fronts/build/features/project-workflows-729.feature) ----------------------
+// The Overview's Workflows block (data-testid="project-workflows-block") shows only the workflows added
+// to the project, one card each, no checkbox. What the screen exposes (the renderer's contract):
+// - data-testid="pj-wf-card": one card per workflow of the project, data-workflow-id="<workflow name>"
+//   (the name kept in the project's `workflows`), its text holding the name and the category;
+// - data-testid="pj-wf-default-badge": in the default workflow's card only, text "Default";
+// - data-testid="pj-wf-make-default" / "pj-wf-remove": the card's "Make default" / "Remove" buttons;
+// - data-testid="pj-wf-add": the block's "+ Add a workflow" button (with or without cards);
+// - data-testid="pj-wf-empty": the empty state's text, when the project has no workflow;
+// - data-testid="pj-wf-add-dialog": the dialog of installed workflows not on the project (role="dialog"),
+//   its search field data-testid="pj-wf-add-search", one data-testid="pj-wf-add-option" per workflow
+//   offered, data-workflow-id="<workflow name>"; picking an option adds it and closes the dialog.
+// The demo project's workflows are written in the scratch workspace's project record (as #486's Create
+// project does: { name, origin, category } and defaultWorkflow), then the app reloads.
+
+const enginePath = (...p) => path.join(__dirname, '..', '..', '..', '..', 'packages', 'engine', ...p);
+const BUNDLED_CATEGORY = { feature: 'build', fix: 'build', refactor: 'build', release: 'build', 'issue-tracker': 'plan' };
+const cards = (page) => overviewBlock(page).getByTestId('pj-wf-card');
+const cardOf = (page, name) => overviewBlock(page).locator(`[data-testid="pj-wf-card"][data-workflow-id="${name}"]`);
+const addDialog = (page) => visible(page.getByTestId('pj-wf-add-dialog')).first();
+const addOptionOf = (page, name) => addDialog(page).locator(`[data-testid="pj-wf-add-option"][data-workflow-id="${name}"]`);
+// "a", "a" and "b", "a", "b" and "c" → [a, b, c]
+const namesOf = (...names) => names.filter((n) => typeof n === 'string');
+
+async function setDemoWorkflows(e2e, names, defaultWorkflow) {
+  if (!e2e.project || !e2e.project.id) throw new Error('no demo project: open the app first');
+  const projects = require(enginePath('domains', 'project', 'projects'));
+  const workflows = names.map((name) => ({ name, origin: 'bundled', category: BUNDLED_CATEGORY[name] || 'build' }));
+  projects.updateProject(path.join(scratchOf(e2e), 'workspace', 'projects'), e2e.project.id, { workflows, defaultWorkflow });
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+}
+
+Given('the demo project has the workflows {string} and {string}, with {string} as its default', async ({ e2e }, a, b, def) => {
+  await setDemoWorkflows(e2e, [a, b], def);
 });
 
-Then('the project\'s default workflow is {string}', async ({ e2e }, name) => {
-  const def = overviewBlock(e2e.window).getByTestId('project-default-workflow');
-  await expect(def).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(def).toContainText(name);
+Given('the demo project has no workflow', async ({ e2e }) => {
+  await setDemoWorkflows(e2e, [], null);
+});
+
+async function expectExactCards(e2e, names) {
+  const block = overviewBlock(e2e.window);
+  await expect(block).toBeVisible({ timeout: LOAD_TIMEOUT });
+  for (const name of names) await expect(cardOf(e2e.window, name), `the workflow card "${name}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cards(e2e.window), `only the project's workflows (${names.join(', ')})`).toHaveCount(names.length);
+}
+
+Then('the project\'s Workflows block shows exactly the card {string}', async ({ e2e }, a) => {
+  await expectExactCards(e2e, namesOf(a));
+});
+
+Then('the project\'s Workflows block shows no card {string}', async ({ e2e }, name) => {
+  await expect(overviewBlock(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cardOf(e2e.window, name), `no workflow card "${name}"`).toHaveCount(0);
+});
+
+Then('the project\'s Workflows block shows exactly the cards {string} and {string}', async ({ e2e }, a, b) => {
+  await expectExactCards(e2e, namesOf(a, b));
+});
+
+Then('the project\'s Workflows block shows exactly the cards {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
+  await expectExactCards(e2e, namesOf(a, b, c));
+});
+
+Then('the project\'s Workflows block lists no workflow as a checkbox', async ({ e2e }) => {
+  const block = overviewBlock(e2e.window);
+  await expect(block).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(block.getByRole('checkbox')).toHaveCount(0);
+});
+
+Then('the workflow card {string} has the {string} badge', async ({ e2e }, name, label) => {
+  const badge = cardOf(e2e.window, name).getByTestId('pj-wf-default-badge');
+  await expect(badge, `the "${label}" badge on "${name}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(badge).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`, 'i'));
+  // one default per project
+  await expect(overviewBlock(e2e.window).getByTestId('pj-wf-default-badge')).toHaveCount(1);
+});
+
+Then('the workflow card {string} has no {string} badge', async ({ e2e }, name, label) => {
+  const card = cardOf(e2e.window, name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card.getByTestId('pj-wf-default-badge'), `no "${label}" badge on "${name}"`).toHaveCount(0);
+});
+
+Then('the workflow card {string} shows the category {string} and offers {string} and {string}', async ({ e2e }, name, category, makeDefault, remove) => {
+  const card = cardOf(e2e.window, name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(name);
+  await expect(card).toContainText(new RegExp(`\\b${escapeRe(category)}\\b`, 'i'));
+  await expect(card.getByTestId('pj-wf-make-default')).toHaveText(new RegExp(`^\\s*${escapeRe(makeDefault)}\\s*$`));
+  await expect(card.getByTestId('pj-wf-make-default')).toBeEnabled();
+  await expect(card.getByTestId('pj-wf-remove')).toHaveText(new RegExp(`^\\s*${escapeRe(remove)}\\s*$`));
+  await expect(card.getByTestId('pj-wf-remove')).toBeEnabled();
+});
+
+Then('the project\'s Workflows block looks like the baseline {string}', async ({ e2e }, name) => {
+  await expect(overviewBlock(e2e.window)).toHaveScreenshot(name);
+});
+
+When('I click {string} in the project\'s Workflows block', async ({ e2e }, label) => {
+  const add = overviewBlock(e2e.window).getByTestId('pj-wf-add');
+  await expect(add).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`), { timeout: LOAD_TIMEOUT });
+  await add.click();
+  await expect(addDialog(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the add-a-workflow dialog offers {string}', async ({ e2e }, name) => {
+  await expect(addOptionOf(e2e.window, name), `"${name}" offered`).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the add-a-workflow dialog offers {string} and {string}', async ({ e2e }, a, b) => {
+  for (const name of [a, b]) await expect(addOptionOf(e2e.window, name), `"${name}" offered`).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the add-a-workflow dialog does not offer {string}', async ({ e2e }, name) => {
+  await expect(addOptionOf(e2e.window, name), `"${name}" not offered`).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the add-a-workflow dialog does not offer {string} or {string}', async ({ e2e }, a, b) => {
+  await expect(addDialog(e2e.window).getByTestId('pj-wf-add-option').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  for (const name of [a, b]) await expect(addOptionOf(e2e.window, name), `"${name}" not offered`).toHaveCount(0);
+});
+
+When('I search {string} in the add-a-workflow dialog', async ({ e2e }, text) => {
+  await addDialog(e2e.window).getByTestId('pj-wf-add-search').fill(text);
+});
+
+When('I pick {string} in the add-a-workflow dialog', async ({ e2e }, name) => {
+  await addOptionOf(e2e.window, name).click();
+});
+
+Then('the add-a-workflow dialog is closed', async ({ e2e }) => {
+  await expect(visible(e2e.window.getByTestId('pj-wf-add-dialog'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the project\'s Workflows block says {string}', async ({ e2e }, text) => {
+  const empty = overviewBlock(e2e.window).getByTestId('pj-wf-empty');
+  await expect(empty).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(empty).toContainText(text);
+});
+
+Then('the project\'s Workflows block shows no workflow card', async ({ e2e }) => {
+  await expect(overviewBlock(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cards(e2e.window)).toHaveCount(0);
+});
+
+Then('the project\'s Workflows block offers {string}', async ({ e2e }, label) => {
+  const add = overviewBlock(e2e.window).getByTestId('pj-wf-add');
+  await expect(add).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(add).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
+  await expect(add).toBeEnabled();
 });
 
 // ---- the Ways of working interview (#487, fronts/analyser/features/ways-of-working.feature) ---------------------------

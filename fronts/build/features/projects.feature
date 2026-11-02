@@ -75,8 +75,8 @@ Feature: Projects, a screen of the menu with a page per project
     And I check the workflow "software-development" in the Workflows block
     And I create the project
     And I open the project "plain-app" from the Projects screen
-    Then the Overview's Workflows block shows "software-development" checked
-    And the Overview's Workflows block shows "issue-tracker" unchecked
+    Then the project's Workflows block shows exactly the card "software-development"
+    And the project's Workflows block shows no card "issue-tracker"
 
   @issue-486
   Scenario: A repository with a workflows manifest gets its workflows pre-checked in their categories
@@ -89,5 +89,5 @@ Feature: Projects, a screen of the menu with a page per project
     And the Workflows block does not offer "Create one for this project"
     When I create the project
     And I open the project "shop-api" from the Projects screen
-    Then the Overview's Workflows block shows "software-development" checked
-    And the project's default workflow is "software-development"
+    Then the project's Workflows block shows exactly the cards "software-development" and "issue-tracker"
+    And the workflow card "software-development" has the "Default" badge
