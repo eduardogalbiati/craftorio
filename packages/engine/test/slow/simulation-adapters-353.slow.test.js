@@ -14,6 +14,8 @@
 // #723: that list follows this checkout's features and renderer, not simulation: the snapshot now
 // keeps the test-id check's status and shape and replaces its `message` and `missing` list
 // (test/simulated-run-events-353.js), so a new test id no longer turns this test red.
+// #723: the baseline was recorded on Windows with Node v24.19.0; paths under a replaced folder now
+// use '/' and this process's Node version reads <node-version>, so it holds on any machine.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

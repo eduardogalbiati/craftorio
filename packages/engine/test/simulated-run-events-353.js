@@ -16,7 +16,12 @@ function normaliseString(s, dirs) {
   for (const [dir, name] of dirs) {
     for (const form of [dir, dir.split(path.sep).join('/'), dir.split(path.sep).join('\\\\')]) out = out.split(form).join(name);
   }
+  // #723: the machine, not simulation, decides the path separator (the baseline was recorded on
+  // Windows) and the Node version a check reports: a path under a replaced folder uses '/', and
+  // this process's Node version reads <node-version>.
   return out
+    .replace(/<(repo|tmp|home)>[^\s"'`]*/g, (p) => p.replace(/\\/g, '/'))
+    .split(process.version).join('<node-version>')
     .replace(/\b(runs|wf|run-input)-[A-Za-z0-9]{6}\b/g, '$1-<tmp>')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, '<ts>')
     .replace(/\b\d{8}-\d{6}-[0-9a-f]{6,}\b/g, '<run-id>');
