@@ -11,6 +11,9 @@
 // workflowCompose builds the workflow set from the last profile and the owner's answers, its manifest
 // merged into the repository's .multiagent/project.yaml; only with write: true are the files written to
 // the project's .multiagent/ (never committed: the owner commits) and the project's set updated.
+// #733: workflowInterviewLast reads the last saved run (the onboarding's profile job is the same
+// interview) without running anything; workflowInterviewState is the running seed's state (seed-runs.js
+// runState) the drawer's loader polls.
 
 const fs = require('fs');
 const os = require('os');
@@ -138,6 +141,21 @@ module.exports = (ctx) => {
     return { ...found, questions: compose.openQuestions(found.profile) };
   }
 
+  /** #733: the last saved run → { profile, evidence, questions, simulated, date, costUsd }, or null; runs nothing. */
+  async function workflowInterviewLast({ projectId }) {
+    const p = projectOf(projectId);
+    const last = oracleSeeds.listSeedRuns(root(), p.id, SEED_ID)[0];
+    if (!last) return null;
+    const found = await lastProfile(p);
+    if (!found) return null;
+    return { ...found, questions: compose.openQuestions(found.profile), date: last.at || null, costUsd: last.costUsd ?? null };
+  }
+
+  /** #733: the interview in progress on the project → { running: { since, items, last } | null, error }. */
+  async function workflowInterviewState({ projectId }) {
+    return seedRuns.runState(ctx, projectOf(projectId), SEED_ID);
+  }
+
   // a composed workflow as the Builder edits it: { mode, spec } (checked by the engine's loader)
   function builderSpec(text) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wow-487-'));
@@ -182,5 +200,7 @@ module.exports = (ctx) => {
   return {
     workflowCompose,
     workflowInterview,
+    workflowInterviewLast,
+    workflowInterviewState,
   };
 };

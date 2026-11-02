@@ -7,7 +7,13 @@
 // "Edit profile" lets the owner override any inferred field (answers named after the profile's fields).
 // "Open in Builder" opens the development workflow in the Builder unsaved (window.openSpecInBuilder);
 // "Write to the repository" writes the set to the project's .multiagent/ (uncommitted) and reloads the
-// page's Workflows block. Nothing runs before "Analyze" and nothing is written before "Write".
+// page's Workflows block. Nothing is written before "Write".
+// #733: the drawer opens on the project's last analysis when it has one (workflows:interviewLast: the
+// onboarding's profile job or an earlier Analyze), dated, with its cost, the project's chosen workflows as
+// the current set and "Analyze again" (secondary, with the estimate); with none, on the first screen
+// (intro, cost, Analyze): nothing runs before a click. While an analysis runs (this drawer's or one seen
+// on reopening) a loader shows the elapsed time and the turn's last item (workflows:interviewState, polled
+// every second); a failure shows its reason and Retry.
 // The drawer is added next to the Start drawer (#drawer) and removed when it closes. Uses app.js
 // globals ($, esc, errMsg, showToast).
 
@@ -43,7 +49,7 @@
     { id: 'languages', label: 'ways_of_working.f_languages' },
   ];
   const optionText = (options, v) => { const o = options.find(([value]) => value === v); return o ? t(o[1]) : v || t('ways_of_working.open'); };
-  let cur = null; // { project, el, backdrop, estimate, phase, error, result, answers, proposed, composing, writing, editing, seq }
+  let cur = null; // { project, el, backdrop, estimate, phase, error, result, answers, proposed, composing, writing, editing, seq, last, run, poll, own, startedAt }
 
   const estimateText = (e) => (e?.free ? t('ways_of_working.estimate_free')
     : e?.costUsd != null ? t('ways_of_working.estimate_cost', { cost: Number(e.costUsd).toFixed(2) })
@@ -137,13 +143,57 @@
     </section>`;
   }
 
+  // #733: m:ss since an ISO date (the running seed's `since`) or a local start
+  function elapsedText(since) {
+    const s = Math.max(0, Math.floor((Date.now() - (Date.parse(since) || Date.now())) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  // #733: the running analysis, as the Product Owner / Oracle chats' working line (agent-chat.js): a
+  // spinner, what runs, the elapsed time and the turn's last item (seed-runs.js runState)
+  function loaderHtml() {
+    const run = cur.run || {};
+    return `<div class="agent-chat-working small" data-testid="ways-of-working-loader" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>${t('ways_of_working.analyzing_repository')} <span class="mono" data-testid="ways-of-working-elapsed">${elapsedText(run.since || cur.startedAt)}</span></span>
+      </div>
+      <p class="small muted" data-testid="ways-of-working-activity">${esc(run.last || t('ways_of_working.analyzing'))}</p>`;
+  }
+
+  // #733: when the shown analysis ran and what it cost, with "Analyze again" (secondary) and its estimate
+  function analyzedHtml() {
+    const l = cur.last;
+    const cost = l && Number(l.costUsd) > 0 ? t('ways_of_working.spent_cost', { cost: Number(l.costUsd).toFixed(2) }) : t('ways_of_working.estimate_free');
+    const on = l?.date ? `<span data-testid="ways-of-working-analyzed-on">${esc(t('ways_of_working.analyzed_on', { date: String(l.date).slice(0, 10), cost }))}</span>` : '';
+    const est = cur.estimate === undefined ? '…' : estimateText(cur.estimate);
+    return `<div class="row small wow-analyzed">${on}
+        <button type="button" class="btn ghost small" data-testid="ways-of-working-analyze-again" data-wow-analyze>${t('ways_of_working.analyze_again')}</button>
+        <span class="muted" title="${esc(t('ways_of_working.estimate_hint'))}">${esc(est)}</span>
+      </div>`;
+  }
+
+  // #733: the project's chosen workflows (saved on the project by the wizard, #729) as the current set
+  function currentSetHtml() {
+    const list = cur.project.workflows || [];
+    if (!list.length) return '';
+    return `<section data-testid="ways-of-working-current-set" aria-label="${t('ways_of_working.current_set')}">
+      <h3 class="arch-sub">${t('ways_of_working.current_set')}</h3>
+      <ul class="wow-proposed">${list.map((w) => `<li class="row small" data-testid="ways-of-working-current-workflow" data-name="${esc(w.name)}">
+        ${w.category ? `<span class="badge">${esc(shownCategory(w.category))}</span>` : ''}<b>${esc(w.name)}</b></li>`).join('')}</ul>
+    </section>`;
+  }
+
   function bodyHtml() {
-    const est = `<p class="small" data-testid="ways-of-working-estimate">${t('ways_of_working.analysis_cost')} ${esc(cur.estimate === undefined ? '…' : estimateText(cur.estimate))}</p>`;
-    if (cur.phase === 'idle') return `<p class="muted small">${t('ways_of_working.intro')}</p>${est}`;
-    if (cur.phase === 'running') return `${est}<p class="small muted" role="status">${t('ways_of_working.analyzing')}</p>`;
-    if (cur.phase === 'error') return `${est}<div class="usage-unavailable" role="alert">${esc(cur.error)}</div>`;
+    const est = `<p class="small" data-testid="ways-of-working-estimate" title="${esc(t('ways_of_working.estimate_hint'))}">${t('ways_of_working.analysis_cost')} ${esc(cur.estimate === undefined ? '…' : estimateText(cur.estimate))}</p>`;
+    if (cur.phase === 'idle') return `<p class="muted small" data-testid="ways-of-working-intro">${t('ways_of_working.intro')}</p>${est}<p class="hint">${t('ways_of_working.estimate_hint')}</p>`;
+    if (cur.phase === 'running') return loaderHtml();
+    if (cur.phase === 'error') {
+      return `${est}<div class="usage-unavailable" role="alert" data-testid="ways-of-working-error">${esc(cur.error)}</div>
+        <button type="button" class="btn small" data-testid="ways-of-working-retry" data-wow-analyze>${t('ways_of_working.retry')}</button>`;
+    }
     const r = cur.result;
-    return `<section class="wow-profile" data-testid="ways-of-working-profile" aria-label="${t('ways_of_working.profile')}">
+    return `${analyzedHtml()}${currentSetHtml()}
+      <section class="wow-profile" data-testid="ways-of-working-profile" aria-label="${t('ways_of_working.profile')}">
         <h3 class="arch-sub">${t('ways_of_working.profile')}${r.simulated ? ` <span class="badge">${t('ways_of_working.simulated')}</span>` : ''}</h3>
         <div class="row">${profileLabels(effectiveProfile()).map((l) => `<span class="badge cat-monitor">${esc(l)}</span>`).join('')}
           ${cur.editing ? '' : `<button type="button" class="btn ghost small" data-wow-edit-profile data-testid="ways-of-working-edit-profile">${t('ways_of_working.edit_profile')}</button>`}</div>
@@ -160,7 +210,8 @@
 
   function footHtml() {
     if (cur.phase !== 'ready') {
-      return `<button type="button" class="btn primary block" data-testid="ways-of-working-analyze" data-wow-analyze ${cur.phase === 'running' ? 'disabled' : ''}>${t('ways_of_working.analyze')}</button>
+      // #733: on an error the body's Retry is the one way to run it again
+      return `${cur.phase === 'error' ? '' : `<button type="button" class="btn primary block" data-testid="ways-of-working-analyze" data-wow-analyze ${cur.phase === 'running' ? 'disabled' : ''}>${t('ways_of_working.analyze')}</button>`}
         <button type="button" class="btn ghost block" data-testid="ways-of-working-cancel" data-wow-close>${t('common.cancel')}</button>`;
     }
     const busy = !cur.proposed || cur.composing || cur.writing;
@@ -213,12 +264,61 @@
     compose();
   }
 
+  // #733: a call the service may lack (an older engine, a test's fake api) answers null
+  async function maybe(method, args) {
+    try { return typeof api[method] === 'function' ? await api[method](args) : null; } catch { return null; }
+  }
+
+  // #733: shows the saved analysis `last` ({ profile, evidence, questions, simulated, date, costUsd }) and composes its set
+  async function showLast(c, last) {
+    c.result = { profile: last.profile, evidence: last.evidence, questions: last.questions || [], simulated: last.simulated };
+    c.last = { date: last.date, costUsd: last.costUsd };
+    c.answers = Object.fromEntries((c.result.questions).map((q) => [q.id, q.default]));
+    c.phase = 'ready';
+    await compose();
+  }
+
+  function stopPoll(c) {
+    if (c?.poll) clearInterval(c.poll);
+    if (c) c.poll = null;
+  }
+
+  // #733: the loader follows the service's run state (workflows:interviewState) every second; a run this
+  // drawer did not start (reopened during it) ends when the state does: the saved analysis is then shown
+  function startPoll(c) {
+    stopPoll(c);
+    // no state to follow (an older engine, a page without timers): the loader stays as drawn
+    if (typeof api.workflowInterviewState !== 'function' || typeof setInterval !== 'function') return;
+    const tick = async () => {
+      const s = await maybe('workflowInterviewState', { projectId: c.project.id });
+      if (cur !== c || c.phase !== 'running') return;
+      if (s?.running) c.run = s.running;
+      else if (!c.own) {
+        stopPoll(c);
+        const last = await maybe('workflowInterviewLast', { projectId: c.project.id });
+        if (cur !== c) return;
+        if (last) { await showLast(c, last); return; }
+        c.phase = s?.error ? 'error' : 'idle';
+        c.error = s?.error || null;
+      }
+      render();
+    };
+    c.poll = setInterval(tick, 1000);
+    tick();
+  }
+
   async function analyze() {
     const c = cur;
     c.phase = 'running';
+    c.own = true;
+    c.error = null;
+    c.startedAt = new Date().toISOString();
+    c.run = null;
     render();
+    startPoll(c);
     try {
       const out = await api.workflowInterview({ projectId: c.project.id });
+      stopPoll(c);
       if (cur !== c) return;
       if (out?.refused) {
         c.phase = 'error';
@@ -229,12 +329,18 @@
       c.result = out;
       c.answers = Object.fromEntries((out.questions || []).map((q) => [q.id, q.default]));
       c.phase = 'ready';
+      const last = await maybe('workflowInterviewLast', { projectId: c.project.id });
+      if (cur !== c) return;
+      c.last = last ? { date: last.date, costUsd: last.costUsd } : null;
     } catch (e) {
+      stopPoll(c);
       if (cur !== c) return;
       c.phase = 'error';
       c.error = errMsg(e);
       render();
       return;
+    } finally {
+      c.own = false;
     }
     await compose();
   }
@@ -257,6 +363,7 @@
 
   function close() {
     if (!cur) return;
+    stopPoll(cur);
     cur.el.remove();
     cur.backdrop.remove();
     document.removeEventListener('keydown', onKey, true);
@@ -321,14 +428,25 @@
     el.addEventListener('change', onChange);
     el.addEventListener('submit', onSubmit);
     document.addEventListener('keydown', onKey, true);
-    cur = { project: p, el, backdrop, estimate: undefined, phase: 'idle', error: null, result: null, answers: {}, proposed: null, composing: false, writing: false, editing: false, seq: 0 };
+    cur = { project: p, el, backdrop, estimate: undefined, phase: 'idle', error: null, result: null, answers: {}, proposed: null, composing: false, writing: false, editing: false, seq: 0, last: null, run: null, poll: null, own: false, startedAt: null };
     const c = cur;
     render();
-    let estimate = null;
-    try { estimate = await api.seedEstimate({ projectId: p.id, seedId: 'ways-of-working' }); } catch { /* no estimate yet */ }
+    // #733: the cost, the last saved analysis and a run in progress, none of which runs anything
+    const [estimate, last, state] = await Promise.all([
+      maybe('seedEstimate', { projectId: p.id, seedId: 'ways-of-working' }),
+      maybe('workflowInterviewLast', { projectId: p.id }),
+      maybe('workflowInterviewState', { projectId: p.id }),
+    ]);
     if (cur !== c) return;
     c.estimate = estimate;
-    render();
+    if (c.phase !== 'idle') { render(); return; } // Analyze was clicked meanwhile
+    if (state?.running) {
+      c.phase = 'running';
+      c.run = state.running;
+      render();
+      startPoll(c);
+    } else if (last) await showLast(c, last);
+    else render();
   }
 
   window.ProjectWaysOfWorking = {

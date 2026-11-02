@@ -14,10 +14,13 @@
 // R11) the Overview leads with the Next steps card (project-next-steps, as mock-7 of
 // docs/work/first-project-onboarding/images, #669: "<name> is ready · <n> workflows" in its head (the count only
 // for a project with its own workflow set), then a grid of entries:
-// next-step-refactors, the project's proposals with a checkbox each and "File and add <n>" (the checked ones
+// next-step-po-issue (#744) → the Product Owner's chat in issue mode on the project (Actions openPoIssue),
+// done with the filed issue's link once one was filed through it (localStorage multiagent.nextStepsPoIssue),
+// next-step-refactors (#744: left out when the project has no proposal), the project's proposals with a checkbox each and "File and add <n>" (the checked ones
 // filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence's "Turn on"
 // → the Health tab, where the findings become issues (#730; it does not turn anything on itself), and
-// next-step-release-ci / next-step-screenshots shown disabled (later phases);
+// next-step-release-ci / next-step-screenshots shown disabled (later phases), their reason in the button's
+// tooltip and a line (#744);
 // next-steps-dismiss), remembered per project in localStorage multiagent.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
@@ -42,15 +45,20 @@ function rememberProjectTab(id, tab) { pvRemember(PV_TABS_KEY, id, tab); }
 
 // #642: the Next steps card of the projects the wizard finished: { <projectId>: 'open' | 'dismissed' }
 const PV_NEXT_STEPS_KEY = 'multiagent.nextSteps';
-// [id, i18n key of its title, of its line (none: the proposals), of its button, later: shown disabled]: mock-7,
-// spec R11 (release CI and screenshots come in later phases)
+// [id, i18n key of its title, of its line (none: the proposals), of its button, later: the i18n key of the
+// reason it is shown disabled, or null]: mock-7, spec R11 (release CI and screenshots come in later phases);
+// #744: the PO's issue first
 const PV_NEXT_STEPS = [
-  ['refactors', 'onboarding.next_steps_refactors', null, 'onboarding.next_steps_file_add', false],
-  ['idea', 'onboarding.next_steps_idea', 'onboarding.next_steps_idea_text', 'onboarding.open_inbox', false],
-  ['cadence', 'onboarding.next_steps_cadence', 'onboarding.next_steps_cadence_text', 'onboarding.turn_on', false],
-  ['release-ci', 'onboarding.next_steps_release_ci', 'onboarding.next_steps_release_ci_text', 'onboarding.add_to_roadmap', true],
-  ['screenshots', 'onboarding.next_steps_screenshots', 'onboarding.next_steps_screenshots_text', 'onboarding.add_spike', true],
+  ['po-issue', 'onboarding.next_steps_po_issue', 'onboarding.next_steps_po_issue_text', 'onboarding.open_po', null],
+  ['refactors', 'onboarding.next_steps_refactors', null, 'onboarding.next_steps_file_add', null],
+  ['idea', 'onboarding.next_steps_idea', 'onboarding.next_steps_idea_text', 'onboarding.open_inbox', null],
+  ['cadence', 'onboarding.next_steps_cadence', 'onboarding.next_steps_cadence_text', 'onboarding.turn_on', null],
+  ['release-ci', 'onboarding.next_steps_release_ci', 'onboarding.next_steps_release_ci_text', 'onboarding.add_to_roadmap', 'onboarding.next_steps_release_ci_reason'],
+  ['screenshots', 'onboarding.next_steps_screenshots', 'onboarding.next_steps_screenshots_text', 'onboarding.add_spike', 'onboarding.next_steps_screenshots_reason'],
 ];
+// #744: the issue the PO filed from the card's "Open the PO", per project: { <projectId>: { issue, url } }
+// (written by fronts/build/views/backlog/backlog-po.js)
+const PV_NEXT_STEPS_PO_ISSUE_KEY = 'multiagent.nextStepsPoIssue';
 // the refactor proposals the card lists (the first ones, ranked)
 const PV_NEXT_STEP_PROPOSALS = 5;
 function nextSteps() { return pvStored(PV_NEXT_STEPS_KEY); }
@@ -82,11 +90,25 @@ function nextStepsMarkup(pv) {
         <input type="checkbox" data-next-refactor="${esc(p.id)}"${pv.nextStepPicked.has(p.id) ? ' checked' : ''}>
         <span class="text-cut" title="${esc(p.title)}">${esc(p.title)}</span></label></li>`).join('')}</ul>`;
   };
+  // #744: the PO's step is done once an issue was filed through it: its link instead of the button
+  const filed = pvStored(PV_NEXT_STEPS_PO_ISSUE_KEY)[pv.id];
+  const button = (step, action, later) => {
+    if (step === 'po-issue' && filed) {
+      return `<a class="small" data-testid="next-step-po-issue-link" href="${esc(filed.url || '#')}" target="_blank" rel="noopener">${esc(t('onboarding.next_steps_po_issue_done', { issue: filed.issue }))}</a>`;
+    }
+    const testid = step === 'po-issue' ? ' data-testid="next-step-po-issue-open"' : '';
+    // #744: a disabled step says why, in its tooltip and in a line of its entry
+    const reason = later ? esc(t(later)) : '';
+    return `<button type="button" class="btn sm" data-next-step="${step}"${testid}${later ? ` disabled aria-disabled="true" title="${reason}"` : ''}>${esc(step === 'refactors' ? fileAndAddLabel(pv) : t(action))}</button>
+      ${later ? `<span class="muted small" data-testid="next-step-reason">${reason}</span>` : ''}`;
+  };
   const entry = ([step, title, line, action, later]) => `<li class="pr-next-step" data-testid="next-step-${step}">
       <strong>${esc(t(title))}</strong>
       ${line ? `<span class="muted small">${esc(t(line, { name: pv.project?.name || '' }))}</span>` : proposals()}
-      <button type="button" class="btn sm" data-next-step="${step}"${later ? ' disabled aria-disabled="true"' : ''}>${esc(step === 'refactors' ? fileAndAddLabel(pv) : t(action))}</button>
+      ${button(step, action, later)}
     </li>`;
+  // #744: no refactors step once the proposals are read and there are none (never "File and add 0")
+  const shown = PV_NEXT_STEPS.filter(([step]) => step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length);
   // mock-7's head: "<name> is ready", its workflows' count, then "city and refactor backlog done" once the
   // ranking made proposals
   const ready = [t('onboarding.next_steps_ready', { name: pv.project?.name || '' })];
@@ -96,7 +118,7 @@ function nextStepsMarkup(pv) {
       <header class="pr-next-steps-head"><h3>${esc(t('onboarding.next_steps_title'))}</h3>
         <span class="muted small pr-next-steps-ready">${esc(ready.join(' · '))}</span>
         <button type="button" class="btn ghost sm" data-testid="next-steps-dismiss" data-next-steps-dismiss aria-label="${esc(t('onboarding.next_steps_dismiss'))}">×</button></header>
-      <ul class="pr-next-steps-list">${PV_NEXT_STEPS.map(entry).join('')}</ul>
+      <ul class="pr-next-steps-list">${shown.map(entry).join('')}</ul>
     </section>`;
 }
 
@@ -114,6 +136,8 @@ function onNextStepClick(step) {
     }
     showView('roadmap');
   }
+  // #744: the Product Owner's chat in issue mode on this project (the Build front's backlog-po.js)
+  else if (step === 'po-issue' && state.pv) window.Actions?.call('openPoIssue', state.pv.id);
   else if (step === 'idea') showView('inbox');
   else if (step === 'cadence' && state.pv) {
     state.pv.tab = 'health';

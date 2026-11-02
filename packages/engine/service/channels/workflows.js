@@ -50,6 +50,10 @@ module.exports = (ctx) => [
   // #487: the Ways of working interview (areas/workflow-interview.js): the analysis seed's profile,
   // its evidence and the open questions, or { refused } (the Oracle's budget)
   { channel: 'workflows:interview', method: 'workflowInterview', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowInterview({ projectId: requireId(opts?.projectId, 'project id') }) },
+  // #733: the last saved interview (the onboarding's or the drawer's), read without running it, or none
+  { channel: 'workflows:interviewLast', method: 'workflowInterviewLast', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: orNone(OBJECT) }, fn: (opts) => ctx.workflowInterviewLast({ projectId: requireId(opts?.projectId, 'project id') }) },
+  // #733: the running interview's state ({ running: { since, items, last } | null, error }), for the drawer's loader
+  { channel: 'workflows:interviewState', method: 'workflowInterviewState', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowInterviewState({ projectId: requireId(opts?.projectId, 'project id') }) },
   // #487: the workflow set composed from the profile and the answers; write: into the project's
   // .multiagent/ (not committed) and its workflow set, else nothing is written
   { channel: 'workflows:compose', method: 'workflowCompose', params: 'opts', schema: { params: args({ projectId: PROJECT_ID, answers: orNone(OBJECT), write: FLAG }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowCompose({ projectId: requireId(opts?.projectId, 'project id'), answers: opts.answers || {}, write: !!opts.write }) },

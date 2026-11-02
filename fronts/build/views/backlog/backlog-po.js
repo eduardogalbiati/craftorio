@@ -150,13 +150,11 @@
     // #234: with no project selected the drawer opens and says so (nothing can be asked)
     const projectId = actions()?.projectId() || null;
     // attachments not sent yet belong to the other project's conversation
-    if (po.projectId !== projectId) po.files = [];
-    if (po.projectId !== projectId) po.placeEpic = {};
+    if (po.projectId !== projectId) Object.assign(po, { files: [], placeEpic: {} });
     if (po.projectId !== projectId) Object.assign(po, { attached: [], extras: {} });
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
     Object.assign(po, { open: true, unread: false });
-    po.unreadCount = 0;
-    po.notice = projectId ? '' : NO_PROJECT;
+    Object.assign(po, { unreadCount: 0, notice: projectId ? '' : NO_PROJECT });
     $p('#po-drawer').classList.add('open');
     $p('#po-drawer').setAttribute('aria-hidden', 'false');
     $p('#po-backdrop').classList.remove('hidden');
@@ -824,11 +822,7 @@
     const x = msg?.issue;
     if (!x || po.busy) return;
     const key = `draft:${m}`;
-    if (act === 'revise') {
-      setMode('issue');
-      $p('#po-question').placeholder = t('backlog_po.what_should_change_in_the_draft');
-      return;
-    }
+    if (act === 'revise') { setMode('issue'); $p('#po-question').placeholder = t('backlog_po.what_should_change_in_the_draft'); return; }
     const n = Number(el.dataset.n) || null;
     const simulated = devMode();
     if (act === 'discard') {
@@ -853,6 +847,7 @@
       if (out.backlog) actions().showData(out.backlog);
       if (out.syncError) po.notes[key] = { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true };
       const filed = !out.preview && out.filed?.number;
+      markNextStepIssue(out);
       if (filed && act === 'create-roadmap') {
         await actions().roadmapGroup({ issues: [filed], workflow: workflowFor(m), inputs: {}, reason: 'Filed by the Product Owner.' });
       } else if (filed && act === 'create-assign') {
@@ -865,6 +860,8 @@
       render();
     }
   }
+  // #744: an issue filed after the Next steps card's "Open the PO" marks its step done (project.js reads multiagent.nextStepsPoIssue)
+  function markNextStepIssue(out) { const filed = !out.preview && out.filed?.number; if (filed && po.issueFor === po.projectId) { try { localStorage.setItem('multiagent.nextStepsPoIssue', JSON.stringify({ ...JSON.parse(localStorage.getItem('multiagent.nextStepsPoIssue') || '{}'), [po.projectId]: { issue: filed, url: out.filed.url || null } })); } catch { /* storage unavailable */ } } }
 
   // ---- the chat (#274) ------------------------------------------------------------------------------
   function emptyHtml() {
@@ -1059,12 +1056,13 @@
     },
     // the Backlog's Send to Product Owner (#169)
     attach,
-    // a `po` notification's click (#149, app.js openNotificationTarget)
-    open,
+    open, // a `po` notification's click (#149, app.js openNotificationTarget)
     // the project whose drawer is open, for the notifications' window context (#149)
     openProjectId: () => (po.open ? po.projectId : null),
     syncSendButton,
   };
+  // #744: the Next steps card's "Open the PO" (project.js): issue mode on that project; an issue filed then marks the step done (localStorage multiagent.nextStepsPoIssue)
+  window.Actions?.register('openPoIssue', async (projectId) => { actions()?.focusProject(projectId); Object.assign(po, { issueFor: projectId }); await open(); setMode('issue'); });
   // #263: the Product Owner in the Agents window: the same conversation, a second chat in the pane
   window.AgentsWindow?.register({
     id: 'product-owner',

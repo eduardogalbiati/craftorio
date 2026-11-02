@@ -12,7 +12,8 @@
 // The actions the fronts offer today: openProject(id, { tab, nextSteps }) (the project's page), showProjects()
 // (the Projects screen), showWorkflowDefinition(file) (Workflows › Definitions at a file),
 // openArtifactsAt({ projectId, runId, path, mock }) (the Artifacts screen at a file), agentCard(agent,
-// opts) (an agent's card markup). Browser: window.Actions; Node: module.exports (tested without a DOM).
+// opts) (an agent's card markup), openPoIssue(projectId) (#744: the Product Owner's chat in issue mode on a
+// project, backlog-po.js). Browser: window.Actions; Node: module.exports (tested without a DOM).
 (function (root) {
   const actions = new Map();
 

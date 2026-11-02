@@ -142,7 +142,8 @@ async function openProject(app, id) {
 const shownEl = (e) => !('hidden' in e.attrs) && !String(e.attrs.class || '').split(/\s+/).includes('hidden');
 // the card as rendered now (the views' static markup left out), or null
 const card = (app) => H.findEl(pageMarkup(app, { defs: false }), (e) => e.attrs['data-testid'] === 'project-next-steps' && shownEl(e));
-const entryIds = (app) => H.findAll(card(app)?.outer || '', (e) => /^next-step-/.test(e.attrs['data-testid'] || '')).map((e) => e.attrs['data-testid'].slice('next-step-'.length));
+// #744: the entries are the <li>s; their nested ids (next-step-reason, next-step-po-issue-open) are not entries
+const entryIds = (app) => H.findAll(card(app)?.outer || '', (e) => e.name === 'li' && /^next-step-/.test(e.attrs['data-testid'] || '')).map((e) => e.attrs['data-testid'].slice('next-step-'.length));
 
 async function clickIn(app, el) {
   const button = el.name === 'button' || el.name === 'a' ? el : H.findEl(el.inner, (e) => e.name === 'button' || e.name === 'a') || el;
@@ -158,7 +159,7 @@ test('#642 after Finish the project page shows the Next steps card with the refa
   const app = await finished();
   assert.equal(String(app.state().view), 'project', 'the project page is open');
   assert.equal(card(app) === null, false, 'data-testid="project-next-steps" is shown');
-  assert.deepEqual(entryIds(app).sort(), ['cadence', 'idea', 'refactors', 'release-ci', 'screenshots']);
+  assert.deepEqual(entryIds(app).sort(), ['cadence', 'idea', 'po-issue', 'refactors', 'release-ci', 'screenshots']);
 });
 
 for (const [id, where, expected, want] of [
