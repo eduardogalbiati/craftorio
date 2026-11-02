@@ -215,9 +215,16 @@ window.ProjectWorkflows = (() => {
       search.oninput = (e) => {
         adding.query = String(e.target.value || '');
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => { if (adding && page) { adding.focus = true; draw(); } }, 120);
+        searchTimer = setTimeout(() => {
+          if (!adding || !page) return;
+          // the caret where the owner left it, not at the end, across the redraw
+          const at = $('#pj-wf-add-search')?.selectionStart;
+          adding.caret = Number.isFinite(at) ? at : adding.query.length;
+          adding.focus = true;
+          draw();
+        }, 120);
       };
-      if (adding.focus) { search.focus?.(); search.setSelectionRange?.(adding.query.length, adding.query.length); }
+      if (adding.focus) { const at = adding.caret ?? adding.query.length; search.focus?.(); search.setSelectionRange?.(at, at); }
     }
     const dialog = $('#pj-wf-add-dialog');
     if (dialog) dialog.onkeydown = (e) => { if (e.key === 'Escape') { e.stopPropagation?.(); closeAdd(); } };
@@ -251,16 +258,6 @@ window.ProjectWorkflows = (() => {
     adding = null;
     if (page) draw();
     $('#project-workflows [data-testid="pj-wf-add"]')?.focus?.();
-  }
-
-  // a project saved elsewhere (the wizard's Finish): the open page and the header's list take it
-  function applySaved(id, project) {
-    if (!project) return;
-    state.projects = (state.projects || []).map((p) => (p.id === id ? { ...p, ...project } : p));
-    const pv = state.pv;
-    if (pv?.id !== id) return;
-    pv.project = { ...pv.project, ...project };
-    showPage(pv.project, $('#project-workflows'));
   }
 
   // true when saved
@@ -313,12 +310,14 @@ window.ProjectWorkflows = (() => {
     else if ((btn = hit('pj-wf-add-option'))) {
       clearTimeout(searchTimer);
       adding = null;
-      save(addPatch(btn.dataset.workflowId));
+      const patch = addPatch(btn.dataset.workflowId);
+      draw(); // the dialog closes at once: a second click cannot save again
+      save(patch);
     } else if (hit('pj-wf-add-close') || e.target.id === 'pj-wf-add-modal') closeAdd();
     else if (hit('pj-wf-add')) openAdd();
     else return false;
     return true;
   }
 
-  return { applySaved, onClick, scheduleDialog, selected, showDialog, showPage };
+  return { onClick, scheduleDialog, selected, showDialog, showPage };
 })();

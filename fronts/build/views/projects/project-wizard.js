@@ -403,8 +403,11 @@
   function pickedWorkflows() {
     const all = workflowChoices();
     const pick = (kind) => cur.workflows?.[kind] || all.find((x) => x.id === kind)?.value || '';
+    // the category from the installed workflow's YAML (the app's state.workflows) when known, 'build' else
+    const installed = (typeof state !== 'undefined' && Array.isArray(state.workflows)) ? state.workflows : [];
+    const categoryOf = (name) => installed.find((w) => String(w.file || '').replace(/^.*[\\/]/, '').replace(/\.ya?ml$/, '') === name)?.category || 'build';
     return ['feature', 'fix', 'release'].map((name) => ({
-      name, origin: 'bundled', category: 'build', variant: pick(name), ...(name === 'release' && pick('ci') ? { ci: pick('ci') } : {}),
+      name, origin: 'bundled', category: categoryOf(name), variant: pick(name), ...(name === 'release' && pick('ci') ? { ci: pick('ci') } : {}),
     }));
   }
 
@@ -665,13 +668,16 @@
     close();
     if (!pid) return;
     if (running) finished.add(pid);
-    window.Actions.call('openProject', pid, { nextSteps: true });
-    if (city) window.ProjectArchitecture?.openCity?.(pid);
     const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
-    // #729: the step 3 workflows on the project, feature the default (DefaultWorkflow.firstBuild's rule);
-    // the page already open draws them when the save answers
+    // #729: the step 3 workflows on the project, feature the default (DefaultWorkflow.firstBuild's rule),
+    // saved before the project's page opens: its reads (listProjectRuns) then see them; the page opens
+    // whether the save succeeds or fails
     new Promise((resolve) => resolve(api.updateProject(pid, { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature' })))
-      .then((p) => window.ProjectWorkflows?.applySaved?.(pid, p), failed);
+      .catch(failed)
+      .finally(() => {
+        window.Actions.call('openProject', pid, { nextSteps: true });
+        if (city) window.ProjectArchitecture?.openCity?.(pid);
+      });
     for (const id of picked) Promise.resolve(api.addRefactorToRoadmap(pid, id, { file: true })).catch(failed);
     if (idea) Promise.resolve(api.createDiscoveryCard(pid, idea.slice(0, 200), idea, 'idea')).catch(failed);
   }
