@@ -33,7 +33,7 @@ const PROJECTS = [
   { id: 'p1', name: 'Project One', repo: 'https://github.com/o/one', folder: 'C:/work/one', exists: true, isGit: true },
   { id: 'p2', name: 'Project Two', repo: 'https://github.com/o/two', folder: 'C:/work/two', exists: true, isGit: true },
 ];
-const TAB_LABELS = ['Overview', 'Conflict map', 'Architecture', 'Refactor'];
+const TAB_LABELS = ['Overview', 'City', 'Health', 'Conflict map']; // #730
 
 function page({ projects = PROJECTS, storage = {}, api = {} } = {}) {
   return loadApp({
@@ -201,7 +201,7 @@ test('#354 a click on a card opens that project\'s page, and it becomes the head
 
 // ---- a project's page ---------------------------------------------------------------------------
 
-test('#354 a project\'s page has the tabs Overview, Conflict map, Architecture and Refactor, Overview selected', async () => {
+test('#354 #730 a project\'s page has the tabs Overview, City, Health and Conflict map, Overview selected', async () => {
   const app = page();
   await app.boot();
   await openProject(app, 'p1');
@@ -223,8 +223,8 @@ test('#354 a click on a tab selects it', async () => {
   const app = page();
   await app.boot();
   await openProject(app, 'p1');
-  await selectTab(app, 'Architecture');
-  assert.deepEqual(selectedTabs(app), ['Architecture']);
+  await selectTab(app, 'Health');
+  assert.deepEqual(selectedTabs(app), ['Health']);
 });
 
 test('#354 the selected tab is remembered per project', async () => {
@@ -242,11 +242,11 @@ test('#354 the selected tab of a project is still selected in the next window', 
   const app = page();
   await app.boot();
   await openProject(app, 'p1');
-  await selectTab(app, 'Refactor');
+  await selectTab(app, 'Health');
   const next = page({ storage: Object.fromEntries(app.sandbox.localStorage.store) });
   await next.boot();
   await openProject(next, 'p1');
-  assert.deepEqual(selectedTabs(next), ['Refactor']);
+  assert.deepEqual(selectedTabs(next), ['Health']);
 });
 
 test('#354 choosing another project in the header switches the open project page to it', async () => {
@@ -261,10 +261,11 @@ test('#354 choosing another project in the header switches the open project page
   assert.equal(app.callsTo('listProjectRuns').at(-1)[0], 'p2');
 });
 
-test('#354 #357 the Refactor tab of a project with no Architecture report points to the Architecture tab', async () => {
+test('#354 #730 the Health tab of a project with no report says it was never analysed (no Refactor tab)', async () => {
   const app = page();
   await app.boot();
   await openProject(app, 'p1');
-  await selectTab(app, 'Refactor');
-  assert.match(H.visibleText(region(app, 'refactor-state-no-report')), /architecture/i);
+  assert.equal(tabs(app).some((t) => t.label === 'Refactor'), false);
+  await selectTab(app, 'Health');
+  assert.ok(region(app, 'architecture-state-never'), 'the never-analysed state');
 });
