@@ -185,6 +185,8 @@ steps:
   - id: plan
     display: City plan
     agent: cartographer
+    # Keep in step with planPrompt in packages/engine/domains/project/project-map.js (#731: the
+    # onboarding's cartographer turn, outside this workflow): same paragraphs, same closing line.
     prompt: |
       Write the city plan of the repository in the current folder ({{ inputs.repo_path }}),
       following the project-map skill. Read the manifests, the README, the agent instructions and

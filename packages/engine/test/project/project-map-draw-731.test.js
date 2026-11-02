@@ -23,6 +23,29 @@ test('#731 planPrompt: the first round has the facts; a new round the report and
   assert.match(next, /"version":1/);
 });
 
+test('#731 planPrompt: names the project and its read-only tools, and carries the skill', () => {
+  const text = projectMap.planPrompt(FACTS, { project: { id: 'ai-memory', name: 'AI Memory' }, skill: '<skill name="project-map">body</skill>' });
+  assert.match(text, /"AI Memory" \(projectId "ai-memory"\)/);
+  assert.match(text, /repo_read, repo_git with projectId "ai-memory"/);
+  assert.doesNotMatch(text, /current folder/);
+  assert.match(text, /<skill name="project-map">body<\/skill>/);
+});
+
+test('#731 drawMap: the skill comes from skillsDirs, the workspace copy first', async (t) => {
+  const where = repo(t);
+  const dirs = ['ws', 'bundled'].map((n) => {
+    const d = path.join(where.folder, `.skills-${n}`, 'project-map');
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, 'SKILL.md'), `---\nname: project-map\ndescription: map\n---\nskill from ${n}\n`);
+    return path.dirname(d);
+  });
+  let prompt = '';
+  const oracle = { budgetRefusal: () => null, oneTurn: async (a) => { prompt = a.prompt; return { text: 'no plan' }; } };
+  await assert.rejects(projectMap.drawMap({ ...where, projectId: 'p', mock: false, oracle, agent: {}, rounds: 1, skillsDirs: dirs }));
+  assert.match(prompt, /skill from ws/);
+  assert.doesNotMatch(prompt, /skill from bundled/);
+});
+
 function repo(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'map-draw-731-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));

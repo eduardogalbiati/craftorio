@@ -20,8 +20,8 @@
 
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const skills = require('../agents/skills');
 const arch = require('../oracle/oracle-architecture');
 const facts = require('./architecture-facts');
 const projects = require('./projects');
@@ -187,22 +187,32 @@ function saveMap({ archRoot, projectId, plan }) {
   return arch.writePlan(archRoot, projectId, plan, new Date().toISOString());
 }
 
-// #731: the project-map skill the workflow's plan step follows (the app's bundled copy); '' when missing,
-// the prompt then names the plan's format itself
-const SKILL_FILE = path.join(__dirname, '..', '..', '..', '..', 'skills', 'project-map', 'SKILL.md');
-function mapSkill() {
-  try { return fs.readFileSync(SKILL_FILE, 'utf8'); } catch { return ''; }
+// The project's record (its name for the prompts), or its id when the record is missing
+function projectOf(archRoot, projectId) {
+  try { return projects.readProject(path.join(path.dirname(archRoot), 'projects'), projectId); } catch { return { id: projectId, name: projectId }; }
+}
+
+// #731: the project-map skill the workflow's cartographer follows, the workspace's copy first, then the
+// app's bundled one (`skillsDirs`, as chain.js resolves a step's skills); '' when none has it
+function mapSkill(skillsDirs) {
+  try {
+    return skills.skillPrompt(skills.resolveSkill(Array.isArray(skillsDirs) ? skillsDirs : [], 'project-map'));
+  } catch { return ''; }
 }
 
 /**
- * #731: the cartographer's prompt outside the workflow: the plan step's (workflows/analyze-project.yaml),
- * with the facts step's output and, on a new round, the validator's report and the refused plan.
+ * #731: the cartographer's prompt outside the workflow. KEEP IN STEP with the plan step's prompt of
+ * workflows/analyze-project.yaml (same facts, refresh and new-round paragraphs, same closing line), with
+ * the facts step's output and, on a new round, the validator's report and the refused plan. The Oracle's
+ * turn has no file tools and runs outside the repository: it reads with repo_read / repo_git and the
+ * project's id, as the Oracle's analysis does (oracle-architecture.js analysisPrompt).
  */
-function planPrompt(f, { previous = null, report = '', round = 0, skill = mapSkill() } = {}) {
+function planPrompt(f, { project = null, previous = null, report = '', round = 0, skill = '' } = {}) {
   const json = (x) => JSON.stringify(x ?? null);
+  const p = project || { id: '', name: '' };
   const lines = [
-    'Write the city plan of the repository in the current folder, following the project-map skill below.',
-    'Read the manifests, the README, the agent instructions and the entry points it names before you write; never edit a file.',
+    `Write the city plan of the project "${p.name || p.id}" (projectId "${p.id}"), following the project-map skill below.`,
+    `Read its manifests, the README, the agent instructions and the entry points it names before you write, with your read-only tools (repo_read, repo_git with projectId "${p.id}"); never edit a file.`,
     '',
     'The facts (counted from `git ls-files`, no model):',
     `- tracked files: ${f.files}`,
@@ -223,8 +233,8 @@ function planPrompt(f, { previous = null, report = '', round = 0, skill = mapSki
     if (previous) lines.push('', 'Your previous plan:', json(previous));
     lines.push('Fix the rules so that the problems above go away; do not add a catch-all district.');
   }
-  lines.push('', 'Answer with the plan as `city_plan` in one ```json block: { "city_plan": { "version": 1, "project", "summary", "ignore", "zones", "districts", "landmarks", "ports", "evidence" } }.');
-  if (skill) lines.push('', '--- The project-map skill ---', skill);
+  lines.push('', 'Answer with the plan as `city_plan` in one ```json block, in the format of the project-map skill.');
+  if (skill) lines.push('', skill);
   return lines.join('\n');
 }
 
@@ -234,11 +244,14 @@ function planPrompt(f, { previous = null, report = '', round = 0, skill = mapSki
  * and saved → { cost_usd (the rounds' sum, null when none reported one), tokens, coverage, history,
  * rounds, simulated }. A simulation (`mock`) saves providers.js's MOCK_CITY_PLAN. Throws when the Oracle
  * refuses (`refused`) or the plan still fails the validation after `rounds` rounds, with the problems.
- * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, rounds?: number }} where
+ * `skillsDirs`: where the project-map skill is looked up, the workspace's skills first, then the bundled ones.
+ * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, rounds?: number, skillsDirs?: string[] }} where
  */
-async function drawMap({ folder, archRoot, projectId, mock, oracle, agent, rounds = 2 }) {
+async function drawMap({ folder, archRoot, projectId, mock, oracle, agent, rounds = 2, skillsDirs = [] }) {
   if (!mock && !oracle) throw new Error('The Oracle is not available to this run: the city plan needs the app service.');
   const f = await mapFacts({ folder, archRoot, projectId });
+  const project = projectOf(archRoot, projectId);
+  const skill = mock ? '' : mapSkill(skillsDirs);
   let cost = null;
   const tokens = { input: 0, output: 0 };
   let previous = null;
@@ -250,7 +263,7 @@ async function drawMap({ folder, archRoot, projectId, mock, oracle, agent, round
     } else {
       const refused = oracle.budgetRefusal();
       if (refused) throw Object.assign(new Error(`The Oracle refused the city plan: ${refused.text}`), { refused: true });
-      const res = await oracle.oneTurn({ prompt: planPrompt(f, { previous, report: v?.report, round: round - 1 }), model: agent?.model, effort: agent?.effort, startReason: 'architecture' });
+      const res = await oracle.oneTurn({ prompt: planPrompt(f, { project, previous, report: v?.report, round: round - 1, skill }), model: agent?.model, effort: agent?.effort, startReason: 'architecture' });
       if (res.costUsd != null && Number.isFinite(Number(res.costUsd))) cost = (cost || 0) + Number(res.costUsd);
       tokens.input += Number(res.tokens?.input) || 0;
       tokens.output += Number(res.tokens?.output) || 0;
@@ -288,8 +301,7 @@ async function analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, on
   const exclude = arch.readSettings(archRoot, projectId).exclude;
   const { state, model } = await facts.readFacts(folder, { exclude });
   if (state !== 'ok') throw notGit(folder, state);
-  let project = { id: projectId, name: projectId };
-  try { project = projects.readProject(path.join(path.dirname(archRoot), 'projects'), projectId); } catch { /* the id names it */ }
+  const project = projectOf(archRoot, projectId);
   const out = await arch.analyze({ project, model, mock: !!mock, oracle, agent, onItem });
   if (out.refused) throw new Error(`The Oracle refused the analysis: ${out.refused.text}`);
   const date = new Date().toISOString();

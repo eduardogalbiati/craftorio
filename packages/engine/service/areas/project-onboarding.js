@@ -457,20 +457,26 @@ module.exports = (ctx) => {
     const ws = ctx.ws;
     if (current?.ws === ws) return current.ob;
     const archRoot = path.join(ws.root, 'architecture');
+    // #731: a plan already drawn for a project whose Oracle report then failed: its Retry reuses it (and its
+    // cost) instead of paying the cartographer again; dropped once the report is saved
+    const drawn = new Map();
     const jobs = {
       facts: ({ projectId, folder }) => projectMap.mapFacts({ folder, archRoot, projectId }),
       // { refused } (an interview already running, the Oracle's budget) fails the job, so Retry runs it again
       profile: ({ projectId }) => ctx.workflowInterview({ projectId }),
       // #731: the city plan first (the cartographer's turn, validated and saved), then the Oracle's report with
-      // both turns' cost: a refused plan never pays the Oracle, and Retry runs the whole job once.
+      // both turns' cost: a refused plan never pays the Oracle; after a saved plan and a failed report,
+      // Retry runs only the report.
       // The map's findings become the Refactor tab's proposals, so the ranking (and the review, #642) has them
       projectMap: async ({ projectId, folder }) => {
         e2eCityPlan();
         const mock = simulation.simulationOnly();
         const oracle = ctx.oracleService();
         const agent = agents.readAgent(ws.agents, agents.ORACLE_ID);
-        const plan = await projectMap.drawMap({ folder, archRoot, projectId, mock, oracle, agent });
+        const plan = drawn.get(projectId) || await projectMap.drawMap({ folder, archRoot, projectId, mock, oracle, agent, skillsDirs: [ws.skills, ctx.BUNDLED_SKILLS_DIR] });
+        drawn.set(projectId, plan);
         const out = await projectMap.analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, planCostUsd: plan.cost_usd, planTokens: plan.tokens });
+        drawn.delete(projectId);
         const saved = arch.listReports(archRoot, projectId).find((r) => r.id === out.report_id);
         proposalsRun.addFindings({ wsRoot: ws.root, projectId, reportId: out.report_id, findings: saved?.report?.findings });
         return out;
