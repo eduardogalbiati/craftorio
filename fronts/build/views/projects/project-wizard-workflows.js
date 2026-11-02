@@ -115,8 +115,20 @@
         <p class="muted small">${esc(t('onboarding.workflows_more'))}</p></div>`;
     }
 
+    // #735: the review's project kind, confirmed by the owner (empty: the engine detects it from the
+    // files, projectFacts); a backend gets no UI step. wizard-kind-select, cur().kind
+    function kindField() {
+      const value = cur().kind || '';
+      const kinds = [['', t('onboarding.kind_detect')], ['backend', t('ways_of_working.kind_backend')], ['frontend', t('ways_of_working.kind_frontend')], ['full-stack', t('ways_of_working.kind_full_stack')]];
+      const attrs = `data-testid="wizard-kind-select" aria-label="${esc(t('ways_of_working.f_kind'))}"`;
+      const control = window.Select?.markup ? window.Select.markup(attrs, kinds, value)
+        : `<select ${attrs}>${kinds.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+      return `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${control}</div>`;
+    }
+
     return {
       jobReason,
+      kindField,
       pickedWorkflows,
       profileOf,
       textOf,

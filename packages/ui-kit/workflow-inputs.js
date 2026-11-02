@@ -312,7 +312,7 @@
         const cur = String(el.value || '').trim();
         if (h.defaultBranch && !field.dataset.wiTouched && !keep.includes(k) && (cur === '' || cur === String(def?.default ?? ''))) set(rootEl, k, h.defaultBranch, { touched: false });
       }
-      applyProjectDefault(rootEl, field, el, k, def || {}, h.runDefaults, keep);
+      applyProjectDefault(rootEl, field, el, k, def, h.runDefaults, keep);
     }
   }
 
@@ -321,7 +321,7 @@
   function applyProjectDefault(rootEl, field, el, k, def, defaults, keep) {
     if (!defaults || typeof defaults !== 'object' || !Object.prototype.hasOwnProperty.call(defaults, k)) return;
     const v = defaults[k];
-    if (v == null || (Array.isArray(def.enum) && !def.enum.map(String).includes(String(v)))) return;
+    if (v == null || (Array.isArray(def?.enum) && !def.enum.map(String).includes(String(v)))) return;
     const value = Array.isArray(v) ? v.join('\n') : v;
     if (!field.dataset.wiTouched && !keep.includes(k)) set(rootEl, k, value, { touched: false });
     const same = el.type === 'checkbox' ? el.checked === truthy(value) : String(el.value ?? '').trim() === String(value).trim();

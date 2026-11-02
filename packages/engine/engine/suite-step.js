@@ -108,11 +108,7 @@ const SELECTION_LINES = 20;
 const MIN_FILE_TIMEOUT_MS = 2 * 60e3;
 const FILE_TIMEOUT_MS = 5 * 60e3;
 // what a shell prints when it refuses a command line (#400): no test ran
-const SHELL_REFUSALS = [
-  /argument list too long/i,
-  /command line is too long/i,
-  /linha de comando muito longa/i,
-];
+const SHELL_REFUSALS = [/argument list too long/i, /command line is too long/i, /linha de comando muito longa/i];
 
 const exists = (dir, f) => { try { return fs.existsSync(path.join(dir, f)); } catch { return false; } };
 const someFile = (dir, re) => { try { return fs.readdirSync(dir).some((f) => re.test(f)); } catch { return false; } };
@@ -126,8 +122,7 @@ function detectTestCommand(dir) {
     if (typeof test === 'string' && test.trim() && !/no test specified/.test(test)) return 'npm test';
   } catch { /* no package.json */ }
   if (exists(dir, 'go.mod')) return 'go test ./...';
-  // #735: a Rust crate (a tooling package.json without a test script does not hide it)
-  if (exists(dir, 'Cargo.toml')) return 'cargo test';
+  if (exists(dir, 'Cargo.toml')) return 'cargo test'; // #735: a Rust crate
   if (exists(dir, 'pom.xml')) {
     if (process.platform === 'win32' && exists(dir, 'mvnw.cmd')) return 'mvnw.cmd -B test';
     return exists(dir, 'mvnw') ? './mvnw -B test' : 'mvn -B test';

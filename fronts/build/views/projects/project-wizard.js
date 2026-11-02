@@ -103,6 +103,7 @@
   // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
   const {
     jobReason,
+    kindField,
     pickedWorkflows,
     profileOf,
     textOf,
@@ -545,17 +546,11 @@
     const chips = [platformOfRepo(cur.model.repository)?.label, languages.join(', ')].filter(Boolean);
     const how = chips.length ? `<div class="wizard-chips">${chips.map((c) => `<span class="wizard-chip">${esc(c)}</span>`).join('')}</div>`
       : `<p class="muted small">${esc(t('onboarding.review_how_pending'))}</p>`;
-    // #735: the project's kind, confirmed here (empty: the engine detects it from the files); a backend gets no UI step
-    const kinds = [['', t('onboarding.kind_detect')], ['backend', t('ways_of_working.kind_backend')], ['frontend', t('ways_of_working.kind_frontend')], ['full-stack', t('ways_of_working.kind_full_stack')]];
-    const kindAttrs = `data-testid="wizard-kind-select" aria-label="${esc(t('ways_of_working.f_kind'))}"`;
-    const kind = `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${window.Select?.markup
-      ? window.Select.markup(kindAttrs, kinds, cur.kind || '')
-      : `<select ${kindAttrs}>${kinds.map(([v, l]) => `<option value="${esc(v)}"${v === (cur.kind || '') ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`}</div>`;
     const flows = M.suggestWorkflows(null).suggestions.map((s) => `<span class="wizard-chip accent text-cut" title="${esc(s.id)}">${esc(s.id)}</span>`).join('');
     return `<section class="card wizard-review-section wizard-review-project">
         <h3 id="project-wizard-title" class="text-cut" title="${esc(name)}">${esc(name)}</h3>
         <span class="mono muted small text-cut" title="${esc(where)}">${esc(where)}</span>
-        <h4>${esc(t('onboarding.review_how', { name }))}</h4>${how}${kind}
+        <h4>${esc(t('onboarding.review_how', { name }))}</h4>${how}${kindField()}
         <h4>${esc(t('onboarding.review_workflows'))}</h4><div class="wizard-chips">${flows}</div>
       </section>`;
   }
@@ -696,21 +691,16 @@
     const idea = cur.idea.trim();
     const running = ACTIVE.includes(cur.onboarding?.status);
     const workflows = pickedWorkflows();
-    const platform = platformOfRepo(cur.model.repository)?.id || cur.provider || null;
-    const kind = cur.kind || null;
+    const extra = { platform: platformOfRepo(cur.model.repository)?.id || cur.provider || null, kind: cur.kind || null };
     close();
     if (!pid) return;
     if (running) finished.add(pid);
     const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
-    // #729: the step 3 workflows on the project, feature the default (DefaultWorkflow.firstBuild's rule),
-    // saved before the project's page opens: its reads (listProjectRuns) then see them; the page opens
-    // whether the save succeeds or fails. The saved record goes into state.projects (the backlog's
-    // pickers read the set and default there), as project-workflows.js's save() does
-    const patch = { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature' };
-    // #745: the platform the owner picked (a self-hosted host its URL does not name), so the Backlog never
-    // asks again; #735: the kind confirmed on the review
-    if (platform) patch.platform = platform;
-    if (kind) patch.kind = kind;
+    // #729: the step 3 workflows on the project, feature the default (DefaultWorkflow.firstBuild's rule), saved before
+    // the project's page opens: its reads (listProjectRuns) then see them; the page opens whether the save succeeds or fails.
+    // The saved record goes into state.projects (the backlog's pickers read the set and default there), as project-workflows.js's
+    // save() does. #745: the platform picked (a self-hosted host its URL does not name: the Backlog never asks again); #735: the kind
+    const patch = { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature', ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v)) };
     new Promise((resolve) => resolve(api.updateProject(pid, patch)))
       .then((saved) => {
         if (typeof state === 'undefined' || !Array.isArray(state.projects)) return;
@@ -897,12 +887,9 @@
     const id = e.target?.id || e.target?.dataset?.testid;
     if (!cur) return;
     if (id === 'wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
+    if (e.target?.dataset?.testid === 'wizard-kind-select') { cur.kind = String(e.target.value || ''); return; } // #735
     // #630: the owner's pick of a suggested workflow's variant (kept across renders)
-    if (e.target?.dataset?.testid === 'wizard-kind-select') { cur.kind = String(e.target.value || ''); return; }
-    if (e.target?.dataset?.testid === 'wizard-workflow-select') {
-      cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') };
-      return;
-    }
+    if (e.target?.dataset?.testid === 'wizard-workflow-select') { cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') }; return; }
     if (onCreateInput(e, id)) return;
     if (id !== 'wizard-repo' && id !== 'wizard-name') return;
     const value = String(e.target.value || '');

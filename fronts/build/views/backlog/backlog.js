@@ -1267,14 +1267,11 @@
     const plat = $b('#bl-platform');
     plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (soon)' : ''}</option>`).join('');
     plat.value = bl.platform || DEFAULT_PLATFORM;
-    // #745: a project whose platform is known shows it as a badge; the select stays only for a host
-    // the URL can't tell (a self-hosted server), and its pick is saved on the project
-    const known = knownPlatform();
+    // #745: a known platform as a badge; the select only for a host the URL can't tell (saved on the project)
+    const known = knownPlatform(), badge = $b('#bl-platform-badge');
     plat.classList.toggle('hidden', !!known);
-    const badge = $b('#bl-platform-badge');
     badge.classList.toggle('hidden', !known);
-    badge.textContent = known ? PLATFORMS[known]?.label || known : '';
-    badge.title = known ? t('backlog.platform_of_the_project') : '';
+    Object.assign(badge, { textContent: known ? PLATFORMS[known]?.label || known : '', title: known ? t('backlog.platform_of_the_project') : '' });
 
     const p = project();
     const btn = $b('#btn-bl-sync');
@@ -1447,12 +1444,8 @@
     $b('nav.sidebar [data-view="backlog"]').insertAdjacentHTML('beforeend', '<span id="nav-backlog-unpushed" class="nav-badge warn hidden"></span>');
     $b('#bl-platform').onchange = (e) => {
       bl.platform = e.target.value;
-      // #745: saved on the project (its host doesn't tell the platform), so the Backlog never asks again
-      const p = project();
-      if (p && !PLATFORMS[bl.platform]?.soon) {
-        p.platform = bl.platform;
-        Promise.resolve(api.updateProject?.(p.id, { platform: bl.platform })).catch((err) => { bl.error = errMsg(err); render(); });
-      }
+      const p = project(); // #745: saved on the project (its host doesn't tell the platform): the Backlog never asks again
+      if (p && !PLATFORMS[bl.platform]?.soon) { p.platform = bl.platform; Promise.resolve(api.updateProject?.(p.id, { platform: bl.platform })).catch((err) => { bl.error = errMsg(err); render(); }); }
       bl.seq++;
       bl.syncing = false;
       bl.error = null;
