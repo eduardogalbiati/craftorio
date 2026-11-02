@@ -48,6 +48,32 @@ test('#723 an output of another kind keeps its message', () => {
   assert.equal(out.output.kind, 'check');
 });
 
+// #723: the baseline was recorded on Windows with another Node version: a path under a replaced
+// folder reads the same on every OS, and this process's Node version reads <node-version>.
+const checkFinished = (log, findings) => ({ type: 'step.finished', step_id: 'check', output: { kind: 'check', status: 'ok', log, findings } });
+
+test('#723 a log path under the temp folder gives the same entry on Windows and on POSIX', () => {
+  const win = project(checkFinished('C:\\Users\\me\\AppData\\Local\\Temp\\runs-Ab12Cd\\20261102-184138-63e24ae0\\logs\\check-1.log', []), [['C:\\Users\\me\\AppData\\Local\\Temp', '<tmp>']]);
+  const posix = project(checkFinished('/tmp/runs-Ab12Cd/20261102-184138-63e24ae0/logs/check-1.log', []), [['/tmp', '<tmp>']]);
+  assert.equal(win.output.log, '<tmp>/runs-<tmp>/<run-id>/logs/check-1.log');
+  assert.equal(posix.output.log, '<tmp>/runs-<tmp>/<run-id>/logs/check-1.log');
+});
+
+test('#723 a path inside a message is normalised up to the quote or space that ends it', () => {
+  const out = project({ type: 'step.finished', step_id: 'red_check', output: { kind: 'suite', message: 'Red check:\nLog: C:\\work\\repo\\logs\\red_check-1.log done' } }, [['C:\\work\\repo', '<repo>']]);
+  assert.equal(out.output.message, 'Red check:\nLog: <repo>/logs/red_check-1.log done');
+});
+
+test('#723 a backslash outside a replaced folder is kept', () => {
+  const out = project(checkFinished('D:\\other\\check.log', []), [['C:\\work\\repo', '<repo>']]);
+  assert.equal(out.output.log, 'D:\\other\\check.log');
+});
+
+test('#723 the running Node version reads <node-version>, another version is kept', () => {
+  const out = project(checkFinished(null, [process.version, 'node ' + process.version + ' found', 'v0.0.1']), []);
+  assert.deepEqual(out.output.findings, ['<node-version>', 'node <node-version> found', 'v0.0.1']);
+});
+
 test('#723 an output without a kind, or not an object, is projected unchanged', () => {
   assert.equal(project({ type: 'step.finished', step_id: 's', output: { message: 'done', missing: ['x'] } }, []).output.message, 'done');
   assert.deepEqual(project({ type: 'step.finished', step_id: 's', output: { message: 'done', missing: ['x'] } }, []).output.missing, ['x']);
