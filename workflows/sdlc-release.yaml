@@ -1,12 +1,13 @@
 # =============================================================================
-# Workflow: SDLC release (#633, docs/work/first-project-onboarding/spec.md R9)
+# Workflow: SDLC release (#633, docs/work/first-project-onboarding/spec.md R9; #651, docs/work/write-doc/spec.md R16)
 # -----------------------------------------------------------------------------
 #   record ──► approval (you) ──► merge: local ──► end
 #
 # The last step of the AI-native SDLC work model's post-flow, after sdlc-record and sdlc-test:
-# writes the release notes of a work item in docs/work/<item>/release.md (what changed for the
-# person who uses it, the issues and the version or tag that shipped it). The Code & Build runs
-# and the release workflow never write docs/work/: this run records what they produced.
+# #651: records the Deploy stage of a work item in docs/work/<item>/deploy.md (the review findings
+# of its PRs or runs: fixed and kept; the release: the version or tag, the items, the release CI
+# and who pressed Ship) and adds the item's entry to the project's CHANGELOG.md. The Code & Build
+# runs and the release workflow never write docs/work/: this run records what they produced.
 # The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
 # recorder writes on the branch sdlc-release/<item>-<run id>, the accept merges it into the local
 # base (never pushed).
@@ -18,7 +19,7 @@ kind: Workflow
 metadata:
   name: sdlc-release
   version: 0.1.0
-  description: Writes a work item's release notes (what changed, its issues, the tag that shipped it) in docs/work/<item>/release.md, for you to accept.
+  description: Records a work item's review findings and its release with the Ship in docs/work/<item>/deploy.md and adds it to the changelog, for you to accept.
   tags: [sdlc, documents, release]
   category: plan
 
@@ -84,8 +85,8 @@ agents:
     skills: [plan-writing]
     system_prompt: |
       You are the release recorder of the work item `{{ inputs.item }}`. You write only under
-      docs/work/{{ inputs.item }}/ and change no other file; you never tag or push. Nobody
-      answers questions during a turn: state an assumption.
+      docs/work/{{ inputs.item }}/ and the project's CHANGELOG.md, and change no other file; you
+      never tag or push. Nobody answers questions during a turn: state an assumption.
 
 groups:
   - name: Record
@@ -96,25 +97,38 @@ steps:
 
   - id: record
     agent: recorder
+    # #651: the Deploy stage in deploy.md (review, release with the Ship) and the changelog
     prompt: |
-      Read docs/work/{{ inputs.item }}/intent.md, plan.md, progress.md and test.md (what exists),
-      and the tags of {{ inputs.base_branch }} (`git tag --contains` on the item's commits). Switch
-      to the branch `sdlc-release/{{ inputs.item }}-{{ run_id }}`, write docs/work/{{ inputs.item }}/release.md:
-      what changed for the person who uses it (plain words, one bullet each), the issues, and the
-      tag that shipped it ("not released yet" when none); then commit it ("docs(work): release
-      notes of {{ inputs.item }}"). Answer with `summary` (one sentence) and `file` (the path).
+      Read docs/work/{{ inputs.item }}/intent.md, plan.md (its Progress: the runs, commits and PRs)
+      and test.md (what exists), the review findings of those PRs or runs (the merge commits'
+      messages, the review notes the project keeps; "not recorded" when none), and the tags of {{ inputs.base_branch }} (`git tag --contains` on the item's
+      commits). Switch to the branch `sdlc-release/{{ inputs.item }}-{{ run_id }}`, then:
+      1. In docs/work/{{ inputs.item }}/deploy.md, the `## Review` table (PR / run | Findings | Fixed | Kept):
+         one row per PR or run with its review findings, what was fixed, and what was kept and why.
+      2. In the same file, the `## Release` table (Version | Items | Release CI | Ship): the version
+         or tag that shipped the item, its issues, the release CI run and who pressed Ship
+         ("not released yet" when no tag contains the commits).
+      3. In the project's CHANGELOG.md (create it when missing, newest first): the item's entry
+         under its version (or "Unreleased"), what changed for the person who uses it, in plain
+         words, one bullet each, with the issues.
+      Keep deploy.md's front matter and set its status; update its translation (`deploy.pt-BR.md`)
+      when it exists. Commit them ("docs(work): record the deploy of {{ inputs.item }}").
+      Answer with `summary` (one sentence), `file` (deploy.md's path) and `files` (every path you wrote).
     output_schema:
       type: object
       required: [summary, file]
       properties:
         summary: { type: string }
         file:    { type: string }
+        files:
+          type: array
+          items: { type: string }
 
   - id: approval
     type: human_approval
     message: |
       {{ steps.record.output.summary }}
-      Approve: merge {{ steps.record.output.file }} into the local {{ inputs.base_branch }}. Reject: stop; the branch is kept, not merged.
+      Approve: merge {{ (steps.record.output.files | join(', ')) if steps.record.output.files | length else steps.record.output.file }} into the local {{ inputs.base_branch }}. Reject: stop; the branch is kept, not merged.
     transitions:
       - when: "approved"
         merge: local

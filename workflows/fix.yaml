@@ -294,4 +294,23 @@ groups:
 
 outputs:
   branch:
+    type: string
+    description: The branch the developer worked on.
     value: "{{ steps.develop.output.branch }}"
+  # #651: the result the post-flow (sdlc-record, chained with `then`) records in docs/work/<item>/
+  merged_commit:
+    type: string
+    description: The commit the run merged into the local base branch (merge local). Empty when nothing was merged.
+    value: "{{ run.local_merge.commit if run.local_merge else '' }}"
+  issues:
+    type: array
+    description: "The issues the run implemented (number, url, title)."
+    value: "{{ run.issues | to_json }}"
+  pr_url:
+    type: string
+    description: The PR/MR the remote mode opened; empty in local mode.
+    value: "{{ steps.ci.output.pr_url if steps.ci.output and steps.ci.output.pr_url else '' }}"
+  evidence:
+    type: object
+    description: "The run's evidence (suite, e2e, screenshots, axe) for the post-flow's test.md row; a fix runs no E2E, screenshots or axe."
+    value: "{% set ev = { 'suite': (steps.suite.output.status if steps.suite.output and steps.suite.output.status else 'not run'), 'e2e': 'not run', 'screenshots': [], 'axe': [] } %}{{ ev | to_json }}"

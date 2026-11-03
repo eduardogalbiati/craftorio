@@ -2523,8 +2523,14 @@ outputs:
     value: "{{ run.issues | to_json }}"
   pr_url:
     type: string
-    description: Always empty here (the work is merged locally, no PR/MR); declared like software-development's.
-    value: "{{ '' }}"
+    description: The PR/MR the remote mode opened; empty in local mode (the work is merged locally, no PR/MR).
+    value: "{{ steps.ci.output.pr_url if steps.ci.output and steps.ci.output.pr_url else '' }}"
+  # #651: what the post-flow (sdlc-record) writes in docs/work/<item>/test.md: the suite, the E2E
+  # scenarios, the before/after screenshots and the axe check; 'not run' / [] when a step did not run
+  evidence:
+    type: object
+    description: "The run's evidence (suite, e2e, screenshots, axe) for the post-flow's test.md row."
+    value: "{% set ev = { 'suite': (steps.suite.output.status if steps.suite.output and steps.suite.output.status else 'not run'), 'e2e': ((steps.e2e.output.message or steps.e2e.output.status) if steps.e2e.output else 'not run'), 'screenshots': ((steps.evidence.output.screenshots if steps.evidence.output else []) or []), 'axe': ((steps.developer_screenshots.output.axe_findings if steps.developer_screenshots.output else []) or []) } %}{{ ev | to_json }}"
 
 observability:
   storage:

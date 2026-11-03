@@ -249,6 +249,7 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:write-doc.yaml:writer_4',
     'workflow:write-doc.yaml:writer_5',
     'workflow:write-doc.yaml:reviewer',
+    'workflow:write-doc.yaml:issue_filer',
   ]);
 
   const testWriter = list.find((x) => x.id === 'workflow:feature.yaml:test_writer');

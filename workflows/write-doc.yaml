@@ -2,8 +2,9 @@
 # Workflow: Write doc (#647, docs/work/write-doc/spec.md R5, R6, R10)
 # -----------------------------------------------------------------------------
 #   scope ──► evidence ──► draft ──► edit (you + the writer) ──► review ──► approval (you)
-#                                      ▲                                     │ revise
-#                                      └─────────────────────────────────────┘
+#                                      ▲                                     │ revise   │ accept a plan
+#                                      └─────────────────────────────────────┘          ▼
+#                                                                                   file_issues
 #
 # One run per stage document of a work item (docs/work/<item>/intent.md, spec.md or plan.md, with
 # its pt-BR translation next to it). The `document` input picks the stage; the writer loads the
@@ -22,6 +23,9 @@
 # 5. review:   the reviewer anchors its notes to the sections (`anchor`), scored on the skill's rubric.
 # 6. approval: the person accepts (Accept intent / Sign off spec / Accept plan on the Documents screen) or sends
 #              the document back to the edit.
+# 7. file_issues (#651, spec R16, a plan only): once the accepted plan is merged, the issue filer
+#              files one issue per step of its Order of work (gh / glab, input git_platform); the
+#              Build workflows take those issues, the `issues` output hands them to a chain.
 # The writer keeps one persistent session across the whole run (the requests build on each other)
 # and goes fresh from its handoff note after 55m idle.
 # #648 Arena mode ("Several writers", `writers` 2-5; writer-reviewer.yaml and ai-arena.yaml are
@@ -30,8 +34,8 @@
 # merges the best of the drafts into one. One writer (the default) skips straight to the draft.
 # An old run started by those names gives only a prompt (ai-arena's `task`, `was:`): no project and
 # no item, the writer drafts from the prompt in the run folder and the Documents service skips it.
-# Outputs (pipelines, chains): `document` (the first draft's text) and `issue` (the issue the run
-# was started from, when there is one).
+# Outputs (pipelines, chains): `document` (the first draft's text), `issue` (the issue the run
+# was started from, when there is one) and `issues` (the issues filed from an accepted plan).
 # The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
 # Documents service puts it on the branch write-doc/<item>-<document>-<run id> at the first step
 # (the new document's skeleton, one commit), writes the draft and each request there, and the
@@ -117,6 +121,14 @@ inputs:
     label: "Reviewer model"
     type: string
     default: gpt-6-luna
+  # #651: where an accepted plan's steps are filed as issues
+  git_platform:
+    type: string
+    enum: [gh, gl]
+    default: gh
+    label: Platform
+    options: { gh: GitHub, gl: GitLab }
+    description: Where an accepted plan's steps are filed as issues (gh = GitHub, gl = GitLab).
 
 # -----------------------------------------------------------------------------
 providers:
@@ -142,6 +154,8 @@ providers:
 x-tools:
   # the agents only read: the Documents service writes the files and the commits (one per request)
   read_only: &read_only { tools: [read], web: false }
+  # #651: the issue filer reads the accepted plan and files its steps (gh / glab, one command per call)
+  read_vcs: &read_vcs { tools: [read, bash:gh, bash:glab], web: false }
 
 defaults:
   # #320: a persistent agent idle past its prompt cache's lifetime continues fresh from its handoff note
@@ -244,13 +258,29 @@ agents:
       You review the {{ inputs.document }} of the work item `{{ inputs.item }}` against your
       skill's rubric. Anchor every note to the section it is about; never rewrite the document.
 
+  # #651: an accepted plan's steps become the issues the Code & Build workflows take
+  issue_filer:
+    provider: claude
+    model: claude-sonnet-5
+    effort: low
+    session: ephemeral
+    capabilities: *read_vcs
+    skills: ["issue-creator-{{ inputs.git_platform }}"]
+    working_dir: "{{ worktree_dir }}"
+    system_prompt: |
+      You are the issue filer of the accepted plan of the work item `{{ inputs.item }}`. You file
+      one issue per step of its Order of work with {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %}, and report the URLs.
+      The current folder is the project, read-only for you: you change no file.
+
 groups:
   - name: Draft
     steps: [scope, evidence, compete, draft]
   - name: Edit
     steps: [edit]
   - name: Review
-    steps: [review, approval]
+    steps: [review, approval, merge_blocked]
+  - name: Issues
+    steps: [file_issues]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -391,6 +421,11 @@ steps:
       - { id: revise, label: "Back to the edit" }
       - { id: stop,   label: "Stop without accepting", help: "Ends the run; its commits stay on the run's branch, not merged." }
     transitions:
+      # #651: an accepted plan goes on to file its steps as issues
+      - when: "choice == 'accept' and inputs.document == 'plan'"
+        merge: local
+        goto: file_issues
+        on_error: merge_blocked
       - when: "choice == 'accept'"
         merge: local
         goto: end
@@ -407,6 +442,10 @@ steps:
       The local merge into {{ inputs.base_branch }} failed: {{ action_error.message if action_error else 'unknown error' }}
       Approve: try the merge again (after you resolved it, e.g. committed the changes in your checkout of {{ inputs.base_branch }}). Reject: stop the run as failed (the worktree and the branch are kept).
     transitions:
+      - when: "approved and inputs.document == 'plan'"
+        merge: local
+        goto: file_issues
+        on_error: merge_blocked
       - when: "approved"
         merge: local
         goto: end
@@ -414,6 +453,40 @@ steps:
       - when: "rejected"
         goto: end
         status: failed
+
+  # #651 (spec R16): the pre-flow's last step, the accepted plan's steps as issues; the Build
+  # workflows (feature, fix) only take these issues
+  - id: file_issues
+    agent: issue_filer
+    prompt: |
+      The plan docs/work/{{ inputs.item }}/plan.md was accepted and merged into {{ inputs.base_branch }}.
+      Read its `## Order of work` and file one issue per step, in order, in the project's
+      repository: the title "{{ inputs.title or inputs.item }}: <the step's short name>", a body
+      with the step's text, the files the plan lists for it, the part of the Proof that shows it
+      and a link to the plan (docs/work/{{ inputs.item }}/plan.md); add the plan's issue (its
+      front matter's `issue`) as the parent or in a "Part of" line when it has one. Skip a step
+      the plan's Progress already marks done or that already names its issue, and list it in your
+      `summary`. Create no label.
+      Answer with `filed` (each issue created: action, number, url, title) and `summary` (one
+      sentence for the owner).
+    output_schema:
+      type: object
+      required: [filed, summary]
+      properties:
+        filed:
+          type: array
+          items:
+            type: object
+            required: [action, number, url, title]
+            properties:
+              action: { type: string, enum: [created, commented, edited] }
+              number: { type: integer }
+              url:    { type: string }
+              title:  { type: string }
+        summary: { type: string }
+    transitions:
+      - when: "true"
+        goto: end
 
 # -----------------------------------------------------------------------------
 # #648: what a pipeline or a chain maps from this run (spec-to-issues gives `document` to issue's
@@ -427,3 +500,8 @@ outputs:
     type: object
     description: "The issue the document was written for (number, url, title), when started from one."
     value: "{{ (run.issues[0] if run.issues | length else none) | to_json }}"
+  # #651: the issues filed from an accepted plan's steps (the feature/fix runs take them); empty otherwise
+  issues:
+    type: array
+    description: "The issues filed from the accepted plan's steps (number, url, title); empty for an intent or a spec."
+    value: "{{ ((steps.file_issues.output.filed if steps.file_issues.output else []) or []) | to_json }}"

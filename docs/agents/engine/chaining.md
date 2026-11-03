@@ -10,7 +10,14 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
   issue tracker's created issues with complexity and grouping advice (`grouping`, `group_with`).
   The visual builder flags `outputs` (it would drop it on save): such a workflow is edited as YAML.
 - Bundled contracts: issue-tracker `issues`; writer-reviewer `document`, `issue`; ai-arena `document`;
-  feature `branch`, `merged_commit`, `issues`, `pr_url`; analyze-project `issues`, `report`; retrospective `findings`.
+  write-doc `document`, `issue`, `issues` (#651: the issues filed from an accepted plan's steps);
+  feature and fix `branch`, `merged_commit`, `issues`, `pr_url`, `evidence` (#651: an object with the
+  `suite`, `e2e`, `screenshots` and `axe` of the run; a fix has no E2E, screenshots or axe);
+  analyze-project `issues`, `report`; retrospective `findings`. #651, the SDLC post-flow: sdlc-record
+  takes `run` (`type: run`, mapped with `'@run'`), `merged_commit`, `pr_url`, `issues` and `evidence`
+  (a `then` from a successful feature/fix run, `then.inputs.item` the work item) and writes plan.md's
+  Progress row and test.md's evidence row. A `type: object` input takes the output object as it is
+  (`convertValue`; a JSON text is parsed).
 - `WorkflowRun` options `then` (what follows, `packages/shared/chain-model.js normalizeThen`: `{ action:
   'workflow', workflow, map: { <next input>: <output name> | '@run' }, inputs }`, `{ action:
   'product_owner' }`, `{ action: 'queue', workflow, inputs }`) and `from: { run_id, workflow }`, both in

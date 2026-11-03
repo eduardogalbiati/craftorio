@@ -1,13 +1,16 @@
 # =============================================================================
-# Workflow: SDLC record (#633, docs/work/first-project-onboarding/spec.md R9)
+# Workflow: SDLC record (#633, docs/work/first-project-onboarding/spec.md R9; #651, docs/work/write-doc/spec.md R16)
 # -----------------------------------------------------------------------------
 #   record ──► approval (you) ──► merge: local ──► end
 #
 # The post-flow of the AI-native SDLC work model: the Code & Build runs (feature, fix) only take
-# the issues filed from the plan and never write docs/work/ (their developer protects it); this
-# run reads what they produced (the plan's issues, the merged commits) and records it in
-# docs/work/<item>/progress.md, the plan's Progress made a file. sdlc-test records the proof,
-# sdlc-release the release notes.
+# the issues filed from the plan and never write docs/work/ (their developer protects it). #651:
+# a chain (`then`, docs/agents/engine/chaining.md) starts this run when a feature/fix run finishes
+# with success, with that run (`run`) and its declared outputs (`merged_commit`, `pr_url`,
+# `issues`, `evidence`) as inputs; a failed or stopped run starts nothing. The recorder adds the
+# step's row to the Progress table of docs/work/<item>/plan.md (run, commit, PR) and the run's
+# evidence row to docs/work/<item>/test.md (suite, E2E, screenshots, axe). sdlc-test records the
+# Test stage at the code owner's gate, sdlc-release the review and the release in deploy.md.
 # The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
 # recorder writes on the branch sdlc-record/<item>-<run id>, the accept merges it into the local
 # base (never pushed).
@@ -19,7 +22,7 @@ kind: Workflow
 metadata:
   name: sdlc-record
   version: 0.1.0
-  description: Records what the Code & Build runs of a work item produced (issues, merged commits) in docs/work/<item>/progress.md, for you to accept.
+  description: Records what a Code & Build run of a work item produced in its plan.md Progress row (run, commit, PR) and its test.md evidence row, for you to accept.
   tags: [sdlc, documents, record]
   category: plan
 
@@ -40,6 +43,34 @@ inputs:
     type: string
     required: true
     description: The item's folder name under docs/work/ (e.g. write-doc).
+  # #651: the Code & Build run this post-flow records and its declared outputs (the chain maps them)
+  run:
+    label: "Code & Build run"
+    type: run
+    default: latest
+    description: The feature or fix run whose result is recorded (the chain passes the run that just finished).
+  merged_commit:
+    label: "Merged commit"
+    type: string
+    required: false
+    default: ""
+    description: The commit the run merged into the local base branch; empty when it opened a PR instead.
+  pr_url:
+    label: "PR / MR"
+    type: string
+    required: false
+    default: ""
+    description: The PR or MR the run opened in remote mode; empty in local mode.
+  issues:
+    label: "Issues"
+    type: array
+    default: []
+    description: The issues the run implemented, one per line (their URLs or numbers).
+  evidence:
+    label: "Evidence"
+    type: object
+    required: false
+    description: The run's evidence (suite, e2e, screenshots, axe), for the test.md row.
 
 # -----------------------------------------------------------------------------
 providers:
@@ -97,25 +128,44 @@ steps:
 
   - id: record
     agent: recorder
+    # #651: the Progress row of plan.md and the evidence row of test.md, from the chained run's outputs
     prompt: |
-      Read docs/work/{{ inputs.item }}/plan.md (its Order of work and its issues) and the git log of
-      {{ inputs.base_branch }} (the commits that close those issues). Switch to the branch
-      `sdlc-record/{{ inputs.item }}-{{ run_id }}`, write docs/work/{{ inputs.item }}/progress.md:
-      one line per step of the plan with its state (done, in progress, not started), the issue and
-      the commit that did it; then commit it ("docs(work): record the progress of {{ inputs.item }}").
-      Answer with `summary` (one sentence) and `file` (the path you wrote).
+      Record the Code & Build run {{ inputs.run }} of the work item `{{ inputs.item }}`.
+      Its result:
+      - merged commit: {{ inputs.merged_commit or 'none' }}
+      - PR / MR: {{ inputs.pr_url or 'none (local mode)' }}
+      - issues: {{ inputs.issues | join(', ') if inputs.issues | length else 'none named' }}
+      - evidence (suite, e2e, screenshots, axe):
+      {{ inputs.evidence | to_yaml }}
+      Switch to the branch `sdlc-record/{{ inputs.item }}-{{ run_id }}`, then:
+      1. In docs/work/{{ inputs.item }}/plan.md, the `## Progress` table (Step | Status | Run | Commit / PR):
+         find the step of the Order of work the run's issues implement (their titles, the git log of
+         {{ inputs.base_branch }} when unsure) and set its row to done, the run `{{ inputs.run }}`
+         and `{{ inputs.merged_commit }}` or the PR `{{ inputs.pr_url }}`. Add a row when the step has
+         none; change no other row.
+      2. In docs/work/{{ inputs.item }}/test.md, the `## Suite and tests` table (Run | Unit | E2E | Result):
+         add one row for the run with the suite's result, the E2E scenarios and the overall result;
+         under `## Before and after screenshots`, list the run's screenshots (path and caption) with
+         the axe check's findings ("no axe findings" when the list is empty). Write "not run" for a
+         piece of the evidence that is missing; never invent one.
+      Keep each file's front matter and other sections; update its translation (`*.pt-BR.md`) when
+      it exists. Commit both ("docs(work): record run {{ inputs.run }} of {{ inputs.item }}").
+      Answer with `summary` (one sentence), `file` (plan.md's path) and `files` (every path you wrote).
     output_schema:
       type: object
       required: [summary, file]
       properties:
         summary: { type: string }
         file:    { type: string }
+        files:
+          type: array
+          items: { type: string }
 
   - id: approval
     type: human_approval
     message: |
       {{ steps.record.output.summary }}
-      Approve: merge {{ steps.record.output.file }} into the local {{ inputs.base_branch }}. Reject: stop; the branch is kept, not merged.
+      Approve: merge {{ (steps.record.output.files | join(', ')) if steps.record.output.files | length else steps.record.output.file }} into the local {{ inputs.base_branch }}. Reject: stop; the branch is kept, not merged.
     transitions:
       - when: "approved"
         merge: local

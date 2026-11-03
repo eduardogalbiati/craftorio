@@ -106,10 +106,23 @@
   const issueLine = (i) => [i.number ? `#${i.number}` : '', i.title || '', i.url ? `(${i.url})` : ''].filter(Boolean).join(' ');
   const isIssue = (v) => plain(v) && (v.url || v.number);
 
-  /** An output value as the value of an input of the next workflow (its definition `def`). */
+  /**
+   * An output value as the value of an input of the next workflow (its definition `def`). #651: a
+   * `type: object` input takes an object as it is (a JSON text is parsed; anything else is dropped).
+   */
   function convertValue(value, def = {}) {
     if (value == null) return undefined;
     const type = def.type || 'string';
+    if (type === 'object') {
+      if (plain(value)) return value;
+      if (typeof value !== 'string') return undefined;
+      try {
+        const parsed = JSON.parse(value);
+        return plain(parsed) ? parsed : undefined;
+      } catch {
+        return undefined;
+      }
+    }
     if (type === 'array') {
       const list = Array.isArray(value) ? value : String(value).split('\n').map((l) => l.trim()).filter(Boolean);
       return list.map((v) => (isIssue(v) ? v.url || String(v.number) : plain(v) ? JSON.stringify(v) : v));
