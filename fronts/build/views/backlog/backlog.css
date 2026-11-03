@@ -282,19 +282,45 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 /* #269: one gap (12px, the Board's) from the alerts to the filter row, the bar and each stage */
 .rm { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
 .rm .bl-queue { margin-bottom: 0; }
-.rm-bar > span { min-width: 0; overflow-wrap: anywhere; }
-/* #465: the base check card: its badge blue while running, green or red once it ended */
-.rm-base-check { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.rm-base-check[data-status="running"] .badge { color: var(--accent); }
-.rm-base-check[data-status="green"] .badge { color: var(--green); }
-.rm-base-check[data-status="red"] .badge, .rm-base-check[data-status="error"] .badge { color: var(--red); }
+/* #750: the header, one card in four bands split by hairlines: 1 state and actions (rm-head-row), 2 the numbers
+   (rm-head-stats), 3 the activity (rm-head-activity, a surface step darker, only while something runs or warns),
+   4 the view and its filters (rm-head-filters) */
+.rm-head { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); min-width: 0; }
+.rm-head > * + * { border-top: 1px solid var(--border); }
+.rm-head-row, .rm-head-filters, .rm-head-line { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px; }
+.rm-head-row > b { font-size: 14px; }
+.rm-head-row .badge { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the controls keep their order and their line: they never wrap under the title */
+.rm-head-controls { display: inline-flex; flex: none; align-items: center; gap: 6px; }
+.rm-head-row .btn.danger { border-color: rgba(248,113,113,.45); }
+.rm-head-row .btn.danger:hover:not(:disabled) { border-color: var(--red); }
+.rm-head-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rm-head-stat { display: grid; gap: 2px; min-width: 0; padding: 8px 12px; }
+.rm-head-stat + .rm-head-stat { border-left: 1px solid var(--border); }
+.rm-head-stat small { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-head-stat strong { font-size: 18px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-head-activity { background: var(--panel-2); }
+.rm-head-activity > .rm-head-line + .rm-head-line { border-top: 1px solid var(--border); }
+.rm-head-line { flex-wrap: wrap; padding: 6px 12px; }
+.rm-head-line code { font-family: var(--mono); }
+.rm-spin { flex: none; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+.rm-head-mark { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.rm-head-filters { flex-wrap: wrap; gap: 8px 12px; }
+.rm-head-filters select { width: auto; flex: none; max-width: 220px; padding: 3px 6px; font-size: 12px; }
+.rm-head-filters select.active { border-color: #8B5CF6; }
+@media (max-width: 900px) {
+  .rm-head-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rm-head-stat:nth-child(3) { border-left: 0; }
+  .rm-head-stat:nth-child(n+3) { border-top: 1px solid var(--border); }
+}
+/* #465: the base check (#750: a line of the activity band): its mark green or red once it ended */
+.rm-base-check[data-status="green"] .rm-head-mark { background: var(--green); }
+.rm-base-check[data-status="red"] .rm-head-mark, .rm-base-check[data-status="failed"] .rm-head-mark { background: var(--red); }
 .rm-base-check [data-term-msg]:empty { display: none; }
-/* the bar (#269): its state dot before the title (the sidebar's run indicator: blue and pulsing while
-   running; amber paused (--yellow, the waiting colour), red paused by a failure, grey planned, green
-   done), Stop in red, the ⋮ menu */
-.rm-bar-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-/* #421: the bar's summary (planned, spent, By release) and its By release list, one row per cut line */
-.rm-summary { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* the state dot (#269) before the title (the sidebar's run indicator: blue and pulsing while running; amber paused
+   (--yellow, the waiting colour), red paused by a failure, grey planned, green done) */
+/* #421: the By release list, one row per cut line */
 .rm-summary-releases { min-width: 280px; max-width: 420px; }
 .rm-summary-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 8px; white-space: nowrap; }
 .rm-state-dot { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
@@ -302,15 +328,7 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .rm-state-dot.is-paused { background: var(--yellow); }
 .rm-state-dot.is-failed { background: var(--red); }
 .rm-state-dot.is-done { background: var(--green); }
-.rm-bar .btn.danger { border-color: rgba(248,113,113,.45); }
-.rm-bar .btn.danger:hover:not(:disabled) { border-color: var(--red); }
 .rm-menu-btn { padding: 2px 8px; font-size: 14px; line-height: 1.3; }
-/* the ⋮ stays at the bar's right when the bar wraps (#421's summary): its menu opens leftwards, never under the sidebar */
-.rm-bar > .rm-menu-wrap { margin-left: auto; }
-/* the filter row above the bar (#269): the epic, Planned | All, the date range, Group by epic */
-.rm-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.rm-filters select { width: auto; flex: none; max-width: 220px; padding: 3px 6px; font-size: 12px; }
-.rm-filters select.active { border-color: #8B5CF6; }
 /* "Restore an earlier version…" (#281): the kept versions, newest first */
 .rm-versions { list-style: none; display: grid; gap: 4px; max-height: 50vh; margin: 8px 0; padding: 0; overflow: auto; }
 .rm-version { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; }

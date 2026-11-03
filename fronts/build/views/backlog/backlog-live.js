@@ -2,8 +2,8 @@
 // backlog-roadmap.js (re-exported as BacklogRoadmap.patch / mergeState) and backlog.js's liveReload.
 // patch: the list drawn again with its item rows kept in place; mergeState: the light backlog:state
 // (packages/engine/domains/backlog/backlog.js backlogState) merged into the Backlog shown, or null when only the full read can
-// tell; readLight: that state read with its key and mark; baseCheckHtml / baseCheckTerm: the "Base check: running since HH:MM on <commit>" card in the
-// roadmap's bar and its read-only log terminal (term-dock.js termButtons / termAction).
+// tell; readLight: that state read with its key and mark; baseCheckHtml / baseCheckTerm: the "Base check since HH:MM · <commit>" line in the
+// roadmap header's activity band (activityHtml, #750) and its read-only log terminal ("View terminal", term-dock.js termAction).
 // Uses app.js globals (esc, t).
 (() => {
   // the list drawn again with its item rows kept: when the same items are in the same stages and
@@ -108,18 +108,26 @@
   // then green or red with the count; its log follows live in a read-only terminal either way.
   // `clock`: the roadmap's HH:MM in the owner's time zone. The terminal's inline message is kept per
   // check (`termMsg`), since the bar is drawn again on every live reload
+  // #750: a line of the header's activity band: a spinner while it runs (or waits), its name, "since HH:MM · <commit>"
+  // (the commit in mono), then "View terminal" (the dock's read-only tab: what "Live terminal" did, termAction)
   let termMsg = null;
   function baseCheckHtml(c, clock) {
     if (!c?.status) return '';
     const commit = String(c.commit || '').slice(0, 8);
-    const text = c.status === 'running' ? t('backlog_roadmap.base_check_running', { time: clock(c.startedAt), commit })
+    const busy = c.status === 'running' || c.status === 'waiting';
+    const text = c.status === 'running' ? `${esc(t('backlog_roadmap.base_check_since', { time: clock(c.startedAt) }))}<code>${esc(commit)}</code>`
       // #527: another run's whole suite holds the machine's suite slot
-      : c.status === 'waiting' ? t('backlog_roadmap.base_check_waiting')
-      : c.status === 'green' ? t('backlog_roadmap.base_check_green', { commit })
-        : c.status === 'red' ? t('backlog_roadmap.base_check_red', { count: c.failures ?? 0, commit })
-          : t('backlog_roadmap.base_check_failed', { error: c.error || '' });
+      : esc(c.status === 'waiting' ? t('backlog_roadmap.base_check_waiting')
+        : c.status === 'green' ? t('backlog_roadmap.base_check_green', { commit })
+          : c.status === 'red' ? t('backlog_roadmap.base_check_red', { count: c.failures ?? 0, commit })
+            : t('backlog_roadmap.base_check_failed', { error: c.error || '' }));
     const msg = termMsg?.key === `${c.commit}:${c.startedAt}` ? termMsg : null;
-    return `<span class="rm-base-check small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="badge">${t('backlog_roadmap.base_check')}</span> <span title="${esc(c.commit || '')}">${esc(text)}</span>${termButtons('base-check', t('backlog_roadmap.follow_the_base_check_log'))}<span class="muted${msg?.error ? ' error' : ''}" data-term-msg data-check="${esc(`${c.commit}:${c.startedAt}`)}">${esc(msg?.text || '')}</span></span>`;
+    return `<div class="rm-base-check rm-head-line small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="${busy ? 'rm-spin' : 'rm-head-mark'}" aria-hidden="true"></span><b>${t('backlog_roadmap.base_check')}</b> <span class="muted" title="${esc(c.commit || '')}">${text}</span><span class="spacer"></span><span class="muted${msg?.error ? ' error' : ''}" data-term-msg data-check="${esc(`${c.commit}:${c.startedAt}`)}">${esc(msg?.text || '')}</span><button class="btn sm ghost" type="button" data-term="base-check" title="${esc(t('backlog_roadmap.follow_the_base_check_log'))}">${t('backlog_roadmap.view_terminal')}</button></div>`;
+  }
+  // #750: the header's activity band around its lines (a background task, the pause note, the base's known failures); '' with none
+  function activityHtml(lines) {
+    const shown = (lines || []).filter(Boolean);
+    return shown.length ? `<div class="rm-head-activity" data-testid="roadmap-activity">${shown.join('')}</div>` : '';
   }
   async function baseCheckTerm({ ctx, target }, btn) {
     const msg = await termAction(btn, { sessionId: ctx.projectId, runId: null, label: t('backlog_roadmap.base_check') });
@@ -132,6 +140,7 @@
   }
 
   window.BacklogLive = {
+    activityHtml,
     baseCheckHtml,
     baseCheckTerm,
     mergeState,

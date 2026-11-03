@@ -119,10 +119,12 @@
   const askOracleHtml = (x) => (askable(x) && window.GateOracle?.failureButtonHtml ? window.GateOracle.failureButtonHtml(x, 'data-rm-ask-oracle data-testid="roadmap-ask-oracle"') : '');
   // #269: the bar's ⋮ menu (open or not) and its entries: a new action is a line here, the bar stays; #421: its summary's
   // "By release" list; #391: its Pause menu (after this stage, or now) and the "Pausing after stage" badge with its Cancel pause
-  let [menuOpen, byReleaseOpen, pauseOpen] = [false, false, false];
+  let [menuOpen, byReleaseOpen, pauseOpen, simulate] = [false, false, false, null]; // #750: Simulated, a ⋮ entry (null: the default)
+  const simulating = (r) => (simulate ?? (!!state.simulationOnly || !!r?.simulated)) && devMode();
   const pauseHtml = (r) => `<span class="bl-menu-wrap rm-pause-wrap"><button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="${t('backlog_roadmap.pause_after_this_stage_or_now')}" aria-haspopup="menu" aria-expanded="${pauseOpen}">${ICON.pause}${t('backlog_roadmap.pause')}</button>${pauseOpen ? Menu.menuHtml(RoadmapModel.pauseChoices(r).map((c) => ({ id: `pause-${c.after}`, iconHtml: c.after === 'stage' ? MI.pause : MI.stop, label: c.label, title: c.hint, testid: `roadmap-pause-${c.after === 'stage' ? 'after-stage' : 'now'}`, attrs: `data-rm="pause-${esc(c.after)}"` })), { className: 'rm-menu rm-pause-menu', testid: 'roadmap-pause-menu', label: t('backlog_roadmap.pause_the_roadmap') }) : ''}</span>`; // #748: the shared menu, each hint in its tooltip
   const pausingHtml = (r, at = RoadmapModel.pausingAfterStage(r)) => (at < 0 ? '' : `<span class="badge warn" data-testid="roadmap-pausing-badge">${t('backlog_roadmap.pausing_after_stage')} ${at + 1}</span> <button class="btn sm ghost" type="button" data-rm="cancel-pause" data-testid="roadmap-cancel-pause" title="${t('backlog_roadmap.take_the_pause_back_the_roadmap')}">${t('backlog_roadmap.cancel_pause')}</button>`);
-  const MENU = [{ id: 'clear', label: 'backlog_roadmap.clear', title: 'backlog_roadmap.clear_tip', show: (r) => r.stages.length > 0 },
+  const MENU = [{ id: 'simulate', label: 'backlog_roadmap.simulated', title: 'backlog_roadmap.simulated_tip', show: (r, acts) => devMode() && (acts.start.allowed || acts.resume.allowed), checked: simulating },
+    { id: 'clear', label: 'backlog_roadmap.clear', title: 'backlog_roadmap.clear_tip', show: (r) => r.stages.length > 0 },
     { id: 'versions', label: 'backlog_roadmap.restore_an_earlier_version', title: 'backlog_roadmap.restore_an_earlier_version_tip', show: () => true }];
   // the item whose Edit form is open; its "add input" pair is shown; the stage whose note is edited; #287: the values of an Edit
   // form whose save was refused ({ id, inputs, mock }); a refused edit whose item is gone ({ item, reason }), its values shown apart
@@ -805,7 +807,7 @@
     if (data?.releases?.error) return `<select class="rm-release-filter" ${attrs} title="${esc(t('backlog_roadmap.the_releases_could_not_be_read', { error: data.releases.error }))}" disabled><option>${t('backlog_roadmap.releases_could_not_be_read')}</option></select>`;
     if (!rv.list.length) return '';
     const shipped = rv.list.filter((x) => x.status === 'shipped' && x.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    const options = [['', 'All'], ['next', 'Next release (not shipped)'], ...shipped.map((x) => [x.version, `${x.version} · ${shortDate(x.date)}`])];
+    const options = [['', t('backlog_roadmap.all')], ['next', t('backlog_roadmap.next_release_not_shipped')], ...shipped.map((x) => [x.version, `${x.version} · ${shortDate(x.date)}`])];
     return `<label class="rm-release-pick small"><span class="muted">${t('backlog_roadmap.release')}</span><select class="rm-release-filter${rv.choice ? ' active' : ''}" ${attrs} title="${t('backlog_roadmap.show_the_stages_and_items_whose')}">${options.map(([id, label]) =>
       `<option value="${esc(id)}"${id === rv.choice ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label>`;
   }
@@ -987,7 +989,7 @@
   async function setLive(ctx, r, on) {
     try {
       if (on) {
-        const simulated = r.state === 'running' ? !!r.simulated || !!state.simulationOnly : !!document.querySelector('#rm-simulate')?.checked && devMode();
+        const simulated = r.state === 'running' ? !!r.simulated || !!state.simulationOnly : simulating(r);
         const cost = simulated ? 'Simulated: the Product Owner answers without a model call.' : 'Each refill is a Product Owner answer and real runs: they cost money (Settings › Live roadmap caps the daily spend).';
         if (r.state !== 'running') {
           if (!await confirmDialog(t('backlog_roadmap.start_the_roadmap_and_go_live'), t('backlog_roadmap.only_a_running_roadmap_can_go', { cost }), t('backlog_roadmap.start_and_go_live'))) return;
@@ -1012,7 +1014,8 @@
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender, view.project || null);
     const { SINCE, cardCount } = RoadmapModel;
-    const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
+    const [since, , , rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
+    const sinceText = t(`backlog_roadmap.since_text_${since}`); // #750: "last 24 hours" in the interface's language
     const r = roadmapOf(data) || { state: 'planned', stages: [] };
     // #291: the releases, and the one the Releases filter chose
     const rv = RoadmapModel.releaseView(data?.roadmap || r, data, view.release || '', !!view.showAll); // #425: Planned, the latest only
@@ -1025,36 +1028,34 @@
     const offStages = r.stages.filter((s) => s.disabled);
     const offOpen = offStages.filter(RoadmapModel.hasUnfinished);
     const acts = may(r);
+    // #750: the header is one card (rm-head) in four bands: 1 the state and the actions | 2 the numbers (RoadmapSummary.statsHtml)
+    // | 3 the activity (BacklogLive.activityHtml: the base check, the pause note, the base's known failures; absent with nothing)
+    // | 4 the view and its filters, the count on its right
     const leftOut = r.state === 'done' && offOpen.length
-      ? `<span class="small muted" data-testid="roadmap-left-out">${plural(offOpen.length, 'backlog_roadmap.done_disabled_stages_left_out')}</span>` : '';
-    // #269: the state is a dot before the title (blue and pulsing while running, amber paused, red
-    // paused by a failure, grey planned, green done), readable in its tooltip and aria-label; a stage
-    // run on its own (#141) is still named, in a badge after the title
+      ? `<div class="small muted rm-head-line" data-testid="roadmap-left-out">${plural(offOpen.length, 'backlog_roadmap.done_disabled_stages_left_out')}</div>` : '';
+    // #269: the state is a dot before the title (blue and pulsing while running, amber paused, red paused by a failure, grey
+    // planned, green done), readable in its tooltip and aria-label; #750: then its coloured pill; a stage run on its own (#141)
+    // is still named, in a badge after it
     const pausedByFailure = failedPause(r);
     const dotState = pausedByFailure ? 'failed' : ['running', 'paused', 'done'].includes(r.state) ? r.state : 'planned';
     const stateLabel = pausedByFailure ? t('backlog_roadmap.paused_by_a_failure') : StatusPill.statusLabel(r.state);
     const dotTitle = `${stateLabel}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}`;
-    const dot = `<span class="rm-state-dot is-${dotState}" data-testid="roadmap-state-dot" data-state="${pausedByFailure ? 'paused-failed' : dotState}" role="img" aria-label="${esc(dotTitle)}" title="${esc(dotTitle)}"><span class="sr-only">${esc(stateLabel)}</span></span>`;
+    const dataState = pausedByFailure ? 'paused-failed' : dotState;
+    const dot = `<span class="rm-state-dot is-${dotState}" data-testid="roadmap-state-dot" data-state="${dataState}" role="img" aria-label="${esc(dotTitle)}" title="${esc(dotTitle)}"><span class="sr-only">${esc(stateLabel)}</span></span>`;
+    const pill = `<span class="pill ${{ running: 'pill-success', done: 'pill-success', paused: 'pill-paused pill-warn', failed: 'pill-failed' }[dotState] || 'pill-idle'}" data-testid="roadmap-state-pill" data-state="${dataState}">${esc(stateLabel)}</span>`;
     const scopeBadge = pausingHtml(r) || (scoped >= 0
-      ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${esc(StatusPill.statusLabel(r.state))} ${t('backlog_roadmap.stage_value_only', { value: scoped + 1 })}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}</span>`
+      ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${t('backlog_roadmap.only_stage_n', { value: scoped + 1 })}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}</span>`
       : r.simulated ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '');
-    // a pause that is not an item's failure (the budget cap, a stage run on its own that ended, a
-    // release on hold) keeps its line here; a failure is the page's error alert (#270, alerts())
-    const note = r.error && !pausedByFailure ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.state === 'paused' && r.budget ? ` <button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(t(r.budget.period === 'night' ? 'backlog_roadmap.budget_raise_night_tip' : 'backlog_roadmap.budget_raise_day_tip'))}">${t(r.budget.period === 'night' ? 'backlog_roadmap.raise_for_tonight' : 'backlog_roadmap.raise_for_today')}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(t(r.budget.period === 'night' ? 'backlog_roadmap.budget_ignored_night_tip' : 'backlog_roadmap.budget_ignored_day_tip'))}">${t('backlog_roadmap.resume_anyway')}</button>` : ''}</span>` : '';
-    const parked = parkedBadgeHtml(r);
-    const menuItems = MENU.filter((m) => m.show(r));
-    const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="${t('backlog_roadmap.roadmap_actions')}" title="${t('backlog_roadmap.more_actions')}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? Menu.menuHtml(menuItems.map((m) => ({ id: m.id, iconHtml: MI[m.id], label: t(m.label), title: t(m.title), attrs: `data-rm="${m.id}"` })), { className: 'rm-menu', testid: 'roadmap-menu', label: t('backlog_roadmap.roadmap_actions') }) : ''}</span>`;
-    const bar = `
-      <div class="bl-queue rm-bar" data-testid="roadmap-bar">
-        <span class="rm-bar-title">${dot}<b>${t('backlog_roadmap.roadmap_2')}</b> ${scopeBadge} ${plural(r.stages.length, 'backlog_roadmap.stages_count')}${offStages.length ? t('backlog_roadmap.length_disabled', { length: offStages.length }) : ''}${parked}</span>
-        ${window.RoadmapSummary?.barHtml(r, { open: byReleaseOpen, money, minutes: mins }) || ''}${note}${leftOut}${data?.baseFailures?.length ? `<details class="small rm-base-failures" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : ''}${window.BacklogLive?.baseCheckHtml(data?.baseCheck, clock) || ''}
-        <span class="spacer"></span>
-        ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>${t('backlog_roadmap.simulated')}</span></label>
-          <button class="btn sm primary" type="button" data-rm="start"${-1 < scoped && acts.resume.allowed ? ` title="${t('backlog_roadmap.resume_stage_value_only', { value: scoped + 1 })}"` : ''}>${t(acts.resume.allowed ? 'backlog_roadmap.resume' : 'backlog_roadmap.start')}</button>` : ''}
-        ${acts.pause.allowed ? pauseHtml(r) : ''}
-        ${acts.stop.allowed ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="${t('backlog_roadmap.back_to_a_plan_nothing_starts')}">${ICON.stop}${t('backlog_roadmap.stop')}</button>` : ''}
-        ${menu}
-      </div>`;
+    // a pause that is not an item's failure (the budget cap, a stage run on its own that ended, a release on hold) is an amber
+    // line of the activity band (#750); a failure is the page's error alert (#270, alerts())
+    const note = r.error && !pausedByFailure ? `<div class="${r.state === 'paused' ? 'warn-text' : 'error'} small rm-head-line">${esc(r.error)}${r.state === 'paused' && r.budget ? `<span class="spacer"></span><button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(t(r.budget.period === 'night' ? 'backlog_roadmap.budget_raise_night_tip' : 'backlog_roadmap.budget_raise_day_tip'))}">${t(r.budget.period === 'night' ? 'backlog_roadmap.raise_for_tonight' : 'backlog_roadmap.raise_for_today')}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(t(r.budget.period === 'night' ? 'backlog_roadmap.budget_ignored_night_tip' : 'backlog_roadmap.budget_ignored_day_tip'))}">${t('backlog_roadmap.resume_anyway')}</button>` : ''}</div>` : '';
+    const failures = data?.baseFailures?.length ? `<details class="small rm-base-failures rm-head-line" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : '';
+    const menuItems = MENU.filter((m) => m.show(r, acts));
+    const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="${t('backlog_roadmap.roadmap_actions')}" title="${t('backlog_roadmap.more_actions')}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? Menu.menuHtml(menuItems.map((m) => ({ id: m.id, iconHtml: MI[m.id], checked: m.checked?.(r), label: t(m.label), title: t(m.title), attrs: `data-rm="${m.id}"` })), { className: 'rm-menu', testid: 'roadmap-menu', label: t('backlog_roadmap.roadmap_actions') }) : ''}</span>`;
+    // band 1: on the right only the controls, always in this order: Start / Resume (primary) or Pause (amber), Stop (red), ⋮
+    const row = `<div class="rm-head-row" data-testid="roadmap-bar">${dot}<b>${t('backlog_roadmap.roadmap_2')}</b>${pill}${scopeBadge}${parkedBadgeHtml(r)}<span class="spacer"></span><span class="rm-head-controls">${acts.start.allowed || acts.resume.allowed
+      ? `<button class="btn sm primary" type="button" data-rm="start"${-1 < scoped && acts.resume.allowed ? ` title="${t('backlog_roadmap.resume_stage_value_only', { value: scoped + 1 })}"` : ''}>${t(acts.resume.allowed ? 'backlog_roadmap.resume' : 'backlog_roadmap.start')}</button>` : ''}${acts.pause.allowed ? pauseHtml(r) : ''}${acts.stop.allowed
+      ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="${t('backlog_roadmap.back_to_a_plan_nothing_starts')}">${ICON.stop}${t('backlog_roadmap.stop')}</button>` : ''}${menu}</span></div>`;
     const queued = q.length ? `
       <div class="bl-queue rm-queued small"><span>${t('backlog_roadmap.runs_in_the_plain_queue', { count: q.length, issues: esc(q.flatMap((x) => refs(x)).map((i) => `#${i.number}`).join(', ')) })}</span>
         <span class="spacer"></span><button class="btn sm ghost" type="button" data-rm="from-queue">${t('backlog_roadmap.move_into_the_roadmap')}</button></div>` : '';
@@ -1076,8 +1077,8 @@
       const on = (id === 'all') === v.showAll;
       return `<button type="button"${on ? ' class="active"' : ''} data-rm-view="${id}" aria-pressed="${on}" title="${esc(tip)}">${label}</button>`;
     }).join('')}</span>` : '';
-    const sinceSelect = r.stages.length ? `<select class="rm-since" data-rm-since data-testid="roadmap-date-filter" aria-label="${t('backlog_roadmap.date_range')}" title="${t('backlog_roadmap.filter_by_each_item_s_last')}">${SINCE.map(([id, label]) =>
-      `<option value="${id}"${id === since ? ' selected' : ''}>${label}</option>`).join('')}</select>` : '';
+    const sinceSelect = r.stages.length ? `<select class="rm-since" data-rm-since data-testid="roadmap-date-filter" aria-label="${t('backlog_roadmap.date_range')}" title="${t('backlog_roadmap.filter_by_each_item_s_last')}">${SINCE.map(([id]) =>
+      `<option value="${id}"${id === since ? ' selected' : ''}>${esc(t(`backlog_roadmap.since_${id}`))}</option>`).join('')}</select>` : ''; // #750: in the interface's language
     const now = Date.now();
     const vis = visibleStages(r, v, byNumber, now); drawnAt = vis.map((x) => x.s);
     const allItems = r.stages.filter((s) => !s.disabled).flatMap((s) => s.items);
@@ -1086,7 +1087,7 @@
     const epicName = v.epic === NO_EPIC ? t('backlog_roadmap.with_no_epic') : t('backlog_roadmap.in_epic_name', { name: epics.find((e) => e.id === v.epic)?.title || v.epic });
     const count = !r.stages.length ? ''
       : rv.choice ? releaseCountHtml(r, rv, vis)
-        : `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(t('backlog_roadmap.items_epic', { epic: epicName }))}"` : ''}>${t('backlog_roadmap.shown_of_items', { shown: shownItems, count: allItems.length })} ${sinceText}${offItems ? t('backlog_roadmap.disabled_apart', { stages: plural(offStages.length, 'backlog_roadmap.disabled_stages_count'), items: plural(offItems, 'backlog_roadmap.items_count') }) : ''}</span>`;
+        : `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(t('backlog_roadmap.items_epic', { epic: epicName }))}"` : ''}>${t('backlog_roadmap.shown_of_items', { shown: shownItems, count: allItems.length })} ${esc(sinceText)}${offItems ? ` · <button class="link-btn small" type="button" data-rm-show-disabled title="${esc(plural(offItems, 'backlog_roadmap.items_count'))}">${plural(offStages.length, 'backlog_roadmap.disabled_apart_count')}</button>` : ''}</span>`;
     // #291: with a release chosen Planned | All does not apply, the date range does
     const nothing = rv.choice ? `<div class="empty-state" data-testid="roadmap-release-empty"><b>${t('backlog_roadmap.no_stage_of_this_release', { range: rangeMs ? t('backlog_roadmap.in_the_range', { range: sinceText }) : '', epic: v.epic ? ` ${esc(epicName)}` : '' })}</b>
       <p class="muted">${rangeMs ? t('backlog_roadmap.the_date_range_hides_the_release') : t('backlog_roadmap.pick_another_epic')}</p>${rangeMs ? `<button class="btn sm ghost" type="button" data-rm-all-time>${t('backlog_roadmap.show_all_time')}</button>` : ''}</div>`
@@ -1129,17 +1130,19 @@
       : grouped ? r.stages.map((stage, s) => (stage.release?.status !== 'shipped' ? cutLineHtml(stage, s, true) : '')).join('') + byEpicHtml(r, epics, byNumber, v, (x) => (v.showAll ? inRange(x, v, now) : !finished(x)))
         : staged.trim() ? `${earlier}${staged}${loadingRow}` : nothing;
     const liveHtml = r.stages.length ? liveBox(r) : '';
-    // #269: the filters sit on one row above the bar: the epic (backlog.js's choice, `view.epicOptions`:
-    // [{ id, title, count }]), Planned | All, the date range, Group by epic; the bar keeps the counts
+    // #750: the header's view band (band 4): the epic (backlog.js's choice, `view.epicOptions`: [{ id, title, count }]), the
+    // Releases filter, By release, the date range, Planned | All, Group by epic on the left; the count on the right
     const options = view.epicOptions || [];
     const epicSelect = options.length ? `<select class="rm-epic${v.epic ? ' active' : ''}" data-rm-epic aria-label="${t('backlog_roadmap.epic')}" title="${t('backlog_roadmap.show_the_items_of_one_epic')}"><option value="">${t('backlog_roadmap.all_epics')}</option>${options.map((o) =>
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
     // (`view.synced`: the Board toolbar's "Synced … from GitHub", which is hidden on this screen)
     const relSelect = r.stages.length ? releaseFilterHtml(data, rv) : '';
-    const filters = epicSelect || viewSeg || sinceSelect || relSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${relSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
+    const left = `${epicSelect}${relSelect}${window.RoadmapSummary?.byReleaseHtml(r, { open: byReleaseOpen, money, minutes: mins }) || ''}${sinceSelect}${viewSeg}${toggle}`;
+    const filters = left || count || view.synced ? `<div class="rm-head-filters" data-testid="filter-row">${left}<span class="spacer"></span>${view.synced ? `<span class="muted small">${esc(view.synced)}</span>` : ''}${count}</div>` : '';
+    const head = `<div class="rm-head" data-testid="roadmap-head">${row}${window.RoadmapSummary?.statsHtml(r, { minutes: mins }) || ''}${window.BacklogLive?.activityHtml([window.BacklogLive.baseCheckHtml(data?.baseCheck, clock), note, failures, leftOut]) || ''}${filters}</div>`;
     // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
     const cmapHtml = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml() : '';
-    return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${lostHtml()}${queued}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
+    return `<div class="rm">${head}${lostHtml()}${queued}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
   }
 
   // #287: a save refused because its item (or its stage) was removed elsewhere: the reason and the
@@ -1446,7 +1449,7 @@
     const earlier = r.stages.slice(0, s).map((x, n) => (RoadmapModel.isOpen(x) ? n : -1)).filter((n) => n >= 0);
     if (earlier.length && !await confirmDialog(t('backlog_roadmap.run_stage_value_out_of_order', { value: s + 1 }), t('backlog_roadmap.earlier_stages_not_done', { count: earlier.length, stages: stagesText(earlier) }), t('backlog_roadmap.run_this_stage'))) return;
     if (!await checkPushes(ctx, r, stage.id)) return;
-    const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
+    const simulated = simulating(r);
     const real = !simulated && stage.items.some((x) => !x.mock && editable(x));
     if (real && !await confirmDialog(t('backlog_roadmap.run_stage_value', { value: s + 1 }), t('backlog_roadmap.its_items_run_as_real_runs'), t('backlog_roadmap.run'))) return;
     ctx.setData(await api.startRoadmap(ctx.projectId, simulated, stage.id));
@@ -1602,7 +1605,7 @@
   async function onClick(e, ctx, data) {
     // a menu entry that is off says why (its tooltip): nothing to do, its menu stays
     if (e.target.closest('[role="menuitem"][aria-disabled="true"]')) return true;
-    const closing = (menuOpen && !e.target.closest('.rm-menu-wrap')) || (pauseOpen && !e.target.closest('.rm-pause-wrap')) || (byReleaseOpen && !e.target.closest('.rm-summary .bl-menu-wrap'));
+    const closing = (menuOpen && !e.target.closest('.rm-menu-wrap')) || (pauseOpen && !e.target.closest('.rm-pause-wrap')) || (byReleaseOpen && !e.target.closest('.rm-by-release'));
     if (closing) menuOpen = pauseOpen = byReleaseOpen = false; // #421: the summary's By release list too
     // #282: a stage's menu closes on any click but its own button's: hidden at once (the click's
     // action may open a dialog), not redrawn, so the clicked control stays in the page (a checkbox
@@ -1667,8 +1670,9 @@
     document.querySelector(`#bl-list .rm-stage[data-stage="${first}"]`)?.scrollIntoView({ block: 'start' });
   }
   const CLICKS = [
-    // #465: the base check card's "Live terminal" / ↗ follow its suite log
+    // #465: the base check's "View terminal" (#750) follows its suite log; #750: "N disabled apart" goes to the first disabled stage
     { selector: '.rm-base-check [data-term]', run: (c, btn) => window.BacklogLive.baseCheckTerm(c, btn) },
+    { selector: '[data-rm-show-disabled]', run: () => document.querySelector('#bl-list .rm-stage.disabled')?.scrollIntoView({ block: 'start', behavior: 'smooth' }) },
     // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it; #421: the summary's By release list
     { selector: '[data-rm-menu]', run: ({ ctx }) => { [menuOpen, pauseOpen] = [!menuOpen, false]; ctx.render(); focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]'); } },
     { selector: '[data-rm-summary-releases]', run: ({ ctx }) => { byReleaseOpen = !byReleaseOpen; ctx.render(); } },
@@ -1693,7 +1697,7 @@
     { selector: '[data-rm-resume]', run: (c, el) => { if (typeof openResumeDialog === 'function') openResumeDialog(el.dataset.rmResume); } },
   ];
   async function startClicked({ ctx, r }) {
-    const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
+    const simulated = simulating(r);
     // Resume on a stage run on its own (#141) goes on with that stage only
     // (a finished scope is not sent: #237); #243: a Resume's confirm says Resume
     const at = r.state === 'paused' ? scopedStage(r) : -1;
@@ -1856,6 +1860,7 @@
     { selector: '[data-rm-remove-stage]', run: removeStageClicked },
     { acts: ['budget-raise', 'budget-resume'], run: budgetClicked },
     { acts: ['pause', 'pause-stage', 'pause-now', 'cancel-pause', 'stop'], run: async ({ ctx, act }) => (await pauseAct(ctx, act) ? 'handled' : undefined) },
+    { acts: ['simulate'], run: ({ ctx, r }) => { simulate = !simulating(r); ctx.render(); focusMenu('[data-rm="simulate"]'); return 'handled'; } }, // #750: the ⋮ menu stays open
     { acts: ['clear'], run: clearClicked },
     { acts: ['versions'], run: async ({ ctx }) => { menuOpen = false; ctx.render(); await openVersions(ctx); return 'handled'; } },
     { acts: ['from-queue'], run: async ({ ctx }) => { ctx.setData(await api.roadmapFromQueue(ctx.projectId)); } },

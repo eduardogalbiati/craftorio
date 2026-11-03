@@ -6,7 +6,8 @@
 //   is text, escaped, `iconHtml` the caller's own SVG), then its label. A refused entry
 //   (`disabledReason`) stays, dimmed, aria-disabled (never `disabled`: the keyboard still reaches it),
 //   its reason in its title only: no line of text between the entries. `danger` marks a destructive
-//   entry (ui-menu-danger). `attrs` is the caller's raw markup (its data-* hooks). { divider: true } is a
+//   entry (ui-menu-danger). `checked` (true / false, #750) makes an on/off entry: role="menuitemcheckbox",
+//   aria-checked, a ✓ in its icon slot. `attrs` is the caller's raw markup (its data-* hooks). { divider: true } is a
 //   role="separator"; falsy items are skipped and dividers collapse (never first, last or twice).
 // - bindMenu(menuEl, { onPick, onClose, anchor }) → { close() }: arrows (wrapping), Home / End move
 //   between the entries (dividers skipped, refused entries reached); Enter clicks the focused entry; a
@@ -23,8 +24,9 @@
   function entryHtml(e) {
     const why = e.disabledReason || '';
     const title = why || e.title || '';
-    const icon = e.iconHtml != null ? e.iconHtml : esc(e.icon || '');
-    return `<button type="button" role="menuitem" class="ui-menu-item${e.danger ? ' ui-menu-danger' : ''}" data-menu-id="${esc(e.id)}"`
+    const icon = e.iconHtml != null ? e.iconHtml : e.checked != null ? (e.checked ? '✓' : '') : esc(e.icon || '');
+    const role = e.checked != null ? `menuitemcheckbox" aria-checked="${!!e.checked}` : 'menuitem'; // #750: an on/off entry
+    return `<button type="button" role="${role}" class="ui-menu-item${e.danger ? ' ui-menu-danger' : ''}" data-menu-id="${esc(e.id)}"`
       + `${title ? ` title="${esc(title)}"` : ''}${why ? ' aria-disabled="true"' : ''}${e.testid ? ` data-testid="${esc(e.testid)}"` : ''}${e.attrs ? ` ${e.attrs}` : ''}>`
       + `<span class="ui-menu-icon" aria-hidden="true">${icon}</span><span class="ui-menu-label">${esc(e.label)}</span></button>`;
   }
@@ -43,9 +45,10 @@
   function bindMenu(menu, { onPick, onClose, anchor } = {}) {
     const doc = menu.ownerDocument || root.document;
     let open = true;
-    const entries = () => [...menu.querySelectorAll('[role="menuitem"]')];
+    const ENTRY = '[role="menuitem"], [role="menuitemcheckbox"]';
+    const entries = () => [...menu.querySelectorAll(ENTRY)];
     const refused = (el) => el.getAttribute('aria-disabled') === 'true';
-    const entryOf = (target) => { const el = target?.closest?.('[role="menuitem"]'); return el && menu.contains(el) ? el : null; };
+    const entryOf = (target) => { const el = target?.closest?.(ENTRY); return el && menu.contains(el) ? el : null; };
     const onKey = (e) => {
       const list = entries();
       const at = list.indexOf(doc.activeElement);
