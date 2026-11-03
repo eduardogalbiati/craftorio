@@ -714,6 +714,7 @@ steps:
     test_map: true
     prompt: |
       Task: {{ inputs.task }}
+      {% if 'docs/work/' in (inputs.task or '') %}The task is an accepted document's path (#648, enrich-issue): read it, it is the task; the images and HTML files of its folder are the mockups of its screens.{% endif %}
       {% if inputs.issues | length > 1 %}This run implements these issues together: {% for u in inputs.issues %}{{ u }} {% endfor %}{% endif %}
 
       {% if steps.red_check.output and steps.red_check.output.status == 'broken' %}
@@ -903,6 +904,7 @@ steps:
       reads your map first and then only the files it names, at the lines it points to.
 
       Task: {{ inputs.task }}
+      {% if 'docs/work/' in (inputs.task or '') %}The task is an accepted document's path (#648, enrich-issue): read it, it is the task; the images and HTML files of its folder are the mockups of its screens.{% endif %}
       {% if inputs.issue %}Issue: {{ inputs.issue }}
       {% endif %}{% if inputs.issues | length %}Issues (one section of the map per issue): {{ inputs.issues | join(', ') }}
       {% endif %}
@@ -946,6 +948,7 @@ steps:
     # #303: no self-review pass (#179, #300) in the develop turn: the code_review step is the review
     prompt: |
       Task: {{ inputs.task }}
+      {% if 'docs/work/' in (inputs.task or '') %}The task is an accepted document's path (#648, enrich-issue): read it, it is the task; the images and HTML files of its folder are the mockups of its screens.{% endif %}
 
       {% if inputs.issues | length > 1 %}
       This run implements {{ inputs.issues | length }} issues together, in one branch:

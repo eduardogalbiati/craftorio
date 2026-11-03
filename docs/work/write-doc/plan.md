@@ -61,6 +61,11 @@ Phase 1 ships the flow from the intent to a signed-off spec; these parts of R8â€
 - R12: Apply / Edit / Dismiss on the reviewer's notes and the Auto-apply notes option (the notes are listed only);
 - R13: Create epic and phase issues and Start the Build open the Backlog and the Roadmap; the Product Owner's proposal from the spec and the feature workflow's `plan.md` come later.
 
+## Phase 2 (#648): the old names
+
+- `writer-reviewer` and `ai-arena` resolve to `write-doc`, `issue-tracker` to `issue`; `rfc-to-issues` and `enrich-save-develop` to `spec-to-issues` and `enrich-issue`.
+- The old inputs are not migrated (accepted at the sign-off): a saved roadmap stage or a manifest that runs `writer-reviewer` or `ai-arena` with their old inputs (`prompt`, `goal`) resolves to `write-doc` and stops at its start with "Required input not provided: item". Its owner gives the stage an `item` (and a `document`) once.
+
 ## Risks
 
 - **The reader's contract moves:** the editor talks to it only through `postMessage` messages, with a contract test on both sides.

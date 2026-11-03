@@ -54,6 +54,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { itemName } = require('@multiagent/shared/doc-model');
 const clarity = require('./clarity');
 const { slugify } = require('../project/projects');
 const { sniffImage } = require('../../engine/providers');
@@ -674,7 +675,7 @@ function renderAutomationInputs(dir, projectId, id, inputs = {}) {
     acceptance: String(card.acceptance || ''),
     document: String(card.document || ''),
     document_skill: DOC_SKILL[card.type] || DEFAULT_DOC_SKILL,
-    item: String(card.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100) || `card-${card.id}`,
+    item: itemName(String(card.title || '')) || `card-${card.id}`,
     title: String(card.title || ''),
     type: String(card.type || ''),
   };

@@ -916,7 +916,7 @@
     return `<span class="bl-menu-wrap">
         <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t('backlog.actions_for_number', { number: i.number })}" title="${t('backlog.actions')}">⋯</button>
         ${open ? `<div class="bl-menu" role="menu" aria-label="${t('backlog.actions_for_number', { number: i.number })}">
-          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="${t('backlog.enrich_this_issue_in_write_review')}">${t('backlog.enrich_in_write_review')}</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="${t('backlog.open_the_project_city_with_the')}">${t('backlog.show_on_the_map')}</button>
+          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="${t('backlog.enrich_this_issue_in_write_review')}">${t('backlog.enrich_in_documents')}</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="${t('backlog.open_the_project_city_with_the')}">${t('backlog.show_on_the_map')}</button>
           <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || t('backlog.close_it_as_not_planned_on'))}">${t('backlog.archive')}</button>
           ${why ? `<p class="muted small bl-menu-why">${esc(why)}</p>` : ''}
         </div>` : ''}

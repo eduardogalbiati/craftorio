@@ -26,6 +26,7 @@
 // - setFrontMatter(markdown, fields): those keys replaced or added, every other line unchanged.
 // - replaceLines(markdown, { start, end }, text): 1-based inclusive lines replaced, the rest unchanged.
 // - version(markdown): the hash above.
+// - itemName(title): a work item's folder name (accents dropped, lowercase, a-z0-9 runs joined by '-', 100 characters).
 // - alignedLines(sourceMd, translationMd, { start }): { start, end } of the translation that match
 //   the source block at that line (the alignment rule above, source to translation), null without a match.
 // - ACCEPTED: { intent: 'accepted', spec: 'signed off', plan: 'accepted' }, the status past the SDLC gate.
@@ -141,6 +142,11 @@
   function slug(text) {
     return String(text).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  // A work item's folder name (docs/work/<item>/) from its title: the Documents' New item and Discovery's Shape card (#648)
+  function itemName(title) {
+    return slug(title).slice(0, 100).replace(/-+$/, '');
   }
 
   function docName(file) {
@@ -349,6 +355,7 @@
     alignedLines,
     blocks,
     frontMatter,
+    itemName,
     lintDoc,
     lintTranslation,
     replaceLines,

@@ -51,6 +51,11 @@ Escopo: a fase 0 (o editor sobre o protótipo do leitor) e a fase 1 (MVP, R1–R
 7. **Os portões:** Accept intent / Sign off spec mudam o front matter e commitam; "Create epic and phase issues" e "Start the Build" viram propostas que esperam o clique do dono.
 8. **A tela Documents, o seed de screenshot, a feature E2E, o i18n e os docs.**
 
+## Fase 2 (#648): os nomes antigos
+
+- `writer-reviewer` e `ai-arena` resolvem para `write-doc`, `issue-tracker` para `issue`; `rfc-to-issues` e `enrich-save-develop` para `spec-to-issues` e `enrich-issue`.
+- Os inputs antigos não migram (aceito na assinatura): um estágio de roadmap salvo ou um manifest que roda `writer-reviewer` ou `ai-arena` com os inputs antigos (`prompt`, `goal`) resolve para `write-doc` e para no início com "Required input not provided: item". O dono dá ao estágio um `item` (e um `document`) uma vez.
+
 ## Riscos
 
 - **O contrato do leitor muda:** o editor só conversa com ele por mensagens de `postMessage`, com um teste de contrato dos dois lados.

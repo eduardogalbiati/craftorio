@@ -31,7 +31,7 @@
 // DocModel (packages/shared/doc-model.js), CurrentProject and AgentChat.
 (() => {
   const FILE = 'write-doc.yaml';
-  const slugOf = (title) => String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100);
+  const slugOf = (title) => window.DocModel.itemName(title); // read when called: the module may load later
   // the status past the SDLC gate (DocModel.ACCEPTED), read when drawn: the module may load later
   const acceptedStatus = (doc) => window.DocModel?.ACCEPTED?.[doc];
 
@@ -221,7 +221,9 @@
     // the run starts from and merges into the project's default branch (main, master, develop…)
     const hints = await api.projectInputHints?.(projectId).catch(() => null);
     if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch; // an issue's run records it (run.issues)
-    return api.startRun({ file: FILE, inputs, mock: !!state.simulationOnly, projectId, ...(issue ? { issues: [issue] } : {}) });
+    const payload = { file: FILE, inputs, mock: !!state.simulationOnly, projectId, ...(issue ? { issues: [issue] } : {}) };
+    const out = await api.startRun(payload); // an ended run of the issue kept commits (#112, #170): from scratch or nothing (null)
+    return !out?.kept ? out : (await keptWorkDialog(out.kept) === 'scratch' ? api.startRun({ ...payload, confirmed: true }) : null);
   }
 
   async function startWriter() {
@@ -922,6 +924,7 @@
     const item = slugOf(issue ? `issue-${issue.number}-${title}` : title) || 'card', doc = issue ? 'spec' : 'intent';
     const folder = (state.projects || []).find((p) => p.id === projectId)?.folder || null;
     const out = await runWriter(projectId, folder, { item, doc, title, prompt, issue });
+    if (!out?.runId) return null; // the owner kept the ended run's work: no writer, no editor
     if (cardId) window.DiscoveryRuns?.started(out.runId, { projectId, cardId, source: 'write-doc', item, doc });
     if (projectId && window.CurrentProject?.get() !== projectId) window.CurrentProject?.set?.(projectId, { redraw: false }); // the header follows
     docs.projectId = projectId || docs.projectId;

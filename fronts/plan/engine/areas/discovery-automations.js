@@ -18,7 +18,6 @@
 // result of a pipeline that ended meanwhile comes back, a run still alive is followed again, a run
 // that is gone ends the automation as interrupted.
 
-const fs = require('fs');
 const path = require('path');
 const { childRunCost, loadWorkflow } = require('@multiagent/engine/engine/workflow');
 const simulation = require('@multiagent/engine/engine/simulation');
@@ -26,6 +25,7 @@ const chainModel = require('@multiagent/shared/chain-model');
 const discovery = require('@multiagent/engine/domains/discovery/discovery');
 const projects = require('@multiagent/engine/domains/project/projects');
 const runs = require('@multiagent/engine/domains/run/runs');
+const docs = require('../domains/docs');
 
 // the stages of a pipeline followed from the run folders (a chain's nextRunId), at most
 const MAX_STAGES = 20;
@@ -45,18 +45,19 @@ module.exports = (ctx) => {
   };
 
   // A run's `document` output as the card's text: write-doc gives the accepted document's path
-  // (docs/work/<item>/<doc>.md, #648), read from the project's folder; any other value is the text.
+  // (docs/work/<item>/<doc>.md, #648), read from the project's folder (docs.readDoc); any other value is
+  // the text. A document not written (a simulated write-doc writes no file) gives ''.
   function documentText(projectId, value) {
     const text = String(value ?? '');
-    if (!/^docs\/work\/\S+\.md$/.test(text.trim())) return text;
+    const m = /^docs\/work\/([^/\s]+)\/([^/\s]+)\.md$/.exec(text.trim());
+    if (!m) return text;
     try {
       const folder = projects.readProject(ctx.ws.projects, path.basename(String(projectId)))?.folder;
-      if (!folder) return '';
-      const file = path.resolve(folder, text.trim());
-      if (!file.startsWith(path.resolve(folder) + path.sep)) return '';
-      return fs.readFileSync(file, 'utf8');
+      return folder ? docs.readDoc(folder, { item: m[1], doc: m[2] }).source.markdown : '';
     } catch { return ''; }
   }
+  // the card's text from a finished run: kept from an earlier stage when this one gives none
+  const takeDocument = (t, projectId, outputs) => { t.document = documentText(projectId, outputs?.document) || t.document; };
 
   // what the automation runs: a pipeline's name comes from its file (the board's copy may be older)
   function describe(auto) {
@@ -187,7 +188,7 @@ module.exports = (ctx) => {
       try { run = runs.readRun(ctx.ws.runs, id); } catch { /* unreadable: gone */ }
       if (!run || !run.finishedAt) { finish(t, 'interrupted'); return; }
       t.costUsd += (Number(run.costUsd) || 0) + (Number(run.childrenCostUsd) || 0);
-      if (run.status === 'success' && String(run.outputs?.document ?? '').trim()) t.document = documentText(projectId, run.outputs.document);
+      if (run.status === 'success') takeDocument(t, projectId, run.outputs);
       const chain = run.chain;
       if (run.status !== 'success' || !chain?.then || chain.then.action !== 'workflow') { finish(t, run.status || 'interrupted'); return; }
       if (chain.state === 'started' && chain.nextRunId) { id = chain.nextRunId; continue; }
@@ -229,7 +230,7 @@ module.exports = (ctx) => {
     if (ev.type === 'approval.requested') answerSimulatedGate(ev);
     if (ev.type !== 'workflow.finished') return;
     t.costUsd += Number(childRunCost(ev.summary)) || 0;
-    if (ev.status === 'success' && String(ev.outputs?.document ?? '').trim()) t.document = documentText(t.projectId, ev.outputs.document);
+    if (ev.status === 'success') takeDocument(t, t.projectId, ev.outputs);
     // a stage with a chain: the chain says what follows (run:chain), the automation goes on with it
     if (ev.status === 'success' && ev.then?.action === 'workflow') { t.waitingOn = ev.run_id; return; }
     finish(t, ev.status);
