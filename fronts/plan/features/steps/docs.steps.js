@@ -558,9 +558,11 @@ When('I open the intent {string}', async ({ e2e }, title) => {
 
 When('I open the {string} stage of the item {string}', async ({ e2e }, stage, title) => {
   const page = e2e.window;
-  const row = item(page, title);
+  // the row by its slug (data-item): a title can be part of another item's, as "checkout" is of "POST /api/checkout"
+  const row = page.locator(`[data-testid="docs-item"][data-item="${slugOf(title)}"]`);
   await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
-  await row.getByTestId('docs-item-title').click();
+  // the row's own "Open intent" button opens the item in the editor (its title is not a control)
+  await row.getByRole('button', { name: 'Open intent', exact: true }).click();
   const step = editor(page).getByTestId('doc-stepper').getByTestId('doc-step').filter({ hasText: stage });
   await step.click();
   await expect(step).toHaveAttribute('aria-current', 'step');
