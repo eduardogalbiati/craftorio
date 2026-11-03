@@ -289,6 +289,40 @@ test('the remote window gets the clipboard for the engine\'s origin only, and no
   assert.equal(conn.allowRemotePermission('clipboard-read', undefined, origin), false);
 });
 
+// #746: an engine on this computer over plain http (loopback) may read the clipboard, so the terminals paste
+test('#746: clipboard-read is granted to an engine on 127.0.0.1 over plain http', () => {
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://127.0.0.1:7300/apps/desktop/renderer/index.html', 'http://127.0.0.1:7300'), true);
+});
+
+test('#746: clipboard-read is granted to an engine on [::1] over plain http', () => {
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://[::1]:7300/apps/desktop/renderer/index.html', 'http://[::1]:7300'), true);
+});
+
+test('#746: clipboard-read is granted to an engine on localhost over plain http', () => {
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://localhost:7300/apps/desktop/renderer/index.html', 'http://localhost:7300'), true);
+});
+
+test('#746: clipboard-read is still refused over plain http on a host that is not loopback', () => {
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://my-pc:7300/apps/desktop/renderer/index.html', 'http://my-pc:7300'), false);
+});
+
+test('#746: clipboard-read is refused to a loopback page on another port than the engine\'s', () => {
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://127.0.0.1:9999/', 'http://127.0.0.1:7300'), false);
+});
+
+test('#746: clipboard-read is refused to another site while the engine is on loopback', () => {
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://evil.example/', 'http://127.0.0.1:7300'), false);
+});
+
+test('#746: clipboard-read is refused without a requesting URL while the engine is on loopback', () => {
+  assert.equal(conn.allowRemotePermission('clipboard-read', undefined, 'http://127.0.0.1:7300'), false);
+});
+
+test('#746: other permissions (media, notifications) stay refused on a loopback engine', () => {
+  assert.equal(conn.allowRemotePermission('media', 'http://127.0.0.1:7300/', 'http://127.0.0.1:7300'), false);
+  assert.equal(conn.allowRemotePermission('notifications', 'http://127.0.0.1:7300/', 'http://127.0.0.1:7300'), false);
+});
+
 // ---- the server's side ------------------------------------------------------------------------
 
 const INTERFACES = {
