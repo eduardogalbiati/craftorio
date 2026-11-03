@@ -258,6 +258,29 @@ test('selectWorkflow: unit_tests and e2e_tests render next to the task/mode fiel
   assert.match(advHtml, /data-wi-input="base_branch"/);
 });
 
+// #759: since #630 the auto/validated choice is the "validation" input (feature.yaml); it shows next
+// to the task like the old Mode did, never folded into the closed Advanced section
+test('selectWorkflow: the validation input (Automatic / Validated) renders next to the task, not folded into Advanced', () => {
+  const workflows = [{
+    file: 'feature.yaml',
+    inputs: {
+      task: { required: true },
+      validation: { enum: ['auto', 'validated'], default: 'auto', label: 'Validation', options: { auto: 'Automatic', validated: 'Validated' } },
+      base_branch: { type: 'string', default: 'main' },
+    },
+    agents: {},
+  }];
+  const { helpers, getEl } = loadStartDrawer({ workflows });
+  helpers.selectWorkflow('feature.yaml');
+  const inputsHtml = getEl('inputs-form').innerHTML;
+  const advHtml = getEl('adv-form').innerHTML;
+  assert.match(inputsHtml, /data-wi-input="validation"/);
+  assert.doesNotMatch(advHtml, /data-wi-input="validation"/);
+  // the default stays Automatic
+  assert.match(inputsHtml, /data-wi-pill="auto" class="active"[^>]*>Automatic<\/button>/);
+  assert.match(advHtml, /data-wi-input="base_branch"/);
+});
+
 test('openDrawer: an explicit inputs prefill is applied after the workflow is selected, so it can still set the main field', () => {
   const openDrawer = /async function openDrawer\(\{[\s\S]*?\n\}/.exec(drawerSrc)[0];
   const renderCallIndex = openDrawer.indexOf('renderWorkflowOptions(');
