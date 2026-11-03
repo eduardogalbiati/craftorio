@@ -7,6 +7,8 @@ const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
 
 const root = path.join(__dirname, '..', '..', '..');
+// #648: writer-reviewer.yaml and ai-arena.yaml left workflows/ (aliases of write-doc); their own tests read these copies
+const LEGACY = path.join(__dirname, 'fixtures', 'legacy');
 async function runLoopBlocked(t, mockSequences) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
@@ -81,7 +83,7 @@ const retro = (runsDir, runId) => new WorkflowRun({ file: path.join(root, 'workf
 async function runWriterReviewer({ inputs = {}, mockSequences, answers = {}, feedback = {} } = {}) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'writer-reviewer.yaml'),
+    file: path.join(LEGACY, 'writer-reviewer.yaml'),
     inputs: { prompt: 'A one-page PRD', goal: 'Every requirement is testable', ...inputs },
     mock: true, runsDir, mockSequences,
   });
@@ -108,7 +110,7 @@ function arenaRun(inputs = {}, mockSequences) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const cleanup = () => fs.rmSync(runsDir, { recursive: true, force: true });
   try {
-    return { run: new WorkflowRun({ file: path.join(root, 'workflows', 'ai-arena.yaml'), inputs: { task: 'A PRD', ...inputs }, mock: true, runsDir, mockSequences }), cleanup };
+    return { run: new WorkflowRun({ file: path.join(LEGACY, 'ai-arena.yaml'), inputs: { task: 'A PRD', ...inputs }, mock: true, runsDir, mockSequences }), cleanup };
   } catch (e) { cleanup(); throw e; }
 }
 // ---------------------------------------------------------------------------

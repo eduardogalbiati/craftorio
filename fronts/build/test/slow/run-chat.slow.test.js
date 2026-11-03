@@ -49,7 +49,8 @@ function chatOf(events) {
 const kinds = (model, kind) => model.items.filter((it) => it.kind === kind);
 
 test('run chat: loops back show as loop lines, gates keep the chosen answer and the feedback', { timeout: 60000 }, async () => {
-  const events = await mockRun(path.join(root, 'workflows', 'writer-reviewer.yaml'), {
+  // #648: writer-reviewer.yaml left workflows/ (an alias of write-doc); its loops and gates stay in the legacy fixture
+  const events = await mockRun(path.join(root, 'packages', 'engine', 'test', 'fixtures', 'legacy', 'writer-reviewer.yaml'), {
     inputs: { prompt: 'A one-page PRD', goal: 'Every requirement is testable', max_rounds: 2 },
     mockSequences: { score: [4] }, answers: { out_of_rounds: 'stop' }, feedback: { out_of_rounds: 'Too vague, stop here.' },
   });

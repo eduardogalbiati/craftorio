@@ -29,7 +29,7 @@ test('a run input that is not a run id is refused before the run starts', (t) =>
 });
 test('writer-reviewer: agents take provider, model and effort from the inputs', () => {
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'writer-reviewer.yaml'),
+    file: path.join(__dirname, '..', 'fixtures', 'legacy', 'writer-reviewer.yaml'), // #648: left workflows/
     inputs: { prompt: 'x', goal: 'y', writer_provider: 'grok', writer_model: 'grok-4.7', writer_effort: 'low' },
     mock: true, runsDir: os.tmpdir(),
   });

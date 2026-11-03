@@ -256,7 +256,7 @@ test('#354 Conflict map tab: "Create issue" of an opened file over the limit ope
   const drawer = app.run('globalThis.__drawer && JSON.stringify(globalThis.__drawer)');
   assert.ok(drawer, 'the Issue tracker drawer did not open');
   const { workflow, project, inputs } = JSON.parse(drawer);
-  assert.deepEqual([workflow, project], ['issue-tracker.yaml', 'p1']);
+  assert.deepEqual([workflow, project], ['issue.yaml', 'p1']); // #648: issue-tracker.yaml is now issue.yaml
   assert.ok(inputs.request.includes('src/a.js') && inputs.request.includes('Split it by feature'), `request: ${inputs.request}`);
 });
 

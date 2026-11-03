@@ -83,8 +83,10 @@ async function skill(client) {
 }
 
 // a copy of a bundled workflow, and its spec as the builder edits it
+// (#648: writer-reviewer.yaml left workflows/, the builder reads the file by its own name: write-doc.yaml)
+const BUNDLED = 'write-doc.yaml';
 async function workflowCopy(client) {
-  const { file } = await client.call('builder:clone', 'writer-reviewer.yaml');
+  const { file } = await client.call('builder:clone', BUNDLED);
   const { spec } = await client.call('builder:load', file);
   return { file, spec };
 }
@@ -146,8 +148,8 @@ module.exports = {
   'backlog:watching': { arg: null },
   'backlog:unqueue': { setup: project, arg: ({ projectId }) => ({ projectId, number: 1 }), invalid: BAD_PROJECT },
   'baseCheck:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
-  'builder:clone': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
-  'builder:load': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
+  'builder:clone': { arg: BUNDLED, invalid: BAD_FILE },
+  'builder:load': { arg: BUNDLED, invalid: BAD_FILE },
   'builder:save': { setup: workflowCopy, arg: ({ file, spec }) => ({ file, spec }), invalid: { arg: { spec: 'name: x' } } },
   'chain:drop': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'chain:estimate': { arg: { file: 'writer-reviewer.yaml' }, invalid: { arg: { file: 42 } } },
@@ -305,7 +307,7 @@ module.exports = {
   'voice:mic-access': { arg: null },
   // #487: ways of working on the contract project; compose without a previous analysis is a client error
   'workflows:compose': { setup: project, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
-  'workflows:export': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
+  'workflows:export': { arg: BUNDLED, invalid: BAD_FILE },
   'workflows:interview': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'workflows:interviewLast': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT }, // #733
   'workflows:interviewState': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT }, // #733
