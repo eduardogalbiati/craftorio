@@ -28,6 +28,8 @@
 # aliases of this workflow): after the evidence, the writer and up to four other writers each draft
 # the document on their own (`compete`, a fan-out, at least one must answer); the draft step then
 # merges the best of the drafts into one. One writer (the default) skips straight to the draft.
+# An old run started by those names gives only a prompt (ai-arena's `task`, `was:`): no project and
+# no item, the writer drafts from the prompt in the run folder and the Documents service skips it.
 # Outputs (pipelines, chains): `document` (the first draft's text) and `issue` (the issue the run
 # was started from, when there is one).
 # The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
@@ -52,8 +54,9 @@ inputs:
   project_path:
     label: "Project folder"
     type: string
-    required: true
-    description: The project whose docs/work/ holds the item.
+    required: false
+    default: ""
+    description: The project whose docs/work/ holds the item. Empty (an old writer-reviewer or ai-arena run, a saved pipeline), the writer drafts from the prompt in the run folder, without a worktree or a document.
   base_branch:
     label: "Base branch"
     type: string
@@ -62,8 +65,9 @@ inputs:
   item:
     label: "Work item"
     type: string
-    required: true
-    description: The item's folder name under docs/work/ (e.g. write-doc).
+    required_unless: prompt
+    default: ""
+    description: The item's folder name under docs/work/ (e.g. write-doc). Without one, the prompt says what to write.
   document:
     label: "Document"
     type: string
@@ -82,7 +86,8 @@ inputs:
     type: string
     required: false
     default: ""
-    description: Optional notes for the first draft (what the item is about).
+    was: task
+    description: Optional notes for the first draft (what the item is about); without an item, what to write.
   writers:
     label: "Writers"
     type: string
