@@ -121,3 +121,20 @@ Feature: Write an item's intent and spec with the writer, change by change, up t
     And I choose "Write the spec" on the item "Export runs as CSV"
     Then the writer drafts the spec with the section "Requirements"
     And the toolbar ends with "Send to review" right after "Versions"
+
+  # #650: the front for intents, the "Intents" view of the Documents screen lists every item's intent
+  # with its status; a draft one opens in the editor and goes through the same gate
+  @issue-650
+  Scenario: The Intents list opens an item's draft intent, and once accepted it reads "accepted"
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with a draft intent
+    When I open "Documents" in the sidebar
+    And I open the "Intents" tab of the Documents screen
+    Then the intents list shows the intent "Export runs as CSV" as "draft"
+    When I open the intent "Export runs as CSV"
+    And I send the document to review
+    And I choose "Accept intent" at the approval gate
+    Then the document is shown as "Accepted"
+    When I open "Documents" in the sidebar
+    And I open the "Intents" tab of the Documents screen
+    Then the intents list shows the intent "Export runs as CSV" as "accepted"

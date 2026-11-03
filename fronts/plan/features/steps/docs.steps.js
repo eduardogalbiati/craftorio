@@ -73,12 +73,12 @@ function workSnapshot(e2e) {
   };
 }
 
-const intentMd = (slug, title, lang) => [
+const intentMd = (slug, title, lang, status = 'accepted') => [
   '---',
   `item: ${slug}`,
   'issue: "#1"',
   'stage: intent',
-  'status: accepted',
+  `status: ${status}`,
   'approver: Product Owner',
   'date: 2026-10-01',
   lang === 'en' ? 'translation: intent.pt-BR.md' : 'source: intent.md',
@@ -129,15 +129,20 @@ Given('the demo project\'s repository has the item {string} in the folder {strin
   seedAcceptedIntent(e2e, title, slug);
 });
 
-function seedAcceptedIntent(e2e, title, slug) {
+// #650: an intent the writer drafted and nobody accepted yet
+Given('the demo project\'s repository has the item {string} with a draft intent', async ({ e2e }, title) => {
+  seedAcceptedIntent(e2e, title, slugOf(title), 'draft');
+});
+
+function seedAcceptedIntent(e2e, title, slug, status = 'accepted') {
   const folder = demoFolder(e2e);
   const dir = path.join(folder, 'docs', 'work', slug);
   fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(path.join(folder, '.git'))) git(e2e, folder, ['init', '-q', '-b', 'main']);
-  fs.writeFileSync(path.join(dir, 'intent.md'), intentMd(slug, title, 'en'));
-  fs.writeFileSync(path.join(dir, 'intent.pt-BR.md'), intentMd(slug, title, 'pt-BR'));
+  fs.writeFileSync(path.join(dir, 'intent.md'), intentMd(slug, title, 'en', status));
+  fs.writeFileSync(path.join(dir, 'intent.pt-BR.md'), intentMd(slug, title, 'pt-BR', status));
   git(e2e, folder, ['add', '-A']);
-  git(e2e, folder, ['commit', '-q', '-m', `Accept the intent of ${title}`]);
+  git(e2e, folder, ['commit', '-q', '-m', `${status === 'accepted' ? 'Accept' : 'Draft'} the intent of ${title}`]);
   e2e.docItem = { title, slug, dir };
 }
 
@@ -516,4 +521,63 @@ Then('the toolbar ends with {string} right after {string}', async ({ e2e }, last
   }
   const bar = await boxOf(toolbar, 'the toolbar');
   expect(sendBox.x + sendBox.width, `"${last}" sits at the toolbar's right`).toBeGreaterThanOrEqual(bar.x + bar.width - (await paddingRight(toolbar)) - 2);
+});
+
+// ---- #650: Maintain (maintain.md's incidents) and the front for intents --------------------------------
+// Assumes these data-testids and roles (the developer adds them):
+//   the Documents screen's views are tabs (role=tab) in <main>, one of them "Intents"
+//   docs-intents        the Intents list (every item's intent.md); docs-intent-row one row per intent,
+//                       its title and its status ("draft", "accepted") in its text; a click opens the
+//                       intent in the editor (doc-editor, data-stage="intent")
+//   docs-item-title     a list row's title (#696); a click opens the item in the editor
+//   doc-stepper/doc-step the editor's six stages (#671); a click on a step opens that stage's document
+//                       (data-stage="maintain" for maintain.md), rendered in the reader's iframe
+// maintain.md's "## Incidents" table (docs/work/write-doc/maintain.md) is a table in the reader; its
+// "New intent" cell links to the new intent. The new intent links back to the item's maintain.md.
+
+const intentRow = (page, title) => page.getByTestId('docs-intents').getByTestId('docs-intent-row').filter({ hasText: title });
+
+When('I open the {string} tab of the Documents screen', async ({ e2e }, name) => {
+  const tab = e2e.window.getByRole('main').getByRole('tab', { name, exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+});
+
+Then('the intents list shows the intent {string} as {string}', async ({ e2e }, title, status) => {
+  const row = intentRow(e2e.window, title);
+  await expect(row).toHaveCount(1, { timeout: RUN_TIMEOUT });
+  await expect(row).toContainText(new RegExp(`(^|\\W)${escapeRe(status)}(\\W|$)`, 'i'));
+});
+
+When('I open the intent {string}', async ({ e2e }, title) => {
+  const row = intentRow(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  await row.click();
+  await expect(editor(e2e.window)).toHaveAttribute('data-stage', 'intent', { timeout: RUN_TIMEOUT });
+});
+
+When('I open the {string} stage of the item {string}', async ({ e2e }, stage, title) => {
+  const page = e2e.window;
+  const row = item(page, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  await row.getByTestId('docs-item-title').click();
+  const step = editor(page).getByTestId('doc-stepper').getByTestId('doc-step').filter({ hasText: stage });
+  await step.click();
+  await expect(step).toHaveAttribute('aria-current', 'step');
+});
+
+Then('the document\'s incidents list the error {string} with a link to its new intent', async ({ e2e }, error) => {
+  const doc = reader(e2e.window);
+  await expect(doc.getByRole('heading', { name: 'Incidents', exact: true })).toBeVisible({ timeout: RUN_TIMEOUT });
+  const row = doc.getByRole('row').filter({ hasText: error });
+  await expect(row).toHaveCount(1, { timeout: RUN_TIMEOUT });
+  await expect(row.getByRole('link').first()).toBeVisible();
+});
+
+Then('the document links back to the maintain of the item {string}', async ({ e2e }, title) => {
+  const slug = slugOf(title);
+  const links = reader(e2e.window).getByRole('link');
+  const pointsBack = new RegExp(`(^|/)${escapeRe(slug)}/maintain(\\.[a-z-]+)?\\.md(#.*)?$`, 'i');
+  await expect.poll(async () => (await links.evaluateAll((as) => as.map((a) => a.getAttribute('href') || '')))
+    .some((href) => pointsBack.test(href)), { timeout: RUN_TIMEOUT, message: `a link to docs/work/${slug}/maintain.md` }).toBe(true);
 });

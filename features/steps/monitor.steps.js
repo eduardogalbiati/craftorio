@@ -120,3 +120,12 @@ Then('the automation line says {string}, {string} and {string}', async ({ e2e },
 Then('the opened card\'s document mentions {string}', async ({ e2e }, text) => {
   await expect(openedCard(e2e.window)).toContainText(text, { timeout: LOAD_TIMEOUT });
 });
+
+// #650: an error group is tied to an item of docs/work/ by a <select> on its row (monitor-item-select),
+// whose options are the items' titles
+When('I tie the error {string} to the item {string}', async ({ e2e }, title, itemTitle) => {
+  const select = errorRow(e2e.window, title).getByTestId('monitor-item-select');
+  await expect(select).toBeEnabled({ timeout: LOAD_TIMEOUT });
+  await select.selectOption({ label: itemTitle });
+  await expect(select.locator('option:checked')).toHaveText(itemTitle);
+});
