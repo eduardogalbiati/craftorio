@@ -54,10 +54,9 @@
     if (g.state !== 'new') return '<span class="err-item-none"></span>';
     const items = er.items || [];
     const chosen = er.tied[g.fingerprint] || '';
-    const options = items.map((it) => `<option value="${esc(it.item)}"${it.item === chosen ? ' selected' : ''}>${esc(it.title || it.item)}</option>`).join('');
-    return `<select class="err-item" data-testid="monitor-item-select" data-fingerprint="${esc(g.fingerprint)}" aria-label="${esc(t('errors.tie_to_item'))}" title="${esc(t('errors.tie_to_item'))}"${er.items && items.length ? '' : ' disabled'}>
-      <option value="">${t('errors.no_item')}</option>${options}
-    </select>`;
+    const options = [['', t('errors.no_item')], ...items.map((it) => [it.item, it.title || it.item])];
+    const attrs = `class="err-item" data-testid="monitor-item-select" data-fingerprint="${esc(g.fingerprint)}" aria-label="${esc(t('errors.tie_to_item'))}" title="${esc(t('errors.tie_to_item'))}"${er.items && items.length ? '' : ' disabled'}`;
+    return window.Select.markup(attrs, options, chosen);
   }
 
   function row(g) {
