@@ -1,8 +1,8 @@
 // Backlog › Product Owner drawer: the workflow options' two views (#431), on the "Plan with" row
 // (#po-wf-row, markup in backlog.js; the options drawn by backlog-po.js with WorkflowInputs.formHtml's
 // `groups`). The chevron (#po-wf-toggle) minimizes the options box (#po-workflow-options) to a one-line
-// summary of the main options' values (#po-wf-summary, "Validation: Automatic · Unit tests: Write and
-// run · …") and expands it again; "Show more options" (wf-more-toggle) opens the options that are not
+// summary of the main options' values (#po-wf-summary, "Automatic · Unit: Write and run · E2E: Write
+// and run · Screenshots: All") and expands it again; "Show more options" (wf-more-toggle) opens the options that are not
 // main. Both choices are the viewer's (localStorage, not per project). Neither changes a value: the
 // hidden fields stay in the box, so a question still sends every value (backlog-po.js ask()).
 // backlog-po.js calls apply() on each render and moreOpen() when it draws the options.
@@ -35,14 +35,19 @@
     return String(label?.childNodes?.[0]?.textContent ?? label?.textContent ?? '').trim();
   };
 
-  /** "Automatic · Unit tests: Write and run · …": the shown fields outside "more options", by their labels. */
+  // the tests read short on one line ("Unit: Write and run · E2E: …"); the other fields by their labels
+  const SHORT = { unit_tests: 'backlog.summary_unit_tests', e2e_tests: 'backlog.summary_e2e_tests' };
+
+  /** "Automatic · Unit: Write and run · E2E: …": the shown fields outside "more options", by their labels. */
   function summary(box) {
     const fields = [...(box?.querySelectorAll('.wi-field[data-wi-key]') || [])]
       .filter((f) => !f.hidden && !f.closest('[data-testid="wf-more"]'));
     return fields.map((f) => {
       const value = valueText(f);
+      const key = f.dataset.wiKey;
       // the run's mode leads by its value alone, as the owner reads it ("Automatic")
-      return ['mode', 'validation'].includes(f.dataset.wiKey) && fields[0] === f ? value : `${labelText(f)}: ${value}`;
+      if (['mode', 'validation'].includes(key) && fields[0] === f) return value;
+      return `${SHORT[key] ? t(SHORT[key]) : labelText(f)}: ${value}`;
     }).filter(Boolean).join(' · ');
   }
 
