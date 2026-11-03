@@ -190,6 +190,27 @@ test('#746: in Portuguese a refused clipboard read shows "Use Ctrl+V para colar"
   }
 });
 
+test('#746: Ctrl+V right after a refused context-menu read still pastes the text', async () => {
+  const dock = loadDock({ clipboardRead: async () => { throw notAllowed(); } });
+  await dock.open();
+  dock.contextmenu();
+  await tick();
+  dock.key({ key: 'v', ctrlKey: true });
+  dock.paste('echo hi');
+  await tick();
+  assert.deepEqual(dock.calls.termInput.map(([id, d]) => `${id}|${d}`), ['pty-1|echo hi']);
+});
+
+test('#746: a context-menu paste followed at once by the native paste event sends the text once', async () => {
+  const dock = loadDock({ clipboardRead: async () => 'echo hi' });
+  await dock.open();
+  dock.contextmenu();
+  await tick();
+  dock.paste('echo hi');
+  await tick();
+  assert.deepEqual(dock.calls.termInput.map(([, d]) => d), ['echo hi']);
+});
+
 // ---- a read-only tab still refuses a paste ---------------------------------------------------------
 
 test('#746: a paste event on a read-only (live) tab sends nothing to the session', async () => {
