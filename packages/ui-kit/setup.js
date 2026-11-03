@@ -34,6 +34,8 @@
     { id: 'first-project', name: () => t('setup.project.name'), title: () => t('setup.project.title'), lead: () => t('setup.project.lead') },
   ];
   const ACTION = { install: () => t('setup.install'), signIn: () => t('setup.sign_in') };
+  // the CLIs the setup checks, in their rows' order (also Settings › Agents & CLIs', #740)
+  const TOOL_IDS = ['claude', 'codex', 'grok', 'gh', 'glab', 'git'];
   const setup = {
     step: 0,
     open: false,
@@ -136,8 +138,7 @@
   }
 
   function renderAgents() {
-    const ids = ['claude', 'codex', 'grok', 'gh', 'glab', 'git'];
-    const tools = setup.tools || ids.map((id) => ({ id, checking: true }));
+    const tools = setup.tools || TOOL_IDS.map((id) => ({ id, checking: true }));
     return `
       <div class="s-group setup-clis">${tools.map((tool) => cliRow(tool)).join('')}</div>
       ${setup.job && window.SettingsClis ? window.SettingsClis.consoleHtml(setup.job) : ''}
@@ -327,5 +328,5 @@
 
   registerView({ id: 'setup', modals, mount });
   window.Setup = { isOpen: () => setup.open, open, skip };
-  window.SetupRows = { cliRow };
+  window.SetupRows = { TOOL_IDS, cliRow };
 })();

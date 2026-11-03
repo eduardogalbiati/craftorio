@@ -63,6 +63,13 @@ async function onboarding(client) {
   return { projectId: s.projectId };
 }
 
+// #740: a CLI setup job that runs nothing (claude's sign-in answers what to run on the server)
+const CLI_SIGN_IN = { id: 'claude', action: 'login' };
+async function cliSetupJob(client) {
+  const job = await client.call('cli-setup:start', CLI_SIGN_IN);
+  return { jobId: job.jobId };
+}
+
 const AGENT = { name: 'Contract agent', provider: 'claude', prompt: 'Checks the contract suite.' };
 async function agent(client) {
   const a = await client.call('agents:create', { ...AGENT, name: unique('Contract agent') });
@@ -147,6 +154,9 @@ module.exports = {
   'chain:get': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'chain:set': onRun({ arg: ({ runId }) => ({ runId, then: null }), invalid: BAD_RUN }),
   'chat:cancel': { arg: { chat: 'oracle' }, invalid: { arg: { chat: 42 } } },
+  // #740: claude's sign-in never runs on the engine (it needs a terminal): a 'manual' job, nothing spawned
+  'cli-setup:start': { arg: CLI_SIGN_IN, invalid: { arg: { id: 42, action: 'login' } } },
+  'cli-setup:status': { setup: cliSetupJob, arg: ({ jobId }) => ({ jobId }), invalid: { arg: { jobId: 42 } } },
   'cliSessions:list': { arg: null },
   'depsCache:info': { arg: null },
   'discovery:archive': { setup: card, arg: (s) => ({ ...s, reason: 'The contract suite archives it.' }), invalid: BAD_CARD },

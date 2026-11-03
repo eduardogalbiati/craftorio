@@ -485,6 +485,7 @@ async function renderVoice(st) {
     $('#set-voice-cli').textContent = errMsg(e);
     return;
   }
+  if (!st) return; // an engine without speech:status answers nothing: the section stays as drawn
   $('#set-voice-command').value = state.settings.voiceCommand || '';
   $('#set-voice-cli').innerHTML = st.path
     ? t('settings.voice.found', { path: esc(st.path) })

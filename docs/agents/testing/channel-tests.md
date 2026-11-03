@@ -23,8 +23,9 @@ changed or trashed, and nothing is left unhandled. The calls run in a child proc
 - **Gates**: `packages/engine/test/service/gates-hostile-333.test.js` checks that hostile input to
   `approval:resolve` and `runs:resume` never opens a human gate.
 - **How to add a skip**: only a channel with effects outside the process (the desktop shell, the
-  network, `gh`/`glab`, a push, the machine's shared caches or its own files) is skipped. Add
-  `{ channel, reason }` (or `<area>:*` for a whole area) to `packages/engine/test/service/channel-sweep-skips.js`;
+  network, `gh`/`glab`, a push, the machine's shared caches or its own files, installing software as
+  `cli-setup:start`, #740) is skipped. Add
+  `{ channel, reason }` (or `<area>:*` for a whole area) to `apps/desktop/test/service/channel-sweep-skips.js`;
   the sweep checks that every skip names a channel of the manifest and says why.
 
 ## The channel contract (#338)

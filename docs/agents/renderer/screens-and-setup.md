@@ -11,11 +11,20 @@ The views, the first-run Setup dialog and one folder per screen (the sidebar, ad
   registered with `registerView` for its `modals` only (no section, no menu entry) with a stepper (Agents · Try it safely · Workflows · First project).
   `init()` opens it when `settings.setupDone === false` (strictly: a workspace or a test double
   without the key never sees it); Settings › Agents & CLIs › Run setup again calls
-  `window.Setup.open()`. Its pure parts (status badges, requirement badges, preselection, hidden
+  `window.Setup.open()`, but the CLIs are managed in that Settings section (#740), not here. Its pure parts (status badges, requirement badges, preselection, hidden
   workflows) are `packages/shared/setup-model.js`, shared with Node (`packages/engine/domains/workflow/workflow-requirements.js`). It sits under
   the other dialogs (z-index 9, so the Skip confirm and New project show above it) and lifts the
   terminal dock above itself while open. Check it with `npm run screenshot -- --view setup --mode
   <agents | try-it-safely | workflows | first-project>` (`--missing-clis` for CLIs not installed).
+- **Settings › Agents & CLIs** (#740, `views/settings/settings-clis.js`, `data-testid="settings-clis"`):
+  the CLIs' rows are the Setup's (`window.SetupRows.cliRow`: status, version, account, ▶ Install /
+  ▶ Sign in), a close button (`settings-clis-close`) and no stepper. An action runs on the engine's
+  machine (`api.cliSetupStart`, the engine's job, after a confirm; `command-hint.js` `canRunCommands` is
+  true in the browser when the engine offers it) and its output shows in the console panel
+  (`cli-console`, `data-state` running | ended, a sign-in's code in `cli-setup-device-code`); the row is
+  checked again when it ends. Deep link: `window.Settings.open('agents', { highlight, onClose })`, used
+  by the project wizard's Open Setup (the wizard hides, the CLI's row is highlighted; closing the section
+  shows the wizard again on its step and checks the CLI again). Closing goes back to the previous screen.
 - **One folder per screen** (#78, moved in slices, the last in #154): every screen is
   `apps/desktop/renderer/views/<view>/<view>.js` + `<view>.css`, plus the screen's other parts in the same
   folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and

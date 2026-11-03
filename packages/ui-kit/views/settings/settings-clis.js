@@ -18,7 +18,6 @@
 // showSettingsTab, command-hint.js's runSuggestedCommand and start-drawer.js's setCliStates.
 
 (function () {
-  const IDS = ['claude', 'codex', 'grok', 'gh', 'glab', 'git'];
   const clis = {
     tools: null,        // env:details, null while checking
     error: null,        // the check's error
@@ -69,7 +68,7 @@
       box.innerHTML = `<div class="s-row"><div class="s-label"><span class="error small" role="alert">${esc(t('settings.clis.check_failed', { error: clis.error }))}</span></div></div>`;
       return;
     }
-    const tools = clis.tools || IDS.map((id) => ({ id, checking: true }));
+    const tools = clis.tools || window.SetupRows.TOOL_IDS.map((id) => ({ id, checking: true }));
     box.innerHTML = tools.map((tool) => window.SetupRows.cliRow(tool, { highlight: clis.highlight })).join('');
   }
 

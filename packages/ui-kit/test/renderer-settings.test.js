@@ -1,6 +1,7 @@
-// packages/ui-kit/views/settings/settings.js: renderTools (Settings › Agents & CLIs) and renderVoice
-// (Settings › General › Voice input) now show a play button next to a missing CLI's install
-// command (#147, commandHint from packages/ui-kit/command-hint.js), instead of plain text or nothing.
+// packages/ui-kit/views/settings/settings.js: renderVoice (Settings › General › Voice input) shows a
+// play button next to a missing CLI's install command (#147, commandHint from
+// packages/ui-kit/command-hint.js), instead of plain text or nothing; renderTools (Settings › Agents &
+// CLIs) hands the rows to settings-clis.js (#740).
 // Pulled out of the source and run in a vm sandbox against a minimal fake DOM and a stubbed api,
 // the way test/renderer-kept-work-dialog.test.js checks app.js's dialogs.
 const test = require('node:test');
@@ -26,7 +27,7 @@ function makeEl() {
   };
 }
 
-function loadSettingsMarkup({ envDetails, speechStatus } = {}) {
+function loadSettingsMarkup({ envDetails, speechStatus, SettingsClis } = {}) {
   const els = new Map();
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
   const sandbox = {
@@ -38,8 +39,9 @@ function loadSettingsMarkup({ envDetails, speechStatus } = {}) {
     api: { envDetails: envDetails || (async () => []), speechStatus: speechStatus || (async () => ({ models: [], languages: [] })) },
   };
   sandbox.window = sandbox;
+  sandbox.SettingsClis = SettingsClis;
   vm.createContext(sandbox);
-  const renderTools = /async function renderTools\(\) \{[\s\S]*?\n\}/.exec(settingsSrc)[0];
+  const renderTools =/async function renderTools\(\) \{[\s\S]*?\n\}/.exec(settingsSrc)[0];
   const renderVoice = /async function renderVoice\(st\) \{[\s\S]*?\n\}/.exec(settingsSrc)[0];
   for (const [name, code] of Object.entries({ renderTools, renderVoice })) {
     assert.ok(code, `${name} not found in settings.js: the source moved`);
@@ -101,35 +103,13 @@ test('renderDefaultWorkflow: a workflow with no `task` input (it cannot take one
   assert.doesNotMatch($('#set-default-workflow').innerHTML, /backlog-refresh/);
 });
 
-test('renderTools: a tool not in PATH with an install command shows the play button, not just "Not found in PATH."', async () => {
-  const { renderTools, $ } = loadSettingsMarkup({
-    envDetails: async () => [{ id: 'gh', name: 'GitHub CLI', path: null, connected: false, installCommand: 'winget install --id GitHub.cli -e' }],
-  });
+// #740: the rows are the first-run Setup's (setup.js window.SetupRows), drawn by settings-clis.js; their
+// content is checked in renderer-settings-clis-740.test.js and settings-clis-rows-740.test.js
+test('renderTools: draws the CLIs with Settings › Agents & CLIs\' rows (window.SettingsClis.render)', async () => {
+  let calls = 0;
+  const { renderTools } = loadSettingsMarkup({ SettingsClis: { render: async () => { calls += 1; } } });
   await renderTools();
-  const html = $('#set-tools').innerHTML;
-  assert.match(html, /Not found in PATH\./);
-  assert.match(html, /<PLAY:winget install --id GitHub\.cli -e>/);
-});
-
-test('renderTools: a tool with no install command but a prose hint shows "Install: <prose>", no play button', async () => {
-  const { renderTools, $ } = loadSettingsMarkup({
-    envDetails: async () => [{ id: 'grok', name: 'Grok Build', path: null, connected: false, installCommand: null, installHint: 'install Grok Build from x.ai' }],
-  });
-  await renderTools();
-  const html = $('#set-tools').innerHTML;
-  assert.doesNotMatch(html, /<PLAY:/);
-  assert.match(html, /Install: install Grok Build from x\.ai/);
-});
-
-test('renderTools: a tool found in PATH shows its path, no install hint at all', async () => {
-  const { renderTools, $ } = loadSettingsMarkup({
-    envDetails: async () => [{ id: 'git', name: 'Git', path: 'C:\\Git\\git.exe', version: 'git version 2.44', connected: true }],
-  });
-  await renderTools();
-  const html = $('#set-tools').innerHTML;
-  assert.match(html, /<code>C:\\Git\\git\.exe<\/code>/);
-  assert.doesNotMatch(html, /<PLAY:/);
-  assert.doesNotMatch(html, /Not found in PATH/);
+  assert.equal(calls, 1);
 });
 
 test('renderVoice: the speech CLI not found, with an install command, shows the play button next to "Not found"', async () => {

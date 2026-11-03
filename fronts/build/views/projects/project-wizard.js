@@ -53,7 +53,9 @@
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
 //   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
 //   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
-//   "cli-signed-out" (the import goes on) with Open Setup, on the repository and the analysis steps.
+//   "cli-signed-out" (the import goes on) with Open Setup, on the repository and the analysis steps. #740: Open
+//   Setup (and no-access's Sign in) opens Settings › Agents & CLIs (window.Settings.open, the CLI highlighted),
+//   never the first-run Setup; the wizard is hidden meanwhile and comes back on its step, the CLI checked again.
 // - the provider (its label, its CLI) is the adapter of window.Platforms.platformOfRepoUrl, the engine's rule too;
 //   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus
 //   back to what opened it.
@@ -64,7 +66,8 @@
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
 // architecture:estimate (the project map's cost), and for the review architecture:city / facts / report,
 // architecture:createIssue (never runNow), the backlog and api.createDiscoveryCard (an Inbox idea).
-// Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.Setup (packages/ui-kit/setup.js).
+// Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.Settings
+// (packages/ui-kit/views/settings/settings-clis.js).
 
 (function () {
   const M = window.OnboardingModel;
@@ -129,7 +132,7 @@
     spinner: SPINNER,
     states,
     statusText,
-    wizardOpen: () => !!cur,
+    wizardOpen: () => !!cur && !root?.hidden, // #740: hidden while Settings › Agents & CLIs is open
   });
   const retryButton = (id) => `<button type="button" class="btn sm" data-act="retry" data-testid="wizard-job-retry-${id}">${esc(t('onboarding.retry'))}</button>`;
 
@@ -791,9 +794,25 @@
     toRepository({ repository: url, name: cur.model.name || slashed.split('/').filter(Boolean).pop() || '' });
   }
 
+  // #740: Open Setup / Sign in → Settings › Agents & CLIs (window.Settings, settings-clis.js) with the warned
+  // CLI highlighted; the wizard is only hidden (cur kept) and comes back on its step, the CLI checked again
   function openSetup() {
-    close();
-    if (window.Setup?.open) window.Setup.open();
+    if (!cur || !root) return;
+    const provider = platformById(cur.onboarding?.cli?.provider) || platformOfRepo(cur.model.repository);
+    if (!window.Settings?.open) return;
+    root.hidden = true;
+    tray.refresh();
+    window.Settings.open('agents', {
+      highlight: provider?.cli || null,
+      onClose: () => {
+        if (!cur || !root) return;
+        root.hidden = false;
+        render();
+        tray.refresh();
+        root.querySelector('.wizard-panel')?.focus?.();
+        loadAccounts();
+      },
+    });
   }
 
   // #632: the Create card and the chips of the create step's questions; true when it was one of them
