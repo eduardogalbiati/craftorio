@@ -42,6 +42,15 @@ module.exports = (ctx) => {
   const plain = (projectId) => path.basename(String(projectId));
   const read = (projectId) => store.readState(dir(), plain(projectId));
   const write = (projectId, state) => store.writeState(dir(), plain(projectId), state);
+  // every read → write of a project's state runs in turn (a poll awaits the network between them:
+  // a push or a diagnosis meanwhile would be overwritten)
+  const queues = new Map();
+  function serial(projectId, work) {
+    const key = plain(projectId);
+    const next = (queues.get(key) || Promise.resolve()).then(() => work());
+    queues.set(key, next.catch(() => {}));
+    return next;
+  }
 
   // the keychain: the host's, or this process's memory (never a file)
   const memory = new Map();
@@ -75,10 +84,17 @@ module.exports = (ctx) => {
   // the groups of the events read so far, each with its state (new, intent, fix-run)
   function groupsOf(state) {
     const events = Object.values(state.events);
+    // each event's fingerprint once: a group's sparkline reads only its own events
+    const byFingerprint = new Map();
+    for (const ev of events) {
+      const fp = grouping.fingerprint(ev);
+      if (!byFingerprint.has(fp)) byFingerprint.set(fp, []);
+      byFingerprint.get(fp).push(ev);
+    }
     return grouping.groupErrors(events).map((g) => {
       const s = state.groups[g.fingerprint] || {};
       // the sparkline of the last hour, ending at the group's last event (the screen's "· 1h")
-      const spark = grouping.sparkOf(events, g.fingerprint, { now: Date.parse(g.lastSeen) || Date.now() });
+      const spark = grouping.sparkOf(byFingerprint.get(g.fingerprint) || [], g.fingerprint, { now: Date.parse(g.lastSeen) || Date.now() });
       return { ...g, spark, state: s.state || 'new', cardId: s.cardId || null, runId: s.runId || null };
     });
   }
@@ -117,12 +133,14 @@ module.exports = (ctx) => {
   // events into the state (`add` changes it), deduplicated by source and id; the new groups are
   // diagnosed when the automation says 'on'
   async function ingest(projectId, add) {
-    const state = read(projectId);
-    const before = new Set(groupsOf(state).map((g) => g.fingerprint));
-    await add(state);
-    write(projectId, state);
-    const fresh = groupsOf(state).filter((g) => !before.has(g.fingerprint) && g.state === 'new');
-    if (state.automation.diagnose === 'on') await autoDiagnose(projectId, fresh);
+    const { fresh, auto } = await serial(projectId, async () => {
+      const state = read(projectId);
+      const before = new Set(groupsOf(state).map((g) => g.fingerprint));
+      await add(state);
+      write(projectId, state);
+      return { fresh: groupsOf(state).filter((g) => !before.has(g.fingerprint) && g.state === 'new'), auto: state.automation.diagnose === 'on' };
+    });
+    if (auto) await autoDiagnose(projectId, fresh);
   }
 
   async function monitorPoll({ projectId }) {
@@ -172,10 +190,13 @@ module.exports = (ctx) => {
       if (count >= state.automation.dailyCap) return;
       const res = await monitorDiagnose({ projectId, fingerprint: g.fingerprint });
       if (!res.ok || res.existing) continue;
-      const after = read(projectId);
-      after.diagnosed = { day, count: count + 1 };
-      write(projectId, after);
-      if (after.automation.fix === 'on') await monitorProposeFix({ projectId, fingerprint: g.fingerprint }).catch((e) => console.error('monitor fix:', e.message));
+      const fix = await serial(projectId, () => {
+        const after = read(projectId);
+        after.diagnosed = { day, count: (after.diagnosed.day === day ? after.diagnosed.count : 0) + 1 };
+        write(projectId, after);
+        return after.automation.fix;
+      });
+      if (fix === 'on') await monitorProposeFix({ projectId, fingerprint: g.fingerprint }).catch((e) => console.error('monitor fix:', e.message));
     }
   }
 
@@ -205,16 +226,18 @@ module.exports = (ctx) => {
 
   const findGroup = (state, fingerprint) => groupsOf(state).find((g) => g.fingerprint === fingerprint) || null;
 
-  async function monitorDiagnose({ projectId, fingerprint }) {
-    const state = read(projectId);
-    const g = findGroup(state, fingerprint);
-    if (!g) return { ok: false, error: `No error group ${fingerprint}.` };
-    if (g.cardId) return { ok: true, cardId: g.cardId, existing: true };
-    const card = intents.createIntent(ctx.ws.discovery, plain(projectId), { workflow: 'monitor', finding: fingerprint, title: g.title, text: diagnosisText(g, state), author: 'monitor' });
-    if (!card) return { ok: false, error: 'The intent card could not be written.' };
-    state.groups[fingerprint] = { ...(state.groups[fingerprint] || {}), state: 'intent', cardId: card.id };
-    write(projectId, state);
-    return { ok: true, cardId: card.id };
+  function monitorDiagnose({ projectId, fingerprint }) {
+    return serial(projectId, () => {
+      const state = read(projectId);
+      const g = findGroup(state, fingerprint);
+      if (!g) return { ok: false, error: `No error group ${fingerprint}.` };
+      if (g.cardId) return { ok: true, cardId: g.cardId, existing: true };
+      const card = intents.createIntent(ctx.ws.discovery, plain(projectId), { workflow: 'monitor', finding: fingerprint, title: g.title, text: diagnosisText(g, state), author: 'monitor' });
+      if (!card) return { ok: false, error: 'The intent card could not be written.' };
+      state.groups[fingerprint] = { ...(state.groups[fingerprint] || {}), state: 'intent', cardId: card.id };
+      write(projectId, state);
+      return { ok: true, cardId: card.id };
+    });
   }
 
   async function monitorProposeFix({ projectId, fingerprint }) {
@@ -232,18 +255,23 @@ module.exports = (ctx) => {
     const inputs = { task: diagnosisText(g, state), repo_path: project.folder, mode: 'local', approve_before_merge: true };
     const notices = [{ level: 'info', message: `Started by the Monitor: a fix for "${g.title}" (${g.count} errors). It waits for your approval before it lands.` }];
     const started = await ctx.startWorkflowRun({ file: FIX_WORKFLOW, inputs, mock: simulation.simulationOnly(), projectId: project.id, notices });
-    state.groups[fingerprint] = { ...(state.groups[fingerprint] || {}), state: 'fix-run', runId: started.runId };
-    write(projectId, state);
+    await serial(projectId, () => {
+      const after = read(projectId);
+      after.groups[fingerprint] = { ...(after.groups[fingerprint] || {}), state: 'fix-run', runId: started.runId };
+      write(projectId, after);
+    });
     return { ok: true, runId: started.runId };
   }
 
-  function monitorSetAutomation({ projectId, diagnose, fix, dailyCap }) {
+  async function monitorSetAutomation({ projectId, diagnose, fix, dailyCap }) {
     if (!AUTOMATION_MODES.includes(diagnose) || !AUTOMATION_MODES.includes(fix)) return { ok: false, error: `A mode is ${AUTOMATION_MODES.join(', ')}.` };
     if (!Number.isInteger(dailyCap) || dailyCap < 0) return { ok: false, error: 'The daily cap is a whole number, 0 or more.' };
-    const state = read(projectId);
-    state.automation = { diagnose, fix, dailyCap };
-    write(projectId, state);
-    return { ok: true, automation: { ...state.automation } };
+    return serial(projectId, () => {
+      const state = read(projectId);
+      state.automation = { diagnose, fix, dailyCap };
+      write(projectId, state);
+      return { ok: true, automation: { ...state.automation } };
+    });
   }
 
   return {

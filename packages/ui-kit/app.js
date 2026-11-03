@@ -30,6 +30,15 @@ function fmtDur(ms) {
 // in the workspace's time zone (#273, time-zone.js); TimeZone.titleOf names the zone for a tooltip
 const timeOf = (iso) => new Date(iso).toLocaleTimeString(uiLocale(), { timeZone: TimeZone.current() });
 const dateOf = (iso) => new Date(iso).toLocaleString(uiLocale(), { dateStyle: 'short', timeStyle: 'short', timeZone: TimeZone.current() });
+// how long ago, in the interface language: just now, N min ago, N h ago, else the local date
+function fmtRelative(iso) {
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (!Number.isFinite(s)) return '';
+  if (s < 60) return t('common.ago_now');
+  if (s < 3600) return t('common.ago_minutes', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('common.ago_hours', { n: Math.floor(s / 3600) });
+  return new Date(iso).toLocaleDateString(uiLocale(), { timeZone: TimeZone.current() });
+}
 const USAGE_SCOPE_KEY = 'multiagent.usageScope';
 const RUN_VIEW_KEY = 'multiagent.runView';
 // A channel or method the running main process (or server) doesn't have: the code on disk is newer

@@ -8,8 +8,11 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const SENTRY_API = 'https://sentry.io/api/0';
+// an event's id from its content, for the events that come without one (a log line, a push)
+const digest = (ev) => crypto.createHash('sha256').update(JSON.stringify(ev)).digest('hex').slice(0, 24);
 
-// the events of a JSON-lines text, each tagged with its source; events older than `since` dropped
+// the events of a JSON-lines text, each tagged with its source (a line with no id gets one from its
+// content, so it is deduplicated across polls); events older than `since` dropped
 function parseLines(text, sourceId, since) {
   const events = [];
   for (const line of String(text || '').split(/\r?\n/)) {
@@ -18,7 +21,7 @@ function parseLines(text, sourceId, since) {
     try { ev = JSON.parse(line); } catch { continue; }
     if (!ev || typeof ev !== 'object' || Array.isArray(ev)) continue;
     if (since && ev.at && String(ev.at) < since) continue;
-    events.push({ ...ev, source: sourceId });
+    events.push({ ...ev, id: ev.id != null ? ev.id : digest(ev), source: sourceId });
   }
   return events;
 }
@@ -65,7 +68,6 @@ const isoOf = (v, now) => {
   return Number.isNaN(d.getTime()) ? now : d.toISOString();
 };
 const pathOf = (url) => { try { return url ? new URL(url).pathname : undefined; } catch { return String(url); } };
-const digest = (ev) => crypto.createHash('sha256').update(JSON.stringify(ev)).digest('hex').slice(0, 24);
 
 // a Sentry webhook's event (an internal integration's data.event / data.error, the legacy plugin's event)
 function sentryPushed(ev, sourceId, payload, now) {

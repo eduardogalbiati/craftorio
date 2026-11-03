@@ -8,14 +8,8 @@
 
 const notificationCenter = { open: false, unread: 0 };
 
-function ncAgo(iso) {
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (!Number.isFinite(s)) return '';
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { timeZone: TimeZone.current() });
-}
+// kept for the screens that call it (Inbox, Discovery): the rule is app.js's fmtRelative
+const ncAgo = (iso) => fmtRelative(iso);
 
 function renderNotificationCount(unread) {
   notificationCenter.unread = unread || 0;

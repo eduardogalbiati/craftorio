@@ -19,16 +19,6 @@
   const typeLabel = (k) => ({ sentry: t('errors.type_sentry'), 'log-url': t('errors.type_log_url'), 'log-file': t('errors.type_log_file') })[k] || k;
   const projectName = (id) => (state.projects || []).find((p) => p.id === id)?.name || id || '';
 
-  // when a source was last polled: just now, N min, N h, N d ago
-  function ago(iso) {
-    const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-    if (!Number.isFinite(s)) return '';
-    if (s < 60) return t('errors.ago_now');
-    if (s < 3600) return t('errors.ago_minutes', { n: Math.floor(s / 60) });
-    if (s < 86400) return t('errors.ago_hours', { n: Math.floor(s / 3600) });
-    return t('errors.ago_days', { n: Math.floor(s / 86400) });
-  }
-
   // the span the count covers, first to last event: 1h, 24h, else days
   function windowOf(g) {
     const span = (Date.parse(g.lastSeen) || 0) - (Date.parse(g.firstSeen) || 0);
@@ -106,7 +96,7 @@
     const cls = s.error ? 'err' : s.polledAt ? 'ok' : '';
     const label = s.label || typeLabel(s.type);
     const text = s.polledAt && !s.error
-      ? t('errors.source_polled', { label, ago: ago(s.polledAt) })
+      ? t('errors.source_polled', { label, ago: fmtRelative(s.polledAt) })
       : t('errors.source_every', { label, n: s.every || 5 });
     return `<span class="err-source ${cls}" title="${esc(s.error || typeLabel(s.type))}">${esc(text)}</span>`;
   }
