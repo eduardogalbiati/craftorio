@@ -211,7 +211,12 @@ Given('the desktop app is open in remote mode on an engine served on this machin
 
 Then('the window title says it runs on the remote engine', async ({ e2e }) => {
   const { port } = new URL(engineUrl(e2e));
-  await expect(e2e.window).toHaveTitle(new RegExp(`engine on 127\\.0\\.0\\.1:${port}`));
+  const pattern = new RegExp(`engine on 127\\.0\\.0\\.1:${port}`);
+  // the native window title (BrowserWindow.getTitle): the page's own document.title is not the window's title
+  await expect.poll(
+    async () => (await e2e.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.getTitle()))).some((t) => pattern.test(t)),
+    { timeout: LOAD_TIMEOUT, message: 'a window title names the remote engine' },
+  ).toBe(true);
 });
 
 Then('the frozen view shows the captured page', async ({ e2e }) => {
