@@ -178,7 +178,17 @@ test('the ⋯ menu holds Enrich in Write & Review above Archive; rows and cards 
   assert.doesNotMatch(chunk('card'), /data-enrich/);
 });
 
-test('choosing Enrich closes the menu, then opens Write & Review for the issue', () => {
+test('#648 Enrich writes the issue\'s spec in the Documents editor: writeDocForCard with the issue { number, url, title } and its prompt', () => {
+  const body = chunk('enrichIssue');
+  assert.ok(body, 'enrichIssue found');
+  assert.match(body, /window\.writeDocForCard\(\{/);
+  assert.match(body, /issue: \{ number: issue\.number, url: issue\.url, title: issue\.title \}/);
+  assert.match(body, /projectId: bl\.projectId/);
+  assert.match(body, /prompt: window\.DuoIssue\?\.issuePrompt\(full\)/);
+  assert.doesNotMatch(body, /showView\('duo'\)|writer-reviewer/, 'Write & Review is no longer opened');
+});
+
+test('choosing Enrich closes the menu, then starts writing the issue\'s spec (enrichIssue)', () => {
   // #375 shares these lines with the Show on the map dispatch (the file's line budget)
   const handler = /const enrich = e\.target\.closest\('\[data-enrich\]'\)[\s\S]*?if \(enrich\) \{([^\n}]*)\}/.exec(src)?.[1] || '';
   assert.ok(handler, 'the Enrich click handler is found');

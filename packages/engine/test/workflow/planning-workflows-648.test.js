@@ -215,3 +215,40 @@ for (const old of ['rfc-to-issues.yaml', 'enrich-save-develop.yaml']) {
     assert.equal(typeof est?.text, 'string');
   });
 }
+
+// ---- issue: a request or a spec (required_unless) --------------------------------------------------
+
+function issueRun(t, inputs) {
+  const { WorkflowRun } = require('../../engine/workflow');
+  const runsDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'runs-648-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  return new WorkflowRun({ file: path.join(WORKFLOWS, 'issue.yaml'), inputs: { project_path: root, ...inputs }, mock: true, runsDir });
+}
+
+test('#648 issue.yaml without a request nor a spec is refused: one of the two is needed', (t) => {
+  assert.throws(() => issueRun(t, {}), /Required input not provided: request \(or spec\)/);
+  assert.throws(() => issueRun(t, { request: '   ', spec: '' }), /Required input not provided: request \(or spec\)/, 'blank text counts as not given');
+});
+
+test('#648 issue.yaml starts with only a spec, or with only a request', (t) => {
+  const fromSpec = issueRun(t, { spec: 'docs/work/export-csv/spec.md' });
+  assert.equal(fromSpec.inputs.spec, 'docs/work/export-csv/spec.md');
+  assert.equal(fromSpec.inputs.request, '');
+  const fromRequest = issueRun(t, { request: 'Export runs as CSV' });
+  assert.equal(fromRequest.inputs.request, 'Export runs as CSV');
+});
+
+// ---- feature: a task that is an accepted document's path (enrich-issue) ----------------------------
+
+const PATH_PHRASE = /The task is an accepted document's path[^\n]*read it, it is the task; the images and HTML files of its folder are the mockups/;
+
+for (const id of ['acceptance_tests', 'warm_up', 'develop']) {
+  test(`#648 feature.yaml ${id}: a task naming docs/work/<item>/plan.md tells the agent to read the path and use its folder's mockups`, () => {
+    const templates = require('../../engine/run/templates');
+    const step = (loadBundled('feature').steps || []).find((s) => String(s.id) === id);
+    assert.ok(step, `step ${id} exists`);
+    const render = (task) => templates.render(String(step.prompt || ''), { inputs: { mode: 'local', task, base_branch: 'main' }, steps: {}, run: {} });
+    assert.match(render('docs/work/export-csv/plan.md'), PATH_PHRASE);
+    assert.doesNotMatch(render('Add a CSV export to the runs list'), PATH_PHRASE, 'a plain task gets no path phrase');
+  });
+}

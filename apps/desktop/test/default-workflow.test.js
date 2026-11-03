@@ -67,3 +67,16 @@ test('mergeOf: an ordinary worktree workflow (no local override, merges not disa
   const wf = { orchestrator: { worktree: { repo: '.', base: 'main' } }, steps: [{ id: 'gate', transitions: [{ when: 'approved', goto: 'end' }] }] };
   assert.equal(DefaultWorkflow.mergeOf(wf), 'remote');
 });
+
+// ---- namesOf(file) (#648) ------------------------------------------------------------------------
+
+test('namesOf: a workflow\'s own name first, then the old names that alias to it', () => {
+  assert.deepEqual(DefaultWorkflow.namesOf('issue.yaml'), ['issue', 'issue-tracker']);
+  assert.deepEqual([...DefaultWorkflow.namesOf('write-doc.yaml')].sort(), ['ai-arena', 'write-doc', 'writer-reviewer']);
+  assert.equal(DefaultWorkflow.namesOf('write-doc.yaml')[0], 'write-doc');
+});
+
+test('namesOf: a path or a workflow without old names gives its own name only', () => {
+  assert.deepEqual(DefaultWorkflow.namesOf('/ws/workflows/issue.yaml'), ['issue', 'issue-tracker']);
+  assert.deepEqual(DefaultWorkflow.namesOf('triage.yaml'), ['triage']);
+});

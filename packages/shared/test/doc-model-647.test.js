@@ -316,6 +316,29 @@ test('#647 replaceLines swaps the given 1-based lines and keeps the others byte 
   assert.equal(out, 'one\nTWO\nTHREE\nEXTRA\nfour\n');
 });
 
+// ---- itemName (#648: the Documents' New item and Discovery's Shape card share it) ----------------
+
+test('#648 itemName: a title becomes a lowercase folder name, accents dropped, words joined by hyphens', () => {
+  const { itemName } = load();
+  assert.equal(itemName('Export runs as CSV'), 'export-runs-as-csv');
+  assert.equal(itemName('Exportação de relatórios: já!'), 'exportacao-de-relatorios-ja');
+  assert.equal(itemName('  --Dark   mode--  '), 'dark-mode');
+});
+
+test('#648 itemName: nothing usable gives an empty name', () => {
+  const { itemName } = load();
+  assert.equal(itemName(''), '');
+  assert.equal(itemName('!!! ???'), '');
+});
+
+test('#648 itemName: cut at 100 characters, never ending with a hyphen', () => {
+  const { itemName } = load();
+  const long = `${'a'.repeat(99)} b${' c'.repeat(20)}`; // the 100th character is the hyphen before b
+  const name = itemName(long);
+  assert.equal(name, 'a'.repeat(99));
+  assert.equal(itemName('x'.repeat(150)).length, 100);
+});
+
 // ---- browser load -------------------------------------------------------------------------------
 
 test('#647 in a page the module sets window.DocModel with its functions', () => {

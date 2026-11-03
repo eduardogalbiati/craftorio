@@ -69,6 +69,15 @@ test('an automation\'s inputs are rendered from the card; an unknown field rende
   assert.equal(d.renderAutomationInputs(dir, P, rfc.id, { s: '{{ card.document_skill }}' }).s, 'rfc-writing');
 });
 
+test('#648 card.item is the work item folder named after the card\'s title (write-doc\'s item), card-<id> without a usable title', (t) => {
+  const { dir } = tmp(t);
+  const d = load();
+  const card = d.createCard(dir, P, { title: 'Exportação de runs em CSV', text: 'x' });
+  assert.equal(d.renderAutomationInputs(dir, P, card.id, { item: '{{ card.item }}' }).item, 'exportacao-de-runs-em-csv');
+  const bare = d.createCard(dir, P, { title: '!!!', text: 'x' });
+  assert.equal(d.renderAutomationInputs(dir, P, bare.id, { item: '{{ card.item }}' }).item, `card-${bare.id}`);
+});
+
 test('the attachments input holds the card\'s text attachments, never an image', (t) => {
   const { dir } = tmp(t);
   const d = load();
