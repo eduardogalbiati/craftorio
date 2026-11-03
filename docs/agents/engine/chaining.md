@@ -16,7 +16,8 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
   analyze-project `issues`, `report`; retrospective `findings`. #651, the SDLC post-flow: sdlc-record
   takes `run` (`type: run`, mapped with `'@run'`), `merged_commit`, `pr_url`, `issues` and `evidence`
   (a `then` from a successful feature/fix run, `then.inputs.item` the work item) and writes plan.md's
-  Progress row and test.md's evidence row. A `type: object` input takes the output object as it is
+  Progress row and test.md's evidence row. A remote run (a PR, no `merged_commit`) pauses the chain
+  (see below), so its PR is recorded by starting sdlc-record by hand. A `type: object` input takes the output object as it is
   (`convertValue`; a JSON text is parsed).
 - `WorkflowRun` options `then` (what follows, `packages/shared/chain-model.js normalizeThen`: `{ action:
   'workflow', workflow, map: { <next input>: <output name> | '@run' }, inputs }`, `{ action:

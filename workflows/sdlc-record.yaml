@@ -54,7 +54,7 @@ inputs:
     type: string
     required: false
     default: ""
-    description: The commit the run merged into the local base branch; empty when it opened a PR instead.
+    description: The commit the run merged into the local base branch. A chain only starts this run when it is set (a remote run that opened a PR pauses the chain); to record a PR, start sdlc-record by hand with the run and its PR.
   pr_url:
     label: "PR / MR"
     type: string
@@ -136,7 +136,7 @@ steps:
       - PR / MR: {{ inputs.pr_url or 'none (local mode)' }}
       - issues: {{ inputs.issues | join(', ') if inputs.issues | length else 'none named' }}
       - evidence (suite, e2e, screenshots, axe):
-      {{ inputs.evidence | to_yaml }}
+      {{ inputs.evidence | to_yaml if inputs.evidence else 'none' }}
       Switch to the branch `sdlc-record/{{ inputs.item }}-{{ run_id }}`, then:
       1. In docs/work/{{ inputs.item }}/plan.md, the `## Progress` table (Step | Status | Run | Commit / PR):
          find the step of the Order of work the run's issues implement (their titles, the git log of

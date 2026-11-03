@@ -44,8 +44,10 @@ test('each bundled workflow declares its outputs: contract', () => {
   const outputsOf = (f) => Object.keys(loadWorkflow(path.join(root, 'workflows', f)).outputs || {}).sort();
   // #648: issue-tracker → issue; writer-reviewer and ai-arena → write-doc (aliases)
   assert.deepEqual(outputsOf('issue.yaml'), ['issues']);
-  assert.deepEqual(outputsOf('write-doc.yaml'), ['document', 'issue']);
-  assert.deepEqual(outputsOf('feature.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
+  // #651: write-doc files the plan's steps (issues); feature and fix hand back their evidence
+  assert.deepEqual(outputsOf('write-doc.yaml'), ['document', 'issue', 'issues']);
+  assert.deepEqual(outputsOf('feature.yaml'), ['branch', 'evidence', 'issues', 'merged_commit', 'pr_url']);
+  assert.deepEqual(outputsOf('fix.yaml'), ['branch', 'evidence', 'issues', 'merged_commit', 'pr_url']);
   assert.deepEqual(outputsOf('retrospective.yaml'), ['findings']);
 });
 test('loadWorkflow rejects a transition to an unknown step', () => {
