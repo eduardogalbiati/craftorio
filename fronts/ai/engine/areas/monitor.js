@@ -15,6 +15,8 @@
 // key (in the keychain, shown once in its URL) or off; the engine server's POST /hooks/monitor/<project>
 // ?key=… (packages/engine/server/index.js, outside the token gate) calls monitorWebhookIngest, which
 // checks the key in constant time and ingests the pushed events like a poll (source 'webhook').
+// #650: monitor:diagnose with an `item` (a work item of the project's docs/work) also records the error
+// in that item's maintain.md and opens a new intent item linking back (ctx.recordDocIncident).
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -231,17 +233,47 @@ module.exports = (ctx) => {
 
   const findGroup = (state, fingerprint) => groupsOf(state).find((g) => g.fingerprint === fingerprint) || null;
 
-  function monitorDiagnose({ projectId, fingerprint }) {
+  // #650 (spec R16): an error tied to a work item of the project's repository is also an incident of
+  // that item: a row in its docs/work/<item>/maintain.md and a new intent item linking back, written by
+  // the Documents service (the plan front's area, ctx.recordDocIncident). Once per group and item.
+  function recordIncident(projectId, fingerprint, g, state, item) {
+    if (!item || g.incident?.item === item) return null;
+    if (!ctx.recordDocIncident) return { ok: false, error: 'The Documents service is not installed: the incident was not recorded.' };
+    let res;
+    try {
+      res = ctx.recordDocIncident({
+        projectId: plain(projectId),
+        item,
+        date: String(g.lastSeen || new Date().toISOString()).slice(0, 10),
+        source: 'monitor',
+        title: g.title,
+        error: `${g.status} ${g.title}: ${g.message}`,
+        diagnosis: `Diagnosed by the Monitor: ${g.count} errors${g.where ? ` at ${g.where}` : ''}, last seen ${g.lastSeen || 'unknown'}.`,
+      });
+    } catch (e) {
+      return { ok: false, error: `The incident was not recorded in ${item}'s maintain.md: ${e.message}` };
+    }
+    state.groups[fingerprint] = { ...(state.groups[fingerprint] || {}), incident: { item, intent: res.intent.item } };
+    return { intent: res.intent };
+  }
+
+  function monitorDiagnose({ projectId, fingerprint, item }) {
     return serial(projectId, () => {
       const state = read(projectId);
       const g = findGroup(state, fingerprint);
       if (!g) return { ok: false, error: `No error group ${fingerprint}.` };
-      if (g.cardId) return { ok: true, cardId: g.cardId, existing: true };
-      const card = intents.createIntent(ctx.ws.discovery, plain(projectId), { workflow: 'monitor', finding: fingerprint, title: g.title, text: diagnosisText(g, state), author: 'monitor' });
-      if (!card) return { ok: false, error: 'The intent card could not be written.' };
-      state.groups[fingerprint] = { ...(state.groups[fingerprint] || {}), state: 'intent', cardId: card.id };
-      write(projectId, state);
-      return { ok: true, cardId: card.id };
+      let cardId = g.cardId;
+      if (!cardId) {
+        const card = intents.createIntent(ctx.ws.discovery, plain(projectId), { workflow: 'monitor', finding: fingerprint, title: g.title, text: diagnosisText(g, state), author: 'monitor' });
+        if (!card) return { ok: false, error: 'The intent card could not be written.' };
+        cardId = card.id;
+        state.groups[fingerprint] = { ...(state.groups[fingerprint] || {}), state: 'intent', cardId };
+        write(projectId, state);
+      }
+      const incident = recordIncident(projectId, fingerprint, g, state, item);
+      if (incident?.ok === false) return incident;
+      if (incident) write(projectId, state);
+      return { ok: true, cardId, ...(g.cardId && !incident ? { existing: true } : {}), ...(incident ? { intent: incident.intent } : {}) };
     });
   }
 

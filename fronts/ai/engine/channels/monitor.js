@@ -52,12 +52,13 @@ module.exports = (ctx) => [
     schema: { params: onProject(), result: shape({ ok: BOOL, groups: listOf(GROUP), errors: listOf(STRING) }, ['ok']) },
     fn: async (arg) => ctx.monitorPoll(requireObject(arg, 'options')),
   },
-  // { projectId, fingerprint } → { ok, cardId }: the group's intent card in the Inbox, once per group
+  // { projectId, fingerprint, item? } → { ok, cardId, intent? }: the group's intent card in the Inbox, once per
+  // group; #650 with `item` (a work item of docs/work) also the incident in its maintain.md and a new intent
   {
     channel: 'monitor:diagnose',
     method: 'monitorDiagnose',
     params: 'opts',
-    schema: { params: ON_GROUP, result: shape({ ok: BOOL, error: nullable(STRING), cardId: nullable(STRING), existing: ANY }, ['ok']) },
+    schema: { params: onProject({ fingerprint: FINGERPRINT, item: nullable(text(100)) }, ['fingerprint']), result: shape({ ok: BOOL, error: nullable(STRING), cardId: nullable(STRING), existing: ANY, intent: nullable(OBJECT) }, ['ok']) },
     fn: async (arg) => ctx.monitorDiagnose(requireObject(arg, 'options')),
   },
   // { projectId, diagnose, fix, dailyCap } → { ok, automation } or { ok: false, error } (nothing saved)

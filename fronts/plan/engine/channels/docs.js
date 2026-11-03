@@ -13,6 +13,8 @@
 // (<runDir>/docs-base.json); at the end of `draft` the writer's draft, only when the run created the
 // document (an existing one is never replaced whole: the writer edits it by request).
 // A run stopped or failed leaves its commits on its branch, not merged (the worktree keeps them).
+// #650 (spec R16): docs:intents lists every item's intent (the Intents tab); docs:read and docs:changes
+// also read an item's maintain.md (written by the Monitor and the Night watch, areas/docs-maintain.js).
 
 const fs = require('fs');
 const os = require('os');
@@ -116,6 +118,23 @@ module.exports = (ctx) => {
       params: ['projectId'],
       schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: listOf(OBJECT) },
       fn: ({ projectId }) => listWithRuns(projectId),
+    },
+    // #650 every item's intent with its status and its link back (`from`, an incident's maintain.md): the
+    // Documents' Intents tab; an intent a write-doc run writes is read from its worktree (accepted there
+    // before the run merges it), with `runId`
+    {
+      channel: 'docs:intents',
+      method: 'listDocIntents',
+      params: ['projectId'],
+      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: listOf(OBJECT) },
+      fn: ({ projectId }) => {
+        const rows = new Map(docs.listIntents(repo(projectId)).map((i) => [i.item, i]));
+        for (const run of docRuns(projectId)) {
+          const there = run.doc === 'intent' && run.dir ? docs.listIntents(run.dir).find((i) => i.item === run.item) : null;
+          if (there) rows.set(run.item, { ...there, runId: run.runId });
+        }
+        return [...rows.values()].sort((a, b) => a.item.localeCompare(b.item));
+      },
     },
     // one document and its translation, as markdown (a run's: from its worktree)
     {

@@ -22,6 +22,15 @@
 //   signed off, plan → accepted (#633), approver and date in both front matters, one commit, the bodies unchanged; already
 //   accepted: HEAD, no commit;
 // - ensureBranch(dir, branch): a detached checkout (a run's worktree) gets that branch, else its own.
+// #650 (spec R16) Maintain: docs/work/<item>/maintain.md, written by the Monitor and the Night watch, never
+// by the writer (readDoc and listChanges read it, listItems gives it as the item's `maintain: { file, status }`):
+// - recordIncident(dir, { item, date?, source, error, diagnosis?, title? }) → { commit, intent: { item, file } }:
+//   a row in the ## Incidents table of maintain.md (and of maintain.pt-BR.md when it exists; maintain.md
+//   from the playbook's skeleton when the item has none) and a NEW item docs/work/<new>/intent.md (a
+//   draft, English only, named after `title` or the error) whose `from:` and body link back; ONE commit;
+// - writePostMortem(dir, { item, intent, text }) → { commit }: a ### <intent> paragraph under ## Post-mortems;
+// - listIntents(dir) → [{ item, title?, file, status, from }] every docs/work/<item>/intent.md (from: the
+//   link back of an incident's intent, null otherwise), the Documents' Intents tab.
 // undoChange refuses (the files as they were) when a later request changed the same lines.
 // A request, an item or a document outside docs/work/<item>/ is refused before anything is written.
 // A repository without an identity commits as the person at this machine (user.name/user.email given
@@ -35,6 +44,7 @@ const DocModel = require('@multiagent/shared/doc-model');
 const { gitOut } = require('@multiagent/engine/service/common');
 
 const DOCS = ['intent', 'spec', 'plan']; // #633: the plan, the pre-flow's third document
+const READABLE = [...DOCS, 'maintain']; // #650: maintain.md is read and listed, never created or accepted
 const ITEM = /^[a-z0-9][a-z0-9._-]{0,99}$/i;
 const MESSAGE_ID = /^[\w.:-]{1,100}$/;
 const COMMIT = /^[0-9a-f]{7,40}$/i;
@@ -99,15 +109,15 @@ function checkItem(item) {
   if (!ITEM.test(name) || name.includes('..')) throw new Error(`Not a work item of docs/work: ${name}`);
   return name;
 }
-function checkDoc(doc) {
-  if (!DOCS.includes(doc)) throw new Error(`Not a stage document: ${doc} (intent, spec or plan)`);
+function checkDoc(doc, allowed = DOCS) {
+  if (!allowed.includes(doc)) throw new Error(`Not a stage document: ${doc} (${allowed.join(', ')})`);
   return doc;
 }
 
 // { source, translation }: the repository-relative files of a document (`/`) and their full paths
-function files(dir, item, doc) {
+function files(dir, item, doc, allowed = DOCS) {
   const rel = (name) => `docs/work/${checkItem(item)}/${name}`;
-  const source = rel(`${checkDoc(doc)}.md`);
+  const source = rel(`${checkDoc(doc, allowed)}.md`);
   const translation = rel(`${doc}.pt-BR.md`);
   const full = (r) => path.join(dir, ...r.split('/'));
   const root = path.join(dir, 'docs', 'work', item);
@@ -137,13 +147,17 @@ function listItems(dir) {
       const heading = /^# (?:(?:Intent|Spec|Plan): )?(.+)$/m.exec(text);
       if (heading) title = heading[1].trim();
     }
-    if (docs.length) items.push({ item: entry.name, ...(title ? { title } : {}), stage, docs });
+    // #650: the Maintain stage's document, apart from `docs` (the pre-flow's, whose latest is the row's
+    // stage and pill) for the editor's stepper
+    const text = docs.length ? readText(path.join(work, entry.name, 'maintain.md')) : null;
+    const maintain = text === null ? null : { file: `docs/work/${entry.name}/maintain.md`, status: DocModel.frontMatter(text).status || 'no incidents' };
+    if (docs.length) items.push({ item: entry.name, ...(title ? { title } : {}), stage, docs, ...(maintain ? { maintain } : {}) });
   }
   return items.sort((a, b) => a.item.localeCompare(b.item));
 }
 
 function readDoc(dir, { item, doc }) {
-  const f = files(dir, item, doc);
+  const f = files(dir, item, doc, READABLE);
   const markdown = readText(f.full(f.source));
   if (markdown === null) throw new Error(`No ${doc} for ${item} yet.`);
   const translation = readText(f.full(f.translation));
@@ -223,7 +237,7 @@ function applyRequest(dir, { item, doc, messageId, request, source, translation 
 function listChanges(dir, { base, item, doc } = {}) {
   if (base && !COMMIT.test(String(base))) throw new Error('Not a commit.');
   const range = base ? `${base}..HEAD` : 'HEAD';
-  const scope = item ? [`docs/work/${checkItem(item)}/${doc ? `${checkDoc(doc)}.` : ''}`] : ['docs/work/'];
+  const scope = item ? [`docs/work/${checkItem(item)}/${doc ? `${checkDoc(doc, READABLE)}.` : ''}`] : ['docs/work/'];
   const out = gitOrNull(dir, ['log', '--reverse', '--format=%x1e%H%x1f%B%x1f', '--name-only', range, '--', ...scope.map((s) => (s.endsWith('/') ? s : `${s}*`))]);
   if (!out) return [];
   const records = out.split('\x1e').filter(Boolean).map((rec) => {
@@ -308,6 +322,138 @@ function acceptDoc(dir, { item, doc, approver, date }) {
   return { commit: commit(dir, changed, `docs(${item}): ${verb}`), status };
 }
 
+// #650 the playbook's maintain.md (docs/work/write-doc/maintain.md), for an item that has none yet
+const MAINTAIN = {
+  incidents: ['## Incidents', '## Incidentes'],
+  empty: ['no incidents', 'sem incidentes'],
+  postMortems: '## Post-mortems',
+};
+function maintainSkeleton(item) {
+  return ['---', `item: ${item}`, 'stage: maintain', 'status: no incidents', '---', '',
+    '# Maintain: incidents and post-mortems', '',
+    'A Monitor error or a Night watch finding tied to this item comes in here; its diagnosis becomes a new intent, linking back.', '',
+    MAINTAIN.incidents[0], '', '| Date | Source | Error | New intent | Fix |', '|---|---|---|---|---|',
+    `| — | — | — | — | ${MAINTAIN.empty[0]} |`, '', MAINTAIN.postMortems, '',
+    'For each resolved incident, a short post-mortem: what happened, the impact, the cause, what was fixed and what changed so it does not happen again.', ''].join('\n');
+}
+
+// [start, end) of the lines of the section `heading` (its heading excluded), -1 when it is missing
+function sectionRange(rows, heading) {
+  const start = rows.findIndex((l) => l.trim() === heading);
+  if (start < 0) return [-1, -1];
+  const next = rows.findIndex((l, i) => i > start && /^##\s/.test(l));
+  return [start + 1, next < 0 ? rows.length : next];
+}
+
+// the incident's row in the table of `heading`, in place of the skeleton's "no incidents" row
+function addIncidentRow(text, heading, empty, row) {
+  const rows = text.split('\n');
+  let [start, end] = sectionRange(rows, heading);
+  if (start < 0) {
+    rows.push('', heading, '', '| Date | Source | Error | New intent | Fix |', '|---|---|---|---|---|');
+    [start, end] = [rows.length - 3, rows.length];
+  }
+  const at = rows.findIndex((l, i) => i >= start && i < end && l.startsWith('|') && l.includes(empty));
+  if (at >= 0) {
+    rows[at] = row;
+    return rows.join('\n');
+  }
+  let last = -1;
+  for (let i = start; i < end; i += 1) if (rows[i].startsWith('|')) last = i;
+  rows.splice(last < 0 ? end : last + 1, 0, row);
+  return rows.join('\n');
+}
+
+const cell = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
+
+// a free item name under docs/work: the title's, then -2, -3…
+function freeItem(dir, title) {
+  const base = DocModel.itemName(title).slice(0, 60).replace(/-+$/, '') || 'incident';
+  for (let n = 1; ; n += 1) {
+    const name = n === 1 ? base : `${base}-${n}`;
+    if (!fs.existsSync(path.join(dir, 'docs', 'work', name))) return name;
+  }
+}
+
+function recordIncident(dir, { item, date, source, error, diagnosis, title }) {
+  const name = checkItem(item);
+  const folder = path.join(dir, 'docs', 'work', name);
+  if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) throw new Error(`No work item ${name} in docs/work.`);
+  const day = date || new Date().toISOString().slice(0, 10);
+  const what = String(error ?? '').replace(/\s+/g, ' ').trim();
+  if (!what) throw new Error('An incident needs its error.');
+  const origin = cell(source || 'monitor');
+  const headline = String(title || what).replace(/\s+/g, ' ').trim().slice(0, 200);
+  const fresh = freeItem(dir, headline);
+  const intentFile = `docs/work/${fresh}/intent.md`;
+  const back = `../${name}/maintain.md`;
+  const intent = ['---', `item: ${fresh}`, 'stage: intent', 'status: draft', `date: ${day}`, `from: ${back}`, '---', '',
+    `# Intent: ${headline}`, '',
+    `From an incident of [${name}](${back}) (${origin}, ${day}).`, '',
+    `## ${SKELETON.intent[0][0]}`, '', what, '',
+    ...(diagnosis ? [String(diagnosis).trim(), ''] : []),
+    ...SKELETON.intent.slice(1).flatMap((names) => [`## ${names[0]}`, '', TO_WRITE[0], ''])].join('\n');
+  const row = `| ${cell(day)} | ${origin} | ${cell(what)} | [${fresh}](../${fresh}/intent.md) | — |`;
+  const changed = [];
+  for (const [i, rel] of [`docs/work/${name}/maintain.md`, `docs/work/${name}/maintain.pt-BR.md`].entries()) {
+    const full = path.join(dir, ...rel.split('/'));
+    let text = readText(full);
+    if (text === null) {
+      if (i > 0) continue;
+      text = maintainSkeleton(name);
+    }
+    text = addIncidentRow(text, MAINTAIN.incidents[i], MAINTAIN.empty[i], row);
+    fs.writeFileSync(full, DocModel.setFrontMatter(text, { status: 'incidents' }));
+    changed.push(rel);
+  }
+  fs.mkdirSync(path.join(dir, 'docs', 'work', fresh), { recursive: true });
+  fs.writeFileSync(path.join(dir, ...intentFile.split('/')), intent);
+  changed.push(intentFile);
+  const subject = `docs(${name}): incident from the ${origin}, new intent ${fresh}`;
+  return { commit: commit(dir, changed, subject), intent: { item: fresh, file: intentFile } };
+}
+
+function writePostMortem(dir, { item, intent, text }) {
+  const name = checkItem(item);
+  const rel = `docs/work/${name}/maintain.md`;
+  const full = path.join(dir, ...rel.split('/'));
+  const markdown = readText(full);
+  if (markdown === null) throw new Error(`No maintain for ${name} yet.`);
+  const body = String(text ?? '').trim();
+  if (!body) throw new Error('A post-mortem needs its text.');
+  const rows = markdown.replace(/\n+$/, '').split('\n');
+  let [, end] = sectionRange(rows, MAINTAIN.postMortems);
+  if (end < 0) {
+    rows.push('', MAINTAIN.postMortems);
+    end = rows.length;
+  }
+  const heading = intent ? `### ${checkItem(intent)}` : '### Post-mortem';
+  rows.splice(end, 0, '', heading, '', body, ...(end < rows.length ? [''] : []));
+  fs.writeFileSync(full, `${rows.join('\n')}\n`);
+  return { commit: commit(dir, [rel], `docs(${name}): post-mortem${intent ? ` of ${intent}` : ''}`) };
+}
+
+function listIntents(dir) {
+  const work = path.join(dir, 'docs', 'work');
+  if (!fs.existsSync(work)) return [];
+  const out = [];
+  for (const entry of fs.readdirSync(work, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !ITEM.test(entry.name)) continue;
+    const text = readText(path.join(work, entry.name, 'intent.md'));
+    if (text === null) continue;
+    const fm = DocModel.frontMatter(text);
+    const heading = /^# (?:Intent: )?(.+)$/m.exec(text);
+    out.push({
+      item: entry.name,
+      ...(heading ? { title: heading[1].trim() } : {}),
+      file: `docs/work/${entry.name}/intent.md`,
+      status: fm.status || 'draft',
+      from: fm.from || null,
+    });
+  }
+  return out.sort((a, b) => a.item.localeCompare(b.item));
+}
+
 module.exports = {
   acceptDoc,
   applyDraft,
@@ -315,10 +461,13 @@ module.exports = {
   createDoc,
   ensureBranch,
   listChanges,
+  listIntents,
   listItems,
   markReviewed,
   readAt,
   readDoc,
+  recordIncident,
   undoChange,
   unreviewed,
+  writePostMortem,
 };

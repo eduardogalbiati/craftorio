@@ -6,6 +6,8 @@
 // (its lines in the source), headings without their #; no script runs in it (sandbox without
 // allow-scripts). #671: the stage and file kicker on top, each heading and requirement with its anchor
 // id, a requirement's #anchor shown beside it (not selectable); Preview leaves the kicker and the anchors out.
+// #650 mocks(md) → the document's ```html mock blocks; mockFrame(html, { title }) → the <iframe> that runs
+// one in an opaque origin (sandbox allow-scripts only, a CSP without network), drawn under the reader.
 // Browser: window.DocsPage (app.js globals esc, markdownHtml; DocModel).
 (function () {
   'use strict';
@@ -44,8 +46,34 @@
     return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><style>${css}</style></head><body>${top}${body}</body></html>`; // i18n-ignore
   }
 
+  // #650 (spec R16) the interactive mocks: each fenced block of the document whose info string is
+  // `html mock [title]` → { title, html }, drawn under the reader by mockFrame
+  function mocks(md) {
+    const out = [];
+    const rows = String(md || '').split('\n');
+    for (let i = 0; i < rows.length; i += 1) {
+      const open = /^(```+|~~~+)\s*html\s+mock\b\s*(.*)$/i.exec(rows[i]);
+      if (!open) continue;
+      const end = rows.findIndex((l, j) => j > i && l.trim().startsWith(open[1]));
+      const stop = end < 0 ? rows.length : end;
+      out.push({ title: open[2].trim() || `Mock ${out.length + 1}`, html: rows.slice(i + 1, stop).join('\n') }); // i18n-ignore
+      i = stop;
+    }
+    return out;
+  }
+
+  // #650 a mock's page in an opaque origin: its scripts run (allow-scripts) but without allow-same-origin
+  // it reaches no window.api, no parent DOM and no storage of the app; the CSP allows no network. The
+  // whole page goes through esc() into srcdoc, so a `</iframe>` in the mock stays text of the attribute.
+  function mockFrame(markup, { title = '' } = {}) {
+    const page = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:"></head><body>${String(markup || '')}</body></html>`; // i18n-ignore
+    return `<iframe class="docs-mock" sandbox="allow-scripts" title="${esc(title)}" srcdoc="${esc(page)}"></iframe>`; // i18n-ignore
+  }
+
   window.DocsPage = {
     html,
+    mockFrame,
+    mocks,
     outline,
   };
 })();

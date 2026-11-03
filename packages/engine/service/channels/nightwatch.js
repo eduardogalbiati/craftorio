@@ -28,7 +28,8 @@
 // or held (ctx.releaseTrain, packages/engine/service/areas/releases.js), logged as oracle.action / oracle.escalated.
 // Findings as intents (#633, spec R9): a finding in a run of a project (oracle.detected with its runId and
 // projectId) also files an `intent` card in that project's Discovery inbox (author oracle, links.from
-// { workflow: 'night-watch', runId, finding }), once per finding like the log entry.
+// { workflow: 'night-watch', runId, finding }), once per finding like the log entry. #650: a run of a work
+// item also records the finding in docs/work/<item>/maintain.md (ctx.recordDocIncident, the plan front).
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -122,6 +123,17 @@ module.exports = (ctx) => {
     intents.createIntent(ctx.ws.discovery || workspace.layout(ctx.ws.root).discovery, projectId, {
       workflow: 'night-watch', runId, finding: id, title: `Night watch: ${kind} in run ${runId}`, text, author: 'oracle',
     });
+    recordIncident({ kind, runId, projectId, text });
+  }
+  // #650 (spec R16): a finding in a run of a work item (its `item` input, a docs/work/<item>/ of the
+  // project) is also an incident in that item's maintain.md with a new intent linking back (the plan
+  // front's ctx.recordDocIncident, optional); an item that is not one stays in the night log only
+  function recordIncident({ kind, runId, projectId, text }) {
+    const item = ctx.liveRun?.(runId)?.inputs?.item;
+    if (!item || !ctx.recordDocIncident) return;
+    try {
+      ctx.recordDocIncident({ projectId, item, source: 'night-watch', title: `${kind} in run ${runId}`, error: `${kind} in run ${runId}`, diagnosis: text });
+    } catch (e) { console.error('Night watch incident:', e.message); }
   }
 
   // ---- Self-healing (#278) -------------------------------------------------------------------

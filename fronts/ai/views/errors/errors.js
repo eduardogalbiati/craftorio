@@ -7,13 +7,15 @@
 // URL or a log file); the line under the list is the automation (Ask me / On / Off, a daily cap).
 // "webhook" opens its dialog (on with a new key, its URL shown once; off); the daily budget comes in a
 // later phase: shown disabled.
+// #650 (spec R16): a new group's "no item" select ties it to a work item of docs/work (the Documents'
+// items, api.listDocItems); Diagnose then also records the incident in that item's maintain.md.
 (function () {
   const MODES = ['ask', 'on', 'off'];
   const CAPS = [1, 3, 5, 10, 20];
   const TYPES = ['sentry', 'log-url', 'log-file'];
   const PATH_EXAMPLE = '/var/log/api.log'; // i18n-ignore: an example path, not language
   const URL_EXAMPLE = 'https://'; // i18n-ignore: an example URL, not language
-  const er = { projectId: null, data: null, error: null, busy: null, type: 'sentry' };
+  const er = { projectId: null, data: null, error: null, busy: null, type: 'sentry', items: null, tied: {} };
 
   const modeLabel = (m) => ({ ask: t('errors.mode_ask'), on: t('errors.mode_on'), off: t('errors.mode_off') })[m] || m;
   const typeLabel = (k) => ({ sentry: t('errors.type_sentry'), 'log-url': t('errors.type_log_url'), 'log-file': t('errors.type_log_file') })[k] || k;
@@ -46,6 +48,18 @@
     return '<span class="err-action-none"></span>';
   }
 
+  // #650: a new group is tied to a work item of the project's docs/work (Documents' items, by title)
+  // before Diagnose: the diagnosis then also records the incident in that item's maintain.md
+  function itemSelect(g) {
+    if (g.state !== 'new') return '<span class="err-item-none"></span>';
+    const items = er.items || [];
+    const chosen = er.tied[g.fingerprint] || '';
+    const options = items.map((it) => `<option value="${esc(it.item)}"${it.item === chosen ? ' selected' : ''}>${esc(it.title || it.item)}</option>`).join('');
+    return `<select class="err-item" data-testid="monitor-item-select" data-fingerprint="${esc(g.fingerprint)}" aria-label="${esc(t('errors.tie_to_item'))}" title="${esc(t('errors.tie_to_item'))}"${er.items && items.length ? '' : ' disabled'}>
+      <option value="">${t('errors.no_item')}</option>${options}
+    </select>`;
+  }
+
   function row(g) {
     const detail = [g.message, g.where].filter(Boolean).join(' · ');
     return `<div class="err-row" data-testid="monitor-error-row" data-fingerprint="${esc(g.fingerprint)}">
@@ -54,6 +68,7 @@
       ${sparkline(g.spark)}
       <span class="err-count">${esc(String(g.count))} · ${esc(windowOf(g))}</span>
       <span class="err-state-cell">${stateBadge(g)}</span>
+      <span class="err-item-cell">${itemSelect(g)}</span>
       <span class="err-action">${actionOf(g)}</span>
     </div>`;
   }
@@ -124,6 +139,11 @@
     er.error = null;
     if (er.projectId) {
       try { er.data = (await api.monitorState({ projectId: er.projectId })) || { groups: [], sources: [], automation: null }; } catch (e) { er.error = errMsg(e); }
+      // #650 the items an error can be tied to (the plan front's Documents may not be served: none)
+      try {
+        const items = await api.listDocItems?.(er.projectId);
+        er.items = Array.isArray(items) ? items : [];
+      } catch { er.items = []; }
     }
     render();
     refreshBadge();
@@ -150,7 +170,7 @@
         er.busy = fingerprint;
         render();
         res = action === 'diagnose'
-          ? await api.monitorDiagnose({ projectId, fingerprint })
+          ? await api.monitorDiagnose({ projectId, fingerprint, item: er.tied[fingerprint] || null })
           : await api.monitorProposeFix({ projectId, fingerprint });
       } else if (action === 'mode') {
         const key = btn.dataset.key;
@@ -266,6 +286,10 @@
       $('#errors-body').addEventListener('click', async (e) => {
         const btn = e.target?.closest?.('button[data-action]');
         if (btn && !btn.disabled) await act(btn);
+      });
+      $('#errors-body').addEventListener('change', (e) => {
+        const sel = e.target?.closest?.('select[data-testid="monitor-item-select"]');
+        if (sel) er.tied[sel.dataset.fingerprint] = sel.value;
       });
       $('#btn-errors-sources').onclick = openSources;
       const seg = $('#errors-source-type');

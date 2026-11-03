@@ -18,6 +18,17 @@
 .docs-item-doc { display: inline-flex; align-items: center; gap: 4px; }
 .docs-item > .docs-pill { flex-shrink: 0; }
 .docs-item-actions { gap: 6px; flex-shrink: 0; flex-wrap: nowrap; justify-content: flex-end; }
+/* #650 the Items / Intents tabs over the list; an intent row is one button (title · file, its link back, its status) */
+.docs-views { margin: 0 0 10px; }
+.docs-intent-row { width: 100%; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.docs-intent-row:hover { border-color: var(--accent); }
+.docs-intent-row:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.docs-intent-file, .docs-intent-from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.docs-intent-from, .docs-intent-row > .badge { flex-shrink: 0; }
+/* #650 the document's interactive mocks under the reader, each in its opaque-origin frame */
+.docs-mocks { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.docs-mock { width: 100%; height: 360px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.docs-mode-diff .docs-mocks { display: none; }
 .badge.docs-done { color: var(--green); }
 .docs-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; font-family: var(--mono); color: var(--muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .docs-pill.editing { border-color: var(--yellow); color: var(--yellow); }
@@ -157,5 +168,5 @@
 }
 @media (max-width: 900px) {
   .docs-list-area.docs-with-panel, .docs-editor-body { grid-template-columns: 1fr; }
-  .docs-left, .docs-toolbar-box, .docs-reader, .docs-diff, .docs-side { grid-column: 1; grid-row: auto; }
+  .docs-left, .docs-toolbar-box, .docs-reader, .docs-diff, .docs-mocks, .docs-side { grid-column: 1; grid-row: auto; }
 }

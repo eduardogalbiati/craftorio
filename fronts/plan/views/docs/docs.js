@@ -25,28 +25,21 @@
 // write-doc's Arena mode (#648); Screens to capture first (captures, phase 3) is shown disabled. The New item
 // panel, the toolbar, the review and the sign-off markup live in docs-panels.js (DocsPanels); the Diff tab's page of a
 // change (its touched sections, docs:read-at) in docs-diff.js (DocsDiff); the sections with their
-// anchors and the reader's page in docs-page.js (DocsPage).
+// anchors and the reader's page in docs-page.js (DocsPage); the SDLC steps and the list's rows in
+// docs-list.js (DocsList).
+// #650 (spec R16) the list has two tabs: Items and Intents (docs:intents, every docs/work/<item>/intent.md
+// with its status and its link back to the maintain.md that opened it); a draft intent opens with its
+// writer. The Maintain step reads the item's maintain.md (the incidents the Monitor and the Night watch
+// record, the post-mortems) and never starts a writer; the document's mocks run in an opaque-origin
+// iframe (DocsPage.mockFrame: sandbox allow-scripts, a CSP without network).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, showToast, showView, confirmDialog), markdownHtml (artifact-render.js),
 // DocModel (packages/shared/doc-model.js), CurrentProject and AgentChat.
 (() => {
   const FILE = 'write-doc.yaml';
   const slugOf = (title) => window.DocModel.itemName(title); // read when called: the module may load later
-  // the status past the SDLC gate (DocModel.ACCEPTED), read when drawn: the module may load later
-  const acceptedStatus = (doc) => window.DocModel?.ACCEPTED?.[doc];
-
-  // #671 the SDLC steps of an item (living-doc.jpg), each with its document; Plan and Design are written here
-  const SDLC = [
-    { name: () => t('docs.step_plan'), doc: 'intent', file: 'intent.md' },
-    { name: () => t('docs.step_design'), doc: 'spec', file: 'spec.md' },
-    { name: () => t('docs.step_build'), doc: 'plan', file: 'plan.md' },
-    { name: () => t('docs.step_test'), doc: null, file: 'test.md' },
-    { name: () => t('docs.step_deploy'), doc: null, file: 'deploy.md' },
-    { name: () => t('docs.step_maintain'), doc: null, file: 'maintain.md' },
-  ];
-  // an item's front matter `stage` (or its latest document) → its SDLC step
-  const STAGE_STEP = { intent: 0, spec: 1, design: 1, plan: 2, build: 2, test: 3, deploy: 4, maintain: 5 };
-  const stepOfDoc = (doc) => SDLC.findIndex((s) => s.doc === doc);
+  const { SDLC, acceptedStatus, docFile, fileName, signedOff, statusBadge, statusLabel, stepOfDoc } = window.DocsList;
+  const WRITTEN = SDLC.filter((s) => s.doc && s.doc !== 'maintain'); // the documents New item can start
   // the spec's cost estimates of a first draft (spec.md, Points of attention › Cost)
   const ESTIMATES = { intent: '$0.30–1.00', spec: '$1.00–3.00' };
 
@@ -55,20 +48,12 @@
   // unreviewed, notes and checks (the reviewer's), messages, selection, requesting (a request in
   // flight), tab (edit | diff | preview), lang (en | pt), source (the markdown shown), mode (now |
   // queue), queue (the queued requests), pendingNotes (applied at the next edit gate), changeOpen }
-  const docs = { projectId: null, items: [], seq: 0, open: null, chat: null, busy: false, early: [] };
+  // #650 view: the list's tab (items | intents), intents: docs:intents' rows
+  const docs = { projectId: null, items: [], intents: [], view: 'items', seq: 0, open: null, chat: null, busy: false, early: [] };
 
-  function statusLabel(status) {
-    if (status === 'accepted') return t('docs.status_accepted');
-    if (status === 'signed off') return t('docs.status_signed_off');
-    if (status === 'draft') return t('docs.status_draft');
-    return esc(status || '');
-  }
-  const statusBadge = (status, testid = '') => `<span class="badge${status === 'draft' ? '' : ' docs-done'}"${testid ? ` data-testid="${testid}"` : ''}>${statusLabel(status)}</span>`;
   const projectFolder = () => (state.projects || []).find((p) => p.id === docs.projectId)?.folder || null;
   const listError = (msg) => { $('#docs-list-error').textContent = msg || ''; };
   const editorError = (msg) => { const p = $('#docs-editor-error'); if (p) p.textContent = msg || ''; };
-  const fileName = (path) => String(path || '').split('/').pop();
-  const docFile = (doc) => SDLC[stepOfDoc(doc)]?.file || `${doc}.md`;
 
   // #671 the header's project, also before the app's start has listed the projects
   const currentProjectId = async () => (await (window.CurrentProject?.resolve?.() ?? window.CurrentProject?.get?.())) || null;
@@ -78,53 +63,40 @@
     const seq = ++docs.seq;
     docs.projectId = await currentProjectId();
     let items = [];
+    let intents = [];
     let error = '';
     if (docs.projectId) {
-      try { items = await api.listDocItems(docs.projectId); } catch (e) { error = errMsg(e); }
+      try {
+        [items, intents] = await Promise.all([api.listDocItems(docs.projectId), api.listDocIntents?.(docs.projectId) ?? []]);
+      } catch (e) { error = errMsg(e); }
     }
     if (seq !== docs.seq) return; // a newer refresh answers
     docs.items = items || [];
+    docs.intents = Array.isArray(intents) ? intents : [];
     listError(error);
     renderList();
+    const box = $('#docs-intents');
+    if (box) box.innerHTML = DocsList.intentsHtml(docs.intents, docs.projectId);
+    DocsList.applyView(docs.view);
   }
 
-  function itemActions(it) {
-    const intent = it.docs.find((d) => d.doc === 'intent');
-    const spec = it.docs.find((d) => d.doc === 'spec');
-    // the document a run in progress writes opens with that run (its gate, its queue)
-    const names = it.docs.map((d) => d.doc);
-    if (it.runId && !names.includes(it.runDoc)) names.push(it.runDoc);
-    const run = (doc) => (it.runId && it.runDoc === doc ? ` data-run="${esc(it.runId)}"` : '');
-    const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${DocsPanels.openLabel(doc)}</button>`);
-    if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
-    // #633 the plan (plan.md) is written from the signed-off spec, at its own gate
-    if (spec && signedOff(spec.status) && !names.includes('plan')) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
-    if (spec && signedOff(spec.status)) open.push(`<button type="button" class="btn sm primary" data-docs-issues data-item="${esc(it.item)}">${t('docs.create_epic_and_phase_issues')}</button>`);
-    return open.join('');
-  }
-
-  // a spec's front matter writes its status `signed off` or `signed-off`
-  const signedOff = (status) => String(status || '').replace(/-/g, ' ') === acceptedStatus('spec');
-
-  // #671 the stage chain of a row, "Plan ✓ · Design": the steps up to the item's, done ones checked
-  function stagesHtml(it) {
-    const latest = it.docs[it.docs.length - 1];
-    const at = STAGE_STEP[it.stage] ?? Math.max(0, stepOfDoc(latest?.doc));
-    const current = it.docs.find((d) => d.doc === SDLC[at].doc);
-    const done = (i) => i < at || (i === at && !!current && (current.status === acceptedStatus(current.doc) || signedOff(current.status)));
-    return SDLC.slice(0, at + 1).map((s, i) => `<span class="docs-stage${done(i) ? ' done' : ''}">${s.name()}${done(i) ? ' ✓' : ''}</span>`).join('<span class="docs-sep">·</span>'); // i18n-ignore
-  }
-
-  // #671 the pill of the latest document: "<file> · <state>", "editing" while a writer run has it
-  function pillHtml(it) {
-    const latest = it.docs[it.docs.length - 1];
-    const editing = it.runId && it.runDoc;
-    const doc = editing ? it.runDoc : latest?.doc;
-    if (!doc) return '';
-    const status = editing ? null : latest.status;
-    const tone = editing ? ' editing' : status === 'draft' ? '' : ' done';
-    const file = editing ? docFile(doc) : fileName(latest.file) || docFile(doc);
-    return `<span class="docs-pill${tone}" data-testid="docs-item-pill" title="${esc(latest?.file || file)}">${esc(file)} · ${editing ? t('docs.pill_editing') : statusLabel(status).toLowerCase()}</span>`; // i18n-ignore
+  // #650 a draft intent opens with the writer (its review and its Accept gate: the intent is validated
+  // there); one a write-doc run has opens with that run
+  async function openIntent(item) {
+    if (docs.busy) return;
+    const row = docs.intents.find((i) => i.item === item);
+    const it = docs.items.find((i) => i.item === item);
+    const runId = it?.runId && it.runDoc === 'intent' ? it.runId : null;
+    docs.busy = true;
+    try {
+      await openDoc(item, 'intent', runId);
+      const o = docs.open;
+      if (!o || o.item !== item) return;
+      o.title = row?.title || it?.title || item;
+      if (!runId && (o.data?.status || row?.status) === 'draft') await startWriter();
+    } catch (e) {
+      editorError(errMsg(e));
+    } finally { docs.busy = false; }
   }
 
   // #670: the Product Owner proposes the epic and one issue per phase of a signed-off spec, each
@@ -137,25 +109,7 @@
   }
 
   function renderList() {
-    const box = $('#docs-list');
-    if (!docs.projectId) {
-      box.innerHTML = `<div class="empty-state"><b>${t('docs.no_project_chosen')}</b><p class="muted">${t('docs.choose_a_project_in_the_header')}</p></div>`;
-      return;
-    }
-    if (!docs.items.length) {
-      box.innerHTML = `<div class="empty-state" data-testid="docs-empty"><b>${t('docs.no_item_yet')}</b><p class="muted">${t('docs.start_with_new_item')}</p></div>`;
-      return;
-    }
-    box.innerHTML = docs.items.map((it) => `
-      <div class="docs-item" data-testid="docs-item" data-item="${esc(it.item)}">
-        <div class="docs-item-main" title="${esc(`docs/work/${it.item}/`)}">
-          <b class="docs-item-title" data-testid="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
-          <span class="docs-sep muted">·</span>
-          <span class="docs-item-stages muted" data-testid="docs-item-stages">${stagesHtml(it)}</span>
-        </div>
-        ${pillHtml(it)}
-        <div class="row docs-item-actions">${itemActions(it)}</div>
-      </div>`).join('');
+    $('#docs-list').innerHTML = DocsList.itemsHtml(docs.items, docs.projectId);
   }
 
   function onListClick(e) {
@@ -332,7 +286,7 @@
     const it = docs.items.find((i) => i.item === o.item);
     const title = it?.title || o.title || o.item;
     const current = stepOfDoc(o.doc);
-    const has = (doc) => doc && (it?.docs || []).some((d) => d.doc === doc);
+    const has = (doc) => doc && (doc === 'maintain' ? !!it?.maintain : (it?.docs || []).some((d) => d.doc === doc));
     const steps = SDLC.map((s, i) => {
       const cur = i === current;
       const name = `<span class="docs-step-num">${i + 1}</span><span class="docs-step-text"><b>${s.name()}</b><span class="mono small">${s.file}</span></span>${cur ? statusBadge(status, 'doc-status') : ''}`;
@@ -407,6 +361,19 @@
     const o = docs.open;
     if (!frame || !o) return;
     frame.srcdoc = DocsPage.html(shownMarkdown(o), { doc: o.doc, kicker: `${stepName(o.doc)} · ${docFile(o.doc)} · v${versionOf(o)}`, preview: o.tab === 'preview', source: o.source }); // i18n-ignore
+    renderMocks();
+  }
+
+  // #650 the document's ```html mock blocks, each running in its own opaque-origin frame (DocsPage.mockFrame)
+  function renderMocks() {
+    const box = $('#docs-mocks');
+    const o = docs.open;
+    if (!box || !o) return;
+    const list = o.source ? [] : DocsPage.mocks(shownMarkdown(o));
+    box.classList.toggle('hidden', !list.length);
+    box.innerHTML = list.length
+      ? `<div class="docs-section-head"><h3>${t('docs.mocks')}</h3><span class="muted small">${t('docs.mocks_help')}</span></div>${list.map((m) => DocsPage.mockFrame(m.html, { title: t('docs.mock_title', { title: m.title }) })).join('')}`
+      : '';
   }
 
   // A selection on the page: the block it starts in (its data-src) and its text, for the chip. Only
@@ -741,6 +708,8 @@
         <button type="button" class="btn ghost" data-testid="doc-gate-stop" data-docs-gate="no"${wait}>${t('docs.stop_as_failed')}</button>`;
     } else if (g) {
       html = signoffHtml(o, g, wait);
+    } else if (o.doc === 'maintain') {
+      html = ''; // #650 the Monitor and the Night watch write it, no writer run
     } else if (o.doc === 'spec' && signedOff(status)) {
       html = `
         <button type="button" class="btn primary" data-docs-next="backlog">${t('docs.create_epic_and_phase_issues')}</button>
@@ -948,10 +917,12 @@
               </div>
               <button type="button" id="btn-docs-new" class="btn primary" data-testid="docs-new-item">${t('docs.new_item')}</button>
             </div>
+            ${DocsList.tabsHtml()}
             <p id="docs-list-error" class="error small"></p>
-            <div id="docs-list" class="docs-list" data-testid="docs-list"></div>
+            <div id="docs-list" class="docs-list" data-testid="docs-list" role="tabpanel"></div>
+            <div id="docs-intents" class="docs-list hidden" data-testid="docs-intents" role="tabpanel"></div>
           </div>
-          ${DocsPanels.newItemPanel(SDLC.filter((s) => s.doc), estimateText('intent'))}
+          ${DocsPanels.newItemPanel(WRITTEN, estimateText('intent'))}
         </div>
         <div id="docs-editor-area" class="hidden">
           <div id="docs-editor" class="docs-editor" data-testid="doc-editor" data-stage="intent">
@@ -966,6 +937,7 @@
               <div id="docs-toolbar-box" class="docs-toolbar-box"></div>
               <iframe id="docs-reader" class="docs-reader" sandbox="allow-same-origin" title="${t('docs.the_document')}"></iframe>
               <section id="docs-diff" class="docs-diff" data-testid="doc-diff" aria-label="${t('docs.diff')}"></section>
+              <section id="docs-mocks" class="docs-mocks hidden" data-testid="doc-mocks" aria-label="${t('docs.mocks')}"></section>
               <aside class="docs-side">
                 <section id="docs-notes" class="docs-notes hidden"></section>
                 <section class="docs-writer" data-testid="doc-writer-panel">
@@ -980,6 +952,13 @@
     mount() {
       $('#btn-docs-new').onclick = openNewItem;
       $('#docs-list').onclick = onListClick;
+      $('#docs-intents').onclick = (e) => { const row = e.target.closest('[data-docs-intent]'); if (row) openIntent(row.dataset.docsIntent); };
+      $('#docs-views').onclick = (e) => {
+        const tab = e.target.closest('[data-docs-view]');
+        if (!tab) return;
+        docs.view = tab.dataset.docsView === 'intents' ? 'intents' : 'items';
+        DocsList.applyView(docs.view);
+      };
       $('#docs-new-form').onsubmit = submitNewItem;
       $('#btn-docs-new-close').onclick = closeNewItem;
       $('#docs-new-starts').onchange = (e) => { $('#docs-new-estimate').textContent = estimateText(e.target.value); };
