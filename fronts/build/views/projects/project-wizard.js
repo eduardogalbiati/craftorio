@@ -54,8 +54,7 @@
 //   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
 //   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
 //   "cli-signed-out" (the import goes on) with Open Setup, on the repository and the analysis steps. #740: Open
-//   Setup (and no-access's Sign in) opens Settings › Agents & CLIs (window.Settings.open, the CLI highlighted),
-//   never the first-run Setup; the wizard is hidden meanwhile and comes back on its step, the CLI checked again.
+//   Setup and Sign in open Settings › Agents & CLIs, the wizard hidden meanwhile (project-wizard-cli.js).
 // - the provider (its label, its CLI) is the adapter of window.Platforms.platformOfRepoUrl, the engine's rule too;
 //   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus
 //   back to what opened it.
@@ -66,8 +65,7 @@
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
 // architecture:estimate (the project map's cost), and for the review architecture:city / facts / report,
 // architecture:createIssue (never runNow), the backlog and api.createDiscoveryCard (an Inbox idea).
-// Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.Settings
-// (packages/ui-kit/views/settings/settings-clis.js).
+// Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.ProjectWizardCli.
 
 (function () {
   const M = window.OnboardingModel;
@@ -134,6 +132,13 @@
     statusText,
     wizardOpen: () => !!cur && !root?.hidden, // #740: hidden while Settings › Agents & CLIs is open
   });
+  // #740: the gh / glab error, Open Setup → Settings › Agents & CLIs (project-wizard-cli.js)
+  const { errorBlock, openSetup } = window.ProjectWizardCli({
+    cur: () => cur,
+    refresh: (checkAgain) => { tray.refresh(); if (checkAgain) loadAccounts(); },
+    render: () => render(),
+    root: () => root,
+  });
   const retryButton = (id) => `<button type="button" class="btn sm" data-act="retry" data-testid="wizard-job-retry-${id}">${esc(t('onboarding.retry'))}</button>`;
 
   function stepper() {
@@ -170,21 +175,6 @@
         <button type="button" class="link-btn" data-act="source-git-url" data-testid="wizard-source-git-url">${esc(t('onboarding.source_git_url'))}</button>
         <span aria-hidden="true">·</span>
         <button type="button" class="link-btn" data-act="source-folder" data-testid="wizard-source-folder">${esc(t('onboarding.source_folder'))}</button></p>`;
-  }
-
-  function errorBlock(o) {
-    const code = o.code || 'failed';
-    const provider = (platformById(o.cli?.provider) || platformOfRepo(cur.model.repository))?.label || '';
-    const signIn = code === 'no-access' && provider
-      ? `<button type="button" class="btn" data-act="setup">${esc(t('onboarding.sign_in', { provider }))}</button>` : '';
-    const edit = code === 'no-access' && cur.model.step === 'repository'
-      ? `<button type="button" class="btn ghost" data-act="edit-repo" data-testid="wizard-edit-repo">${esc(t('onboarding.edit_repo'))}</button>` : '';
-    return `<div class="wizard-alert error" role="alert" data-testid="wizard-error" data-error="${esc(code)}">
-        <strong>${esc(t(code === 'no-access' ? 'onboarding.no_access' : code === 'clone-failed' ? 'onboarding.clone_failed' : 'onboarding.failed'))}</strong>
-        <p>${esc(o.reason || t('onboarding.no_reason'))}</p>
-        <p class="muted small">${esc(t(code === 'no-access' ? 'onboarding.no_access_hint' : 'onboarding.failed_hint'))}</p>
-        <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry">${esc(t('onboarding.retry'))}</button>${signIn}${edit}</div>
-      </div>`;
   }
 
   // the provider: read from the URL, else the one picked on the toggle (GitHub by default)
@@ -792,27 +782,6 @@
     const slashed = String(folder).replace(/\\/g, '/');
     const url = `file://${slashed.startsWith('/') ? '' : '/'}${encodeURI(slashed)}`;
     toRepository({ repository: url, name: cur.model.name || slashed.split('/').filter(Boolean).pop() || '' });
-  }
-
-  // #740: Open Setup / Sign in → Settings › Agents & CLIs (window.Settings, settings-clis.js) with the warned
-  // CLI highlighted; the wizard is only hidden (cur kept) and comes back on its step, the CLI checked again
-  function openSetup() {
-    if (!cur || !root) return;
-    const provider = platformById(cur.onboarding?.cli?.provider) || platformOfRepo(cur.model.repository);
-    if (!window.Settings?.open) return;
-    root.hidden = true;
-    tray.refresh();
-    window.Settings.open('agents', {
-      highlight: provider?.cli || null,
-      onClose: () => {
-        if (!cur || !root) return;
-        root.hidden = false;
-        render();
-        tray.refresh();
-        root.querySelector('.wizard-panel')?.focus?.();
-        loadAccounts();
-      },
-    });
   }
 
   // #632: the Create card and the chips of the create step's questions; true when it was one of them
