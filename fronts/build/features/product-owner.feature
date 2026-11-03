@@ -175,3 +175,51 @@ Feature: Backlog Product Owner
     And the proposal lists "mock-5.jpg" as a later phase
     And the proposal says no mockup is missing an issue
     And the proposal can be added to the roadmap
+
+  # #431: the drawer's foot ("Plan with [workflow]" and the workflow's options) takes less room. The
+  # main options (Mode, Unit tests, E2E tests, Screenshots) come first, under small group labels; the
+  # others wait behind "Show more options". A chevron on the "Plan with" row collapses the options to
+  # a one-line summary of the chosen values; the choice is remembered. AI Development, local hero's
+  # defaults: Validation Automatic, E2E tests Write and run (#235). The issue's "Mode (Automatic or
+  # Validated)" is the input labelled "Validation" since #630.
+  @issue-431
+  Scenario: The plan shows the main options first, grouped, and the others behind "Show more options"
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I switch the Product Owner to "Plan the backlog"
+    And I plan with the workflow "AI Development, local hero"
+    Then the plan's options show "Validation", "Unit tests", "E2E tests" and "Screenshots"
+    And the plan's options do not show "Check command"
+    And the plan's options are grouped under "How it runs" and "Tests"
+    When I click "Show more options" in the plan's options
+    Then the plan's options show "Check command"
+    And the plan's options offer "Show fewer options"
+
+  @issue-431
+  Scenario: Collapsing the plan's options leaves a one-line summary, and expanding them keeps the values
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I switch the Product Owner to "Plan the backlog"
+    And I plan with the workflow "AI Development, local hero"
+    And I collapse the plan's options
+    Then the plan's options are hidden, the "Plan with" row stays
+    And the plan's summary shows "Automatic"
+    And the plan's summary shows "E2E: Write and run"
+    When I expand the plan's options
+    Then "Automatic" is still chosen for "Validation" in the plan's options
+    And "Write and run" is still chosen for "E2E tests" in the plan's options
+
+  @issue-431
+  Scenario: The Product Owner's drawer remembers the plan's options collapsed
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I switch the Product Owner to "Plan the backlog"
+    And I plan with the workflow "AI Development, local hero"
+    And I collapse the plan's options
+    And I close the Product Owner
+    And I open the Product Owner
+    Then the plan's options are hidden, the "Plan with" row stays
+    And the plan's summary shows "Automatic"
