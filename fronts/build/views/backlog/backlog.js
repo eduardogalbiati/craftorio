@@ -693,7 +693,7 @@
   }
   const roadmapCtx = () => ({
     projectId: bl.projectId, setData, setError: (msg) => { bl.error = msg; },
-    render: () => { const view = $b('#view-backlog'); const top = view?.scrollTop; render(); if (view && top != null) view.scrollTop = top; }, // #748: the scroll stays
+    render: function renderKeepingScroll() { const view = $b('#view-backlog'); const top = view?.scrollTop; render(); if (view && top != null) view.scrollTop = top; }, // #748: the scroll stays
     // #269: the filter row's epic (the Board's choice too); #270: "Open the Roadmap" of the Board's alert
     setEpic: (id) => { bl.epic = String(id || ''); render(); },
     showRoadmap: () => showRoadmap(),

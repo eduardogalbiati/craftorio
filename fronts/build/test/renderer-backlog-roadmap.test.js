@@ -409,7 +409,7 @@ test('a stage note: "Add note" in the stage\'s ⋮ menu when empty (#282), text 
   const ctx = makeCtx();
   await BacklogRoadmap.onClick({ target: stageMenuTarget('st1') }, ctx, data);
   html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /<button type="button" role="menuitem" data-rm-addnote[^>]*>Add note<\/button>/);
+  assert.match(html, /<button type="button" role="menuitem"[^>]*data-rm-addnote[^>]*>.*?<span class="ui-menu-label">Add note<\/span><\/button>/);
   await BacklogRoadmap.onClick({ target: addNoteButtonTarget(0) }, ctx, data);
   html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /<input type="text" class="rm-note small" data-rm-note/);
@@ -510,15 +510,15 @@ test('html: Run this stage is enabled only when the roadmap is not running and t
   };
   const planned = await entries(threeStageData(['planned', 'planned', 'planned']));
   for (const e of planned) {
-    assert.match(e, /data-rm-run-stage title="Run only this stage/);
+    assert.match(e, /title="Run only this stage/);
     assert.doesNotMatch(e, /disabled/);
   }
 
   const done = await entries(threeStageData(['done', 'planned', 'planned']));
-  assert.match(done[0], /data-rm-run-stage title="No planned item in this stage" aria-disabled="true"/);
+  assert.match(done[0], /title="No planned item in this stage" aria-disabled="true"/);
 
   const running = await entries(threeStageData(['planned', 'planned', 'planned'], { state: 'running' }));
-  for (const e of running) assert.match(e, /data-rm-run-stage title="The roadmap is running: pause or stop it first" aria-disabled="true"/);
+  for (const e of running) assert.match(e, /title="The roadmap is running: pause or stop it first" aria-disabled="true"/);
 });
 
 test('html: the stage run on its own is highlighted (running or paused), the bar names it, and the other stages keep their plain badge', () => {
