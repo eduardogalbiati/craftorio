@@ -207,14 +207,8 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
   assert.equal(list[2].id, 'oracle');
 
   const workflowIds = list.slice(3).map((x) => x.id);
+  // #648: ai-arena, writer-reviewer and issue-tracker are aliases now (write-doc, issue)
   assert.deepEqual(workflowIds, [
-    'workflow:ai-arena.yaml:contender_1',
-    'workflow:ai-arena.yaml:contender_2',
-    'workflow:ai-arena.yaml:contender_3',
-    'workflow:ai-arena.yaml:contender_4',
-    'workflow:ai-arena.yaml:contender_5',
-    'workflow:ai-arena.yaml:synthesizer',
-    'workflow:ai-arena.yaml:verifier',
     'workflow:analyze-project.yaml:cartographer',
     'workflow:analyze-project.yaml:analyst',
     'workflow:backlog-refresh.yaml:refresher',
@@ -233,9 +227,9 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:fix.yaml:reviewer',
     'workflow:fix.yaml:verifier',
     'workflow:fix.yaml:ci_pusher',
-    'workflow:issue-tracker.yaml:code_analyzer',
-    'workflow:issue-tracker.yaml:issue_writer',
-    'workflow:issue-tracker.yaml:issue_filer',
+    'workflow:issue.yaml:code_analyzer',
+    'workflow:issue.yaml:issue_writer',
+    'workflow:issue.yaml:issue_filer',
     'workflow:refactor.yaml:test_writer',
     'workflow:refactor.yaml:developer',
     'workflow:refactor.yaml:reviewer',
@@ -250,10 +244,11 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:test-backfill.yaml:test_writer',
     'workflow:test-backfill.yaml:developer',
     'workflow:write-doc.yaml:writer',
+    'workflow:write-doc.yaml:writer_2',
+    'workflow:write-doc.yaml:writer_3',
+    'workflow:write-doc.yaml:writer_4',
+    'workflow:write-doc.yaml:writer_5',
     'workflow:write-doc.yaml:reviewer',
-    'workflow:writer-reviewer.yaml:writer',
-    'workflow:writer-reviewer.yaml:reviewer',
-    'workflow:writer-reviewer.yaml:signoff',
   ]);
 
   const testWriter = list.find((x) => x.id === 'workflow:feature.yaml:test_writer');
@@ -265,9 +260,9 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
   assert.ok(testWriter.skills.includes('unit-test-writer'), 'the templated skill name resolves to its family');
   assert.ok(testWriter.steps.includes('test'), 'the step that runs it is listed');
 
-  // the fan-out step of ai-arena (`agents: [contender_1, ...]`) lists each contender
-  const contender1 = list.find((x) => x.id === 'workflow:ai-arena.yaml:contender_1');
-  assert.ok(contender1.steps.includes('compete'));
+  // the fan-out step of write-doc's Arena mode (`agents: [writer, writer_2, ...]`) lists each writer
+  const writer2 = list.find((x) => x.id === 'workflow:write-doc.yaml:writer_2');
+  assert.ok(writer2.steps.includes('compete'));
 });
 
 // #203 regression (34a48ee): a skill wrapped in a Liquid condition (`{% if inputs.unit_tests ==
@@ -306,23 +301,21 @@ test('listAgents: a skill wrapped in {% if %}...{% endif %} resolves to its fami
   }
 });
 
-test('template resolution: writer-reviewer\'s user-picked models show "picked at start", its fixed signoff does not', (t) => {
+test('template resolution: write-doc\'s user-picked writer shows "picked at start", its fixed Arena writer does not', (t) => {
   const dir = tmp(t);
   const workflowsDir = tmpWorkflows(t);
   const list = agents.listAgents(dir, { workflowsDir });
 
-  const writer = list.find((x) => x.id === 'workflow:writer-reviewer.yaml:writer');
+  const writer = list.find((x) => x.id === 'workflow:write-doc.yaml:writer');
   assert.equal(writer.provider, 'claude');
   assert.equal(writer.providerType, 'claude-code');
   assert.equal(writer.model, 'claude-opus-5-5');
-  assert.equal(writer.effort, 'high');
-  assert.deepEqual([...writer.pickedAtStart].sort(), ['effort', 'model', 'provider']);
+  assert.deepEqual([...writer.pickedAtStart].sort(), ['model', 'provider']);
 
-  const signoff = list.find((x) => x.id === 'workflow:writer-reviewer.yaml:signoff');
-  assert.equal(signoff.provider, 'claude');
-  assert.equal(signoff.model, 'claude-opus-5-5');
-  assert.equal(signoff.effort, 'high');
-  assert.deepEqual(signoff.pickedAtStart, []);
+  const writer2 = list.find((x) => x.id === 'workflow:write-doc.yaml:writer_2');
+  assert.equal(writer2.provider, 'claude');
+  assert.equal(writer2.model, 'claude-sonnet-5-5');
+  assert.deepEqual(writer2.pickedAtStart, []);
 });
 
 test('a workflow file that fails to load shows one entry with its error; the other workflows still list', (t) => {
@@ -337,14 +330,14 @@ test('a workflow file that fails to load shows one entry with its error; the oth
   assert.ok(broken[0].error);
 
   // the other workflows still produced their agents
-  assert.ok(list.some((x) => x.id === 'workflow:writer-reviewer.yaml:writer'));
-  assert.ok(list.some((x) => x.id === 'workflow:ai-arena.yaml:synthesizer'));
+  assert.ok(list.some((x) => x.id === 'workflow:write-doc.yaml:writer'));
+  assert.ok(list.some((x) => x.id === 'workflow:issue.yaml:issue_writer'));
 });
 
 test('saveAgent on a workflow agent only saves its look; the YAML name, prompt and model are kept', (t) => {
   const dir = tmp(t);
   const workflowsDir = tmpWorkflows(t);
-  const id = agents.workflowAgentId('writer-reviewer.yaml', 'writer');
+  const id = agents.workflowAgentId('write-doc.yaml', 'writer');
 
   const saved = agents.saveAgent(dir, id, { name: 'Renamed', prompt: 'Different prompt', skills: ['z'], model: 'other-model', appearance: LOOK }, { workflowsDir });
   assert.equal(saved.name, 'Writer');
@@ -352,7 +345,7 @@ test('saveAgent on a workflow agent only saves its look; the YAML name, prompt a
   assert.equal(saved.model, 'claude-opus-5-5');
   assert.equal(saved.appearance.emblem, 'rocket');
 
-  const lookFile = path.join(dir, 'workflows', 'writer-reviewer.yaml', 'writer.json');
+  const lookFile = path.join(dir, 'workflows', 'write-doc.yaml', 'writer.json');
   assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(lookFile, 'utf8'))).sort(), ['appearance', 'updatedAt']);
 
   // the look file never shows up as a user agent
@@ -373,21 +366,21 @@ test('saveAgent on an unknown workflow agent throws', (t) => {
 
 test('agentPathForRemoval refuses a workflow agent: it belongs to its workflow', (t) => {
   const dir = tmp(t);
-  const id = agents.workflowAgentId('writer-reviewer.yaml', 'writer');
+  const id = agents.workflowAgentId('write-doc.yaml', 'writer');
   assert.throws(() => agents.agentPathForRemoval(dir, id), /belongs to its workflow/);
 });
 
 test('editing a workflow file on disk is reflected in the next listAgents', (t) => {
   const dir = tmp(t);
   const workflowsDir = tmpWorkflows(t);
-  const before = agents.listAgents(dir, { workflowsDir }).find((x) => x.id === 'workflow:writer-reviewer.yaml:signoff');
-  assert.equal(before.model, 'claude-opus-5-5');
+  const before = agents.listAgents(dir, { workflowsDir }).find((x) => x.id === 'workflow:write-doc.yaml:writer_2');
+  assert.equal(before.model, 'claude-sonnet-5-5');
 
-  const file = path.join(workflowsDir, 'writer-reviewer.yaml');
-  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('model: claude-opus-5-5\n    effort: high\n    session: ephemeral', 'model: claude-sonnet-5-5\n    effort: high\n    session: ephemeral'));
+  const file = path.join(workflowsDir, 'write-doc.yaml');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('model: claude-sonnet-5-5\n    session: ephemeral', 'model: claude-haiku-5-5\n    session: ephemeral'));
 
-  const after = agents.listAgents(dir, { workflowsDir }).find((x) => x.id === 'workflow:writer-reviewer.yaml:signoff');
-  assert.equal(after.model, 'claude-sonnet-5-5');
+  const after = agents.listAgents(dir, { workflowsDir }).find((x) => x.id === 'workflow:write-doc.yaml:writer_2');
+  assert.equal(after.model, 'claude-haiku-5-5');
 });
 
 test('the emblems and eyes match the ones the robots can draw', () => {

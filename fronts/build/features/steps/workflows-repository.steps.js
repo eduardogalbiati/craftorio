@@ -62,10 +62,10 @@ async function commitToProject(e2e, files) {
   await e2e.window.waitForLoadState('domcontentloaded');
 }
 
-// The repository's own copy of the bundled issue-tracker under another name and category, declared by file
+// The repository's own copy of the bundled issue workflow under another name and category, declared by file
 Given('the project\'s repository declares its own workflow {string} in the {string} category', async ({ e2e }, name, category) => {
-  const yaml = fs.readFileSync(path.join(root, 'workflows', 'issue-tracker.yaml'), 'utf8')
-    .replace(/^(\s*name:\s*)issue-tracker\s*$/m, `$1${name}`)
+  const yaml = fs.readFileSync(path.join(root, 'workflows', 'issue.yaml'), 'utf8')
+    .replace(/^(\s*name:\s*)issue\s*$/m, `$1${name}`)
     .replace(/^(\s*category:\s*)\S+\s*$/m, `$1${category.toLowerCase()}`);
   await commitToProject(e2e, {
     '.multiagent/project.yaml': `version: 1\nworkflows:\n  - name: ${name}\n    file: workflows/${name}.yaml\n    category: ${category.toLowerCase()}\n`,

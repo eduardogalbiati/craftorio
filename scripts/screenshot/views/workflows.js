@@ -15,8 +15,8 @@ function demoPipelines(ws, appDir) {
   // seeded now (the app would at start) so the edited default counts as modified, not custom
   require(path.join(appDir, 'packages', 'engine', 'domains', 'workflow', 'workflows')).seedWorkflows(path.join(appDir, 'workflows'), ws.workflows);
   const wf = (f) => path.join(ws.workflows, f);
-  const tracker = fs.readFileSync(wf('issue-tracker.yaml'), 'utf8');
-  fs.writeFileSync(wf('issue-tracker.yaml'), tracker.replace('description: "The issues created:', 'description: "The filed issues:'));
+  const tracker = fs.readFileSync(wf('issue.yaml'), 'utf8');
+  fs.writeFileSync(wf('issue.yaml'), tracker.replace('description: "The issues created:', 'description: "The filed issues:'));
   // the retrospective declares `findings` (#134): the copies rename it instead of adding a second `outputs:`
   const retro = fs.readFileSync(wf('retrospective.yaml'), 'utf8');
   fs.writeFileSync(wf('weekly-digest.yaml'), retro.replace('name: retrospective', 'name: weekly-digest').replace(/description: .*/, 'description: Summarizes the week\'s retrospectives into one digest of what to change first.').replace('\n  findings:\n', '\n  digest:\n'));
@@ -25,8 +25,8 @@ function demoPipelines(ws, appDir) {
   // owner's: a valid one and one whose mapping names an output its workflow doesn't declare (refused)
   const dir = path.join(ws.root, 'pipelines');
   require(path.join(appDir, 'packages', 'engine', 'domains', 'workflow', 'pipelines')).seedPipelines(path.join(appDir, 'pipelines'), dir);
-  const rfc = path.join(dir, 'rfc-to-issues.yaml');
-  if (fs.existsSync(rfc)) fs.writeFileSync(rfc, fs.readFileSync(rfc, 'utf8').replace('description: AI Arena writes an RFC', 'description: AI Arena writes our quarterly RFC'));
+  const spec = path.join(dir, 'spec-to-issues.yaml');
+  if (fs.existsSync(spec)) fs.writeFileSync(spec, fs.readFileSync(spec, 'utf8').replace('description: Write doc writes the spec', 'description: Write doc writes our quarterly spec'));
   fs.writeFileSync(path.join(dir, 'ship-and-learn.yaml'), [
     'name: Ship and learn',
     'description: Develops a task, then runs a retrospective on that run.',
@@ -52,7 +52,7 @@ function demoPipelines(ws, appDir) {
     'description: Files a triaged issue, then develops it up to the merge.',
     'category: build',
     'stages:',
-    '  - workflow: issue-tracker.yaml',
+    '  - workflow: issue.yaml',
     '  - workflow: software-development.yaml',
     '    map: { task: findings }',
     '',

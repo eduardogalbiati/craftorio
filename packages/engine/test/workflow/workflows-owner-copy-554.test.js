@@ -119,21 +119,21 @@ test('#554 resolveWorkflow: preferRepository (the project\'s setting) makes the 
 
 // ---- the service: run:start (the dispatcher's path) and workflows:list ---------------------------
 
-// A project whose repository declares `writer-reviewer` with its own file (like this repository's
-// ai-development-local-hero), and the workspace's seeded writer-reviewer.yaml: edited by the owner
+// A project whose repository declares `write-doc` with its own file (like this repository's
+// ai-development-local-hero), and the workspace's seeded write-doc.yaml: edited by the owner
 // (`edited`, a different provider / model / effort for agent a) or left as seeded.
 async function projectSetup(t, { edited }) {
   const { makeService } = loadHelpers();
   const { service, api } = makeService(t);
   const repo = makeRepo(t, {
-    '.multiagent/project.yaml': MANIFEST('writer-reviewer'),
-    '.multiagent/workflows/writer-reviewer.yaml': flow('writer-reviewer', { provider: 'claude', model: REPO_MODEL }),
+    '.multiagent/project.yaml': MANIFEST('write-doc'),
+    '.multiagent/workflows/write-doc.yaml': flow('write-doc', { provider: 'claude', model: REPO_MODEL }),
   });
   const project = await api['projects:create']({ name: 'demo', folder: repo.dir });
-  const wsFile = path.join(service.workspace().workflows, 'writer-reviewer.yaml');
-  if (edited) fs.writeFileSync(wsFile, flow('writer-reviewer', { provider: 'codex', model: OWNER_MODEL, effort: 'high' }));
+  const wsFile = path.join(service.workspace().workflows, 'write-doc.yaml');
+  if (edited) fs.writeFileSync(wsFile, flow('write-doc', { provider: 'codex', model: OWNER_MODEL, effort: 'high' }));
   const list = await api['workflows:list']({ projectId: project.id });
-  const own = list.find((w) => w.file === 'writer-reviewer.yaml' && w.origin !== 'repository');
+  const own = list.find((w) => w.file === 'write-doc.yaml' && w.origin !== 'repository');
   const fromRepo = list.find((w) => w.origin === 'repository' && !w.error);
   // the setup itself: the workspace copy's origin and the repository entry
   assert.equal(own?.origin, edited ? 'modified' : 'default', 'fixture: the workspace copy\'s origin');
@@ -160,7 +160,7 @@ function startAndFinish(service, api, payload) {
 test('#554 run:start for a project runs the owner\'s modified workspace copy, no acceptance asked for the unaccepted repository copy', async (t) => {
   const { service, api, project, fromRepo } = await projectSetup(t, { edited: true });
   assert.equal(fromRepo.accepted, false, 'fixture: the repository copy is not accepted');
-  const { end, started } = await startAndFinish(service, api, { file: 'writer-reviewer.yaml', projectId: project.id, inputs: {}, mock: true });
+  const { end, started } = await startAndFinish(service, api, { file: 'write-doc.yaml', projectId: project.id, inputs: {}, mock: true });
   assert.equal(end.status, 'success', end.error);
   assert.equal(started?.agents?.a?.model, OWNER_MODEL);
 });
@@ -169,7 +169,7 @@ test('#554 with "prefer the repository\'s workflows", the repository copy runs w
   const { service, api, project, fromRepo } = await projectSetup(t, { edited: true });
   await api['projects:update']({ id: project.id, patch: { preferRepositoryWorkflows: true } });
   await api['workflows:accept']({ projectId: project.id, file: fromRepo.file, commit: fromRepo.commit });
-  const { end, started } = await startAndFinish(service, api, { file: 'writer-reviewer.yaml', projectId: project.id, inputs: {}, mock: true });
+  const { end, started } = await startAndFinish(service, api, { file: 'write-doc.yaml', projectId: project.id, inputs: {}, mock: true });
   assert.equal(end.status, 'success', end.error);
   const a = started?.agents?.a || {};
   assert.equal(a.provider, 'codex');
@@ -179,14 +179,14 @@ test('#554 with "prefer the repository\'s workflows", the repository copy runs w
   const { provider, model, effort, ...source } = a;
   assert.match(JSON.stringify(source), /workspace/i, 'workflow.started agents.a says the model came from the workspace copy');
   // and the repository copy is the one that ran: its file is the repository's
-  assert.match(String(started?.file || ''), /writer-reviewer/);
+  assert.match(String(started?.file || ''), /write-doc/);
 });
 
 test('#554 run:start with no edited workspace copy still refuses the unaccepted repository copy, naming the copy it took (repository @ sha)', async (t) => {
   const { api, repo, project } = await projectSetup(t, { edited: false });
   const sha = repo.head().slice(0, 7);
   await assert.rejects(
-    async () => api['run:start']({ file: 'writer-reviewer.yaml', projectId: project.id, inputs: {}, mock: true }),
+    async () => api['run:start']({ file: 'write-doc.yaml', projectId: project.id, inputs: {}, mock: true }),
     (e) => /not accepted/i.test(e.message) && /repository/i.test(e.message) && e.message.includes(sha),
   );
   assert.equal(api['runs:active']().length, 0);

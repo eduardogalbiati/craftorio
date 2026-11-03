@@ -39,7 +39,7 @@ Eduardo Galbiati (`eduardogalbiati/multiagent-orchestrator`, branch `main`).
 npm start                  # the app
 npm test                   # unit tests + a full mock run of feature
 npm test -w packages/engine   # one workspace's tests
-npm run run -- --file ai-arena.yaml --mock --auto-approve --input project_path=C:/x --task "..."
+npm run run -- --file write-doc.yaml --mock --auto-approve --input project_path=C:/x --task "..."
 npm run serve -- --port 7300 [--host h] [--workspace dir]   # engine server + UI in a browser
 npm run build              # packaged app in build/ (npm run package → dist/)
 npm run docs               # README tables + docs/agents maps (generated)

@@ -438,7 +438,8 @@ test('backlog:save-doc: preview works for a finished, accepted run started from 
   t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
   const p = await api['projects:create']({ name: 'demo', folder });
   api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/o/r' } });
-  const { runId, end } = await acceptedWriterReviewerRun(service, api, {}, {
+  // #648: writer-reviewer.yaml is an alias of write-doc.yaml, which works on a project's work item
+  const { runId, end } = await acceptedWriterReviewerRun(service, api, { project_path: folder, item: 'backlog-screen' }, {
     projectId: p.id, issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen' }],
   });
   assert.equal(end.status, 'success', end.error);

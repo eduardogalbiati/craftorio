@@ -44,7 +44,7 @@ test('#485 workflows:list for a project lists its repository workflows with orig
   assert.equal(item.category, 'solo');
   assert.equal(item.projectId, project.id);
   // a bundled workflow named without a file is not a repository workflow
-  assert.equal(repoEntries(list).some((w) => w.name === 'writer-reviewer' || w.file === 'writer-reviewer.yaml'), false);
+  assert.equal(repoEntries(list).some((w) => w.name === 'write-doc' || w.file === 'write-doc.yaml'), false);
 });
 
 test('#485 workflows:list without a project lists no repository workflow (as today)', async (t) => {
@@ -103,15 +103,15 @@ test('#485 workflows:list with repositoryOnly gives the repository workflows and
   assert.equal(own.category, 'solo');
   // a workflow the manifest names without a file: its name and the manifest's category
   const named = list.filter((w) => w.origin === 'manifest').map((w) => `${w.name}:${w.category}`);
-  assert.deepEqual(named, ['writer-reviewer:team']);
+  assert.deepEqual(named, ['write-doc:team']);
 });
 
 test('#485 workflows:list for a project files a workspace workflow the manifest names under the manifest\'s category', async (t) => {
   const { api, project } = await projectWithRepo(t);
-  const plain = (await api['workflows:list']()).find((w) => w.file === 'writer-reviewer.yaml');
-  assert.ok(plain, 'writer-reviewer is in the workspace');
+  const plain = (await api['workflows:list']()).find((w) => w.file === 'write-doc.yaml');
+  assert.ok(plain, 'write-doc is in the workspace');
   assert.notEqual(plain.category, 'team', 'its own category is not the manifest\'s (else this test proves nothing)');
-  const forProject = (await api['workflows:list']({ projectId: project.id })).find((w) => w.file === 'writer-reviewer.yaml');
+  const forProject = (await api['workflows:list']({ projectId: project.id })).find((w) => w.file === 'write-doc.yaml');
   assert.equal(forProject.category, 'team');
   assert.equal(forProject.origin, plain.origin, 'still the workspace\'s workflow');
 });

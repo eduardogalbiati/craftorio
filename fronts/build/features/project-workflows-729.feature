@@ -29,11 +29,11 @@ Feature: A project's workflows, as cards on its Overview
     When I open "Projects" in the sidebar
     And I open the project "demo-app" from the Projects screen
     And I click "+ Add a workflow" in the project's Workflows block
-    Then the add-a-workflow dialog offers "issue-tracker" and "refactor"
+    Then the add-a-workflow dialog offers "issue" and "refactor"
     And the add-a-workflow dialog does not offer "feature" or "fix"
     When I search "refac" in the add-a-workflow dialog
     Then the add-a-workflow dialog offers "refactor"
-    And the add-a-workflow dialog does not offer "issue-tracker"
+    And the add-a-workflow dialog does not offer "issue"
     When I pick "refactor" in the add-a-workflow dialog
     Then the add-a-workflow dialog is closed
     And the project's Workflows block shows exactly the cards "feature", "fix" and "refactor"

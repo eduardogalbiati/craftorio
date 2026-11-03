@@ -62,7 +62,7 @@ function git(e2e, cwd, args) {
 // project does: { name, origin, category } and defaultWorkflow), then the app reloads.
 
 const enginePath = (...p) => path.join(__dirname, '..', '..', '..', '..', 'packages', 'engine', ...p);
-const BUNDLED_CATEGORY = { feature: 'build', fix: 'build', refactor: 'build', release: 'build', 'issue-tracker': 'plan' };
+const BUNDLED_CATEGORY = { feature: 'build', fix: 'build', refactor: 'build', release: 'build', issue: 'plan' };
 const cards = (page) => overviewBlock(page).getByTestId('pj-wf-card');
 const cardOf = (page, name) => overviewBlock(page).locator(`[data-testid="pj-wf-card"][data-workflow-id="${name}"]`);
 const addDialog = (page) => visible(page.getByTestId('pj-wf-add-dialog')).first();

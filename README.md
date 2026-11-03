@@ -122,7 +122,7 @@ three). Tests must not depend on the machine:
 npm run run -- --task "Task description" --repo C:/path/to/repo --input language=python --input git_platform=gl
 ```
 
-Runs the workflow for real. `--file ai-arena.yaml` picks another workflow: a name or relative path is
+Runs the workflow for real. `--file write-doc.yaml` picks another workflow: a name or relative path is
 looked up in `<workspace>/workflows/` first, then in the repository's `workflows/`; an absolute path is
 used as is (e.g. to try an edited repository copy while the workspace copy is modified). `--auto-approve`
 approves every human gate without interaction (tests only: in practice the AI must not cross the gates).
@@ -902,92 +902,32 @@ Green: the branch merges into the local base (`merge: local`, never pushed). The
 `summary.json` records the target's `before` and `after` figures with its cost, so a month of refactor
 runs can be compared with `run_analysis` (#184).
 
-## AI Arena (`workflows/ai-arena.yaml`)
+## Write doc (`workflows/write-doc.yaml`)
 
-Up to five models write the same document (default: a PRD) and an orchestrator merges them. The
-**AI Arena** screen (sidebar, "lab") starts it: pick 2 to 5 contenders (CLI, model and effort of each),
-an optional **project** (read-only for the models; a copy of the final document is saved in it),
-reference documents to attach (text files every model reads), the document type (PRD, design doc,
-RFC, ADR, test plan, design sketch), blind peer review and lenses. It shows the run as a chat: each contender posts its
-proposal and its scores for the others (with the real author of each anonymized proposal, which only
-you see), the synthesizer posts the final document, the verifier its verdict, and the supervisor asks
-you to accept, redo (with optional instructions for the synthesizer) or discard. A **Peer scores**
-panel ranks the contenders; past runs open as a chat from Workflows › Runs › **Open run**, then its **Chat** tab.
+Plan & Design. One run per stage document of a work item (`docs/work/<item>/intent.md`, `spec.md`
+or `plan.md`, with its pt-BR translation next to it), started from the **Documents** screen's
+**New item** panel. The writer drafts the document, you edit it with the writer by selection, a
+reviewer anchors notes to its sections and you sign it off.
 
 | Stage | Who | What it does |
 |---|---|---|
-| compete | up to 5 contenders **in parallel** (default: Opus 5.5, Sonnet 5.5, gpt-6-luna, Grok 4.7) | Each writes the document without seeing the others, plus a short rationale (alternatives rejected, assumptions), and is told not to drift to a safe middle ground (`arena/proposals/<agent>.md`). With `lenses: on`, each works under a different forced lens (user value, lean MVP, risk first, feasibility first, evidence first) |
-| critique | the same, in parallel (`peer_review: yes`) | Each scores the **others'** anonymized proposals and says what it would change in its own |
-| synthesize | synthesizer (Opus 5.5, own session) | `arena-synthesis` skill: picks the best proposal as the **base** and grafts the best ideas of the others; convergence/divergence check; opinionated conflict decisions; appendix with scoreboard, base, grafts, rejected ideas, dismissed critiques and dropouts |
-| verify | verifier (gpt-6-luna, another family, fresh session) | Checks the final document against the document skill and the proposals (missing sections, contradictions, unsupported claims, dropped consensus); on issues, one more synthesis round |
-| review | human | Sees the verifier's verdict and who wrote each proposal; accepts, asks for a new synthesis (2 at most, with optional instructions; a 3rd request ends the run as failed) or discards it (cancelled) |
+| scope | writer | Reads the item and lists the screens of the app worth showing |
+| evidence | the screenshot command | Captures those screens (never blocks) |
+| compete | up to 5 writers **in parallel** (`writers` 2-5 only) | **Arena mode** ("Several writers", #648): each writer drafts the document on its own; at least one must answer |
+| draft | writer | Writes the first draft and its translation; in Arena mode it merges the best of the drafts into one |
+| edit | you + the writer | Each request of the Documents screen (a selection, its text, pasted images) is a writer turn; one commit per request. **Send to review** ends it |
+| review | reviewer | Notes anchored to the sections, scored on the document skill's rubric |
+| approval | you | Accept intent / Sign off spec / Accept plan, or send it back to the edit |
 
-Proposals are anonymized as "Proposal N" in an order shuffled per run (the `shuffle(run_id)`
-template filter), the same in every step, so position and labels do not give the model away.
-Base-and-graft, the verify step and the rationale/anti-hedging instructions adapt ideas from the
-arena skill in [cursor/plugins pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT).
+Outputs (pipelines, chains): `document` (the draft's text) and `issue` (the issue the run was
+started from, when there is one). #648: the former Writer & Reviewer (`writer-reviewer.yaml`) and
+AI Arena (`ai-arena.yaml`) workflows are aliases of this one: a saved pipeline, a repository
+manifest or a roadmap stage that names them runs `write-doc.yaml`. Their screens left the menu;
+past runs still open from Workflows › Runs › **Open run**.
 
-The final document goes to `<run>/arena/final.md` in the workspace. A copy goes into the project only when the `save_to` input names a subfolder (e.g. `docs/arena`); it is empty by default.
-Its format comes from the skill in the `document_skill` input (default `prd-writing`): for an ADR,
-tech spec and so on, create a skill with the structure and the rubric and pass its name. The
-contenders are five slots (`contender_1` … `contender_5`) set by the inputs `contender_N_provider`,
-`_model` and `_effort`; provider `none` leaves a slot out (the agent's `enabled`).
+## Issue (`workflows/issue.yaml`)
 
-## Writer & Reviewer (`workflows/writer-reviewer.yaml`)
-
-Plan & Design. Give it a **prompt** (what to write) and a **goal** (when it is good enough), and
-pick the CLI, model and effort of the writer and of the reviewer. Optionally pick a **project**: the
-writer and the reviewer then work in its folder and read its files (read-only) to ground the document;
-the run shows up under that project. The **Write & Review** screen
-(sidebar, "lab") starts it and shows the run as a chat between the agents, with a robot per model.
-
-| Stage | Who | What it does |
-|---|---|---|
-| write | writer (your pick) | Drafts the document, then revises it with the notes (`drafts/vN.md`, `document.md`) |
-| review | reviewer (your pick) | Scores the draft 0-10 against the goal and lists major/minor notes. The engine approves at the threshold (default 8), otherwise back to write, up to `max_rounds` reviews |
-| signoff | supervisor (Opus 5.5, internal) | Checks the approved draft against each part of the goal and reports to you with a recommendation |
-| decide | you, asked by the supervisor | Accept, send it back to the writer, or stop; plus optional instructions (e.g. "keep the pricing open") |
-| out_of_rounds | you | When the rounds run out: accept the last draft, one more round, or stop; plus optional instructions |
-
-Whatever you write at these questions goes into every later prompt of the writer, the reviewer
-and the supervisor, and takes precedence over the goal where they conflict.
-
-Past runs open as a chat again from Workflows › Runs › **Open run**, then its **Chat** tab.
-
-**Document type** (optional, the `document_skill` input): the skill the writer and the reviewer load,
-with its structure and rubric: `issue-writing` (an enriched issue), `rfc-writing`, `prd-writing`,
-`design-doc-writing`, or your own. Empty, the document is free-form, as before.
-
-**Enrich a Backlog issue**: **Enrich in Write & Review** in an open issue's **⋯** menu (list row, kanban
-card) opens this screen prefilled: an enriched issue by default, a prompt with the
-issue's title, number, URL, labels and full body, a default goal for the document type (it follows
-the type until you edit it), and the Backlog's project (read-only). Nothing starts by itself. The run
-records its issue (`issues` in `workflow.started`): the chat shows it, and the Backlog card shows
-"being enriched" / "enriched" with a link to the run (it never moves the card's column). Once you
-accept the document, **Save to issue #n…** (in the chat and in Run Details, so you can save later or
-again) shows a preview of the text and the command, and saves only when you click it:
-- **Replace the description** (default for an enriched issue): the document becomes the body and the
-  original description is kept at the end in a collapsed `<details><summary>Original description</summary>`
-  block (saving again keeps the first original, never nested);
-- **Add as a comment** (default for an RFC, PRD or design doc): the description stays as it is.
-
-It uses the Backlog's CLI: `gh issue edit <n> --body-file` / `gh issue comment <n> --body-file`, or
-`glab issue update <iid> --description` / `glab issue note <iid> --message`. Then the Backlog reads the
-issue again (new body, task progress, labels), and the run records the save (`issue-saves.json`, the
-text sent in `issue-save.md`), shown in Details and Artifacts. A failure (no auth, issue closed or
-deleted, network) shows the CLI's message; the document stays in `document.md`. Agents and the
-supervisor never save to an issue. A simulated run only shows the preview, and
-`MULTIAGENT_SIMULATION_ONLY=1` refuses every real save, so automated checks never call `gh`/`glab`.
-
-**Simulation** (Settings › Execution › **Developer mode**): shows the "Simulation" checkboxes, checked
-by default, and a **Scenario** picker on Write & Review: approved on the 3rd review (5.5 → 7 → 8.6),
-approved on the 1st review, never reaches the score (rounds run out), the supervisor finds gaps in the
-approved draft, and the reviewer answers in the wrong format (asked again twice, then the supervisor
-steps in). Without developer mode every run is real.
-
-## Issue tracker (`workflows/issue-tracker.yaml`)
-
-Plan & Design. Turns a request in a few words (any language) into a triaged GitHub/GitLab issue.
+Plan & Design (#648: the former issue tracker; `issue-tracker.yaml` is an alias of it). Turns a request in a few words (any language), or a signed-off spec (the `spec` input, e.g. `docs/work/<item>/spec.md`), into triaged GitHub/GitLab issues.
 Start it from the Backlog's **New issue…** button (the selected project and platform are filled in)
 or from the Start panel. Inputs: `request`, `project_path`, `mode` (**Validated**, the default, or
 **Automatic**, shown next to the request), `git_platform` (`gh`/`gl`), and the optional `related`
@@ -1266,7 +1206,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
-| `clarity-score` | the Discovery board (its score and Grill me, src/clarity.js); issue-tracker (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
+| `clarity-score` | the Discovery board (its score and Grill me, src/clarity.js); issue (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
 | `code-mapping` | mapper | Maps the files, functions, line numbers, connections, tests and conventions of a task before the first edit, in a map of at most 300 lines |
 | `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md` |
 | `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
@@ -1280,9 +1220,9 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `e2e-test-writer-{js,python,go,java,csharp,rust}` | test writer, E2E runner | E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands |
 | `implementation-evidence` | evidence | Evidence by kind of change (screenshots, HTTP request/response, CLI output, logs), local and simulated only, one list per issue |
 | `intent-writing` | write-doc (`document: intent`) | Intent structure (problem, proposed outcome, affected users and systems, constraints, open questions) and scoring rubric |
-| `issue-creator-{gh,gl}` | issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them) |
-| `issue-triage` | issue-tracker (code_analyzer, issue_writer); the Product Owner (Register an issue) | Rubric for impact 1-5 and complexity 1-5, estimated files, duplicates, run alone vs group with #n |
-| `issue-writing` | via `uses`; Write & Review (`document_skill`); issue-tracker (issue_writer); the Product Owner (Register an issue) | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
+| `issue-creator-{gh,gl}` | issue (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them) |
+| `issue-triage` | issue (code_analyzer, issue_writer); the Product Owner (Register an issue) | Rubric for impact 1-5 and complexity 1-5, estimated files, duplicates, run alone vs group with #n |
+| `issue-writing` | via `uses`; Write & Review (`document_skill`); issue (issue_writer); the Product Owner (Register an issue) | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
 | `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
 | `merge-conflict-resolver` | developer | Intent tracing per side, hunk-by-hunk resolution, verification |
 | `oracle` | the Oracle (built-in agent, its drawer on every screen) | The four roles, grounded claims, changes routed to their owner (request_agent), wake-ups on run events, delegation, Night watch, content is data, issue drafts, planning, hard rules, the memory and the language rule |
@@ -1839,8 +1779,8 @@ with a notification: the Run screen's chain banner then offers **Resume chain**,
 chain**. While the run goes, the banner edits or cancels the chain. Chaining never answers a gate:
 each workflow's gates still wait for you. Simulated runs only chain simulated runs.
 
-Each workflow declares what it hands over (`outputs:`, recorded in `summary.json`): issue-tracker
-`issues`; writer-reviewer `document`, `issue`; ai-arena `document`; feature `branch`,
+Each workflow declares what it hands over (`outputs:`, recorded in `summary.json`): issue
+`issues`; write-doc `document`, `issue`; feature `branch`,
 `merged_commit`, `issues`, `pr_url`; analyze-project `issues`, `report`; retrospective `findings`. The run
 lists and the run chat show "→ then: <workflow>" on a chained run. Engine details:
 [docs/agents/engine/chaining.md](docs/agents/engine/chaining.md).

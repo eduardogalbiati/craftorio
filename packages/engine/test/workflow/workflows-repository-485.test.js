@@ -27,7 +27,7 @@ const MANIFEST = `workflows:
   - name: shared
     file: workflows/shared.yaml
     category: team
-  - name: writer-reviewer
+  - name: write-doc
     category: team
 `;
 
@@ -42,7 +42,7 @@ function setup(t, manifest = MANIFEST) {
   fs.writeFileSync(path.join(ws, 'shared.yaml'), repoFlow('ws_shared', 'shared'));
   fs.writeFileSync(path.join(ws, 'only-ws.yaml'), repoFlow('ws', 'only-ws'));
   fs.writeFileSync(path.join(bundled, 'only-bundled.yaml'), repoFlow('b', 'only-bundled'));
-  fs.writeFileSync(path.join(bundled, 'writer-reviewer.yaml'), repoFlow('wr', 'writer-reviewer'));
+  fs.writeFileSync(path.join(bundled, 'write-doc.yaml'), repoFlow('wr', 'write-doc'));
   return { repo: repo.dir, ws, bundled };
 }
 
@@ -79,8 +79,8 @@ test('#485 resolveWorkflow: what the repository does not declare resolves worksp
   same(b.file, path.join(bundled, 'only-bundled.yaml'));
   assert.equal(b.origin, 'bundled');
   // declared by name only (no file): the bundled workflow, not a repository file
-  const byName = resolveWorkflow('writer-reviewer.yaml', [ws, bundled], { repo });
-  same(byName.file, path.join(bundled, 'writer-reviewer.yaml'));
+  const byName = resolveWorkflow('write-doc.yaml', [ws, bundled], { repo });
+  same(byName.file, path.join(bundled, 'write-doc.yaml'));
   assert.notEqual(byName.origin, 'repository');
 });
 

@@ -17,12 +17,12 @@ const os = require('os');
 const path = require('path');
 const { loadWorkflow } = require('../engine/workflow');
 
-const BUNDLED = path.join(__dirname, '..', '..', '..', 'workflows', 'writer-reviewer.yaml');
+const BUNDLED = path.join(__dirname, '..', '..', '..', 'workflows', 'write-doc.yaml');
 
 function tempCopy(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-cache-389-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const file = path.join(dir, 'writer-reviewer.yaml');
+  const file = path.join(dir, 'write-doc.yaml');
   fs.copyFileSync(BUNDLED, file);
   // #407: copyFileSync keeps the source's mtime on Windows (CopyFileW) but not on every
   // platform (e.g. Linux's copy_file_range gives the copy a fresh mtime); pin an old one so the
@@ -52,31 +52,31 @@ function readsOf(t, file, fn) {
 test('loadWorkflow does not read an unchanged workflow file again (#389)', (t) => {
   const file = tempCopy(t);
   const first = loadWorkflow(file);
-  assert.equal(first.metadata.name, 'writer-reviewer');
+  assert.equal(first.metadata.name, 'write-doc');
 
   const { out: second, reads } = readsOf(t, file, () => loadWorkflow(file));
   assert.equal(reads, 0, 'the second load of the same file (same mtime) comes from the cache');
-  assert.equal(second.metadata.name, 'writer-reviewer');
+  assert.equal(second.metadata.name, 'write-doc');
   assert.ok(Array.isArray(second.warnings), 'the cached workflow keeps its warnings (#286)');
 
   // a caller changing its copy never changes what the next load returns
   second.metadata.name = 'changed by a caller';
-  assert.equal(loadWorkflow(file).metadata.name, 'writer-reviewer');
+  assert.equal(loadWorkflow(file).metadata.name, 'write-doc');
 });
 
 test('loadWorkflow reads a workflow file again once its mtime changed (#389)', (t) => {
   const file = tempCopy(t);
-  assert.equal(loadWorkflow(file).metadata.name, 'writer-reviewer');
+  assert.equal(loadWorkflow(file).metadata.name, 'write-doc');
   // the cache is in use before the edit
   assert.equal(readsOf(t, file, () => loadWorkflow(file)).reads, 0, 'the unchanged file comes from the cache');
 
-  fs.writeFileSync(file, fs.readFileSync(BUNDLED, 'utf8').replace('  name: writer-reviewer', '  name: writer-reviewer-edited'));
+  fs.writeFileSync(file, fs.readFileSync(BUNDLED, 'utf8').replace('  name: write-doc', '  name: write-doc-edited'));
   const later = new Date(Date.now() + 5000);
   fs.utimesSync(file, later, later);
 
   const { out, reads } = readsOf(t, file, () => loadWorkflow(file));
   assert.equal(reads, 1, 'the edited file is read again');
-  assert.equal(out.metadata.name, 'writer-reviewer-edited');
+  assert.equal(out.metadata.name, 'write-doc-edited');
 });
 
 test('a same-size rewrite within the mtime tick is not masked by the cache (#407)', (t) => {
@@ -85,18 +85,18 @@ test('a same-size rewrite within the mtime tick is not masked by the cache (#407
   const recent = new Date();
   fs.utimesSync(file, recent, recent);
   const first = loadWorkflow(file);
-  assert.equal(first.metadata.name, 'writer-reviewer');
+  assert.equal(first.metadata.name, 'write-doc');
 
-  // same byte length ('writer-reviewer' -> 'writer-reviewed'), and the mtime is forced back to
+  // same byte length ('write-doc' -> 'write-dox'), and the mtime is forced back to
   // the exact same value: the cache key (mtime + size) does not change, only the text does
   const original = fs.readFileSync(file, 'utf8');
-  const rewritten = original.replace('name: writer-reviewer', 'name: writer-reviewed');
+  const rewritten = original.replace('name: write-doc', 'name: write-dox');
   assert.equal(rewritten.length, original.length, 'the rewrite must keep the cache key (mtime+size) the same');
   fs.writeFileSync(file, rewritten);
   fs.utimesSync(file, recent, recent);
 
   const second = loadWorkflow(file);
-  assert.equal(second.metadata.name, 'writer-reviewed', 'a same-mtime, same-size rewrite is not masked by the stale cache');
+  assert.equal(second.metadata.name, 'write-dox', 'a same-mtime, same-size rewrite is not masked by the stale cache');
 });
 
 test('a racy reload of unchanged text still hands out a fresh clone of the cached parse (#407)', (t) => {
@@ -104,14 +104,14 @@ test('a racy reload of unchanged text still hands out a fresh clone of the cache
   const recent = new Date();
   fs.utimesSync(file, recent, recent);
   const first = loadWorkflow(file);
-  assert.equal(first.metadata.name, 'writer-reviewer');
+  assert.equal(first.metadata.name, 'write-doc');
 
   // still inside the racy window: the text is re-read to confirm it did not change, but the
   // parse is reused (no re-parse) and each call still hands out its own copy
   const { out: second, reads } = readsOf(t, file, () => loadWorkflow(file));
   assert.equal(reads, 1, 'a racy reload re-reads the text to check it is unchanged');
-  assert.equal(second.metadata.name, 'writer-reviewer');
+  assert.equal(second.metadata.name, 'write-doc');
 
   second.metadata.name = 'changed by a caller';
-  assert.equal(loadWorkflow(file).metadata.name, 'writer-reviewer');
+  assert.equal(loadWorkflow(file).metadata.name, 'write-doc');
 });

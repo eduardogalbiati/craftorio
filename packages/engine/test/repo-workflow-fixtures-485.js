@@ -27,7 +27,7 @@ workflows:
     file: workflows/repo-flow.yaml
     category: solo
     description: The repository's own flow
-  - name: writer-reviewer
+  - name: write-doc
     category: team
 `;
 
