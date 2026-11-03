@@ -388,16 +388,19 @@
     window.showRun(el.dataset.run, { workflow: el.dataset.workflow });
   }
 
-  // "Enrich in Write & Review" (#103): the Write & Review screen prefilled with the issue (an enriched
-  // issue by default), in this project, read-only; the owner edits and starts it.
+  // "Enrich" (#103; #648: write-doc, Write & Review left the menu): the writer on the issue's spec, in
+  // this project, opened in the Documents editor (window.writeDocForCard, views/docs/docs.js); the run
+  // records the issue, the prompt is its title, number, labels and body (DuoIssue.issuePrompt).
   function enrichIssue(number) {
     const issue = bl.data?.issues?.find((i) => i.number === number);
     if (!issue) return;
-    window.openDuoForIssue({
+    const full = { number: issue.number, title: issue.title, url: issue.url, body: issue.body || '', labels: issue.labels || [] };
+    window.writeDocForCard({
       projectId: bl.projectId,
-      platform: bl.data.platform,
-      issue: { number: issue.number, title: issue.title, url: issue.url, body: issue.body || '', labels: issue.labels || [] },
-    });
+      title: issue.title,
+      issue: { number: issue.number, url: issue.url, title: issue.title },
+      prompt: window.DuoIssue?.issuePrompt(full) || '',
+    }).catch((e) => { bl.error = errMsg(e); render(); });
   }
 
   // New issue (#81): the Start drawer on the issue workflow, for this project and platform;

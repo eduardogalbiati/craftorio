@@ -3,6 +3,9 @@
 // and anchored notes (mock-4) and the sign-off gate (mock-5). Markup only, from the values docs.js
 // passes, and the New item panel's Several writers value (#648); the clicks are docs.js's (data-docs-*). Uses app.js globals (esc, t) and Select (select.js). Browser: window.DocsPanels.
 (() => {
+  // #648 Several writers: how many may draft (write-doc's `writers`, 2 to 5), three unless chosen
+  const WRITER_COUNTS = ['2', '3', '4', '5'];
+  const SEVERAL_WRITERS = '3';
   // the side panel next to the list: starts with, what it is about, the screens (a later phase,
   // disabled), Several writers (#648: write-doc's Arena mode), the estimate and Start; `steps` the SDLC steps a document starts at
   function newItemPanel(steps, estimate) {
@@ -31,6 +34,10 @@
                 <input type="checkbox" data-testid="docs-new-writers" />
                 <span><b>${t('docs.several_writers')}</b><span class="muted small">${t('docs.several_writers_help')}</span></span>
               </label>
+              <div class="field docs-new-writers-count hidden" data-docs-writers-count>
+                <label for="docs-new-writers-count">${t('docs.how_many_writers')}</label>
+                ${Select.markup('id="docs-new-writers-count" data-testid="docs-new-writers-count"', WRITER_COUNTS.map((n) => [n, n]), SEVERAL_WRITERS)}
+              </div>
               <p id="docs-new-error" class="error small"></p>
               <div class="docs-new-foot">
                 <span id="docs-new-estimate" class="mono muted small" data-testid="docs-new-estimate">${estimate}</span>
@@ -133,13 +140,21 @@
   const openLabel = (doc) => t(OPEN_LABEL[doc] || OPEN_LABEL.intent);
 
   // #648: the New item panel's "Several writers" (write-doc's Arena mode): the `writers` input it asks
-  // for (write-doc's text enum "1"-"5"), null when off (the workflow's one writer); `on` sets it first
-  const SEVERAL_WRITERS = '3';
+  // for (write-doc's text enum "1"-"5": the count chosen, 2 to 5, shown while the box is on), null when
+  // off (the workflow's one writer); `on` sets the box first (off: the count back to its default)
   function newItemWriters(on) {
     const box = document.querySelector('#docs-new-panel [data-testid="docs-new-writers"]');
-    if (box && typeof on === 'boolean') box.checked = on;
-    return box?.checked ? SEVERAL_WRITERS : null;
+    const count = document.querySelector('#docs-new-writers-count');
+    if (box && typeof on === 'boolean') {
+      box.checked = on;
+      if (!on && count) count.value = SEVERAL_WRITERS;
+    }
+    document.querySelector('#docs-new-panel [data-docs-writers-count]')?.classList.toggle('hidden', !box?.checked);
+    if (!box?.checked) return null;
+    return WRITER_COUNTS.includes(count?.value) ? count.value : SEVERAL_WRITERS;
   }
+  // the count shows as soon as the box is turned on
+  document.addEventListener('change', (e) => { if (e.target?.matches?.('#docs-new-panel [data-testid="docs-new-writers"]')) newItemWriters(); });
 
   window.DocsPanels = {
     newItemPanel,

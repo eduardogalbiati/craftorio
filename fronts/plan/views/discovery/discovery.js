@@ -28,7 +28,7 @@
 // its issues' badge in the Backlog: window.DiscoveryActions.openCard) and offers "New card from this
 // one": new learning is a new Inbox card linked to it, the committed card never returns to the board.
 // Column automations (#259): a column with an automation (the board's columns[].on_enter: Shape
-// offers AI Arena → Write & Review on the card's document, Ready the clarity check) shows it in its
+// offers Write doc on the card's document, #648, Ready the clarity check) shows it in its
 // header with its mode; the button opens its settings (the pipeline, the mode Ask me / On / Off,
 // saved at once). A move into an "Ask me" column opens the proposal (the pipeline, its cost estimate)
 // with Run / Not now; "On" starts it with the move (a toast). A card whose automation runs shows
@@ -36,15 +36,12 @@
 // its cost, written by the service); the thread's run link opens the run.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, dateOf, confirmDialog, openModal, closeModal, showToast, selectRun), ncAgo (notification-center.js), markdownHtml (artifact-render.js),
-// CurrentProject, ImageViewer, DiscoveryCardParts (views/inbox/inbox.js), DuoIssue (the document
-// types' goals), openDuoForCard (views/duo/duo.js) and openArenaForCard (views/arena/arena.js).
+// CurrentProject, ImageViewer, DiscoveryCardParts (views/inbox/inbox.js) and writeDocForCard (views/docs/docs.js).
 (() => {
   const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix', 'intent']; // the store's (discovery.TYPES; #633 intent)
   const FAST = ['bug', 'hotfix']; // the fast lane's types
   // the runs whose result comes back to a card, by the `source` it is recorded under
   const SOURCES = { 'ai-arena': 'AI Arena', 'write-doc': 'Write a document', 'write-review': 'Write & Review' };
-  // the document type a card's type asks Write & Review and the AI Arena for (else free-form)
-  const DOC_SKILL = { prd: 'prd-writing', rfc: 'rfc-writing' };
   const LS_RUNS = 'discovery.runs'; // run id → { projectId, cardId, source }, until the run ends
   const THREAD = '<svg class="inbox-clip" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>';
   const CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>';
@@ -877,8 +874,6 @@
     }
     box.innerHTML = dv.open.column !== 'shape' ? '' : `
       <div class="row dsc-actions" role="group" aria-label="${t('discovery.shape')}">
-        <button type="button" class="btn sm" data-testid="card-open-write-review" data-detail="open-write-review" title="${t('discovery.a_writer_and_a_reviewer_work')}">${t('discovery.open_in_write_review')}</button>
-        <button type="button" class="btn sm" data-testid="card-open-arena" data-detail="open-arena" title="${t('discovery.several_models_write_from_this_card')}">${t('discovery.open_in_ai_arena')}</button>
         <button type="button" class="btn sm" data-testid="card-write-doc" data-detail="write-doc" title="${t('discovery.the_writer_drafts_an_intent_from')}">${t('discovery.write_a_document')}</button>
       </div>
       <p class="muted small dsc-actions-hint">${t('discovery.the_card_s_document_is_the')}</p>`;
@@ -1280,41 +1275,20 @@
   }
 
   // ---- a run for a card -----------------------------------------------------------------------------
-  // "Open in Write & Review" / "Open in AI Arena" fill that screen with the card's document; nothing
-  // starts by itself. The screen tells DiscoveryRuns.started which run it started for the card, and
+  // #649 "Write a document": the Documents editor writes a new intent named after the card (views/docs/docs.js).
+  // #648: the Write & Review and AI Arena screens left the menu and the card (write-doc does both), their
+  // past runs still come back. The editor tells DiscoveryRuns.started which run it started for the card, and
   // when that run finishes its document is recorded on the card (discovery:record-result). The link
   // is kept in localStorage, so a run that ends while the app is closed is caught up on the next visit.
-  function openRunScreen(source) {
-    const c = dv.open;
-    if (editBlocks()) return;
-    const skill = DOC_SKILL[c.type] || '';
-    const what = { prd: 'a PRD', rfc: 'an RFC' }[c.type] || 'a clear document';
-    const request = [
-      `Shape this discovery card into ${what}. Keep its intent and every fact it states; ground what you add in the project's files and mark assumptions and open questions as such.`,
-      `Card: ${c.title}`,
-      `<document>\n${String(c.document || '').trim() || t('discovery.no_document_yet')}\n</document>`,
-      ...(String(c.acceptance || '').trim() ? [`<acceptance_criteria>\n${c.acceptance.trim()}\n</acceptance_criteria>`] : []),
-    ].join('\n');
-    const card = { projectId: dv.openProject, cardId: c.id, title: c.title };
-    if (source === 'ai-arena') {
-      window.openArenaForCard({ ...card, task: request, skill });
-      return;
-    }
-    const goal = window.DuoIssue.defaultGoal(skill)
-      || 'A document clear enough to commit to: the problem and who has it, what is decided, the scope and what is out of it, and the open questions marked as such.';
-    window.openDuoForCard({ ...card, prompt: request, goal, skill });
-  }
-
-  // #649 "Write a document": the Documents editor writes a new intent named after the card (views/docs/docs.js)
   function writeDocument() { if (!editBlocks()) window.writeDocForCard({ projectId: dv.openProject, cardId: dv.open.id, title: dv.open.title }).catch((e) => detailError(errMsg(e))); }
-  const RUN_ACTS = { 'open-write-review': () => openRunScreen('write-review'), 'open-arena': () => openRunScreen('ai-arena'), 'write-doc': writeDocument };
+  const RUN_ACTS = { 'write-doc': writeDocument };
 
   const readRuns = () => { try { return JSON.parse(localStorage.getItem(LS_RUNS)) || {}; } catch { return {}; } };
   const writeRuns = (runs) => { try { localStorage.setItem(LS_RUNS, JSON.stringify(runs)); } catch { /* ignore */ } };
 
   /** The run `runId` was started for a card: `{ projectId, cardId, source, item?, doc? }` (source 'write-review' | 'ai-arena' | 'write-doc'). */
   function runStarted(runId, { projectId, cardId, source, item, doc }) { writeRuns({ ...readRuns(), [runId]: { projectId, cardId, source, item, doc } }); }
-  // a write-doc run's document, read back from the project once it ends (the run has no `document` output)
+  // a write-doc run's document, read back from the project once it ends (its `document` output is the file's path)
   const writtenDoc = (link, ev) => (link.item && ev.status === 'success' ? api.readDoc(link.projectId, link.item, link.doc || 'intent').then((d) => d?.source?.markdown, () => null) : null);
 
   function forgetRun(runId) { const runs = readRuns(); delete runs[runId]; writeRuns(runs); }

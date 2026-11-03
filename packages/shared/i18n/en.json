@@ -2230,6 +2230,7 @@
   "docs.front_matter_after_sign_off": "Front matter after sign-off",
   "docs.give_the_item_a_title": "Give the item a title.",
   "docs.has_a_review_note": "has a review note",
+  "docs.how_many_writers": "How many writers",
   "docs.language": "Language",
   "docs.later_phase": "Comes in a later phase",
   "docs.lint_problems_count": "Lint problems after the last change: {count} (hover to read them)",

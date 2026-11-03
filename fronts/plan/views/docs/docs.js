@@ -14,15 +14,15 @@
 // off spec changes the front matter and commits (docs:accept) before it answers the gate. A signed-off
 // spec offers Create epic and phase issues (its list row too: the Backlog's Product Owner proposes them
 // with their mockup coverage, #670) and Start the Build (the Roadmap): nothing is filed or started
-// before that click. A Discovery card's Write a document starts its writer here too (writeDocForCard, #649).
+// before that click. A Discovery card's Write a document (#649) and a Backlog issue's Enrich (#648) start their writer here too (writeDocForCard).
 // #671 the screens follow the spec's mockups (docs/work/write-doc/images/): the list rows show their
 // SDLC stage chain and the pill of their latest document, New item is a side panel (mock-1); the
 // editor has the item's six SDLC steps, the contents with each requirement, the toolbar (Edit / Diff /
 // Preview, EN / PT, Versions, Send to review) and the writer panel (Apply now or Queue, Attach image)
 // (living-doc, mock-2); each change by request is a versioned card whose detail holds Undo this change
 // and Mark reviewed (mock-3); the review shows its score, its rubric checks and the anchored notes with
-// Apply / Edit / Dismiss (mock-4); the approval gate is the sign-off panel (mock-5). Several writers
-// (AI Arena, phase 2) and Screens to capture first (captures, phase 3) are shown disabled. The New item
+// Apply / Edit / Dismiss (mock-4); the approval gate is the sign-off panel (mock-5). Several writers is
+// write-doc's Arena mode (#648); Screens to capture first (captures, phase 3) is shown disabled. The New item
 // panel, the toolbar, the review and the sign-off markup live in docs-panels.js (DocsPanels); the Diff tab's page of a
 // change (its touched sections, docs:read-at) in docs-diff.js (DocsDiff); the sections with their
 // anchors and the reader's page in docs-page.js (DocsPage).
@@ -216,12 +216,12 @@
   }
 
   // The write-doc run of a document → its startRun answer { runId }; folder: the project's (none: left out)
-  async function runWriter(projectId, folder, { item, doc, title, writers }) {
-    const inputs = { ...(folder ? { project_path: folder } : {}), item, document: doc, title: title || item, ...(writers ? { writers } : {}) };
+  async function runWriter(projectId, folder, { item, doc, title, writers, prompt, issue }) {
+    const inputs = { ...(folder ? { project_path: folder } : {}), item, document: doc, title: title || item, ...(writers ? { writers } : {}), ...(prompt ? { prompt } : {}) };
     // the run starts from and merges into the project's default branch (main, master, develop…)
     const hints = await api.projectInputHints?.(projectId).catch(() => null);
-    if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch;
-    return api.startRun({ file: FILE, inputs, mock: !!state.simulationOnly, projectId });
+    if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch; // an issue's run records it (run.issues)
+    return api.startRun({ file: FILE, inputs, mock: !!state.simulationOnly, projectId, ...(issue ? { issues: [issue] } : {}) });
   }
 
   async function startWriter() {
@@ -914,19 +914,19 @@
     },
   };
 
-  // #649 "Write a document" on a Discovery card (views/discovery/discovery.js): the writer on a new
-  // intent named after the card, opened in this editor; the run is the card's (DiscoveryRuns), so its
-  // document comes back to the card as a version and an attachment when it ends → the run id
-  window.writeDocForCard = async ({ projectId, cardId, title }) => {
-    const item = slugOf(title) || 'card';
+  // #649 "Write a document" on a Discovery card (views/discovery/discovery.js): the writer on a new intent named
+  // after the card, opened in this editor; the run is the card's (DiscoveryRuns), so its document comes back to the
+  // card as a version and an attachment when it ends → the run id. #648 Enrich on a Backlog issue
+  // (views/backlog/backlog.js, `issue` { number, url, title }, its `prompt`): the issue's spec, the run records it
+  window.writeDocForCard = async ({ projectId, cardId, title, issue = null, prompt = '' }) => {
+    const item = slugOf(issue ? `issue-${issue.number}-${title}` : title) || 'card', doc = issue ? 'spec' : 'intent';
     const folder = (state.projects || []).find((p) => p.id === projectId)?.folder || null;
-    const out = await runWriter(projectId, folder, { item, doc: 'intent', title });
-    window.DiscoveryRuns?.started(out.runId, { projectId, cardId, source: 'write-doc', item, doc: 'intent' });
-    // the editor follows the card's project, the header too (openDoc reads it)
-    if (projectId && window.CurrentProject?.get() !== projectId) window.CurrentProject?.set?.(projectId, { redraw: false });
+    const out = await runWriter(projectId, folder, { item, doc, title, prompt, issue });
+    if (cardId) window.DiscoveryRuns?.started(out.runId, { projectId, cardId, source: 'write-doc', item, doc });
+    if (projectId && window.CurrentProject?.get() !== projectId) window.CurrentProject?.set?.(projectId, { redraw: false }); // the header follows
     docs.projectId = projectId || docs.projectId;
     showView('docs');
-    await openDoc(item, 'intent', out.runId, { creating: true, projectId });
+    await openDoc(item, doc, out.runId, { creating: true, projectId });
     if (docs.open) docs.open.title = title;
     return out.runId;
   };
