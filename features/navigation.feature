@@ -1,9 +1,11 @@
 Feature: Menu by the flow
   The sidebar follows the work's flow: Home on top, then Plan & Design, Code & Build, Workflows and
-  AI, each a titled group that collapses (and stays collapsed), then Night watch and Settings. The
-  header holds the app-wide project, the Oracle and the notifications bell. The Supervisor has no
-  screen nor header button: its conversation is a drawer of the Workflows screen.
+  AI, then Monitor (Errors and Night watch), each a titled group that collapses (and stays
+  collapsed), then Settings. The header holds the app-wide project, the Oracle and the notifications
+  bell. The Supervisor has no screen nor header button: its conversation is a drawer of the
+  Workflows screen.
 
+  # #634: the Monitor group (Errors, then Night watch) comes after AI, before Settings
   @issue-254 @smoke
   Scenario: The sidebar groups the screens in the order of the flow, and a collapsed group stays collapsed
     Given the app is open
@@ -15,7 +17,7 @@ Feature: Menu by the flow
       | Code & Build  | Backlog, Roadmap, Sessions              |
       | Workflows     | Definitions, Runs, Builder, Pipelines   |
       | AI            | Agents, Skills, Usage                   |
-      | Night watch   |                                         |
+      | Monitor       | Errors, Night watch                     |
       | Settings      |                                         |
     And the sidebar does not offer "Dashboard"
     And the sidebar does not offer "Supervisor"

@@ -24,10 +24,11 @@ function tokens(layout) {
     : block.items.map((i) => text(i.label))));
 }
 
-test('NavGroups.GROUPS: plan, code, workflows and ai, in that order, with their titles', () => {
+// #634: a fifth group, Monitor (Errors, Night watch), after AI
+test('NavGroups.GROUPS: plan, code, workflows, ai and monitor, in that order, with their titles', () => {
   const { GROUPS } = navGroups();
-  assert.deepEqual(GROUPS.map((g) => g.id), ['plan', 'build', 'workflows', 'ai']);
-  assert.deepEqual(GROUPS.map((g) => g.title), ['Plan & Design', 'Code & Build', 'Workflows', 'AI']);
+  assert.deepEqual(GROUPS.map((g) => g.id), ['plan', 'build', 'workflows', 'ai', 'monitor']);
+  assert.deepEqual(GROUPS.map((g) => g.title), ['Plan & Design', 'Code & Build', 'Workflows', 'AI', 'Monitor']);
 });
 
 test('navLayout: the groups come in their fixed order whatever the views\' order, each with its title and its items by order; an empty group is left out', () => {
@@ -44,7 +45,8 @@ test('navLayout: the groups come in their fixed order whatever the views\' order
   assert.deepEqual(grouped[2].items.map((i) => i.id), ['agents', 'usage']);
 });
 
-test('the menu built from the real views: Home, Plan & Design, Code & Build, Workflows (its tabs), AI, then Night watch and Settings', () => {
+// #634: Night watch moved into the Monitor group, after Errors
+test('the menu built from the real views: Home, Plan & Design, Code & Build, Workflows (its tabs), AI, Monitor (Errors, Night watch), then Settings', () => {
   const { navLayout } = navGroups();
   const app = loadApp();
   const entries = navEntries(app.defs);
@@ -54,7 +56,7 @@ test('the menu built from the real views: Home, Plan & Design, Code & Build, Wor
     '[build]', 'Projects', 'Backlog', 'Roadmap', 'Sessions',
     '[workflows]', 'Definitions', 'Runs', 'Builder', 'Pipelines',
     '[ai]', 'Agents', 'Skills', 'Usage',
-    'Night watch',
+    '[monitor]', 'Errors', 'Night watch',
     'Settings',
   ];
   // entries the issue does not place (e.g. Analytics) are left out of the comparison
@@ -94,7 +96,8 @@ test('a group collapses and stays collapsed: the choice is kept in the given sto
   assert.equal(ng.isCollapsed('build', storage), false);
 });
 
-test('the page\'s sidebar shows the four group titles', async () => {
+// #634: Monitor is the fifth
+test('the page\'s sidebar shows the five group titles', async () => {
   const app = loadApp();
   await app.boot();
   // what the sidebar holds: its own markup, and what was put into it or into an element of it (`nav…` selectors)
@@ -108,7 +111,7 @@ test('the page\'s sidebar shows the four group titles', async () => {
   };
   [...app.elements.entries()].filter(([sel]) => /sidebar|(^|[#.\s])nav/.test(sel)).forEach(([, el]) => walk(el));
   const dom = parts.map(text).join(' | ');
-  for (const title of ['Plan & Design', 'Code & Build', 'Workflows', 'AI']) {
+  for (const title of ['Plan & Design', 'Code & Build', 'Workflows', 'AI', 'Monitor']) {
     assert.ok(dom.includes(title), `the sidebar has no "${title}" group title`);
   }
 });
