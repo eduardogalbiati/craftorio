@@ -198,31 +198,6 @@ test('sync reads an epic and its sub-issues into the cache (packages/engine/doma
   assert.deepEqual(backlog.readBacklog(dir, 'p').epics, data.epics); // cached like the rest
 });
 
-test('right before a queued issue starts: only PRs opened since it was assigned skip it, and the queue says why', async (t) => {
-  const dir = tmp(t);
-  const pr = (number, issue) => ({ number, title: `PR ${number} (#${issue})`, url: `https://github.com/o/r/pull/${number}`, body: '' });
-  // #1 was assigned anyway with PR 10 open; #2 had none
-  let q = backlog.enqueue(dir, 'p', { workflow: 'sd.yaml', issues: [
-    { number: 1, url: 'i1', title: 'One', pullRequests: [{ number: 10, url: 'https://github.com/o/r/pull/10' }] },
-    { number: 2, url: 'i2', title: 'Two' },
-  ] });
-  const check = (item, answer) => backlog.newPullRequests({ item, platform: 'github', repo: 'https://github.com/o/r', exec: routedExec({ pr: answer }).exec });
-  assert.deepEqual(await check(q.items[0], [pr(10, 1)]), []);
-  assert.deepEqual(await check(q.items[1], [pr(10, 1)]), []);
-  assert.deepEqual((await check(q.items[1], [pr(10, 1), pr(11, 2)])).map((p) => p.number), [11]);
-  assert.deepEqual(await check(q.items[1], new Error('offline')), []); // the check failing lets it start
-
-  q = backlog.skipQueued(dir, 'p', 2, 'open PR #11 since it was queued');
-  assert.deepEqual(q.items.map((x) => x.number), [1]);
-  assert.deepEqual(q.skipped.map((s) => [s.number, s.title, s.reason]), [[2, 'Two', 'open PR #11 since it was queued']]);
-  assert.equal(backlog.nextQueued(dir).item.number, 1);
-  // assigning it again, or dismissing it, clears the note
-  q = backlog.enqueue(dir, 'p', { workflow: 'sd.yaml', issues: [{ number: 2, url: 'i2', title: 'Two' }] });
-  assert.deepEqual(q.skipped, []);
-  backlog.skipQueued(dir, 'p', 2, 'again');
-  assert.deepEqual(backlog.unqueue(dir, 'p', 2).skipped, []);
-});
-
 test('issues link to the runs that mention them and land in a kanban column', () => {
   const issue = (number, state) => ({ number, state, url: `https://github.com/o/r/issues/${number}` });
   const runs = [
@@ -369,65 +344,6 @@ test('linkRuns: a run with no title or PR carries neither (no undefined fields l
   const [out] = backlog.linkRuns([issue], [run]);
   assert.ok(!('title' in out.runs[0]));
   assert.ok(!('pr' in out.runs[0]));
-});
-
-test('the queue: enqueue skips duplicates and remembers inputs, next item across projects, pause', (t) => {
-  const dir = tmp(t);
-  const issue = (number) => ({ number, url: `u${number}`, title: `T${number}`, body: `B${number}` });
-  assert.deepEqual(backlog.readQueue(dir, 'p'), { paused: false, error: null, inputs: {}, items: [], skipped: [] });
-  assert.equal(backlog.nextQueued(dir), null);
-
-  backlog.setPaused(dir, 'p', true, 'stopped');
-  let q = backlog.enqueue(dir, 'p', { issues: [issue(1), issue(2)], workflow: 'sd.yaml', inputs: { language: 'go' } });
-  assert.equal(q.paused, false); // assigning resumes the queue
-  assert.equal(q.error, null);
-  q = backlog.enqueue(dir, 'p', { issues: [issue(2), issue(3)], workflow: 'sd.yaml', inputs: { language: 'js' }, mock: true });
-  assert.deepEqual(q.items.map((x) => [x.number, x.inputs.language, x.mock]), [[1, 'go', false], [2, 'go', false], [3, 'js', true]]);
-  assert.deepEqual(q.inputs, { 'sd.yaml': { language: 'js' } });
-
-  backlog.enqueue(dir, 'other', { issues: [issue(9)], workflow: 'sd.yaml' });
-  assert.deepEqual(backlog.queuedProjects(dir).sort(), ['other', 'p']); // #162: Keep awake sums work across these
-  assert.deepEqual(backlog.nextQueued(dir), { projectId: 'p', item: q.items[0] }); // the oldest first
-  assert.equal(backlog.nextQueued(dir, (projectId) => projectId !== 'p').projectId, 'other'); // p at its limit of runs
-  assert.equal(backlog.nextQueued(dir, () => false), null);
-  backlog.setPaused(dir, 'p', true, 'why');
-  assert.equal(backlog.nextQueued(dir).projectId, 'other');
-  assert.equal(backlog.readQueue(dir, 'p').error, 'why');
-
-  backlog.unqueue(dir, 'other', 9);
-  assert.equal(backlog.nextQueued(dir), null);
-  backlog.setPaused(dir, 'p', false);
-  backlog.pauseAll(dir, 'restarted');
-  assert.deepEqual([backlog.readQueue(dir, 'p').paused, backlog.readQueue(dir, 'p').error], [true, 'restarted']);
-  assert.equal(backlog.readQueue(dir, 'other').paused, false); // nothing waiting there
-});
-
-test('a group is one queue item; removing an issue leaves the group or cancels it; a skip keeps the rest', async (t) => {
-  const dir = tmp(t);
-  const issue = (number, extra) => ({ number, url: `https://github.com/o/r/issues/${number}`, title: `T${number}`, body: `B${number}`, ...extra });
-  backlog.enqueue(dir, 'p', { issues: [issue(9)], workflow: 'sd.yaml' });
-  let q = backlog.enqueue(dir, 'p', { issues: [issue(65), issue(9), issue(53), issue(77)], workflow: 'sd.yaml', group: true });
-  // #9 was already queued: the group is the other three, in the order given
-  assert.deepEqual(q.items.map((x) => [x.number, (x.issues || []).map((i) => i.number)]), [[9, []], [65, [65, 53, 77]]]);
-  assert.deepEqual(backlog.itemIssues(q.items[1]).map((i) => i.title), ['T65', 'T53', 'T77']);
-  // a group of one is a plain item
-  assert.equal(backlog.enqueue(dir, 'other', { issues: [issue(1)], workflow: 'sd.yaml', group: true }).items[0].issues, undefined);
-
-  q = backlog.unqueue(dir, 'p', 65); // leaves the group: the group goes on with #53 and #77, headed by #53
-  assert.deepEqual(q.items.map((x) => [x.number, x.title, (x.issues || []).map((i) => i.number)]), [[9, 'T9', []], [53, 'T53', [53, 77]]]);
-  q = backlog.unqueue(dir, 'p', 77, { cancelGroup: true }); // the whole group
-  assert.deepEqual(q.items.map((x) => x.number), [9]);
-
-  q = backlog.enqueue(dir, 'p', { issues: [issue(1), issue(2, { pullRequests: [{ url: 'https://github.com/o/r/pull/10' }] }), issue(3)], workflow: 'sd.yaml', group: true });
-  const exec = routedExec({ pr: [
-    { number: 10, title: 'Old (#2)', url: 'https://github.com/o/r/pull/10', body: '' },
-    { number: 11, title: 'New (#3)', url: 'https://github.com/o/r/pull/11', body: '' },
-  ] }).exec;
-  const prs = await backlog.newPullRequests({ item: q.items[1], platform: 'github', repo: 'https://github.com/o/r', exec });
-  assert.deepEqual(prs.map((p) => [p.number, p.issue]), [[11, 3]]); // PR 10 was known when #2 was assigned
-  q = backlog.skipQueued(dir, 'p', 3, 'open PR #11 since it was queued');
-  assert.deepEqual(q.items.map((x) => [x.number, (x.issues || []).map((i) => i.number)]), [[9, []], [1, [1, 2]]]);
-  assert.deepEqual(q.skipped.map((s) => [s.number, s.title]), [[3, 'T3']]);
 });
 
 test('a run started for several issues links to each of them; runs recorded with one `issue` still link', () => {
@@ -788,22 +704,6 @@ test('withSyncedText: a copy takes the synced title/body/labels/updatedAt (its o
   const synced = { title: 'New', body: 'new body', labels: [{ name: 'b' }], updatedAt: '2026-10-01T00:00:00Z' }; // no url
   assert.deepEqual(backlog.withSyncedText(copy, synced), { ...copy, title: 'New', body: 'new body', labels: [{ name: 'b' }], updatedAt: '2026-10-01T00:00:00Z' });
   assert.deepEqual(backlog.withSyncedText(copy, null), copy);
-});
-
-test('refreshQueuedCopies: brings the queued copies up to a sync; a no-op (no write) once they already match', (t) => {
-  const dir = tmp(t);
-  backlog.enqueue(dir, 'p', {
-    workflow: 'w.yaml',
-    issues: [{ number: 1, url: 'u1', title: 'Old', body: 'old' }, { number: 2, url: 'u2', title: 'Old2', body: 'old2' }],
-  });
-  const synced = [
-    { number: 1, title: 'New title', body: 'new body', url: 'u1', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
-    { number: 2, title: 'New2', body: 'new2', url: 'u2', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
-  ];
-  assert.equal(backlog.refreshQueuedCopies(dir, 'p', synced), true);
-  const q = backlog.readQueue(dir, 'p');
-  assert.deepEqual(q.items.map((i) => i.title), ['New title', 'New2']);
-  assert.equal(backlog.refreshQueuedCopies(dir, 'p', synced), false); // already up to date: nothing written
 });
 
 test('the platform is the source of truth: a sync and a fresh pre-start read never write back to it (no edit/create/close/comment call)', async (t) => {

@@ -31,7 +31,9 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
   run's path/branch/language/platform inputs; the produced issues linked), plans the produced issues
   as a new last roadmap stage (the `queue` action, "Create and plan": the plain queue is retired,
   #446, and an older `chain.json` with that target plans the stage too; a simulated run plans
-  nothing; a run without a project pauses with "no roadmap to plan in"), or asks the
+  simulated items; produced issues not open in the synced backlog are left out, and when none is
+  left the chain ends done with "nothing planned"; a run without a project pauses with "no roadmap
+  to plan in"), or asks the
   Product Owner and adds its plan as planned roadmap stages (`roadmaps.propose`, never started by
   itself). Anything else pauses the chain (`runs/<id>/chain.json`: `then`, `state` waiting | started |
   paused | dropped | done, `reason`, `nextRunId`) with a notification; channels `chain:get`,

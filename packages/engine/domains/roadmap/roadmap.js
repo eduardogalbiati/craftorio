@@ -565,13 +565,14 @@ function fromQueue(queueItems, name = 'From the queue') {
 
 /**
  * #446: the plain queue is retired. The queues an older version left with items (`fromIndex`: the
- * index's rows per project, store.takeLeftoverQueues; else the backlog/<id>.queue.json file) become one
+ * index's rows per project, store.leftoverQueues; else the backlog/<id>.queue.json file) become one
  * planned stage at the end of each project's roadmap, once (fromQueue's rule), without their pause;
- * their files go, so nothing reads them again (a failed move keeps its file). Returns the moved ids.
+ * then their files go and `onMoved` drops their rows, so nothing reads them again (a failed move
+ * keeps both for the next start). Returns the moved ids.
  * @param {string} dir the backlog folder
- * @param {{ fromIndex?: Record<string, object[]>, issuesOf?: (projectId: string) => any[] }} [options]
+ * @param {{ fromIndex?: Record<string, object[]>, issuesOf?: (projectId: string) => any[], onMoved?: (projectId: string) => void }} [options]
  */
-function moveLeftoverQueues(dir, { fromIndex = {}, issuesOf = () => [] } = {}) {
+function moveLeftoverQueues(dir, { fromIndex = {}, issuesOf = () => [], onMoved = () => {} } = {}) {
   const SUFFIX = '.queue.json';
   let files = [];
   try { files = fs.readdirSync(dir).filter((f) => f.endsWith(SUFFIX)).map((f) => f.slice(0, -SUFFIX.length)); } catch { /* no backlog folder yet */ }
@@ -587,6 +588,7 @@ function moveLeftoverQueues(dir, { fromIndex = {}, issuesOf = () => [] } = {}) {
         moved.push(projectId);
       }
       for (const f of [file, `${file}.bak`]) fs.rmSync(f, { force: true });
+      onMoved(projectId);
     } catch (e) { console.error(`backlog queue move (${projectId}):`, e.message); }
   }
   return moved;

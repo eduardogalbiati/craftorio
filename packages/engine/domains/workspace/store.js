@@ -18,8 +18,9 @@
 //                  path to the runs that saved it. Rebuilt from runs/ when missing.
 //   queues, queue_items, queue_claims
 //                  the retired Backlog queues (#446): never written any more; the items an older
-//                  version left are taken once (takeLeftoverQueues) and planned in the roadmap
-//                  (packages/engine/domains/roadmap/roadmap.js moveLeftoverQueues). Migrations only grow, so the tables stay.
+//                  version left are read (leftoverQueues), planned in the roadmap (packages/engine/
+//                  domains/roadmap/roadmap.js moveLeftoverQueues) and only then dropped
+//                  (dropLeftoverQueue). Migrations only grow, so the tables stay.
 //   gates          a row per approval.requested, closed on approval.resolved or the run's end; the
 //                  open gates of runs that did not survive a restart become `interrupted`.
 //   notifications  every notice (run started/finished/failed, gate waiting, CLI session waiting, push
@@ -257,18 +258,21 @@ function openStore(ws) {
 
     // ---- the retired Backlog queues (#446) -----------------------------------------------------
     /**
-     * The items an older version left in the queue tables, per project ({ <projectId>: items }),
-     * taken out of the tables in the same transaction: the one-time move into the roadmap reads them once.
+     * The items an older version left in the queue tables, per project ({ <projectId>: items }), in
+     * the queue's order. Read only: the one-time move drops a project's rows once it is planned.
      */
-    takeLeftoverQueues() {
-      return transaction(() => {
-        const out = {};
-        for (const r of db.prepare('SELECT project_id, item FROM queue_items ORDER BY project_id, position').all()) {
-          const item = parse(r.item);
-          if (item) (out[r.project_id] ||= []).push(item);
-        }
-        db.exec('DELETE FROM queue_items; DELETE FROM queues; DELETE FROM queue_claims;');
-        return out;
+    leftoverQueues() {
+      const out = {};
+      for (const r of db.prepare('SELECT project_id, item FROM queue_items ORDER BY project_id, position').all()) {
+        const item = parse(r.item);
+        if (item) (out[r.project_id] ||= []).push(item);
+      }
+      return out;
+    },
+    /** Empties one project's rows of the retired queue tables, once its items are in the roadmap. */
+    dropLeftoverQueue(projectId) {
+      transaction(() => {
+        for (const table of ['queue_items', 'queues', 'queue_claims']) db.prepare(`DELETE FROM ${table} WHERE project_id = ?`).run(String(projectId));
       });
     },
 

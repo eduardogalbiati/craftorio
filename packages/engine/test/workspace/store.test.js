@@ -262,7 +262,7 @@ test('pruneNotifications deletes what is older than N days; 0 or less keeps ever
   assert.deepEqual(store.notifications().map((n) => n.id), [recent.id]);
 });
 
-test('#446 takeLeftoverQueues hands out the items an older version left in the queue tables once, then empties them', (t) => {
+test('#446 leftoverQueues reads the items an older version left in the queue tables; dropLeftoverQueue empties one project', (t) => {
   const ws = tempWorkspace();
   const first = openStore(ws);
   first.close();
@@ -273,12 +273,15 @@ test('#446 takeLeftoverQueues hands out the items an older version left in the q
   add.run('proj', 1, 2, '2026-01-01T00:00:01.000Z', JSON.stringify({ number: 2, url: 'u2', title: 'T2' }));
   add.run('proj', 0, 1, '2026-01-01T00:00:00.000Z', JSON.stringify({ number: 1, url: 'u1', title: 'T1' }));
   db.prepare("INSERT INTO queue_claims (project_id, number, claimed_at) VALUES ('proj', 1, '2026-01-01T00:00:00.000Z')").run();
+  add.run('other', 0, 9, '2026-01-01T00:00:02.000Z', JSON.stringify({ number: 9, url: 'u9', title: 'T9' }));
   db.close();
 
   const store = openStore(ws);
   closeAndRemove(t, ws, store);
-  const taken = store.takeLeftoverQueues();
-  assert.deepEqual(Object.keys(taken), ['proj']);
-  assert.deepEqual(taken.proj.map((i) => i.number), [1, 2], 'in the queue\'s order');
-  assert.deepEqual(store.takeLeftoverQueues(), {}, 'taken once: the tables are empty');
+  const left = store.leftoverQueues();
+  assert.deepEqual(Object.keys(left).sort(), ['other', 'proj']);
+  assert.deepEqual(left.proj.map((i) => i.number), [1, 2], 'in the queue\'s order');
+  assert.deepEqual(Object.keys(store.leftoverQueues()).sort(), ['other', 'proj'], 'reading takes nothing out (a failed move keeps them)');
+  store.dropLeftoverQueue('proj');
+  assert.deepEqual(Object.keys(store.leftoverQueues()), ['other'], 'only the moved project is emptied');
 });

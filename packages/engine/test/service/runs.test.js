@@ -6,7 +6,6 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { setupWorkspace } = require('../../domains/workspace/workspace');
 const { createService } = require('../../service');
-const backlog = require('../../domains/backlog/backlog');
 const {
   ISSUE_WORKFLOW, WORKFLOW, makeService, until, untilTrue, watchRuns,
 } = require('./helpers');
@@ -361,34 +360,19 @@ test('prepareRestart refuses while a run start is still reserved (e.g. cloning i
   await finishPendingRun(api, runId);
 });
 
-test('prepareRestart refuses with active runs unless confirmed; once confirmed it pauses the Backlog queues', async (t) => {
+test('prepareRestart refuses with active runs unless confirmed', async (t) => {
   const { service, api } = makeService(t);
-  const ws = service.workspace();
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-restart-'));
-  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
-  const p = await api['projects:create']({ name: 'demo', folder });
-  backlog.enqueue(ws.backlog, p.id, { issues: [{ number: 1, url: 'u1', title: 'T1', body: 'B1' }], workflow: 'fixture-service.yaml' });
-
   const { runId } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
   assert.throws(() => service.prepareRestart(), /1 run is in progress.*confirm the restart/s);
-  assert.equal(backlog.readQueue(ws.backlog, p.id).paused, false, 'refused: nothing paused yet');
 
   const result = service.prepareRestart({ interruptRuns: true });
   assert.deepEqual(result, { interrupted: [{ runId, workflow: 'fixture-service' }] });
-  assert.equal(backlog.readQueue(ws.backlog, p.id).paused, true);
   await finishPendingRun(api, runId);
 });
 
-test('prepareRestart with no runs in progress needs no confirmation and still pauses queued Backlog work', async (t) => {
-  const { service, api } = makeService(t);
-  const ws = service.workspace();
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-restart-idle-'));
-  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
-  const p = await api['projects:create']({ name: 'demo', folder });
-  backlog.enqueue(ws.backlog, p.id, { issues: [{ number: 1, url: 'u1', title: 'T1', body: 'B1' }], workflow: 'fixture-service.yaml' });
-
+test('prepareRestart with no runs in progress needs no confirmation', (t) => {
+  const { service } = makeService(t);
   assert.deepEqual(service.prepareRestart(), { interrupted: [] });
-  assert.equal(backlog.readQueue(ws.backlog, p.id).paused, true);
 });
 
 // ---- Backlog issue enrichment: run:start records the issue, backlog:save-doc saves to it (#103) --

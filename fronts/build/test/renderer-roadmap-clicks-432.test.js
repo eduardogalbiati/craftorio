@@ -24,7 +24,7 @@ function load({ confirm = true, api = {}, elements = {}, globals = {} } = {}) {
     calls.api.push([name, ...plain(args)]);
     return answer ? answer(...args) : { roadmap: { state: 'planned', stages: [] }, edit: { id: `e-${name}` } };
   };
-  const apiNames = ['saveRoadmap', 'startRoadmap', 'parkRoadmapStage', 'roadmapBudget', 'cancelRoadmapPause', 'pauseRoadmap', 'roadmapFromQueue', 'proposeRoadmap', 'roadmapItem', 'roadmapVersions', 'restoreRoadmapVersion', 'clearRoadmap', 'undoRoadmap', 'listReleases', 'listWorkflows'];
+  const apiNames = ['saveRoadmap', 'startRoadmap', 'parkRoadmapStage', 'roadmapBudget', 'cancelRoadmapPause', 'pauseRoadmap', 'proposeRoadmap', 'roadmapItem', 'roadmapVersions', 'restoreRoadmapVersion', 'clearRoadmap', 'undoRoadmap', 'listReleases', 'listWorkflows'];
   const sandbox = {
     esc, state: { runs: new Map() }, errMsg: (e) => String(e?.message || e), devMode: () => false,
     confirmDialog: async (...args) => { calls.confirm.push(plain(args)); return typeof confirm === 'function' ? confirm(...args) : confirm; },
@@ -227,22 +227,13 @@ test('#432 Restore an earlier version lists the versions and a Restore puts one 
   assert.deepEqual(calls.toasts.map((x) => x[0]), ['Restored an earlier version']);
 });
 
-test('#432 From the queue fills the roadmap from the queue', async () => {
-  const { R, calls } = load();
-  const ctx = makeCtx();
-  assert.equal(await R.onClick({ target: act('from-queue') }, ctx, roadmapData({ stages: [] })), true);
-  assert.deepEqual(calls.api, [['roadmapFromQueue', 'p1']]);
-  assert.equal(ctx._calls.setData.length, 1);
-  assert.equal(ctx._calls.render, 1);
-});
-
 test('#432 a failed action shows its error in the screen\'s error line and still redraws', async () => {
-  const { R, calls } = load({ api: { roadmapFromQueue: async () => { throw new Error('queue is empty'); } } });
+  const { R, calls } = load({ api: { clearRoadmap: async () => { throw new Error('roadmap is running'); } } });
   const ctx = makeCtx();
-  assert.equal(await R.onClick({ target: act('from-queue') }, ctx, roadmapData()), true);
-  assert.deepEqual(ctx._calls.setError, ['queue is empty']);
+  assert.equal(await R.onClick({ target: act('clear') }, ctx, roadmapData()), true);
+  assert.deepEqual(ctx._calls.setError, ['roadmap is running']);
   assert.deepEqual(calls.errors, ['roadmap edit:']);
-  assert.equal(ctx._calls.render, 1);
+  assert.equal(ctx._calls.render, 2, 'the menu closes, then the redraw after the error');
 });
 
 test('#432 Propose: an empty proposal does nothing, invalid JSON is an error, a valid one is sent and the issues left out are said', async () => {

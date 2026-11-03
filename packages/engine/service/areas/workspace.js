@@ -49,9 +49,11 @@ module.exports = (ctx) => {
     ctx.watchStrayProcesses();
     // #446: a plain queue an older version left becomes a planned roadmap stage, once (never started)
     try {
+      const store = storeFor(ws.backlog);
       roadmaps.moveLeftoverQueues(ws.backlog, {
-        fromIndex: storeFor(ws.backlog)?.takeLeftoverQueues() || {},
+        fromIndex: store?.leftoverQueues() || {},
         issuesOf: (id) => backlog.readBacklog(ws.backlog, id)?.issues || [],
+        onMoved: (id) => store?.dropLeftoverQueue(id),
       });
     } catch (e) { console.error('backlog queues:', e); }
     // after an app update's restart (#279, areas/app-update.js): the roadmaps it paused run again,

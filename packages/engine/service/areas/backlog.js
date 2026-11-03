@@ -19,6 +19,7 @@ const roadmaps = require('../../domains/roadmap/roadmap');
 const { normalizeThen } = require('@multiagent/shared/chain-model');
 const { platformOrDefault } = require('@multiagent/shared/platforms');
 const runs = require('../../domains/run/runs');
+const { clientError } = require('../common');
 
 module.exports = (ctx) => {
   // A synced backlog with each issue's runs and roadmap stage (computed on every read: runs come and
@@ -142,20 +143,24 @@ module.exports = (ctx) => {
     const chained = normalizeThen(then);
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
     if (runNow && !mock) simulation.refuseReal('real runs from the Backlog');
+    // #141's rule: a running roadmap runs a stage in its turn, never on its own; refused before anything is planned
+    const current = roadmaps.readRoadmap(ws.backlog, project.id);
+    if (runNow && current.state === 'running') throw clientError('The roadmap is running: pause or stop it first, or assign without Run now.');
     const numbersOf = groups.flat().map((i) => i.number);
     // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
     roadmaps.dropIssues(ws.backlog, project.id, numbersOf, { alive: ctx.runAlive });
-    const before = new Set(roadmaps.readRoadmap(ws.backlog, project.id).stages.map((s) => s.id));
+    const before = new Set(current.stages.map((s) => s.id));
     // a pipeline's first stage keeps its workflow's agents (#262: the overrides were chosen for `workflow`)
     const items = groups.map((list) => ({
       workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, then: chained,
       agentOverrides: pipeline ? null : agentOverrides, issues: list.map((i) => i.number),
     }));
-    const { roadmap } = roadmaps.propose(ws.backlog, project.id, [{ name: '', note: '', items }], { issues: data.issues, alive: ctx.runAlive });
+    const { roadmap, dropped } = roadmaps.propose(ws.backlog, project.id, [{ name: '', note: '', items }], { issues: data.issues, alive: ctx.runAlive });
     const added = roadmap.stages.find((s) => !before.has(s.id));
-    if (added && allowKeptWork) for (const x of added.items) ctx.allowKeptWork(project.id, x.id);
-    // a running roadmap runs the new stage in its turn: Run now never narrows what it runs
-    if (added && runNow && roadmap.state !== 'running') return ctx.startRoadmap({ projectId: project.id, simulated: false, stage: added.id });
+    // every issue is in an item already running or finished (propose keeps those): say so, as the PO's add does
+    if (!added) throw clientError(`${dropped.map((n) => `#${n}`).join(', ')} ${dropped.length > 1 ? 'are' : 'is'} already planned in the roadmap: nothing was added.`);
+    if (allowKeptWork) for (const x of added.items) ctx.allowKeptWork(project.id, x.id);
+    if (runNow) return ctx.startRoadmap({ projectId: project.id, simulated: false, stage: added.id });
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
   }
 

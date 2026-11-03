@@ -8,7 +8,7 @@
 // else pauses the chain with a notice, and the owner resumes or drops it. The chain's state lives in
 // runs/<id>/chain.json (packages/engine/domains/run/runs.js readChain/writeChain). It never answers a gate: the next run's
 // gates wait for the owner like any run's. A simulated run only chains simulated runs, and plans
-// only simulated items.
+// only simulated items (none when its issues are not in the synced backlog: the chain ends done).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -136,8 +136,17 @@ module.exports = (ctx) => {
       const platform = platformOrDefault(prev.inputs.git_platform).id;
       await backlog.syncBacklog({ dir: ws.backlog, project, platform });
     }
-    await ctx.assignWorkflow({ projectId: project.id, batches, workflow: then.workflow, inputs: then.inputs || {}, mock: simulated });
-    const n = batches.reduce((a, b) => a + b.numbers.length, 0);
+    // only the produced issues open in the synced backlog can be planned (a simulation's are usually not there)
+    const open = new Set((backlog.readBacklog(ws.backlog, project.id)?.issues || []).filter((i) => i.state === 'open').map((i) => i.number));
+    const known = batches.map((b) => ({ ...b, numbers: b.numbers.filter((x) => open.has(Number(x))) })).filter((b) => b.numbers.length);
+    if (!known.length) {
+      const text = 'The produced issues are not open in the synced backlog: nothing planned.';
+      write(prev.runDir, { state: 'done', reason: text });
+      notice(prev, 'done', text);
+      return null;
+    }
+    await ctx.assignWorkflow({ projectId: project.id, batches: known, workflow: then.workflow, inputs: then.inputs || {}, mock: simulated });
+    const n = known.reduce((a, b) => a + b.numbers.length, 0);
     const text = `${n} issue${n === 1 ? '' : 's'} planned in the roadmap for ${then.workflow}.`;
     write(prev.runDir, { state: 'done', reason: text });
     notice(prev, 'done', text);
