@@ -261,6 +261,19 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
     res.end(req.method === 'HEAD' ? undefined : data);
   }
 
+  // the routes behind the token (the caller already checked it)
+  async function serveAuthorized(req, res, url) {
+    if (byCookie(req)) res.setHeader('Set-Cookie', cookieHeader(req));
+    if (url.pathname === '/') {
+      res.writeHead(302, { Location: `/${ui}index.html` });
+      return res.end();
+    }
+    if (url.pathname === '/api/manifest' && req.method === 'GET') return sendJson(res, 200, { result: manifest, contract });
+    if (url.pathname === '/api/version' && req.method === 'GET') return sendJson(res, 200, await version());
+    if (url.pathname.startsWith('/api/')) return await handleApi(req, res, decodeURIComponent(url.pathname.slice(5)));
+    return serveStatic(req, res, url.pathname);
+  }
+
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -290,15 +303,7 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
         }
         throw new HttpError(401, 'Missing or invalid token: sign in at /session, or open the URL printed by the server.');
       }
-      if (byCookie(req)) res.setHeader('Set-Cookie', cookieHeader(req));
-      if (url.pathname === '/') {
-        res.writeHead(302, { Location: `/${ui}index.html` });
-        return res.end();
-      }
-      if (url.pathname === '/api/manifest' && req.method === 'GET') return sendJson(res, 200, { result: manifest, contract });
-      if (url.pathname === '/api/version' && req.method === 'GET') return sendJson(res, 200, await version());
-      if (url.pathname.startsWith('/api/')) return await handleApi(req, res, decodeURIComponent(url.pathname.slice(5)));
-      return serveStatic(req, res, url.pathname);
+      return await serveAuthorized(req, res, url);
     } catch (e) {
       if (res.headersSent) { res.destroy(); return; }
       sendJson(res, e.status || 500, { error: e.message || String(e) });
