@@ -37,8 +37,8 @@ test('every bundled workflow needs git and only known CLI ids, sorted, with a bo
   }
 });
 
-test('multi-model workflows need Codex: ai-arena, retrospective, feature with the multi-model review', () => {
-  for (const name of ['ai-arena', 'retrospective']) {
+test('multi-model workflows need Codex: write-doc (ai-arena, #648), retrospective, feature with the multi-model review', () => {
+  for (const name of ['write-doc', 'retrospective']) {
     assert.ok(reqsOf(name).clis.includes('codex'), `${name} needs codex`);
   }
   const wf = loadWorkflow(path.join(WORKFLOWS, 'feature.yaml'));
@@ -67,15 +67,15 @@ test('local workflows need neither Codex, Grok nor a forge CLI: fix, release, te
   }
 });
 
-test('writer-reviewer needs its default reviewer CLI, and runs on Claude only when the reviewer is switched to Claude', () => {
-  const wf = loadWorkflow(path.join(WORKFLOWS, 'writer-reviewer.yaml'));
+test('write-doc (writer-reviewer, #648) needs its default reviewer CLI, and runs on Claude only when the reviewer is switched to Claude', () => {
+  const wf = loadWorkflow(path.join(WORKFLOWS, 'write-doc.yaml'));
   const { workflowRequirements } = load();
   assert.ok(workflowRequirements(wf).clis.includes('codex'), 'the reviewer defaults to Codex');
   assert.deepEqual(workflowRequirements(wf, { writer_provider: 'claude', reviewer_provider: 'claude' }).clis, ['claude', 'git']);
 });
 
-test('issue-tracker and backlog-refresh need gh or glab (forge)', () => {
-  for (const name of ['issue-tracker', 'backlog-refresh']) {
+test('issue (issue-tracker, #648) and backlog-refresh need gh or glab (forge)', () => {
+  for (const name of ['issue', 'backlog-refresh']) {
     assert.equal(reqsOf(name).forge, true, `${name}: forge`);
   }
 });

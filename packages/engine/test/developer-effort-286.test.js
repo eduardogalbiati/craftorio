@@ -25,7 +25,11 @@ process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', 'workflows');
 const HERO = path.join(WORKFLOWS, 'feature.yaml');
 const readYaml = (file) => yaml.load(fs.readFileSync(path.join(WORKFLOWS, file), 'utf8'));
-const ARENA = readYaml('ai-arena.yaml');
+// #648: ai-arena.yaml and writer-reviewer.yaml left workflows/ (aliases of write-doc); their last
+// copies, kept as fixtures, are still the reference of effort_args and of the effort labels
+const LEGACY = path.join(__dirname, 'fixtures', 'legacy');
+const readLegacy = (file) => yaml.load(fs.readFileSync(path.join(LEGACY, file), 'utf8'));
+const ARENA = readLegacy('ai-arena.yaml');
 const DEV_WORKFLOWS = [
   'feature.yaml',
   'release.yaml',
@@ -155,7 +159,7 @@ test('#286 ai-development-local-hero: developer_effort input, right after develo
   assert.equal(input.default, 'default');
   assert.equal(typeof input.description, 'string');
   assert.ok(input.description.trim().length > 0);
-  const writer = readYaml('writer-reviewer.yaml').inputs.writer_effort.options;
+  const writer = readLegacy('writer-reviewer.yaml').inputs.writer_effort.options;
   for (const k of ['low', 'medium', 'high', 'xhigh']) assert.equal((input.options || {})[k], writer[k], `label of ${k}`);
   assert.equal(typeof (input.options || {}).default, 'string');
   assert.ok(String((input.options || {}).default).trim().length > 0, 'the default option has a label');

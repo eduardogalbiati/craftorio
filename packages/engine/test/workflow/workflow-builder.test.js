@@ -139,8 +139,12 @@ test('effort "default" leaves the effort out (the CLI default) and reads back as
   assert.equal(builder.fromWorkflow(wf).spec.steps[0].agent.effort, 'default');
 });
 
+// #648: writer-reviewer left workflows/ (an alias of write-doc); its last copy, a fixture, stays the
+// hand-written workflow with loops, schemas and choices these builder tests read
+const LEGACY_WRITER_REVIEWER = path.join(__dirname, '..', 'fixtures', 'legacy', 'writer-reviewer.yaml');
+
 test('describeWorkflow shows any workflow; patchWorkflow changes only agents and prompts', (t) => {
-  const file = path.join(root, 'workflows', 'writer-reviewer.yaml');
+  const file = LEGACY_WRITER_REVIEWER;
   const doc = loadWorkflow(file);
   const spec = builder.describeWorkflow(doc);
   assert.equal(spec.fixed, true);
@@ -234,7 +238,7 @@ test('an AI gate that keeps rejecting ends the run as failed after its rounds', 
 });
 
 // #245: a desk's (or agent's) display name, the readable name the screens show instead of its id
-const displayDoc = () => loadWorkflow(path.join(root, 'workflows', 'writer-reviewer.yaml'));
+const displayDoc = () => loadWorkflow(LEGACY_WRITER_REVIEWER);
 const withDisplay = (spec, { agent, step }) => ({
   ...spec,
   agents: { ...spec.agents, writer: { ...spec.agents.writer, display: agent } },

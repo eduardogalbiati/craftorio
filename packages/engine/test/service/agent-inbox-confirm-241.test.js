@@ -31,7 +31,7 @@ async function poSetup(t, name) {
 }
 
 // An edited workspace copy of a bundled workflow → { file, edited }.
-function editWorkflow(ws, name = 'issue-tracker.yaml') {
+function editWorkflow(ws, name = 'issue.yaml') {
   const file = path.join(ws.workflows, name);
   const edited = `${fs.readFileSync(path.join(BUNDLED, 'workflows', name), 'utf8')}\n# edited by the owner\n`;
   fs.writeFileSync(file, edited);
@@ -221,10 +221,10 @@ test('under the Night watch, after 3 automatic actions on one target the next re
   assert.equal(blocked[0].target, 'all');
 
   const { file } = editWorkflow(ws);
-  const other = await send('workflow.restore', { file: 'issue-tracker.yaml' });
+  const other = await send('workflow.restore', { file: 'issue.yaml' });
   assert.equal(other.ok, true, JSON.stringify(other));
   assert.equal(other.pending, undefined);
-  assert.equal(fs.readFileSync(file, 'utf8'), fs.readFileSync(path.join(BUNDLED, 'workflows', 'issue-tracker.yaml'), 'utf8'));
+  assert.equal(fs.readFileSync(file, 'utf8'), fs.readFileSync(path.join(BUNDLED, 'workflows', 'issue.yaml'), 'utf8'));
 });
 
 // ---- 4. the owner's Do it / Dismiss / Undo through the service ------------------------------------
@@ -286,17 +286,17 @@ test('supervisor:requestAct do on a pending run.stop card stops the run', async 
 test('supervisor:requestAct do on a pending workflow.restore card restores it, and undo puts the edited copy back', async (t) => {
   const { service, api } = makeService(t);
   const { file, edited } = editWorkflow(service.workspace());
-  await api['oracle:requestAgent']({ to: 'supervisor', kind: 'workflow.restore', params: { file: 'issue-tracker.yaml' }, reason: 'broken edit', mock: true });
+  await api['oracle:requestAgent']({ to: 'supervisor', kind: 'workflow.restore', params: { file: 'issue.yaml' }, reason: 'broken edit', mock: true });
   const card = ofKind(await api['supervisor:chatHistory'](), 'workflow.restore')[0];
   assert.equal(fs.readFileSync(file, 'utf8'), edited, 'nothing before the click');
 
   const done = await api['supervisor:requestAct']({ ref: card.request.ref, action: 'do', mock: true });
   assert.equal(done.ok, true, JSON.stringify(done));
-  assert.equal(fs.readFileSync(file, 'utf8'), fs.readFileSync(path.join(BUNDLED, 'workflows', 'issue-tracker.yaml'), 'utf8'));
+  assert.equal(fs.readFileSync(file, 'utf8'), fs.readFileSync(path.join(BUNDLED, 'workflows', 'issue.yaml'), 'utf8'));
 
   const undone = await api['supervisor:requestAct']({ ref: card.request.ref, action: 'undo', mock: true });
   assert.equal(undone.ok, true, JSON.stringify(undone));
-  assert.equal(undone.text, 'Undone: issue-tracker.yaml is back to the edited copy.');
+  assert.equal(undone.text, 'Undone: issue.yaml is back to the edited copy.');
   assert.equal(fs.readFileSync(file, 'utf8'), edited);
 });
 

@@ -75,6 +75,6 @@ test('#474 a custom workflow is trusted once confirmed, until its file changes o
   assert.equal(listed().trusted, false);
 
   // a copy of a bundled workflow is the owner's own: trusted
-  const { file: copy } = api['builder:clone']('writer-reviewer.yaml');
+  const { file: copy } = api['builder:clone']('write-doc.yaml'); // #648: writer-reviewer is an alias now
   assert.equal(api['workflows:list']().find((w) => w.file === copy).trusted, true);
 });

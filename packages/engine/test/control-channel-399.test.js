@@ -201,7 +201,7 @@ test('#399 runs:resume carrying confirmGate (any value but null or false) is ref
 
 // ---- workflows:restore ---------------------------------------------------------------------------------
 
-const BUNDLED = 'ai-arena.yaml';
+const BUNDLED = 'write-doc.yaml'; // #648: ai-arena.yaml is now an alias of write-doc
 
 function editCopy(service, edit) {
   const file = path.join(service.workspace().workflows, BUNDLED);

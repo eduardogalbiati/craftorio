@@ -109,9 +109,9 @@ test('#488 fixtures: the importable fixtures load with today\'s loader, the inva
 
 test('#488 workflows:export returns the YAML of a default workflow exactly as it is on disk', async (t) => {
   const { api, service } = makeService(t);
-  const text = await api['workflows:export']('writer-reviewer.yaml');
+  const text = await api['workflows:export']('write-doc.yaml'); // #648: writer-reviewer is an alias now
   assert.equal(typeof text, 'string');
-  assert.equal(text, read(service, 'writer-reviewer.yaml'));
+  assert.equal(text, read(service, 'write-doc.yaml'));
 });
 
 test('#488 workflows:export returns a custom workflow byte for byte (comments and spacing kept)', async (t) => {

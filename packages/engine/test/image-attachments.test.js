@@ -203,7 +203,7 @@ test('images attached to separate workflow inputs are checked individually and t
   const related = make(6, 'related');
 
   assert.throws(() => new WorkflowRun({
-    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    file: path.join(root, 'workflows', 'issue.yaml'),
     inputs: { request: 'x', project_path: root },
     mock: true,
     runsDir: path.join(dir, 'runs1'),
@@ -212,7 +212,7 @@ test('images attached to separate workflow inputs are checked individually and t
 
   // each input alone (6 images) stays within the limit
   assert.doesNotThrow(() => new WorkflowRun({
-    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    file: path.join(root, 'workflows', 'issue.yaml'),
     inputs: { request: 'x', project_path: root },
     mock: true,
     runsDir: path.join(dir, 'runs2'),
@@ -224,7 +224,7 @@ test('images attached to an input that does not exist on the workflow are refuse
   const dir = tmpDir(t, 'img-badinput-');
   const png = writePng(path.join(dir, 'a.png'));
   assert.throws(() => new WorkflowRun({
-    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    file: path.join(root, 'workflows', 'issue.yaml'),
     inputs: { request: 'x', project_path: root },
     mock: true,
     runsDir: path.join(dir, 'runs'),
@@ -241,7 +241,7 @@ test('resume: an invalid image in resume.images throws when the run is construct
   const invalid = path.join(dir, 'notes.txt');
   fs.writeFileSync(invalid, 'not an image');
   assert.throws(() => new WorkflowRun({
-    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    file: path.join(root, 'workflows', 'issue.yaml'),
     inputs: { request: 'x', project_path: root },
     mock: true,
     runsDir: path.join(dir, 'runs'),

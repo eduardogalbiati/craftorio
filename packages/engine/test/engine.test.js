@@ -42,9 +42,9 @@ test('every workflow in workflows/ is valid', () => {
 // ---- outputs (#134): every bundled workflow declares the result contract the issue lists ---------
 test('each bundled workflow declares its outputs: contract', () => {
   const outputsOf = (f) => Object.keys(loadWorkflow(path.join(root, 'workflows', f)).outputs || {}).sort();
-  assert.deepEqual(outputsOf('issue-tracker.yaml'), ['issues']);
-  assert.deepEqual(outputsOf('writer-reviewer.yaml'), ['document', 'issue']);
-  assert.deepEqual(outputsOf('ai-arena.yaml'), ['document']);
+  // #648: issue-tracker → issue; writer-reviewer and ai-arena → write-doc (aliases)
+  assert.deepEqual(outputsOf('issue.yaml'), ['issues']);
+  assert.deepEqual(outputsOf('write-doc.yaml'), ['document', 'issue']);
   assert.deepEqual(outputsOf('feature.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
   assert.deepEqual(outputsOf('retrospective.yaml'), ['findings']);
 });
@@ -224,7 +224,7 @@ test('loadWorkflow validates groups: known steps, one group per step, unique nam
   }
 });
 test('the bundled workflows group every step', () => {
-  for (const f of ['feature.yaml', 'fix.yaml', 'release.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'retrospective.yaml', 'backlog-refresh.yaml']) {
+  for (const f of ['feature.yaml', 'fix.yaml', 'release.yaml', 'issue.yaml', 'retrospective.yaml', 'backlog-refresh.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', f));
     assert.ok(wf.groups?.length, `${f} has groups`);
     assert.deepEqual(wf.groups.flatMap((g) => g.steps).sort(), wf.steps.map((s) => s.id).sort(), f);

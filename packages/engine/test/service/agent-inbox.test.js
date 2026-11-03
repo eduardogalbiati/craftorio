@@ -200,11 +200,11 @@ test('supervisor:request run.retry and run.resume on an unknown run are ok false
 
 test('supervisor:request workflow.restore brings back the bundled workflow', async (t) => {
   const { service, api } = makeService(t);
-  const file = path.join(service.workspace().workflows, 'issue-tracker.yaml');
-  const bundled = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'workflows', 'issue-tracker.yaml'), 'utf8');
+  const file = path.join(service.workspace().workflows, 'issue.yaml');
+  const bundled = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'workflows', 'issue.yaml'), 'utf8');
   fs.writeFileSync(file, `${bundled}\n# edited by the owner\n`);
 
-  const out = await api['supervisor:request']({ kind: 'workflow.restore', params: { file: 'issue-tracker.yaml' }, reason: 'broken edit', from: 'oracle', ref: 'restore-1', mock: true });
+  const out = await api['supervisor:request']({ kind: 'workflow.restore', params: { file: 'issue.yaml' }, reason: 'broken edit', from: 'oracle', ref: 'restore-1', mock: true });
   assert.equal(out.ok, true, out.error);
   assert.equal(out.costUsd, 0);
   assert.equal(fs.readFileSync(file, 'utf8'), bundled);

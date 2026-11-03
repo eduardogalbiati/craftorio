@@ -6,18 +6,19 @@ const { makeService } = require('./helpers');
 
 test('builder: bundled workflows open read-only and clone into an editable copy', async (t) => {
   const { api, service } = makeService(t);
-  const ro = api['builder:load']('writer-reviewer.yaml');
+  // #648: write-doc replaced writer-reviewer (an alias now)
+  const ro = api['builder:load']('write-doc.yaml');
   assert.equal(ro.mode, 'readonly');
   assert.ok(ro.spec.fixed && ro.problems.length);
-  assert.throws(() => api['builder:save']({ file: 'writer-reviewer.yaml', spec: ro.spec }), /bundled with the app: clone it/);
+  assert.throws(() => api['builder:save']({ file: 'write-doc.yaml', spec: ro.spec }), /bundled with the app: clone it/);
 
-  const { file } = api['builder:clone']('writer-reviewer.yaml');
-  assert.equal(file, 'writer-reviewer-copy.yaml');
-  assert.equal(api['builder:clone']('writer-reviewer.yaml').file, 'writer-reviewer-copy-2.yaml');
+  const { file } = api['builder:clone']('write-doc.yaml');
+  assert.equal(file, 'write-doc-copy.yaml');
+  assert.equal(api['builder:clone']('write-doc.yaml').file, 'write-doc-copy-2.yaml');
   const copy = api['builder:load'](file);
   assert.equal(copy.mode, 'fixed');
-  assert.equal(copy.spec.name, 'writer-reviewer-copy');
-  copy.spec.agents.signoff.effort = 'low';
+  assert.equal(copy.spec.name, 'write-doc-copy');
+  copy.spec.agents.reviewer.effort = 'low';
   api['builder:save']({ file, spec: copy.spec });
   const listed = api['workflows:list']().find((w) => w.file === file);
   assert.equal(listed.origin, 'custom');

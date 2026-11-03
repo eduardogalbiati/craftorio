@@ -399,7 +399,8 @@ test('run:start forwards projectId and issues (sanitized), recorded in the run a
   t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
   const p = await api['projects:create']({ name: 'demo', folder });
   const { runId } = await api['run:start']({
-    file: 'writer-reviewer.yaml', inputs: { prompt: 'Enrich #29', goal: 'g' }, mock: true, projectId: p.id,
+    // #648: Enrich is a write-doc run on the issue's spec (writer-reviewer is its alias)
+    file: 'write-doc.yaml', inputs: { project_path: folder, item: 'issue-29-backlog-screen', document: 'spec', prompt: 'Enrich #29' }, mock: true, projectId: p.id,
     issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen', extra: 'dropped' }],
   });
   const run = api['runs:active']().find((r) => r.runId === runId);
