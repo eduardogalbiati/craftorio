@@ -58,6 +58,21 @@ test('#634 a log file of JSON lines gives its events, blank and malformed lines 
   assert.equal(res.events[0].message, "TypeError: cannot read 'total' of undefined");
 });
 
+// lines without an id get one from their content: the same line keeps it from one poll to the next
+// (so it is counted once), two different lines get different ones
+test('#634 log lines without an id: the same line has the same id in two polls, two lines two ids', async (t) => {
+  const noId = (at) => JSON.stringify({ at, status: 500, method: 'POST', path: '/api/checkout', message: 'boom', file: 'checkout.js', line: 412 });
+  const file = tempLog(t, `${noId('2026-11-02T10:00:00Z')}\n${noId('2026-11-02T10:05:00Z')}\n`);
+  const first = await load().pollSource({ id: 'f1', type: 'log-file', path: file }, {});
+  const second = await load().pollSource({ id: 'f1', type: 'log-file', path: file }, {});
+  assert.equal(first.ok && second.ok, true);
+  const ids = first.events.map((e) => e.id);
+  assert.equal(ids.length, 2);
+  assert.equal(ids.every((id) => typeof id === 'string' && id.length > 0), true);
+  assert.notEqual(ids[0], ids[1]);
+  assert.deepEqual(second.events.map((e) => e.id), ids);
+});
+
 test('#634 a log file that does not exist is { ok: false } with an error, not a throw', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-634-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

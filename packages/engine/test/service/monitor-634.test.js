@@ -210,3 +210,99 @@ test('#634 monitor:propose-fix starts a run and the group shows state fix-run wi
   const after = await groupTitled(s, 'POST /api/checkout');
   assert.deepEqual([after.state, after.runId], ['fix-run', res.runId]);
 });
+
+// waits until `check()` is true, or fails after `ms`
+async function until(check, ms, what) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.fail(`timed out waiting for ${what}`);
+}
+
+test('#634 monitor:propose-fix again: the same run while it is live, a new run once it has ended', async (t) => {
+  const s = await withLogSource(t);
+  await s.api['monitor:poll']({ projectId: s.projectId });
+  const g = await groupTitled(s, 'POST /api/checkout');
+  const first = await s.api['monitor:propose-fix']({ projectId: s.projectId, fingerprint: g.fingerprint });
+  assert.equal(first?.ok, true, JSON.stringify(first));
+  const again = await s.api['monitor:propose-fix']({ projectId: s.projectId, fingerprint: g.fingerprint });
+  assert.equal(again.runId, first.runId);
+  await s.api['run:stop']({ runId: first.runId });
+  const activeIds = async () => (await s.api['runs:active']()).map((r) => r.runId || r.id);
+  await until(async () => !(await activeIds()).includes(first.runId), 30000, 'the stopped run to end');
+  const next = await s.api['monitor:propose-fix']({ projectId: s.projectId, fingerprint: g.fingerprint });
+  assert.equal(next?.ok, true, JSON.stringify(next));
+  assert.notEqual(next.runId, first.runId);
+  const after = await groupTitled(s, 'POST /api/checkout');
+  assert.deepEqual([after.state, after.runId], ['fix-run', next.runId]);
+  assert.equal(intentsOf(s).length, 1, 'a second proposal files no second intent card');
+});
+
+// ---- dedup of lines without an id, the daily cap across days, concurrent writes -----------------------
+
+const noId = (at, p = '/api/checkout') => JSON.stringify({ at, status: 500, method: 'POST', path: p, message: MSG, file: 'checkout.js', line: 412 });
+
+test('#634 log lines without an id are counted once across polls', async (t) => {
+  const s = await withLogSource(t, `${noId('2026-11-02T10:00:00Z')}\n${noId('2026-11-02T10:01:00Z')}\n`);
+  await s.api['monitor:poll']({ projectId: s.projectId });
+  await s.api['monitor:poll']({ projectId: s.projectId });
+  assert.equal((await groupTitled(s, 'POST /api/checkout'))?.count, 2);
+});
+
+test('#634 the daily cap counts per day: spent today, a new group waits; the next day it is diagnosed again', async (t) => {
+  const s = await withLogSource(t, TWO_GROUPS);
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-02T12:00:00Z') });
+  await s.api['monitor:automation']({ projectId: s.projectId, diagnose: 'on', fix: 'off', dailyCap: 1 });
+  await s.api['monitor:poll']({ projectId: s.projectId });
+  assert.equal(intentsOf(s).length, 1);
+  // a third group the same day: the cap is spent
+  fs.appendFileSync(s.logFile, `${noId('2026-11-02T11:00:00Z', '/api/cart')}\n`);
+  await s.api['monitor:poll']({ projectId: s.projectId });
+  assert.equal(intentsOf(s).length, 1, 'the cap of 1 was passed on the same day');
+  // the next day, a fourth group is diagnosed
+  t.mock.timers.setTime(Date.parse('2026-11-03T12:00:00Z'));
+  fs.appendFileSync(s.logFile, `${noId('2026-11-03T11:00:00Z', '/api/pay')}\n`);
+  await s.api['monitor:poll']({ projectId: s.projectId });
+  assert.equal(intentsOf(s).length, 2);
+  assert.equal((await groupTitled(s, 'POST /api/pay'))?.state, 'intent');
+  assert.equal((await groupTitled(s, 'POST /api/cart'))?.state, 'new');
+});
+
+test('#634 while a poll waits for the network, a saved source, a diagnosis and an automation change are all kept', async (t) => {
+  const s = await withLogSource(t);
+  await s.api['monitor:poll']({ projectId: s.projectId });
+  const g = await groupTitled(s, 'POST /api/checkout');
+  const url = await s.api['monitor:save-source']({ projectId: s.projectId, source: { type: 'log-url', url: 'https://logs.example.test/api.log', label: 'remote logs' } });
+  assert.equal(url?.ok, true, JSON.stringify(url));
+  // the log URL answers only when released
+  let release;
+  const answer = new Promise((r) => { release = r; });
+  let called;
+  const fetched = new Promise((r) => { called = r; });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    called();
+    await answer;
+    return { ok: true, status: 200, text: async () => `${orders('o1')}\n`, json: async () => [] };
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  const poll = s.api['monitor:poll']({ projectId: s.projectId });
+  await fetched;
+  const extraLog = path.join(tmpDir(t), 'worker.log');
+  fs.writeFileSync(extraLog, '');
+  const meanwhile = [
+    s.api['monitor:save-source']({ projectId: s.projectId, source: { type: 'log-file', path: extraLog, label: 'worker logs' } }),
+    s.api['monitor:diagnose']({ projectId: s.projectId, fingerprint: g.fingerprint }),
+    s.api['monitor:automation']({ projectId: s.projectId, diagnose: 'ask', fix: 'ask', dailyCap: 7 }),
+  ];
+  await new Promise((r) => setTimeout(r, 50));
+  release();
+  await Promise.all([poll, ...meanwhile]);
+  const state = await stateOf(s);
+  assert.deepEqual(state.sources.map((x) => x.label).sort(), ['api logs', 'remote logs', 'worker logs']);
+  assert.equal((await groupTitled(s, 'POST /api/checkout'))?.state, 'intent');
+  assert.equal(state.automation.dailyCap, 7);
+  assert.equal(state.groups.some((x) => x.title === 'GET /api/orders/:id'), true, `groups: ${state.groups.map((x) => x.title).join(', ')}`);
+});
