@@ -9,11 +9,8 @@
 // What the screens expose (the renderer's contract for these steps), skills/ui-conventions:
 // - data-testid="project-workflows-block": the Workflows block, in the project dialog
 //   (data-testid="project-dialog") and in the project's Overview (data-testid="project-overview");
-// - data-testid="project-workflows-category": one category group in the block, data-category="<key>",
-//   its name in a role="heading" ("Solo", "Team", "Intake", "Release", "Build", "Plan", "Monitor"...);
-// - data-testid="project-workflows-category-hint": the group's one-line hint (non-empty);
-// - each workflow is a role="checkbox" named by its label, which starts with the workflow's name;
-// - data-testid="project-workflows-create": the "Create one for this project" button (no manifest only);
+// - #741: the project dialog's Create mode (its categories, hints and "Create one for this project") is gone:
+//   creating a project is the new-project wizard only; the steps of that mode below fail with that reason;
 // - data-testid="project-default-workflow": in the Overview's block, the project's default workflow's name.
 // The dialog's fields are found by their labels ("Name", "Folder"), its submit by "Create project".
 //
@@ -38,9 +35,10 @@ const projectOverview = (page) => visible(page.getByTestId('project-page')).firs
 const blockIn = (scope) => scope.getByTestId('project-workflows-block').first();
 const dialogBlock = (page) => blockIn(projectDialog(page));
 const overviewBlock = (page) => blockIn(projectOverview(page));
-// a category's heading is its section name, which may carry the group's name ("Build" is "Code & Build", the Workflows screen's section)
-const categoryIn = (page, block, name) => block.getByTestId('project-workflows-category')
-  .filter({ has: page.getByRole('heading', { name: new RegExp(`\\b${escapeRe(name)}\\b`, 'i') }) }).first();
+// #741: the project dialog's Create mode is gone; its #486 steps say so instead of waiting for a dialog
+const createModeGone = () => {
+  throw new Error('#741: the project dialog\'s Create mode (its Workflows block) is gone: creating a project is the new-project wizard only');
+};
 const workflowBox = (scope, name) => scope.getByRole('checkbox', { name: nameRe(name) }).first();
 
 // the scenario's folders, under its scratch folder (the workspace is <scratch>/workspace)
@@ -75,77 +73,17 @@ Given('a local git repository {string} whose workflows manifest lists {string} a
   git(e2e, folder, ['commit', '-q', '-m', 'Declare the workflows']);
 });
 
-// Projects › New project opens the onboarding wizard since #643; the project dialog's Create mode
-// (with its Workflows block) is still the header's project selector's "New project…".
-When('I start a new project {string} in the folder {string}', async ({ e2e }, name, folderName) => {
-  const screen = visible(e2e.window.getByTestId('projects-screen')).first();
-  await expect(screen).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await e2e.window.getByTestId('header-project').selectOption({ label: 'New project…' });
-  const dialog = projectDialog(e2e.window);
-  await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await dialog.getByLabel(/^\s*Name\b/).first().fill(name);
-  const folder = dialog.getByLabel(/^\s*Folder\b/).first();
-  await folder.fill(folderOf(e2e, folderName));
-  // leaving the field is when the dialog looks at the folder
-  await folder.press('Tab');
-  await expect(dialogBlock(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
-});
-
-Then('the project dialog shows a Workflows block', async ({ e2e }) => {
-  const block = dialogBlock(e2e.window);
-  await expect(block).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(block).toContainText(/Workflows/);
-});
-
-Then('the Workflows block lists {string} under {string}, {word}', async ({ e2e }, name, category, state) => {
-  const group = categoryIn(e2e.window, dialogBlock(e2e.window), category);
-  await expect(group, `the "${category}" category of the Workflows block`).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const box = workflowBox(group, name);
-  await expect(box, `the workflow "${name}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
-  if (state === 'checked') await expect(box).toBeChecked();
-  else if (state === 'unchecked') await expect(box).not.toBeChecked();
-  else throw new Error(`"${state}": expected "checked" or "unchecked"`);
-});
-
-Then('no workflow is checked in the Workflows block', async ({ e2e }) => {
-  const boxes = dialogBlock(e2e.window).getByRole('checkbox');
-  await expect(boxes.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const n = await boxes.count();
-  for (let i = 0; i < n; i++) await expect(boxes.nth(i)).not.toBeChecked();
-});
-
-Then('every category of the Workflows block has a one-line hint', async ({ e2e }) => {
-  const groups = dialogBlock(e2e.window).getByTestId('project-workflows-category');
-  await expect(groups.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const n = await groups.count();
-  for (let i = 0; i < n; i++) {
-    const hint = groups.nth(i).getByTestId('project-workflows-category-hint');
-    await expect(hint).toHaveCount(1);
-    await expect(hint).not.toHaveText(/^\s*$/);
-  }
-});
-
-Then('the Workflows block offers {string}', async ({ e2e }, label) => {
-  const button = dialogBlock(e2e.window).getByTestId('project-workflows-create');
-  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(button).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
-});
-
-Then('the Workflows block does not offer {string}', async ({ e2e }, label) => {
-  const block = dialogBlock(e2e.window);
-  await expect(block.getByRole('checkbox').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(visible(block.getByTestId('project-workflows-create'))).toHaveCount(0);
-  await expect(visible(block.getByRole('button', { name: label }))).toHaveCount(0);
-});
-
-When('I check the workflow {string} in the Workflows block', async ({ e2e }, name) => {
-  await workflowBox(dialogBlock(e2e.window), name).check();
-});
-
-When('I create the project', async ({ e2e }) => {
-  await projectDialog(e2e.window).getByRole('button', { name: 'Create project', exact: true }).click();
-  await expect(visible(e2e.window.getByTestId('project-dialog'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });
-});
+// #741: the project dialog's Create mode (and the header selector's way to it) is gone; the #486 scenarios
+// of projects.feature that create a project there fail here with that reason (creating is the wizard only).
+When('I start a new project {string} in the folder {string}', createModeGone);
+Then('the project dialog shows a Workflows block', createModeGone);
+Then('the Workflows block lists {string} under {string}, {word}', createModeGone);
+Then('no workflow is checked in the Workflows block', createModeGone);
+Then('every category of the Workflows block has a one-line hint', createModeGone);
+Then('the Workflows block offers {string}', createModeGone);
+Then('the Workflows block does not offer {string}', createModeGone);
+When('I check the workflow {string} in the Workflows block', createModeGone);
+When('I create the project', createModeGone);
 
 // #729: the Overview's block no longer lists checkboxes; #486's "checked on the Overview" became
 // "a card on the Overview" (steps below: "shows exactly the card(s)", "shows no card", the Default badge).

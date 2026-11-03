@@ -59,9 +59,9 @@ Feature: Workflows a repository declares
     And the workspace holds an edited copy of the workflow "issue-tracker"
     And the project's repository declares its own copy of the workflow "issue-tracker"
     When I open "Projects" in the sidebar
-    And I edit the project "demo-app" from the Projects screen
-    And I turn on "Prefer the repository's workflows" in the project dialog
-    And I save the project dialog
+    And I choose Edit on the project "demo-app" in the Projects screen
+    And I turn on "Prefer the repository's workflows" in the project settings
+    And I save the project settings
     And I open "Definitions" in the sidebar
     Then the repository card of the workflow "issue-tracker" says a project's run uses it at the repository's latest commit
     And the workspace card of the workflow "issue-tracker" says it does not run for this project

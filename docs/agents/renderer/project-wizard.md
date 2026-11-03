@@ -21,8 +21,22 @@ The first project's onboarding: the wizard, its progress tray, the review and th
 Home's empty state (`home-empty-create-project`, `packages/ui-kit/views/dashboard/dashboard.js`, #644),
 Projects › New project (`projects.js`) and the Setup's First project step (`packages/ui-kit/setup.js`, #643),
 each through `window.Actions.call('openProjectWizard')`: the ui-kit never imports the build front, so
-Home falls back to the old dialog (`openProjectModal`) when the action is not registered. Edit keeps the
-old dialog.
+Home has no fallback when the action is not registered (#741: the old New / Edit project dialog is gone).
+A card's Edit opens the project's page with its settings open (`project-settings`,
+`fronts/analyser/views/project/project-settings.js`): the one place to edit a project's name, folder,
+repository, base branch, local preview and per-project flags, next to its ways of working and workflows.
+
+## Resuming an unfinished onboarding (#741)
+
+The wizard's step and the owner's picks (repository, name, the workflows column, the analysis choice, the
+refactor / finding picks, the idea) are saved with the project's record on every change
+(`onboarding:save-wizard`, `onboarding: { step, picks, finished }` in `packages/engine/domains/project/projects.js`);
+Finish calls `onboarding:finish`. `fronts/build/views/projects/project-wizard-resume.js` (split out of the
+wizard for its size cap) saves and loads that state. `ProjectWizard.open({ projectId })` reopens an
+unfinished onboarding at its step with its picks; the card of such a project shows "Onboarding not
+finished" (`project-onboarding-unfinished`) with Continue. New project with the URL of a repository whose
+project exists (`onboarding:start`, same repository whatever its case, trailing slash or `.git`) resumes it
+when unfinished, and for a finished one says it exists with Open the project: never a second project.
 
 ## The steps
 

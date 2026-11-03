@@ -12,12 +12,13 @@ Feature: Installing a repository's dependencies without running their scripts
   Scenario: A project of your own installs with its dependencies' scripts until you turn the setting on, and the setting is kept
     Given the app is open
     When I open "Projects" in the sidebar
-    And I edit the project "demo-app" from the Projects screen
-    Then the project dialog shows "Install dependencies without running their scripts" turned off
-    When I turn on "Install dependencies without running their scripts" in the project dialog
-    And I save the project dialog
-    And I edit the project "demo-app" from the Projects screen
-    Then the project dialog shows "Install dependencies without running their scripts" turned on
+    And I choose Edit on the project "demo-app" in the Projects screen
+    Then the project settings show "Install dependencies without running their scripts" turned off
+    When I turn on "Install dependencies without running their scripts" in the project settings
+    And I save the project settings
+    And I open "Projects" in the sidebar
+    And I choose Edit on the project "demo-app" in the Projects screen
+    Then the project settings show "Install dependencies without running their scripts" turned on
 
   @issue-472
   Scenario: A run's start log names the commands it runs from the repository
