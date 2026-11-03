@@ -949,7 +949,7 @@
   "backlog.create_a_project_with_a_repository": "Crie um projeto com um repositório (Novo projeto… no cabeçalho, ou Projetos no menu) para ver as issues dele aqui.",
   "backlog.days_ago": "há {days} dias",
   "backlog.deprioritized_still_carry": { "one": "{issues} ainda tem o rótulo deprioritized, que não é mais usado.", "other": "{issues} ainda têm o rótulo deprioritized, que não é mais usado." },
-  "backlog.describe_a_problem_or_an_idea": "Descreva um problema ou uma ideia em poucas palavras: o workflow issue-tracker analisa o código, avalia impacto e complexidade, redige a issue e a registra quando você aprovar",
+  "backlog.describe_a_problem_or_an_idea": "Descreva um problema ou uma ideia em poucas palavras: o workflow issue analisa o código, avalia impacto e complexidade, redige a issue e a registra quando você aprovar",
   "backlog.developer_mode_the_run_is_simulated": "Modo desenvolvedor: a execução é simulada, nenhuma CLI é chamada",
   "backlog.dismiss": "dispensar",
   "backlog.dismiss_for_today": "Dispensar por hoje",
@@ -3403,7 +3403,7 @@
   "onboarding.workflows_choose_line": "Como escolher os workflows de {name}?",
   "onboarding.workflows_failed": "Não foi possível analisar as formas de trabalho",
   "onboarding.workflows_line": "Pelo jeito como {name} é trabalhado hoje. Mude qualquer um.",
-  "onboarding.workflows_more": "Mais workflows (refactor, backlog-refresh, writer-reviewer…) estão sempre disponíveis em Iniciar.",
+  "onboarding.workflows_more": "Mais workflows (refactor, backlog-refresh, write-doc…) estão sempre disponíveis em Iniciar.",
   "onboarding.workflows_no_profile": "A análise não encontrou um perfil de formas de trabalho no histórico.",
   "onboarding.workflows_title": "Workflows sugeridos",
 

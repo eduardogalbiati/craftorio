@@ -949,7 +949,7 @@
   "backlog.create_a_project_with_a_repository": "Create a project with a repository (New project… in the header, or Projects in the menu) to see its issues here.",
   "backlog.days_ago": "{days} days ago",
   "backlog.deprioritized_still_carry": { "one": "{issues} still carries the retired deprioritized label.", "other": "{issues} still carry the retired deprioritized label." },
-  "backlog.describe_a_problem_or_an_idea": "Describe a problem or an idea in a few words: the issue-tracker workflow analyses the code, rates impact and complexity, drafts the issue and files it once you approve",
+  "backlog.describe_a_problem_or_an_idea": "Describe a problem or an idea in a few words: the issue workflow analyses the code, rates impact and complexity, drafts the issue and files it once you approve",
   "backlog.developer_mode_the_run_is_simulated": "Developer mode: the run is simulated, no CLI is called",
   "backlog.dismiss": "dismiss",
   "backlog.dismiss_for_today": "Dismiss for today",
@@ -3403,7 +3403,7 @@
   "onboarding.workflows_choose_line": "How should the workflows of {name} be picked?",
   "onboarding.workflows_failed": "The ways of working could not be analyzed",
   "onboarding.workflows_line": "From how {name} is worked on today. Change any of them.",
-  "onboarding.workflows_more": "More workflows (refactor, backlog-refresh, writer-reviewer…) are always available in Start.",
+  "onboarding.workflows_more": "More workflows (refactor, backlog-refresh, write-doc…) are always available in Start.",
   "onboarding.workflows_no_profile": "The analysis found no ways of working profile in the history.",
   "onboarding.workflows_title": "Suggested workflows",
 

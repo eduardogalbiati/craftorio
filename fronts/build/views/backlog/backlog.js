@@ -400,7 +400,7 @@
     });
   }
 
-  // New issue (#81): the Start drawer on the issue-tracker workflow, for this project and platform;
+  // New issue (#81): the Start drawer on the issue workflow, for this project and platform;
   // the owner writes the request and starts it. The issue shows here after the next sync.
   function newIssue() {
     if (!project()?.repo) return;

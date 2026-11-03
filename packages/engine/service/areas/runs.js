@@ -363,7 +363,8 @@ module.exports = (ctx) => {
     const fromRepo = projectId && !workspaceOnly && !own ? ctx.repositoryWorkflow(projectId, file) : null;
     if (!fromRepo) return ctx.workflowPath(file);
     const edited = workflows.editedWorkspaceCopy([file, fromRepo.file], ctx.workflowDirs());
-    if (edited && !resumed && !project.preferRepositoryWorkflows) return ctx.workflowPath(edited);
+    // #648: the edited copy's own file, not its name (an old name like writer-reviewer.yaml is an alias)
+    if (edited && !resumed && !project.preferRepositoryWorkflows) return { file: path.join(ctx.ws.workflows, edited), dir: ctx.ws.workflows, fallback: false };
     const wf = loadRepositoryWorkflow(fromRepo.path, { accepted: fromRepo.accepted, policy: { tools: settings.repositoryWorkflowTools }, commit: fromRepo.commit });
     return { file: fromRepo.path, fallback: false, ownerCopy: edited ? ownerCopy(path.join(ctx.ws.workflows, edited), wf) : null };
   }

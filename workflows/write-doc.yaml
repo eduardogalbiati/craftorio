@@ -300,6 +300,9 @@ steps:
 
   - id: draft
     agent: writer
+    # #648: the run's document.md, what the backlog's "Save to issue" sends (like writer-reviewer's)
+    save_as:
+      - { path: document.md, content: "{{ output.source_text }}" }
     prompt: |
       {% if steps.compete.output.succeeded | length %}Several writers drafted the {{ inputs.document }} of `{{ inputs.item }}` on their own:
       {% for name in steps.compete.output.succeeded | shuffle(run_id) %}
