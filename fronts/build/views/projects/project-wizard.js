@@ -2,7 +2,9 @@
 // The new-project wizard (#641, onboarding step 4 of docs/work/first-project-onboarding/plan.md; spec
 // R1-R3, R5): a modal over the page with the steps of OnboardingModel (packages/shared/onboarding-model.js),
 // and the onboarding's progress tray. window.ProjectWizard = { open(), close() } opens it: Projects › New project
-// (projects.js) and the Setup's First project step (#643, packages/ui-kit/setup.js); Edit keeps the old dialog.
+// (projects.js) and the Setup's First project step (#643, packages/ui-kit/setup.js); #741: open({ projectId }) (a
+// card's Continue) resumes that project's onboarding at its saved step, Finish marks it finished, and the step and
+// picks are saved at each change (project-wizard-resume.js); creating a project is the wizard only.
 // - #project-wizard (data-testid="project-wizard", role="dialog"), laid out as the spec's mockups (#669,
 //   docs/work/first-project-onboarding/images/mock-1, -2, -4, -6.jpg): the numbered pills over a divider
 //   (wizard-steps, one wizard-step-pill data-step="<id>" per step reading "<n> <label>", the current one
@@ -105,6 +107,7 @@
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
   const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
+  const resume = window.ProjectWizardResume({ cur: () => cur, render: () => render(), close: () => close() });
   const {
     jobReason,
     kindField,
@@ -611,9 +614,10 @@
           ${stepper()}
           <button type="button" class="btn ghost wizard-close" data-act="close" data-testid="wizard-close" aria-label="${esc(t('common.close'))}">×</button>
         </header>
-        <section class="wizard-body">${BODY[step]()}</section>
-        <footer class="wizard-foot" data-testid="wizard-footer">${foot}</footer>
+        <section class="wizard-body">${cur.exists ? resume.existsBody() : BODY[step]()}</section>
+        <footer class="wizard-foot" data-testid="wizard-footer">${cur.exists ? back : foot}</footer>
       </div>`;
+    resume.save();
   }
 
   // ---- the engine's state ----------------------------------------------------------------------
@@ -687,6 +691,7 @@
     if (!pid) return;
     if (running) finished.add(pid);
     const failed = (e) => showToast(t('onboarding.finish_failed'), errMsg(e));
+    new Promise((resolve) => resolve(api.finishOnboarding(pid))).catch(failed); // #741: no longer "Onboarding not finished"
     // #729: the step 3 workflows on the project, feature the default (DefaultWorkflow.firstBuild's rule), saved before
     // the project's page opens: its reads (listProjectRuns) then see them; the page opens whether the save succeeds or fails.
     // The saved record goes into state.projects (the backlog's pickers read the set and default there), as project-workflows.js's
@@ -715,6 +720,16 @@
       cur.estimate = Number.isFinite(r?.estimate?.usd) ? r.estimate.usd : null;
       render();
     }).catch(() => { if (cur?.projectId === pid) { cur.estimate = null; render(); } });
+  }
+
+  // #741: the project's onboarding, just started or resumed at its saved step with its picks
+  function resumeAt(state, name) {
+    cur.projectId = state?.projectId || null;
+    if (!cur.projectId) return;
+    resume.apply(state.wizard);
+    names.set(cur.projectId, name || cur.model.name.trim());
+    remember(state);
+    if (cur.model.step === 'analysis') toAnalysis();
   }
 
   async function call(fn) {
@@ -749,9 +764,9 @@
       render();
       try {
         const state = await begin();
-        cur.projectId = state?.projectId || null;
-        if (cur.projectId) names.set(cur.projectId, name);
-        remember(state);
+        // #741: a finished project of this repository: say it exists; an unfinished one resumes at its step
+        if (state?.exists) cur.exists = state.projectId;
+        else resumeAt(state, name);
       } catch (e) {
         showToast(t(creating ? 'onboarding.new_create_failed' : 'onboarding.start_failed'), errMsg(e));
       } finally {
@@ -835,7 +850,7 @@
 
   async function onClick(e) {
     const act = e.target?.closest?.('[data-act]')?.dataset.act;
-    if (!act || !cur) return;
+    if (!act || !cur || resume.onClick(act)) return;
     if (act === 'close' || act === 'cancel') close();
     else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
     else if (onCreateClick(act, e) || onRepoClick(act, e)) return;
@@ -918,7 +933,7 @@
     else if (e.key === 'Enter' && e.target?.tagName === 'INPUT') next();
   }
 
-  function open() {
+  function open({ projectId = null } = {}) {
     opener = document.activeElement || null;
     if (!root) {
       root = document.createElement('div');
@@ -931,6 +946,7 @@
       root.addEventListener('click', onClick);
       root.addEventListener('input', onInput);
       root.addEventListener('change', onInput);
+      root.addEventListener('change', () => { if (cur) resume.save(); }); // #741: a pick made without a render
       root.addEventListener('keydown', onKey);
       root.addEventListener('focusout', (e) => { if (cur?.stale && e.target?.id === 'wizard-review-idea') { cur.stale = false; render(); } });
       document.body.appendChild(root);
@@ -942,6 +958,8 @@
     tray.refresh(); // #724: hidden while the wizard is open
     root.querySelector('.wizard-panel')?.focus?.();
     loadAccounts();
+    if (projectId) Promise.resolve(api.onboardingStatus(projectId)).then((s) => { if (cur && !cur.projectId && s) { resumeAt(s); render(); } })
+      .catch((e) => showToast(t('onboarding.action_failed'), errMsg(e)));
   }
 
   function close() {
@@ -983,5 +1001,5 @@
     close,
     open,
   };
-  window.Actions.register('openProjectWizard', () => open()); // Setup's First project step asks for it (setup.js)
+  window.Actions.register('openProjectWizard', (opts) => open(opts || {}));// Setup's First project step asks for it (setup.js)
 })();

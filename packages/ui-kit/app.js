@@ -192,7 +192,6 @@ async function init() {
     if (!$('#usage-pop').classList.contains('hidden')) return closeUsagePopover();
     if ($('#sup-drawer').classList.contains('open')) return closeSupervisor();
     if (!$('#budget-modal').classList.contains('hidden')) return closeModal('#budget-modal');
-    if (!$('#project-modal').classList.contains('hidden')) return closeModal('#project-modal');
     // the Setup (#319): Esc is its Skip, which asks first (once: not while that question shows)
     if (window.Setup?.isOpen()) return $('#confirm-modal').classList.contains('hidden') ? window.Setup.skip() : undefined;
     if (!$('#skill-modal').classList.contains('hidden')) return closeModal('#skill-modal');

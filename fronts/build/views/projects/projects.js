@@ -1,16 +1,18 @@
 /* global api */
 // Projects (#354: back in the menu, Code & Build before Backlog; it was a page of Settings since
 // #254): the project cards (Start workflow, Open folder, Edit, Remove; a click opens the project's
-// page, views/project/) with Open folder and New project in the header, and the New / Edit project
-// dialog with its Local preview fields and the run command detected in the folder (#115). #643: New
-// project (the header and the empty state, data-testid="projects-empty") opens the onboarding wizard
-// (window.ProjectWizard, project-wizard.js); a card's Edit keeps the dialog. The dialog
-// is also opened from the Start drawer (app.js) and the header's project selector
-// (current-project.js), so openProjectModal stays a global; showProjects opens the screen. Both are
-// offered as actions (actions.js: openProjectModal, showProjects) to the kit and the other fronts; a
-// card's click asks the openProject action (the project's page, when its front is shipped).
-// Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
-// errMsg, openModal, closeModal, confirmDialog, openDrawer, renderProjectOptions, runAppCommandHtml).
+// page, views/project/) with Open folder and New project in the header. #643: New project (the header
+// and the empty state, data-testid="projects-empty") opens the onboarding wizard (window.ProjectWizard,
+// project-wizard.js). #741: one editor for a project: creating is the wizard only and a card's Edit opens
+// the project's page on its settings (data-testid="project-settings", project-settings.js); the old New /
+// Edit project dialog is gone. A card whose onboarding was closed before Finish reads "Onboarding not
+// finished" (data-testid="project-onboarding-unfinished") with Continue (data-act="continue"): the wizard
+// on that project's saved step. #742: Remove asks in the confirm modal, with "Also delete the folder"
+// (project-remove.js). showProjects opens the screen, offered as an action (actions.js) to the kit and the
+// other fronts; a card's click asks the openProject action (the project's page, when its front is shipped).
+// Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api, openDrawer).
+
+const onboardingUnfinished = (p) => p.onboarding?.finished === false;
 
 async function refreshProjects() {
   state.projects = await api.listProjects();
@@ -29,6 +31,7 @@ async function refreshProjects() {
         ${p.error ? `<span class="badge warn">${t('projects.error')}</span>` : p.isGit ? `<span class="badge">${t('projects.git')}</span>` : ''}
       </div>
       ${p.description ? `<p class="muted small">${esc(p.description)}</p>` : ''}
+      ${onboardingUnfinished(p) ? `<div class="row"><span class="badge warn" data-testid="project-onboarding-unfinished">${t('projects.onboarding_not_finished')}</span><button class="btn sm" data-act="continue">${t('projects.continue_onboarding')}</button></div>` : ''}
       <dl class="kv">
         <dt>${t('projects.folder')}</dt><dd class="${p.exists ? '' : 'warn-text'}">${esc(p.folder || '—')}${p.exists ? '' : t('projects.not_found')}</dd>
         <dt>${t('projects.repository')}</dt><dd>${esc(p.repo || '—')}</dd>
@@ -56,11 +59,9 @@ async function onProjectsClick(e) {
   }
   if (act.dataset.act === 'run') openDrawer({ project: p.id });
   if (act.dataset.act === 'open') api.openPath(p.folder);
-  if (act.dataset.act === 'edit') openProjectModal(p);
-  if (act.dataset.act === 'remove' && await confirmDialog(t('projects.remove_project'), t('projects.remove_name_from_the_list_the', { name: p.name, folder: p.folder }), t('common.remove'))) {
-    await api.removeProject(p.id);
-    refreshProjects();
-  }
+  if (act.dataset.act === 'continue') window.ProjectWizard.open({ projectId: p.id });
+  if (act.dataset.act === 'edit') window.Actions.call('openProject', p.id, { settings: true });
+  if (act.dataset.act === 'remove' && await window.ProjectRemove.remove(p)) refreshProjects();
 }
 
 // The Projects screen: where the links to the projects lead (a project's page, a Run App copy)
@@ -68,120 +69,6 @@ function showProjects() {
   showView('projects');
 }
 window.Actions.register('showProjects', showProjects);
-window.Actions.register('openProjectModal', (p, opts) => openProjectModal(p, opts));
-
-let editingProject = null;
-let projectFromDrawer = false;
-let projectFromHeader = false;
-// fromDrawer / fromHeader: the new project becomes the Start drawer's / the app's (the header selector's)
-function openProjectModal(p, { fromDrawer = false, fromHeader = false } = {}) {
-  editingProject = p;
-  projectFromDrawer = fromDrawer;
-  projectFromHeader = fromHeader;
-  $('#project-modal-title').textContent = p ? t('projects.edit_project') : t('projects.new_project');
-  $('#btn-pj-save').textContent = p ? t('common.save') : t('projects.create_project');
-  $('#pj-name').value = p?.name || '';
-  $('#pj-description').value = p?.description || '';
-  $('#pj-repo').value = p?.repo || '';
-  $('#pj-folder').value = p?.folder || '';
-  $('#pj-lp-install').value = p?.localPreview?.install || '';
-  $('#pj-lp-command').value = p?.localPreview?.command || '';
-  $('#pj-lp-url').value = p?.localPreview?.url || '';
-  // #472: a new project cloned by the app (a repository URL) suggests it on until the box is touched
-  const scripts = $('#pj-ignore-scripts');
-  scripts.checked = !!p?.ignoreInstallScripts;
-  scripts.dataset.touched = '';
-  scripts.onchange = () => { scripts.dataset.touched = '1'; };
-  // #554: the repository's copy of a workflow runs over the owner's edited workspace copy
-  $('#pj-prefer-repo-workflows').checked = !!p?.preferRepositoryWorkflows;
-  // #486: the Workflows block, for a new project (the project's page edits the set): the repository's
-  // manifest read from the folder, else from the URL before cloning (project-workflows.js)
-  const wfBox = $('#pj-workflows');
-  $('#pj-workflows-field').classList.toggle('hidden', !!p);
-  if (p) wfBox.innerHTML = '';
-  else window.ProjectWorkflows.showDialog(wfBox, pjWorkflowsTarget());
-  $('#pj-repo').oninput = p ? null : () => {
-    if (!scripts.dataset.touched) scripts.checked = !!$('#pj-repo').value.trim();
-    window.ProjectWorkflows.scheduleDialog(wfBox, pjWorkflowsTarget);
-  };
-  $('#pj-folder').required = !!p;
-  $('#pj-folder-hint').classList.toggle('hidden', !!p);
-  $('#pj-error').textContent = '';
-  pjDetected = null;
-  $('#pj-folder').oninput = () => {
-    clearTimeout(pjDetectTimer);
-    pjDetectTimer = setTimeout(detectProjectRun, 400);
-    if (!editingProject) window.ProjectWorkflows.scheduleDialog(wfBox, pjWorkflowsTarget);
-  };
-  detectProjectRun();
-  openModal('#project-modal');
-  $('#pj-name').focus({ preventScroll: true });
-}
-
-// #486: where the dialog reads the repository's workflows manifest from
-const pjWorkflowsTarget = () => ({ folder: $('#pj-folder').value.trim(), url: $('#pj-repo').value.trim() });
-
-// What the folder declares (.multiagent/local-preview.yaml) or is detected to run with (#115), so
-// the owner confirms it here ("Use it" fills Local preview) before any gate asks.
-let pjDetectTimer = null;
-let pjDetectSeq = 0;
-let pjDetected = null; // the suggestion "Use it" took (its cwd / env are saved with the fields)
-async function detectProjectRun() {
-  const box = $('#pj-lp-detected');
-  const folder = $('#pj-folder').value.trim();
-  const seq = ++pjDetectSeq;
-  box.classList.add('hidden');
-  if (!folder || editingProject?.localPreview?.command) return;
-  let s = null;
-  try { s = await api.suggestLocalPreview(folder); } catch { /* an unreadable folder suggests nothing */ }
-  if (seq !== pjDetectSeq || !s?.command) return;
-  box.innerHTML = `Detected: ${runAppCommandHtml(s)}${s.url ? ` at ${esc(s.url)}` : ''} <span class="muted">${t('projects.from_value', { value: esc(s.from || 'the folder') })}</span>
-    <button type="button" class="btn sm ghost" id="btn-pj-lp-use">${t('projects.use_it')}</button>`;
-  box.classList.remove('hidden');
-  $('#btn-pj-lp-use').onclick = () => {
-    $('#pj-lp-install').value = s.install || '';
-    $('#pj-lp-command').value = s.command;
-    $('#pj-lp-url').value = s.url || '';
-    pjDetected = s;
-    box.classList.add('hidden');
-  };
-}
-
-async function saveProject(e) {
-  e.preventDefault();
-  const { lp_install: install, lp_command: command, lp_url: url, ...data } = Object.fromEntries(new FormData($('#project-form')));
-  // the fields show install / command / URL; a monorepo app's folder and the env are kept
-  const kept = pjDetected?.command === command ? pjDetected : editingProject?.localPreview || {};
-  data.localPreview = { cwd: kept.cwd, env: kept.env, install, command, url };
-  // not a named field: FormData leaves an unchecked box out
-  data.ignoreInstallScripts = $('#pj-ignore-scripts').checked;
-  data.preferRepositoryWorkflows = $('#pj-prefer-repo-workflows').checked;
-  // #486: the workflows checked in the Workflows block; none keeps today's project (no set, no default)
-  const workflows = editingProject ? [] : window.ProjectWorkflows.selected($('#pj-workflows'));
-  if (workflows.length) data.workflows = workflows;
-  pjDetected = null;
-  const btn = $('#btn-pj-save');
-  $('#pj-error').textContent = '';
-  btn.disabled = true;
-  const label = btn.textContent;
-  if (!editingProject && data.repo) btn.textContent = t('projects.cloning');
-  try {
-    const p = editingProject ? await api.updateProject(editingProject.id, data) : await api.createProject(data);
-    closeModal('#project-modal');
-    state.projects = await api.listProjects();
-    // created from the header's selector: it becomes the app's project, and the open screen shows it
-    if (projectFromHeader) window.CurrentProject.set(p.id, { redraw: false });
-    window.CurrentProject.refresh();
-    if (projectFromDrawer) renderProjectOptions(p.id);
-    if (projectFromHeader) showView(state.view);
-    else if (state.view === 'projects') refreshProjects();
-  } catch (err) {
-    $('#pj-error').textContent = errMsg(err);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = label;
-  }
-}
 
 registerView({
   id: 'projects',
@@ -200,66 +87,10 @@ registerView({
         </div>
         <div id="projects-list" class="card-grid"></div>
       </section>`,
-  modals: () => `
-  <div id="project-modal" class="modal hidden">
-    <form id="project-form" class="modal-card wide" data-testid="project-dialog">
-      <h3 id="project-modal-title">${t('projects.new_project')}</h3>
-      <div class="field">
-        <label for="pj-name">${t('projects.name')} <span class="req">*</span></label>
-        <input type="text" id="pj-name" name="name" required />
-      </div>
-      <div class="field">
-        <label for="pj-description">${t('projects.description')}</label>
-        <input type="text" id="pj-description" name="description" />
-      </div>
-      <div class="field">
-        <label for="pj-repo">${t('projects.git_repository')} <span class="muted">${t('projects.optional')}</span></label>
-        <input type="text" id="pj-repo" name="repo" placeholder="${t('projects.https_github_com_owner_repo_git')}" />
-        <div class="hint">${t('projects.if_the_folder_is_not_a')}</div>
-      </div>
-      <div class="field">
-        <label for="pj-folder">${t('projects.folder_2')}</label>
-        <div class="row">
-          <input type="text" id="pj-folder" name="folder" />
-          <button type="button" id="btn-pj-pick" class="btn sm">…</button>
-        </div>
-        <div id="pj-folder-hint" class="hint">${t('projects.leave_empty_to_create_it_in')}</div>
-      </div>
-      <div class="field" id="pj-workflows-field">
-        <div id="pj-workflows"></div>
-      </div>
-      <div class="field">
-        <label for="pj-lp-command">${t('projects.local_preview')} <span class="muted">${t('projects.optional')}</span></label>
-        <div class="row">
-          <input type="text" id="pj-lp-install" name="lp_install" placeholder="${t('projects.install_npm_ci')}" />
-          <input type="text" id="pj-lp-command" name="lp_command" placeholder="${t('projects.run_npm_start')}" />
-          <input type="text" id="pj-lp-url" name="lp_url" placeholder="${t('projects.url_http_localhost_5173')}" />
-        </div>
-        <div id="pj-lp-detected" class="hint pj-lp-detected hidden"></div>
-        <div class="hint">${t('projects.how_to_run_a_run_s')}</div>
-      </div>
-      <div class="field">
-        <label class="check small"><input type="checkbox" id="pj-ignore-scripts" data-testid="project-ignore-scripts" /><span>${t('projects.install_without_scripts')}</span></label>
-        <div class="hint">${t('projects.install_without_scripts_hint')}</div>
-      </div>
-      <div class="field">
-        <label class="check small"><input type="checkbox" id="pj-prefer-repo-workflows" data-testid="project-prefer-repository-workflows" /><span>${t('projects.prefer_repository_workflows')}</span></label>
-        <div class="hint">${t('projects.prefer_repository_workflows_hint')}</div>
-      </div>
-      <p id="pj-error" class="error small"></p>
-      <div class="modal-actions">
-        <button type="button" id="btn-pj-cancel" class="btn ghost">${t('common.cancel')}</button>
-        <button type="submit" id="btn-pj-save" class="btn primary">${t('projects.create_project')}</button>
-      </div>
-    </form>
-  </div>`,
   mount() {
     $('#projects-list').onclick = onProjectsClick;
     $('#btn-new-project').onclick = () => window.ProjectWizard.open();
     $('#btn-projects-folder').onclick = () => api.openPath(state.ws.projects);
-    $('#project-form').onsubmit = saveProject;
-    $('#btn-pj-cancel').onclick = () => closeModal('#project-modal');
-    $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) { $('#pj-folder').value = d; detectProjectRun(); if (!editingProject) window.ProjectWorkflows.showDialog($('#pj-workflows'), pjWorkflowsTarget()); } };
   },
   show: refreshProjects,
 });

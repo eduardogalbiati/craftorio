@@ -2,8 +2,8 @@
 // (#header-project) and remembered. The Backlog, the Roadmap, Analytics and the Product Owner read
 // it (window.CurrentProject.get()); choosing another opens the current screen again for it. The
 // default is the last one chosen, else the last a run used (settings.lastProject), else the first
-// with a repository. "New project…" opens the project dialog (views/projects/projects.js).
-// Uses app.js globals at call time (esc, state, showView) and openProjectModal.
+// with a repository. "New project…" opens the new-project wizard (#741: openProjectWizard, project-wizard.js).
+// Uses app.js globals at call time (esc, state, showView).
 // Browser: window.CurrentProject; Node: module.exports (pickDefault, for a test).
 (function (root) {
   const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
@@ -51,7 +51,7 @@
     if (e.target.value !== NEW) { set(e.target.value); return; }
     // the selector keeps the current project; the new one is chosen once it is created
     render();
-    window.Actions.call('openProjectModal', null, { fromHeader: true });
+    window.Actions.call('openProjectWizard'); // #741: creating a project is the wizard only
   };
 
   // #671 the header's project, also before the app's start has listed the projects (a screen opened

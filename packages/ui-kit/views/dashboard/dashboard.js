@@ -265,7 +265,7 @@ function onHomeClick(e) {
   if (run) return state.runs.has(run.dataset.homeRun) ? openGateOf(run.dataset.homeRun) : showRun(run.dataset.homeRun);
   const act = e.target.closest('[data-home-act]')?.dataset.homeAct;
   // #644: the onboarding wizard when the build front registered it, the old dialog otherwise
-  if (act === 'project') return window.Actions.has('openProjectWizard') ? window.Actions.call('openProjectWizard') : window.Actions.call('openProjectModal', null, { fromHeader: true });
+  if (act === 'project') return window.Actions.call('openProjectWizard');
   if (act === 'idea') return viewRegistry.has('inbox') ? showView('inbox') : undefined;
   if (act === 'run') return openDrawer();
   const stage = e.target.closest('[data-stage]');

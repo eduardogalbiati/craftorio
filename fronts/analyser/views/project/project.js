@@ -1,6 +1,7 @@
 /* global api */
 // A project's page (Projects › a project, #354): its name, then the tabs Overview (its folder,
-// repository and unpushed commits, its workflow set and default, projects/project-workflows.js #486,
+// repository and unpushed commits, #741: its Project settings, the one editor of the project's fields,
+// project-settings.js, opened by a Projects card's Edit; its workflow set and default, projects/project-workflows.js #486,
 // and its runs in the shared run list, run-list.js: paged with an
 // infinite scroll, filters and search answered by the service, #200), City (project-architecture.js,
 // #373: the project's 3D city and its Analyze), Health (project-health.js, #730: the git facts, the
@@ -156,10 +157,12 @@ function newProjectPage(id) {
 }
 
 // tab: open the page on this tab (the Conflict map links); nextSteps: show the Next steps card (the
-// wizard's Finish, #642); while the card is open the page opens on the Overview that leads with it
-function openProjectView(id, { tab = null, nextSteps: withNextSteps = false } = {}) {
+// wizard's Finish, #642); while the card is open the page opens on the Overview that leads with it;
+// settings: the Overview with its Project settings open (#741: a Projects card's Edit)
+function openProjectView(id, { tab = null, nextSteps: withNextSteps = false, settings = false } = {}) {
   if (withNextSteps) rememberNextSteps(id, 'open');
   if (state.pv?.id !== id) state.pv = newProjectPage(id);
+  if (settings) { tab = 'overview'; state.pv.openSettings = true; }
   if (!tab && nextSteps()[id] === 'open') tab = 'overview';
   if (tab) { state.pv.tab = tab; rememberProjectTab(id, tab); }
   // the header's project follows the page (the page is drawn right after)
@@ -235,6 +238,9 @@ function renderProjectView() {
       <dt>${t('project.repository')}</dt><dd>${esc(p?.repo || '—')}</dd>
       ${pv.local?.ahead > 0 ? `<dt>${t('project.not_pushed')}</dt><dd class="warn-text">${t(pv.local.issues?.length ? 'project.commits_on_local_base_closes' : 'project.commits_on_local_base', { count: pv.local.ahead, base: esc(pv.local.base), issues: esc((pv.local.issues || []).map((n) => `#${n}`).join(', ')) })}</dd>` : ''}
     </dl>`;
+  // #741: the one editor of the project's own fields (project-settings.js)
+  window.ProjectSettings?.show(p, $('#project-settings-box'), { open: !!pv.openSettings });
+  pv.openSettings = false;
   // #486: the project's workflow set and default, edited here (project-workflows.js)
   window.ProjectWorkflows?.showPage(p, $('#project-workflows'));
   renderRunList(pv, {
@@ -285,6 +291,7 @@ registerView({
         <div id="project-panel-overview" role="tabpanel" aria-label="${t('project.overview')}" data-testid="project-overview">
           <div id="project-next-steps-box"></div>
           <div id="project-info" class="pr-head-info"></div>
+          <div id="project-settings-box"></div>
           <div id="project-workflows"></div>
           <div class="pr-toolbar">
             <div id="project-run-filters" class="chips"></div>

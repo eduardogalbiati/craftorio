@@ -371,14 +371,16 @@ function ownedFolder(folder, roots) {
 
 /**
  * #742: what deleting a git folder would lose: dirty (`git status --porcelain`, the paths) and unpushed (the
- * local commits on no remote branch, `<hash> <subject>`, at most 50). A folder that is not a repository of
+ * local commits on no remote branch, `<hash> <subject>`, at most 50; none without a remote). A folder that is not a repository of
  * its own (no .git) loses nothing git knows: both empty.
  */
 async function folderChanges(folder, { git = execGit } = {}) {
   if (!folder || !fs.existsSync(path.join(String(folder), '.git'))) return { dirty: [], unpushed: [] };
   const lines = (out) => String(out || '').split(/\r?\n/).map((l) => l.trimEnd()).filter(Boolean);
   const dirty = lines(await git(['status', '--porcelain'], folder).catch(() => '')).map((l) => l.slice(3) || l);
-  const unpushed = lines(await git(['log', '--branches', '--not', '--remotes', '--format=%h %s', '-n', '50'], folder).catch(() => ''));
+  // the issue's rule: commits ahead of a remote; a repository with no remote at all has no upstream to be ahead of
+  const remotes = lines(await git(['remote'], folder).catch(() => ''));
+  const unpushed = remotes.length ? lines(await git(['log', '--branches', '--not', '--remotes', '--format=%h %s', '-n', '50'], folder).catch(() => '')) : [];
   return { dirty, unpushed };
 }
 
