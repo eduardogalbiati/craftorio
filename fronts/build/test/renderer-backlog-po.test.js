@@ -143,12 +143,13 @@ test('groupState: a pending or running run makes the group "running", with its r
   assert.equal(st.kind, null); // an enrich run is not an applied group's run
 });
 
-test('groupState: an issue only in the queue (no roadmap place, no live run) makes the group "queued", with no runId', () => {
+test('groupState (#446): a leftover "queued" flag (no roadmap place, no live run) no longer covers the issue: the group is still to apply', () => {
   const { helpers, setIssues } = loadAppliedState();
   setIssues([{ number: 1, queued: true }]);
   const st = helpers.groupState({ issues: [1] });
-  assert.equal(st.kind, 'queued');
-  assert.equal(st.runId, null);
+  assert.equal(st.kind, null);
+  assert.deepEqual([...st.covered], []);
+  assert.deepEqual([...st.rest], [1]);
 });
 
 test('groupState: a simulated marker (#148, the groups scenario) counts its covered issues as already in the roadmap at its stage, with no real roadmap, queue or run behind it', () => {
@@ -164,10 +165,10 @@ test('groupState: a simulated marker (#148, the groups scenario) counts its cove
   assert.deepEqual([...partly.rest], [3]);
 });
 
-test('applied: true for roadmap, running and queued groups; false for a partly applied or a still-to-apply one', () => {
+test('applied: true for roadmap and running groups; false for a partly applied or a still-to-apply one (#446: no queued state)', () => {
   const { helpers } = loadAppliedState();
-  for (const kind of ['roadmap', 'running', 'queued']) assert.equal(helpers.applied({ kind }), true, kind);
-  for (const kind of ['partly', null]) assert.equal(helpers.applied({ kind }), false, String(kind));
+  for (const kind of ['roadmap', 'running']) assert.equal(helpers.applied({ kind }), true, kind);
+  for (const kind of ['partly', 'queued', null]) assert.equal(helpers.applied({ kind }), false, String(kind));
 });
 
 test('appliedBadge: "roadmap" links to the first stage, reading "In roadmap · Stage N" for this answer\'s own items, or "Already in the roadmap" otherwise', () => {
@@ -181,11 +182,13 @@ test('appliedBadge: "roadmap" links to the first stage, reading "In roadmap · S
   assert.doesNotMatch(already, /In roadmap ·/);
 });
 
-test('appliedBadge: "running" with a runId links to that run; without one, or "queued", shows a plain Queued badge', () => {
+test('appliedBadge: "running" with a runId links to that run; without one it is a plain Running badge, never "Queued" (#446)', () => {
   const { helpers } = loadAppliedState();
   assert.match(helpers.appliedBadge({ kind: 'running', runId: 'run-7' }, false), /data-po-run="run-7"/);
-  assert.match(helpers.appliedBadge({ kind: 'running', runId: null }, false), />Queued</);
-  assert.match(helpers.appliedBadge({ kind: 'queued', runId: null }, false), />Queued</);
+  const plain = helpers.appliedBadge({ kind: 'running', runId: null }, false);
+  assert.match(plain, /^<span [^>]*>Running<\/span>$/);
+  assert.doesNotMatch(plain, /Queued|queue/i);
+  assert.doesNotMatch(helpers.appliedBadge({ kind: 'queued', runId: null }, false), /Queued/);
 });
 
 test('appliedBadge: "partly" names what is covered and what is left, "in the roadmap" when a stage is known, else "assigned"', () => {
@@ -197,11 +200,10 @@ test('appliedBadge: "partly" names what is covered and what is left, "in the roa
   assert.match(assigned, /Partly assigned \(#4\)/);
 });
 
-test('appliedTitle: names the stage for a group already in the roadmap, else whether it is running or queued', () => {
+test('appliedTitle: names the stage for a group already in the roadmap, else that its run is in progress (#446: no queue)', () => {
   const { helpers } = loadAppliedState();
   assert.equal(helpers.appliedTitle({ kind: 'roadmap', stages: [4] }), 'Already in the roadmap, stage 4');
   assert.equal(helpers.appliedTitle({ kind: 'running' }), 'Already assigned: its run is in progress');
-  assert.equal(helpers.appliedTitle({ kind: 'queued' }), 'Already assigned: it is in the queue');
 });
 
 test('groupHtml: an applied group is shown dimmed with its badge, Assign and Add to roadmap disabled and titled with why; a partly applied one offers "Add the rest" instead', () => {

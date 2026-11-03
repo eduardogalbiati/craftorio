@@ -81,6 +81,83 @@ test('#446 backlog:assign with Run now starts only the new stage, on its own (#1
   assert.equal(fs.existsSync(queueFile(ws, p.id)), false);
 });
 
+// edits the stored roadmap file the way a run would leave it (state / item status are run fields
+// roadmap:save never takes from the caller)
+function patchRoadmapFile(ws, projectId, fn) {
+  const file = path.join(ws.backlog, `${projectId}.roadmap.json`);
+  const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fs.writeFileSync(file, JSON.stringify(fn(r)));
+}
+
+test('#446 backlog:assign with Run now while the roadmap is running is refused before anything is planned', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 3], 'assign-run-now-running-446');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ name: 'Already planned', items: [{ workflow: 'fixture-issue.yaml', number: 3, mock: true }] }] });
+  patchRoadmapFile(ws, p.id, (r) => ({ ...r, state: 'running' }));
+  const before = api['roadmap:get']({ projectId: p.id });
+
+  await assert.rejects(
+    () => api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-issue.yaml', mock: true, runNow: true }),
+    /The roadmap is running/,
+  );
+
+  const after = api['roadmap:get']({ projectId: p.id });
+  assert.equal(after.stages.length, 1, 'no stage was added');
+  assert.deepEqual(after.stages.flatMap((s) => s.items.flatMap(issueNumbers)), [3]);
+  assert.equal(after.state, 'running');
+  assert.equal(after.updatedAt, before.updatedAt, 'the roadmap file was not rewritten');
+  assert.equal(api['runs:active']().length, 0, 'nothing started');
+  assert.equal(fs.existsSync(queueFile(ws, p.id)), false);
+});
+
+test('#446 backlog:assign without Run now on a running roadmap plans the stage (the refusal is Run now\'s only)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 3], 'assign-running-plan-446');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ name: 'Already planned', items: [{ workflow: 'fixture-issue.yaml', number: 3, mock: true }] }] });
+  patchRoadmapFile(ws, p.id, (r) => ({ ...r, state: 'running' }));
+
+  await api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-issue.yaml', mock: true });
+
+  const after = api['roadmap:get']({ projectId: p.id });
+  assert.equal(after.stages.length, 2);
+  assert.deepEqual(after.stages[1].items.flatMap(issueNumbers), [1]);
+});
+
+// a finished item does not hold its issues (roadmap plannedNumbers): only an item whose run is alive does
+test('#446 backlog:assign of issues all in a roadmap item whose run is in progress is refused naming them, and adds no stage', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2], 'assign-already-planned-446');
+  await api['backlog:assign']({ projectId: p.id, numbers: [1, 2], workflow: 'fixture-issue.yaml', mock: true, group: true, runNow: true });
+  await until(() => api['runs:active']().length === 1);
+  const before = api['roadmap:get']({ projectId: p.id });
+  assert.equal(before.stages.length, 1);
+
+  await assert.rejects(
+    () => api['backlog:assign']({ projectId: p.id, numbers: [2, 1], workflow: 'fixture-issue.yaml', mock: true, group: true }),
+    (err) => {
+      assert.match(err.message, /already planned in the roadmap: nothing was added/);
+      assert.match(err.message, /#2/);
+      assert.match(err.message, /#1/);
+      assert.match(err.message, /\bare\b/, 'plural for two issues');
+      return true;
+    },
+  );
+
+  const after = api['roadmap:get']({ projectId: p.id });
+  assert.equal(after.stages.length, 1, 'no empty stage was added');
+  assert.equal(after.stages[0].items.length, 1, 'the running item is kept');
+  assert.deepEqual(issueNumbers(after.stages[0].items[0]), [1, 2]);
+  assert.equal(after.stages[0].items[0].status, 'running');
+  assert.equal(api['runs:active']().length, 1, 'nothing else started');
+  assert.equal(fs.existsSync(queueFile(ws, p.id)), false);
+});
+
 test('#446 the queue channels (backlog:unqueue, backlog:pause, roadmap:from-queue) are gone from the service and the control allowlist', (t) => {
   const { service, api } = makeService(t);
   const gone = ['backlog:unqueue', 'backlog:pause', 'roadmap:from-queue'];

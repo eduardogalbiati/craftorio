@@ -133,6 +133,29 @@ test('#446 an older chain.json with the Backlog-queue target still works: resume
   assert.equal(fs.existsSync(path.join(ws.backlog, `${p.id}.queue.json`)), false);
 });
 
+test('#446 a chain to the Backlog-queue target whose produced issues are not open in the synced backlog ends done with "nothing planned" (never paused)', { timeout: 60000 }, async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const { p, folder } = await planProject(t, api, ws, 'chain-plan-unknown-446');
+  const before = api['roadmap:get']({ projectId: p.id });
+
+  const { runId } = await api['run:start']({
+    file: 'fixture-chain-source.yaml', inputs: { task: 'Do the work', repo_path: folder }, mock: true, mockSequences: { number: [555] }, projectId: p.id,
+    then: { action: 'queue', workflow: 'fixture-issue.yaml' },
+  });
+  autoApprove(service, runId, 'review', 'accept');
+
+  await untilTrue(() => ['done', 'paused'].includes(api['chain:get']({ runId })?.state));
+  const ch = api['chain:get']({ runId });
+  assert.equal(ch.state, 'done', 'the chain is not paused');
+  assert.match(String(ch.reason || ''), /nothing planned/);
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.stages.length, 1, 'no stage was added');
+  assert.deepEqual(roadmap.stages[0].items.flatMap(issueNumbers), [102]);
+  assert.equal(roadmap.updatedAt, before.updatedAt, 'the roadmap was not rewritten');
+  assert.equal(fs.existsSync(path.join(ws.backlog, `${p.id}.queue.json`)), false);
+});
+
 test('#446 the issue tracker\'s "Create and queue" choice reads "Create and plan"', () => {
   const yaml = fs.readFileSync(path.join(ROOT, 'workflows', 'issue.yaml'), 'utf8');
   const line = yaml.split('\n').find((l) => /id:\s*create_assign\b/.test(l) && /label:/.test(l));
