@@ -81,3 +81,28 @@ test('#697 a stage added before the running stage by a save (roadmap:save → sa
   const step = roadmaps.advance(saved, { runOf: runsOf({ 'run-one': RUNNING }) });
   assert.deepEqual(step.start.map((x) => x.id), []);
 });
+
+test('#697 two stages inserted before the running one start in their order, then the later stages', () => {
+  const stages = (a, b) => [stage('s-a', [a]), stage('s-b', [b]), stage('s1', [started('i1')]), stage('s2', [item('i2', 'planned')])];
+  // the running stage is over: the first inserted stage starts, alone
+  let step = roadmaps.advance(plan(stages(item('i8', 'planned'), item('i9', 'planned'))), { runOf: runsOf({ 'run-i1': MERGED }) });
+  assert.deepEqual(step.start.map((x) => x.id), ['i8']);
+  // the first inserted stage is over: the second one starts, still before the stage after the old running one
+  step = roadmaps.advance(plan(stages(started('i8'), item('i9', 'planned'))), { runOf: runsOf({ 'run-i1': MERGED, 'run-i8': MERGED }) });
+  assert.deepEqual(step.start.map((x) => x.id), ['i9']);
+  step = roadmaps.advance(plan(stages(started('i8'), started('i9'))), { runOf: runsOf({ 'run-i1': MERGED, 'run-i8': MERGED, 'run-i9': MERGED }) });
+  assert.deepEqual(step.start.map((x) => x.id), ['i2']);
+});
+
+test('#697 a later run waiting at a human gate (not parked) does not hold an inserted stage', () => {
+  // the issue's rule: only an item `running` and not waiting at a human gate holds the stage before it
+  const r = plan([stage('s-new', [item('i9', 'planned')]), stage('s1', [started('i1')])]);
+  const step = roadmaps.advance(r, { runOf: runsOf({ 'run-i1': { status: 'running', waiting: true } }) });
+  assert.deepEqual(step.start.map((x) => x.id), ['i9']);
+});
+
+test('#697 while an inserted stage waits, the running stage still starts its own planned items', () => {
+  const r = plan([stage('s-new', [item('i9', 'planned')]), stage('s1', [started('i1'), item('i3', 'planned')])]);
+  const step = roadmaps.advance(r, { runOf: runsOf({ 'run-i1': RUNNING }) });
+  assert.deepEqual([step.start.map((x) => x.id), step.roadmap.state], [['i3'], 'running']);
+});
