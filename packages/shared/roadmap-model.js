@@ -13,6 +13,7 @@
 //   retry, skip                  the item that failed or could not start (#196), never a paused one
 //   park                         the item's "Move on" (#395): its run waits at a human gate, the roadmap goes on
 //   parkStage                    the stage's "Move on from this stage" (#395): parks its items at a gate, skips the planned
+//   removeStage                  the stage's "Remove from roadmap" (#748): never while one of its items runs or waits at a gate
 // The Roadmap view's rules: releaseView (Planned: the latest release only, #425), the date ranges (SINCE, inRange) and its pages (pageOf).
 // Any load order: read only when a screen draws.
 /** An item's status, ITEM_STATES as a type (#346): the file stores planned, done, parked or skipped.
@@ -30,7 +31,7 @@
   const FINISHED = new Set(['done', 'parked', 'skipped']);
   // an item whose run still changes (#491): its live run is in the light backlog:state
   const LIVE_ITEM_STATES = new Set(['parked', 'running']);
-  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'park', 'parkStage', 'pause', 'pauseStage', 'resume', 'retry', 'skip', 'start', 'stop'];
+  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'park', 'parkStage', 'pause', 'pauseStage', 'removeStage', 'resume', 'retry', 'skip', 'start', 'stop'];
 
   // #395: a parked item (`parked`: { at, gate }) whose gate was answered later and whose run then
   // failed is finished too: the roadmap moved past it, so it never holds its stage or pauses the roadmap
@@ -180,8 +181,13 @@
   function stageActions(r, stage) {
     if (!stage) {
       const none = no(t('roadmap.no_stage_given'));
-      return { disable: none, enable: none, parkStage: none, pauseStage: none, stopStage: none };
+      return { disable: none, enable: none, parkStage: none, pauseStage: none, removeStage: none, stopStage: none };
     }
+    // #748: the stage and its items leave the roadmap (not the issues); never under a run that still changes
+    const removeStage = () => {
+      if (itemsOf(stage).some(atGate)) return no(t('roadmap.stage_remove_at_gate'));
+      return itemsOf(stage).some((x) => x.status === 'running') ? no(t('roadmap.stage_item_running')) : yes();
+    };
     const busy = itemsOf(stage).some((x) => x.status === 'running');
     // #395: its items at a gate are parked and its planned ones not started skipped; never while a turn runs
     const parkStage = () => {
@@ -201,6 +207,7 @@
       enable: stage.disabled ? yes() : no(t('roadmap.stage_already_enabled')),
       parkStage: parkStage(),
       pauseStage: pauseStage(),
+      removeStage: removeStage(),
       // #412: Stop cancels its runs in progress (the roadmap pauses on them, Resume / Retry / Skip)
       stopStage: busy ? yes() : no(t('roadmap.stage_no_run')),
     };

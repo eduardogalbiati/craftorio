@@ -1,0 +1,22 @@
+/* #748: the app's menu (menu.js): a panel under its button (or above it, .up, near the window's
+   bottom), entries with a fixed icon column so every label starts at the same x, a divider between
+   groups, a refused entry dimmed (its reason in its tooltip), a danger entry in red. */
+.ui-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; min-width: 220px; max-width: 320px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
+.ui-menu.up { top: auto; bottom: calc(100% + 4px); }
+.ui-menu-item {
+  display: grid; grid-template-columns: 16px 1fr; align-items: center; gap: 8px; width: 100%; min-height: 28px;
+  padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.ui-menu-icon { width: 16px; display: inline-flex; justify-content: center; align-items: center; color: var(--muted); }
+.ui-menu-icon svg { width: 14px; height: 14px; }
+.ui-menu-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-menu-item:hover:not([aria-disabled="true"]), .ui-menu-item:focus-visible { background: var(--panel-2); }
+.ui-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+.ui-menu-item[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }
+.ui-menu-danger, .ui-menu-danger .ui-menu-icon { color: var(--red); }
+.ui-menu-danger[aria-disabled="true"], .ui-menu-danger[aria-disabled="true"] .ui-menu-icon { color: var(--muted); }
+.ui-menu-sep { height: 1px; margin: 4px 2px; background: var(--border); }
