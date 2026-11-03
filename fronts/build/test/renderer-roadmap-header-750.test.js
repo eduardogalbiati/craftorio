@@ -333,6 +333,82 @@ test('#750 filters: on the right "5 de 5 itens" and a "2 desativadas à parte" l
   assert.match(H.visibleText(link.inner), /^2\b/);
 });
 
+// ---------- after the review: a finished base check, the disabled stages' link ----------
+
+const checkAt = (status, endedAgo, extra = {}) => ({ status, commit: 'abcdef1234567890', startedAt: H.iso(H.NOW - 10 * H.MIN), endedAt: H.iso(H.NOW - endedAgo), ...extra });
+const checkStatus = (page) => H.findEl(page, (e) => e.attrs['data-testid'] === 'base-check-card')?.attrs['data-status'] ?? null;
+
+test('#750 activity: a green base check stays a minute after it ended, then the band goes', (t) => {
+  const out = load();
+  lang(t, out, 'pt-BR');
+  const d = example({}, { baseCheck: checkAt('green', 30 * 1000) });
+  const fresh = html(out, d);
+  assert.equal(checkStatus(fresh), 'green');
+  assert.equal(bandCount(fresh, 'rm-head-activity'), 1);
+  out.setNow(H.NOW + 2 * H.MIN); // 2 min 30 s after it ended
+  const later = html(out, d);
+  assert.equal(checkStatus(later), null);
+  assert.equal(bandCount(later, 'rm-head-activity'), 0);
+  assert.equal(bandCount(html(out, example({}, { baseCheck: { status: 'green', commit: 'abcdef12' } })), 'rm-head-activity'), 0, 'a green check with no end time');
+});
+
+test('#750 activity: a red or failed base check stays in the band long after it ended', (t) => {
+  const out = load();
+  lang(t, out, 'pt-BR');
+  for (const bc of [checkAt('red', 3 * H.HOUR, { failures: 2 }), checkAt('failed', 3 * H.HOUR, { error: 'npm not found' })]) {
+    const page = html(out, example({}, { baseCheck: bc }));
+    assert.equal(checkStatus(page), bc.status);
+    assert.equal(bandCount(page, 'rm-head-activity'), 1, bc.status);
+  }
+});
+
+// The page's list as a fake document: `pages` pages to load before the first disabled stage is drawn,
+// or (`needsAll`) drawn only once the view shows All. Records the scroll and the highlight.
+function fakeList(out, calls, { pages = 0, needsAll = false } = {}) {
+  const seen = { scrolled: [], flashed: [] };
+  const stageEl = { scrollIntoView: (o) => seen.scrolled.push(o?.block ?? ''), classList: { add: (c) => seen.flashed.push(c), remove: () => {} } };
+  const drawn = () => calls.render >= pages && (!needsAll || calls.showAll.includes(true));
+  out.sandbox.document = {
+    querySelector: (sel) => (/rm-stage/.test(sel) && /disabled/.test(sel) ? (drawn() ? stageEl : null)
+      : /data-rm-load-more/.test(sel) ? (calls.render < pages ? {} : null) : null),
+    querySelectorAll: () => [],
+  };
+  return seen;
+}
+async function clickDisabledLink(out, ctx) {
+  const d = example();
+  const f = band(html(out, d), 'rm-head-filters');
+  await out.R.onClick(H.clickOn(f, (e) => 'data-rm-show-disabled' in e.attrs), ctx, d);
+}
+
+test('#750 filters: "desativadas à parte" scrolls to the first disabled stage and marks it', async (t) => {
+  const out = load();
+  lang(t, out, 'pt-BR');
+  const { ctx, calls } = H.makeCtx();
+  const seen = fakeList(out, calls);
+  await clickDisabledLink(out, ctx);
+  assert.deepEqual([seen.scrolled.length, seen.flashed, calls.showAll], [1, ['flash'], []]);
+});
+
+test('#750 filters: "desativadas à parte" loads the next pages until the disabled stage is drawn', async (t) => {
+  const out = load();
+  lang(t, out, 'pt-BR');
+  const { ctx, calls } = H.makeCtx();
+  const seen = fakeList(out, calls, { pages: 3 });
+  await clickDisabledLink(out, ctx);
+  assert.ok(calls.render >= 3, `pages loaded: ${calls.render}`);
+  assert.deepEqual([seen.flashed, calls.showAll], [['flash'], []]);
+});
+
+test('#750 filters: "desativadas à parte" switches to All when the view hides the disabled stage', async (t) => {
+  const out = load();
+  lang(t, out, 'pt-BR');
+  const { ctx, calls } = H.makeCtx();
+  const seen = fakeList(out, calls, { needsAll: true });
+  await clickDisabledLink(out, ctx);
+  assert.deepEqual([calls.showAll, seen.flashed], [[true], ['flash']]);
+});
+
 test('#750 pt-BR: the header reads "Últimas 24h", never "last 24 hours"', (t) => {
   const out = load();
   lang(t, out, 'pt-BR');

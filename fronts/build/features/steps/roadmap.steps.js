@@ -530,11 +530,12 @@ Then('the roadmap bar holds none of the filters', async ({ e2e }) => {
   for (const [what, control] of FILTERS(rmBar(e2e.window))) await expect(control, `${what} in the roadmap bar`).toHaveCount(0);
 });
 
-Then('the filter row is above the roadmap bar', async ({ e2e }) => {
+// #750: the filters are the header's last band (view and filters), under band 1 (state and actions)
+Then('the filter row is under the roadmap bar', async ({ e2e }) => {
   const row = await filterRow(e2e.window).boundingBox();
   const bar = await rmBar(e2e.window).boundingBox();
   expect(row && bar, 'the filter row and the bar are shown').toBeTruthy();
-  expect(row.y + row.height, 'the filter row ends above the bar').toBeLessThanOrEqual(bar.y + 1);
+  expect(row.y, 'the filter row starts under the bar').toBeGreaterThanOrEqual(bar.y + bar.height - 1);
 });
 
 // ---- #271: "Ask the Oracle about this failure" on a failed item ----------------------------------------
@@ -1005,14 +1006,15 @@ Then('the pause menu offers {string} first, with the hint {string}', async ({ e2
   const first = pauseMenu(page).getByRole('menuitem').first();
   await expect(first).toHaveAttribute('data-testid', PAUSE_ENTRIES[label]);
   await expect(first).toContainText(label);
-  await expect(first).toContainText(hint);
+  // #748: the shared menu shows the hint as the entry's tooltip (its title), not as text
+  await expect(first).toHaveAttribute('title', hint);
 });
 
 Then('the pause menu offers {string}, with the hint {string}', async ({ e2e }, label, hint) => {
   const entry = pauseEntry(e2e.window, label);
   await expect(entry).toBeVisible();
   await expect(entry).toHaveAttribute('data-testid', PAUSE_ENTRIES[label]);
-  await expect(entry).toContainText(hint);
+  await expect(entry).toHaveAttribute('title', hint);
 });
 
 When('I choose {string} in the pause menu', async ({ e2e }, label) => {

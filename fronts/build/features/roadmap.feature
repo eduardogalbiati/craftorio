@@ -212,13 +212,13 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then the roadmap shows at least 2 stages
 
   @issue-269
-  Scenario: The roadmap's filters sit on one filter row above the bar
+  Scenario: The roadmap's filters sit on one filter row under the bar
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Roadmap
     Then the roadmap's filter row holds the epic filter, the Planned and All switch, the date filter and "Group by epic"
     And the roadmap bar holds none of the filters
-    And the filter row is above the roadmap bar
+    And the filter row is under the roadmap bar
 
   # ---- #270: the alerts at the top of the page ------------------------------------------------------
   # The demo workspace has an error (the roadmap paused: "Could not start #14: …") and an info (2 commits
