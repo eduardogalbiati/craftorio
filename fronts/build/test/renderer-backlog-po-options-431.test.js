@@ -41,10 +41,10 @@ const MODE_KEYS = ['mode', 'validation'];
 const TEST_MAIN = ['unit_tests', 'e2e_tests', 'screenshots'];
 const EXTRA = ['developer_model', 'developer_effort', 'test_command', 'check_command', 'suite_red_outside_change'];
 
-async function openPo({ storage = null } = {}) {
+async function openPo({ storage = null, workflows = [FEATURE] } = {}) {
   const page = await loadPage({
     api: {
-      listWorkflows: async () => [FEATURE],
+      listWorkflows: async () => workflows,
       listProjects: async () => [{ id: 'demo', name: 'Demo project' }],
       askProductOwner: () => new Promise(() => {}),
     },
@@ -120,6 +120,46 @@ test('#431 the chevron minimizes the options to a one-line summary of the chosen
   await settle();
   assert.equal(toggle(page).getAttribute('aria-expanded'), 'true');
   assert.equal(isHidden(page, box(page)), false, 'the options are shown again');
+});
+
+test('#431 the minimized summary reads the owner\'s line: "Automatic · Unit: Write and run · E2E: Write and run · Screenshots: All"', async () => {
+  const page = await openPo();
+  needToggle(page).click();
+  await settle();
+  const s = summary(page);
+  assert.equal(s === null, false, 'a [data-testid="po-wf-summary"]');
+  assert.equal(textOf(s).replace(/\s+/g, ' ').trim(), 'Automatic · Unit: Write and run · E2E: Write and run · Screenshots: All');
+});
+
+test('#431 in Portuguese the summary names the tests short in the viewer\'s language (Unitários:, E2E:)', async () => {
+  const page = await openPo();
+  page.sandbox.I18n.setLanguage('pt-BR');
+  needToggle(page).click();
+  await settle();
+  const text = textOf(summary(page));
+  assert.equal(text.includes('Unitários: '), true, `"${text}"`);
+  assert.equal(text.includes('E2E: '), true, `"${text}"`);
+  assert.equal(text.includes('Unit: '), false, `no English prefix: "${text}"`);
+});
+
+test('#431 switching the workflow while minimized keeps it minimized and the summary follows the new workflow\'s values', async () => {
+  const quickInputs = JSON.parse(JSON.stringify(FEATURE.inputs));
+  quickInputs.unit_tests.default = 'off';
+  const QUICK = { file: 'quick.yaml', name: 'Quick development', description: 'A copy with unit tests off', inputs: quickInputs };
+  const page = await openPo({ workflows: [FEATURE, QUICK] });
+  const select = page.$('#po-workflow');
+  assert.equal(select.value, 'feature.yaml', 'the default development workflow is chosen first');
+  needToggle(page).click();
+  await settle();
+  assert.equal(textOf(summary(page)).includes('Unit: Write and run'), true, `"${textOf(summary(page))}"`);
+  select.value = 'quick.yaml';
+  select.onchange({ target: select });
+  await settle();
+  assert.equal(toggle(page).getAttribute('aria-expanded'), 'false', 'still minimized');
+  assert.equal(isHidden(page, box(page)), true, 'the options box stays hidden');
+  const text = textOf(summary(page));
+  assert.equal(isHidden(page, summary(page)), false, 'the summary is shown');
+  assert.equal(text.includes('Unit: Off'), true, `the new workflow's value: "${text}"`);
 });
 
 test('#431 the summary follows the values set: Unit tests set to Off reads Off once minimized', async () => {
