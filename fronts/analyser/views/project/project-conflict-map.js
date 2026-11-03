@@ -192,7 +192,7 @@
     const r = f.recommendation;
     const p = cur.perf;
     const request = `Stop parallel runs colliding on ${file}: ${r.text}\n\nEvidence (Projects › ${p.project?.name || cur.id} › Conflict map, ${p.from} to ${p.to}): edited by ${pct(r.evidence.share)} of the runs with commits (${r.evidence.runs} of ${p.runsWithCommits})${r.evidence.lines != null ? `, ${r.evidence.lines} lines now` : ''}, named by ${r.evidence.conflicts} merge conflict(s). The shared limit is ${pct(p.sharedLimit)} of the runs.`;
-    openDrawer({ workflow: 'issue-tracker.yaml', project: cur.id, inputs: { request } });
+    openDrawer({ workflow: 'issue.yaml', project: cur.id, inputs: { request } });
   }
 
   async function askPlan() {

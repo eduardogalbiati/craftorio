@@ -233,7 +233,8 @@ async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, p
  * @returns {{ epic: string, numbers: number[] } | null}
  */
 function filedToEpic({ workflow, status, steps } = {}) {
-  if (workflow !== 'issue-tracker' || status !== 'success') return null;
+  // #648: the issue workflow, and the issue tracker's old runs (issue-tracker is now its alias)
+  if (!['issue', 'issue-tracker'].includes(workflow) || status !== 'success') return null;
   const choice = steps?.review?.output ? steps.review.output.choice : steps?.file?.output ? 'create' : null;
   if (!['create', 'create_assign'].includes(choice)) return null;
   const epic = steps.analyze?.output?.epic;

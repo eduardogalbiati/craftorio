@@ -59,11 +59,13 @@ const { LIVE_ITEM_STATES } = require('@multiagent/shared/roadmap-model');
 const { projectPlatform } = require('@multiagent/shared/platforms');
 const { resolveRunInputs } = require('../project/project-run-defaults');
 
-// the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
-const ENRICH_WORKFLOW = 'writer-reviewer';
-// the issue tracker (#81) files issues, it does not implement them: its runs never link to an issue
-// they mention (e.g. "related to #41"); its "create and queue" choice queues the issues it filed
-const ISSUE_TRACKER_WORKFLOW = 'issue-tracker';
+// the workflows that enrich an issue's text and do not implement it: write-doc, and Write & Review's
+// old runs (#648: writer-reviewer became an alias of write-doc)
+const ENRICH_WORKFLOWS = ['write-doc', 'writer-reviewer'];
+// the issue workflow (#81, #648: issue-tracker's old runs too) files issues, it does not implement them:
+// its runs never link to an issue they mention (e.g. "related to #41"); its "create and queue" choice
+// queues the issues it filed
+const ISSUE_WORKFLOWS = ['issue', 'issue-tracker'];
 
 // ---- open pull/merge requests ----------------------------------------------------------------
 // An issue already has work in flight when an open PR/MR refers to it: GitHub's closing references,
@@ -209,7 +211,7 @@ function linkRuns(issues, runs, queue = null, local = null) {
   const sorted = [...runs].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
   const items = queue?.items || [];
   return issues.map((issue) => {
-    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && r.workflow !== ISSUE_TRACKER_WORKFLOW && !runIssues(r).length && mentions(r, issue)))
+    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && !ISSUE_WORKFLOWS.includes(r.workflow) &&!runIssues(r).length && mentions(r, issue)))
       .map((r) => {
         // a run started for a group: the other issues it implements ("grouped with #a, #b")
         const others = runIssues(r).filter((a) => !sameIssue(a, issue)).map((a) => a.number);
@@ -222,7 +224,7 @@ function linkRuns(issues, runs, queue = null, local = null) {
           ...(r.title ? { title: r.title, customTitle: r.customTitle || null } : {}),
           ...(r.pr ? { pr: r.pr } : {}),
           // a Write & Review run enriching the issue's text (#103): shown on the card, never moves the column
-          ...(r.workflow === ENRICH_WORKFLOW ? { enrich: true } : {}),
+          ...(ENRICH_WORKFLOWS.includes(r.workflow) ? { enrich: true } : {}),
         };
       });
     const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));

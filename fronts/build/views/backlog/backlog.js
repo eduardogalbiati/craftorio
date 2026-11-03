@@ -66,7 +66,7 @@
   const SORTS = ['complexity', 'impact', 'updated'];
   // #238: the one-time banner of the issues still labelled with the retired `deprioritized` (per project)
   const DEPRIORITIZED_KEY = 'multiagent.backlogDeprioritized';
-  const ISSUE_TRACKER = 'issue-tracker.yaml';
+  const ISSUE_TRACKER = 'issue.yaml'; // #648: issue-tracker.yaml became issue.yaml
   const REFRESH = 'backlog-refresh.yaml';
   // the one-off seed of #138: the Product Owner proposes epics for the open issues (same text as its chip)
   const ORGANIZE = 'Organize the open issues into epics';

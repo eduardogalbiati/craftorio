@@ -1,10 +1,10 @@
 // Documents screen (#671, views/docs/docs.js): the markup of the panels the spec's mockups draw
 // (docs/work/write-doc/images/): the New item side panel (mock-1), the editor's toolbar (mock-2), the review with its rubric checks
 // and anchored notes (mock-4) and the sign-off gate (mock-5). Markup only, from the values docs.js
-// passes; the clicks are docs.js's (data-docs-*). Uses app.js globals (esc, t) and Select (select.js). Browser: window.DocsPanels.
+// passes, and the New item panel's Several writers value (#648); the clicks are docs.js's (data-docs-*). Uses app.js globals (esc, t) and Select (select.js). Browser: window.DocsPanels.
 (() => {
-  // the side panel next to the list: starts with, what it is about, the screens and Several writers
-  // (later phases, disabled), the estimate and Start; `steps` the SDLC steps a document starts at
+  // the side panel next to the list: starts with, what it is about, the screens (a later phase,
+  // disabled), Several writers (#648: write-doc's Arena mode), the estimate and Start; `steps` the SDLC steps a document starts at
   function newItemPanel(steps, estimate) {
     return `
           <aside id="docs-new-panel" class="docs-new-panel hidden" data-testid="docs-new-panel" aria-labelledby="docs-new-heading">
@@ -27,8 +27,8 @@
                   <button type="button" class="chip" data-testid="docs-new-screen-add" disabled title="${t('docs.later_phase')}">${t('docs.add_screen')}</button>
                 </div>
               </div>
-              <label class="docs-new-writers" title="${t('docs.later_phase')}">
-                <input type="checkbox" data-testid="docs-new-writers" disabled />
+              <label class="docs-new-writers">
+                <input type="checkbox" data-testid="docs-new-writers" />
                 <span><b>${t('docs.several_writers')}</b><span class="muted small">${t('docs.several_writers_help')}</span></span>
               </label>
               <p id="docs-new-error" class="error small"></p>
@@ -132,8 +132,18 @@
   const OPEN_LABEL = { intent: 'docs.open_intent', spec: 'docs.open_spec', plan: 'docs.open_plan' };
   const openLabel = (doc) => t(OPEN_LABEL[doc] || OPEN_LABEL.intent);
 
+  // #648: the New item panel's "Several writers" (write-doc's Arena mode): the `writers` input it asks
+  // for (write-doc's text enum "1"-"5"), null when off (the workflow's one writer); `on` sets it first
+  const SEVERAL_WRITERS = '3';
+  function newItemWriters(on) {
+    const box = document.querySelector('#docs-new-panel [data-testid="docs-new-writers"]');
+    if (box && typeof on === 'boolean') box.checked = on;
+    return box?.checked ? SEVERAL_WRITERS : null;
+  }
+
   window.DocsPanels = {
     newItemPanel,
+    newItemWriters,
     openLabel,
     review,
     signoff,

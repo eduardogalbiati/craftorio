@@ -1,10 +1,11 @@
-# Saved pipeline (#135, packages/engine/domains/workflow/pipelines.js): the issue tracker files the issues of a request, then the
+# Saved pipeline (#135, packages/engine/domains/workflow/pipelines.js): the issue workflow files the issues of a request, then the
 # Product Owner places them in the roadmap as planned stages. Nothing starts until you press Start.
+# #648: issue-tracker.yaml became issue.yaml (the old name still resolves through an alias).
 name: Issue → Roadmap
-description: The issue tracker files the issues of your request, then the Product Owner places them in the project's roadmap as planned stages (nothing starts until you press Start on the Backlog).
+description: The issue workflow files the issues of your request, then the Product Owner places them in the project's roadmap as planned stages (nothing starts until you press Start on the Backlog).
 category: plan
 stages:
-  - workflow: issue-tracker.yaml
+  - workflow: issue.yaml
     inputs:
       mode: validated
   - target: product_owner

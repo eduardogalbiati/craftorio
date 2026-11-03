@@ -18,6 +18,7 @@
 const path = require('path');
 const yaml = require('js-yaml');
 const chain = require('@multiagent/shared/chain-model');
+const { aliasOf } = require('@multiagent/shared/default-workflow');
 const { seedBundle, bundleStatus, restoreBundled } = require('../seed/seed');
 const { WORKFLOW_KIND } = require('./workflows');
 const { WORKFLOW_CATEGORIES } = require('./workflow-categories');
@@ -30,6 +31,15 @@ const TARGETS = ['product_owner', 'queue', 'workflow'];
 const CONDITIONS = ['success'];
 const CATEGORIES = WORKFLOW_CATEGORIES;
 const TARGET_LABELS = { product_owner: 'Product Owner (roadmap)', queue: 'Queue (Backlog)' };
+// #648: renamed bundled pipelines. An old name (a saved Assign, a discovery automation) resolves to the
+// new file when the workspace no longer has the old one (service/areas/pipelines.js readPipeline).
+const PIPELINE_ALIASES = {
+  'enrich-save-develop.yaml': 'enrich-issue.yaml',
+  'rfc-to-issues.yaml': 'spec-to-issues.yaml',
+};
+
+/** The new file an old pipeline name stands for, or null. */
+const pipelineAliasOf = (file) => PIPELINE_ALIASES[String(file || '').split(/[\\/]/).pop()] || null;
 
 const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
 const fileOf = (w) => String(w || '').split(/[\\/]/).pop();
@@ -48,6 +58,13 @@ const restorePipeline = (srcDir, destDir, file) => restoreBundled(srcDir, destDi
 function fileNameFor(name) {
   const slug = String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return `${slug || 'pipeline'}.yaml`;
+}
+
+// #648: a stage naming an old workflow (an alias) keeps only the inputs and mappings the new workflow
+// declares: a saved copy's `document_skill` or `goal` has no place there (the run ignores it anyway).
+function dropUnknownInputs(s, defs) {
+  const known = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => defs[k]));
+  return { ...s, inputs: known(s.inputs), ...(s.map ? { map: known(s.map) } : {}) };
 }
 
 const stageName = (s, i) => `stage ${i + 1} (${s.target === 'workflow' ? s.workflow : TARGET_LABELS[s.target]})`;
@@ -96,9 +113,10 @@ function validatePipeline(p, workflowOf) {
     if (!s.workflow) return null;
     try { return workflowOf(s.workflow); } catch (e) { throw new Error(`${where(s, i)}: workflow "${s.workflow}" could not be loaded: ${e.message}`); }
   });
-  const stages = p.stages.map((s, i) => {
+  const stages = p.stages.map((s0, i) => {
     const wf = wfs[i];
     const defs = wf?.inputs || {};
+    const s = s0.workflow && aliasOf(s0.workflow) ? dropUnknownInputs(s0, defs) : s0;
     for (const k of Object.keys(s.inputs)) {
       if (!defs[k]) throw new Error(`${where(s, i)}: input "${k}" is not an input of ${s.workflow} (its inputs: ${Object.keys(defs).join(', ') || 'none'}).`);
     }
@@ -183,7 +201,9 @@ module.exports = {
   isPipelineFile,
   loadPipelineText,
   parsePipeline,
+  PIPELINE_ALIASES,
   PIPELINE_KIND,
+  pipelineAliasOf,
   pipelineStatus,
   pipelineThen,
   pipelineWorkflows,

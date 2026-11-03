@@ -176,6 +176,7 @@
     $('#docs-new-starts').value = 'intent';
     $('#docs-new-estimate').textContent = estimateText('intent');
     $('#docs-new-error').textContent = '';
+    DocsPanels.newItemWriters(false);
     $('#docs-new-panel').classList.remove('hidden');
     $('#docs-list-area').classList.add('docs-with-panel');
     $('#docs-new-title').focus({ preventScroll: true });
@@ -195,19 +196,18 @@
     if (!item) { $('#docs-new-error').textContent = t('docs.give_the_item_a_title'); return; }
     if (docs.items.some((it) => it.item === item)) { $('#docs-new-error').textContent = t('docs.an_item_with_this_name_exists', { item }); return; }
     closeNewItem();
-    await startDoc(item, doc, title);
+    await startDoc(item, doc, title, DocsPanels.newItemWriters());
   }
 
-  // A new document: the write-doc run that creates its skeleton in the run's worktree (the service, at
-  // its first step), drafts and edits it.
-  async function startDoc(item, doc, title) {
+  // A new document: its write-doc run creates the skeleton in the run's worktree, drafts and edits it; `writers`: Arena mode (#648)
+  async function startDoc(item, doc, title, writers = null) {
     if (docs.busy) return;
     docs.busy = true;
     listError('');
     try {
       // creating: its run writes the skeleton, the first read has nothing yet
       await openDoc(item, doc, null, { creating: true });
-      docs.open.title = title || item;
+      Object.assign(docs.open, { title: title || item, writers });
       await startWriter();
       refresh();
     } catch (e) {
@@ -216,8 +216,8 @@
   }
 
   // The write-doc run of a document → its startRun answer { runId }; folder: the project's (none: left out)
-  async function runWriter(projectId, folder, { item, doc, title }) {
-    const inputs = { ...(folder ? { project_path: folder } : {}), item, document: doc, title: title || item };
+  async function runWriter(projectId, folder, { item, doc, title, writers }) {
+    const inputs = { ...(folder ? { project_path: folder } : {}), item, document: doc, title: title || item, ...(writers ? { writers } : {}) };
     // the run starts from and merges into the project's default branch (main, master, develop…)
     const hints = await api.projectInputHints?.(projectId).catch(() => null);
     if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch;

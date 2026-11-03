@@ -18,8 +18,10 @@ module.exports = (ctx) => {
 
   // A pipeline file of the workspace, parsed and checked (throws with the reason).
   function readPipeline(file) {
-    const name = path.basename(String(file || ''));
+    let name = path.basename(String(file || ''));
     if (!pipelines.isPipelineFile(name)) throw new Error(`Not a pipeline file: ${name}`);
+    // #648: a renamed bundled pipeline still answers to its old name when the old file is gone
+    if (!fs.existsSync(path.join(dir(), name)) && pipelines.pipelineAliasOf(name)) name = pipelines.pipelineAliasOf(name);
     const full = path.join(dir(), name);
     if (!fs.existsSync(full)) throw new Error(`Pipeline not found: ${name}`);
     return pipelines.loadPipelineText(fs.readFileSync(full, 'utf8'), name, workflowOf);
