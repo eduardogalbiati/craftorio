@@ -40,7 +40,7 @@
 // the card with {{ card.title }}, {{ card.document }}, {{ card.acceptance }}, {{ card.attachments }},
 // {{ card.type }}, {{ card.document_skill }}: renderAutomationInputs) or the clarity check (`check:
 // 'clarity'`, no run). `mode` is 'ask' (the screen proposes it; the default), 'on' (it starts) or
-// 'off' (setColumnAutomation). Shape offers AI Arena → Write & Review on the card's document, Ready
+// 'off' (setColumnAutomation). Shape offers Write doc (the card's intent) on the card, Ready
 // the clarity check; a column stored without on_enter takes the default's. The service starts the
 // run and records it on the card: card.json's `automation` { state: 'running' | 'done' | 'failed',
 // runId, name, column, costUsd?, startedAt, endedAt? } (markAutomation), and the result comes back
@@ -72,18 +72,20 @@ const BOARD_COLUMNS = [
 const COLUMNS = BOARD_COLUMNS.map((c) => c.id);
 // a column automation's modes (#259): proposed to the owner, started at once, or nothing
 const AUTOMATION_MODES = ['ask', 'on', 'off'];
-// the prompt the Shape automation gives the first stage (AI Arena's task), rendered from the card
+// the prompt the Shape automation gives write-doc's first draft (#648), rendered from the card
 const SHAPE_TASK = [
   'Shape this discovery card into a clear document. Keep its intent and every fact it states; ground what you add in the project\'s files and mark assumptions and open questions as such.',
   'Card: {{ card.title }}',
   '<document>\n{{ card.document }}\n</document>',
   '<acceptance_criteria>\n{{ card.acceptance }}\n</acceptance_criteria>',
 ].join('\n\n');
-// the default `on_enter` of the columns (#259): what a move into them may start
+// the default `on_enter` of the columns (#259): what a move into them may start. Shape writes the
+// card's intent with write-doc (#648: it absorbed the AI Arena → Write & Review pipeline), under
+// docs/work/<card.item>/, the card's title as the item's name
 const ON_ENTER = {
   shape: {
-    pipeline: 'ai-arena-write-review.yaml', name: 'AI Arena → Write & Review', mode: 'ask',
-    inputs: { task: SHAPE_TASK, attachments: '{{ card.attachments }}', document_skill: '{{ card.document_skill }}' },
+    workflow: 'write-doc.yaml', name: 'Write doc', mode: 'ask',
+    inputs: { item: '{{ card.item }}', document: 'intent', title: '{{ card.title }}', prompt: SHAPE_TASK },
   },
   ready: { check: 'clarity', name: 'Clarity check', mode: 'ask' },
 };
@@ -667,7 +669,8 @@ function attachmentsText(folder, names) {
 /**
  * An automation's inputs rendered from the card: each `{{ card.<field> }}` in the given values becomes
  * the card's title, document, acceptance, type, document_skill (prd-writing, or rfc-writing for an
- * RFC) or attachments (the text ones); an unknown field renders empty.
+ * RFC), item (its title as a docs/work/ folder name, as the Documents screen names a new item) or
+ * attachments (the text ones); an unknown field renders empty.
  */
 function renderAutomationInputs(dir, projectId, id, inputs = {}) {
   const folder = existingCard(dir, projectId, id);
@@ -676,6 +679,7 @@ function renderAutomationInputs(dir, projectId, id, inputs = {}) {
     acceptance: String(card.acceptance || ''),
     document: String(card.document || ''),
     document_skill: DOC_SKILL[card.type] || DEFAULT_DOC_SKILL,
+    item: String(card.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100) || `card-${card.id}`,
     title: String(card.title || ''),
     type: String(card.type || ''),
   };

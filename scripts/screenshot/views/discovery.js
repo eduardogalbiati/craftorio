@@ -38,7 +38,7 @@ function demoDiscoveryBoard(ws, projectId) {
   card(3, 'triage', { title: 'Crash when a run is stopped twice', type: 'bug', author: 'support', text: 'Stopping a run that is already stopping throws in the engine.' });
   const plugin = card(30, 'shape', { title: 'Plugin API for custom steps', type: 'rfc', author: 'marina', tags: ['engine'], text: 'Let a workflow call a step implemented by a workspace plugin.' });
   // #259: the Shape automation runs on this card (Running… on its face); Ready's is turned off
-  discovery.markAutomation(dir, projectId, plugin, { runId: '20261011-2210-cd34', name: 'AI Arena → Write & Review', column: 'shape' });
+  discovery.markAutomation(dir, projectId, plugin, { runId: '20261011-2210-cd34', name: 'Write doc', column: 'shape' });
   discovery.setColumnAutomation(dir, projectId, 'ready', { mode: 'off' });
   // #649: a "Write a document" result on it: plugin-api-for-custom-steps.md attached and a version
   discovery.recordResult(dir, projectId, plugin, {

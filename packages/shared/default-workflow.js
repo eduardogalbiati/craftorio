@@ -18,7 +18,7 @@
 // - #631: project-map and refactor-proposals now mean analyze-project.yaml (refactor-proposals is
 //   its `since` mode), test-batch means test-backfill.yaml, run-retrospective retrospective.yaml.
 // - #648: writer-reviewer and ai-arena now mean write-doc.yaml (ai-arena is its "Several writers"
-//   Arena mode, `writers`), issue-tracker means issue.yaml.
+//   Arena mode, `writers`), issue-tracker means issue.yaml; namesOf(file) lists a file's own and old names.
 // Browser: window.DefaultWorkflow; Node: module.exports (packages/engine/domains/po/product-owner.js).
 (function (root) {
   const LOCAL = 'feature.yaml';
@@ -45,6 +45,13 @@
     const name = String(file || '').replace(/^.*[\\/]/, '');
     const hit = ALIASES[name] || ALIASES[`${name}.yaml`];
     return hit ? { file: hit.file, inputs: { ...hit.inputs } } : null;
+  }
+
+  /** #648: the names (without .yaml) that mean `file`: its own and its old ones ('issue.yaml' → ['issue', 'issue-tracker']). */
+  function namesOf(file) {
+    const own = label(String(file || '').replace(/^.*[\\/]/, ''));
+    const old = Object.keys(ALIASES).filter((k) => label(ALIASES[k].file) === own).map(label);
+    return [own, ...old];
   }
 
   // #630: feature's old `mode: auto | validated` (the PO's plans, saved roadmaps and runs) is now
@@ -127,6 +134,7 @@
     firstBuild,
     label,
     mergeOf,
+    namesOf,
     oldValidation,
     projectFirst,
     resolve,

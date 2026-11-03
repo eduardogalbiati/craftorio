@@ -18,6 +18,7 @@
 // result of a pipeline that ended meanwhile comes back, a run still alive is followed again, a run
 // that is gone ends the automation as interrupted.
 
+const fs = require('fs');
 const path = require('path');
 const { childRunCost, loadWorkflow } = require('@multiagent/engine/engine/workflow');
 const simulation = require('@multiagent/engine/engine/simulation');
@@ -42,6 +43,20 @@ module.exports = (ctx) => {
     if (!col) throw new Error(`Unknown column: ${column}`);
     return col;
   };
+
+  // A run's `document` output as the card's text: write-doc gives the accepted document's path
+  // (docs/work/<item>/<doc>.md, #648), read from the project's folder; any other value is the text.
+  function documentText(projectId, value) {
+    const text = String(value ?? '');
+    if (!/^docs\/work\/\S+\.md$/.test(text.trim())) return text;
+    try {
+      const folder = projects.readProject(ctx.ws.projects, path.basename(String(projectId)))?.folder;
+      if (!folder) return '';
+      const file = path.resolve(folder, text.trim());
+      if (!file.startsWith(path.resolve(folder) + path.sep)) return '';
+      return fs.readFileSync(file, 'utf8');
+    } catch { return ''; }
+  }
 
   // what the automation runs: a pipeline's name comes from its file (the board's copy may be older)
   function describe(auto) {
@@ -172,7 +187,7 @@ module.exports = (ctx) => {
       try { run = runs.readRun(ctx.ws.runs, id); } catch { /* unreadable: gone */ }
       if (!run || !run.finishedAt) { finish(t, 'interrupted'); return; }
       t.costUsd += (Number(run.costUsd) || 0) + (Number(run.childrenCostUsd) || 0);
-      if (run.status === 'success' && String(run.outputs?.document ?? '').trim()) t.document = String(run.outputs.document);
+      if (run.status === 'success' && String(run.outputs?.document ?? '').trim()) t.document = documentText(projectId, run.outputs.document);
       const chain = run.chain;
       if (run.status !== 'success' || !chain?.then || chain.then.action !== 'workflow') { finish(t, run.status || 'interrupted'); return; }
       if (chain.state === 'started' && chain.nextRunId) { id = chain.nextRunId; continue; }
@@ -214,7 +229,7 @@ module.exports = (ctx) => {
     if (ev.type === 'approval.requested') answerSimulatedGate(ev);
     if (ev.type !== 'workflow.finished') return;
     t.costUsd += Number(childRunCost(ev.summary)) || 0;
-    if (ev.status === 'success' && String(ev.outputs?.document ?? '').trim()) t.document = String(ev.outputs.document);
+    if (ev.status === 'success' && String(ev.outputs?.document ?? '').trim()) t.document = documentText(t.projectId, ev.outputs.document);
     // a stage with a chain: the chain says what follows (run:chain), the automation goes on with it
     if (ev.status === 'success' && ev.then?.action === 'workflow') { t.waitingOn = ev.run_id; return; }
     finish(t, ev.status);

@@ -25,6 +25,7 @@ const {
   repoLabels,
   runCommand,
 } = require('./issues');
+const { namesOf } = require('@multiagent/shared/default-workflow');
 const Language = require('@multiagent/shared/language');
 
 const EPIC_LABEL = 'epic';
@@ -234,7 +235,7 @@ async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, p
  */
 function filedToEpic({ workflow, status, steps } = {}) {
   // #648: the issue workflow, and the issue tracker's old runs (issue-tracker is now its alias)
-  if (!['issue', 'issue-tracker'].includes(workflow) || status !== 'success') return null;
+  if (!namesOf('issue.yaml').includes(workflow) || status !== 'success') return null;
   const choice = steps?.review?.output ? steps.review.output.choice : steps?.file?.output ? 'create' : null;
   if (!['create', 'create_assign'].includes(choice)) return null;
   const epic = steps.analyze?.output?.epic;

@@ -60,6 +60,8 @@ inputs:
     label: "Request"
     type: string
     required: false
+    # one of request and spec must be given: the run does not start with neither (setup.js resolveInputs)
+    required_unless: spec
     default: ""
     description: The problem or the idea, in a few words, in any language (e.g. "the run chat hides the gate when the window is small"). May be empty when a spec is given.
   spec:

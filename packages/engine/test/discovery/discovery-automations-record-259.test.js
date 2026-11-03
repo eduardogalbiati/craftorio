@@ -31,7 +31,8 @@ test('board.json keeps only the owner\'s mode of a default automation, and nothi
   // the pipeline and its inputs still come from the default
   const shape = d.readBoard(dir, P).columns.find((c) => c.id === 'shape').on_enter;
   assert.equal(shape.mode, 'off');
-  assert.equal(shape.pipeline, 'ai-arena-write-review.yaml');
+  assert.equal(shape.workflow, 'write-doc.yaml'); // #648: write-doc absorbed the AI Arena → Write & Review pipeline
+  assert.equal(shape.pipeline, undefined);
 
   d.setColumnAutomation(dir, P, 'shape', { mode: 'ask' });
   assert.equal('on_enter' in storedColumn(dir, 'shape'), false);

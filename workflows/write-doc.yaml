@@ -416,8 +416,8 @@ steps:
 outputs:
   document:
     type: string
-    description: The accepted document, merged into the base branch (its path in the project; the issue and feature workflows read it).
-    value: "docs/work/{{ inputs.item }}/{{ inputs.document }}.md (the {{ inputs.document }} of {{ inputs.title or inputs.item }}, accepted)"
+    description: The accepted document's path in the project (docs/work/<item>/<document>.md), merged into the base branch; the issue and feature workflows read it.
+    value: "docs/work/{{ inputs.item }}/{{ inputs.document }}.md"
   issue:
     type: object
     description: "The issue the document was written for (number, url, title), when started from one."

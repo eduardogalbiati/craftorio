@@ -55,6 +55,7 @@ const { writeJsonSafe } = require('../workspace/state-file');
 const { storeFor } = require('../workspace/store');
 const TimeZone = require('../analytics/time-zone');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('@multiagent/shared/backlog-archive');
+const { namesOf } = require('@multiagent/shared/default-workflow');
 const { LIVE_ITEM_STATES } = require('@multiagent/shared/roadmap-model');
 const { projectPlatform } = require('@multiagent/shared/platforms');
 const { resolveRunInputs } = require('../project/project-run-defaults');
@@ -65,7 +66,7 @@ const ENRICH_WORKFLOWS = ['write-doc', 'writer-reviewer'];
 // the issue workflow (#81, #648: issue-tracker's old runs too) files issues, it does not implement them:
 // its runs never link to an issue they mention (e.g. "related to #41"); its "create and queue" choice
 // queues the issues it filed
-const ISSUE_WORKFLOWS = ['issue', 'issue-tracker'];
+const ISSUE_WORKFLOWS = namesOf('issue.yaml');
 
 // ---- open pull/merge requests ----------------------------------------------------------------
 // An issue already has work in flight when an open PR/MR refers to it: GitHub's closing references,

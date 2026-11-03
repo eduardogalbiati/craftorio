@@ -1301,7 +1301,10 @@
     if (!link || dv.recording.has(runId)) return;
     dv.recording.add(runId);
     try {
-      const text = String(ev.outputs?.document ?? (await writtenDoc(link, ev)) ?? '');
+      // write-doc's `document` output is the document's path (#648): its text is read from the project
+      const out = ev.outputs?.document;
+      const isPath = typeof out === 'string' && /^docs\/work\/\S+\.md$/.test(out.trim());
+      const text = String((out != null && !isPath ? out : await writtenDoc(link, ev)) ?? '');
       if (ev.status !== 'success' || !text.trim()) {
         forgetRun(runId);
         return;

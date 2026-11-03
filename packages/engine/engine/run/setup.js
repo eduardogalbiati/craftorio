@@ -45,6 +45,12 @@ const methods = {
       if (def.type === 'array' && typeof v === 'string') v = v.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
       out[k] = v;
     }
+    // `required_unless: <other input>` (#648, issue's request or spec): one of the two must be given
+    const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+    for (const [k, def] of Object.entries(this.wf.inputs || {})) {
+      const other = def.required_unless;
+      if (other && blank(out[k]) && blank(out[other])) throw new Error(`Required input not provided: ${k} (or ${other})`);
+    }
     return out;
   },
 
