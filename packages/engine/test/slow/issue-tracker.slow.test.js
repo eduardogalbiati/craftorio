@@ -1,4 +1,4 @@
-// workflows/issue-tracker.yaml: mode (#133) — validated (default) stops at the review gate as
+// workflows/issue.yaml (issue-tracker.yaml until #648): mode (#133) — validated (default) stops at the review gate as
 // before; auto files the first draft straight away unless the writer found a duplicate, creates no
 // missing label without a person, and never queues assign_workflow. Full flow in mock mode, the
 // way test/engine.test.js's software-development mode tests do.
@@ -17,7 +17,7 @@ const root = path.join(__dirname, '..', '..', '..', '..');
 async function runIssueTracker({ mockSequences, answers = {}, feedback = {}, inputs = {} } = {}) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    file: path.join(root, 'workflows', 'issue.yaml'), // #648: issue-tracker.yaml was renamed issue.yaml
     inputs: { request: 'The run chat hides the gate when the window is small', project_path: root, ...inputs },
     mock: true,
     runsDir,

@@ -1,4 +1,4 @@
-// #129: image attachments on agent turns, through mock runs of workflows/issue-tracker.yaml: an
+// #129: image attachments on agent turns, through mock runs of workflows/issue.yaml: an
 // image attached to an input, and one pasted into a resume instruction (packages/engine/engine/workflow.js).
 // Split by #306 (whole mock runs of a bundled workflow live in test/slow/, docs/agents/testing.md):
 // the rest of this file's tests are in test/image-attachments.test.js.
@@ -31,7 +31,7 @@ test('a mock run of issue-tracker with an image attached to an input copies it i
   const dir = tmpDir(t, 'img-run-');
   const png = writePng(path.join(dir, 'bug.png'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    file: path.join(root, 'workflows', 'issue.yaml'), // #648: issue-tracker.yaml was renamed issue.yaml
     inputs: { request: 'The run chat hides the gate when the window is small', project_path: root },
     mock: true,
     runsDir: path.join(dir, 'runs'),
@@ -63,7 +63,7 @@ test('resume: an image pasted into the instruction is copied into <run_dir>/atta
   const dir = tmpDir(t, 'img-resume-');
   const png = writePng(path.join(dir, 'shot.png'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    file: path.join(root, 'workflows', 'issue.yaml'),
     inputs: { request: 'x', project_path: root },
     mock: true,
     runsDir: path.join(dir, 'runs'),

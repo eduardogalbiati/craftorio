@@ -46,6 +46,8 @@ function fixtureFile(t, text = FIXTURE) {
 }
 
 const bundled = (name) => path.join(root, 'workflows', name);
+// #648: writer-reviewer and ai-arena left workflows/ (write-doc's aliases now); their test copies
+const legacy = (name) => path.join(__dirname, '..', 'fixtures', 'legacy', name);
 
 // the replay of the run's log gives what the run held in memory
 function assertReplayMatches(run) {
@@ -92,13 +94,13 @@ test('run-retrospective: the replay of its mock run gives the in-memory state', 
 });
 
 test('writer-reviewer: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('writer-reviewer.yaml'), inputs: { prompt: 'A one-page PRD', goal: 'Every requirement is testable' } });
+  const run = await recordedRun(t, { file: legacy('writer-reviewer.yaml'), inputs: { prompt: 'A one-page PRD', goal: 'Every requirement is testable' } });
   assertReplayMatches(run);
 });
 
 test('ai-arena: the replay of its mock run gives the in-memory state', async (t) => {
   const run = await recordedRun(t, {
-    file: bundled('ai-arena.yaml'),
+    file: legacy('ai-arena.yaml'),
     inputs: { task: 'A PRD', contender_4_provider: 'none', peer_review: 'yes' },
     mockSequences: { verdict: ['issues', 'pass'] },
   });
@@ -111,6 +113,7 @@ test('backlog-refresh: the replay of its mock run gives the in-memory state', as
 });
 
 test('issue-tracker: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('issue-tracker.yaml'), inputs: { request: 'The run list should show the cost of each run', project_path: root } });
+  // #648: issue-tracker.yaml was renamed issue.yaml
+  const run = await recordedRun(t, { file: bundled('issue.yaml'), inputs: { request: 'The run list should show the cost of each run', project_path: root } });
   assertReplayMatches(run);
 });
