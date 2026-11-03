@@ -212,7 +212,6 @@ test('issues link to the runs that mention them and land in a kanban column', ()
   assert.deepEqual(by[1].runs.map((r) => r.runId), ['b', 'a']); // newest first
   assert.deepEqual(by[1].runs[0], { runId: 'b', workflow: 'software-development', status: 'running', startedAt: '2026-09-03', mock: false, waiting: false });
   assert.equal(by[1].column, 'in_progress');
-  assert.equal(by[1].queued, null);
   assert.equal(by[2].column, 'todo'); // its only run was cancelled
   assert.deepEqual(by[3].runs, []); // simulated and look-alike mentions don't count
   assert.equal(by[3].column, 'todo');
@@ -232,14 +231,14 @@ test('an open issue merged locally stays in Local until its work is pushed; only
     run('eeeee', 5, null), // a PR workflow: its PR isn't merged, the issue is still open
   ];
   const local = { base: 'main', ahead: 2, commits: [{ sha: 'aaa111', subject: 'A', issues: [1] }, { sha: 'new222', subject: 'B', issues: [2] }], issues: [1, 2] };
-  const col = (l) => Object.fromEntries(backlog.linkRuns([issue(1), issue(2), issue(3), issue(4, 'closed'), issue(5)], runs, null, l).map((i) => [i.number, i.column]));
+  const col = (l) => Object.fromEntries(backlog.linkRuns([issue(1), issue(2), issue(3), issue(4, 'closed'), issue(5)], runs, l).map((i) => [i.number, i.column]));
   assert.deepEqual(col(local), { 1: 'local', 2: 'local', 3: 'in_progress', 4: 'done', 5: 'in_progress' });
   // never checked, or the check failed: a local merge is assumed not pushed
   assert.deepEqual(col(null), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'in_progress' });
   assert.deepEqual(col({ error: 'origin/main not found', commits: [], issues: [] }), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'in_progress' });
   // everything pushed: Done only once the platform closes them
   assert.deepEqual(col({ base: 'main', ahead: 0, commits: [], issues: [] }), { 1: 'in_progress', 2: 'in_progress', 3: 'in_progress', 4: 'done', 5: 'in_progress' });
-  const [one] = backlog.linkRuns([issue(1)], runs, null, local);
+  const [one] = backlog.linkRuns([issue(1)], runs, local);
   assert.deepEqual(one.runs[0].localMerge, { branch: 'feat/x', base: 'main', commit: 'aaa111' });
 });
 
@@ -271,15 +270,14 @@ test('a run started for an issue links to it even when simulated; only a real on
     run('c', 3, { status: 'failed' }),
     // started for #5 but its task mentions #4: only the explicit link counts
     run('d', 5, { status: 'running', task: 'Also see #4' }),
-  ], { items: [{ number: 4, workflow: 'software-development.yaml', workflowName: 'software-development', mock: true }] });
+  ]);
   const by = Object.fromEntries(out.map((i) => [i.number, i]));
   assert.equal(by[1].column, 'todo'); // its only run is a simulation
   assert.equal(by[1].runs[0].mock, true); // but it still shows in the issue's history
   assert.equal(by[2].column, 'in_progress'); // succeeded, still open on the platform
   assert.equal(by[3].column, 'in_progress');
   assert.deepEqual(by[4].runs, []);
-  assert.deepEqual(by[4].queued, { position: 1, workflow: 'software-development', mock: true }); // still shows the queued badge
-  assert.equal(by[4].column, 'todo'); // a simulated queue item doesn't move it either
+  assert.equal(by[4].column, 'todo');
   assert.equal(by[5].column, 'in_progress');
 });
 
@@ -314,20 +312,6 @@ test('a real run decides the column even when a newer simulated run is linked', 
   assert.deepEqual(out.runs.map((r) => r.runId), ['bb', 'a']); // the history still lists both, newest first
 });
 
-test('a queued simulation leaves the column as it would be without it; a real queue item moves it', () => {
-  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
-  const queue = { items: [
-    { number: 1, workflow: 'w.yaml', workflowName: 'w', mock: true },
-    { number: 2, workflow: 'w.yaml', workflowName: 'w', mock: false },
-  ] };
-  const out = backlog.linkRuns([issue(1), issue(2)], [], queue);
-  const by = Object.fromEntries(out.map((i) => [i.number, i]));
-  assert.equal(by[1].column, 'todo');
-  assert.deepEqual(by[1].queued, { position: 1, workflow: 'w', mock: true }); // still shows the queued badge
-  assert.equal(by[2].column, 'in_progress');
-  assert.deepEqual(by[2].queued, { position: 2, workflow: 'w', mock: false });
-});
-
 test('linkRuns passes a run\'s title and PR through to its history (#84)', () => {
   const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
   const pr = { number: 42, url: 'https://github.com/o/r/pull/42', state: 'ready' };
@@ -352,14 +336,13 @@ test('a run started for several issues links to each of them; runs recorded with
   const out = backlog.linkRuns([issue(53), issue(65), issue(77), issue(8), issue(9), issue(10)], [
     { runId: 'group', workflow: 'w', status: 'running', waiting: true, startedAt: '2026-09-02', issues: [ref(53), ref(65), ref(77)], task: 'mentions #8' },
     { runId: 'old', workflow: 'w', status: 'success', startedAt: '2026-09-01', issue: ref(8) },
-  ], { items: [{ number: 9, url: ref(9).url, workflow: 'w.yaml', issues: [ref(9), ref(10)] }] });
+  ]);
   const by = Object.fromEntries(out.map((i) => [i.number, i]));
   assert.deepEqual([53, 65, 77].map((n) => [by[n].column, by[n].runs[0].runId]), [['waiting', 'group'], ['waiting', 'group'], ['waiting', 'group']]);
   assert.deepEqual(by[65].runs[0].groupedWith, [53, 77]);
   assert.deepEqual(by[8].runs.map((r) => r.runId), ['old']); // a started-for run's text mentions don't count
   assert.equal(by[8].runs[0].groupedWith, undefined);
   assert.equal(by[8].column, 'in_progress'); // succeeded, still open
-  assert.deepEqual([by[9].queued, by[10].queued.groupedWith, by[10].column], [{ position: 1, workflow: 'w.yaml', mock: false, groupedWith: [10] }, [9], 'in_progress']);
 });
 
 test('a queued group becomes one task listing every issue, with `issues` next to `issue`', () => {

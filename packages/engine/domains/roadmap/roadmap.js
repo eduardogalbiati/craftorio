@@ -583,10 +583,7 @@ function moveLeftoverQueues(dir, { fromIndex = {}, issuesOf = () => [], onMoved 
       let items = fromIndex?.[projectId];
       if (!items) { try { items = JSON.parse(fs.readFileSync(file, 'utf8')).items; } catch { items = []; } }
       items = (Array.isArray(items) ? items : []).filter((q) => q?.workflow && itemIssues(q).length);
-      if (items.length) {
-        propose(dir, projectId, [fromQueue(items)], { issues: issuesOf(projectId) });
-        moved.push(projectId);
-      }
+      if (items.length) { propose(dir, projectId, [fromQueue(items)], { issues: issuesOf(projectId) }); moved.push(projectId); }
       for (const f of [file, `${file}.bak`]) fs.rmSync(f, { force: true });
       onMoved(projectId);
     } catch (e) { console.error(`backlog queue move (${projectId}):`, e.message); }

@@ -1,7 +1,7 @@
 // #491 the Roadmap's light state (acceptance tests written before the code). The screen's live
 // reloads read a light channel instead of the whole Backlog:
 //   backlog:state { projectId } → { projectId, roadmap: { state, updatedAt, scope, pausedBy, error,
-//     stages: [{ id, items: [{ id, status, runId, runs, startedAt, elapsed, waiting }] }] }, queue, refresh }
+//     stages: [{ id, items: [{ id, status, runId, runs, startedAt, elapsed, waiting }] }] }, refresh } (#446: the plain queue is retired)
 // (window.api.getBacklogState(projectId)): what changes while runs go, no issue bodies, small however
 // long the roadmap and its issues are.
 // Seam: the service's api (test/service/helpers.js makeService), the project and its synced issues
@@ -41,7 +41,7 @@ function ids(value, out = new Set()) {
 const hasKey = (value, key) => (Array.isArray(value) ? value.some((v) => hasKey(v, key))
   : value && typeof value === 'object' ? Object.keys(value).includes(key) || Object.values(value).some((v) => hasKey(v, key)) : false);
 
-test('#491 backlog:state: the roadmap\'s state and updatedAt, every item\'s id and status, the queue and the refresh, and no issue body', async (t) => {
+test('#491 backlog:state: the roadmap\'s state and updatedAt, every item\'s id and status and the refresh, and no issue body (#446: no queue)', async (t) => {
   const { api, p } = await bigRoadmap(t);
   const full = api['backlog:get']({ projectId: p.id });
   assert.equal(full.roadmap.stages.length, STAGES, 'fixture check: the roadmap was saved');
@@ -54,7 +54,6 @@ test('#491 backlog:state: the roadmap\'s state and updatedAt, every item\'s id a
   assert.deepEqual(itemIds.filter((id) => !got.has(id)), [], 'every item is in the light state');
   const statuses = JSON.stringify(light.roadmap).match(/"status":/g) || [];
   assert.ok(statuses.length >= itemIds.length, 'with its status');
-  assert.ok('queue' in light, 'the queue');
   assert.ok('refresh' in light, 'the refresh flag (the Backlog Refresh banner\'s state)');
   assert.equal(hasKey(light, 'body'), false, 'no issue body anywhere');
 });
