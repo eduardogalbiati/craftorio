@@ -184,7 +184,9 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   account, keep-awake, control channel or cleanup timer; the service is constructed but never gets a
   workspace. `MULTIAGENT_ENGINE=local` forces local; under `MULTIAGENT_SIMULATION_ONLY=1` a remote
   engine is used only on 127.0.0.1 (a check never drives an engine that can start real runs).
-- The remote window has no preload, `sandbox`, its own session (`persist:remote-engine`, user agent
+- The remote window has only the capture preload (`apps/desktop/host/remote-window-preload.js`,
+  #751: `window.desktopCapture.capturePage()`, answered for that window only; `api-http.js`'s
+  `captureWindow` uses it, a browser tab draws the DOM with html-to-image), `sandbox`, its own session (`persist:remote-engine`, user agent
   marked `MultiagentRemoteClient`, clipboard permissions for the engine's origin only); the page
   (`api-http.js`) reads the mark for `api.engineConnection` and opens the connection page by opening
   `/__desktop__/engine-connection`, which the window catches.

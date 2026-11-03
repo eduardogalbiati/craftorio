@@ -1,7 +1,9 @@
 // Findings button (#361), after the `sightline` seed of Kent Beck's ToolSeeds: a tool for the people
 // building this app. The sidebar's Findings entry (or Ctrl+Shift+F) freezes the view: the window's
-// real pixels (window:capture) fill an overlay that stays until Save / File as issue / Cancel, so
-// nothing updates under the marks. When it shows: FindingsModel.buttonVisible (from source, or
+// real pixels (api.captureWindow: window:capture in the local desktop app; in the remote engine's window
+// and in a browser tab, apps/web/renderer/api-http.js's native capture or DOM drawing, #751) fill an
+// overlay that stays until Save / File as issue / Cancel, so nothing updates under the marks. A capture
+// that fails says so in the interface language and the marks go on a blank picture. When it shows: FindingsModel.buttonVisible (from source, or
 // Settings › General › "Findings button"; never in a scripts/screenshot.js capture unless asked).
 // - Marks: numbered pins (each resolved to the element under it: its data-testid, the view and tab,
 //   the ids it carries, its box; FindingsModel.resolvePin), circle, box, arrow and freehand, each with
@@ -19,8 +21,10 @@
 // window.FindingsModel (packages/shared/findings-model.js, loaded before the renderer's files) as it loads.
 (() => {
   const M = window.FindingsModel;
-  const TOOLS = [['pin', 'Pin'], ['circle', 'Circle'], ['box', 'Box'], ['arrow', 'Arrow'], ['freehand', 'Freehand']];
-  const STATUS = { saved: 'Saved', sent: 'Sent', filed: 'Filed' };
+  // the labels are read when shown (#751), so they follow the interface language
+  const TOOLS = ['pin', 'circle', 'box', 'arrow', 'freehand'];
+  const toolLabel = (k) => t(`findings.tool_${k}`);
+  const STATUS = { saved: 'findings.status_saved', sent: 'findings.status_sent', filed: 'findings.filed' };
   const COLOR = '#f43f5e';
   const actions = [];
   let last = null;
@@ -102,16 +106,21 @@
     const size = { width: window.innerWidth, height: window.innerHeight };
     const context = contextOf(at, size);
     let image = null;
-    let error = null;
+    let reason = null;
     try {
       image = typeof api.captureWindow === 'function' ? await api.captureWindow() : null;
-      if (!image) error = 'Capturing the window is only available in the desktop app: the marks go on a blank picture.';
+      if (!image) reason = 'no picture';
     } catch (e) {
-      error = `Could not capture the window: ${errMsg(e)}`;
+      reason = errMsg(e);
     }
     if (cur) return;
     build({ at, size, context, image });
-    if (error) setStatus('error', error);
+    // #751 the catalog's words only (the reason is often English): the reason on hover and in the console
+    if (reason) {
+      console.warn(`Findings: the capture failed: ${reason}`);
+      setStatus('error', t('findings.capture_failed'), '', 'findings-capture-error');
+      cur.el.querySelector('[data-testid="findings-capture-error"]')?.setAttribute('title', reason);
+    }
   }
 
   function build({ at, size, context, image }) {
@@ -124,7 +133,7 @@
     el.setAttribute('aria-label', t('findings.findings'));
     el.innerHTML = `
       <div class="fd-bar" data-testid="findings-toolbar" role="toolbar" aria-label="${t('findings.marking_tools')}">
-        <div class="seg sm fd-tools">${TOOLS.map(([k, label]) => `<button type="button" data-fd-tool="${k}" data-testid="findings-tool-${k}" aria-pressed="false">${label}</button>`).join('')}</div>
+        <div class="seg sm fd-tools">${TOOLS.map((k) => `<button type="button" data-fd-tool="${k}" data-testid="findings-tool-${k}" aria-pressed="false">${toolLabel(k)}</button>`).join('')}</div>
         <button type="button" class="btn sm ghost" data-fd-undo data-testid="findings-undo" title="${t('findings.remove_the_last_mark_ctrl_z')}">${t('findings.undo_mark')}</button>
         <span class="fd-spacer"></span>
         <span class="fd-status small" data-testid="findings-status" role="status" aria-live="polite"><span class="fd-status-text">${t('findings.marking_click_the_frozen_view_to')}</span></span>
@@ -135,21 +144,21 @@
       <div class="fd-main">
         <div class="fd-stage">
           <div class="fd-frame" data-testid="findings-frame">
-            <span class="fd-frame-label">${t('findings.frozen_view_width', { width: size.width })}${size.height}</span>
-            ${image ? `<img class="fd-img" alt="${t('findings.the_frozen_view')}" draggable="false" />` : '<div class="fd-img fd-blank"></div>'}
+            <span class="fd-frame-label" data-testid="findings-frame-label">${t('findings.frozen_view_width', { width: size.width })}${size.height}</span>
+            ${image ? `<img class="fd-img" data-testid="findings-frozen-image" alt="${t('findings.the_frozen_view')}" draggable="false" />` : '<div class="fd-img fd-blank"></div>'}
             <canvas class="fd-canvas" data-testid="findings-canvas" aria-label="${t('findings.the_frozen_view_click_or_drag')}"></canvas>
             <div class="fd-pins"></div>
           </div>
         </div>
         <aside class="fd-side">
           <label class="fd-field"><span>${t('findings.note')}</span><textarea data-testid="findings-note" rows="5" placeholder="${t('findings.what_is_wrong_on_this_screen')}"></textarea></label>
-          <div class="fd-field"><span>${t('findings.marks')}</span><ol class="fd-marks" data-testid="findings-marks" data-empty="No marks yet."></ol></div>
+          <div class="fd-field"><span>${t('findings.marks')}</span><ol class="fd-marks" data-testid="findings-marks" data-empty="${t('findings.no_marks_yet')}"></ol></div>
           <p class="muted small">${esc(at.view || '?')}${at.tab ? ` › ${esc(at.tab)}` : ''} · ${size.width}×${size.height}</p>
         </aside>
       </div>`;
     document.body.appendChild(el);
     cur = { el, at, size, context, image, marks: [], tool: 'pin', drawing: null, saved: null, busy: false, opener: document.activeElement };
-    if (image) el.querySelector('.fd-img').src = image;
+    if (image) el.querySelector('.fd-img').setAttribute('src', image);
     const canvas = el.querySelector('.fd-canvas');
     canvas.addEventListener('click', onCanvasClick);
     canvas.addEventListener('pointerdown', onPointerDown);
@@ -302,9 +311,9 @@
   }
 
   const markLabel = (m) => {
-    if (m.type !== 'pin') return TOOLS.find(([k]) => k === m.type)[1];
-    if (m.element?.empty) return `Pin ${m.n} · empty space`;
-    return `Pin ${m.n} · ${m.element?.testid || m.element?.ids?.run || 'no data-testid'}`;
+    if (m.type !== 'pin') return toolLabel(m.type);
+    if (m.element?.empty) return t('findings.pin_n_empty_space', { n: m.n });
+    return t('findings.pin_n_target', { n: m.n, target: m.element?.testid || m.element?.ids?.run || t('findings.no_data_testid') });
   };
 
   function renderMarks() {
@@ -417,11 +426,12 @@
     };
   }
 
-  function setStatus(kind, text, extra = '') {
+  // testid: the text's own data-testid (findings-capture-error, #751), gone with the next status
+  function setStatus(kind, text, extra = '', testid = '') {
     if (!cur) return;
     const box = cur.el.querySelector('[data-testid="findings-status"]');
     box.className = `fd-status small fd-${kind}`;
-    box.innerHTML = `<span class="fd-status-text">${esc(text)}</span>${extra}`;
+    box.innerHTML = `<span class="fd-status-text"${testid ? ` data-testid="${esc(testid)}"` : ''}>${esc(text)}</span>${extra}`;
     box.querySelector('[data-fd-open]')?.addEventListener('click', () => api.openPath(box.querySelector('[data-fd-open]').dataset.fdOpen).catch(() => {}));
   }
 
@@ -495,14 +505,14 @@
       list = await api.listFindings();
     } catch (e) {
       el.innerHTML = '';
-      el.dataset.empty = `Could not read the findings: ${errMsg(e)}`;
+      el.dataset.empty = t('findings.could_not_read_the_findings_e', { e: errMsg(e) });
       return;
     }
-    el.dataset.empty = 'No findings yet: the Findings button saves them here.';
+    el.dataset.empty = t('findings.no_findings_yet');
     el.innerHTML = list.map((f) => `
       <li class="fd-item" data-testid="settings-finding">
         <span class="fd-item-note" title="${esc(f.note || '')}">${esc(f.note || t('findings.no_note'))}</span>
-        <span class="badge fd-badge-${esc(f.status)}">${esc(STATUS[f.status] || f.status)}</span>
+        <span class="badge fd-badge-${esc(f.status)}">${esc(STATUS[f.status] ? t(STATUS[f.status]) : f.status)}</span>
         ${f.issueUrl ? `<a class="small" href="${esc(f.issueUrl)}" target="_blank" rel="noopener">${t('findings.issue')}</a>` : ''}
         <span class="muted small mono" title="${esc(f.dir)}">${esc(f.id)}</span>
         <button type="button" class="btn sm ghost" data-fd-open="${esc(f.dir)}">${t('findings.open_folder')}</button>

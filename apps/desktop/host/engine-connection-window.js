@@ -4,8 +4,9 @@
 // Pure of Electron, like apps/desktop/host/agents-window.js: createEngineConnection({ BrowserWindow, ipcMain, shell,
 // session, dirname, store, version, ... }) → { startRemote(decision), openPage(), window() }.
 //
-// - The remote window loads `<url>/` with no preload (remote content: context isolation, no Node,
-//   sandboxed) in its own session (PARTITION): the token goes in an `Authorization: Bearer` header
+// - The remote window loads `<url>/` with only the capture preload (apps/desktop/host/remote-window-preload.js,
+//   #751: window.desktopCapture.capturePage(), answered for that window only; remote content: context
+//   isolation, no Node, sandboxed) in its own session (PARTITION): the token goes in an `Authorization: Bearer` header
 //   to the engine's origin only (webRequest.onBeforeSendHeaders), never in an address (#480); only
 //   the engine's origin loads in it, other http(s) links open in the system browser, and the engine's
 //   page asks for the connection page by opening CONNECTION_PATH (Settings › Execution › Engine, api-http.js).
@@ -162,7 +163,14 @@ function createEngineConnection({
     const w = new BrowserWindow({
       ...windowOptions,
       title,
-      webPreferences: { partition: conn.PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true, devTools },
+      webPreferences: {
+        partition: conn.PARTITION,
+        preload: path.join(dirname, 'remote-window-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        devTools,
+      },
     });
     remoteWin = w;
     failure = null;
@@ -203,6 +211,13 @@ function createEngineConnection({
   const handle = (channel, fn) => ipcMain.handle(channel, (e, arg) => {
     if (!fromPage(e)) throw new Error('Only the engine connection page can use this channel.');
     return fn(arg || {});
+  });
+
+  // #751 the remote window's own pixels (remote-window-preload.js), for that window only: the
+  // capture the local app gets from window:capture (main.js)
+  ipcMain.handle('engine-connection:capture', async (e) => {
+    if (!live(remoteWin) || e.sender !== remoteWin.webContents) throw new Error('Only the remote engine window can capture itself.');
+    return (await e.sender.capturePage()).toDataURL();
   });
 
   handle('engine-connection:state', () => {

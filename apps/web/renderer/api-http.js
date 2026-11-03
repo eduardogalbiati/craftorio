@@ -174,6 +174,23 @@
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       return true;
     },
+    // the window's picture, a PNG data URL (#751: the Findings overlay, the release city's Save image).
+    // The desktop app's remote window: its preload's native capture (apps/desktop/host/remote-window-preload.js),
+    // read at call time. A browser tab: the page's DOM drawn to a canvas by html-to-image (vendored,
+    // index.html), no permission prompt; it misses iframes, cross-origin images and a WebGL canvas
+    // drawn without preserveDrawingBuffer (those come out blank). The overlay itself is left out.
+    captureWindow: async () => {
+      if (typeof window.desktopCapture?.capturePage === 'function') return window.desktopCapture.capturePage();
+      if (typeof window.htmlToImage?.toPng !== 'function') throw new Error('The page capture library did not load.');
+      const body = document.body;
+      return window.htmlToImage.toPng(body, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        pixelRatio: window.devicePixelRatio || 1,
+        backgroundColor: getComputedStyle(body).backgroundColor || null,
+        filter: (node) => !(node.classList && node.classList.contains('fd')),
+      });
+    },
   };
 
   function method(entry) {
