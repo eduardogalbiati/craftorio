@@ -95,7 +95,7 @@ three). Tests must not depend on the machine:
 npm run run -- --task "Task description" --repo C:/path/to/repo --input language=python --input git_platform=gl
 ```
 
-Runs the workflow for real. `--file ai-arena.yaml` picks another workflow: a name or relative path is
+Runs the workflow for real. `--file write-doc.yaml` picks another workflow: a name or relative path is
 looked up in `<workspace>/workflows/` first, then in the repository's `workflows/`; an absolute path is
 used as is (e.g. to try an edited repository copy while the workspace copy is modified). `--auto-approve`
 approves every human gate without interaction (tests only: in practice the AI must not cross the gates).

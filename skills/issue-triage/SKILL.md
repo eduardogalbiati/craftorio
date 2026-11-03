@@ -2,7 +2,7 @@
 name: issue-triage
 description: Rates a requested change before it is filed - the code involved (file:line), the files likely to change, impact 1-5 and complexity 1-5 with a one-line reason each, duplicates and work already in flight, and whether it should run alone or can be grouped with other open issues. Use when analysing a request for the issue tracker or the Backlog.
 summary: "Rubric for impact 1-5 and complexity 1-5, estimated files, duplicates, run alone vs group with #n"
-used_by: "issue-tracker (code_analyzer, issue_writer); the Product Owner (Register an issue)"
+used_by: "issue (code_analyzer, issue_writer); the Product Owner (Register an issue)"
 ---
 
 # Issue triage

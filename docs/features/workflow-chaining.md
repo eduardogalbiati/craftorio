@@ -25,8 +25,8 @@ with a notification: the Run screen's chain banner then offers **Resume chain**,
 chain**. While the run goes, the banner edits or cancels the chain. Chaining never answers a gate:
 each workflow's gates still wait for you. Simulated runs only chain simulated runs.
 
-Each workflow declares what it hands over (`outputs:`, recorded in `summary.json`): issue-tracker
-`issues`; writer-reviewer `document`, `issue`; ai-arena `document`; feature `branch`,
+Each workflow declares what it hands over (`outputs:`, recorded in `summary.json`): issue
+`issues`; write-doc `document`, `issue`; feature `branch`,
 `merged_commit`, `issues`, `pr_url`; analyze-project `issues`, `report`; retrospective `findings`. The run
 lists and the run chat show "→ then: <workflow>" on a chained run. Engine details:
 [docs/agents/engine/chaining.md](docs/agents/engine/chaining.md).

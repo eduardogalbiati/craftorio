@@ -3,7 +3,7 @@ name: issue-creator-gl
 description: Files, updates or comments on GitLab issues with the glab CLI, after searching for duplicates, using the issue-writing structure (context, evidence, decisions, verifiable acceptance criteria). Use when an agent must record a bug, an enhancement or a follow-up on GitLab.
 uses: [issue-writing]
 summary: "Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them)"
-used_by: "issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues"
+used_by: "issue (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues"
 ---
 
 # Issue creator: GitLab (glab CLI)

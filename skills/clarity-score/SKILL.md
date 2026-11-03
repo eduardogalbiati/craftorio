@@ -2,7 +2,7 @@
 name: clarity-score
 description: Scores how clear an item is (idea, PRD, RFC, task, bug, hotfix) from 0 to 100% with a rubric per kind, lists what is missing, and holds it to the 85% bar an item needs before a run implements it. Inside a run it never asks - each gap becomes an open question on the item; with a person present ("Grill me") it interviews them one question at a time. Use when writing, triaging or refreshing an item, and when asked to grill someone about one.
 summary: "Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview"
-used_by: "the Discovery board (its score and Grill me, src/clarity.js); issue-tracker (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue)"
+used_by: "the Discovery board (its score and Grill me, src/clarity.js); issue (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue)"
 ---
 
 # Clarity score
