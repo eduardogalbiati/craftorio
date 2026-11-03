@@ -262,7 +262,6 @@ agents:
   issue_filer:
     provider: claude
     model: claude-sonnet-5
-    effort: low
     session: ephemeral
     capabilities: *read_vcs
     skills: ["issue-creator-{{ inputs.git_platform }}"]
