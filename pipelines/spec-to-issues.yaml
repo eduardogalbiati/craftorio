@@ -1,0 +1,16 @@
+# Saved pipeline (#135, packages/engine/domains/workflow/pipelines.js). #648: was rfc-to-issues.yaml
+# (AI Arena, then the issue tracker; the old name still resolves): write-doc writes the spec of a work
+# item (turn on "Several writers" for its Arena mode), you sign it off, then issue files the issues of
+# the signed-off spec (validated: the drafts wait for your review before anything is filed).
+name: Spec → Issues
+description: Write doc writes the spec of a work item (with several writers when you pick them) and you sign it off, then the issue workflow files the issues of the signed-off spec (you review the drafts before anything is filed).
+category: plan
+stages:
+  - workflow: write-doc.yaml
+    inputs:
+      document: spec
+  - workflow: issue.yaml
+    map:
+      spec: document
+    inputs:
+      mode: validated

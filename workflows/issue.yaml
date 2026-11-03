@@ -1,5 +1,5 @@
 # =============================================================================
-# Workflow: Issue Tracker
+# Workflow: Issue (#648: the issue tracker, renamed; issue-tracker.yaml is an alias of it)
 # -----------------------------------------------------------------------------
 #   analyze ──► write ──► review (you) ──► file ──► end
 #                 ▲   │      │               ▲
@@ -15,6 +15,8 @@
 #
 # Intake: the inputs. `request` is free text in any language (the owner's few words); the
 # project, the platform, optional files (screenshots, logs) and an optional "related to #n".
+# #648: `spec` files the issues of a signed-off spec (docs/work/<item>/spec.md, or its text; the
+# spec-to-issues pipeline maps write-doc's document to it); with it, `request` may be empty.
 #
 # 1. analyze: the code analyzer (read-only, cheaper model) finds the code involved and today's
 #             behaviour (file:line), estimates the files to change, rates impact 1-5 and
@@ -46,8 +48,8 @@ apiVersion: multiagent/v1
 kind: Workflow
 
 metadata:
-  name: issue-tracker
-  version: 0.2.0
+  name: issue
+  version: 0.3.0
   description: Turns a request in a few words into a triaged GitHub/GitLab issue - the code involved, the files to change, impact and complexity 1-5 as labels, duplicates and grouping advice - and files it after you approve the draft (Validated) or as soon as it is written (Automatic).
   tags: [issues, triage, backlog, github, gitlab]
   category: plan
@@ -57,8 +59,15 @@ inputs:
   request:
     label: "Request"
     type: string
-    required: true
-    description: The problem or the idea, in a few words, in any language (e.g. "the run chat hides the gate when the window is small").
+    required: false
+    default: ""
+    description: The problem or the idea, in a few words, in any language (e.g. "the run chat hides the gate when the window is small"). May be empty when a spec is given.
+  spec:
+    label: "From a spec"
+    type: string
+    required: false
+    default: ""
+    description: Optional signed-off spec to file the issues of, its path (e.g. docs/work/<item>/spec.md) or its text. Its requirements become the issues' acceptance criteria.
   project_path:
     label: "Project folder"
     type: string
@@ -210,7 +219,11 @@ steps:
       <request>
       {{ inputs.request }}
       </request>
-      {% if inputs.related %}Related, according to the owner: {{ inputs.related }}. Read them first.
+      {% if inputs.spec %}The signed-off spec to file the issues of (a path: read it; else its text):
+      <spec>
+      {{ inputs.spec }}
+      </spec>
+      {% endif %}{% if inputs.related %}Related, according to the owner: {{ inputs.related }}. Read them first.
       {% endif %}{% if inputs.attachments | length %}Files the owner attached (read them):
       {% for a in inputs.attachments %}- {{ a }}
       {% endfor %}{% endif %}
@@ -332,7 +345,11 @@ steps:
       <request>
       {{ inputs.request }}
       </request>
-      {% if inputs.related %}Related, according to the owner: {{ inputs.related }}.
+      {% if inputs.spec %}The signed-off spec (its requirements are the acceptance criteria):
+      <spec>
+      {{ inputs.spec }}
+      </spec>
+      {% endif %}{% if inputs.related %}Related, according to the owner: {{ inputs.related }}.
       {% endif %}
       The code analyzer's findings (estimates are marked):
       {{ steps.analyze.output | dump }}

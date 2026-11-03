@@ -24,6 +24,12 @@
 #              the document back to the edit.
 # The writer keeps one persistent session across the whole run (the requests build on each other)
 # and goes fresh from its handoff note after 55m idle.
+# #648 Arena mode ("Several writers", `writers` 2-5; writer-reviewer.yaml and ai-arena.yaml are
+# aliases of this workflow): after the evidence, the writer and up to four other writers each draft
+# the document on their own (`compete`, a fan-out, at least one must answer); the draft step then
+# merges the best of the drafts into one. One writer (the default) skips straight to the draft.
+# Outputs (pipelines, chains): `document` (the first draft's text) and `issue` (the issue the run
+# was started from, when there is one).
 # The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
 # Documents service puts it on the branch write-doc/<item>-<document>-<run id> at the first step
 # (the new document's skeleton, one commit), writes the draft and each request there, and the
@@ -36,7 +42,7 @@ kind: Workflow
 
 metadata:
   name: write-doc
-  version: 0.1.0
+  version: 0.2.0
   description: A writer drafts the intent, the spec or the plan of a work item, you edit it with the writer by selection, a reviewer anchors notes to its sections and you sign it off.
   tags: [writing, review, documents, sdlc]
   category: plan
@@ -77,6 +83,13 @@ inputs:
     required: false
     default: ""
     description: Optional notes for the first draft (what the item is about).
+  writers:
+    label: "Writers"
+    type: string
+    enum: ["1", "2", "3", "4", "5"]
+    default: "1"
+    options: { "1": "One writer", "2": "Two writers", "3": "Three writers", "4": "Four writers", "5": "Five writers" }
+    description: "Several writers (Arena mode): each writer drafts the document on its own, then the writer merges the best of the drafts into the first draft. One writer: a single draft."
   writer_provider:
     label: "Writer CLI"
     options: { "claude": "Claude", "codex": "Codex", "grok": "Grok" }
@@ -169,6 +182,52 @@ agents:
       sections and rubric. Nobody answers questions during a turn: state an assumption, and give
       every open decision its **Recommended:** line.
 
+  # #648 Arena mode: the other writers of "Several writers", one per extra writer (ephemeral: each
+  # drafts once, on its own); the writer above merges the best of their drafts.
+  writer_2:
+    enabled: "{{ inputs.writers | int >= 2 }}"
+    provider: claude
+    model: claude-sonnet-5-5
+    session: ephemeral
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% elif inputs.document == 'plan' %}plan-writing{% else %}intent-writing{% endif %}"]
+    capabilities: *read_only
+    working_dir: "{{ worktree_dir }}"
+    system_prompt: &arena_writer |
+      You are one of several writers of the {{ inputs.document }} of the work item
+      `{{ inputs.item }}`: each writes a draft on its own, the best of them is merged into one.
+      Work independently and make distinct, specific choices: state assumptions instead of
+      inventing facts. The current folder is the project, read-only for you.
+
+  writer_3:
+    enabled: "{{ inputs.writers | int >= 3 }}"
+    provider: codex
+    model: gpt-6-luna
+    session: ephemeral
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% elif inputs.document == 'plan' %}plan-writing{% else %}intent-writing{% endif %}"]
+    capabilities: *read_only
+    working_dir: "{{ worktree_dir }}"
+    system_prompt: *arena_writer
+
+  writer_4:
+    enabled: "{{ inputs.writers | int >= 4 }}"
+    provider: grok
+    model: grok-4.7
+    session: ephemeral
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% elif inputs.document == 'plan' %}plan-writing{% else %}intent-writing{% endif %}"]
+    capabilities: *read_only
+    working_dir: "{{ worktree_dir }}"
+    system_prompt: *arena_writer
+
+  writer_5:
+    enabled: "{{ inputs.writers | int >= 5 }}"
+    provider: claude
+    model: claude-opus-5-5
+    session: ephemeral
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% elif inputs.document == 'plan' %}plan-writing{% else %}intent-writing{% endif %}"]
+    capabilities: *read_only
+    working_dir: "{{ worktree_dir }}"
+    system_prompt: *arena_writer
+
   reviewer:
     provider: "{{ inputs.reviewer_provider }}"
     model: "{{ inputs.reviewer_model }}"
@@ -182,7 +241,7 @@ agents:
 
 groups:
   - name: Draft
-    steps: [scope, evidence, draft]
+    steps: [scope, evidence, compete, draft]
   - name: Edit
     steps: [edit]
   - name: Review
@@ -219,12 +278,38 @@ steps:
     type: screenshots
     from: scope
     folder: write-doc
+    # #648: several writers draft on their own first (Arena mode); one writer drafts at once
+    transitions:
+      - when: "inputs.writers | int > 1"
+        goto: compete
+      - when: "true"
+        goto: draft
+
+  # #648 Arena mode: each writer drafts the English document on its own (a fan-out)
+  - id: compete
+    display: Several writers
+    agents: [writer, writer_2, writer_3, writer_4, writer_5]
+    min_success: 1
+    save_as: "write-doc/drafts/{{ agent }}.md"
+    prompt: |
+      Write your own draft of the {{ inputs.document }} of `{{ inputs.item }}`: {{ steps.scope.output.summary }}
+      {% if inputs.prompt %}The owner's notes: {{ inputs.prompt }}{% endif %}
+      {% if steps.evidence.output %}Screenshots: {{ steps.evidence.output.message }}{% endif %}
+      Follow your skill's sections. Answer ONLY with the Markdown document (English, with its
+      front matter: item, stage, status: draft, date), no comments before it.
 
   - id: draft
     agent: writer
     prompt: |
-      Write the first draft of the {{ inputs.document }} of `{{ inputs.item }}`: {{ steps.scope.output.summary }}
-      {% if steps.evidence.output %}Screenshots: {{ steps.evidence.output.message }}{% endif %}
+      {% if steps.compete.output.succeeded | length %}Several writers drafted the {{ inputs.document }} of `{{ inputs.item }}` on their own:
+      {% for name in steps.compete.output.succeeded | shuffle(run_id) %}
+      ----- Draft {{ loop.index }} -----
+      {{ steps.compete.output.results[name].text }}
+      {% endfor %}
+      Merge the best of them into the first draft: keep the strongest choice of each section, never
+      a safe middle ground, and resolve what they disagree on (an assumption or a **Recommended:** line).
+      {% else %}Write the first draft of the {{ inputs.document }} of `{{ inputs.item }}`: {{ steps.scope.output.summary }}
+      {% if steps.evidence.output %}Screenshots: {{ steps.evidence.output.message }}{% endif %}{% endif %}
       Answer with `source_text` (the whole English document, with its front matter: item, stage,
       status: draft, date), `translation_text` (the same document in Português (Brasil), the same
       headings order and the same **R1.** / **D1.** labels) and `reply` (one sentence to the owner).
@@ -321,3 +406,16 @@ steps:
       - when: "rejected"
         goto: end
         status: failed
+
+# -----------------------------------------------------------------------------
+# #648: what a pipeline or a chain maps from this run (spec-to-issues gives `document` to issue's
+# `spec`, enrich-issue gives `document` and `issue` to feature), like writer-reviewer's outputs.
+outputs:
+  document:
+    type: string
+    description: The accepted document, merged into the base branch (its path in the project; the issue and feature workflows read it).
+    value: "docs/work/{{ inputs.item }}/{{ inputs.document }}.md (the {{ inputs.document }} of {{ inputs.title or inputs.item }}, accepted)"
+  issue:
+    type: object
+    description: "The issue the document was written for (number, url, title), when started from one."
+    value: "{{ (run.issues[0] if run.issues | length else none) | to_json }}"

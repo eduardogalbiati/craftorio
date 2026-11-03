@@ -1,0 +1,17 @@
+# Saved pipeline (#135, packages/engine/domains/workflow/pipelines.js). #648: was enrich-save-develop.yaml
+# (Write & Review, then the local developer workflow; the old name still resolves): write-doc enriches a
+# work item into its plan, you accept it, then feature (local mode) implements the accepted document.
+name: Enrich → Issue
+description: Write doc turns a work item (or an issue, started from the Backlog's Enrich) into an implementable plan; accept it at its approval, then feature (local mode) implements the accepted document.
+category: build
+stages:
+  - workflow: write-doc.yaml
+    inputs:
+      document: plan
+  # #630: software-development-local-hero.yaml is now feature.yaml in local mode
+  - workflow: feature.yaml
+    map:
+      task: document
+      issues: issue
+    inputs:
+      mode: local
