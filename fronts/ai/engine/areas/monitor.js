@@ -120,11 +120,16 @@ module.exports = (ctx) => {
     if (input.type === 'log-file' && !input.path) return { ok: false, error: 'A log file source needs its path.' };
     if (input.type === 'log-url' && !/^https?:\/\//i.test(String(input.url || ''))) return { ok: false, error: 'A log URL source needs an http(s) URL.' };
     if (input.type === 'sentry' && !(input.org && input.project)) return { ok: false, error: 'A Sentry source needs its organisation and project.' };
-    const state = read(projectId);
-    const id = input.id && state.sources.some((s) => s.id === input.id) ? input.id : `src-${crypto.randomBytes(4).toString('hex')}`;
-    const saved = { id, type: input.type, label: String(input.label || defaultLabel(input)).slice(0, 80), ...Object.fromEntries(SOURCE_FIELDS[input.type].map((k) => [k, String(input[k])])) };
-    state.sources = [...state.sources.filter((s) => s.id !== id), saved];
-    write(projectId, state);
+    // in the project's queue: a poll waiting for the network would otherwise write over it
+    const saved = await serial(projectId, () => {
+      const state = read(projectId);
+      const id = input.id && state.sources.some((s) => s.id === input.id) ? input.id : `src-${crypto.randomBytes(4).toString('hex')}`;
+      const next = { id, type: input.type, label: String(input.label || defaultLabel(input)).slice(0, 80), ...Object.fromEntries(SOURCE_FIELDS[input.type].map((k) => [k, String(input[k])])) };
+      state.sources = [...state.sources.filter((s) => s.id !== id), next];
+      write(projectId, state);
+      return next;
+    });
+    const { id } = saved;
     if (token) await secrets().set(tokenKey(projectId, id), String(token));
     watchMonitor();
     return { ok: true, source: saved };
