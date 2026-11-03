@@ -158,6 +158,25 @@ test('#650 recordIncident refuses an item that does not exist and a name outside
   assert.equal(exists(r, 'docs/work/nope'), false);
 });
 
+test('#650 the translation\'s empty row in the playbook\'s pt-BR words ("nenhum incidente") is replaced too', (t) => {
+  const pt = MAINTAIN_PT.replace('| — | — | — | — | sem incidentes |', '| — | — | — | — | nenhum incidente |');
+  const r = repo(t, { ...FILES, 'docs/work/checkout/maintain.pt-BR.md': pt });
+  load().recordIncident(r.dir, incident());
+  const rows = section(read(r, 'docs/work/checkout/maintain.pt-BR.md'), '## Incidentes').split('\n').filter((l) => l.startsWith('|'));
+  assert.equal(rows.filter((l) => l.includes(ERROR)).length, 1, rows.join('\n'));
+  assert.equal(rows.some((l) => l.includes('nenhum incidente')), false, rows.join('\n'));
+});
+
+test('#650 a second incident is a second row; the first one stays', (t) => {
+  const r = repo(t);
+  load().recordIncident(r.dir, incident());
+  load().recordIncident(r.dir, incident({ date: '2026-11-03', source: 'night-watch', error: 'stalled in run r-42' }));
+  const rows = section(read(r, 'docs/work/checkout/maintain.md'), '## Incidents').split('\n').filter((l) => l.startsWith('|'));
+  assert.equal(rows.filter((l) => l.includes(ERROR)).length, 1, rows.join('\n'));
+  assert.equal(rows.filter((l) => l.includes('stalled in run r-42')).length, 1, rows.join('\n'));
+  assert.equal(load().listIntents(r.dir).length, 3);
+});
+
 test('#650 readDoc reads the maintain document with the recorded incident', (t) => {
   const r = repo(t);
   load().recordIncident(r.dir, incident());

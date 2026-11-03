@@ -98,3 +98,30 @@ test('#650 monitor:diagnose of an error tied to an item records it in the item\'
   // committed in the project's repository, nothing left uncommitted under docs/work
   assert.equal(s.git('status', '--porcelain', '--', 'docs/work'), '');
 });
+
+test('#650 monitor:diagnose with an item the repository does not have: ok false, nothing written in docs/work, the Inbox card still filed', async (t) => {
+  const s = await setup(t);
+  const head = s.git('rev-parse', 'HEAD');
+  const res = await s.api['monitor:diagnose']({ projectId: s.projectId, fingerprint: s.group.fingerprint, item: 'nope' });
+  assert.equal(res?.ok, false, JSON.stringify(res));
+  assert.match(String(res.error || ''), /nope/);
+  assert.deepEqual(workItems(s.repo.dir), ['checkout']);
+  assert.equal(fs.readFileSync(path.join(s.repo.dir, 'docs', 'work', 'checkout', 'maintain.md'), 'utf8'), MAINTAIN);
+  assert.equal(s.git('rev-parse', 'HEAD'), head);
+  assert.equal(s.git('status', '--porcelain'), '');
+  const discovery = require('../../domains/discovery/discovery');
+  const cards = discovery.listCards(s.service.workspace().discovery, s.projectId, { column: 'inbox' }).filter((c) => c.type === 'intent');
+  assert.equal(cards.length, 1);
+  const g = (await s.api['monitor:state']({ projectId: s.projectId })).groups.find((x) => x.fingerprint === s.group.fingerprint);
+  assert.equal(g.state, 'intent');
+});
+
+test('#650 diagnosing the same group again with its item records the incident once', async (t) => {
+  const s = await setup(t);
+  await s.api['monitor:diagnose']({ projectId: s.projectId, fingerprint: s.group.fingerprint, item: 'checkout' });
+  const again = await s.api['monitor:diagnose']({ projectId: s.projectId, fingerprint: s.group.fingerprint, item: 'checkout' });
+  assert.equal(again?.ok, true, JSON.stringify(again));
+  const maintain = fs.readFileSync(path.join(s.repo.dir, 'docs', 'work', 'checkout', 'maintain.md'), 'utf8');
+  assert.equal(maintain.split('\n').filter((l) => l.startsWith('|') && l.includes(MSG)).length, 1, maintain);
+  assert.equal(workItems(s.repo.dir).length, 2);
+});

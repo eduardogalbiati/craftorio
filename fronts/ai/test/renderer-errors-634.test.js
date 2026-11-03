@@ -220,3 +220,63 @@ test('#634 a click on Propose fix calls monitorProposeFix with the project and t
   const fix = calls.filter((c) => c[0] === 'monitorProposeFix').map((c) => `${c[1]?.projectId} ${c[1]?.fingerprint}`);
   assert.deepEqual(fix, ['p1 fp-checkout']);
 });
+
+// ---- #650 (spec R16): a new group is tied to a work item before Diagnose ----------------------------
+
+const DOC_ITEMS = [{ item: 'checkout', title: 'Checkout' }, { item: 'search', stage: 'intent' }];
+const withItems = { listDocItems: async () => JSON.parse(JSON.stringify(DOC_ITEMS)) };
+
+async function clickDiagnose(box) {
+  const btn = box.buttons.find((b) => b.dataset.action === 'diagnose');
+  assert.ok(btn, 'no Diagnose button');
+  const ev = { type: 'click', target: btn, currentTarget: box, preventDefault() {}, stopPropagation() {} };
+  if (btn.onclick) await btn.onclick(ev);
+  else {
+    await box.onclick?.(ev);
+    for (const fn of box.listeners.click || []) await fn(ev);
+  }
+  await new Promise((r) => setImmediate(r));
+}
+// the user picks `value` in the item select of the row `fingerprint` (a change event on #errors-body)
+async function choose(box, fingerprint, value) {
+  const sel = { value, dataset: { fingerprint }, attrs: { 'data-testid': 'monitor-item-select', 'data-fingerprint': fingerprint } };
+  sel.closest = (s) => (matches(s, { name: 'select', attrs: sel.attrs }) ? sel : null);
+  const ev = { type: 'change', target: sel, currentTarget: box };
+  await box.onchange?.(ev);
+  for (const fn of box.listeners.change || []) await fn(ev);
+}
+const selectsOf = (html) => [...String(html).matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)]
+  .map((m) => ({ attrs: attrsOf(m[1]), disabled: /\sdisabled\b/.test(m[1]), options: [...m[2].matchAll(/<option\b([^>]*)>([^<]*)<\/option>/g)].map((o) => [attrsOf(o[1]).value, o[2].trim()]) }))
+  .filter((s) => s.attrs['data-testid'] === 'monitor-item-select');
+
+test('#650 only the new group gets the item select, listing the Documents\' items by title, with "no item" first', async () => {
+  const { box } = await shown(withItems);
+  const selects = selectsOf(box.html);
+  assert.deepEqual(selects.map((s) => s.attrs['data-fingerprint']), ['fp-refund']);
+  assert.deepEqual(selects[0].options.map(([v]) => v), ['', 'checkout', 'search']);
+  assert.deepEqual(selects[0].options.slice(1).map(([, label]) => label), ['Checkout', 'search']);
+  assert.equal(selects[0].disabled, false);
+});
+
+test('#650 the item chosen in the select reaches monitorDiagnose as `item`', async () => {
+  const { box, calls } = await shown(withItems);
+  await choose(box, 'fp-refund', 'checkout');
+  await clickDiagnose(box);
+  const diag = calls.filter((c) => c[0] === 'monitorDiagnose').map((c) => [c[1]?.projectId, c[1]?.fingerprint, c[1]?.item]);
+  assert.deepEqual(diag, [['p1', 'fp-refund', 'checkout']]);
+});
+
+test('#650 without a chosen item, Diagnose sends no item (as in #634)', async () => {
+  const { box, calls } = await shown(withItems);
+  await clickDiagnose(box);
+  const diag = calls.filter((c) => c[0] === 'monitorDiagnose').map((c) => c[1]?.item ?? null);
+  assert.deepEqual(diag, [null]);
+});
+
+test('#650 a project without Documents items (or without the plan front) shows the select disabled', async () => {
+  const { box } = await shown({ listDocItems: async () => { throw new Error('No handler for docs:list'); } });
+  const selects = selectsOf(box.html);
+  assert.equal(selects.length, 1);
+  assert.equal(selects[0].disabled, true);
+  assert.deepEqual(selects[0].options.map(([v]) => v), ['']);
+});
