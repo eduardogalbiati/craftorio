@@ -235,11 +235,9 @@
     renderGate();
     try {
       const out = await runWriter(docs.projectId, folder, o);
-      if (docs.open !== o) return;
+      if (docs.open !== o || !out) return; // no out: the owner kept the ended run's work
       o.runId = out.runId;
-      // the run's first events may arrive before startRun answers
-      const early = docs.early.filter((ev) => ev.run_id === o.runId);
-      docs.early = [];
+      const early = docs.early.splice(0).filter((ev) => ev.run_id === o.runId); // first events may come before startRun answers
       for (const ev of early) await onRunEvent(ev);
     } catch (e) {
       editorError(errMsg(e));
@@ -916,10 +914,9 @@
     },
   };
 
-  // #649 "Write a document" on a Discovery card (views/discovery/discovery.js): the writer on a new intent named
-  // after the card, opened in this editor; the run is the card's (DiscoveryRuns), so its document comes back to the
-  // card as a version and an attachment when it ends → the run id. #648 Enrich on a Backlog issue
-  // (views/backlog/backlog.js, `issue` { number, url, title }, its `prompt`): the issue's spec, the run records it
+  // #649 "Write a document" on a Discovery card (views/discovery/discovery.js): the writer on a new intent named after the
+  // card, in this editor; the run is the card's (DiscoveryRuns), its document comes back as a version → the run id.
+  // #648 Enrich on a Backlog issue (views/backlog/backlog.js, `issue` { number, url, title }, `prompt`): the issue's spec
   window.writeDocForCard = async ({ projectId, cardId, title, issue = null, prompt = '' }) => {
     const item = slugOf(issue ? `issue-${issue.number}-${title}` : title) || 'card', doc = issue ? 'spec' : 'intent';
     const folder = (state.projects || []).find((p) => p.id === projectId)?.folder || null;

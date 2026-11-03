@@ -61,9 +61,9 @@ test('#647 the Documents screen offers New item', async () => {
   assert.equal(allMarkup(app).includes('data-testid="docs-new-item"'), true);
 });
 
-test('#647 Write & Review and AI Arena are still in the menu until phase 2', () => {
+test('#647 #648 Write & Review and AI Arena leave the menu in phase 2', () => {
   const ids = navEntries(loadApp().defs).map((e) => e.id);
-  assert.deepEqual(['duo', 'arena'].filter((id) => !ids.includes(id)), []);
+  assert.deepEqual(['duo', 'arena'].filter((id) => ids.includes(id)), []);
 });
 
 // ---- the editor: gates, a new document's run --------------------------------------------------
