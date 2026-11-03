@@ -251,7 +251,17 @@ function loadApp({ api: apiOverrides = {}, storage = {}, session = {}, state: st
     getElementById(id) { return document.querySelector(`#${id}`); },
     getElementsByClassName: () => [],
     getElementsByTagName: () => [],
-    createElement(tag) { const el = makeEl('', tag); created.push(el); return el; },
+    createElement(tag) {
+      const el = makeEl('', tag);
+      // a <template> has its inert `content` fragment (no HTML parsing here: the fragment keeps the markup as text)
+      if (String(tag).toLowerCase() === 'template') {
+        const content = makeEl('', 'fragment');
+        el.content = content;
+        Object.defineProperty(el, 'innerHTML', { get: () => content.innerHTML, set: (h) => { content.innerHTML = String(h); }, enumerable: true });
+      }
+      created.push(el);
+      return el;
+    },
     createElementNS(_ns, tag) { const el = makeEl('', tag); created.push(el); return el; },
     createTextNode: (t) => ({ textContent: t }),
     createDocumentFragment: () => makeEl('', 'fragment'),
