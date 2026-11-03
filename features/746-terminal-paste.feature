@@ -14,6 +14,8 @@ Feature: Pasting into a session's terminal in a browser tab
   # "The browser refuses to let the page read the clipboard" replaces navigator.clipboard.readText in
   # the page (before it loads) by one that counts its calls and rejects with the browser's
   # NotAllowedError, as a browser that denies the clipboard-read permission does.
+  # #777: the run is a feature run (features/support/workflows.js) with Validation "Validated", so it
+  # stops at a gate card.
   # Assumes the developer adds:
   # - data-testid="term-pane" on each terminal's pane in the dock (term-dock.js openTerminal);
   # - data-testid="term-dock-message" on the terminal bar's message (#term-msg), with the class
@@ -26,7 +28,8 @@ Feature: Pasting into a session's terminal in a browser tab
     And the served engine's first-run Setup is done
     And the browser refuses to let the page read the clipboard
     When I open the served UI in the browser
-    And I choose the workflow "software-development" in the Start panel
+    And I choose the workflow "feature" in the Start panel
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I open the gate card's "Terminal there"
@@ -44,7 +47,8 @@ Feature: Pasting into a session's terminal in a browser tab
     And the served engine has a project "demo-app"
     And the served engine's first-run Setup is done
     When I open the served UI in the browser
-    And I choose the workflow "software-development" in the Start panel
+    And I choose the workflow "feature" in the Start panel
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I open the run's "Details" tab
@@ -60,7 +64,8 @@ Feature: Pasting into a session's terminal in a browser tab
     And the served engine's first-run Setup is done
     And the browser refuses to let the page read the clipboard
     When I open the served UI in the browser
-    And I choose the workflow "software-development" in the Start panel
+    And I choose the workflow "feature" in the Start panel
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I open the gate card's "Terminal there"

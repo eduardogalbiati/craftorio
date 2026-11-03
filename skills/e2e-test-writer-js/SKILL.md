@@ -56,3 +56,10 @@ Unset: leave the runner's default.
 - Screenshots (release run): `await page.screenshot({ path })` (or the Electron window's
   `capturePage()`) into `evidence_dir` with the e2e-scenarios naming.
 - Close the browser / app in an `After` hook (`AfterAll` for a shared app), on failure too.
+- Choosing a workflow (the Start panel, the Product Owner's plan, the Workflows screen, the agent
+  cards, the Settings default): use a file or display title named in `features/support/workflows.js`
+  (`feature` / "Feature", `test-backfill` / "Test backfill"), never a retired name: the aliases of
+  `packages/shared/default-workflow.js` (`software-development`, the local heroes) are not offered,
+  so the step times out. A run that must reach a gate card chooses `feature` and picks "Validated"
+  for "Validation" before starting. Seeded past runs and roadmap items may keep old names.
+  `packages/shared/test/e2e-workflow-names.test.js` guards it.

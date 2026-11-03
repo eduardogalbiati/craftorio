@@ -21,6 +21,7 @@ const { _electron: electron } = require('@playwright/test');
 const demo = require('../../scripts/screenshot');
 const machineSlot = require('@multiagent/engine/engine/machine-slot');
 const { shiftClock } = require('./fixed-clock');
+const workflows = require('./workflows');
 
 const root = path.join(__dirname, '..', '..');
 const src = (m) => require(path.join(root, 'packages', 'engine', m));
@@ -35,7 +36,7 @@ async function seedWorkspace(wsDir) {
   const project = projects.updateProject(ws.projects, created.id, { repo: demo.DEMO_REPO });
   // #444: English chosen, not "same as the computer" (writeSettings merges one level: keep the language defaults)
   const language = { ...workspace.readSettings(ws).language, interface: 'en' };
-  workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, language });
+  workspace.writeSettings(ws, { developerMode: true, lastWorkflow: workflows.FEATURE.file, lastProject: project.id, language });
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demo.demoBacklog(project.id, src('domains/backlog/backlog').taskProgress), null, 2));
   demo.demoLocalMerge(ws, project.id);

@@ -29,29 +29,31 @@ Feature: Backlog Product Owner
     And the suggested questions, "Register an issue…" and Ask were disabled while the Product Owner worked
     And the suggested questions, "Register an issue…" and Ask are enabled again
 
+  # #777: the plan offers the files of workflows/ by display name (features/support/workflows.js).
+  # Feature is tests first: no Cost chip; Test backfill is not, and has the E2E tests input: Cost chip.
   @issue-235
-  Scenario: Plan mode lists the workflows by name and AI Development shows its own options
+  Scenario: Plan mode lists the workflows by name and Feature shows its own options
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Product Owner
     And I switch the Product Owner to "Plan the backlog"
-    Then the plan's workflow choice offers "AI Development, local hero" and "Software development, local hero"
-    When I plan with the workflow "AI Development, local hero"
+    Then the plan's workflow choice offers "Feature" and "Test backfill"
+    When I plan with the workflow "Feature"
     Then the Cost chip is hidden
     And the plan shows the workflow's options
     And "Write and run" is selected for "E2E tests"
-    And the Product Owner's header says "Planning for demo-app · AI Development, local hero"
+    And the Product Owner's header says "Planning for demo-app · Feature"
 
   @issue-235
-  Scenario: Planning with Software development, local hero shows the Cost chip
+  Scenario: Planning with Test backfill shows the Cost chip
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Product Owner
     And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "AI Development, local hero"
-    And I plan with the workflow "Software development, local hero"
+    And I plan with the workflow "Feature"
+    And I plan with the workflow "Test backfill"
     Then the Cost chip is shown
-    And the Product Owner's header says "Planning for demo-app · Software development, local hero"
+    And the Product Owner's header says "Planning for demo-app · Test backfill"
 
   # The simulated plan answer proposes to split the demo's big issue #15 (a long title, 12 tasks whose
   # text has `code` spans): its split card is the one checked
@@ -179,8 +181,8 @@ Feature: Backlog Product Owner
   # #431: the drawer's foot ("Plan with [workflow]" and the workflow's options) takes less room. The
   # main options (Mode, Unit tests, E2E tests, Screenshots) come first, under small group labels; the
   # others wait behind "Show more options". A chevron on the "Plan with" row collapses the options to
-  # a one-line summary of the chosen values; the choice is remembered. AI Development, local hero's
-  # defaults: Validation Automatic, E2E tests Write and run (#235). The issue's "Mode (Automatic or
+  # a one-line summary of the chosen values; the choice is remembered. Feature's (#777, once
+  # AI Development, local hero) defaults: Validation Automatic, E2E tests Write and run (#235). The issue's "Mode (Automatic or
   # Validated)" is the input labelled "Validation" since #630.
   @issue-431
   Scenario: The plan shows the main options first, grouped, and the others behind "Show more options"
@@ -188,7 +190,7 @@ Feature: Backlog Product Owner
     When I open "Backlog" in the sidebar
     And I open the Product Owner
     And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "AI Development, local hero"
+    And I plan with the workflow "Feature"
     Then the plan's options show "Validation", "Unit tests", "E2E tests" and "Screenshots"
     And the plan's options do not show "Check command"
     And the plan's options are grouped under "How it runs" and "Tests"
@@ -202,7 +204,7 @@ Feature: Backlog Product Owner
     When I open "Backlog" in the sidebar
     And I open the Product Owner
     And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "AI Development, local hero"
+    And I plan with the workflow "Feature"
     And I collapse the plan's options
     Then the plan's options are hidden, the "Plan with" row stays
     And the plan's summary shows "Automatic"
@@ -217,7 +219,7 @@ Feature: Backlog Product Owner
     When I open "Backlog" in the sidebar
     And I open the Product Owner
     And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "AI Development, local hero"
+    And I plan with the workflow "Feature"
     And I collapse the plan's options
     And I close the Product Owner
     And I open the Product Owner

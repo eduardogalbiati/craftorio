@@ -7,22 +7,22 @@ Feature: Agent providers per run, and their fallbacks
   answered each turn and every fallback with its reason, and a notification tells the owner. With no
   fallback left the run fails as before, with the provider's message.
 
-  # ai-development-local-hero's "Reviewer" runs on claude, claude-opus-5-5, effort high; its
-  # "Developer" on claude, claude-opus-5-5 (the workflow's defaults). Mode Validated stops the run at
-  # its "Developer check" gate right after Develop.
+  # feature's "Reviewer" runs on claude, claude-opus-5-5, effort high; its "Developer" on claude,
+  # claude-opus-5-5 (the workflow's defaults). Validation "Validated" stops the run at its
+  # "Developer check" gate right after Develop (#777: features/support/workflows.js).
   @issue-262
   Scenario: The Start panel lists the workflow's agents with their defaults, and a change applies to that run only
     Given the app is open
-    When I choose the workflow "ai-development-local-hero" in the Start panel
+    When I choose the workflow "feature" in the Start panel
     Then the Start panel's agent "Reviewer" runs on "claude" with the model "claude-opus-5-5" and the effort "high"
     And the Start panel's agent "Developer" runs on "claude" with the model "claude-opus-5-5"
     When I set the Start panel's agent "Developer" to "codex" with the model "gpt-6-luna"
-    And I pick "Validated" for "Mode"
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I switch the run to its chat
     Then the run chat shows that "Develop" was answered by "codex" with the model "gpt-6-luna"
-    When I choose the workflow "ai-development-local-hero" in the Start panel
+    When I choose the workflow "feature" in the Start panel
     Then the Start panel's agent "Developer" runs on "claude" with the model "claude-opus-5-5"
 
   # A simulated run (no model) started like the Start panel starts one, with the developer moved to

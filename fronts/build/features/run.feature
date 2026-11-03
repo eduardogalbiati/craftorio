@@ -41,10 +41,10 @@ Feature: Runs and gates
     And the run shows the pill "E2E tests: Off"
 
   @issue-286
-  Scenario: The Start panel of AI Development (local hero) offers the developer's effort next to the developer's model
+  Scenario: The Start panel of Feature offers the developer's effort next to the developer's model
     Given the app is open
     When I open the Start panel
-    And I choose the workflow "ai-development-local-hero" in the Start panel
+    And I choose the workflow "feature" in the Start panel
     Then the field "Developer effort" comes right after "Developer model"
     And "Developer effort" offers the choices "default", "low", "medium", "high" and "xhigh"
     And "Default" is selected for "Developer effort"
@@ -53,7 +53,7 @@ Feature: Runs and gates
   Scenario: The Start panel offers Rust as a project language
     Given the app is open
     When I open the Start panel
-    And I choose the workflow "software-development" in the Start panel
+    And I choose the workflow "feature" in the Start panel
     Then the field "Language" offers "Rust"
     And the field "Language" offers "JavaScript"
 
@@ -142,17 +142,17 @@ Feature: Runs and gates
     And I click Resume in the run chat
     Then the resume dialog opens with the step "Developer check" preselected
 
-  # ---- #301: the Warm Up step of AI Development (local hero) ----------------------------------------
+  # ---- #301: the Warm Up step of Feature (once AI Development, local hero) ---------------------------
   # A read-only agent step "Warm Up" (step warm_up, agent mapper) maps the code before Develop. It is
   # an agent step like the others: no new screen.
 
-  # A simulated run of ai-development-local-hero goes acceptance tests, red check, Warm Up, Develop,
-  # then stops at its "Developer check" gate
+  # A simulated run of feature goes acceptance tests, red check, Warm Up, Develop, then, with
+  # Validation "Validated", stops at its "Developer check" gate (#777)
   @issue-301
-  Scenario: A simulated AI Development run shows Warm Up right before Develop, run by the mapper
+  Scenario: A simulated Feature run shows Warm Up right before Develop, run by the mapper
     Given the app is open
-    When I choose the workflow "ai-development-local-hero" in the Start panel
-    And I pick "Validated" for "Mode"
+    When I choose the workflow "feature" in the Start panel
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     And the run's steps show "Warm Up" right before "Develop"
@@ -305,17 +305,17 @@ Feature: Runs and gates
     And the run goes on past the current turn without pausing
 
   # ---- #396: a suite red only outside the change ----------------------------------------------------
-  # A new owner policy input of AI Development (local hero), "Suite red outside the change" (Ask |
+  # A new owner policy input of Feature (once AI Development, local hero), "Suite red outside the change" (Ask |
   # Continue, default Ask): with Continue, a suite red only outside the change goes to the build without
   # the test_failed gate. A run that reached the build without a green suite records it in its summary
   # and shows a "Not tested green" pill. The run "-red00396" is seeded finished that way (the policy was
   # Continue); the run "-sui00304" (#304) is a green one.
 
   @issue-396
-  Scenario: The Start panel of AI Development (local hero) offers the suite policy, Ask by default
+  Scenario: The Start panel of Feature offers the suite policy, Ask by default
     Given the app is open
     When I open the Start panel
-    And I choose the workflow "ai-development-local-hero" in the Start panel
+    And I choose the workflow "feature" in the Start panel
     Then the field "Suite red outside the change" offers "Ask"
     And the field "Suite red outside the change" offers "Continue"
     And "Ask" is selected for "Suite red outside the change"

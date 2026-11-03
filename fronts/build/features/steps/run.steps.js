@@ -12,8 +12,9 @@ const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
 const { openStartPanel, runScreenStatus, runTab } = require('../../../../features/support/run-screen');
+const { fileOf } = require('../../../../features/support/workflows');
 
-// a simulated run of software-development reaches its first gate in well under a minute
+// a simulated run of feature (Validation "Validated") reaches its first gate in well under a minute
 const GATE_TIMEOUT = 120000;
 
 // #412: no Start in the header: the Start panel opens from Projects › the demo project's "Start workflow"
@@ -203,10 +204,12 @@ Then('the Oracle shows a simulated answer', async ({ e2e }) => {
 // radiogroup named by its label); no new data-testid.
 const visibleGroup = (page, name) => page.getByRole('radiogroup', { name, exact: true }).filter({ visible: true }).first();
 
+// #777: a file, a name or a display title of workflows/ ("feature", "Feature", "feature.yaml"), the
+// names of features/support/workflows.js; a retired alias is not offered
 When('I choose the workflow {string} in the Start panel', async ({ e2e }, name) => {
   const page = e2e.window;
   await openStartPanel(e2e);
-  await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(`${name}.yaml`);
+  await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(fileOf(name));
 });
 
 // #378: the Start panel's inputs of the chosen workflow. A path input (project_path) is the

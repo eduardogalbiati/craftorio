@@ -23,7 +23,7 @@ Feature: Workflows a repository declares
     And the project's repository has a malformed workflows manifest
     When I open "Definitions" in the sidebar
     Then the Workflows screen reports that the repository's manifest is malformed
-    And the workflow "software-development" is listed on the Workflows screen
+    And the workflow "feature" is listed on the Workflows screen
 
   @issue-485
   Scenario: Each workflow category explains in one line what it is for

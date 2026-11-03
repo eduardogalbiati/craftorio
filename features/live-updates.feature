@@ -19,6 +19,8 @@ Feature: Live updates from the engine
   # - the sidebar's waiting-gates badge (today #nav-run-gates) gets data-testid="nav-run-gates";
   # - the shell's connection indicator is data-testid="connection-status", reading
   #   "Disconnected, reconnecting…" while the pushed channel is down, hidden otherwise (no dialog).
+  # #777: the run is a feature run (features/support/workflows.js) with Validation "Validated", so it
+  # stops at a gate card.
 
   @issue-603
   Scenario: A gate I answer shows answered at once, even when no live update arrives
@@ -26,7 +28,8 @@ Feature: Live updates from the engine
     And the served engine has a project "demo-app"
     And the browser's live updates from the engine go through a relay I control
     When I open the served UI in the browser
-    And I choose the workflow "software-development" in the Start panel
+    And I choose the workflow "feature" in the Start panel
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When the browser stops receiving live updates from the engine
@@ -41,7 +44,8 @@ Feature: Live updates from the engine
     And the served engine has a project "demo-app"
     And the browser's live updates from the engine go through a relay I control
     When I open the served UI in the browser
-    And I choose the workflow "software-development" in the Start panel
+    And I choose the workflow "feature" in the Start panel
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When the browser stops receiving live updates from the engine
