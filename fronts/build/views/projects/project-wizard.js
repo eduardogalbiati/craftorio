@@ -107,6 +107,7 @@
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
   const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
+  const workModel = window.ProjectWizardWorkModel({ cur: () => cur }); // #633: step 3's work model section
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
     jobReason,
@@ -438,7 +439,7 @@
           ${remoteWarning(o.remote)}
         </div>
         ${workflowsColumn()}
-      </div>`;
+      </div>${workModel.section()}`;
   }
 
   const jobOf = (id) => cur.onboarding?.jobs?.[id] || {};
@@ -686,7 +687,7 @@
     const idea = cur.idea.trim();
     const running = ACTIVE.includes(cur.onboarding?.status);
     const workflows = pickedWorkflows();
-    const extra = { platform: platformOfRepo(cur.model.repository)?.id || cur.provider || null, kind: cur.kind || null };
+    const extra = { platform: platformOfRepo(cur.model.repository)?.id || cur.provider || null, kind: cur.kind || null, workModel: workModel.picked() };
     close();
     if (!pid) return;
     if (running) finished.add(pid);
@@ -883,6 +884,7 @@
     if (e.target?.dataset?.testid === 'wizard-kind-select') { cur.kind = String(e.target.value || ''); return; } // #735
     // #630: the owner's pick of a suggested workflow's variant (kept across renders)
     if (e.target?.dataset?.testid === 'wizard-workflow-select') { cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') }; return; }
+    if (workModel.onInput(e)) { render(); return; } // #633: the work model's radios
     if (onCreateInput(e, id)) return;
     if (id !== 'wizard-repo' && id !== 'wizard-name') return;
     const value = String(e.target.value || '');
@@ -941,7 +943,7 @@
       document.body.appendChild(root);
     }
     // Import is selected when the wizard opens (mock-1); #632: the create step's choices start at mock-3's
-    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, nameTyped: false, ...freshReview() };
+    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, workModel: undefined, nameTyped: false, ...freshReview() };
     root.hidden = false;
     render();
     tray.refresh(); // #724: hidden while the wizard is open

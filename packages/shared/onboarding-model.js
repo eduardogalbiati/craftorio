@@ -25,6 +25,8 @@
 //   the new project's id and folder name (<workspace>/projects/<slug>).
 // - #738 forkSuggestion({ repo, push }): the "no push access" notice (Create a fork / Work locally), null
 //   unless push === false.
+// - #633 WORK_MODELS (light / standard / full, spec R9) and DEFAULT_WORK_MODEL ('standard'): how work on
+//   a project is documented, step 3's work model section and the project record's workModel.
 // #726: every text is an i18n key, never English: the choices' and PROFILE_LABELS' labels are keys
 // (onboarding.choice_* / onboarding.profile_*), a reason is a key or { key, params } whose params are keys
 // or { key, params } too (onboarding.why_*), profileLine an array of keys; the interface resolves them
@@ -40,6 +42,9 @@
   const DEFAULT = 'feature';
   // #738: mode fork ("Fork + PR"): the owner cannot push to the original, runs push to their fork
   const PROFILE = { mode: ['local', 'remote', 'fork'], ci: ['none', 'release', 'pr+release'], tests: ['unit', 'unit+e2e'] };
+  // #633: the work model (Light: an issue only; Standard: intent → spec → plan; Full: + REVIEW.md and evals)
+  const WORK_MODELS = ['light', 'standard', 'full'];
+  const DEFAULT_WORK_MODEL = 'standard';
 
   const filled = (v) => typeof v === 'string' && v.trim().length > 0;
   const stepIndex = (s) => Math.max(0, STEPS.findIndex((x) => x.id === s?.step));
@@ -225,12 +230,14 @@
     CREATE_ANSWERS,
     CREATE_DEFAULTS,
     DEFAULT,
+    DEFAULT_WORK_MODEL,
     FAILURE_CODES,
     KIND_LABELS,
     PROFILE,
     PROFILE_LABELS,
     PROJECT_KINDS,
     STEPS,
+    WORK_MODELS,
     back,
     canGoNext,
     ciChoice,

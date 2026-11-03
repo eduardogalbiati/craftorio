@@ -17,7 +17,7 @@
 //   its own, a fenced code block is one block whatever its empty lines), front matter left out; 1-based.
 // - sections(markdown, blocks): [{ key, title, label, name, slug, blocks }], a new one at each heading
 //   and each labelled paragraph; name: the bold text after the label ("**R1. Documents.**" → Documents).
-// - lintDoc({ kind: 'intent' | 'spec', markdown, exists? }): { ok, problems: [{ rule, message, line? }] },
+// - lintDoc({ kind: 'intent' | 'spec' | 'plan' (#633), markdown, exists? }): { ok, problems: [{ rule, message, line? }] },
 //   rules front-matter, section (the playbook's sections, English source only), requirements (R1, R2…
 //   in order), recommended (a decision without its **Recommended:** line), image (a missing file).
 // - lintTranslation(sourceMd, translationMd): [{ rule: 'translation', message }] when the headings or
@@ -28,7 +28,7 @@
 // - version(markdown): the hash above.
 // - alignedLines(sourceMd, translationMd, { start }): { start, end } of the translation that match
 //   the source block at that line (the alignment rule above, source to translation), null without a match.
-// - ACCEPTED: { intent: 'accepted', spec: 'signed off' }, the status past the SDLC gate.
+// - ACCEPTED: { intent: 'accepted', spec: 'signed off', plan: 'accepted' }, the status past the SDLC gate.
 // Browser: window.DocModel; Node: module.exports.
 (function (root) {
   'use strict';
@@ -42,10 +42,12 @@
   const SECTIONS = {
     intent: ['Problem', 'Proposed outcome', 'Affected users and systems', 'Constraints', 'Open questions'],
     spec: ['Requirements', 'Design', 'Areas of concern', 'Open questions'],
+    // #633: the plan (skills/plan-writing), the developer's brief replaced
+    plan: ['Files that change', 'Order of work', 'Risks', 'Proof'],
   };
   const FRONT_MATTER_KEYS = ['item', 'stage', 'status', 'date'];
-  // the status of a document past its SDLC gate (Accept intent, Sign off spec)
-  const ACCEPTED = { intent: 'accepted', spec: 'signed off' };
+  // the status of a document past its SDLC gate (Accept intent, Sign off spec, #633 Accept plan)
+  const ACCEPTED = { intent: 'accepted', spec: 'signed off', plan: 'accepted' };
   const RECOMMENDED = /\*\*(Recommended|Recomendado):\*\*/;
   const IMAGE = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 

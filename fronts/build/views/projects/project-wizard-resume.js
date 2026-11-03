@@ -8,7 +8,7 @@
 // project (wizard-open-existing, the project's page), never a second project.
 // window.ProjectWizardResume({ cur, render, close }) gives the wizard, over its own state (`cur()`):
 // - save(): the step and the picks (the model's source, repository, name and analyzeLater, workflowsMode, the
-//   suggested workflows' variants, kind, idea) to the engine once the project exists, only when they changed
+//   suggested workflows' variants, kind, idea, #633 the work model) to the engine once the project exists, only when they changed
 //   since the last save (fire and forget: a failed save never stops the wizard);
 // - apply(wizard): the saved step and picks onto the wizard's state (a pick not saved keeps its value);
 // - at(state, name): the onboarding just started (or resumed) onto the wizard: its project, saved step and picks;
@@ -21,7 +21,7 @@
 (function () {
   const STEPS = ['repository', 'analysis', 'review'];
   const MODEL_PICKS = ['source', 'repository', 'name', 'analyzeLater'];
-  const OWN_PICKS = ['workflowsMode', 'workflows', 'kind', 'idea'];
+  const OWN_PICKS = ['workflowsMode', 'workflows', 'kind', 'idea', 'workModel'];
 
   window.ProjectWizardResume = function ({ close, cur, names, remember, render, toAnalysis }) {
     const sent = new Map(); // projectId → the last step and picks sent (JSON)

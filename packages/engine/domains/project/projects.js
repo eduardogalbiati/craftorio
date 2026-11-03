@@ -14,6 +14,7 @@
 // #735: `kind` (backend / frontend / full-stack) and `runDefaults` the owner set (project-run-defaults.js).
 // #741: `onboarding: { step, picks, finished }`, the new-project wizard's state (service/areas/project-onboarding.js).
 // #742: ownedFolder / folderChanges: the checks before a removal deletes the project's folder.
+// #633: `workModel` (light / standard / full, spec R9), how work on the project is documented, picked at onboarding.
 
 const fs = require('fs');
 const path = require('path');
@@ -23,8 +24,12 @@ const { childEnv, PLATFORM_CLIS } = require('../../engine/child-env');
 const { cleanConfig } = require('../local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow
 const { firstBuild } = require('@multiagent/shared/default-workflow');
-// #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery)
-const { slugify } = require('@multiagent/shared/onboarding-model');
+// #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery);
+// #633: the work models a project may keep
+const {
+  WORK_MODELS,
+  slugify,
+} = require('@multiagent/shared/onboarding-model');
 const { findPlatform } = require('@multiagent/shared/platforms');
 // #735: the kinds and the keys a project's run defaults may override (read at call time: no load cycle)
 const runDefaultsModule = () => require('./project-run-defaults');
@@ -215,6 +220,8 @@ function updateProject(dir, id, patch) {
   if (patch.runDefaults !== undefined) next.runDefaults = cleanRunDefaults(patch.runDefaults);
   // #741: the new-project wizard's state (its step, the owner's picks, finished), so an onboarding resumes
   if (patch.onboarding !== undefined) next.onboarding = cleanOnboarding(patch.onboarding);
+  // #633: the work model picked at onboarding (light / standard / full); any other value keeps the previous one
+  if (WORK_MODELS.includes(patch.workModel)) next.workModel = patch.workModel;
   if (patch.folder !== undefined) moveFolder(next, cur, patch.folder, jobs.has(jobKey(dir, id)));
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);

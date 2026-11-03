@@ -127,6 +127,9 @@
 .wizard-workflows[aria-busy="true"] { opacity: .45; pointer-events: none; user-select: none; }
 .wizard-workflows-analyzing { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; text-align: center; font-size: 13px; color: var(--text); background: color-mix(in srgb, var(--bg) 55%, transparent); border-radius: var(--radius); }
 @media (prefers-reduced-motion: reduce) { .wizard-workflows-analyzing .spinner { animation-duration: 2.4s; } }
+/* #633: step 3's work model (mock-5), under the analyses and workflows: the radios, and where the files live */
+.wizard-work-model { padding-top: 16px; border-top: 1px solid var(--border); }
+.wizard-work-model-path { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); font-family: var(--mono); font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
 
 /* #642 / #669: the review, three cards (mock-6), then the backlog and the idea */
 .wizard-review { display: flex; flex-direction: column; gap: 14px; }

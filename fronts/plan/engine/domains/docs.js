@@ -2,8 +2,8 @@
 // only code that writes a work item's stage documents (the write-doc agents only read). Plain
 // synchronous functions, the repository folder first; git runs in that folder with its own config.
 // - listItems(dir) → [{ item, title?, stage, docs: [{ doc, file, status, translation }] }] from the front
-//   matter of docs/work/<item>/intent.md and spec.md (stage: the spec's over the intent's; title: the
-//   latest document's heading, #670); [] without docs/work;
+//   matter of docs/work/<item>/intent.md, spec.md and (#633) plan.md (stage: the latest document's; title:
+//   the latest document's heading, #670); [] without docs/work;
 // - readDoc(dir, { item, doc }) → { item, doc, status, source: { file, markdown }, translation: { file, markdown } | null };
 // - createDoc(dir, { item, doc, title, date }) → { item, doc, commit }: the playbook's skeleton of the
 //   document and its pt-BR translation (the sections of DocModel's lint, one line each to write), one
@@ -19,7 +19,7 @@
 //   marked, the marks in <runDir>/docs-reviewed.json;
 // - readAt(dir, { item, doc, commit }) → { file, before, after }: the source at the change's parent and at it;
 // - acceptDoc(dir, { item, doc, approver?, date? }) → { commit, status }: intent → accepted, spec →
-//   signed off, approver and date in both front matters, one commit, the bodies unchanged; already
+//   signed off, plan → accepted (#633), approver and date in both front matters, one commit, the bodies unchanged; already
 //   accepted: HEAD, no commit;
 // - ensureBranch(dir, branch): a detached checkout (a run's worktree) gets that branch, else its own.
 // undoChange refuses (the files as they were) when a later request changed the same lines.
@@ -34,7 +34,7 @@ const { execFileSync } = require('child_process');
 const DocModel = require('@multiagent/shared/doc-model');
 const { gitOut } = require('@multiagent/engine/service/common');
 
-const DOCS = ['intent', 'spec'];
+const DOCS = ['intent', 'spec', 'plan']; // #633: the plan, the pre-flow's third document
 const ITEM = /^[a-z0-9][a-z0-9._-]{0,99}$/i;
 const MESSAGE_ID = /^[\w.:-]{1,100}$/;
 const COMMIT = /^[0-9a-f]{7,40}$/i;
@@ -56,8 +56,14 @@ const SKELETON = {
     ['Areas of concern', 'Pontos de atenção'],
     ['Open questions', 'Perguntas em aberto'],
   ],
+  plan: [
+    ['Files that change', 'Arquivos que mudam'],
+    ['Order of work', 'Ordem do trabalho'],
+    ['Risks', 'Riscos'],
+    ['Proof', 'Prova'],
+  ],
 };
-const TITLE = { intent: ['Intent', 'Intenção'], spec: ['Spec', 'Spec'] };
+const TITLE = { intent: ['Intent', 'Intenção'], spec: ['Spec', 'Spec'], plan: ['Plan', 'Plano'] };
 const TO_WRITE = ['To be written with the writer.', 'A escrever com o writer.'];
 
 function git(dir, args) {
@@ -94,7 +100,7 @@ function checkItem(item) {
   return name;
 }
 function checkDoc(doc) {
-  if (!DOCS.includes(doc)) throw new Error(`Not a stage document: ${doc} (intent or spec)`);
+  if (!DOCS.includes(doc)) throw new Error(`Not a stage document: ${doc} (intent, spec or plan)`);
   return doc;
 }
 
@@ -128,7 +134,7 @@ function listItems(dir) {
       docs.push({ doc, file: `docs/work/${entry.name}/${doc}.md`, status: fm.status || 'draft', translation: fm.translation || null });
       stage = fm.stage || doc;
       // #670: the item's title, what the owner named it: the document's heading without "Intent: " / "Spec: "
-      const heading = /^# (?:(?:Intent|Spec): )?(.+)$/m.exec(text);
+      const heading = /^# (?:(?:Intent|Spec|Plan): )?(.+)$/m.exec(text);
       if (heading) title = heading[1].trim();
     }
     if (docs.length) items.push({ item: entry.name, ...(title ? { title } : {}), stage, docs });
@@ -298,7 +304,7 @@ function acceptDoc(dir, { item, doc, approver, date }) {
   if (!changed.length) throw new Error(`No ${doc} for ${item} yet.`);
   // accepted already (a second click after the gate's answer failed): nothing new to commit
   if (!git(dir, ['status', '--porcelain', '--', ...changed])) return { commit: git(dir, ['rev-parse', 'HEAD']), status };
-  const verb = doc === 'spec' ? 'sign off the spec' : 'accept the intent';
+  const verb = { spec: 'sign off the spec', plan: 'accept the plan' }[doc] || 'accept the intent';
   return { commit: commit(dir, changed, `docs(${item}): ${verb}`), status };
 }
 

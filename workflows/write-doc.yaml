@@ -5,9 +5,12 @@
 #                                      ▲                                     │ revise
 #                                      └─────────────────────────────────────┘
 #
-# One run per stage document of a work item (docs/work/<item>/intent.md or spec.md, with its
-# pt-BR translation next to it). The `document` input picks the stage; the writer loads the
-# intent-writing or the spec-writing skill accordingly.
+# One run per stage document of a work item (docs/work/<item>/intent.md, spec.md or plan.md, with
+# its pt-BR translation next to it). The `document` input picks the stage; the writer loads the
+# intent-writing, spec-writing or plan-writing skill accordingly. #633 (spec R9, the AI-native SDLC):
+# this is the pre-flow; the plan replaces the developer's brief, the Code & Build run only takes the
+# issues filed from it and never writes docs/work/ (the post-flow sdlc-record / sdlc-test /
+# sdlc-release records what the runs produced).
 # 1. scope:    the writer reads the item and lists the screens of the app worth showing.
 # 2. evidence: the project's screenshot command captures them (never blocks: a simulated run or
 #              a failed capture is in the step's message).
@@ -17,7 +20,7 @@
 #              swaps them in both files and makes one commit per request. Only the person ends it
 #              with Send to review.
 # 5. review:   the reviewer anchors its notes to the sections (`anchor`), scored on the skill's rubric.
-# 6. approval: the person accepts (Accept intent / Sign off spec on the Documents screen) or sends
+# 6. approval: the person accepts (Accept intent / Sign off spec / Accept plan on the Documents screen) or sends
 #              the document back to the edit.
 # The writer keeps one persistent session across the whole run (the requests build on each other)
 # and goes fresh from its handoff note after 55m idle.
@@ -34,7 +37,7 @@ kind: Workflow
 metadata:
   name: write-doc
   version: 0.1.0
-  description: A writer drafts the intent or the spec of a work item, you edit it with the writer by selection, a reviewer anchors notes to its sections and you sign it off.
+  description: A writer drafts the intent, the spec or the plan of a work item, you edit it with the writer by selection, a reviewer anchors notes to its sections and you sign it off.
   tags: [writing, review, documents, sdlc]
   category: plan
 
@@ -58,9 +61,9 @@ inputs:
   document:
     label: "Document"
     type: string
-    enum: [intent, spec]
+    enum: [intent, spec, plan]
     default: intent
-    options: { "intent": "Intent (the problem and the outcome)", "spec": "Spec (the requirements and the design)" }
+    options: { "intent": "Intent (the problem and the outcome)", "spec": "Spec (the requirements and the design)", "plan": "Plan (the files, the order of work and the proof)" }
     description: The stage document to write.
   title:
     label: "Title"
@@ -155,7 +158,7 @@ agents:
     model: "{{ inputs.writer_model }}"
     session: persistent   # every request builds on the previous ones
     fresh_after_idle: 55m
-    skills: ["{% if inputs.document == 'spec' %}spec-writing{% else %}intent-writing{% endif %}"]
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% elif inputs.document == 'plan' %}plan-writing{% else %}intent-writing{% endif %}"]
     capabilities: *read_only
     working_dir: "{{ worktree_dir }}"
     system_prompt: |
@@ -170,7 +173,7 @@ agents:
     provider: "{{ inputs.reviewer_provider }}"
     model: "{{ inputs.reviewer_model }}"
     session: persistent   # checks whether its previous notes were addressed
-    skills: ["{% if inputs.document == 'spec' %}spec-writing{% else %}intent-writing{% endif %}"]
+    skills: ["{% if inputs.document == 'spec' %}spec-writing{% elif inputs.document == 'plan' %}plan-writing{% else %}intent-writing{% endif %}"]
     capabilities: *read_only
     working_dir: "{{ worktree_dir }}"
     system_prompt: |
@@ -283,15 +286,15 @@ steps:
               severity: { type: string, enum: [major, minor] }
               text:     { type: string }
 
-  # The SDLC gate: Accept intent / Sign off spec on the Documents screen change the front matter and
-  # commit (the service, docs:accept), then answer accept here.
+  # The SDLC gate: Accept intent / Sign off spec / Accept plan on the Documents screen change the front
+  # matter and commit (the service, docs:accept), then answer accept here.
   - id: approval
     type: human_approval
     message: |
       The reviewer scored the {{ inputs.document }} {{ steps.review.output.score }}/10: {{ steps.review.output.summary }}
-      {% if inputs.document == 'spec' %}Sign off the spec{% else %}Accept the intent{% endif %}, or send it back to the edit with the notes.
+      {% if inputs.document == 'spec' %}Sign off the spec{% elif inputs.document == 'plan' %}Accept the plan{% else %}Accept the intent{% endif %}, or send it back to the edit with the notes.
     choices:
-      - { id: accept, label: "{% if inputs.document == 'spec' %}Sign off spec{% else %}Accept intent{% endif %}" }
+      - { id: accept, label: "{% if inputs.document == 'spec' %}Sign off spec{% elif inputs.document == 'plan' %}Accept plan{% else %}Accept intent{% endif %}" }
       - { id: revise, label: "Back to the edit" }
       - { id: stop,   label: "Stop without accepting", help: "Ends the run; its commits stay on the run's branch, not merged." }
     transitions:
