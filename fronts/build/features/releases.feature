@@ -123,7 +123,7 @@ Feature: Releases
     When I open "Backlog" in the sidebar
     And I open the Roadmap
     And I open the stage actions menu of stage 3
-    And I choose "Release here" in the stage actions menu
+    And I choose "Release after this stage" in the stage actions menu
     Then the cut line dialog shows the recent releases "1.1.2 · 2026-10-13 · 4 issues", "1.1.1 · 2026-10-02 · 3 issues" and "1.1.0 · 2026-09-20 · 5 issues" above the "Release name" field
     And the cut line dialog does not list the release "1.0.0"
     When I click "Suggest version" in the cut line dialog
@@ -153,7 +153,7 @@ Feature: Releases
     When I open "Backlog" in the sidebar
     And I open the Roadmap
     And I open the stage actions menu of stage 3
-    And I choose "Release here" in the stage actions menu
+    And I choose "Release after this stage" in the stage actions menu
     And I type "1.3.0" as the release name in the cut line dialog
     And I click "Add cut line" in the cut line dialog
     Then the cut line dialog is closed
@@ -168,7 +168,7 @@ Feature: Releases
     When I open "Backlog" in the sidebar
     And I open the Roadmap
     And I open the stage actions menu of stage 3
-    And I choose "Release here" in the stage actions menu
+    And I choose "Release after this stage" in the stage actions menu
     And I type "1.3.0" as the release name in the cut line dialog
     And the cut line "1.2.9" is drawn after stage 3 outside the app
     Then the roadmap shows the cut line "1.2.9" right after stage 3

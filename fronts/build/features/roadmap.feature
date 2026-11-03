@@ -344,7 +344,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then stage 3 offers no "Run this stage" button outside its stage actions menu
     When I open the stage actions menu of stage 3 with the keyboard
     Then the stage actions menu's first entry is focused
-    And the stage actions menu offers "Release here"
+    And the stage actions menu offers "Release after this stage"
     And the stage actions menu offers "Run this stage"
     And the stage actions menu offers "Disable"
     When I press Escape
@@ -431,15 +431,16 @@ Feature: Roadmap statuses, done items, filters and run timers
   # with no live agent turn to wait for, so the stage ends paused once the pause is asked.
 
   @issue-368
-  # #391 renamed the stage menu's entry "Pause after current turn" to "Pause after current step".
+  # #391 renamed the stage menu's entry "Pause after current turn" to "Pause after current step";
+  # #748 renamed it again to "Stop when finished".
   Scenario: Pausing a stage after the current step shows it paused, not failed, with no Retry or Skip on its items
     Given the app is open
     And the roadmap is running as a simulation
     When I open "Backlog" in the sidebar
     And I open the Roadmap
     And I open the stage actions menu of stage 2
-    Then the stage actions menu entry "Pause after current step" pauses the stage
-    When I choose "Pause after current step" in the stage actions menu
+    Then the stage actions menu entry "Stop when finished" pauses the stage
+    When I choose "Stop when finished" in the stage actions menu
     Then stage 2 is shown as paused, not failed
     And the roadmap bar shows "Paused"
     And the roadmap item "Keyboard focus is lost after closing a dialog" is not shown as failed
@@ -545,24 +546,8 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then the roadmap item "Gate item A" is done
     And the roadmap bar shows no parked count
 
-  # "Move on from this stage" is refused while an item of the stage has an agent turn running: the
-  # #391 setup (simulated turns of a few seconds, one run at a time) keeps "Pause item A" in a turn.
-
-  @issue-395
-  Scenario: Moving on from a stage is refused while an agent turn runs, pointing to "Pause after current step"
-    Given the app is open with simulated turns of a few seconds
-    And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
-    When I open "Backlog" in the sidebar
-    And I open the Roadmap
-    And I switch the roadmap to "All"
-    And I resume the roadmap as a simulation
-    Then the roadmap item "Pause item A" has started
-    When I open the stage actions menu of stage 1
-    Then the stage actions menu entry "Move on from this stage" moves on from the stage
-    When I choose "Move on from this stage" in the stage actions menu
-    Then the roadmap refuses to move on while an agent turn is running, pointing to "Pause after current step"
-    And the roadmap item "Pause item A" is not parked
-    And the roadmap item "Pause item C" has not started
+  # #748 removed "Move on from this stage" from the stage actions menu (its #395 scenario went with it);
+  # parking an item at a gate stays possible from that item's card.
 
   # ---- #405: main stays green: the base's known failures, the fix item of a red base ---------------------
 
@@ -664,6 +649,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     And the roadmap does not show the release block "v0.9.1"
 
   # ---- #426: Run later / Run earlier pass the stages Planned hides ---------------------------------
+  # #748 renamed the entries "Run later" / "Run earlier" to "Move down" / "Move up".
   # Planned hides the finished stages. The scenarios add finished stages (one item each, a copy of one
   # of tonight's done items) to the demo roadmap: stage 3 is "Reports and health", stage 5 then "Test
   # batch" and the last planned stage holds "Dark scrollbars in the terminal dock".
@@ -677,7 +663,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then the roadmap's item switch is on "Planned"
     And stage 4 is not shown
     When I open the stage actions menu of stage 3
-    And I choose "Run later" in the stage actions menu
+    And I choose "Move down" in the stage actions menu
     Then the toast says stage 3 moved down and is stage 5 now
     And stage 5 is the stage "Reports and health"
     And stage 4 sits between stage 2 and stage 5
@@ -692,8 +678,8 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I open the Roadmap
     Then stage 6 is not shown
     When I open the stage actions menu of stage 5
-    Then the stage actions menu offers "Run later", enabled
-    When I choose "Run later" in the stage actions menu
+    Then the stage actions menu offers "Move down", enabled
+    When I choose "Move down" in the stage actions menu
     Then the toast says stage 5 moved down and is stage 7 now
     And stage 7 shows the item "Dark scrollbars in the terminal dock"
 
@@ -809,3 +795,67 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I note the cost meter of the roadmap item "Keyboard focus is lost after closing a dialog"
     And the running demo run "run00016" records a session cost of 2.50 dollars
     Then the cost meter of the roadmap item "Keyboard focus is lost after closing a dialog" grows by 2.50 dollars without a reload
+
+  # ---- #748: the stage's ⋮ menu: at once, in place, grouped, and "Remove from roadmap" -------------------
+  # The demo roadmap has 5 stages; the long roadmap adds 200 planned stages of one item each (stages 6 to
+  # 205). Opening a stage's menu draws nothing else again and moves nothing on the page. The entries of
+  # an idle planned stage, in their groups; a refused entry is dimmed, its reason in its tooltip only.
+  # Stage 2 "Tonight" holds the running #16 and #15 waiting at a gate, so it cannot be removed.
+  # Assumption: the confirm dialog's button is "Remove", and the removed stage's issues stay open in the
+  # Backlog (only the roadmap forgets them).
+
+  @issue-748
+  Scenario: On a long roadmap a stage's ⋮ menu opens at once in place, its entries grouped, "Remove from roadmap" last
+    Given the app is open
+    And the roadmap ends with 200 planned stages of one item each
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I scroll the roadmap down to stage 150
+    And I note the roadmap's scroll position and where stage 150 is on the screen
+    And I open the stage actions menu of stage 150
+    Then the stage actions menu of stage 150 is open
+    And stage 150 was not drawn again
+    And the roadmap has not scrolled and stage 150 has not moved on the screen
+    And the stage actions menu shows these groups of entries, divided by lines:
+      | Disable, Run this stage      |
+      | Stop when finished, Stop now |
+      | Release after this stage     |
+      | Move up, Move down           |
+      | Add note                     |
+      | Remove from roadmap          |
+    And the stage actions menu shows no explanation line
+    And the stage actions menu does not offer "Move on from this stage"
+    And the stage actions menu ends with "Remove from roadmap", shown as a dangerous action
+
+  @issue-748
+  Scenario: Remove from roadmap asks first naming the stage and its items, then takes them off the roadmap, the issues kept
+    Given the app is open
+    And the backlog has the open issues "Tidy the settings page" and "Rename the export button"
+    And the roadmap ends with a planned stage "Cleanup" holding the issues "Tidy the settings page" and "Rename the export button"
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 6
+    And I choose "Remove from roadmap" in the stage actions menu
+    Then the confirm dialog asks "Remove stage 6 and its 2 items from the roadmap?"
+    When I press "Remove" in the confirm dialog
+    Then stage 6 is not shown
+    And the roadmap no longer shows the item "Tidy the settings page"
+    And the roadmap no longer shows the item "Rename the export button"
+    When I open "Backlog" in the sidebar
+    And I open the Board as a list
+    Then the list shows the issue "Tidy the settings page"
+    And the list shows the issue "Rename the export button"
+
+  @issue-748
+  Scenario: Remove from roadmap is refused on a stage whose item runs, its reason in the tooltip only
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Keyboard focus is lost after closing a dialog" shows a run chip reading "Running"
+    When I open the stage actions menu of stage 2
+    Then the stage actions menu entry "Remove from roadmap" is refused, with its reason in its tooltip only
+    And the stage actions menu shows no explanation line
+    When I try "Remove from roadmap" in the stage actions menu
+    Then no confirm dialog opens
+    And stage 2 is the stage "Tonight"
+    And the roadmap shows the item "Keyboard focus is lost after closing a dialog"

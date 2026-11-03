@@ -27,7 +27,8 @@ When('I draw a cut line {string} after stage {int}', async ({ e2e }, name, n) =>
   await expect(stage, `the roadmap's stage ${n}`).toBeVisible();
   // #282: the stage's actions are in its ⋮ menu
   await stage.getByTestId('roadmap-stage-menu').click();
-  await page.getByRole('menu').getByRole('menuitem', { name: /Release here/ }).click();
+  // #748 renamed the stage menu's entry "Release here" to "Release after this stage"
+  await page.getByRole('menu').getByRole('menuitem', { name: /Release after this stage/ }).click();
   const dialog = page.getByRole('dialog').filter({ has: page.getByRole('textbox', { name: 'Release name' }) });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('textbox', { name: 'Release name' }).fill(name);
@@ -41,7 +42,8 @@ Then('the roadmap shows a cut line {string} between stage {int} and stage {int}'
   const line = cutLines(page).filter({ hasText: name });
   await expect(line).toHaveCount(1);
   await expect(line).toBeVisible();
-  await expect(line).toContainText('Release here');
+  // #748: the cut line's own label may follow the stage menu's new name, or keep its own
+  await expect(line).toContainText(/Release here|Release after this stage/);
   const handle = await line.elementHandle();
   const before = await stages(page).nth(a - 1).elementHandle();
   const after = await stages(page).nth(b - 1).elementHandle();
@@ -395,7 +397,7 @@ Then('the roadmap shows the cut line {string} right after stage {int}', async ({
   const page = e2e.window;
   const line = cutLine(page, name);
   await expect(line).toHaveCount(1, { timeout: LOAD_TIMEOUT });
-  await expect(line).toContainText('Release here');
+  await expect(line).toContainText(/Release here|Release after this stage/);
   const before = await line.evaluate((el) => {
     const shown = Array.from(document.querySelectorAll('[data-testid="roadmap-stage"]'))
       .filter((s) => s.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
