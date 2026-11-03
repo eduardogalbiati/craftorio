@@ -17,7 +17,14 @@ const onboardingUnfinished = (p) => p.onboarding?.finished === false;
 async function refreshProjects() {
   state.projects = await api.listProjects();
   window.CurrentProject.refresh();
+  renderProjects();
+}
+
+// Draws the cards from state.projects; the wizard (project-wizard.js) asks for it when it changes the
+// list while the screen is open (a project it created, its onboarding closed or finished)
+function renderProjects() {
   const box = $('#projects-list');
+  if (!box) return;
   if (!state.projects.length) {
     box.innerHTML = `<div class="empty-state" data-testid="projects-empty"><b>${t('projects.no_projects_yet')}</b><p class="muted">${t('projects.create_a_project_that_points_to')}</p><button class="btn primary" id="empty-new-project">${t('projects.new_project')}</button></div>`;
     $('#empty-new-project').onclick = () => window.ProjectWizard.open();
@@ -69,6 +76,10 @@ function showProjects() {
   showView('projects');
 }
 window.Actions.register('showProjects', showProjects);
+window.ProjectsView = {
+  refresh: refreshProjects,
+  render: renderProjects,
+};
 
 registerView({
   id: 'projects',

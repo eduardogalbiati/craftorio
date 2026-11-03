@@ -953,6 +953,8 @@
   function close() {
     cur = null;
     tray.refresh(); // #724: back with what still needs attention
+    // #741: the open Projects screen reads its cards again (an onboarding closed before Finish reads "not finished")
+    if (state.view === 'projects') window.ProjectsView?.refresh?.().catch(() => {});
     if (!root) return;
     root.hidden = true;
     root.innerHTML = '';
@@ -976,6 +978,7 @@
     const fresh = list.find((p) => p.id === ev.projectId);
     if (fresh && state.pv?.id === fresh.id && state.pv.project) state.pv.project = { ...state.pv.project, ...fresh };
     window.CurrentProject?.refresh?.();
+    if (state.view === 'projects') window.ProjectsView?.render?.(); // the open Projects screen draws its cards again
   }
 
   if (typeof window.api?.onOnboardingChanged === 'function') {
