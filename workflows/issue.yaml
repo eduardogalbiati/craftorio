@@ -11,7 +11,7 @@
 # answers the gate for them. In auto, a draft that found a duplicate (`existing_issue` not 0) still
 # stops at the review (nothing is added to an existing issue without the owner), no missing label is
 # created (the filer files with the existing labels and lists the skipped ones in its summary), and
-# nothing is queued for `assign_workflow` (queueing stays a choice at the gate).
+# nothing is planned for `assign_workflow` (planning stays a choice at the gate).
 #
 # Intake: the inputs. `request` is free text in any language (the owner's few words); the
 # project, the platform, optional files (screenshots, logs) and an optional "related to #n".
@@ -26,18 +26,19 @@
 #             evidence, the owner's decisions verbatim, tasks as acceptance criteria, labels.
 #             Independent parts become several cross-linked issues.
 # 3. review:  you see the scores, the grouping advice and the draft(s), and pick: create, create
-#             and queue a workflow now, revise (your note goes back to the writer), add to an
+#             and plan a workflow in the roadmap, revise (your note goes back to the writer), add to an
 #             existing issue instead, or discard.
 # 4. file:    the issue filer (gh/glab only) creates the issue(s) or comments on/edits the
 #             existing one, with the labels, and reports the URLs. Missing impact/complexity/kind/
 #             area labels are created only here, after your choice at the gate: no agent before
 #             the gate can create anything (in auto, none is created).
 #
-# "Create and queue" (`create_assign`): the choice's `then` (#134) chains the run to a queue: when it
-# ends with success, the app syncs the project's Backlog and queues the created issues (the `issues`
-# output) for `assign_workflow` (packages/engine/service/areas/chain.js, chain-model queueBatches), as one run
-# when there are several and the analysis said `group`. Simulated runs
-# queue nothing. The Backlog's New issue button starts this workflow for the selected project.
+# "Create and plan" (`create_assign`): the choice's `then` (#134) chains the run to the roadmap (#446;
+# the target's id stays `queue`): when it ends with success, the app syncs the project's Backlog and
+# plans the created issues (the `issues` output) for `assign_workflow` in a new roadmap stage at the end
+# (packages/engine/service/areas/chain.js, chain-model queueBatches), one item per run, grouped when
+# the analysis said `group`. Nothing starts: the owner runs the stage. Simulated runs plan simulated
+# items. The Backlog's New issue button starts this workflow for the selected project.
 # Epics (#138): the analyzer names the existing epic the issue belongs to (`epic`). When the match is
 # `clear` and the project's "Auto-place new issues" option (project.autoEpic) is on, the app places
 # the created issues in it when the run ends (packages/engine/domains/backlog/epics.js filedToEpic, the service's
@@ -110,7 +111,7 @@ inputs:
     label: "Workflow to assign"
     type: string
     default: software-development.yaml
-    description: "Workflow the new issues are queued for when you pick \"Create and queue\" at the review (grouped in one run when the analysis advises it)."
+    description: "Workflow the new issues are planned for in the roadmap when you pick \"Create and plan\" at the review (grouped in one run when the analysis advises it)."
 
 # -----------------------------------------------------------------------------
 providers:
@@ -424,7 +425,7 @@ steps:
       Files to change (estimate): {{ steps.analyze.output.files_count }}. Grouping: {{ steps.analyze.output.grouping }} ({{ steps.analyze.output.grouping_reason }}).
       {% for d in steps.analyze.output.duplicates %}Possible {{ d.relation }}: #{{ d.number }} {{ d.title }} ({{ d.state }}).
       {% endfor %}{% for p in steps.analyze.output.in_flight %}Open PR/MR #{{ p.number }} already covers: {{ p.covers }}.
-      {% endfor %}{% for n in steps.analyze.output.nearby %}Nearby #{{ n.number }} ({{ n.advice }}): {{ n.reason }}{% if steps.analyze.output.grouping == 'group' and n.advice == 'group_with' %} - "Create and queue" runs it grouped with the new issue(s), up to the Backlog's group size (Settings › General › Backlog).{% endif %}
+      {% endfor %}{% for n in steps.analyze.output.nearby %}Nearby #{{ n.number }} ({{ n.advice }}): {{ n.reason }}{% if steps.analyze.output.grouping == 'group' and n.advice == 'group_with' %} - "Create and plan" plans it grouped with the new issue(s), up to the Backlog's group size (Settings › General › Backlog).{% endif %}
       {% endfor %}{% if steps.analyze.output.epic.id %}Epic: {{ steps.analyze.output.epic.id }} {{ steps.analyze.output.epic.title }} ({{ steps.analyze.output.epic.match }} match: {{ steps.analyze.output.epic.reason }}).{% if steps.analyze.output.epic.match == 'clear' %} Created issues join it when the project's "Auto-place new issues" option is on (Backlog › Epics).{% endif %}
       {% endif %}
       {{ steps.write.output.message }}
@@ -439,7 +440,7 @@ steps:
       {% endif %}What do you want to do?
     choices:
       - { id: create,        label: "Create {% if steps.write.output.issues | length > 1 %}the {{ steps.write.output.issues | length }} issues{% else %}the issue{% endif %}" }
-      - { id: create_assign, label: "Create and queue {{ inputs.assign_workflow }} now (Backlog)", then: { action: queue, workflow: "{{ inputs.assign_workflow }}" } }
+      - { id: create_assign, label: "Create and plan {{ inputs.assign_workflow }} (Roadmap)", then: { action: queue, workflow: "{{ inputs.assign_workflow }}" } }
       - { id: revise,        label: "Revise: send my note to the writer", feedback_required: true }
       - { id: add_to,        label: "Add to {% if steps.write.output.existing_issue %}#{{ steps.write.output.existing_issue }}{% else %}an existing issue (#n in your note){% endif %} instead" }
       - { id: discard,       label: "Discard" }

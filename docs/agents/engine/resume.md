@@ -56,8 +56,7 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   `cost_not_recorded`), its ephemeral session closes, and that agent's next turn of the step gets
   the `<previous_attempt>` block (factor 9) after its prompt. A persistent session continues on the
   account that opened it (#312); an account gone since leaves it behind and the agent starts from its
-  handoff note. A run the Backlog queue started (`workflow.started.from_queue`) still pauses the
-  queue when it fails after a recovery (#445). A run that cannot start again (a busy slot, low
+  handoff note. A run that cannot start again (a busy slot, low
   memory, the budget) gives `owner.json` back, stays `interrupted` and is reported at once. Never a second copy: a run another live
   process owns is left (#112); the process claims `owner.json` in the same tick as the check, so a
   second service started next sees it alive. Not recovered: real runs under

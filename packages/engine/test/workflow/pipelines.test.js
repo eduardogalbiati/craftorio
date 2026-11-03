@@ -112,7 +112,7 @@ test('validatePipeline: a product_owner/queue stage needs the previous workflow 
   const p1 = pipelines.parsePipeline({ name: 'P', stages: [{ workflow: 'a.yaml' }, { target: 'product_owner' }] }, 'p.yaml');
   assert.throws(() => pipelines.validatePipeline(p1, () => wf({}, {})), /declares no "issues" or "issue" output to place in the roadmap/);
   const p2 = pipelines.parsePipeline({ name: 'P', stages: [{ workflow: 'a.yaml' }, { target: 'queue', workflow: 'b.yaml' }] }, 'p.yaml');
-  assert.throws(() => pipelines.validatePipeline(p2, () => wf({}, {})), /declares no "issues" or "issue" output to queue/);
+  assert.throws(() => pipelines.validatePipeline(p2, () => wf({}, {})), /declares no "issues" or "issue" output to plan for a workflow/); // #446: the roadmap
 });
 
 test('validatePipeline: without a map, the Start drawer\'s default mapping is used', () => {

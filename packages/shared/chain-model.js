@@ -6,7 +6,9 @@
 // A `then` is one of
 //   { action: 'workflow', workflow: '<file>', map: { <next input>: <source> }, inputs: { <next input>: value } }
 //   { action: 'product_owner' }                 the PO places the produced issues in the roadmap (planned)
-//   { action: 'queue', workflow: '<file>', inputs } the produced issues are queued (the Backlog's Assign)
+//   { action: 'queue', workflow: '<file>', inputs } the produced issues are planned for the workflow
+//                                               in a new roadmap stage at the end, as the Backlog's
+//                                               Assign does (#446: the id stays 'queue' for older chains)
 // A source is the name of one of the previous run's declared `outputs:`, or RUN_SOURCE (the previous
 // run itself, for a `type: run` input). Nothing (`action: 'none'`, or no then) is null.
 // A saved pipeline (#135, packages/engine/domains/workflow/pipelines.js) is the same chain, longer: a `workflow` then carries the
@@ -19,7 +21,7 @@
   const ACTION_LABELS = {
     none: 'Nothing',
     product_owner: 'Ask the Product Owner to place it in the roadmap',
-    queue: 'Queue the issues (Backlog)',
+    queue: 'Plan the issues (Roadmap)',
     workflow: 'Start a workflow with it',
   };
   const RUN_SOURCE = '@run';
@@ -177,7 +179,7 @@
 
   /**
    * The assign calls a `queue` then makes with the produced issues, as the issue tracker's "Create
-   * and queue" always did: one assign of every issue (each its own run), or, when the analysis
+   * and plan" does (one roadmap item per batch, #446): one assign of every issue (each its own run), or, when the analysis
    * advised grouping (an issue's `grouping: 'group'`), group runs where the open issues it advised to
    * group with (`group_with`) fill the room the produced ones leave, at most `maxGroup` issues per run
    * (created issues beyond it go in further groups).
@@ -252,7 +254,7 @@
     if (!then) return '';
     if (then.action === 'product_owner') return 'Product Owner (roadmap)';
     const name = fileOf(then.workflow).replace(/\.ya?ml$/i, '');
-    return then.action === 'queue' ? `queue for ${name}` : name;
+    return then.action === 'queue' ? `plan for ${name}` : name;
   }
 
   const CHAIN_STATES = {
@@ -300,7 +302,7 @@
     return { ...(chain || {}), then: then || null, state: then ? 'waiting' : undefined };
   }
 
-  const STAGE_TARGETS = { product_owner: 'Product Owner (roadmap)', queue: 'Queue (Backlog)' };
+  const STAGE_TARGETS = { product_owner: 'Product Owner (roadmap)', queue: 'Plan (Roadmap)' };
 
   /**
    * A pipeline's stages as a strip (#135): the Start drawer and the Assign dialog before it starts
@@ -312,7 +314,7 @@
   function pipelineStagesHtml(p, { names = {}, runs = null, current = -1 } = {}) {
     const stages = p?.stages || [];
     return `<ol class="pipe-strip">${stages.map((s, i) => {
-      const label = s.target && s.target !== 'workflow' && s.target !== 'queue' ? STAGE_TARGETS[s.target] : `${s.target === 'queue' ? 'Queue for ' : ''}${names[s.workflow] || fileOf(s.workflow).replace(/\.ya?ml$/i, '')}`;
+      const label = s.target && s.target !== 'workflow' && s.target !== 'queue' ? STAGE_TARGETS[s.target] : `${s.target === 'queue' ? 'Plan for ' : ''}${names[s.workflow] || fileOf(s.workflow).replace(/\.ya?ml$/i, '')}`;
       const map = i ? Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(`Input "${input}" ← output "${output}" of the previous stage`)}">${esc(output === RUN_SOURCE ? 'the run' : output)} → ${esc(input)}</span>`).join('') : '';
       const fixed = Object.entries(s.inputs || {}).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n');
       const run = runs?.[i];

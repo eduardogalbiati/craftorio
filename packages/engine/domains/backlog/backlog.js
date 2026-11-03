@@ -4,22 +4,20 @@
 // Bitbucket is a choice in Settings but has no sync yet (no official CLI).
 // `linkRuns` ties runs to issues (`run.issues` recorded by the engine, `run.issue` for older runs,
 // else task/inputs mentioning the URL or `#n`, mock runs excluded; `groupedWith` = the other issues
-// of the same run or queued group) and picks the kanban column (todo / in_progress / waiting / local
-// / done; done = closed on the platform). Simulated (mock) runs and queue items are listed but never
-// move the column: it comes from the newest real run and the real queue items. Each sync also reads the open PRs/MRs
-// (`fetchOpenPullRequests`, `referencedIssues`) into `issue.pullRequests`. Assigning a workflow
-// queues issues (the index's queue tables, packages/engine/domains/workspace/store.js, snapshotted to `<id>.queue.json`) (`enqueue`, `group: true` = one item with `issues` for one run,
-// `itemIssues`, `unqueue`, `runInputs` builds one task listing every issue of a group; before a real
-// start `newPullRequests` and `skipQueued`); the service's `dispatchQueue` starts queued issues while
-// there are free run slots (`claimQueued`: atomic with the index). Column `local`: an open issue whose latest run merged
+// of the same run) and picks the kanban column (todo / in_progress / waiting / local / done; done =
+// closed on the platform). Simulated (mock) runs are listed but never move the column: it comes from
+// the newest real run. Each sync also reads the open PRs/MRs (`fetchOpenPullRequests`,
+// `referencedIssues`) into `issue.pullRequests`. Assigning a workflow plans the issues in the roadmap
+// (#446: the plain queue is retired; packages/engine/service/areas/backlog.js assignWorkflow); `itemIssues`
+// and `runInputs` (one task listing every issue of a group) serve its items. Column `local`: an open issue whose latest run merged
 // locally while its commit is not on origin (`readLocal`/`writeLocal`: `<id>.local.json`).
 // Write & Review runs started from an issue (`enrich` on the linked run) never move its column; their
 // accepted document can be saved back to the issue (`saveRunToIssue`: replace the description or comment).
-// An issue-tracker run whose owner chose "create and queue" is chained to a queue (#134): the service
-// (packages/engine/service/areas/chain.js) syncs the backlog and assigns its `issues` output when the run ends.
+// An issue-tracker run whose owner chose "create and plan" is chained to the roadmap (#134, #446): the service
+// (packages/engine/service/areas/chain.js) syncs the backlog and plans its `issues` output when the run ends.
 // Each sync also reads the epics (#138, packages/engine/domains/backlog/epics.js readEpics): `issue.epic` and the cache's `epics`.
-// The platform is the source of truth (#168): queue and roadmap items keep a read-only copy of their
-// issues, refreshed by each sync (`refreshQueuedCopies`) and read again right before a run starts
+// The platform is the source of truth (#168): roadmap items keep a read-only copy of their
+// issues, refreshed by each sync (`refreshCopies`) and read again right before a run starts
 // (`freshIssues`, with the cache as a recorded fallback when the platform cannot be read).
 // Archive (#238): `archiveIssues` closes issues as not planned with the `archived` label (guards:
 // packages/shared/backlog-archive.js), `restoreIssues` reopens them.
@@ -51,8 +49,6 @@ const {
   withSyncedText,
 } = require('./issues');
 const { refreshCopies } = require('../roadmap/roadmap');
-const { writeJsonSafe } = require('../workspace/state-file');
-const { storeFor } = require('../workspace/store');
 const TimeZone = require('../analytics/time-zone');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('@multiagent/shared/backlog-archive');
 const { namesOf } = require('@multiagent/shared/default-workflow');
@@ -156,7 +152,6 @@ async function syncBacklog({ dir, project, platform: asked, exec }) {
   // the planned items not started yet show (and the Product Owner reads) the current text (#168);
   // a plan that cannot be written leaves the sync done
   try {
-    refreshQueuedCopies(dir, project.id, issues);
     refreshCopies(dir, project.id, issues);
   } catch (e) { console.error('planned issue copies:', e.message); }
   return data;
@@ -185,13 +180,12 @@ function notPushed(issue, run, local) {
   return (local.issues || []).includes(issue.number) || (local.commits || []).some((c) => c.sha === run.localMerge.commit);
 }
 
-// Kanban column from the issue state, a real queue item for it, its latest real run and the project's
+// Kanban column from the issue state, its latest real run and the project's
 // local commits not pushed yet (localStatus in packages/engine/domains/local/local-push.js). Done = closed on the platform,
 // only: an open issue whose run succeeded (a PR not merged yet, a push the platform hasn't seen)
 // stays in progress until a sync reports it closed.
-function columnOf(issue, latest, queued, local) {
+function columnOf(issue, latest, local) {
   if (issue.state === 'closed') return 'done';
-  if (queued) return 'in_progress';
   if (!latest) return 'todo';
   if (latest.waiting) return 'waiting';
   if (latest.status === 'success') return notPushed(issue, latest, local) ? 'local' : 'in_progress';
@@ -200,17 +194,15 @@ function columnOf(issue, latest, queued, local) {
 }
 
 /**
- * Adds to each issue the project's runs that work on it (newest first), its place in the queue
- * and its column: todo | in_progress | waiting (a run stopped at a human gate) | local (merged
- * into the local base, not pushed yet) | done.
+ * Adds to each issue the project's runs that work on it (newest first) and its column: todo |
+ * in_progress | waiting (a run stopped at a human gate) | local (merged into the local base, not
+ * pushed yet) | done.
  * @param {object[]} issues from fetchIssues
  * @param {{ runId, workflow, status, startedAt, mock?, waiting?, issue?, task?, inputs?, localMerge?, recovery? }[]} runs the project's runs
- * @param {{ items: object[] } | null} queue the project's queue (readQueue)
  * @param {{ commits: { sha }[], issues: number[], error? } | null} local the project's commits not pushed (readLocal)
  */
-function linkRuns(issues, runs, queue = null, local = null) {
+function linkRuns(issues, runs, local = null) {
   const sorted = [...runs].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
-  const items = queue?.items || [];
   return issues.map((issue) => {
     const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && !ISSUE_WORKFLOWS.includes(r.workflow) &&!runIssues(r).length && mentions(r, issue)))
       .map((r) => {
@@ -228,14 +220,8 @@ function linkRuns(issues, runs, queue = null, local = null) {
           ...(ENRICH_WORKFLOWS.includes(r.workflow) ? { enrich: true } : {}),
         };
       });
-    const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));
-    const others = at < 0 ? [] : itemIssues(items[at]).map((x) => x.number).filter((n) => n !== issue.number);
-    const queued = at < 0 ? null : {
-      position: at + 1, workflow: items[at].workflowName || items[at].workflow, mock: !!items[at].mock, ...(others.length ? { groupedWith: others } : {}),
-    };
-    // simulations stay in the issue's history (and keep their queued badge) but never decide its column
-    const realQueued = items.some((q) => !q.mock && itemIssues(q).some((x) => x.number === issue.number));
-    return { ...issue, runs: linked, queued, column: columnOf(issue, linked.find((r) => !r.mock && !r.enrich), realQueued, local) };
+    // simulations stay in the issue's history but never decide its column
+    return { ...issue, runs: linked, column: columnOf(issue, linked.find((r) => !r.mock && !r.enrich), local) };
   });
 }
 
@@ -252,228 +238,6 @@ function writeLocal(dir, projectId, status) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(localFile(dir, projectId), JSON.stringify(status, null, 2));
   return status;
-}
-
-// ---- queue -----------------------------------------------------------------------------------
-// Issues assigned to a workflow wait in <workspace>/backlog/<project id>.queue.json until the
-// service starts them while there are free run slots (Settings › Execution › Concurrent runs; one at
-// a time by default): { paused, error, inputs: { <workflow file>: inputs }, items, skipped }.
-// An item is one run: one issue ({ number, url, title, body, knownPullRequests, ... }), or a group
-// sent as a single run (one branch, one PR/MR), which also has `issues`: the same fields per issue,
-// in the order selected; its number/url/title are the first issue's.
-// `skipped` lists the issues taken out right before their start, with the reason (an open PR/MR).
-// With the service's index open (packages/engine/domains/workspace/store.js, #76) the queue lives in its tables: each change is
-// one transaction and the file is only a readable snapshot written under that lock; without it
-// (scripts, unit tests) the file is the queue.
-const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
-const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [], skipped: [] });
-const MAX_SKIPPED = 20;
-
-function readQueue(dir, projectId) {
-  const store = storeFor(dir);
-  if (store) return withoutStalePause({ ...emptyQueue(), ...(store.readQueue(path.basename(String(projectId))) || {}) });
-  try { return withoutStalePause({ ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }); } catch { return emptyQueue(); }
-}
-
-// #445: a run's failure pauses the queue with `reason` { key, values: { issues } } (drawn in the
-// interface language); before, `error` held the English sentence, still recognised here
-const QUEUE_FAILED = 'backlog.queue_failed';
-const LEGACY_FAILED = / failed: resume to start the next issues\.$/;
-const failureIssues = (q) => (q.reason?.key === QUEUE_FAILED ? (q.reason.values?.issues || []).map(Number)
-  : LEGACY_FAILED.test(q.error || '') ? (q.error.match(/#(\d+)/g) || []).map((s) => +s.slice(1)) : null);
-
-// A pause by a failure does not outlive its cause: an empty queue, or every issue it names done
-// (`done(number)`), is not paused (#445). A pause by hand or by a start that failed stays.
-function withoutStalePause(q, done = () => false) {
-  const issues = q.paused ? failureIssues(q) : null;
-  if (!issues || (q.items.length && !(issues.length && issues.every(done)))) return q;
-  const { reason: _reason, ...rest } = q;
-  return { ...rest, paused: false, error: null };
-}
-
-// What a queue must look like (#112: a write that breaks it is refused, packages/engine/domains/workspace/state-file.js).
-function queueProblem(q) {
-  if (!q || typeof q !== 'object') return 'not an object';
-  if (!Array.isArray(q.items)) return 'items is not a list';
-  if (q.skipped && !Array.isArray(q.skipped)) return 'skipped is not a list';
-  const bad = q.items.find((x) => !x || !x.workflow || !Number.isInteger(Number(x.number)));
-  return bad ? `an item has no workflow or issue number: ${JSON.stringify(bad).slice(0, 120)}` : null;
-}
-
-// atomic, with the previous version kept as .bak (packages/engine/domains/workspace/state-file.js)
-function writeQueueFile(dir, projectId, queue) {
-  return writeJsonSafe(queueFile(dir, projectId), queue, { validate: queueProblem });
-}
-
-function writeQueue(dir, projectId, queue) {
-  const problem = queueProblem(queue);
-  if (problem) writeQueueFile(dir, projectId, queue); // refused, logged and thrown before the index changes
-  const store = storeFor(dir);
-  if (!store) return writeQueueFile(dir, projectId, queue);
-  return store.transaction(() => {
-    store.writeQueue(path.basename(String(projectId)), queue);
-    return writeQueueFile(dir, projectId, queue);
-  });
-}
-
-// read, change and write in one transaction (with the index): a concurrent change waits for it
-function updateQueue(dir, projectId, fn) {
-  const apply = () => writeQueue(dir, projectId, withoutStalePause(fn(readQueue(dir, projectId)) || readQueue(dir, projectId)));
-  const store = storeFor(dir);
-  return store ? store.transaction(apply) : apply();
-}
-
-// An item with these issues: a group while it has two or more, a single issue otherwise.
-function withIssues(item, issues) {
-  const { issues: _old, ...rest } = item;
-  return { ...rest, ...issueFields(issues[0]), ...(issues.length > 1 ? { issues } : {}) };
-}
-
-// addedAt of an assignment: strictly increasing, so nextQueued's "oldest first" across projects
-// never ties (two assignments in the same millisecond would fall back to the folder listing order).
-let lastStamp = 0;
-function queueStamp() {
-  lastStamp = Math.max(Date.now(), lastStamp + 1);
-  return new Date(lastStamp).toISOString();
-}
-
-/**
- * Queues issues for a workflow and remembers the inputs used for it in this project. Issues
- * already queued are skipped. Assigning resumes a paused queue. The open PRs/MRs an issue has when
- * it is assigned were accepted by the user ("assign anyway"): only newer ones skip it later.
- * `group`: the issues go as one item (one run, one branch, one PR/MR), in the order given.
- * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean, group?: boolean }} a
- */
-// then: what happens with each run's result when it finishes (#134, chain-model), given to its start
-// agentOverrides (#262): the provider / model / effort per agent chosen for these runs (run:start's)
-function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false, then = null, agentOverrides = null }) {
-  return updateQueue(dir, projectId, (q) => {
-    const have = new Set(q.items.flatMap((x) => itemIssues(x).map((i) => i.number)));
-    const now = queueStamp();
-    const fresh = issues.filter((i) => !have.has(i.number))
-      .map((i) => issueFields({ ...i, knownPullRequests: (i.pullRequests || []).map((p) => p.url) }));
-    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now, ...(then ? { then } : {}), ...(agentOverrides && Object.keys(agentOverrides).length ? { agentOverrides } : {}) };
-    const added = !fresh.length ? [] : group ? [withIssues(base, fresh)] : fresh.map((i) => withIssues(base, [i]));
-    const numbers = new Set(fresh.map((x) => x.number));
-    return {
-      ...q, paused: false, error: null, inputs: { ...q.inputs, [workflow]: inputs }, items: [...q.items, ...added],
-      skipped: (q.skipped || []).filter((s) => !numbers.has(s.number)),
-    };
-  });
-}
-
-// The queue items without one issue: a group loses that issue (and ends when none is left), or
-// with `whole`, the item holding it is taken out with all its issues.
-function withoutIssue(items, number, whole = false) {
-  return items.flatMap((x) => {
-    const issues = itemIssues(x);
-    if (!issues.some((i) => i.number === number)) return [x];
-    const left = issues.filter((i) => i.number !== number);
-    return whole || !left.length ? [] : [withIssues(x, left)];
-  });
-}
-
-/**
- * Takes an issue out of the queue (and out of the skipped list). An issue of a group leaves the
- * group, whose other issues stay queued; `cancelGroup` takes the whole group out instead.
- */
-function unqueue(dir, projectId, number, { cancelGroup = false } = {}) {
-  return updateQueue(dir, projectId, (q) => ({ ...q, items: withoutIssue(q.items, number, cancelGroup), skipped: (q.skipped || []).filter((s) => s.number !== number) }));
-}
-
-/** Takes a queued issue out right before its start and records why (shown by the queue); the rest of its group stays. */
-function skipQueued(dir, projectId, number, reason) {
-  return updateQueue(dir, projectId, (q) => {
-    const issue = q.items.flatMap(itemIssues).find((i) => i.number === number);
-    if (!issue) return q;
-    const entry = { number, title: issue.title, url: issue.url, reason, at: new Date().toISOString() };
-    return { ...q, items: withoutIssue(q.items, number), skipped: [...(q.skipped || []).filter((s) => s.number !== number), entry].slice(-MAX_SKIPPED) };
-  });
-}
-
-/**
- * The open PRs/MRs of a queued issue that were not there when it was assigned (checked again right
- * before it starts). A check that fails lets the issue start: the last sync had none new either.
- * For a group, each PR/MR carries `issue`: the number of the group's issue it refers to.
- */
-async function newPullRequests({ item, platform, repo, exec }) {
-  let prs;
-  try { prs = await fetchOpenPullRequests({ platform, repo, exec }); } catch { return []; }
-  const issues = itemIssues(item);
-  return issues.flatMap((issue) => {
-    const known = new Set(issue.knownPullRequests || []);
-    return prs.filter((p) => p.issues.includes(issue.number) && !known.has(p.url))
-      .map(({ number, title, url, draft }) => ({ number, title, url, draft, ...(issues.length > 1 ? { issue: issue.number } : {}) }));
-  });
-}
-
-// `reason` (#445): a pause drawn in the interface language, { key, values }, instead of `error`
-function setPaused(dir, projectId, paused, error = null, reason = null) {
-  return updateQueue(dir, projectId, ({ reason: _old, ...q }) => ({ ...q, paused: !!paused, error: paused ? error : null, ...(paused && reason ? { reason } : {}) }));
-}
-
-/** #445: a run of the queue's own failed: its issues pause the queue (none when nothing waits). */
-function pauseForFailure(dir, projectId, numbers) {
-  return setPaused(dir, projectId, true, null, { key: QUEUE_FAILED, values: { issues: numbers.map(Number) } });
-}
-
-/** #445: the pause of a failure ends once each issue it names is done (`done(number)`). */
-function clearDonePause(dir, projectId, done) {
-  const q = readQueue(dir, projectId);
-  if (withoutStalePause(q, done) !== q) updateQueue(dir, projectId, (cur) => withoutStalePause(cur, done));
-}
-
-// Project ids with a queue (rows of the index, else queue files).
-function queuedProjects(dir) {
-  const store = storeFor(dir);
-  if (store) return store.queuedProjects();
-  try { return fs.readdirSync(dir).filter((f) => f.endsWith('.queue.json')).map((f) => f.slice(0, -'.queue.json'.length)); } catch { return []; }
-}
-
-/**
- * The next item to start: the oldest one across the projects whose queue is not paused, among
- * those `canStart(projectId, item)` accepts (a project at its limit of concurrent runs waits).
- * Items another dispatcher claimed (claimQueued, being started) are passed over.
- */
-function nextQueued(dir, canStart = () => true) {
-  const store = storeFor(dir);
-  const heads = queuedProjects(dir)
-    .map((projectId) => ({ projectId, q: readQueue(dir, projectId) }))
-    .filter(({ q }) => !q.paused && q.items.length)
-    .map(({ projectId, q }) => {
-      const claimed = store ? store.claimedNumbers(projectId) : new Set();
-      return { projectId, item: q.items.find((x) => !claimed.has(x.number)) };
-    })
-    .filter(({ projectId, item }) => item && canStart(projectId, item));
-  heads.sort((a, b) => String(a.item.addedAt).localeCompare(String(b.item.addedAt)));
-  return heads[0] || null;
-}
-
-/**
- * nextQueued, taken atomically: with the index, the item is claimed in the same transaction, so two
- * dispatchers (two windows' services, or a server and the app on one workspace) never take the same
- * issue. The claim ends when the item leaves the queue (unqueue after its start) or releaseQueued.
- */
-function claimQueued(dir, canStart = () => true) {
-  const store = storeFor(dir);
-  if (!store) return nextQueued(dir, canStart);
-  return store.transaction(() => {
-    const next = nextQueued(dir, canStart);
-    if (next) store.claim(next.projectId, next.item.number);
-    return next;
-  });
-}
-
-/** Ends a dispatcher's claim on an item that did not start (it stays queued). */
-function releaseQueued(dir, projectId, number) {
-  storeFor(dir)?.release(path.basename(String(projectId)), number);
-}
-
-/** Pauses every queue with items waiting (the app restarted: nothing starts without the user). */
-function pauseAll(dir, reason) {
-  for (const projectId of queuedProjects(dir)) {
-    updateQueue(dir, projectId, (q) => (q.items.length && !q.paused ? { ...q, paused: true, error: reason } : q));
-  }
 }
 
 // ---- save a document to its issue ------------------------------------------------------------
@@ -648,25 +412,10 @@ async function restoreIssues({ platform, repo, numbers, dir = null, projectId = 
 }
 
 // ---- the platform is the source of truth (#168) ------------------------------------------------
-// Queue and roadmap items keep a read-only copy of their issues (issueFields) for the screen and the
+// Roadmap items keep a read-only copy of their issues (issueFields) for the screen and the
 // Product Owner: every sync brings the copies of the items not started yet up to date
-// (refreshQueuedCopies, roadmap.refreshCopies), and right before a run starts its issues are read
+// (roadmap.refreshCopies), and right before a run starts its issues are read
 // again from the platform (freshIssues). Nothing here writes to the platform.
-
-const copyChanged = (copy, synced) => JSON.stringify(withSyncedText(copy, synced)) !== JSON.stringify(copy);
-
-/**
- * Brings the copies of a project's queued issues up to `issues` (a sync, or a fresh read). Items a
- * dispatcher is starting (claimed) are left as they are, unless `includeClaimed`. Writes only on a change.
- */
-function refreshQueuedCopies(dir, projectId, issues, { includeClaimed = false } = {}) {
-  const known = new Map((issues || []).map((i) => [i.number, i]));
-  const claimed = includeClaimed ? new Set() : storeFor(dir)?.claimedNumbers(projectId) || new Set();
-  const open = (x) => !claimed.has(x.number);
-  if (!readQueue(dir, projectId).items.some((x) => open(x) && itemIssues(x).some((i) => copyChanged(i, known.get(i.number))))) return false;
-  updateQueue(dir, projectId, (q) => ({ ...q, items: q.items.map((x) => (open(x) ? withIssues(x, itemIssues(x).map((i) => withSyncedText(i, known.get(i.number)))) : x)) }));
-  return true;
-}
 
 const clockOf = (iso) => {
   const d = new Date(iso);
@@ -839,7 +588,6 @@ function backlogState(data) {
     startedAt: x.run?.startedAt || null, elapsed: x.run?.startedAt ? (Date.parse(x.run.finishedAt) || Date.now()) - Date.parse(x.run.startedAt) : null,
     ...runOf(x),
   });
-  const queue = data.queue ? { ...data.queue, items: (data.queue.items || []).map(({ body, inputs, issues, ...rest }) => rest) } : null;
   return {
     projectId: data.projectId,
     roadmap: {
@@ -847,7 +595,6 @@ function backlogState(data) {
       shape: r.shape || stagesShape(r.stages),
       stages: (r.stages || []).map((s) => ({ id: s.id, pause: s.pause || null, items: (s.items || []).map(item) })),
     },
-    queue,
     refresh: data.refresh || null,
     baseCheck: data.baseCheck || null,
   };
@@ -856,12 +603,10 @@ function backlogState(data) {
 module.exports = {
   PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOf, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
-  readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
+  runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
   archiveIssues,
   backlogState,
-  claimQueued,
-  clearDonePause,
   cliTarget,
   fetchIssue,
   freshIssues,
@@ -870,12 +615,8 @@ module.exports = {
   issueCreateCommand,
   issueSaveBody,
   issueSaveCommand,
-  pauseForFailure,
-  queuedProjects,
   readIssueSaves,
   recordedIssues,
-  refreshQueuedCopies,
-  releaseQueued,
   repoLabels,
   restoreIssues,
   saveRunToIssue,

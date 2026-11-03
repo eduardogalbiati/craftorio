@@ -273,7 +273,7 @@ test('thenLabel: the words shown on a badge or notice', () => {
   assert.equal(chain.thenLabel(null), '');
   assert.equal(chain.thenLabel(chain.normalizeThen({ action: 'product_owner' })), 'Product Owner (roadmap)');
   assert.equal(chain.thenLabel(chain.normalizeThen({ action: 'workflow', workflow: 'software-development.yaml' })), 'software-development');
-  assert.equal(chain.thenLabel(chain.normalizeThen({ action: 'queue', workflow: 'writer-reviewer.yaml' })), 'queue for writer-reviewer');
+  assert.equal(chain.thenLabel(chain.normalizeThen({ action: 'queue', workflow: 'writer-reviewer.yaml' })), 'plan for writer-reviewer'); // #446: the roadmap
 });
 
 test('chainBadgesHtml: without a chain, nothing; a `then` shows "→ then:", a `from` shows "← from"', () => {

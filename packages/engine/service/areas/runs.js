@@ -1,6 +1,6 @@
 // Service area: the runs in progress. Starts a run (concurrency limits, budgets, the project it
 // belongs to, no second live run of the same issues, #112), records what it emits (events.jsonl,
-// the index, notifications, 'run:event') and reacts as it ends (the Backlog queue, roadmaps, issue
+// the index, notifications, 'run:event') and reacts as it ends (the roadmaps, issue
 // tracker, the run's chain #134). Runs in progress live in `active` by run id (several with Settings › Execution ›
 // Concurrent runs); a run leaves it when it finishes and is read from its folder from then on.
 
@@ -30,7 +30,6 @@ const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../domains/workspace/workspace');
 const projects = require('../../domains/project/projects');
 const workflows = require('../../domains/workflow/workflows');
-const backlog = require('../../domains/backlog/backlog');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const agents = require('../../domains/agents/agents');
 const usage = require('../../domains/usage/usage');
@@ -70,7 +69,7 @@ module.exports = (ctx) => {
   // their usage is not in the baseline of those runs, so the per-turn budget check adds it.
   const budgetAt = new Map();
   let finishedPeers = []; // [{ finishedAt, sessions }]
-  // the queue dispatches scheduled as runs end, cancelled by the service's shutdown (#186)
+  // the roadmap dispatches scheduled as runs end, cancelled by the service's shutdown (#186)
   const dispatchTimers = new Set();
   function stopDispatchTimers() {
     for (const t of dispatchTimers) clearTimeout(t);
@@ -83,7 +82,7 @@ module.exports = (ctx) => {
   // ---- memory guard (#276) --------------------------------------------------------------
   // Settings › Execution › Memory guard configures the app's guard (packages/engine/engine/memory-guard.js) that
   // real runs use. A new real run does not start while free memory is under its floor: the refusal
-  // names the reason like slotProblem, and a timer dispatches the roadmaps and queues again once
+  // names the reason like slotProblem, and a timer dispatches the roadmaps again once
   // memory recovers (they only dispatch at app start, when a run ends and on a screen action).
   let memoryRetry = null;
   function applyMemorySettings() {
@@ -402,7 +401,7 @@ module.exports = (ctx) => {
 
   // recover (#607, areas/recover.js): { runId, events, worktree, personas, owner } a run the app died in,
   // continued in its own folder with its own id; `owner` is its owner.json, already taken over
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, recover = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, fromQueue = false, workspaceWorkflow = false }) {
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, recover = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, workspaceWorkflow = false }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // a resumed run continues that work, a recovered run (#607) is that run
@@ -492,7 +491,6 @@ module.exports = (ctx) => {
         // #378: the Refactor proposals workflow ranks with the Refactor tab's Product Owner (channels/refactor.js)
         refactorPriorityOptions: (projectId) => ctx.refactorPriorityOptions?.(projectId) || null,
       });
-      run.fromQueue = !!fromQueue; // #445: only the queue's own runs pause it (afterRunFinished)
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
         const problems = usage.preflight(run.wf, usage.withPeerUsage(budget, peerSessions(run), settings.prices), resolveCommand, run.inputs);

@@ -155,8 +155,8 @@ module.exports = (ctx) => [
     schema: { params: OPTIONS, result: OBJECT },
     fn: (patch) => {
       const next = workspace.writeSettings(ctx.ws, patch);
-      // a higher limit of concurrent runs frees slots for the Backlog queues
-      if (patch && ('concurrentRuns' in patch || 'machineProfile' in patch)) ctx.dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
+      // a higher limit of concurrent runs frees slots for the roadmaps (#446: the plain queue is retired)
+      if (patch && ('concurrentRuns' in patch || 'machineProfile' in patch)) Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e));
       // the desktop app re-checks Keep awake (#162, apps/desktop/host/main.js)
       ctx.events.emit('settings:changed', next);
       return next;

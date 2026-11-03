@@ -66,7 +66,7 @@ module.exports = (ctx) => {
       try {
         await ctx.startWorkflowRun({
           file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId, issues: spec.issues, agentOverrides: spec.agentOverrides,
-          then: started.then || null, from: started.from || null, fromQueue: !!started.from_queue,
+          then: started.then || null, from: started.from || null,
           recover: { runId: c.runId, events: c.events, worktree: spec.worktree, personas: spec.personas, owner: c.owner },
         });
       } catch (e) {

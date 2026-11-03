@@ -6,7 +6,7 @@
 //   stages: the first one a workflow (its `inputs` are fixed values, the rest asked when it starts);
 //     each next one { workflow, map: { <input>: <output of the previous workflow> | '@run' }, inputs, on }
 //     or a target that ends it: { target: product_owner } (the PO places the produced issues in the
-//     roadmap) or { target: queue, workflow, inputs } (the produced issues are queued for a workflow).
+//     roadmap) or { target: queue, workflow, inputs } (the produced issues are planned for a workflow in a new roadmap stage, #446).
 //     Without `map`, the mapping is the one the Start drawer proposes (chain-model defaultMap).
 //     `on: success` (the default, the only one): a stage that fails or stops pauses the pipeline.
 // It runs as a phase-1 chain: the first stage's run gets a `then` for the second stage with the rest
@@ -30,7 +30,7 @@ const PIPELINE_KIND = WORKFLOW_KIND;
 const TARGETS = ['product_owner', 'queue', 'workflow'];
 const CONDITIONS = ['success'];
 const CATEGORIES = WORKFLOW_CATEGORIES;
-const TARGET_LABELS = { product_owner: 'Product Owner (roadmap)', queue: 'Queue (Backlog)' };
+const TARGET_LABELS = { product_owner: 'Product Owner (roadmap)', queue: 'Plan (Roadmap)' };
 // #648: renamed bundled pipelines. An old name (a saved Assign, a discovery automation) resolves to the
 // new file when the workspace no longer has the old one (service/areas/pipelines.js readPipeline).
 const PIPELINE_ALIASES = {
@@ -125,7 +125,7 @@ function validatePipeline(p, workflowOf) {
     const outs = wfs[i - 1]?.outputs || {};
     const declared = Object.keys(outs).join(', ') || 'none';
     if (s.target === 'product_owner' || s.target === 'queue') {
-      if (!outs.issues && !outs.issue) throw new Error(`${where(s, i)}: ${prev.workflow} declares no "issues" or "issue" output to ${s.target === 'queue' ? 'queue' : 'place in the roadmap'} (its outputs: ${declared}).`);
+      if (!outs.issues && !outs.issue) throw new Error(`${where(s, i)}: ${prev.workflow} declares no "issues" or "issue" output to ${s.target === 'queue' ? 'plan for a workflow' : 'place in the roadmap'} (its outputs: ${declared}).`);
       return { ...s, map: {} };
     }
     const map = s.map || chain.defaultMap(outs, defs);

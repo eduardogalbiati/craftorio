@@ -122,8 +122,7 @@ module.exports = (ctx) => {
     },
     'dispatch.restart': async () => {
       await ctx.dispatchRoadmaps();
-      await ctx.dispatchQueue();
-      return { text: 'The roadmaps and queues were dispatched: the next planned items start when they can.' };
+      return { text: 'The roadmaps were dispatched: the next planned items start when they can.' };
     },
     'issue.file': async (a, { sim }) => {
       const p = a.params;

@@ -401,8 +401,6 @@ class WorkflowRun extends EventEmitter {
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       then: this.then || undefined,
       from: this.from || undefined,
-      // #607: a run the Backlog queue started; recovered, it still pauses the queue when it fails (#445)
-      from_queue: this.fromQueue || undefined,
       parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
