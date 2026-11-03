@@ -10,7 +10,7 @@ Read this before changing anything in the UI: the UI kit (`packages/ui-kit/`), a
 - [The Findings button](renderer/findings.md): Capturing a finding bundle from any screen and reading one (#361).
 - [Interface language](renderer/interface-language.md): Visible text through `t()` (#329), the catalogues, number and date formats, and how to add a language.
 - [Loading and composition](renderer/loading-and-composition.md): How each page's file lists are generated (#152) and how the UI kit, the fronts and an app's page compose (#579).
-- [Terminal buttons on machine steps](renderer/machine-step-terminals.md): Live terminals for suite, e2e, check and screenshots steps (#465) and the base check's card.
+- [Terminal buttons on machine steps](renderer/machine-step-terminals.md): Live terminals for suite, e2e, check and screenshots steps (#465) and the base check's line.
 - [The Oracle's panel and drawer](renderer/oracle.md): The Oracle's states, unread badge, pasted images and memory form (#171).
 - [Page security and shared code](renderer/page-security.md): No bundler, a window that never navigates, sanitized HTML without forms, the IPC guard and the shared dual-load modules.
 - [The new-project wizard](renderer/project-wizard.md): The first project's onboarding: the wizard, its progress tray, the review and the project page's Next steps card (#629).
