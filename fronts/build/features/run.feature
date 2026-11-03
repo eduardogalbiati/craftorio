@@ -1,17 +1,23 @@
 Feature: Runs and gates
   A simulated run of the demo project, started from the Start panel, stops at its human gates.
 
-  @issue-222 @smoke
+  # #759: since #630 the default workflow (feature.yaml) validates automatically ("Validation" is
+  # Automatic by default), so a run stops at a gate only when "Validated" is chosen
+  @issue-222 @issue-759 @smoke
   Scenario: A simulated run starts and reaches a gate
     Given the app is open
-    When I start a simulated run with the task "Add a /health endpoint"
+    When I open the Start panel
+    And I pick "Validated" for "Validation"
+    And I start a simulated run with the task "Add a /health endpoint"
     Then the run is running
     And a gate card waits for my approval
 
-  @issue-222 @smoke
+  @issue-222 @issue-759 @smoke
   Scenario: The gate card shows its summary and its buttons
     Given the app is open
-    When I start a simulated run with the task "Add a /health endpoint"
+    When I open the Start panel
+    And I pick "Validated" for "Validation"
+    And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     And the gate card shows its summary and its buttons
 
