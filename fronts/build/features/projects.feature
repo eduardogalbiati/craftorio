@@ -38,49 +38,9 @@ Feature: Projects, a screen of the menu with a page per project
     Then the project page of "demo-app" is open
     And the project tab "Conflict map" is selected
 
-  # #486: a new project chooses its workflows. Once its folder (or repository) is given, the project
-  # dialog shows a Workflows block: a repository's workflows manifest (.multiagent/project.yaml) checks
-  # its workflows in their categories and asks nothing; without one, the bundled and workspace
-  # workflows by category, none checked, and "Create one for this project". The project's Overview
-  # shows the same block, with the project's default workflow (the first solo or team one checked).
-
-  @issue-486
-  Scenario: Without a workflows manifest, a new project is offered the workflows by category, none checked
-    Given the app is open
-    And a local folder "plain-app" without a workflows manifest
-    When I open "Projects" in the sidebar
-    And I start a new project "plain-app" in the folder "plain-app"
-    Then the project dialog shows a Workflows block
-    And the Workflows block lists "software-development" under "Build", unchecked
-    And no workflow is checked in the Workflows block
-    And every category of the Workflows block has a one-line hint
-    And the Workflows block offers "Create one for this project"
-
-  @issue-486
-  Scenario: A workflow checked when creating a project is checked on the project's Overview
-    Given the app is open
-    And a local folder "plain-app" without a workflows manifest
-    When I open "Projects" in the sidebar
-    And I start a new project "plain-app" in the folder "plain-app"
-    And I check the workflow "software-development" in the Workflows block
-    And I create the project
-    And I open the project "plain-app" from the Projects screen
-    Then the project's Workflows block shows exactly the card "software-development"
-    And the project's Workflows block shows no card "issue-tracker"
-
-  @issue-486
-  Scenario: A repository with a workflows manifest gets its workflows pre-checked in their categories
-    Given the app is open
-    And a local git repository "shop-api" whose workflows manifest lists "software-development" as "solo" and "issue-tracker" as "intake"
-    When I open "Projects" in the sidebar
-    And I start a new project "shop-api" in the folder "shop-api"
-    Then the Workflows block lists "software-development" under "Solo", checked
-    And the Workflows block lists "issue-tracker" under "Intake", checked
-    And the Workflows block does not offer "Create one for this project"
-    When I create the project
-    And I open the project "shop-api" from the Projects screen
-    Then the project's Workflows block shows exactly the cards "software-development" and "issue-tracker"
-    And the workflow card "software-development" has the "Default" badge
+  # #486's scenarios of the project dialog's Create mode (its Workflows block) are gone with that dialog (#741):
+  # creating a project is the new-project wizard only, whose workflows step onboarding.feature covers; the
+  # project's Overview cards are project-workflows-729.feature's.
 
   # #730: a project's page has the tabs Visão geral · Cidade · Saúde · Mapa de conflitos (Overview, City, Health,
   # Conflict map), in this order. The Architecture tab and its Fatos | Cidade switch are gone (the City is a tab

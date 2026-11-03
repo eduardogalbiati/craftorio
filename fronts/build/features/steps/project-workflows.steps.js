@@ -1,9 +1,5 @@
-// Steps of fronts/build/features/projects.feature's @issue-486 scenarios: the "Workflows" block of the project
-// dialog (Create project, once a repository URL or a folder is given) and of a project's Overview.
-// With a workflows manifest in the repository (.multiagent/project.yaml at HEAD, #485) its workflows
-// come pre-checked in their categories and nothing is asked; without one, a picker of the bundled and
-// workspace workflows by category, none checked, a one-line hint per category, and a
-// "Create one for this project" button. The project's default workflow is the first solo/team one checked.
+// Steps of a project's Overview "Workflows" block (#486, #729) and of the Ways of working interview (#487, #733).
+// (#741: the project dialog's Create mode and its #486 steps are gone; creating a project is the wizard only.)
 // Opening Projects and a project's page reuses app.steps.js and projects.steps.js.
 //
 // What the screens expose (the renderer's contract for these steps), skills/ui-conventions:
@@ -26,25 +22,16 @@ const { Given, When, Then } = require('../../../../features/steps/fixtures');
 const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const visible = (locator) => locator.filter({ visible: true });
-// a workflow's checkbox label starts with its name ("software-development", maybe a description after)
-const nameRe = (name) => new RegExp(`^\\s*${escapeRe(name)}(\\s|$)`);
 
 const projectOverview = (page) => visible(page.getByTestId('project-page')).first().getByTestId('project-overview').first();
 const blockIn = (scope) => scope.getByTestId('project-workflows-block').first();
 const overviewBlock = (page) => blockIn(projectOverview(page));
-// #741: the project dialog's Create mode is gone; its #486 steps say so instead of waiting for a dialog
-const createModeGone = () => {
-  throw new Error('#741: the project dialog\'s Create mode (its Workflows block) is gone: creating a project is the new-project wizard only');
-};
-const workflowBox = (scope, name) => scope.getByRole('checkbox', { name: nameRe(name) }).first();
-
-// the scenario's folders, under its scratch folder (the workspace is <scratch>/workspace)
+// the scenario's scratch folder (the workspace is <scratch>/workspace)
 function scratchOf(e2e) {
   const scratch = e2e.scratch || (process.env.MULTIAGENT_WORKSPACE && path.dirname(process.env.MULTIAGENT_WORKSPACE));
   if (!scratch) throw new Error('no scratch folder: open the app first');
   return scratch;
 }
-const folderOf = (e2e, name) => path.join(scratchOf(e2e), 'folders', name);
 
 function git(e2e, cwd, args) {
   const config = path.join(scratchOf(e2e), 'empty.gitconfig');
@@ -53,34 +40,8 @@ function git(e2e, cwd, args) {
   return execFileSync('git', ['-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', '-c', 'core.autocrlf=false', ...args], { cwd, env, encoding: 'utf8' }).trim();
 }
 
-Given('a local folder {string} without a workflows manifest', async ({ e2e }, name) => {
-  const folder = folderOf(e2e, name);
-  fs.mkdirSync(folder, { recursive: true });
-  fs.writeFileSync(path.join(folder, 'README.md'), `# ${name}\n`);
-});
-
-Given('a local git repository {string} whose workflows manifest lists {string} as {string} and {string} as {string}', async ({ e2e }, name, a, catA, b, catB) => {
-  const folder = folderOf(e2e, name);
-  fs.mkdirSync(path.join(folder, '.multiagent'), { recursive: true });
-  fs.writeFileSync(path.join(folder, 'README.md'), `# ${name}\n`);
-  fs.writeFileSync(path.join(folder, '.multiagent', 'project.yaml'),
-    `version: 1\nworkflows:\n  - name: ${a}\n    category: ${catA}\n  - name: ${b}\n    category: ${catB}\n`);
-  git(e2e, folder, ['init', '-q', '-b', 'main']);
-  git(e2e, folder, ['add', '-A']);
-  git(e2e, folder, ['commit', '-q', '-m', 'Declare the workflows']);
-});
-
-// #741: the project dialog's Create mode (and the header selector's way to it) is gone; the #486 scenarios
-// of projects.feature that create a project there fail here with that reason (creating is the wizard only).
-When('I start a new project {string} in the folder {string}', createModeGone);
-Then('the project dialog shows a Workflows block', createModeGone);
-Then('the Workflows block lists {string} under {string}, {word}', createModeGone);
-Then('no workflow is checked in the Workflows block', createModeGone);
-Then('every category of the Workflows block has a one-line hint', createModeGone);
-Then('the Workflows block offers {string}', createModeGone);
-Then('the Workflows block does not offer {string}', createModeGone);
-When('I check the workflow {string} in the Workflows block', createModeGone);
-When('I create the project', createModeGone);
+// #741: the project dialog's Create mode is gone (creating a project is the new-project wizard only), and
+// with it #486's scenarios that created a project there and their steps.
 
 // #729: the Overview's block no longer lists checkboxes; #486's "checked on the Overview" became
 // "a card on the Overview" (steps below: "shows exactly the card(s)", "shows no card", the Default badge).
