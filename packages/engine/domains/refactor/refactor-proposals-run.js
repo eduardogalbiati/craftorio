@@ -113,22 +113,16 @@ function proposeFindings({ wsRoot, projectId, report, costUsd = null, tokens = n
  */
 function fileIntents({ stores, projectId, runId, added }) {
   const intents = [];
+  if (!added.length) return intents;
+  const byId = new Map(proposals.listProposals(stores.refactor, projectId).map((p) => [p.id, p]));
+  const say = (v) => (v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
   for (const { id } of added) {
-    const proposal = proposals.listProposals(stores.refactor, projectId).find((p) => p.id === id);
+    const proposal = byId.get(id);
     if (!proposal) continue;
     const files = filesOf(proposal);
-    const say = (v) => (v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
     const text = [say(proposal.evidence), files.length ? `Files: ${files.join(', ')}` : '', proposal.refactor ? `Refactor: ${say(proposal.refactor)}` : ''].filter(Boolean).join('\n\n');
-    try {
-      const card = discovery.createCard(stores.discovery, projectId, {
-        title: `analyze-project: ${proposal.title}`,
-        text,
-        type: 'intent',
-        author: 'analyze-project',
-        from: { workflow: 'analyze-project', runId, finding: id },
-      });
-      intents.push({ id: card.id, finding: id });
-    } catch { /* a project id that is no plain name, a full disk: the finding stays a Refactor proposal */ }
+    const card = discovery.createIntent(stores.discovery, projectId, { workflow: 'analyze-project', runId, finding: id, title: `analyze-project: ${proposal.title}`, text });
+    if (card) intents.push({ id: card.id, finding: id });
   }
   return intents;
 }

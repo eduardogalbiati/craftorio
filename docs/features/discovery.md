@@ -37,7 +37,8 @@ order: 260
   repository, each starting with `From discovery card <id>` and holding the card's title, its tasks
   and the first 4000 characters of its document. The card keeps the issue numbers in
   `links.issues`, the text of each issue in `filed/`, and the column `committed`: it is in no board
-  column any more and never moves again. A card started from it keeps the link in `links.from`;
+  column any more and never moves again. A card started from it keeps the link in `links.from`
+  (an `intent` filed from a run's finding keeps `{ workflow, runId, finding }` there instead, #633);
   `links.release` is the release that shipped its issues.
   Nothing else under `discovery/` goes to the git platform: the folder carries a `.gitignore` that ignores
   everything, and the screens, the Oracle and agents reach a card only through the card API (the

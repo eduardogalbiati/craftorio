@@ -10,29 +10,22 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
+const { listSkills } = require('../packages/engine/domains/agents/skills');
 
 const ROOT = path.join(__dirname, '..');
 
-function frontmatter(text) {
-  const m = /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (!m) return null;
-  try { return yaml.load(m[1]) || {}; } catch { return null; }
-}
-
+// the skills as the engine reads them (listSkills: the frontmatter of each skills/<id>/SKILL.md)
 function skillEvals(root = ROOT) {
-  const dir = path.join(root, 'skills');
   const names = new Set();
   const failures = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const file = path.join(dir, e.name, 'SKILL.md');
-    if (!e.isDirectory() || !fs.existsSync(file)) continue;
-    names.add(e.name);
-    const meta = frontmatter(fs.readFileSync(file, 'utf8'));
-    const where = `skills/${e.name}/SKILL.md`;
-    if (!meta) { failures.push(`${where}: no frontmatter`); continue; }
-    if (String(meta.name || '') !== e.name) failures.push(`${where}: name "${meta.name || ''}" is not its folder "${e.name}"`);
-    if (!String(meta.description || '').trim()) failures.push(`${where}: no description`);
+  for (const s of listSkills(path.join(root, 'skills'))) {
+    names.add(s.id);
+    const where = `skills/${s.id}/SKILL.md`;
+    if (s.error) { failures.push(`${where}: does not read: ${s.error}`); continue; }
+    // meta.name: the frontmatter's own (listSkills' name falls back to the folder)
+    const name = String(s.meta?.name || '');
+    if (name !== s.id) failures.push(`${where}: name "${name}" is not its folder "${s.id}"`);
+    if (!String(s.description || '').trim()) failures.push(`${where}: no description`);
   }
   return { names, failures };
 }

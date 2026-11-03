@@ -70,13 +70,23 @@
 
   // the sign-off panel: the review and unreviewed pills, the front matter the gate writes (`from` →
   // `to`), the next steps (nothing starts before their own click) and its three answers
-  function signoff({ spec, file, from, to, score, open, pending, message, versions, wait }) {
+  // the gate's words per document (intent, spec, #633 plan): its answer and the next steps
+  const GATE = {
+    intent: { accept: () => t('docs.accept_intent'), next: () => [[t('docs.write_the_spec'), t('docs.next_spec_help')]] },
+    spec: {
+      accept: () => t('docs.sign_off_spec'),
+      next: () => [[t('docs.create_epic_and_phase_issues'), t('docs.next_issues_help')], [t('docs.start_the_build'), t('docs.next_build_help')]],
+    },
+    plan: { accept: () => t('docs.accept_plan'), next: () => [[t('docs.create_epic_and_phase_issues'), t('docs.next_plan_issues_help')], [t('docs.start_the_build'), t('docs.next_plan_build_help')]] },
+  };
+
+  function signoff({ doc, file, from, to, score, open, pending, message, versions, wait }) {
     const today = new Date().toISOString().slice(0, 10);
+    const spec = doc === 'spec';
+    const gate = GATE[doc] || GATE.intent;
     // the front matter's own keys, as the file spells them
     const fm = `status: ${esc(from || 'draft')} → <span class="docs-fm-new">${esc(to || '')}</span> · approver: ${t('docs.your_git_name')} · date: ${today}`; // i18n-ignore
-    const next = spec
-      ? [[t('docs.create_epic_and_phase_issues'), t('docs.next_issues_help')], [t('docs.start_the_build'), t('docs.next_build_help')]]
-      : [[t('docs.write_the_spec'), t('docs.next_spec_help')]];
+    const next = gate.next();
     return `
       <section class="docs-signoff" data-testid="doc-signoff" aria-labelledby="docs-signoff-heading">
         <div class="docs-signoff-head">
@@ -93,7 +103,7 @@
         <div class="docs-signoff-next">${next.map(([title, help]) => `
           <div class="docs-next-card" data-testid="doc-signoff-next"><b>${title}</b><p class="muted small">${help}</p></div>`).join('')}</div>
         <div class="row docs-signoff-actions">
-          <button type="button" class="btn primary" data-testid="doc-gate-accept" data-docs-gate="accept"${wait}>${spec ? t('docs.sign_off_spec') : t('docs.accept_intent')}</button>
+          <button type="button" class="btn primary" data-testid="doc-gate-accept" data-docs-gate="accept"${wait}>${gate.accept()}</button>
           <button type="button" class="btn ghost" data-testid="doc-gate-revise" data-docs-gate="revise"${wait}>${t('docs.back_to_editing')}</button>
           <button type="button" class="btn ghost" data-testid="doc-gate-cancel" data-docs-stop${wait}>${t('docs.stop')}</button>
           <span class="spacer"></span>

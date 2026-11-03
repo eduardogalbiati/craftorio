@@ -18,7 +18,7 @@ const DEFAULT_BAR = 85;
 // the owner's night, when agents work alone
 const DEFAULT_NIGHT = { start: '23:00', end: '08:00' };
 // `task` is the development board's kind: no discovery card has it yet (discovery.TYPES)
-const KINDS = ['idea', 'prd', 'rfc', 'task', 'bug', 'hotfix'];
+const KINDS = ['idea', 'intent', 'prd', 'rfc', 'task', 'bug', 'hotfix'];
 
 const NON_GOALS = /\bnon[- ]?goals?\b|\b(out of|not in) scope\b/;
 const withoutNonGoals = (h) => h.replace(new RegExp(NON_GOALS.source, 'g'), ' ');
@@ -93,6 +93,8 @@ const BUG = ['problem', 'steps', 'observed', 'expected', 'goal', 'scope', 'nonGo
 const COMMON = ['problem', 'goal', 'scope', 'nonGoals', 'acceptance', 'decisions', 'openQuestions', 'dependencies', 'evidence'];
 const RUBRICS = {
   idea: COMMON,
+  // an intent (#633): what a finding or the owner wants, before its spec
+  intent: COMMON,
   prd: ['problem', 'goal', 'users', 'scope', 'nonGoals', 'acceptance', 'metrics', 'decisions', 'openQuestions', 'dependencies', 'evidence'],
   rfc: ['problem', 'goal', 'scope', 'nonGoals', 'alternatives', 'acceptance', 'decisions', 'openQuestions', 'dependencies', 'evidence'],
   task: COMMON,

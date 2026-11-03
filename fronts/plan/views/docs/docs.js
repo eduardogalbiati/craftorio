@@ -39,14 +39,16 @@
   const SDLC = [
     { name: () => t('docs.step_plan'), doc: 'intent', file: 'intent.md' },
     { name: () => t('docs.step_design'), doc: 'spec', file: 'spec.md' },
-    { name: () => t('docs.step_build'), doc: null, file: 'plan.md' },
+    { name: () => t('docs.step_build'), doc: 'plan', file: 'plan.md' },
     { name: () => t('docs.step_test'), doc: null, file: 'test.md' },
     { name: () => t('docs.step_deploy'), doc: null, file: 'deploy.md' },
     { name: () => t('docs.step_maintain'), doc: null, file: 'maintain.md' },
   ];
   // an item's front matter `stage` (or its latest document) → its SDLC step
-  const STAGE_STEP = { intent: 0, spec: 1, design: 1, build: 2, test: 3, deploy: 4, maintain: 5 };
+  const STAGE_STEP = { intent: 0, spec: 1, design: 1, plan: 2, build: 2, test: 3, deploy: 4, maintain: 5 };
   const stepOfDoc = (doc) => SDLC.findIndex((s) => s.doc === doc);
+  // the list's button that opens each document
+  const OPEN_LABEL = { intent: () => t('docs.open_intent'), spec: () => t('docs.open_spec'), plan: () => t('docs.open_plan') };
   // the spec's cost estimates of a first draft (spec.md, Points of attention › Cost)
   const ESTIMATES = { intent: '$0.30–1.00', spec: '$1.00–3.00' };
 
@@ -95,8 +97,10 @@
     const names = it.docs.map((d) => d.doc);
     if (it.runId && !names.includes(it.runDoc)) names.push(it.runDoc);
     const run = (doc) => (it.runId && it.runDoc === doc ? ` data-run="${esc(it.runId)}"` : '');
-    const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${doc === 'spec' ? t('docs.open_spec') : t('docs.open_intent')}</button>`);
+    const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${OPEN_LABEL[doc]?.() ?? t('docs.open_intent')}</button>`);
     if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
+    // #633 the plan (plan.md) is written from the signed-off spec, at its own gate
+    if (spec && signedOff(spec.status) && !names.includes('plan')) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
     if (spec && signedOff(spec.status)) open.push(`<button type="button" class="btn sm primary" data-docs-issues data-item="${esc(it.item)}">${t('docs.create_epic_and_phase_issues')}</button>`);
     return open.join('');
   }
@@ -159,6 +163,8 @@
   function onListClick(e) {
     const write = e.target.closest('[data-docs-write-spec]');
     if (write) return startDoc(write.dataset.item, 'spec', null);
+    const plan = e.target.closest('[data-docs-write-plan]');
+    if (plan) return startDoc(plan.dataset.item, 'plan', null);
     const issues = e.target.closest('[data-docs-issues]');
     if (issues) return proposeIssues(issues.dataset.item);
     const open = e.target.closest('[data-docs-open]');
@@ -707,7 +713,7 @@
   // writes, the next steps (nothing starts before their own click) and its three answers
   function signoffHtml(o, g, wait) {
     return DocsPanels.signoff({
-      spec: o.doc === 'spec',
+      doc: o.doc,
       file: docFile(o.doc),
       from: o.data?.status,
       to: acceptedStatus(o.doc),

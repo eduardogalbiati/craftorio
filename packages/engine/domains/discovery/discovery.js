@@ -421,6 +421,17 @@ function createCard(dir, projectId, { title, text = '', author = 'owner', type =
   return load(folder);
 }
 
+/**
+ * #633 (spec R9): a finding of a run (the Night watch, analyze-project) as an `intent` card in the
+ * project's Inbox, links.from { workflow, runId, finding } → the card, or null when it cannot be
+ * written (a project id that is no plain name, a full disk): the finding stays where its run keeps it.
+ */
+function createIntent(dir, projectId, { workflow, runId = null, finding = null, title, text = '', author }) {
+  try {
+    return createCard(dir, projectId, { title, text, type: 'intent', author: author || workflow, from: { workflow, runId, finding } });
+  } catch { return null; }
+}
+
 /** A card of cards/: card.json plus `document`, `acceptance` and `attachments` (names). */
 function readCard(dir, projectId, id) {
   return load(existingCard(dir, projectId, id));
@@ -1128,6 +1139,7 @@ module.exports = {
   COMMIT_BAR,
   COMMITTED,
   createCard,
+  createIntent,
   filedDir,
   finishImports,
   grillCard,

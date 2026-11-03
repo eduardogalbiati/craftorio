@@ -116,17 +116,12 @@ module.exports = (ctx) => {
     if (runId && projectId) fileIntent({ id, kind, runId, projectId, evidence });
   }
   // #633: a finding in a run of a project comes back as an intent in that project's Discovery inbox
+  // (discovery.createIntent; a card that cannot be written: the finding stays in the night log)
   function fileIntent({ id, kind, runId, projectId, evidence }) {
-    try {
-      const text = evidence == null ? '' : typeof evidence === 'string' ? evidence : JSON.stringify(evidence, null, 2);
-      discovery.createCard(ctx.ws.discovery || workspace.layout(ctx.ws.root).discovery, projectId, {
-        title: `Night watch: ${kind} in run ${runId}`,
-        text,
-        type: 'intent',
-        author: 'oracle',
-        from: { workflow: 'night-watch', runId, finding: id },
-      });
-    } catch { /* a project id that is no plain name, a full disk: the finding stays in the night log */ }
+    const text = evidence == null ? '' : typeof evidence === 'string' ? evidence : JSON.stringify(evidence, null, 2);
+    discovery.createIntent(ctx.ws.discovery || workspace.layout(ctx.ws.root).discovery, projectId, {
+      workflow: 'night-watch', runId, finding: id, title: `Night watch: ${kind} in run ${runId}`, text, author: 'oracle',
+    });
   }
 
   // ---- Self-healing (#278) -------------------------------------------------------------------
