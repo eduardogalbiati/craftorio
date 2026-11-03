@@ -14,6 +14,8 @@
 // when the panel's screen registers later (a front's screen loads after the shell's, phase 3), which
 // the panel then takes the place of.
 // `mount()` runs once, right after the markup is in place; `show()` each time showView opens it.
+// `fromMenu()`: runs before show() when the sidebar's entry is clicked (not when another screen opens
+// it): a screen with a detail of its own goes back to its top level there (Documents: the list).
 // #329 the interface language: `markup` may be a function (drawn again when the language changes,
 // redrawMarkup); the menu's texts come from the catalog (packages/shared/i18n.js) by key, `nav.<id>`
 // (`nav.<id>.<tab>` for a tab, `nav.<id>.title` for the hover text, `nav.group.<id>` for a group's

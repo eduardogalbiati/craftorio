@@ -978,6 +978,13 @@
       });
       api.onEvent?.((ev) => { onRunEvent(ev); });
     },
+    // the menu's Documents entry goes back to the list (with its Items/Intents tabs) from an open document
+    fromMenu() {
+      if (!docs.open) return;
+      docs.open = null;
+      $('#docs-editor-area').classList.add('hidden');
+      $('#docs-list-area').classList.remove('hidden');
+    },
     show: () => (docs.open ? reload() : refresh()),
   });
 })();

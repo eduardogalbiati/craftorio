@@ -189,6 +189,7 @@ async function init() {
     if (b.dataset.view === 'workflows') state.workflowsTab = b.dataset.tab || 'runs';
     // the Run item opens the run shown in the top bar in the remembered view
     if (b.dataset.view === 'run' && state.runs.has(state.runId)) { selectRun(state.runId); return; }
+    viewRegistry.get(b.dataset.view)?.fromMenu?.();
     showView(b.dataset.view);
   });
   refreshUnpushed();
