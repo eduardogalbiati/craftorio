@@ -12,6 +12,9 @@
 // Uses app.js globals (esc, t) and window.OnboardingModel.
 
 (function () {
+  // A repository path, the same in every language.
+  const FILES_PATH = 'docs/work/<item>/intent.md · spec.md · plan.md'; // i18n-ignore
+
   window.ProjectWizardWorkModel = function ({ cur }) {
     const M = window.OnboardingModel;
     const picked = () => (M.WORK_MODELS.includes(cur()?.workModel) ? cur().workModel : M.DEFAULT_WORK_MODEL);
@@ -41,7 +44,7 @@
         <div class="wizard-column" data-testid="wizard-work-model-files">
           <h3>${esc(t('onboarding.work_model_files_title'))}</h3>
           <span class="small muted">${esc(t('onboarding.work_model_in_repo'))}</span>
-          <div class="wizard-work-model-path">docs/work/&lt;item&gt;/intent.md · spec.md · plan.md</div>
+          <div class="wizard-work-model-path">${esc(FILES_PATH)}</div>
           <p class="muted small">${esc(t('onboarding.work_model_files_line'))}</p>
           <div class="wizard-chips">${chip('onboarding.work_model_chip_fix', true)}${chip('onboarding.work_model_chip_feature', true)}${chip('onboarding.work_model_chip_release', false)}</div>
         </div>

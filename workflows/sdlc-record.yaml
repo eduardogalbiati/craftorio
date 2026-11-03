@@ -52,6 +52,8 @@ providers:
 
 defaults:
   working_dir: "{{ worktree_dir }}"
+  # #320: a persistent agent idle past its prompt cache's lifetime continues fresh from its handoff note
+  fresh_after_idle: 55m
   timeout: 20m
   max_context: 150k
   retry:
