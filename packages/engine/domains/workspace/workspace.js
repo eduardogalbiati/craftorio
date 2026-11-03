@@ -141,6 +141,8 @@ function layout(root) {
     architecture: path.join(root, 'architecture'),
     // the Refactor tab's proposals, ranking and cadence (#357, packages/engine/domains/refactor/refactor-proposals.js), created on demand
     refactor: path.join(root, 'refactor'),
+    // the Monitor's sources, error events and groups per project (#634, packages/engine/domains/monitor/monitor-store.js), created on demand
+    monitor: path.join(root, 'monitor'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),

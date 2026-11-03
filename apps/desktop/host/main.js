@@ -58,6 +58,7 @@ const { createEngineConnection } = require('./engine-connection-window');
 const { createAuth, fileStorage } = require('@multiagent/engine/domains/account/auth');
 const authConfig = require('@multiagent/engine/domains/account/auth-config');
 const { createKeepAwake } = require('./keep-awake');
+const { createSecrets } = require('./secrets');
 const mainLog = require('@multiagent/engine/domains/workspace/main-log');
 
 // the last lines of this process's console, for a finding's context (#361)
@@ -166,6 +167,8 @@ const service = createService({
     // #279: Self-healing applies merged fixes to this app folder, then restarts it
     appDir: app.getAppPath(),
     relaunch: () => restartApp(),
+    // #634: the Monitor's source tokens, encrypted by the system (host/secrets.js)
+    secrets: createSecrets({ file: path.join(app.getPath('userData'), 'secrets.bin'), safeStorage }),
   },
   // the fronts this app ships (apps/desktop/composition.js, phase 4 of the study, #590): their
   // engine-side channels and areas load with the kernel's

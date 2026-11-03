@@ -192,6 +192,13 @@ module.exports = {
   'index:status': { arg: null },
   'localPreview:list': { arg: null },
   'memory:strays': { arg: null },
+  // #634: the Monitor's channels, on a fresh project with no source and no error group
+  'monitor:automation': { setup: project, arg: ({ projectId }) => ({ projectId, diagnose: 'ask', fix: 'off', dailyCap: 5 }), invalid: BAD_PROJECT },
+  'monitor:diagnose': { setup: project, arg: ({ projectId }) => ({ projectId, fingerprint: 'no-such-group' }), invalid: BAD_PROJECT },
+  'monitor:poll': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'monitor:propose-fix': { setup: project, arg: ({ projectId }) => ({ projectId, fingerprint: 'no-such-group' }), invalid: BAD_PROJECT },
+  'monitor:save-source': { setup: project, arg: ({ projectId }) => ({ projectId, source: { type: 'log-file', label: 'contract log', path: UNREACHABLE_REPO } }), invalid: BAD_PROJECT },
+  'monitor:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'nightwatch:morning': { arg: null },
   'nightwatch:report': { arg: null },
   'nightwatch:state': { arg: null },

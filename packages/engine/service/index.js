@@ -35,6 +35,8 @@
 //   relaunch()       optional; restarts the app (apps/desktop/host/main.js); without it the app never updates itself
 //   cliHome          optional; the folder the CLIs' config folders (.claude, .codex, .grok) are read under
 //                    (#408, packages/engine/domains/cli/cli-config-dirs.js); the user's home (and CLAUDE_CONFIG_DIR/CODEX_HOME) without it
+//   secrets          optional; the system keychain, { get(key), set(key, value) } (async): the Monitor's source
+//                    tokens (#634, fronts/ai/engine/areas/monitor.js); without it they stay in this process's memory
 
 const path = require('path');
 const { EventEmitter } = require('events');
@@ -152,6 +154,8 @@ function createService({ host, fronts = null, installed = undefined }) {
       ctx.stopPrTimer();
       ctx.stopBacklogWatch();
       ctx.stopDispatchTimers();
+      // #634: the Monitor's poll timer (fronts/ai/engine/areas/monitor.js; the ai front may not be served)
+      ctx.stopMonitorWatch?.();
       ctx.waiting.closeAll();
       ctx.terminals.killAll();
       for (const run of ctx.active.values()) run.stop();
