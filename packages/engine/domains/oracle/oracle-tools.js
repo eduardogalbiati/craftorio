@@ -1,6 +1,6 @@
 // The Oracle's read-only tools (#122): the supervisor's tools (packages/engine/domains/supervisor/supervisor-tools.js) plus live
 // workspace state through the engine's read functions (runs in progress, run events and files,
-// roadmaps, Backlog queues and caches, local merges not pushed, seed status of workflows and skills)
+// roadmaps, Backlog caches, local merges not pushed, seed status of workflows and skills)
 // and the projects' repositories read-only (git log/diff/show/... from READ_GIT_COMMANDS, files).
 // The app's own code is read through the project whose package is APP_PACKAGE (the orchestrator's
 // source repository registered as a project); without one, app_source says it is not available.

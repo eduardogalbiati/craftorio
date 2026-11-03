@@ -1,6 +1,6 @@
 ## Project run defaults: a run starts from the project's configuration
 
-A run's inputs are resolved in one order everywhere (the run dialog, the Roadmap's queue and
+A run's inputs are resolved in one order everywhere (the run dialog, the Roadmap's stages and
 `scripts/run.js`, `resolveRunInputs` in `packages/engine/domains/project/project-run-defaults.js`):
 **what you type in the dialog > the roadmap item's inputs > the project's run defaults > the
 workflow's defaults**. The dialog marks the fields filled from the project with a "from the

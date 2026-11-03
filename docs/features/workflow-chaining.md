@@ -15,8 +15,10 @@ roadmap item's Edit form have an optional **When it finishes** choice:
   this run. The next run shows "← from <run>".
 - **Ask the Product Owner to place it in the roadmap**: the Product Owner gets the produced issues
   and proposes where they go, as planned roadmap stages. Nothing starts until you press Start.
-- **Queue the issues (Backlog)**: what the issue tracker's **Create and queue** does (it is the same
-  chain, set by that gate choice).
+- **Plan the issues in the roadmap**: what the issue tracker's **Create and plan** does (it is the
+  same chain, set by that gate choice): the produced issues become a new last roadmap stage with the
+  chosen workflow, planned, never started by itself. A chain saved by an older version with the
+  Backlog queue as its target plans the stage the same way.
 
 Under the choice, the workflows that will run and a rough cost from your past runs, marked as an
 estimate. The next step starts only when the run finished with **success** (a development workflow

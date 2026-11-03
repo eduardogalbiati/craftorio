@@ -1,4 +1,4 @@
-// Safe writes of the workspace state files the app rewrites (#112: roadmap.json, queue.json):
+// Safe writes of the workspace state files the app rewrites (#112: roadmap.json; the queue.json is retired, #446):
 // the content is checked by the caller's `validate` first (a write that would produce an invalid
 // file is refused, logged and throws), the previous version is kept as <file>.bak, and the new one
 // is written to a temp file then renamed over the old one, so a crash never leaves half a file.

@@ -28,8 +28,10 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
 - The service acts on it (`packages/engine/service/areas/chain.js`), never the engine: on `workflow.finished`
   with `success` (and, when the workflow declares `merged_commit`, a non-empty one; simulated runs are
   exempt) it starts the next run (`nextInputs`: the then's values, the mapped outputs, the previous
-  run's path/branch/language/platform inputs; the produced issues linked), queues the produced issues
-  (`queueBatches`, like the old "Create and queue"; a simulated run queues nothing), or asks the
+  run's path/branch/language/platform inputs; the produced issues linked), plans the produced issues
+  as a new last roadmap stage (the `queue` action, "Create and plan": the plain queue is retired,
+  #446, and an older `chain.json` with that target plans the stage too; a simulated run plans
+  nothing; a run without a project pauses with "no roadmap to plan in"), or asks the
   Product Owner and adds its plan as planned roadmap stages (`roadmaps.propose`, never started by
   itself). Anything else pauses the chain (`runs/<id>/chain.json`: `then`, `state` waiting | started |
   paused | dropped | done, `reason`, `nextRunId`) with a notification; channels `chain:get`,

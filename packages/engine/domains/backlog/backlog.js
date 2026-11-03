@@ -60,7 +60,7 @@ const { resolveRunInputs } = require('../project/project-run-defaults');
 // old runs (#648: writer-reviewer became an alias of write-doc)
 const ENRICH_WORKFLOWS = ['write-doc', 'writer-reviewer'];
 // the issue workflow (#81, #648: issue-tracker's old runs too) files issues, it does not implement them:
-// its runs never link to an issue they mention (e.g. "related to #41"); its "create and queue" choice
+// its runs never link to an issue they mention (e.g. "related to #41"); its "create and plan" choice
 // queues the issues it filed
 const ISSUE_WORKFLOWS = namesOf('issue.yaml');
 

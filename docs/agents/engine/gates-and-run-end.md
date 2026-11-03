@@ -199,9 +199,9 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   like `projectId` and carried over on resume (`resumeSpec`). The old option `issue` is still accepted;
   runs recorded with `issue` load as `issues: [issue]` (`runs.readRun`, `resumeSpec`, the run chat).
   The Backlog fills the `issue` (first URL) and `issues` (every URL) inputs when a workflow declares them.
-- Backlog dispatch (service, not the engine): `dispatchQueue` starts the plain queue's items whenever a
-  slot is free; `dispatchRoadmaps` (packages/engine/domains/roadmap/roadmap.js `advance`) runs a started roadmap stage by stage,
-  first after every `workflow.finished` (before the queue) and when a workspace opens. An item is done when
+- Backlog dispatch (service, not the engine): the plain queue is retired (#446);
+  `dispatchRoadmaps` (packages/engine/domains/roadmap/roadmap.js `advance`) runs a started roadmap stage by stage,
+  after every `workflow.finished` and when a workspace opens. An item is done when
   its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
   and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`
   (backlog-refresh, #161): its item is done when its run succeeds (service `roadmapRun` reads the run's

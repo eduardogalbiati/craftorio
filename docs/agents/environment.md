@@ -89,7 +89,7 @@ the workspace folder.
   `renderer/` and `preload.js`; the packaged app uses its version only) and the window compares it
   with the code on disk (`app:codeVersion`) when it loads and gets the focus. On a difference a
   banner offers **Restart** (`app:relaunch`): it lists the runs in progress with their step,
-  refuses without that confirmation, pauses the Backlog queues and relaunches; after the restart
+  refuses without that confirmation and relaunches; after the restart
   the interrupted runs are listed with Resume. A missing channel shows "This feature needs an app
   restart" instead of the IPC error. So: pull, then restart. With the browser UI, restart the server
   and reload the page.
@@ -98,7 +98,7 @@ the workspace folder.
   (`app.isPackaged` false) whose repository is a project of the workspace (same `origin`, or the
   app's commit in the clone's local main) takes the fixes merged into that clone's **local main**
   (never the network): after a roadmap stage ends (the one trigger since #285; a merged item alone
-  never updates the app) it pauses the roadmaps ("Updating the app") and the Backlog queues,
+  never updates the app) it pauses the roadmaps ("Updating the app"),
   waits for every run in progress (a gate is waited for, never answered), refuses a dirty app
   folder or a history that is not a fast-forward (`git merge --ff-only`), runs `npm install` only
   when `package-lock.json` changed (a failure resets the folder to the previous commit), writes

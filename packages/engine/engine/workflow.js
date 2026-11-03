@@ -364,7 +364,7 @@ class WorkflowRun extends EventEmitter {
     return this.then;
   }
 
-  // A gate choice with `then` (e.g. the issue tracker's "Create and queue"): the owner's pick sets the
+  // A gate choice with `then` (e.g. the issue tracker's "Create and plan"): the owner's pick sets the
   // chain; its workflow can be a template over the run (`{{ inputs.assign_workflow }}`).
   thenFromChoice(step, choice) {
     const t = choice.then && typeof choice.then === 'object' ? { ...choice.then } : choice.then;

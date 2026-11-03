@@ -566,9 +566,8 @@ function fromQueue(queueItems, name = 'From the queue') {
 /**
  * #446: the plain queue is retired. The queues an older version left with items (`fromIndex`: the
  * index's rows per project, store.takeLeftoverQueues; else the backlog/<id>.queue.json file) become one
- * planned stage at the end of each project's roadmap, once (fromQueue's rule); their pause is not
- * carried over (propose keeps the roadmap's state) and their files are removed, so nothing reads
- * them again. A move that fails keeps its file for the next open. Returns the moved project ids.
+ * planned stage at the end of each project's roadmap, once (fromQueue's rule), without their pause;
+ * their files go, so nothing reads them again (a failed move keeps its file). Returns the moved ids.
  * @param {string} dir the backlog folder
  * @param {{ fromIndex?: Record<string, object[]>, issuesOf?: (projectId: string) => any[] }} [options]
  */

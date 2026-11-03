@@ -1,6 +1,6 @@
 # Files are the source of truth
 
-What each run, queue, gate and notification file holds, and how old runs upgrade on read (#350).
+What each run, roadmap, gate and notification file holds, and how old runs upgrade on read (#350).
 
 ## Files are the source of truth
 

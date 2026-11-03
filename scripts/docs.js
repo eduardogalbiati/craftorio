@@ -390,7 +390,7 @@ const TOPIC_INTROS = {
   storage: {
     title: 'Storage: files and the SQLite index',
     intro: [
-      'Read this before touching run listings, the Backlog queue, pending gates, notifications or',
+      'Read this before touching run listings, the Backlog roadmap, pending gates, notifications or',
       '`packages/engine/domains/workspace/store.js` (#76).',
     ],
   },
