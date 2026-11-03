@@ -16,7 +16,8 @@
 // ?key=… (packages/engine/server/index.js, outside the token gate) calls monitorWebhookIngest, which
 // checks the key in constant time and ingests the pushed events like a poll (source 'webhook').
 // #650: monitor:diagnose with an `item` (a work item of the project's docs/work) also records the error
-// in that item's maintain.md and opens a new intent item linking back (ctx.recordDocIncident).
+// in that item's maintain.md and opens a new intent item linking back (ctx.recordDocIncident); the
+// group's fix run, once it succeeds, writes the post-mortem there (ctx.writeDocPostMortem).
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -257,6 +258,20 @@ module.exports = (ctx) => {
     return { intent: res.intent };
   }
 
+  // #650: the fix run of a group tied to an item ends: when it succeeded, the item's maintain.md gets its
+  // post-mortem (what happened, the impact, the cause, the fix), under Post-mortems (ctx.writeDocPostMortem)
+  function writePostMortem(projectId, g, runId, ev) {
+    if (!g.incident || ev?.status !== 'success' || !ctx.writeDocPostMortem) return;
+    const text = [
+      `- What happened: ${g.status} ${g.title}: ${g.message}`,
+      `- Impact: ${g.count} errors${g.where ? ` at ${g.where}` : ''}, last seen ${g.lastSeen || 'unknown'}.`,
+      `- Cause and fix: see the new intent ${g.incident.intent} and the fix run ${runId}, approved before it landed.`,
+    ].join('\n');
+    try {
+      ctx.writeDocPostMortem({ projectId: plain(projectId), item: g.incident.item, intent: g.incident.intent, text });
+    } catch (e) { console.error('monitor post-mortem:', e.message); }
+  }
+
   function monitorDiagnose({ projectId, fingerprint, item }) {
     return serial(projectId, () => {
       const state = read(projectId);
@@ -291,7 +306,11 @@ module.exports = (ctx) => {
     if (!project?.folder) return { ok: false, error: 'The project has no folder to fix.' };
     const inputs = { task: diagnosisText(g, state), repo_path: project.folder, mode: 'local', approve_before_merge: true };
     const notices = [{ level: 'info', message: `Started by the Monitor: a fix for "${g.title}" (${g.count} errors). It waits for your approval before it lands.` }];
-    const started = await ctx.startWorkflowRun({ file: FIX_WORKFLOW, inputs, mock: simulation.simulationOnly(), projectId: project.id, notices });
+    const fixed = g;
+    let runId = null;
+    const onFinished = (ev) => writePostMortem(projectId, fixed, runId || ev?.run_id, ev);
+    const started = await ctx.startWorkflowRun({ file: FIX_WORKFLOW, inputs, mock: simulation.simulationOnly(), projectId: project.id, notices, onFinished });
+    runId = started.runId;
     await serial(projectId, () => {
       const after = read(projectId);
       after.groups[fingerprint] = { ...(after.groups[fingerprint] || {}), state: 'fix-run', runId: started.runId };

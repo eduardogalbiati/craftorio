@@ -2249,7 +2249,6 @@
   "docs.no_intent_yet": "Nenhum intent ainda",
   "docs.no_intent_yet_help": "Comece um com Novo item, ou ligue um erro do Monitor a um item.",
   "docs.no_item_yet": "Nenhum item de trabalho ainda",
-  "docs.open_to_validate": "Abra o rascunho para validá-lo com o writer",
   "docs.no_project_chosen": "Nenhum projeto escolhido",
   "docs.no_section_changed": "Este pedido não mudou nenhuma seção.",
   "docs.note_queued": "na fila",
@@ -2257,6 +2256,7 @@
   "docs.open_intent": "Abrir intenção",
   "docs.open_plan": "Abrir plano",
   "docs.open_spec": "Abrir spec",
+  "docs.open_to_validate": "Abra o rascunho para validá-lo com o writer",
   "docs.pill_editing": "editando",
   "docs.preview": "Prévia",
   "docs.proposals_rfcs_and_prds": "Propostas, RFCs e PRDs que você escreve com os agentes e revisa aqui. Os documentos aprovados vão em commit para o projeto em docs/work/.",
@@ -2319,6 +2319,7 @@
   "docs.write_the_plan": "Escrever o plano",
   "docs.write_the_spec": "Escrever a spec",
   "docs.writer": "Writer",
+  "docs.writer_started_for_intent": "O writer começou neste rascunho de intenção: revise-o e aceite-o no gate.",
   "docs.your_git_name": "seu nome no git",
 
   "duo.a_pm_can_hand_it_to": "Um PM pode entregá-lo à engenharia como está: todo requisito é testável, os conflitos de sincronização são tratados e as métricas têm metas.",

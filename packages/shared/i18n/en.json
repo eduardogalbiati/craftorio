@@ -2249,7 +2249,6 @@
   "docs.no_intent_yet": "No intent yet",
   "docs.no_intent_yet_help": "Start one with New item, or tie a Monitor error to an item.",
   "docs.no_item_yet": "No work item yet",
-  "docs.open_to_validate": "Open the draft to validate it with the writer",
   "docs.no_project_chosen": "No project chosen",
   "docs.no_section_changed": "This request changed no section.",
   "docs.note_queued": "queued",
@@ -2257,6 +2256,7 @@
   "docs.open_intent": "Open intent",
   "docs.open_plan": "Open plan",
   "docs.open_spec": "Open spec",
+  "docs.open_to_validate": "Open the draft to validate it with the writer",
   "docs.pill_editing": "editing",
   "docs.preview": "Preview",
   "docs.proposals_rfcs_and_prds": "Proposals, RFCs and PRDs you write with the agents and review here. Approved documents are committed to the project under docs/work/.",
@@ -2319,6 +2319,7 @@
   "docs.write_the_plan": "Write the plan",
   "docs.write_the_spec": "Write the spec",
   "docs.writer": "Writer",
+  "docs.writer_started_for_intent": "The writer started on this draft intent: review it, then accept it at the gate.",
   "docs.your_git_name": "your git name",
 
   "duo.a_pm_can_hand_it_to": "A PM can hand it to engineering as-is: every requirement is testable, conflicts during sync are addressed, and the metrics have targets.",

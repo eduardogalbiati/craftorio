@@ -7,7 +7,8 @@
 // allow-scripts). #671: the stage and file kicker on top, each heading and requirement with its anchor
 // id, a requirement's #anchor shown beside it (not selectable); Preview leaves the kicker and the anchors out.
 // #650 mocks(md) → the document's ```html mock blocks; mockFrame(html, { title }) → the <iframe> that runs
-// one in an opaque origin (sandbox allow-scripts only, a CSP without network), drawn under the reader.
+// one in an opaque origin (sandbox allow-scripts only, a CSP without network), drawn under the reader;
+// mountMocks(box, markup) loads each one's page through docs-mock.html (its own CSP, not the app's).
 // Browser: window.DocsPage (app.js globals esc, markdownHtml; DocModel).
 (function () {
   'use strict';
@@ -70,10 +71,30 @@
     return `<iframe class="docs-mock" sandbox="allow-scripts" title="${esc(title)}" srcdoc="${esc(page)}"></iframe>`; // i18n-ignore
   }
 
+  // #650 an about:srcdoc page inherits the app's CSP (script-src 'self'): its scripts would not run. So
+  // mountMocks(box, markup) puts the markup in `box` with each mock frame's page moved from srcdoc into
+  // the fragment of docs-mock.html (a real document with its own CSP, next to this file), before any
+  // frame loads (the frames are built in an inert <template>). The sandbox stays allow-scripts only.
+  const MOCK_SHELL = (() => {
+    try { return new URL('docs-mock.html', document.currentScript.src).href; } catch { return null; }
+  })();
+  function mountMocks(box, markup) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = markup;
+    if (MOCK_SHELL) {
+      for (const frame of tpl.content.querySelectorAll('iframe.docs-mock[srcdoc]')) {
+        frame.setAttribute('src', `${MOCK_SHELL}#${encodeURIComponent(frame.getAttribute('srcdoc'))}`);
+        frame.removeAttribute('srcdoc');
+      }
+    }
+    box.replaceChildren(tpl.content);
+  }
+
   window.DocsPage = {
     html,
     mockFrame,
     mocks,
+    mountMocks,
     outline,
   };
 })();

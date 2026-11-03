@@ -164,7 +164,8 @@
 .docs-signoff-actions { gap: 8px; flex-wrap: wrap; }
 @media (max-width: 1100px) {
   .docs-editor-body { grid-template-columns: minmax(160px, 200px) minmax(0, 1fr); }
-  .docs-side { grid-column: 1 / span 2; grid-row: 3; }
+  /* auto: under the mocks (row 3) when the document has some, in row 3 when not (#650) */
+  .docs-side { grid-column: 1 / span 2; grid-row: auto; }
 }
 @media (max-width: 900px) {
   .docs-list-area.docs-with-panel, .docs-editor-body { grid-template-columns: 1fr; }

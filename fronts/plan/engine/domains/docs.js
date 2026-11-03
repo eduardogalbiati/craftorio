@@ -127,6 +127,11 @@ function files(dir, item, doc, allowed = DOCS) {
   return { source, translation, full };
 }
 const readText = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
+// #670: the item's title, what the owner named it: the document's heading without "Intent: " / "Spec: "
+const titleOf = (text) => {
+  const heading = /^# (?:(?:Intent|Spec|Plan): )?(.+)$/m.exec(text);
+  return heading ? heading[1].trim() : null;
+};
 
 function listItems(dir) {
   const work = path.join(dir, 'docs', 'work');
@@ -143,9 +148,7 @@ function listItems(dir) {
       const fm = DocModel.frontMatter(text);
       docs.push({ doc, file: `docs/work/${entry.name}/${doc}.md`, status: fm.status || 'draft', translation: fm.translation || null });
       stage = fm.stage || doc;
-      // #670: the item's title, what the owner named it: the document's heading without "Intent: " / "Spec: "
-      const heading = /^# (?:(?:Intent|Spec|Plan): )?(.+)$/m.exec(text);
-      if (heading) title = heading[1].trim();
+      title = titleOf(text) || title;
     }
     // #650: the Maintain stage's document, apart from `docs` (the pre-flow's, whose latest is the row's
     // stage and pill) for the editor's stepper
@@ -325,15 +328,17 @@ function acceptDoc(dir, { item, doc, approver, date }) {
 // #650 the playbook's maintain.md (docs/work/write-doc/maintain.md), for an item that has none yet
 const MAINTAIN = {
   incidents: ['## Incidents', '## Incidentes'],
-  empty: ['no incidents', 'sem incidentes'],
+  empty: 'no incidents',
   postMortems: '## Post-mortems',
 };
+// the table's "nothing yet" row, in either language (its last cell says "no incidents" / "nenhum incidente")
+const EMPTY_ROW = '| — | — | — | — |';
 function maintainSkeleton(item) {
   return ['---', `item: ${item}`, 'stage: maintain', 'status: no incidents', '---', '',
     '# Maintain: incidents and post-mortems', '',
     'A Monitor error or a Night watch finding tied to this item comes in here; its diagnosis becomes a new intent, linking back.', '',
     MAINTAIN.incidents[0], '', '| Date | Source | Error | New intent | Fix |', '|---|---|---|---|---|',
-    `| — | — | — | — | ${MAINTAIN.empty[0]} |`, '', MAINTAIN.postMortems, '',
+    `${EMPTY_ROW} ${MAINTAIN.empty} |`, '', MAINTAIN.postMortems, '',
     'For each resolved incident, a short post-mortem: what happened, the impact, the cause, what was fixed and what changed so it does not happen again.', ''].join('\n');
 }
 
@@ -346,14 +351,14 @@ function sectionRange(rows, heading) {
 }
 
 // the incident's row in the table of `heading`, in place of the skeleton's "no incidents" row
-function addIncidentRow(text, heading, empty, row) {
+function addIncidentRow(text, heading, row) {
   const rows = text.split('\n');
   let [start, end] = sectionRange(rows, heading);
   if (start < 0) {
     rows.push('', heading, '', '| Date | Source | Error | New intent | Fix |', '|---|---|---|---|---|');
     [start, end] = [rows.length - 3, rows.length];
   }
-  const at = rows.findIndex((l, i) => i >= start && i < end && l.startsWith('|') && l.includes(empty));
+  const at = rows.findIndex((l, i) => i >= start && i < end && l.startsWith(EMPTY_ROW));
   if (at >= 0) {
     rows[at] = row;
     return rows.join('\n');
@@ -402,7 +407,7 @@ function recordIncident(dir, { item, date, source, error, diagnosis, title }) {
       if (i > 0) continue;
       text = maintainSkeleton(name);
     }
-    text = addIncidentRow(text, MAINTAIN.incidents[i], MAINTAIN.empty[i], row);
+    text = addIncidentRow(text, MAINTAIN.incidents[i], row);
     fs.writeFileSync(full, DocModel.setFrontMatter(text, { status: 'incidents' }));
     changed.push(rel);
   }
@@ -442,10 +447,10 @@ function listIntents(dir) {
     const text = readText(path.join(work, entry.name, 'intent.md'));
     if (text === null) continue;
     const fm = DocModel.frontMatter(text);
-    const heading = /^# (?:Intent: )?(.+)$/m.exec(text);
+    const title = titleOf(text);
     out.push({
       item: entry.name,
-      ...(heading ? { title: heading[1].trim() } : {}),
+      ...(title ? { title } : {}),
       file: `docs/work/${entry.name}/intent.md`,
       status: fm.status || 'draft',
       from: fm.from || null,

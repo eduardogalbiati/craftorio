@@ -93,7 +93,11 @@
       const o = docs.open;
       if (!o || o.item !== item) return;
       o.title = row?.title || it?.title || item;
-      if (!runId && (o.data?.status || row?.status) === 'draft') await startWriter();
+      // validating a draft is the writer's review and Accept gate: the toast says a run started
+      if (!runId && (o.data?.status || row?.status) === 'draft') {
+        await startWriter();
+        if (docs.open === o && o.runId) showToast(t('docs.writer_started_for_intent'), o.title);
+      }
     } catch (e) {
       editorError(errMsg(e));
     } finally { docs.busy = false; }
@@ -371,9 +375,9 @@
     if (!box || !o) return;
     const list = o.source ? [] : DocsPage.mocks(shownMarkdown(o));
     box.classList.toggle('hidden', !list.length);
-    box.innerHTML = list.length
+    DocsPage.mountMocks(box, list.length
       ? `<div class="docs-section-head"><h3>${t('docs.mocks')}</h3><span class="muted small">${t('docs.mocks_help')}</span></div>${list.map((m) => DocsPage.mockFrame(m.html, { title: t('docs.mock_title', { title: m.title }) })).join('')}`
-      : '';
+      : '');
   }
 
   // A selection on the page: the block it starts in (its data-src) and its text, for the chip. Only
