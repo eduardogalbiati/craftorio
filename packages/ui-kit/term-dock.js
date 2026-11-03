@@ -258,7 +258,12 @@ async function pasteIntoTerm(tab) {
   tab.lastPaste = Date.now();
   const flash = tab.flash || flashTermMsg;
   let text;
-  try { text = await api.clipboardRead(); } catch { flash(t('term_dock.use_ctrl_v_to_paste'), true); return; }
+  try { text = await api.clipboardRead(); } catch {
+    // nothing was pasted: the Ctrl+V the message asks for must go through at once
+    tab.lastPaste = 0;
+    flash(t('term_dock.use_ctrl_v_to_paste'), true);
+    return;
+  }
   tab.lastPaste = Date.now();
   if (!text) return;
   if (readOnlyTerm(tab.kind)) { flash(t('term_dock.this_terminal_is_read_only')); return; }
