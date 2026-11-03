@@ -66,6 +66,7 @@ function loadRoadmap({ listWorkflows, now = NOW, runTitle } = {}) {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (exists('estimates.js')) vm.runInContext(read('estimates.js'), sandbox);
+  vm.runInContext(read('menu.js'), sandbox, { filename: 'menu.js' }); // the shared menu (#748)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return { R: sandbox.window.BacklogRoadmap, sandbox, setNow: both };
 }

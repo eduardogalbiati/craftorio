@@ -1051,9 +1051,7 @@ Then('the roadmap pauses with {string}', async ({ e2e }, text) => {
 // - a parked item's card: data-status="parked" on its roadmap-item, and data-testid="roadmap-item-parked",
 //   "Parked at <gate>", a link (or button) that opens the run at its gate.
 // - data-testid="roadmap-parked-count" in the roadmap bar: "N parked at a gate" (absent when none).
-// - data-testid="roadmap-stage-move-on": the stage menu's "Move on from this stage" entry.
-// - data-testid="roadmap-move-on-refused": the refusal (a toast, an alert or the dialog's text) while an
-//   item of the stage has an agent turn running, naming "Pause after current step".
+// (#748 took "Move on from this stage" out of the stage menu: parking stays on the item's card.)
 
 const parkedLine = (page, title) => roadmapItem(page, title).getByTestId('roadmap-item-parked');
 const parkedCount = (page) => rmBar(page).getByTestId('roadmap-parked-count');
@@ -1146,17 +1144,6 @@ When('I choose {string} on the gate card', async ({ e2e }, name) => {
   const card = e2e.window.getByTestId('run-gate').first();
   await card.getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) }).click();
   await expect(card.getByTestId('run-gate-choice').first()).toBeHidden({ timeout: LOAD_TIMEOUT });
-});
-
-Then('the stage actions menu entry {string} moves on from the stage', async ({ e2e }, name) => {
-  await expect(stageMenu(e2e.window).getByRole('menuitem', { name, exact: true })).toHaveAttribute('data-testid', 'roadmap-stage-move-on');
-});
-
-Then('the roadmap refuses to move on while an agent turn is running, pointing to {string}', async ({ e2e }, action) => {
-  const refusal = e2e.window.getByTestId('roadmap-move-on-refused').filter({ visible: true }).first();
-  await expect(refusal).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(refusal).toContainText(/agent turn/i);
-  await expect(refusal).toContainText(action);
 });
 
 // ---- #426: "Run later" / "Run earlier" pass the stages Planned hides ------------------------------------

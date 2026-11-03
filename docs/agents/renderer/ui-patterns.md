@@ -56,8 +56,7 @@ Page alerts, toasts with an action, ⋮ menus, the roadmap card and releases, an
   at a gate. A parked card (`data-status="parked"`) has `roadmap-item-parked`, "Parked at <gate>"
   (`parkedHtml`, a `[data-run]` button that opens the run at its gate; "resume its run first" when it
   was interrupted); the bar counts `roadmap-parked-count` ("N parked at a gate"). Parked items stay in
-  Planned. The stage menu's "Move on from this stage" (`roadmap-stage-move-on`, `[data-rm-park-stage]`)
-  is off while an item of the stage runs a turn: its reason line is `roadmap-move-on-refused`.
+  Planned. The stage menu has no "Move on from this stage" any more (#748): parking is the card's.
   Screenshot state: `--roadmap parked`.
 - **Releases on the Roadmap** (#291, `releaseView` / `releaseBlockHtml` / `releaseLineHtml` in
   `backlog-roadmap.js`, `.rm-release*` in `backlog.css`): `data.releases` comes with the Backlog read

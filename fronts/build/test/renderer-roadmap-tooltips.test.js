@@ -96,6 +96,7 @@ function loadRoadmap() {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
+  vm.runInContext(read('menu.js'), sandbox); // the shared menu (#748)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }

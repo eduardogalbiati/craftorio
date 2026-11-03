@@ -1523,8 +1523,8 @@
   function openStageMenu(r, id) {
     const btn = stageButtonOf(id);
     const s = r.stages.findIndex((st) => st.id === id);
+    stageMenu = id; // without its button in the page, the next draw shows it open
     if (!btn || s < 0) return;
-    stageMenu = id;
     const wrap = btn.closest('.rm-stage-menu-wrap');
     if (!wrap.querySelector('.rm-stage-menu')) wrap.insertAdjacentHTML('beforeend', stageMenuBody(r.stages[s], s, r.stages.length, r, !RoadmapModel.hasUnfinished(r.stages[s])));
     const menu = wrap.querySelector('.rm-stage-menu');
