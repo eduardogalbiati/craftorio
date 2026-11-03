@@ -9,7 +9,9 @@ Ctrl+Shift+F, `resolvePin`) are the development tool after ToolSeeds' `sightline
 sidebar entry at the menu's end (`[data-testid="findings-button"]`). It shows from source, or with
 `settings.findingsButton`, and never in `scripts/screenshot.js` captures unless the setting is on
 (app:info's `isPackaged` and `screenshot`). It opens `[data-testid="findings-overlay"]` over the
-window's capture (`window:capture`, desktop only). Pins are DOM `[data-testid="findings-pin"]`
+window's capture, `api.captureWindow()`: the IPC `window:capture` in the local desktop app, the
+remote window's minimal preload (`desktopCapture.capturePage`) in remote mode, and html-to-image
+(DOM to canvas) in a browser tab (#751). Pins are DOM `[data-testid="findings-pin"]`
 elements and the shapes are drawn on the canvas. It records the last 50 clicks and navigations;
 the service records the last 50 channel calls (`areas/findings.js`) and `packages/engine/domains/workspace/main-log.js` keeps
 the main log. Screenshots: `--view findings --mode marking|saved|list`.

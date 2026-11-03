@@ -127,7 +127,7 @@ One repository, one `node_modules` (default hoisting), the workspaces of the roo
   ([loading-and-composition.md](renderer/loading-and-composition.md)).
 - `apps/desktop/` = `@multiagent/desktop`: `host/` (Electron's main, the root `package.json`'s `main`),
   `renderer/` (its page, `index.html`, generated from its composition; the engine connection page),
-  `assets/`, `scripts/package.js` (`npm run build`). `node-pty`, xterm, marked and dompurify are its
+  `assets/`, `scripts/package.js` (`npm run build`). `node-pty`, xterm, marked, dompurify and html-to-image are its
   dependencies.
 - `apps/web/` = `@multiagent/web` (phase 3): the browser UI the engine server serves at `/` (the root
   `package.json`'s `multiagent.ui` names `apps/web/renderer`): its `composition.js`, its page and
