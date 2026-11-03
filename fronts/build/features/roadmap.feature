@@ -915,3 +915,27 @@ Feature: Roadmap statuses, done items, filters and run timers
     When I click "View terminal" in the roadmap's activity band
     Then a read-only terminal tab opens for "Base check"
     And the terminal shows "npm test"
+
+  # ---- #697: a stage added before the running stage waits for it ------------------------------------
+  # The roadmap runs (simulated) with the demo run #16 of stage 2 "Tonight" running. A planned stage
+  # "Earlier work" (one item, #5521, made up) sits after it as stage 3; Move up puts it before "Tonight".
+  # It does not start in parallel: it reads that it waits for stage 3 (the running stage), shows nothing
+  # running, and "Tonight" stays the only stage marked Current.
+
+  @issue-697
+  Scenario: A stage moved before the running stage waits for it, and only the running stage is Current
+    Given the app is open
+    And the roadmap is running as a simulation
+    And the roadmap has an open stage "Earlier work" before stage 3
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 3
+    And I choose "Move up" in the stage actions menu
+    Then the toast says stage 3 moved up and is stage 2 now
+    And stage 2 is the stage "Earlier work"
+    And stage 3 is the stage "Tonight"
+    And stage 2 shows that it waits for stage 3
+    And stage 2 shows nothing "Running"
+    And the roadmap item "Earlier work item" has not started
+    And stage 3 is highlighted as the current stage
+    And stage 2 is not highlighted as the current stage

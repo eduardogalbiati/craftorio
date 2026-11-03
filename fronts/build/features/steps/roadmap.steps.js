@@ -1596,3 +1596,26 @@ Then("the roadmap's activity band offers {string} and no {string} or {string} bu
 When("I click {string} in the roadmap's activity band", async ({ e2e }, name) => {
   await activity(e2e.window).getByRole('button', { name, exact: true }).click();
 });
+
+// ---- #697: a stage put before the running stage waits for it ---------------------------------------------
+// What the screen exposes (new for #697): an open stage before the stage whose run is in progress shows,
+// in its head, data-testid="roadmap-stage-waits": its text says it waits and names the running stage's
+// number ("Waits for stage 3"; pt-BR "Aguarda a etapa 3"). It never shows "Running" (no running
+// status-label, no "Running" badge) and is not the current stage: "Current" (roadmap-stage-current)
+// stays on the running stage only.
+
+Then('stage {int} shows that it waits for stage {int}', async ({ e2e }, n, running) => {
+  const waits = stage(e2e.window, n).getByTestId('roadmap-stage-waits');
+  await expect(waits).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(waits).toHaveText(/wait/i);
+  await expect(waits).toContainText(new RegExp(`\\b${running}\\b`));
+  await expect(e2e.window.getByTestId('roadmap-stage-waits')).toHaveCount(1);
+});
+
+Then('stage {int} shows nothing {string}', async ({ e2e }, n, label) => {
+  const s = stage(e2e.window, n);
+  await expect(s).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(s.locator('[data-testid="status-label"][data-status="running"]')).toHaveCount(0);
+  await expect(s.locator('[data-testid="roadmap-item"][data-status="running"]')).toHaveCount(0);
+  await expect(s).not.toContainText(new RegExp(`\\b${escapeRe(label)}\\b`));
+});
