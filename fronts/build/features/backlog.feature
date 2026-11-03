@@ -155,37 +155,12 @@ Feature: Backlog Board and Roadmap
     And I open the menu of the issue "Dark scrollbars in the terminal dock"
     Then its Archive action is disabled with the reason "Planned in stage 5: remove it from the roadmap first"
 
-  # ---- #422: the "Queue" error alert offers Resume, never a dismiss × ---------------------------------
-  # The demo workspace has no issue queue: the Given queues one open issue and pauses the queue the way
-  # the service does when a queued run failed ("#13 failed: resume to start the next issues."); an
-  # issue still waits, so the pause is not stale (#445). The roadmap's own error ("Could not
-  # start #14") is another alert, so the scenarios bring the queue's alert into view first.
-
-  @issue-422 @issue-556
-  Scenario: The Queue error alert offers Resume and no close button
-    Given the app is open
-    And a queued run failed and paused the issue queue
-    When I open "Backlog" in the sidebar
-    And I show the alert "failed: resume to start the next issues"
-    Then the shown alert is at level "error" and says "Queue"
-    And the shown alert offers "Resume"
-    And the shown alert has no "Dismiss" button
-
-  @issue-422 @issue-556
-  Scenario: Resume in the Queue error alert resumes the queue and the alert goes away
-    Given the app is open
-    And a queued run failed and paused the issue queue
-    When I open "Backlog" in the sidebar
-    And I show the alert "failed: resume to start the next issues"
-    And I click "Resume" in the shown alert
-    Then the alerts no longer show "failed: resume to start the next issues"
-
-  # ---- #445: a failed roadmap run leaves the plain queue alone ----------------------------------------
-  # The demo workspace's plain queue is empty and not paused; its roadmap's run of #13 ("Run reports")
-  # failed. That failure is the roadmap's, not the queue's: no "Queue: #13 failed" alert, no queue bar.
+  # ---- #445: a failed roadmap run stays the roadmap's ---------------------------------------------------
+  # The demo workspace's roadmap run of #13 ("Run reports") failed. The plain queue is retired (#446):
+  # no "Queue: #13 failed" alert, no queue bar.
 
   @issue-445
-  Scenario: A failed roadmap run does not pause the empty plain queue, and the Backlog shows no queue bar
+  Scenario: A failed roadmap run shows no Queue alert, and the Backlog shows no queue bar
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Roadmap

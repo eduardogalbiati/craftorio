@@ -114,7 +114,6 @@ module.exports = [
   { channel: 'releases:start', reason: RELEASE },
   { channel: 'releases:summary', reason: RELEASE },
   { channel: 'roadmap:budget', reason: RELEASE },
-  { channel: 'roadmap:from-queue', reason: RELEASE },
   { channel: 'roadmap:item', reason: RELEASE },
   { channel: 'roadmap:propose', reason: RELEASE },
   { channel: 'roadmap:restore-version', reason: VERSION },

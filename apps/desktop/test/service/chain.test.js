@@ -141,10 +141,13 @@ test('a failed run never starts the chain: it pauses with a reason, and the owne
   assert.match(chain.reason, /the run ended failed/);
   assert.equal(started.length, 1, 'no second run was started');
 
-  // resumed: the owner says it goes on anyway (mock: queueing a simulated run queues nothing, but runs)
+  // resumed: the owner says it goes on anyway; a run without a project has no roadmap to plan in (#446),
+  // so the chain pauses again with that reason, and can still be dropped
   const resumed = await api['chain:resume']({ runId: runId1 });
-  assert.equal(resumed.state, 'done');
-  assert.match(resumed.reason, /Simulated run: nothing queued/);
+  assert.equal(resumed.state, 'paused');
+  assert.match(resumed.reason, /no roadmap to plan in/);
+  assert.equal(started.length, 1, 'still no second run');
+  assert.equal(api['chain:drop']({ runId: runId1 }).chain.state, 'dropped');
   await assert.rejects(api['chain:resume']({ runId: runId1 }), /only a paused chain resumes/);
 });
 
@@ -166,7 +169,7 @@ test('a failed run\'s paused chain can instead be dropped: nothing follows it', 
   await assert.rejects(api['chain:resume']({ runId: runId1 }), /is dropped: only a paused chain resumes/);
 });
 
-test('the issue tracker\'s "Create and queue" sets a `queue` chain at its review gate; a simulated run queues nothing once it finishes', { timeout: 60000 }, async (t) => {
+test('the issue tracker\'s "Create and plan" sets a `queue` chain (the roadmap target, #446) at its review gate; without a project it plans nothing and pauses', { timeout: 60000 }, async (t) => {
   const { service, api } = makeService(t);
   const thens = [];
   service.events.on('run:event', (ev) => { if (ev.type === 'run.then') thens.push(ev); });
@@ -183,8 +186,11 @@ test('the issue tracker\'s "Create and queue" sets a `queue` chain at its review
   assert.deepEqual(setThen.then, { action: 'queue', workflow: 'software-development.yaml', inputs: {} });
   assert.equal(setThen.by, 'gate:review');
 
-  await untilTrue(() => api['chain:get']({ runId })?.state === 'done');
-  assert.match(api['chain:get']({ runId }).reason, /Simulated run: nothing queued \(it filed no real issue\)\./);
+  await untilTrue(() => ['done', 'paused'].includes(api['chain:get']({ runId })?.state));
+  const chain = api['chain:get']({ runId });
+  // nothing queued ever: either no issue was produced, or there is no project's roadmap to plan in
+  assert.match(chain.reason, /nothing planned|no roadmap to plan in/);
+  assert.doesNotMatch(chain.reason, /queued/);
 });
 
 test('a chain to the Product Owner proposes roadmap stages from the run\'s produced issues, and starts no run', { timeout: 60000 }, async (t) => {

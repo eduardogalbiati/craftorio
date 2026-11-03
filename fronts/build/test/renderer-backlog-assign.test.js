@@ -21,20 +21,19 @@ test('updateAssignNote: the real-run note drops the "one at a time" / ordering c
   const note = /function updateAssignNote\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.doesNotMatch(note, /one at a time/);
   assert.doesNotMatch(note, /starting now if nothing else is running/);
-  // still switches the submit button text between Simulate and Start (#330: one plural catalog entry
-  // per variant, picked by the number of runs)
+  // #446: the one submit button plans in the roadmap; the note only enables it (no Simulate / Start text)
   assert.match(note, /const runCount = \{ count: runs \};/);
-  assert.match(note, /\$b\('#btn-assign-ok'\)\.textContent = t\(mock \? 'backlog\.assign_simulate_runs' : 'backlog\.assign_start_runs', runCount\);/);
-  assert.deepEqual(en['backlog.assign_simulate_runs'], { one: 'Simulate {count} run', other: 'Simulate {count} runs' });
-  assert.deepEqual(en['backlog.assign_start_runs'], { one: 'Start {count} run', other: 'Start {count} runs' });
+  assert.match(note, /\$b\('#btn-assign-ok'\)\.disabled = !n \|\| tooMany;/);
+  assert.doesNotMatch(note, /assign_simulate_runs|assign_start_runs/);
+  assert.equal(en['backlog.assign_simulate_runs'], undefined);
+  assert.equal(en['backlog.assign_start_runs'], undefined);
 });
 
-test('#330 the Assign button reads "Simulate 1 run" / "Start 3 runs" in English and its Portuguese text in pt-BR', () => {
+test('#446 the Assign dialog\'s "Run now" reads "Run now" in English and its Portuguese text in pt-BR', () => {
   const I18n = require('@multiagent/shared/i18n.js');
-  assert.equal(I18n.t('backlog.assign_simulate_runs', { count: 1 }, 'en'), 'Simulate 1 run');
-  assert.equal(I18n.t('backlog.assign_start_runs', { count: 3 }, 'en'), 'Start 3 runs');
-  assert.equal(I18n.t('backlog.assign_simulate_runs', { count: 1 }, 'pt-BR'), 'Simular 1 execução');
-  assert.equal(I18n.t('backlog.assign_start_runs', { count: 3 }, 'pt-BR'), 'Iniciar 3 execuções');
+  assert.equal(I18n.t('backlog.run_now', {}, 'en'), 'Run now');
+  assert.equal(I18n.t('backlog.run_now', {}, 'pt-BR'), 'Executar agora');
+  assert.ok(I18n.t('backlog.run_now_hint', {}, 'en'));
 });
 
 test('status(): a run the supervisor sent back after a failed merge shows a "sent back" badge with its record', () => {
@@ -62,17 +61,18 @@ test('renderAssignInputs: the workflow\'s "About" details only appear when its d
   assert.match(fn, /\$b\('#assign-wf-about'\)\.classList\.toggle\('hidden', !about \|\| firstSentence\(about\) === about\.trim\(\)\);/);
 });
 
-test('submitAssign: assigning an issue the roadmap already plans asks first, and takes it out of the roadmap', () => {
+test('submitAssign: assigning an issue the roadmap already plans asks first, and moves it to the new stage', () => {
   const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const inRoadmap = planned\(numbers\);/);
   assert.match(fn, /if \(inRoadmap\.length && !await confirmDialog\(t\('backlog\.already_in_the_roadmap'\)/);
   assert.equal(en['backlog.already_in_the_roadmap'], 'Already in the roadmap');
   assert.match(fn, /t\(inRoadmap\.length > 1 \? 'backlog\.planned_in_roadmap_many' : 'backlog\.planned_in_roadmap_one'/);
-  assert.match(en['backlog.planned_in_roadmap_many'], /takes them out of the roadmap and into the queue/);
-  assert.match(en['backlog.planned_in_roadmap_one'], /takes it out of the roadmap and into the queue/);
+  assert.match(en['backlog.planned_in_roadmap_many'], /plans them in a new stage at the end/);
+  assert.match(en['backlog.planned_in_roadmap_one'], /plans it in a new stage at the end/);
+  assert.doesNotMatch(en['backlog.planned_in_roadmap_one'], /queue/);
 });
 
-// ---- The kept-work question (#170): assign and queue resume share the same two named choices ---
+// ---- The kept-work question (#170) ---
 
 test('submitAssign: an ended run\'s kept work (assignWorkflow\'s `kept`) opens the kept-work dialog; "resume" also closes the Assign modal; only "scratch" assigns again, confirmed', () => {
   const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
@@ -82,12 +82,16 @@ test('submitAssign: an ended run\'s kept work (assignWorkflow\'s `kept`) opens t
   assert.match(fn, /const pipeline = pipe\?\.file \|\| null;/);
   // #262: and the Agents section's choices (none for a pipeline)
   assert.match(fn, /const agentOverrides = pipe \? null : assignAgentOverrides\(\);/);
-  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), false, then, pipeline, agentOverrides\);/);
+  // #446: and "Run now" (the new stage started on its own)
+  assert.match(fn, /const runNow = \$b\('#assign-run-now'\)\.checked;/);
+  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), false, then, pipeline, agentOverrides, runNow\);/);
   assert.match(fn, /if \(data\?\.kept\) \{/);
   assert.match(fn, /const kept = await keptWorkDialog\(data\.kept\);/);
   assert.match(fn, /if \(kept === 'resume'\) closeModal\('#assign-modal'\);/);
   assert.match(fn, /if \(kept !== 'scratch'\) return;/);
-  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true, then, pipeline, agentOverrides\);/);
+  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true, then, pipeline, agentOverrides, runNow\);/);
+  // #446: the inputs sent are remembered per project and workflow (the plain queue remembered them before)
+  assert.match(fn, /save\(`\$\{INPUTS_KEY\}\$\{bl\.projectId\}\.\$\{workflow\}`, JSON\.stringify\(inputs \|\| \{\}\)\);/);
 });
 
 // ---- Assign a saved pipeline (#135): the dropdown lists it, its first workflow receives the issues ---
@@ -109,20 +113,14 @@ test('openAssign: only pipelines whose first workflow can receive the issues are
   assert.match(fn, /<optgroup label="Workflows">\$\{options\}<\/optgroup><optgroup label="Pipelines">/);
 });
 
-test('renderAssignInputs: a pipeline sets its first stage\'s fixed inputs, shows its stages instead of "When it finishes", and disables "Plan it" (a roadmap stage runs one workflow)', () => {
+test('renderAssignInputs: a pipeline sets its first stage\'s fixed inputs and shows its stages instead of "When it finishes"', () => {
   const fn = /function renderAssignInputs\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /for \(const \[k, v\] of Object\.entries\(pipe\?\.stages\[0\]\.inputs \|\| \{\}\)\) if \(defs\[k\]\) WorkflowInputs\.set\(box, k, v\);/);
   assert.match(fn, /\$b\('#assign-chain'\)\.classList\.toggle\('hidden', !!pipe\);/);
-  assert.match(fn, /toRoadmap\.disabled = !!pipe;/);
 });
 
-test('queue resume (data-pause="off"): an ended run\'s kept work opens the kept-work dialog; only "scratch" resumes the queue again, confirmed', () => {
-  // the panel's toggle and the queue alert's Resume (#422) share setQueuePaused
-  const panel = /\$b\('#bl-queue'\)\.onclick = async \(e\) => \{[\s\S]*?\n    \};/.exec(src)[0];
-  assert.match(panel, /if \(b\) await setQueuePaused\(b, b\.dataset\.pause === 'on'\);/);
-  const fn = /async function setQueuePaused\(button, on\) \{[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /let out = await api\.pauseQueue\(bl\.projectId, on\);/);
-  assert.match(fn, /if \(out\?\.kept && await keptWorkDialog\(out\.kept\) === 'scratch'\) out = await api\.pauseQueue\(bl\.projectId, false, true\);/);
+test('#446 the Backlog has no queue toggle and no pauseQueue call', () => {
+  assert.doesNotMatch(src, /setQueuePaused|api\.pauseQueue|#bl-queue'\)\.onclick/);
 });
 
 test('openAssign: a prefill from the Product Owner picks its workflow, groups its issues into one run, and fills its inputs', () => {
@@ -130,8 +128,10 @@ test('openAssign: a prefill from the Product Owner picks its workflow, groups it
   // the proposed workflow wins over the last-used one when it exists among the project's workflows;
   // nothing remembered falls back to the default development workflow (#195)
   assert.match(fn, /sel\.value = \[prefill\?\.workflow, load\(WORKFLOW_KEY\), DefaultWorkflow\.current\(\)\.file, files\[0\]\]\.find\(\(f\) => f && files\.includes\(f\)\);/);
-  // a multi-issue group is assigned as one run, not as separate runs
-  assert.match(fn, /document\.querySelector\(`input\[name="assign-group"\]\[value="\$\{prefill\?\.group \? 'group' : 'separate'\}"\]`\)\.checked = true;/);
+  // a multi-issue group is assigned as one run, not as separate runs (#446: without a prefill, several
+  // issues that fit one run go together, as one roadmap item)
+  assert.match(fn, /const together = prefill \? !!prefill\.group : issues\.length > 1 && issues\.length <= maxGroup\(\);/);
+  assert.match(fn, /document\.querySelector\(`input\[name="assign-group"\]\[value="\$\{together \? 'group' : 'separate'\}"\]`\)\.checked = true;/);
   // each proposed input value is written into its field, through the shared WorkflowInputs renderer
   assert.match(fn, /for \(const \[k, v\] of Object\.entries\(prefill\?\.inputs \|\| \{\}\)\) WorkflowInputs\.set\(\$b\('#assign-inputs'\), k, v\);/);
 });
