@@ -1124,3 +1124,63 @@ Then("the wizard's suggested workflows use the {string} way of working", async (
 Then("the wizard's suggested workflows say {string}", async ({ e2e }, text) => {
   await expect(workflowsColumn(e2e.window)).toContainText(new RegExp(escapeRe(text), 'i'), { timeout: IMPORT_TIMEOUT });
 });
+
+// ---- #633 (onboarding phase 5): the AI-native SDLC work model (docs/work/first-project-onboarding/images/mock-5.jpg)
+// Step 3 "Analysis & workflows" has a section "How work on <name> is documented":
+// - data-testid="wizard-work-model": the section (both columns of the mockup); its radios (role="radio" or input[type=radio]) carry
+//   data-testid="wizard-work-model-light|standard|full", each named by its model ("Light", "Standard", "Full")
+//   and followed by its description; Standard is checked by default;
+// - data-testid="wizard-work-model-files": the "Where the files live" panel ("In the repository", the
+//   docs/work/<item>/... path with its files, and chips such as "fix: issue only").
+// The pick is the project's workModel (light | standard | full), saved with the wizard while it is open, so an
+// onboarding resumed from the Projects screen (#741) shows it again.
+const workModel = (page) => wizard(page).getByTestId('wizard-work-model');
+const workModelFiles = (page) => wizard(page).getByTestId('wizard-work-model-files');
+const workModelRadio = (page, model) => workModel(page).getByTestId(`wizard-work-model-${String(model).trim().toLowerCase()}`);
+
+Then('the wizard shows how work on {string} is documented', async ({ e2e }, name) => {
+  const section = workModel(e2e.window);
+  await expect(section).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(section.getByRole('heading', { name: `How work on ${name} is documented` })).toBeVisible();
+  await expect(section).toContainText('Each step leaves a file the next step reads, and a person approves it.');
+});
+
+// a table of | model | description |, in the order shown
+Then('the wizard offers the work models:', async ({ e2e }, table) => {
+  const rows = table.raw().map((r) => r.map((c) => String(c || '').trim())).filter((r) => r[0]);
+  const section = workModel(e2e.window);
+  await expect(section.getByRole('radio')).toHaveCount(rows.length, { timeout: IMPORT_TIMEOUT });
+  for (const [model, description] of rows) {
+    await expect(section.getByRole('radio', { name: new RegExp(`^\\s*${escapeRe(model)}\\b`) }), `the "${model}" radio`).toHaveCount(1);
+    await expect(workModelRadio(e2e.window, model), `the "${model}" radio by its test id`).toHaveCount(1);
+    if (description) await expect(section, `the description of "${model}"`).toContainText(description);
+  }
+});
+
+When('I pick the {string} work model in the wizard', async ({ e2e }, model) => {
+  await workModelRadio(e2e.window, model).click();
+});
+
+Then('the wizard has the {string} work model picked', async ({ e2e }, model) => {
+  const section = workModel(e2e.window);
+  await expect(workModelRadio(e2e.window, model)).toBeChecked({ timeout: IMPORT_TIMEOUT });
+  await expect(section.getByRole('radio', { checked: true }), 'only one work model picked').toHaveCount(1);
+});
+
+Then("the wizard's work model files live {string} in {string} as {string}, {string} and {string}", async ({ e2e }, where, folder, a, b, c) => {
+  const panel = workModelFiles(e2e.window);
+  await expect(panel).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(panel).toContainText('Where the files live');
+  await expect(panel).toContainText(where);
+  await expect(panel).toContainText(folder);
+  for (const file of [a, b, c]) await expect(panel, `the file ${file}`).toContainText(file);
+});
+
+Then("the wizard's work model files show the chips {string}, {string} and {string}", async ({ e2e }, a, b, c) => {
+  const panel = workModelFiles(e2e.window);
+  for (const chip of [a, b, c]) await expect(panel.getByText(chip, { exact: true }), `the chip "${chip}"`).toBeVisible();
+});
+
+Then("the wizard's work model looks like the baseline {string}", async ({ e2e }, name) => {
+  await expect(workModel(e2e.window)).toHaveScreenshot(name);
+});

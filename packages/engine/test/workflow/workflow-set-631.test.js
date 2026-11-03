@@ -36,7 +36,8 @@ const CODE_AND_BUILD = [
   'ai-arena', 'analyze-project', 'backlog-refresh', 'feature', 'fix', 'issue-tracker',
   'refactor', 'release', 'retrospective', 'test-backfill', 'writer-reviewer',
 ];
-const PLANNING_TOOLS = ['write-doc'];
+// #633: the SDLC flows are not Code & Build
+const PLANNING_TOOLS = ['sdlc-record', 'sdlc-release', 'sdlc-test', 'write-doc'];
 
 const ALIASES = [
   ['project-map', 'analyze-project.yaml'],

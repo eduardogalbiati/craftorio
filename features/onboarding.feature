@@ -645,3 +645,46 @@ Feature: Bring a project in with a guided wizard
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
     And the wizard does not suggest a fork
+
+  # #633 (onboarding phase 5): step 3 follows docs/work/first-project-onboarding/images/mock-5.jpg. How work on
+  # the project is documented: Light, Standard (picked by default) or Full, and where the files live in the
+  # repository. The pick is the project's workModel (light | standard | full), saved with the wizard while it is
+  # open. @visual: the section's baseline is taken in the screenshot lane.
+  @issue-633 @visual
+  Scenario: The Analysis & workflows step shows how work on the project is documented, Standard picked, and where the files live
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "Shop"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard shows how work on "Shop" is documented
+    And the wizard offers the work models:
+      | Light    | An issue, then feature or fix. Nothing else is written.          |
+      | Standard | intent.md → spec.md → plan.md → code. Recommended for features. |
+      | Full     | Standard + REVIEW.md + evals of the project's skills and workflows. |
+    And the wizard has the "Standard" work model picked
+    And the wizard's work model files live "In the repository" in "docs/work/<item>/" as "intent.md", "spec.md" and "plan.md"
+    And the wizard's work model files show the chips "fix: issue only", "feature: Standard" and "release: notes"
+    And the wizard's work model looks like the baseline "onboarding-work-model.png"
+
+  # The pick is saved with the wizard while it is open: an onboarding closed on step 3 and resumed from the
+  # project's card on the Projects screen (#741) shows it again.
+  @issue-633
+  Scenario: The work model picked in the wizard is kept when the onboarding is resumed from the Projects screen
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open "Projects" in the sidebar
+    And I choose New project in the Projects screen's header
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "light-633"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I pick the "Light" work model in the wizard
+    Then the wizard has the "Light" work model picked
+    When I close the project wizard
+    Then the project "light-633" on the Projects screen says its onboarding is not finished and offers Continue
+    When I continue the onboarding of the project "light-633" from the Projects screen
+    Then the wizard is on its "analysis" step
+    And the wizard has the "Light" work model picked
