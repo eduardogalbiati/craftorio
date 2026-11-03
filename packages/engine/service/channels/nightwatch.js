@@ -132,7 +132,7 @@ module.exports = (ctx) => {
     const item = ctx.liveRun?.(runId)?.inputs?.item;
     if (!item || !ctx.recordDocIncident) return;
     try {
-      ctx.recordDocIncident({ projectId, item, source: 'night-watch', title: `${kind} in run ${runId}`, error: `${kind} in run ${runId}`, diagnosis: text });
+      ctx.recordDocIncident?.({ projectId, item, source: 'night-watch', title: `${kind} in run ${runId}`, error: `${kind} in run ${runId}`, diagnosis: text });
     } catch (e) { console.error('Night watch incident:', e.message); }
   }
 

@@ -242,7 +242,7 @@ module.exports = (ctx) => {
     if (!ctx.recordDocIncident) return { ok: false, error: 'The Documents service is not installed: the incident was not recorded.' };
     let res;
     try {
-      res = ctx.recordDocIncident({
+      res = ctx.recordDocIncident?.({
         projectId: plain(projectId),
         item,
         date: String(g.lastSeen || new Date().toISOString()).slice(0, 10),
@@ -268,7 +268,7 @@ module.exports = (ctx) => {
       `- Cause and fix: see the new intent ${g.incident.intent} and the fix run ${runId}, approved before it landed.`,
     ].join('\n');
     try {
-      ctx.writeDocPostMortem({ projectId: plain(projectId), item: g.incident.item, intent: g.incident.intent, text });
+      ctx.writeDocPostMortem?.({ projectId: plain(projectId), item: g.incident.item, intent: g.incident.intent, text });
     } catch (e) { console.error('monitor post-mortem:', e.message); }
   }
 
