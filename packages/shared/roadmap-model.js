@@ -359,6 +359,37 @@
     return x?.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : [];
   }
 
+  // #163 (moved from backlog-roadmap.js, #750): why issue `d.issue` of item `d.from` can't join item `toId` ('' when it can)
+  function dropProblem(stages, d, toId) {
+    const items = (stages || []).flatMap((s) => s.items || []);
+    const from = items.find((x) => x.id === d.from);
+    const to = items.find((x) => x.id === toId);
+    if (!from || !itemIssues(from).some((i) => i.number === d.issue)) return `#${d.issue} is no longer in that item: the roadmap changed.`;
+    if (!to) return 'Drop the issue on another item to run them together.';
+    if (to === from) return `#${d.issue} is already in this item.`;
+    if (!allowedActions(null, null, to).edit.allowed) return `This item is ${to.waiting ? 'waiting at a gate' : to.status}: only planned or failed items take issues.`;
+    return '';
+  }
+
+  // #163: moves issue `number` from item `fromId` into item `toId` (a group while it has two or more); the emptied item goes.
+  // Items of either shape (an `issues` list, or a single issue stored as the item); both keep their first issue's fields at
+  // the top for older readers. Changes `stages`; false when dropProblem refuses
+  function moveIssue(stages, number, fromId, toId) {
+    if (dropProblem(stages, { issue: number, from: fromId }, toId)) return false;
+    const items = stages.flatMap((s) => s.items);
+    const from = items.find((x) => x.id === fromId);
+    const to = items.find((x) => x.id === toId);
+    const setIssues = (item, issues) => {
+      const { number: n, url, title, body, knownPullRequests } = issues[0];
+      Object.assign(item, { number: n, url, title, body, knownPullRequests, issues });
+    };
+    const left = itemIssues(from).filter((i) => i.number !== number);
+    setIssues(to, [...itemIssues(to), itemIssues(from).find((i) => i.number === number)]);
+    if (left.length) setIssues(from, left);
+    else for (const s of stages) s.items = s.items.filter((x) => x !== from);
+    return true;
+  }
+
   // #426: the stage nearest to `s` towards `dir` (-1 up, 1 down) among those the view draws
   // (`drawn`: their real indexes; every stage when absent), or -1 when none is drawn on that side
   function drawnNeighbour(stages, s, dir, drawn) {
@@ -411,6 +442,7 @@
     cardCount,
     currentStage,
     drawnNeighbour,
+    dropProblem,
     earlierRuns,
     foldReleases,
     hasUnfinished,
@@ -422,6 +454,7 @@
     isRelease,
     itemIssues,
     itemRuns,
+    moveIssue,
     moveRelease,
     moveStage,
     pageOf,

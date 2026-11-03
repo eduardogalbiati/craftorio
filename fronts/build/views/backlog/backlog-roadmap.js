@@ -183,7 +183,6 @@
   const money = (n) => `$${Number(n || 0).toFixed(2)}`;
   // #750: the header's money (its numbers and By release) in the interface's locale, the app's format elsewhere
   const cost = (n) => window.I18n?.formatCost?.(n) ?? money(n);
-  const GREEN_CHECK_MS = 60 * 1000; // #750: how long a green base check stays in the activity band after it ended
   const mins = (n) => Estimates.formatMinutes(n);
 
   // #215: a real value against its estimate, coloured by the verdict (Estimates.verdict) with an
@@ -1032,9 +1031,7 @@
     const offOpen = offStages.filter(RoadmapModel.hasUnfinished);
     const acts = may(r);
     // #750: the header is one card (rm-head) in four bands: 1 the state and the actions | 2 the numbers (BacklogLive.statsHtml) | 3 the
-    // activity (the base check, the pause note, the base's known failures; absent with nothing) | 4 the view
-    const leftOut = r.state === 'done' && offOpen.length
-      ? `<div class="small muted rm-head-line" data-testid="roadmap-left-out">${plural(offOpen.length, 'backlog_roadmap.done_disabled_stages_left_out')}</div>` : '';
+    // activity (BacklogLive.activityHtml: the base check, the pause note, the base's known failures; absent with nothing) | 4 the view
     // #269: the state is a dot before the title (blue and pulsing while running, amber paused, red paused by a failure, grey planned,
     // green done), readable in its tooltip; #750: then its coloured pill; a stage run on its own (#141) still named in a badge after it
     const pausedByFailure = failedPause(r);
@@ -1048,8 +1045,6 @@
     const scopeBadge = pausingHtml(r) || (scoped >= 0
       ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${t('backlog_roadmap.only_stage_n', { value: scoped + 1 })}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}</span>`
       : r.simulated ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '');
-    // a pause not from a failure (budget cap, a stage run alone that ended, a release on hold): an amber activity line (#750); a failure: the error alert (#270)
-    const note = r.error && !pausedByFailure ? `<div class="${r.state === 'paused' ? 'warn-text' : 'error'} small rm-head-line">${esc(r.error)}${r.state === 'paused' && r.budget ? `<span class="spacer"></span><button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(t(r.budget.period === 'night' ? 'backlog_roadmap.budget_raise_night_tip' : 'backlog_roadmap.budget_raise_day_tip'))}">${t(r.budget.period === 'night' ? 'backlog_roadmap.raise_for_tonight' : 'backlog_roadmap.raise_for_today')}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(t(r.budget.period === 'night' ? 'backlog_roadmap.budget_ignored_night_tip' : 'backlog_roadmap.budget_ignored_day_tip'))}">${t('backlog_roadmap.resume_anyway')}</button>` : ''}</div>` : '';
     const failures = data?.baseFailures?.length ? `<details class="small rm-base-failures rm-head-line" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : '';
     const menuItems = MENU.filter((m) => m.show(r, acts));
     const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="${t('backlog_roadmap.roadmap_actions')}" title="${t('backlog_roadmap.more_actions')}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? Menu.menuHtml(menuItems.map((m) => ({ id: m.id, iconHtml: MI[m.id], checked: m.checked?.(r), label: t(m.label), title: t(m.title), attrs: `data-rm="${m.id}"` })), { className: 'rm-menu', testid: 'roadmap-menu', label: t('backlog_roadmap.roadmap_actions') }) : ''}</span>`;
@@ -1138,12 +1133,8 @@
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
     const left = `${epicSelect}${r.stages.length ? releaseFilterHtml(data, rv) : ''}${window.RoadmapSummary?.byReleaseHtml(r, { open: byReleaseOpen, money: cost, minutes: mins }) || ''}${sinceSelect}${viewSeg}${toggle}`;
     const filters = left || count || view.synced ? `<div class="rm-head-filters" data-testid="filter-row">${left}<span class="spacer"></span>${view.synced ? `<span class="muted small">${esc(view.synced)}</span>` : ''}${count}</div>` : '';
-    // band 3 only while a task runs: a green base check leaves it a minute after it ended (the engine keeps its last state; the
-    // next redraw drops it), red or failed stays as a warning
-    const bc = data?.baseCheck, endedAt = Date.parse(bc?.endedAt || '');
-    const live = window.BacklogLive, check = bc?.status === 'green' && !(Date.now() - endedAt < GREEN_CHECK_MS) ? null : bc;
-    const act = [live?.baseCheckHtml(check, clock), note, failures, leftOut].filter(Boolean).join('');
-    const head = `<div class="rm-head" data-testid="roadmap-head">${row}${live?.statsHtml(r, { minutes: mins, money: cost }) || ''}${act ? `<div class="rm-head-activity" data-testid="roadmap-activity">${act}</div>` : ''}${filters}</div>`;
+    const live = window.BacklogLive, act = live ? live.activityHtml(r, data, { clock, pausedByFailure, failures, offOpen: offOpen.length }) : failures;
+    const head = `<div class="rm-head" data-testid="roadmap-head">${row}${live?.statsHtml(r, { minutes: mins, money: cost }) || ''}${act}${filters}</div>`;
     // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
     const cmapHtml = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml() : '';
     return `<div class="rm">${head}${lostHtml()}${queued}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
@@ -1269,38 +1260,9 @@
     if (dir < 0) stages[at].items.push(item); else stages[at].items.unshift(item);
   }
 
-  // Why issue `d.issue` of item `d.from` can't join item `toId` ('' when it can; #163).
-  function dropProblem(stages, d, toId) {
-    const items = (stages || []).flatMap((s) => s.items || []);
-    const from = items.find((x) => x.id === d.from);
-    const to = items.find((x) => x.id === toId);
-    if (!from || !refs(from).some((i) => i.number === d.issue)) return `#${d.issue} is no longer in that item: the roadmap changed.`;
-    if (!to) return 'Drop the issue on another item to run them together.';
-    if (to === from) return `#${d.issue} is already in this item.`;
-    if (!editable(to)) return `This item is ${to.waiting ? 'waiting at a gate' : to.status}: only planned or failed items take issues.`;
-    return '';
-  }
-
-  // Moves issue `number` from item `fromId` into item `toId` (a group while it has two or more); the
-  // emptied item goes. Items of either shape (an `issues` list, or a single issue stored as the item);
-  // both keep their first issue's fields at the top for older readers.
-  function moveIssue(stages, number, fromId, toId) {
-    if (dropProblem(stages, { issue: number, from: fromId }, toId)) return false;
-    const items = stages.flatMap((s) => s.items);
-    const from = items.find((x) => x.id === fromId);
-    const to = items.find((x) => x.id === toId);
-    const issue = refs(from).find((i) => i.number === number);
-    const left = refs(from).filter((i) => i.number !== number);
-    setIssues(to, [...refs(to), issue]);
-    if (left.length) setIssues(from, left);
-    else for (const s of stages) s.items = s.items.filter((x) => x !== from);
-    return true;
-  }
-
-  function setIssues(item, issues) {
-    const { number, url, title, body, knownPullRequests } = issues[0];
-    Object.assign(item, { number, url, title, body, knownPullRequests, issues });
-  }
+  // #163: an issue dragged onto another item (why it can't join, the move): RoadmapModel's, pure
+  const dropProblem = (stages, d, toId) => RoadmapModel.dropProblem(stages, d, toId);
+  const moveIssue = (stages, number, fromId, toId) => RoadmapModel.moveIssue(stages, number, fromId, toId);
 
   /** The inputs of the Edit form `form` applied to `item` (its fields, the new name + value pair, Simulation). */
   function applyForm(item, form) {
@@ -1470,9 +1432,11 @@
 
   // #196: the bar's "Show the item": the item that paused the roadmap, scrolled into view and marked.
   function showItem(id) {
-    const el = [...document.querySelectorAll('#bl-list [data-item]')].find((x) => x.dataset.item === id);
+    flashTo([...document.querySelectorAll('#bl-list [data-item]')].find((x) => x.dataset.item === id), 'center');
+  }
+  function flashTo(el, block) {
     if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.scrollIntoView({ block, behavior: 'smooth' });
     el.classList.add('flash');
     setTimeout(() => el.classList.remove('flash'), 1600);
   }
@@ -1486,10 +1450,7 @@
     };
     let el = loadUntilFound();
     if (!el && ctx.setShowAll) { ctx.setShowAll(true); el = loadUntilFound(); }
-    if (!el) return;
-    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    el.classList.add('flash');
-    setTimeout(() => el.classList.remove('flash'), 1600);
+    flashTo(el, 'start');
   }
 
   // Retry or Skip an item (its card's buttons, the paused roadmap's alert): a retry that would redo an
@@ -1693,7 +1654,7 @@
     { selector: '.rm-base-check [data-term]', run: (c, btn) => window.BacklogLive.baseCheckTerm(c, btn) },
     { selector: '[data-rm-show-disabled]', run: showDisabled },
     // #269: the ⋮ button opens its menu (the first entry, plain or on/off, gets the focus) or closes it; #421: the summary's By release list
-    { selector: '[data-rm-menu]', run: ({ ctx }) => { [menuOpen, pauseOpen] = [!menuOpen, false]; ctx.render(); focusMenu(menuOpen ? `:is(${Menu.ENTRY})` : '[data-rm-menu]'); } },
+    { selector: '[data-rm-menu]', run: ({ ctx }) => { [menuOpen, pauseOpen] = [!menuOpen, false]; ctx.render(); focusMenu(menuOpen ? `:is(${window.Menu?.ENTRY || '[role="menuitem"]'})` : '[data-rm-menu]'); } },
     { selector: '[data-rm-summary-releases]', run: ({ ctx }) => { byReleaseOpen = !byReleaseOpen; ctx.render(); } },
     { selector: '[data-rm-stage-menu]', run: toggleStageMenu }, // #282: a stage's ⋮ button, the same way (one menu open at a time)
     { selector: '[data-rm-ask-oracle]', run: askOracleClicked }, // #271: the Oracle asked about the item's failure (gate-oracle.js)
