@@ -302,15 +302,16 @@
 
   // ---- what the Roadmap view shows (#217, #268; moved from backlog-roadmap.js, #395) ----
   const DAY_MS = 24 * 60 * 60 * 1000;
-  // the date ranges: [id, the option, in the header's count, its length in ms (null: no limit)]
+  // the date ranges: [id, its length in ms (null: no limit)]; their labels are the catalog's
+  // backlog_roadmap.since_<id> (the option) and since_text_<id> (in the header's count), #750
   const SINCE = [
-    ['24h', 'Last 24 hours', 'last 24 hours', DAY_MS],
-    ['2d', 'Last 2 days', 'last 2 days', 2 * DAY_MS],
-    ['3d', 'Last 3 days', 'last 3 days', 3 * DAY_MS],
-    ['1w', 'Last week', 'last week', 7 * DAY_MS],
-    ['15d', 'Last 15 days', 'last 15 days', 15 * DAY_MS],
-    ['1m', 'Last month', 'last month', 30 * DAY_MS],
-    ['total', 'Total', 'all time', null],
+    ['24h', DAY_MS],
+    ['2d', 2 * DAY_MS],
+    ['3d', 3 * DAY_MS],
+    ['1w', 7 * DAY_MS],
+    ['15d', 15 * DAY_MS],
+    ['1m', 30 * DAY_MS],
+    ['total', null],
   ];
   const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
   // An item's last activity: the latest of when it joined the roadmap (`origin`), its run's start and

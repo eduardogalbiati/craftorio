@@ -127,12 +127,11 @@
   }
   // #750: the header's numbers band (rm-head-stats) from RoadmapSummary.stats: four columns (Stages, Left, Forecast, Spent), each a
   // muted label, the value and a muted detail; "—" for an unknown value, the column always there. `minutes`: the view's time
-  // format; money in the interface's locale (I18n.formatCost)
-  function statsHtml(roadmap, { minutes }) {
+  // format; `money`: the view's money format (the interface's locale, I18n.formatCost)
+  function statsHtml(roadmap, { minutes, money }) {
     const s = window.RoadmapSummary?.stats(roadmap);
     if (!s) return '';
     const I = window.I18n;
-    const money = (n) => I?.formatCost(n) ?? `$${Number(n).toFixed(2)}`;
     const none = s.withoutEstimate.length ? t('backlog_roadmap.summary_without_estimate', { count: s.withoutEstimate.length }) : '';
     const noneTip = none ? t('backlog_roadmap.summary_without_estimate_tip', { items: s.withoutEstimate.map((x) => x.title).join(', ') }) : '';
     const col = (label, value, detail, tip = '') => `<div class="rm-head-stat" data-testid="roadmap-stat"${tip ? ` title="${esc(tip)}"` : ''}><small class="muted" data-testid="roadmap-stat-label">${esc(label)}</small><strong data-testid="roadmap-stat-value">${esc(value)}</strong><small class="muted" data-testid="roadmap-stat-detail">${esc(detail || '—')}</small></div>`;

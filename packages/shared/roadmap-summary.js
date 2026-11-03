@@ -55,9 +55,10 @@
     const list = Array.isArray(stages) ? stages : [];
     const parts = list.map(stagePart);
     let spent = 0;
+    let costed = 0; // #750: the items with a real cost (the header's Spent is "—" without one)
     let since = null;
     for (const x of list.flatMap((s) => (Array.isArray(s.items) ? s.items : []))) {
-      if (x.status === 'done' || x.status === 'running' || x.status === 'parked') spent += num(x.actualUsd) || 0;
+      if ((x.status === 'done' || x.status === 'running' || x.status === 'parked') && num(x.actualUsd) !== null) { spent += num(x.actualUsd); costed += 1; }
       if (x.origin && (!since || Date.parse(x.origin) < Date.parse(since))) since = x.origin;
     }
     const lines = (Array.isArray(releases) ? releases : []).filter((x) => num(x?.at) !== null && x.at >= 0).sort((a, b) => a.at - b.at);
@@ -68,7 +69,7 @@
       from = line.at + 1;
     }
     if (lines.length) split.push({ after: true, ...total(parts.slice(from)) });
-    return { planned: total(parts), spent: { usd: round(spent), since }, releases: split };
+    return { planned: total(parts), spent: { usd: round(spent), since, items: costed }, releases: split };
   }
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -79,19 +80,18 @@
 
   /**
    * #750: the header's numbers as values: { stages, disabled, left: { items, stages }, forecast: { usd, minutes } | null,
-   * spent: { usd, since } | null, withoutEstimate }. forecast is null when no item left has an estimate, spent when no item has a real cost.
+   * spent: { usd, since, items } | null, withoutEstimate }. forecast is null when no item left has an estimate, spent when no item has a real cost.
    */
   function stats(roadmap) {
     const stages = stagesOf(roadmap);
     const S = summaryOf(stages);
     const p = S.planned;
-    const costed = stages.flatMap((s) => (Array.isArray(s.items) ? s.items : [])).some((x) => ['done', 'running', 'parked'].includes(x.status) && num(x.actualUsd) !== null);
     return {
       stages: stages.length,
       disabled: stages.filter((s) => s.disabled).length,
       left: { items: p.items, stages: p.stages },
       forecast: p.items > p.withoutEstimate.length ? { usd: p.usd, minutes: p.minutes } : null,
-      spent: costed ? S.spent : null,
+      spent: S.spent.items > 0 ? S.spent : null,
       withoutEstimate: p.withoutEstimate,
     };
   }

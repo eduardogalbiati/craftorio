@@ -181,6 +181,9 @@
   }
 
   const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+  // #750: the header's money (its numbers and By release) in the interface's locale, the app's format elsewhere
+  const cost = (n) => window.I18n?.formatCost?.(n) ?? money(n);
+  const GREEN_CHECK_MS = 60 * 1000; // #750: how long a green base check stays in the activity band after it ended
   const mins = (n) => Estimates.formatMinutes(n);
 
   // #215: a real value against its estimate, coloured by the verdict (Estimates.verdict) with an
@@ -1014,7 +1017,7 @@
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender, view.project || null);
     const { SINCE, cardCount } = RoadmapModel;
-    const [since, , , rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
+    const [since, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const sinceText = t(`backlog_roadmap.since_text_${since}`); // #750: "last 24 hours" in the interface's language
     const r = roadmapOf(data) || { state: 'planned', stages: [] };
     // #291: the releases, and the one the Releases filter chose
@@ -1039,6 +1042,8 @@
     const stateLabel = pausedByFailure ? t('backlog_roadmap.paused_by_a_failure') : StatusPill.statusLabel(r.state);
     const [dotTitle, dataState] = [`${stateLabel}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}`, pausedByFailure ? 'paused-failed' : dotState];
     const dot = `<span class="rm-state-dot is-${dotState}" data-testid="roadmap-state-dot" data-state="${dataState}" role="img" aria-label="${esc(dotTitle)}" title="${esc(dotTitle)}"><span class="sr-only">${esc(stateLabel)}</span></span>`;
+    // not StatusPill.statusPill: the approved design has Running green (StatusPill's is blue) and Paused amber; `pill-warn` names
+    // the amber for the header's readers (its colour is pill-paused's)
     const pill = `<span class="pill ${{ running: 'pill-success', done: 'pill-success', paused: 'pill-paused pill-warn', failed: 'pill-failed' }[dotState] || 'pill-idle'}" data-testid="roadmap-state-pill" data-state="${dataState}">${esc(stateLabel)}</span>`;
     const scopeBadge = pausingHtml(r) || (scoped >= 0
       ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${t('backlog_roadmap.only_stage_n', { value: scoped + 1 })}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}</span>`
@@ -1131,10 +1136,14 @@
     const options = view.epicOptions || [];
     const epicSelect = options.length ? `<select class="rm-epic${v.epic ? ' active' : ''}" data-rm-epic aria-label="${t('backlog_roadmap.epic')}" title="${t('backlog_roadmap.show_the_items_of_one_epic')}"><option value="">${t('backlog_roadmap.all_epics')}</option>${options.map((o) =>
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
-    const left = `${epicSelect}${r.stages.length ? releaseFilterHtml(data, rv) : ''}${window.RoadmapSummary?.byReleaseHtml(r, { open: byReleaseOpen, money, minutes: mins }) || ''}${sinceSelect}${viewSeg}${toggle}`;
+    const left = `${epicSelect}${r.stages.length ? releaseFilterHtml(data, rv) : ''}${window.RoadmapSummary?.byReleaseHtml(r, { open: byReleaseOpen, money: cost, minutes: mins }) || ''}${sinceSelect}${viewSeg}${toggle}`;
     const filters = left || count || view.synced ? `<div class="rm-head-filters" data-testid="filter-row">${left}<span class="spacer"></span>${view.synced ? `<span class="muted small">${esc(view.synced)}</span>` : ''}${count}</div>` : '';
-    const live = window.BacklogLive, act = [live?.baseCheckHtml(data?.baseCheck, clock), note, failures, leftOut].filter(Boolean).join('');
-    const head = `<div class="rm-head" data-testid="roadmap-head">${row}${live?.statsHtml(r, { minutes: mins }) || ''}${act ? `<div class="rm-head-activity" data-testid="roadmap-activity">${act}</div>` : ''}${filters}</div>`;
+    // band 3 only while a task runs: a green base check leaves it a minute after it ended (the engine keeps its last state; the
+    // next redraw drops it), red or failed stays as a warning
+    const bc = data?.baseCheck, endedAt = Date.parse(bc?.endedAt || '');
+    const live = window.BacklogLive, check = bc?.status === 'green' && !(Date.now() - endedAt < GREEN_CHECK_MS) ? null : bc;
+    const act = [live?.baseCheckHtml(check, clock), note, failures, leftOut].filter(Boolean).join('');
+    const head = `<div class="rm-head" data-testid="roadmap-head">${row}${live?.statsHtml(r, { minutes: mins, money: cost }) || ''}${act ? `<div class="rm-head-activity" data-testid="roadmap-activity">${act}</div>` : ''}${filters}</div>`;
     // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
     const cmapHtml = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml() : '';
     return `<div class="rm">${head}${lostHtml()}${queued}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
@@ -1467,6 +1476,21 @@
     el.classList.add('flash');
     setTimeout(() => el.classList.remove('flash'), 1600);
   }
+  // #750: the header's "N disabled apart": the first disabled stage, scrolled to and marked; the next pages load until it is drawn
+  // and, when the view hides it (Planned: nothing open in it), All shows it
+  function showDisabled({ ctx }) {
+    const find = () => document.querySelector('#bl-list .rm-stage.disabled');
+    const loadUntilFound = () => {
+      for (let k = 0; !find() && document.querySelector('#bl-list [data-rm-load-more]') && k < 100; k += 1) { loadMore(); ctx.render(); }
+      return find();
+    };
+    let el = loadUntilFound();
+    if (!el && ctx.setShowAll) { ctx.setShowAll(true); el = loadUntilFound(); }
+    if (!el) return;
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1600);
+  }
 
   // Retry or Skip an item (its card's buttons, the paused roadmap's alert): a retry that would redo an
   // ended run's kept work asks first (#112, #170): resume that run or start from scratch
@@ -1667,9 +1691,9 @@
   const CLICKS = [
     // #465: the base check's "View terminal" (#750) follows its suite log; #750: "N disabled apart" goes to the first disabled stage
     { selector: '.rm-base-check [data-term]', run: (c, btn) => window.BacklogLive.baseCheckTerm(c, btn) },
-    { selector: '[data-rm-show-disabled]', run: () => document.querySelector('#bl-list .rm-stage.disabled')?.scrollIntoView({ block: 'start', behavior: 'smooth' }) },
-    // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it; #421: the summary's By release list
-    { selector: '[data-rm-menu]', run: ({ ctx }) => { [menuOpen, pauseOpen] = [!menuOpen, false]; ctx.render(); focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]'); } },
+    { selector: '[data-rm-show-disabled]', run: showDisabled },
+    // #269: the ⋮ button opens its menu (the first entry, plain or on/off, gets the focus) or closes it; #421: the summary's By release list
+    { selector: '[data-rm-menu]', run: ({ ctx }) => { [menuOpen, pauseOpen] = [!menuOpen, false]; ctx.render(); focusMenu(menuOpen ? `:is(${Menu.ENTRY})` : '[data-rm-menu]'); } },
     { selector: '[data-rm-summary-releases]', run: ({ ctx }) => { byReleaseOpen = !byReleaseOpen; ctx.render(); } },
     { selector: '[data-rm-stage-menu]', run: toggleStageMenu }, // #282: a stage's ⋮ button, the same way (one menu open at a time)
     { selector: '[data-rm-ask-oracle]', run: askOracleClicked }, // #271: the Oracle asked about the item's failure (gate-oracle.js)

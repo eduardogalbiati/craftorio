@@ -13,20 +13,23 @@
 //   between the entries (dividers skipped, refused entries reached); Enter clicks the focused entry; a
 //   click on an allowed entry calls onPick(id); Escape calls onClose('escape'); a press or a click
 //   outside the menu and its `anchor` (the button that opened it, or a function returning it) calls
-//   onClose('outside'), once (a target already gone from the page is ignored). close() removes the
+//   onClose('outside'), once (a target already gone from the page is ignored). ENTRY: the entries' selector. close() removes the
 //   listeners; a screen that redraws an open menu binds the new element again. The look is menu.css.
 // Browser: window.Menu; Node: module.exports.
 // load: early (the views draw their menus with it)
 (function (root) {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const SEP = '<div role="separator" class="ui-menu-sep"></div>';
+  // the selector of a menu's entries (plain and on/off), for a screen that focuses the first one
+  const ENTRY = '[role="menuitem"], [role="menuitemcheckbox"]';
 
   function entryHtml(e) {
     const why = e.disabledReason || '';
     const title = why || e.title || '';
     const icon = e.iconHtml != null ? e.iconHtml : e.checked != null ? (e.checked ? '✓' : '') : esc(e.icon || '');
-    const role = e.checked != null ? `menuitemcheckbox" aria-checked="${!!e.checked}` : 'menuitem'; // #750: an on/off entry
-    return `<button type="button" role="${role}" class="ui-menu-item${e.danger ? ' ui-menu-danger' : ''}" data-menu-id="${esc(e.id)}"`
+    const role = e.checked != null ? 'menuitemcheckbox' : 'menuitem'; // #750: an on/off entry
+    const checked = e.checked != null ? ` aria-checked="${!!e.checked}"` : '';
+    return `<button type="button" role="${role}"${checked} class="ui-menu-item${e.danger ? ' ui-menu-danger' : ''}" data-menu-id="${esc(e.id)}"`
       + `${title ? ` title="${esc(title)}"` : ''}${why ? ' aria-disabled="true"' : ''}${e.testid ? ` data-testid="${esc(e.testid)}"` : ''}${e.attrs ? ` ${e.attrs}` : ''}>`
       + `<span class="ui-menu-icon" aria-hidden="true">${icon}</span><span class="ui-menu-label">${esc(e.label)}</span></button>`;
   }
@@ -45,7 +48,6 @@
   function bindMenu(menu, { onPick, onClose, anchor } = {}) {
     const doc = menu.ownerDocument || root.document;
     let open = true;
-    const ENTRY = '[role="menuitem"], [role="menuitemcheckbox"]';
     const entries = () => [...menu.querySelectorAll(ENTRY)];
     const refused = (el) => el.getAttribute('aria-disabled') === 'true';
     const entryOf = (target) => { const el = target?.closest?.(ENTRY); return el && menu.contains(el) ? el : null; };
@@ -91,6 +93,7 @@
   }
 
   const api = {
+    ENTRY,
     bindMenu,
     menuHtml,
   };
