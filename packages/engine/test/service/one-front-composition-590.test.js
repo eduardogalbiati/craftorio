@@ -27,8 +27,9 @@ const { createServer } = require('../../server');
 // #730: architecture:createIssue; #733: workflows:interviewLast and workflows:interviewState;
 // #738: onboarding:fork and onboarding:work-locally; #740: cli-setup:start, cli-setup:status and the
 // cli-setup:changed event; #741: onboarding:save-wizard and onboarding:finish; #742: projects:remove takes
-// { id, deleteFolder, confirmed, confirmName }; #634: the monitor:* channels of the ai front).
-const MAIN_CONTRACT = '9ed95e2a4431';
+// { id, deleteFolder, confirmed, confirmName }; #634: the monitor:* channels of the ai front; #650/#776:
+// docs:intents, and monitor:diagnose takes `item` and answers `intent`).
+const MAIN_CONTRACT = '67912f910cf1';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;

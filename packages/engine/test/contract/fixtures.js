@@ -186,6 +186,8 @@ module.exports = {
   'discovery:update': { setup: card, arg: (s) => ({ ...s, fields: { title: 'A renamed contract card' } }), invalid: BAD_CARD },
   'discovery:versions': { setup: card, arg: (s) => s, invalid: BAD_CARD },
   'discovery:waiting': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #650/#774: a fresh project has no docs/work yet, so no item has an intent (it only reads the folder)
+  'docs:intents': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'env:check': { arg: null },
   'env:details': { arg: null },
   'findings:list': { arg: null },
