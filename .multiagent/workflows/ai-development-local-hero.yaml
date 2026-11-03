@@ -166,6 +166,7 @@ inputs:
   # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj, Cargo.toml; every one found, main first).
   language:
     label: "Language"
+    group: Project
     type: string
     enum: [js, python, go, java, csharp, rust]
     default: js
@@ -180,6 +181,8 @@ inputs:
   # validated: the run stops at developer_check after the developer.
   mode:
     label: "Mode"
+    group: How it runs
+    main: true
     type: string
     enum: [auto, validated]
     default: auto
@@ -190,6 +193,7 @@ inputs:
   # turn timeout from `models`, whichever way it was chosen
   developer_model:
     label: "Developer model"
+    group: Developer
     type: string
     enum: [claude-opus-5-5, claude-fable-5-1]
     default: claude-opus-5-5
@@ -199,6 +203,7 @@ inputs:
   # default for the model, the behaviour before #286); xhigh doubles the turn timeout
   developer_effort:
     label: "Developer effort"
+    group: Developer
     type: string
     enum: [default, low, medium, high, xhigh]
     default: default
@@ -207,6 +212,7 @@ inputs:
   # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
     label: "Validate every round"
+    group: How it runs
     type: boolean
     default: false
     show_if: "mode == 'validated'"
@@ -220,6 +226,8 @@ inputs:
     # only the suite (run_existing)
     default: write_and_run
     label: Unit tests
+    group: Tests
+    main: true
     options: { write_and_run: Write and run, run_existing: Run existing, "off": "Off" }
     description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-batch workflow)."
   e2e_tests:
@@ -228,6 +236,8 @@ inputs:
     # owner 2026-10-03: quality first, the scenarios are written and run here by default
     default: write_and_run
     label: E2E tests
+    group: Tests
+    main: true
     options: { "off": "Off", write: Write, write_and_run: Write and run }
     description: "Write: the test writer writes the issue's end-to-end scenarios first, with the acceptance tests, and checks that they parse; the E2E release workflow runs them. Write and run: the orchestrator also runs them here, with the @smoke journeys, after the suite (no agent while they pass; starts the app). Off: none."
   # #223: the e2e step adds `--grep "@issue-<n>|@smoke"` (Playwright) to it
@@ -235,6 +245,7 @@ inputs:
     type: string
     default: "npm run test:e2e"
     label: E2E command
+    group: Tests
     show_if: "e2e_tests == 'write_and_run'"
     description: "The project's Playwright E2E command; the orchestrator runs it with --grep on the issue's tag and @smoke."
   # #205: the evidence screenshots (the Product Owner's Cost step sets it on a roadmap item:
@@ -244,17 +255,21 @@ inputs:
     enum: ["off", changed, all]
     default: all
     label: Screenshots
+    group: Tests
+    main: true
     options: { "off": "Off", changed: Changed screens, all: All }
     description: "All: the developer's UI states before your check and the evidence's captures. Changed: only the screens the issue changes, original and modified. Off: no screenshot step and no npm run screenshot by any agent; the evidence is the diff, the logs and the test results (cheapest: the evidence step costs about $0.3-1.5 and 5-10 min of a run)."
   # #588: where the project's UI and its E2E step definitions live (this repository: the UI kit, the
   # fronts and each app's renderer; the root's and each front's step definitions)
   ui_folders:
     label: "UI folders"
+    group: Tests
     type: array
     default: [packages/ui-kit/, fronts/, apps/desktop/renderer/, apps/web/renderer/]
     description: "The project's UI folders, repository-relative (one per line). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there."
   steps_folders:
     label: "Step definition folders"
+    group: Tests
     type: array
     default: [features/steps, fronts/ai/features/steps, fronts/analyser/features/steps, fronts/build/features/steps, fronts/plan/features/steps]
     description: "The folders of the project's E2E step definitions, repository-relative (one per line), read by the test id check."
@@ -262,12 +277,14 @@ inputs:
     type: string
     default: ""
     label: Test command
+    group: Tests
     description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
   # #404: the project's fast rule checks, run after each develop commit (rule_check)
   check_command:
     type: string
     default: ""
     label: Check command
+    group: Checks
     description: "The project's fast rule checks (lint, layers, docs...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script from its package.json (npm run check); a project without one skips the step."
   # #396 (owner 2026-10-15): set before the run, never changed by an agent while it runs. With
   # continue, a suite red only outside the change goes on to the build without the test_failed gate.
@@ -276,6 +293,7 @@ inputs:
     enum: [ask, continue]
     default: ask
     label: Suite red outside the change
+    group: Tests
     options: { ask: Ask, continue: Continue }
     description: "When the suite still fails but every failing test is outside the change (its test file reaches no changed file, passes alone, or fails or hangs on the base too). Ask: the test_failed gate waits for you, as for any red suite. Continue: the run goes on to the build and the merge, reported as not tested green. A failure in the change always asks."
 
