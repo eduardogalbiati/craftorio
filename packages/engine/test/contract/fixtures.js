@@ -202,8 +202,12 @@ module.exports = {
   // #632: a new project, git init only, no remote
   'onboarding:create': { arg: () => ({ name: unique('Contract create'), starts: 'empty', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone' } }), invalid: { arg: { name: 42 } } },
   // #738: a repository the owner can push to (here none reached) has no fork to create or decline: 400
+  // #741: Finish marks the onboarding finished
+  'onboarding:finish': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'onboarding:fork': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
   'onboarding:retry': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #741: the wizard's step and picks saved with the project
+  'onboarding:save-wizard': { setup: onboarding, arg: ({ projectId }) => ({ projectId, step: 'repository', picks: { name: 'Contract' } }), invalid: { arg: { projectId: 'p', step: 42 } } },
   'onboarding:start': { arg: () => ({ name: unique('Contract onboarding'), repo: UNREACHABLE_REPO }), invalid: { arg: { name: 'No repository' } } },
   'onboarding:status': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'onboarding:work-locally': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },

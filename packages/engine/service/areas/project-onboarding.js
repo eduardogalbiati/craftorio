@@ -25,6 +25,10 @@
 // a failed clone ends `failed` with a readable reason; onboardingRetry runs again what failed (the
 // access check and the clone, a failed job) and always checks gh / glab again. A project removed while
 // its jobs run loses its state; no error of a job escapes the chain.
+// #741: the wizard's own state is saved with the project's record, `onboarding: { step, picks, finished }`
+// (saveWizard on every change of the wizard, finish on Finish; status() answers it as `wizard`), so it outlives
+// the process; start() with the repository of an existing project resumes its unfinished onboarding (no second
+// project) or answers { exists, finished, projectId } for a finished one.
 
 const fs = require('fs');
 const path = require('path');
@@ -48,6 +52,10 @@ const { toolSignIn } = require('./settings');
 const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
 const PAID = ['projectMap'];
+
+// #741: two URLs of the same repository (case, a trailing slash or .git aside)
+const repoKey = (url) => String(url || '').trim().toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '');
+const sameRepo = (a, b) => !!repoKey(a) && repoKey(a) === repoKey(b);
 
 // a readable reason for an access check that did not reach the repository
 function accessReason(access) {
@@ -250,7 +258,13 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     Object.assign(s, patch);
     for (const k of Object.keys(patch)) if (patch[k] === undefined) delete s[k];
     for (const [job, value] of Object.entries(jobPatch)) s.jobs[job] = value;
-    emit('onboarding:changed', snapshot(s));
+    emit('onboarding:changed', withWizard(snapshot(s), projectOf(id)));
+  }
+
+  // #741: a state with the wizard saved on the project's record (`wizard`), when it has one
+  function withWizard(snap, p) {
+    const o = p?.onboarding;
+    return o ? { ...snap, wizard: { step: o.step, picks: o.picks || {}, finished: o.finished === true } } : snap;
   }
 
   // the project, or null once it was removed
@@ -360,12 +374,22 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     change(id, { status: 'failed', code: 'no-access', reason: accessReason(access) }, { clone: { status: 'skipped' } });
   }
 
-  /** Checks the access, creates the project and starts its clone; never waits for the clone. */
+  /**
+   * Checks the access, creates the project and starts its clone; never waits for the clone. #741: the
+   * repository of an existing project creates nothing: its onboarding not finished resumes (that project's
+   * state, with its wizard), else { exists: true, finished: true, projectId } (the wizard offers to open it).
+   */
   async function start({ name, repo } = {}) {
     if (typeof name !== 'string' || !name.trim()) throw clientError('The project name is missing.');
     if (typeof repo !== 'string' || !repo.trim()) throw clientError('The repository URL is missing.');
+    const existing = projects.listProjects(projectsDir).find((x) => !x.error && sameRepo(x.repo, repo));
+    if (existing) {
+      if (!existing.onboarding || existing.onboarding.finished) return { exists: true, finished: true, projectId: existing.id };
+      return status(existing.id);
+    }
     const access = await projects.checkAccess(repo, { git });
     const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir, ...(access.status === 'reachable' ? {} : { cloneError: accessReason(access) }) });
+    projects.updateProject(projectsDir, p.id, { onboarding: { step: 'repository', picks: {}, finished: false } });
     // a folder of repos/ that already is a clone (a removed project imported again) needs no access
     const reachable = access.status === 'reachable' || p.status === 'ready';
     states.set(p.id, { projectId: p.id, status: 'cloning', jobs: Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), cli: null });
@@ -464,11 +488,44 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(projectId);
   }
 
-  /** The project's state, as the last onboarding:changed pushed it. */
+  /**
+   * The project's state, as the last onboarding:changed pushed it, with #741's wizard: { step, picks, finished }
+   * (the project's record). A project removed drops its state; an onboarding of an earlier process (the app
+   * restarted) is read back from the record (restore).
+   */
   function status(projectId) {
+    const p = projectOf(projectId);
+    if (!p) { states.delete(projectId); work.delete(projectId); }
+    else if (!states.has(projectId) && p.onboarding) restore(p);
     const s = states.get(projectId);
     if (!s) throw clientError(`No onboarding runs for the project ${projectId}.`);
-    return snapshot(s);
+    return withWizard(snapshot(s), p);
+  }
+
+  // #741: the state of an onboarding this process did not start: its clone as the record says, the free part
+  // run again once the clone is ready (the facts and the profile the wizard's step 3 reads)
+  function restore(p) {
+    const waiting = Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }]));
+    const ready = p.status === 'ready';
+    states.set(p.id, { projectId: p.id, name: p.name, status: ready ? 'ready' : 'failed', jobs: { ...waiting, clone: { status: ready ? 'done' : 'failed' } }, cli: null, ...(ready ? {} : { code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }) });
+    if (ready && !p.onboarding.finished) startFree(p.id);
+  }
+
+  // #741: the wizard's state saved with the project (its step, the picks, finished kept)
+  function saveWizard(projectId, { step, picks } = {}) {
+    if (!OnboardingModel.STEPS.some((x) => x.id === step)) throw clientError(`The wizard step must be one of: ${OnboardingModel.STEPS.map((x) => x.id).join(', ')}.`);
+    const p = projectOf(projectId);
+    if (!p) throw clientError(`No onboarding runs for the project ${projectId}.`);
+    projects.updateProject(projectsDir, projectId, { onboarding: { step, picks: picks && typeof picks === 'object' ? picks : {}, finished: p.onboarding?.finished === true } });
+    return status(projectId);
+  }
+
+  /** #741: Finish: the onboarding is finished (the Projects card no longer offers Continue). */
+  function finish(projectId) {
+    const p = projectOf(projectId);
+    if (!p) throw clientError(`No onboarding runs for the project ${projectId}.`);
+    projects.updateProject(projectsDir, projectId, { onboarding: { step: p.onboarding?.step || 'review', picks: p.onboarding?.picks || {}, finished: true } });
+    return status(projectId);
   }
 
   /** Asks for the paid part: runs it now on a ready project, else once the clone is ready. */
@@ -550,6 +607,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     if (provider && !Platforms.findPlatform(provider)?.cli) throw clientError(`No CLI creates repositories on ${provider}.`);
     const profile = { ...cleanAnswers(answers), tests: 'unit' };
     const p = await projects.createProject(projectsDir, { name }, { git, fresh: true }).catch((e) => { throw clientError(String(e?.message || e)); });
+    projects.updateProject(projectsDir, p.id, { onboarding: { step: 'repository', picks: {}, finished: false } });
     const folder = p.folder;
     try {
       await initRepository(folder, p.name, starts);
@@ -582,7 +640,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(p.id);
   }
 
-  return { analyze, create, fork, retry, start, status, workLocally };
+  return { analyze, create, finish, fork, retry, saveWizard, start, status, workLocally };
 }
 
 module.exports = (ctx) => {
@@ -625,9 +683,11 @@ module.exports = (ctx) => {
     onboardingAccounts: () => cliAccounts(),
     onboardingAnalyze: ({ projectId }) => onboarding().analyze(projectId),
     onboardingCreate: (data) => onboarding().create(data),
+    onboardingFinish: ({ projectId }) => onboarding().finish(projectId),
     onboardingFork: ({ projectId }) => onboarding().fork(projectId),
     onboardingRepos: ({ provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
+    onboardingSaveWizard: ({ projectId, step, picks } = {}) => onboarding().saveWizard(projectId, { step, picks }),
     onboardingStart: (data) => onboarding().start(data),
     onboardingStatus: ({ projectId }) => onboarding().status(projectId),
     onboardingWorkLocally: ({ projectId }) => onboarding().workLocally(projectId),

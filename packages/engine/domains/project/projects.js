@@ -12,6 +12,8 @@
 // #640: cloneJob lets the onboarding (packages/engine/service/areas/project-onboarding.js) wait for a clone.
 // #745: `platform` (github / gitlab) for a host its URL does not name (shared/platforms projectPlatform);
 // #735: `kind` (backend / frontend / full-stack) and `runDefaults` the owner set (project-run-defaults.js).
+// #741: `onboarding: { step, picks, finished }`, the new-project wizard's state (service/areas/project-onboarding.js).
+// #742: ownedFolder / folderChanges: the checks before a removal deletes the project's folder.
 
 const fs = require('fs');
 const path = require('path');
@@ -210,6 +212,8 @@ function updateProject(dir, id, patch) {
   // #735: backend / frontend / full-stack as the owner confirmed it, and the run defaults edited on the project page
   if (patch.kind !== undefined) next.kind = cleanKind(patch.kind);
   if (patch.runDefaults !== undefined) next.runDefaults = cleanRunDefaults(patch.runDefaults);
+  // #741: the new-project wizard's state (its step, the owner's picks, finished), so an onboarding resumes
+  if (patch.onboarding !== undefined) next.onboarding = cleanOnboarding(patch.onboarding);
   if (patch.folder !== undefined) moveFolder(next, cur, patch.folder, jobs.has(jobKey(dir, id)));
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);
@@ -256,6 +260,13 @@ function cleanRunDefaults(v) {
     else if (typeof val === 'string' && val.trim()) out[k] = val.trim();
   }
   return Object.keys(out).length ? out : null;
+}
+
+// #741: the wizard's state, { step (a step id), picks (an object), finished }; null: none
+function cleanOnboarding(v) {
+  if (!v || typeof v !== 'object') return null;
+  const picks = v.picks && typeof v.picks === 'object' && !Array.isArray(v.picks) ? JSON.parse(JSON.stringify(v.picks)) : {};
+  return { step: String(v.step || 'start'), picks, finished: v.finished === true };
 }
 
 // #486: a workflow's name without its .yaml suffix; null when empty
@@ -336,10 +347,39 @@ function decodeContents(out) {
   return String(out ?? '');
 }
 
-/** Removes only the project entry; the project folder is not deleted. */
+/**
+ * Removes only the project entry; the project folder is not deleted (#742: the service area
+ * project-remove.js deletes it on request, with ownedFolder and folderChanges below).
+ */
 function removeProject(dir, id) {
   fs.rmSync(metaFile(dir, id), { force: true });
   return true;
+}
+
+/**
+ * #742: whether `folder` is one the app made: a folder strictly inside one of `roots` (<workspace>/repos/, the
+ * clones; <workspace>/projects/, the new projects' folders), never a root itself nor a path escaping it.
+ */
+function ownedFolder(folder, roots) {
+  if (!folder) return false;
+  const target = path.resolve(String(folder));
+  return roots.filter(Boolean).some((root) => {
+    const rel = path.relative(path.resolve(root), target);
+    return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+  });
+}
+
+/**
+ * #742: what deleting a git folder would lose: dirty (`git status --porcelain`, the paths) and unpushed (the
+ * local commits on no remote branch, `<hash> <subject>`, at most 50). A folder that is not a repository of
+ * its own (no .git) loses nothing git knows: both empty.
+ */
+async function folderChanges(folder, { git = execGit } = {}) {
+  if (!folder || !fs.existsSync(path.join(String(folder), '.git'))) return { dirty: [], unpushed: [] };
+  const lines = (out) => String(out || '').split(/\r?\n/).map((l) => l.trimEnd()).filter(Boolean);
+  const dirty = lines(await git(['status', '--porcelain'], folder).catch(() => '')).map((l) => l.slice(3) || l);
+  const unpushed = lines(await git(['log', '--branches', '--not', '--remotes', '--format=%h %s', '-n', '50'], folder).catch(() => ''));
+  return { dirty, unpushed };
 }
 
 
@@ -347,7 +387,9 @@ module.exports = {
   checkAccess,
   cloneJob,
   createProject,
+  folderChanges,
   listProjects,
+  ownedFolder,
   projectDefaultWorkflow,
   projectManifest,
   readProject,

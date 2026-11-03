@@ -26,8 +26,9 @@ const { createServer } = require('../../server');
 // onboarding:repos; #671: docs:read-at; #630: backlog:auto-push removed; #632: onboarding:create;
 // #730: architecture:createIssue; #733: workflows:interviewLast and workflows:interviewState;
 // #738: onboarding:fork and onboarding:work-locally; #740: cli-setup:start, cli-setup:status and the
-// cli-setup:changed event).
-const MAIN_CONTRACT = 'ad51597a86f6';
+// cli-setup:changed event; #741: onboarding:save-wizard and onboarding:finish; #742: projects:remove takes
+// { id, deleteFolder, confirmed, confirmName }).
+const MAIN_CONTRACT = 'f0cfa94a28c3';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;

@@ -15,6 +15,7 @@ const {
   nullable,
   NUMBER,
   OBJECT,
+  oneOf,
   PROJECT_ID,
   STRING,
   text,
@@ -39,7 +40,18 @@ module.exports = (ctx) => [
   { channel: 'projects:list', method: 'listProjects', schema: { result: listOf(OBJECT) }, fn: () => projects.listProjects(ctx.ws.projects) },
   { channel: 'projects:create', method: 'createProject', params: 'data', schema: { params: PROJECT_DATA, result: OBJECT }, fn: (data) => projects.createProject(ctx.ws.projects, requireObject(data, 'project'), { reposDir: ctx.ws.repos }) },
   { channel: 'projects:update', method: 'updateProject', params: ['id', 'patch'], schema: { params: args({ id: PROJECT_ID, patch: PROJECT_DATA }, ['id']), result: OBJECT }, fn: ({ id, patch }) => projects.updateProject(ctx.ws.projects, requireId(id, 'project id'), patch) },
-  { channel: 'projects:remove', method: 'removeProject', params: 'id', schema: { params: PROJECT_ID, result: BOOL }, fn: (id) => projects.removeProject(ctx.ws.projects, requireId(id, 'project id')) },
+  // #742: a bare id (the record only) or { id, deleteFolder, confirmed, confirmName } (service/areas/project-remove.js)
+  {
+    channel: 'projects:remove',
+    method: 'removeProject',
+    params: 'id',
+    schema: {
+      // the id's own check (requireId) names it in its 400, as projects:update's does (#333)
+      params: oneOf(text(200, 'The project id: the record only.'), args({ id: text(200, 'The project id.'), deleteFolder: FLAG, confirmed: FLAG, confirmName: text(200, 'The project\'s name, typed to delete a folder the app did not make.') }, ['id'])),
+      result: oneOf(BOOL, OBJECT),
+    },
+    fn: (arg) => ctx.projectRemove(arg),
+  },
   // the page options of runs:list (#200) as the second argument
   {
     channel: 'projects:runs',

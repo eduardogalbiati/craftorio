@@ -3,6 +3,7 @@
 // failed. Each answers the onboarding state, which onboarding:changed pushes on every change. Before any
 // import, the wizard's repository step (#669, mock-2) reads gh / glab's sign-in and the account's repositories.
 // #632: onboarding:create makes a new project instead of importing one (mock-3).
+// #741: onboarding:save-wizard / onboarding:finish keep the wizard's step and picks with the project.
 
 const {
   args,
@@ -37,5 +38,9 @@ module.exports = (ctx) => [
   // the original; Fork + PR) or "Work locally" (the Local way of working, no pull request)
   { channel: 'onboarding:fork', method: 'forkOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingFork(opts) },
   { channel: 'onboarding:work-locally', method: 'workLocallyOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingWorkLocally(opts) },
+  // #741: the wizard's step and the owner's picks, saved with the project on every change (an onboarding left
+  // before Finish resumes there); Finish marks it finished
+  { channel: 'onboarding:save-wizard', method: 'saveOnboardingWizard', params: 'data', schema: { params: args({ projectId: PROJECT_ID, step: text(20, 'The wizard step: start, repository, analysis or review.'), picks: described(OBJECT, 'The owner\'s picks, kept as given.') }, ['projectId', 'step']), result: OBJECT }, fn: (data) => ctx.onboardingSaveWizard(data) },
+  { channel: 'onboarding:finish', method: 'finishOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingFinish(opts) },
   { event: 'onboarding:changed', method: 'onOnboardingChanged' },
 ];
