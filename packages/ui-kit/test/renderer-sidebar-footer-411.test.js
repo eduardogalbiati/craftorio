@@ -122,28 +122,35 @@ test('#411 index.html: Keeping awake, the Run item and the runs list are in the 
 
 // ---- 2. the menu entries the page places -------------------------------------------------------
 
-test('#411 the page puts every menu entry (Home, the groups, Night watch, Settings) in the menu part, not on the sidebar itself, in the same order', () => {
+// #634: Night watch moved into the Monitor group (mock-8), so the entries standing alone are Home and Settings
+test('#411 the page puts every menu entry (Home, the groups, Settings) in the menu part, not on the sidebar itself, in the same order', () => {
   const app = loadApp();
   const nodes = [...app.elements.values(), ...app.created];
   const containerOf = (node) => nodes.find((n) => (n.appended || []).includes(node));
   const label = (n) => text(n.innerHTML);
-  const top = ['Home', 'Night watch', 'Settings'].map((name) => {
+  const entry = (name) => {
     const btn = app.created.find((n) => n.classList.contains('nav-item') && label(n) === name);
     assert.ok(btn, `no "${name}" menu entry was created`);
     return btn;
-  });
+  };
+  const top = ['Home', 'Settings'].map(entry);
   const groups = app.created.filter((n) => n.classList.contains('nav-group'));
-  assert.ok(groups.length >= 4, `only ${groups.length} menu groups`);
+  assert.ok(groups.length >= 5, `only ${groups.length} menu groups`);
   const holders = [...new Set([...top, ...groups].map(containerOf))];
   assert.equal(holders.length, 1, 'the menu entries and groups are not all in one container');
   const holder = holders[0];
   assert.ok(holder, 'the menu entries were placed nowhere');
   assert.notEqual(String(holder.key), 'nav.sidebar', 'the menu entries are placed on nav.sidebar itself, not in its menu part');
-  // the order is the entries' own (data-order): Home first, then the groups, Night watch, Settings last
+  // Night watch sits in the Monitor group's entries
+  const nightBox = containerOf(entry('Night watch'));
+  assert.equal(containerOf(nightBox)?.dataset?.group, 'monitor', 'Night watch is not in the Monitor group');
+  // the order is the entries' own (data-order): Home first, then the groups (Monitor last), Settings last
   const order = (n) => Number(n.dataset.order);
-  const [home, night, settings] = top;
-  assert.ok(groups.every((g) => order(home) < order(g) && order(g) < order(night)), 'Home, the groups, Night watch: order changed');
-  assert.ok(order(night) < order(settings), 'Settings is no longer after Night watch');
+  const [home, settings] = top;
+  assert.ok(groups.every((g) => order(home) < order(g) && order(g) < order(settings)), 'Home, the groups, Settings: order changed');
+  const monitor = groups.find((g) => g.dataset.group === 'monitor');
+  assert.ok(monitor, 'no Monitor group');
+  assert.ok(groups.every((g) => g === monitor || order(g) < order(monitor)), 'Monitor is not the last group');
   const footerNames = ['sidebar-footer', ...selectorsFor('sidebar-footer')];
   assert.ok(!footerNames.some((n) => String(holder.key).includes(n)), 'the menu entries are placed in the footer');
 });
