@@ -1403,3 +1403,194 @@ Then('the cost meter of the roadmap item {string} grows by {float} dollars witho
   await expect.poll(() => costOf(page, title), { timeout: LOAD_TIMEOUT }).toBeCloseTo(before + usd, 1);
   expect(await page.evaluate(() => window.e2eCostNoted === true), 'the window was not reloaded').toBe(true);
 });
+
+// ---- #750: the Roadmap header in four bands -----------------------------------------------------------
+// What the screen exposes (the renderer's contract for these steps, new for #750 unless marked):
+// - data-testid="roadmap-head": one card holding the four bands, top to bottom, each band after the
+//   first separated from the one above by a divider (a border, an <hr> or a role="separator").
+// - band 1, data-testid="roadmap-bar" (exists, now inside the card): left the state dot (#269's
+//   data-testid="roadmap-state-dot"), the title "Roadmap", then data-testid="roadmap-state-pill" (its
+//   text the readable state: "Running", "Paused", "Paused by a failure", "Planned", "Done"; data-state
+//   as the dot's); right only the controls, in order: "Start" / "Resume" (primary) or "Pause", then
+//   "Stop", then the ⋮ button ("Roadmap actions"). No other control in this band: the "Simulated"
+//   checkbox moves into the ⋮ menu (role="menuitemcheckbox", or a checkbox inside the menu, named
+//   "Simulated").
+// - band 2, data-testid="roadmap-stats": four columns of equal width, data-testid="roadmap-stat" each
+//   (in order Stages, Left, Forecast, Spent), with data-testid="roadmap-stat-label", "roadmap-stat-value"
+//   (a number, a money or a time, "—" when unknown) and "roadmap-stat-detail" ("N disabled", "in N
+//   stages", the planned money, "so far").
+// - band 3, data-testid="roadmap-activity": only while a background task runs (the base check): its
+//   name, "since HH:MM · <commit>", and a button "View terminal" that opens its log (it replaces the base
+//   check card's "Live terminal" and "↗"). Absent when nothing runs.
+// - band 4, data-testid="filter-row" (exists, now inside the card, under the bars): on its left the
+//   Releases filter (when there are releases), the date filter ("Date range"), the Planned | All switch
+//   ("Roadmap items"), "Group by epic"; on its right data-testid="roadmap-count" (exists).
+
+const rmHead = (page) => page.getByTestId('roadmap-head').filter({ visible: true }).first();
+const HEAD_BANDS = {
+  'state and actions': 'roadmap-bar',
+  numbers: 'roadmap-stats',
+  activity: 'roadmap-activity',
+  'view and filters': 'filter-row',
+};
+const statePill = (page) => rmHead(page).getByTestId('roadmap-bar').getByTestId('roadmap-state-pill');
+const headStats = (page) => rmHead(page).getByTestId('roadmap-stats').getByTestId('roadmap-stat');
+const activity = (page) => rmHead(page).getByTestId('roadmap-activity');
+const exactText = (text) => new RegExp(`^\\s*${escapeRe(text)}\\s*$`);
+const headStat = (page, label) => headStats(page).filter({ has: page.getByTestId('roadmap-stat-label').filter({ hasText: exactText(label) }) }).first();
+
+// the band is set off from the one above: its own top border, or a divider (an <hr>, a separator, a
+// bottom border) right before it
+const dividedFromAbove = (band) => band.evaluate((el) => {
+  const line = (s, side) => parseFloat(s[`border${side}Width`]) > 0 && s[`border${side}Style`] !== 'none';
+  if (line(getComputedStyle(el), 'Top')) return true;
+  const prev = el.previousElementSibling;
+  if (!prev) return false;
+  return prev.tagName === 'HR' || prev.getAttribute('role') === 'separator' || line(getComputedStyle(prev), 'Bottom');
+});
+
+Then('the roadmap header shows its bands in order: {}', async ({ e2e }, list) => {
+  const page = e2e.window;
+  const names = list.split(/,\s*/).map((s) => s.trim());
+  await expect(rmHead(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  let above = null;
+  for (const [i, name] of names.entries()) {
+    const id = HEAD_BANDS[name];
+    expect(id, `a band of the roadmap header named "${name}"`).toBeTruthy();
+    const band = rmHead(page).getByTestId(id).filter({ visible: true }).first();
+    await expect(band, `the "${name}" band in the roadmap header`).toBeVisible({ timeout: LOAD_TIMEOUT });
+    const box = await band.boundingBox();
+    if (above) {
+      expect(box.y, `the "${name}" band comes under the "${names[i - 1]}" band`).toBeGreaterThanOrEqual(above.y + above.height - 1);
+      expect(await dividedFromAbove(band), `a divider sets the "${name}" band off from the one above`).toBe(true);
+    }
+    above = box;
+  }
+});
+
+Then('the roadmap header shows no activity band', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(rmHead(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(activity(page)).toHaveCount(0);
+});
+
+// the pill follows the dot and the title "Roadmap", on the band's left
+Then("the roadmap's state pill reads {string}", async ({ e2e }, label) => {
+  const page = e2e.window;
+  const pill = statePill(page);
+  await expect(pill).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(pill).toHaveText(exactText(label), { timeout: 20000 });
+  const bar = rmHead(page).getByTestId('roadmap-bar');
+  const dot = await bar.getByTestId('roadmap-state-dot').boundingBox();
+  const title = await bar.getByText('Roadmap', { exact: true }).first().boundingBox();
+  const box = await pill.boundingBox();
+  expect(dot && title, 'the state dot and the title are shown').toBeTruthy();
+  expect(dot.x + dot.width, 'the dot comes before the title').toBeLessThanOrEqual(title.x + 1);
+  expect(title.x + title.width, 'the pill comes after the title').toBeLessThanOrEqual(box.x + 1);
+});
+
+// exactly these three controls in the band, left to right, at its right end, after the pill
+Then("the roadmap header's controls are {string}, {string} and the ⋮ menu, in that order", async ({ e2e }, a, b) => {
+  const page = e2e.window;
+  const bar = rmHead(page).getByTestId('roadmap-bar');
+  const names = [a, b, 'Roadmap actions'];
+  const boxes = [];
+  for (const name of names) {
+    const control = bar.getByRole('button', { name, exact: true });
+    await expect(control, `"${name}" in the roadmap header`).toBeVisible({ timeout: LOAD_TIMEOUT });
+    boxes.push(await control.boundingBox());
+  }
+  const controls = bar.locator('button, select, input, [role="button"], [role="checkbox"], [role="switch"]').filter({ visible: true });
+  expect(await controls.count(), 'the state band holds only these three controls').toBe(3);
+  for (let i = 1; i < boxes.length; i++) expect(boxes[i].x, `"${names[i]}" comes after "${names[i - 1]}"`).toBeGreaterThanOrEqual(boxes[i - 1].x + boxes[i - 1].width - 1);
+  const pill = await statePill(page).boundingBox();
+  const band = await bar.boundingBox();
+  expect(boxes[0].x, 'the controls sit right of the state pill').toBeGreaterThan(pill.x + pill.width);
+  const last = boxes[boxes.length - 1];
+  expect(band.x + band.width - (last.x + last.width), 'the ⋮ button ends the band, on its right').toBeLessThanOrEqual(40);
+  if (/^(Start|Resume)$/.test(a)) await expect(bar.getByRole('button', { name: a, exact: true })).toHaveClass(/\bprimary\b/);
+});
+
+Then('the roadmap header offers no {string} checkbox outside its ⋮ menu', async ({ e2e }, name) => {
+  const page = e2e.window;
+  await expect(rmHead(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole('menu').filter({ visible: true })).toHaveCount(0);
+  await expect(rmHead(page).getByRole('checkbox', { name, exact: true }).filter({ visible: true })).toHaveCount(0);
+});
+
+Then("the roadmap's menu offers the {string} switch", async ({ e2e }, name) => {
+  const menu = rmMenu(e2e.window);
+  await expect(menu.getByRole('menuitemcheckbox', { name, exact: true }).or(menu.getByRole('checkbox', { name, exact: true })).first()).toBeVisible();
+});
+
+Then("the roadmap header's numbers are {string}, {string}, {string} and {string}, in equal columns, each with its value", async ({ e2e }, a, b, c, d) => {
+  const page = e2e.window;
+  const labels = [a, b, c, d];
+  const cols = headStats(page);
+  await expect(cols).toHaveCount(4, { timeout: LOAD_TIMEOUT });
+  const boxes = [];
+  for (const [i, label] of labels.entries()) {
+    const col = cols.nth(i);
+    await expect(col.getByTestId('roadmap-stat-label'), `column ${i + 1}'s label`).toHaveText(exactText(label));
+    await expect(col.getByTestId('roadmap-stat-value'), `the "${label}" value`).toHaveText(/\S/);
+    await expect(col.getByTestId('roadmap-stat-detail'), `the "${label}" detail`).toHaveCount(1);
+    boxes.push(await col.boundingBox());
+  }
+  for (let i = 1; i < boxes.length; i++) {
+    expect(Math.abs(boxes[i].width - boxes[0].width), `column ${i + 1} as wide as column 1`).toBeLessThanOrEqual(2);
+    expect(Math.abs(boxes[i].y - boxes[0].y), `column ${i + 1} on the same row`).toBeLessThanOrEqual(2);
+    expect(boxes[i].x, `column ${i + 1} right of column ${i}`).toBeGreaterThanOrEqual(boxes[i - 1].x + boxes[i - 1].width - 1);
+  }
+});
+
+Then('the {string} number of the roadmap header says {string}', async ({ e2e }, label, text) => {
+  const col = headStat(e2e.window, label);
+  await expect(col).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(col.getByTestId('roadmap-stat-detail')).toContainText(text);
+});
+
+Then("the roadmap's view band holds the date filter, the Planned and All switch and {string} on its left, and the item count on its right", async ({ e2e }, groupBy) => {
+  const page = e2e.window;
+  const band = rmHead(page).getByTestId('filter-row').filter({ visible: true }).first();
+  await expect(band).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const count = band.getByTestId('roadmap-count');
+  await expect(count, 'the item count in the view band').toBeVisible();
+  const countBox = await count.boundingBox();
+  const bandBox = await band.boundingBox();
+  const left = [
+    ['the date filter', band.getByRole('combobox', { name: 'Date range', exact: true })],
+    ['the Planned | All switch', band.getByRole('group', { name: 'Roadmap items', exact: true })],
+    [`"${groupBy}"`, band.getByRole('checkbox', { name: groupBy, exact: true })],
+  ];
+  for (const [what, control] of left) {
+    await expect(control, `${what} in the view band`).toBeVisible();
+    const box = await control.boundingBox();
+    expect(box.x + box.width, `${what} sits left of the item count`).toBeLessThanOrEqual(countBox.x + 1);
+  }
+  expect(bandBox.x + bandBox.width - (countBox.x + countBox.width), 'the item count ends the band, on its right').toBeLessThanOrEqual(40);
+});
+
+// e2e.baseCommit: the base's commit, noted by "the demo project is a git repository on the base … whose
+// suite runs for a while" (base-health.steps.js)
+Then("the roadmap's activity band names {string}, running since a time on the base's commit", async ({ e2e }, name) => {
+  const band = activity(e2e.window);
+  await expect(band).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(band).toContainText(name);
+  await expect(band).toContainText(/since\s+\d{1,2}:\d{2}/i);
+  expect(e2e.baseCommit, "the base's commit, noted when the repository was made").toBeTruthy();
+  await expect(band).toContainText(e2e.baseCommit.slice(0, 7));
+});
+
+Then("the roadmap's activity band offers {string} and no {string} or {string} button", async ({ e2e }, name, gone1, gone2) => {
+  const band = activity(e2e.window);
+  await expect(band.getByRole('button', { name, exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // by its accessible name or its text (the ↗ button may be named by its tooltip)
+  for (const gone of [gone1, gone2]) {
+    await expect(band.getByRole('button', { name: gone, exact: true })).toHaveCount(0);
+    await expect(band.getByRole('button').filter({ hasText: exactText(gone) })).toHaveCount(0);
+  }
+});
+
+When("I click {string} in the roadmap's activity band", async ({ e2e }, name) => {
+  await activity(e2e.window).getByRole('button', { name, exact: true }).click();
+});

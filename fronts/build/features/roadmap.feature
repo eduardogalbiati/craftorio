@@ -859,3 +859,59 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then no confirm dialog opens
     And stage 2 is the stage "Tonight"
     And the roadmap shows the item "Keyboard focus is lost after closing a dialog"
+
+  # ---- #750: the Roadmap header in four bands -------------------------------------------------------------
+  # One card with four bands, separated by dividers: the state and the actions; the numbers (Stages, Left,
+  # Forecast, Spent); the activity, only while a background task (the base check) runs; the view and its
+  # filters. The demo roadmap is paused by a refused start (#14), so it offers Resume; stages 2 to 5 have
+  # work left; tonight's runs already spent money; nothing runs in the background (no base check).
+  # Assumptions: the pill reads the app's existing state labels ("Paused by a failure", "Running",
+  # "Paused"); the Simulated switch is a checkbox entry of the ⋮ menu; the Releases filter only shows once
+  # the project has shipped releases, so the view band is checked without it here; the base check runs a
+  # suite of about 90 seconds (on a suite slot of the scenario's own), long enough to see it running.
+
+  @issue-750
+  Scenario: The Roadmap's header shows the state, the numbers and the view in their bands, with no activity when nothing runs
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap header shows its bands in order: state and actions, numbers, view and filters
+    And the roadmap header shows no activity band
+    And the roadmap's state pill reads "Paused by a failure"
+    And the roadmap header's controls are "Resume", "Stop" and the ⋮ menu, in that order
+    And the roadmap header offers no "Simulated" checkbox outside its ⋮ menu
+    And the roadmap header's numbers are "Stages", "Left", "Forecast" and "Spent", in equal columns, each with its value
+    And the "Left" number of the roadmap header says "in 4 stages"
+    And the "Spent" number of the roadmap header says "so far"
+    And the roadmap's view band holds the date filter, the Planned and All switch and "Group by epic" on its left, and the item count on its right
+    And the roadmap's date filter is "Last 24 hours"
+    And the roadmap header counts the items shown out of all, for "last 24 hours"
+    When I open the roadmap's ⋮ menu
+    Then the roadmap's menu offers the "Simulated" switch
+
+  @issue-750
+  Scenario: A running roadmap shows a "Running" pill with Pause, Stop and ⋮; once paused, Resume, Stop and ⋮
+    Given the app is open
+    And the roadmap is running as a simulation
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap's state pill reads "Running"
+    And the roadmap header's controls are "Pause", "Stop" and the ⋮ menu, in that order
+    When I click "Pause" on the roadmap bar
+    And I choose "Pause now" in the pause menu
+    Then the roadmap's state pill reads "Paused"
+    And the roadmap header's controls are "Resume", "Stop" and the ⋮ menu, in that order
+
+  @issue-750
+  Scenario: While the base check runs, the activity band names it with its start and commit, and "View terminal" opens its log
+    Given the app is open with the machine's suite slot free
+    And the demo project is a git repository on the base "main" whose suite runs for a while
+    When a merge into the base "main" starts the base check
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap header shows its bands in order: state and actions, numbers, activity, view and filters
+    And the roadmap's activity band names "Base check", running since a time on the base's commit
+    And the roadmap's activity band offers "View terminal" and no "Live terminal" or "↗" button
+    When I click "View terminal" in the roadmap's activity band
+    Then a read-only terminal tab opens for "Base check"
+    And the terminal shows "npm test"

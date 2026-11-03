@@ -177,6 +177,37 @@ Then("the roadmap's base check reads {string}", async ({ e2e }, text) => {
   await expect(card).toContainText(text, { ignoreCase: true });
 });
 
+// ---- #750: the Roadmap header's activity band while the base check runs ------------------------------
+// (fronts/build/features/roadmap.feature). The app gets a suite slot of the scenario's own (its temp
+// folder and MULTIAGENT_LOCKS_DIR, as #527), free, so no other suite on the machine makes the check wait.
+Given("the app is open with the machine's suite slot free", async ({ e2e }) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
+  const locks = path.join(tmp, 'multiagent-orchestrator', 'locks');
+  fs.mkdirSync(locks, { recursive: true });
+  await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, MULTIAGENT_LOCKS_DIR: locks } });
+  const close = e2e.close;
+  e2e.close = async () => {
+    await close();
+    try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { /* the OS temp folder cleans it */ }
+  };
+});
+
+// as "the demo project is a git repository on the base …", its test script lasting about 90 s (the check
+// stays "running" while the scenario looks at it); the base's commit noted in e2e.baseCommit
+Given('the demo project is a git repository on the base {string} whose suite runs for a while', async ({ e2e }, base) => {
+  const folder = e2e.project.folder;
+  const pkg = path.join(folder, 'package.json');
+  const data = JSON.parse(fs.readFileSync(pkg, 'utf8'));
+  data.scripts = { ...data.scripts, test: 'node -e "setTimeout(function () {}, 90000)"' };
+  fs.writeFileSync(pkg, JSON.stringify(data, null, 2));
+  const config = path.join(e2e.scratch, 'empty.gitconfig');
+  fs.writeFileSync(config, '');
+  git(folder, ['init', '-q', '-b', base], config);
+  git(folder, ['add', '-A'], config);
+  git(folder, ['commit', '-q', '-m', 'Initial commit'], config);
+  e2e.baseCommit = git(folder, ['rev-parse', 'HEAD'], config);
+});
+
 When('the other run frees the suite slot', async ({ e2e }) => {
   fs.rmSync(e2e.suiteSlot, { force: true });
 });
