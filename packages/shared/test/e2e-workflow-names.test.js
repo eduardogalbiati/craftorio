@@ -183,6 +183,24 @@ test('features/support/workflows.js names the display title of a workflow it cho
   for (const t of titles.filter((s) => names.has(norm(s)))) assert.equal(RETIRED.has(norm(t)), false);
 });
 
+// The Start panel step selects the option whose value is fileOf(<what the scenario wrote>).
+test('fileOf turns a workflow name, display title or file into the file the Start panel offers', () => {
+  const { fileOf } = loadShared();
+  const { files } = offered();
+  for (const [given, file] of [
+    ['feature', 'feature.yaml'],
+    ['Feature', 'feature.yaml'],
+    ['feature.yaml', 'feature.yaml'],
+    ['  Feature  ', 'feature.yaml'],
+    ['Test backfill', 'test-backfill.yaml'],
+    ['test-backfill', 'test-backfill.yaml'],
+    ['Analyze project', 'analyze-project.yaml'],
+  ]) {
+    assert.equal(fileOf(given), file, `fileOf("${given}")`);
+    assert.equal(files.has(file), true, `${file} is in workflows/`);
+  }
+});
+
 test('the seeded lastWorkflow of features/support/app.js comes from the shared names module', () => {
   const app = fs.readFileSync(path.join(ROOT, 'features', 'support', 'app.js'), 'utf8');
   assert.match(app, /require\(\s*['"]\.\/workflows(\.js)?['"]\s*\)/, 'app.js does not require ./workflows');
