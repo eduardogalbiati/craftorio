@@ -7,7 +7,8 @@
 //   engine offers it, after a confirm: its output follows cli-setup:changed in the console panel
 //   (data-testid="cli-console", data-state running | ended), with a sign-in's one-time code
 //   (cli-setup-device-code) and its URL as a link, or, for a sign-in that needs a terminal on the server,
-//   what to run there. When the job ends the row shows the CLI checked again (the job's `tool`). The
+//   what to run there. A CLI without a one-line installer here (glab on Linux) starts no job: its ▶ Install
+//   shows the install hint in the panel (data-status="manual"). When the job ends the row shows the CLI checked again (the job's `tool`). The
 //   desktop app keeps its terminal dock for a sign-in (interactive, on this computer).
 // - window.Settings.open(section, { highlight, onClose }): the deep link (the project wizard's Open Setup,
 //   fronts/build/views/projects/project-wizard.js): the Settings screen on that tab, the `highlight` CLI's row
@@ -52,7 +53,7 @@
         ${job.url ? `<a href="${esc(job.url)}" target="_blank" rel="noopener noreferrer" data-testid="cli-setup-url">${esc(job.url)}</a>` : ''}
       </div>` : '';
     const manual = job.status === 'manual' ? `
-      <p class="small">${t('settings.clis.manual')}</p>
+      <p class="small">${t(job.action === 'install' ? 'settings.clis.manual_install' : 'settings.clis.manual')}</p>
       <code class="setup-cmd" title="${esc(job.command || '')}">${esc(job.command || '')}</code>` : '';
     return `
       <div class="cli-console" data-testid="cli-console" data-state="${ended(job) ? 'ended' : 'running'}" data-status="${esc(job.status)}" role="status" aria-live="polite">
@@ -137,9 +138,17 @@
   const inTerminal = (action) => action === 'login' && api.platform !== 'browser' && typeof Terminal !== 'undefined';
 
   // ▶ Install / ▶ Sign in of a CLI: confirmed, then the engine's job (or the desktop's terminal dock)
-  async function run(id, action, { onChange = settingsJob } = {}) {
+  async function run(id, action, { onChange = settingsJob, hint = null } = {}) {
     const tool = (clis.tools || []).find((x) => x.id === id) || {};
     const command = action === 'login' ? tool.signInCommand : tool.installCommand;
+    // a CLI without a one-line installer on the engine's platform (glab on Linux, #316): nothing runs, the
+    // console says what to install there (the row's install hint)
+    const installHint = action === 'install' && !command ? tool.installHint || hint : null;
+    if (installHint) {
+      const job = { jobId: `manual-${id}`, id, action, status: 'manual', output: '', command: installHint };
+      onChange(job);
+      return job;
+    }
     if (inTerminal(action) || !canRunOnEngine()) {
       if (!command) return null;
       const tab = await runSuggestedCommand(command, { signIn: action === 'login' });

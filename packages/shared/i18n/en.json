@@ -4814,6 +4814,7 @@
   "settings.clis.device_code": "One-time code",
   "settings.clis.installing": "Installing",
   "settings.clis.manual": "This sign-in needs a terminal: run this on the engine's machine.",
+  "settings.clis.manual_install": "This CLI has no one-line installer on this platform: install it on the engine's machine, then check again.",
   "settings.clis.signing_in": "Signing in",
   "settings.clis.start_failed": "Could not start the command",
   "settings.clis.status_done": "Done",

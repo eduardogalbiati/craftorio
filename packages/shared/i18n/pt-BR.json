@@ -4814,6 +4814,7 @@
   "settings.clis.device_code": "Código de uso único",
   "settings.clis.installing": "Instalando",
   "settings.clis.manual": "Este login precisa de um terminal: rode isto na máquina do engine.",
+  "settings.clis.manual_install": "Este CLI não tem instalador de uma linha nesta plataforma: instale-o na máquina do engine e verifique de novo.",
   "settings.clis.signing_in": "Entrando",
   "settings.clis.start_failed": "Não foi possível iniciar o comando",
   "settings.clis.status_done": "Concluído",

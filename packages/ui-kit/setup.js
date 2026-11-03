@@ -99,6 +99,9 @@
     const off = !canRunCommands();
     const tip = off ? ` title="${esc(NO_TERMINAL_HINT)}"` : '';
     if (!tool.path && tool.installCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.installCommand)}" data-cli-id="${esc(tool.id)}" data-cli-action="install" data-testid="setup-install-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.install()}</button>`;
+    // a CLI without a one-line installer here (glab on Linux, #316): ▶ Install runs nothing, it shows what
+    // to install on the engine's machine (the console's manual state, Settings › Agents & CLIs' run)
+    if (!tool.checking && !tool.path && tool.installHint && window.SettingsClis) return `<button type="button" class="btn sm primary" data-setup-run="" data-install-hint="${esc(tool.installHint)}" data-cli-id="${esc(tool.id)}" data-cli-action="install" data-testid="setup-install-${esc(tool.id)}">${ACTION.install()}</button>`;
     if (tool.path && !tool.connected && tool.auth && tool.signInCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.signInCommand)}" data-sign-in data-cli-id="${esc(tool.id)}" data-cli-action="login" data-testid="setup-sign-in-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.signIn()}</button>`;
     return '';
   }
@@ -159,8 +162,10 @@
   async function runAction(btn) {
     // #740: in the browser UI the command runs on the engine's machine (Settings › Agents & CLIs' job),
     // its console under the rows; the CLIs are checked again when it ends
-    if (api.platform === 'browser' && window.SettingsClis) {
+    // a CLI without an install command (data-install-hint): its instructions, on every platform
+    if ((api.platform === 'browser' || btn.dataset.installHint) && window.SettingsClis) {
       await window.SettingsClis.run(btn.dataset.cliId, btn.dataset.cliAction, {
+        hint: btn.dataset.installHint,
         onChange: (job) => {
           setup.job = job;
           if (setup.open && STEPS[setup.step].id === 'agents') render();

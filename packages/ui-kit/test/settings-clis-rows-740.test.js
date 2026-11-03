@@ -1,6 +1,6 @@
 // #740 (the developer's own tests, next to the acceptance tests of renderer-settings-clis-740.test.js):
 // Settings › Agents & CLIs (packages/ui-kit/views/settings/settings-clis.js) with the Setup's rows
-// (setup.js window.SetupRows): a CLI without an install command shows its prose hint and no button, a sign-in
+// (setup.js window.SetupRows): a CLI without an install command shows its prose hint and an Install that only shows it, a sign-in
 // the engine cannot run headless shows what to run on the server, and a failed check says why.
 // Harness: packages/ui-kit/test/renderer-app-harness.js (the real page in a vm with a fake DOM).
 const test = require('node:test');
@@ -29,13 +29,20 @@ async function openClis(app) {
   await app.settle(20);
 }
 
-test('#740 a CLI with only a prose install hint shows it, with no Install button', async () => {
-  const app = page();
+test('#740 a CLI with only a prose install hint: ▶ Install runs nothing and shows the hint in the console', async () => {
+  let started = 0;
+  const app = page({ cliSetupStart: async () => { started += 1; return {}; } });
   await openClis(app);
   const rows = String(app.el('#set-tools').innerHTML);
   assert.match(rows, /data-testid="setup-cli-grok"/);
   assert.match(rows, /install Grok Build from x\.ai/);
-  assert.doesNotMatch(rows, /data-testid="setup-install-grok"/);
+  assert.match(rows, /data-testid="setup-install-grok"/);
+  await app.sandbox.SettingsClis.run('grok', 'install');
+  await app.settle(5);
+  const panel = String(app.el('#set-cli-console').innerHTML);
+  assert.match(panel, /data-status="manual"/);
+  assert.match(panel, /install Grok Build from x\.ai/);
+  assert.equal(started, 0, 'no engine job for a CLI without an install command');
 });
 
 test('#740 a sign-in that needs a terminal: the console says what to run on the server', async () => {
