@@ -33,7 +33,27 @@ async function runSuggestedCommand(command, { signIn = false } = {}) {
 const canRunCommands = () => (api.platform === 'browser' ? typeof api.cliSetupStart === 'function' : typeof Terminal !== 'undefined');
 const NO_TERMINAL_HINT = 'Run this on the computer where the app runs';
 
+// #740: the browser UI has no terminal of its own: a CLI's install / sign-in command runs as the engine's
+// job (window.SettingsClis.run, confirmed there); any other command is shown to run on the server.
+async function runOnEngine(command, { signIn = false } = {}) {
+  let tool = null;
+  try {
+    tool = (await api.envDetails()).find((x) => x.installCommand === command || x.signInCommand === command) || null;
+  } catch {
+    tool = null;
+  }
+  if (tool && window.SettingsClis) {
+    const action = tool.signInCommand === command && (signIn || tool.installCommand !== command) ? 'login' : 'install';
+    return window.SettingsClis.run(tool.id, action);
+  }
+  showToast(NO_TERMINAL_HINT, command);
+  return null;
+}
+
 document.addEventListener('click', (e) => {
   const b = e.target.closest?.('[data-run-command]');
-  if (b) runSuggestedCommand(b.dataset.runCommand, { signIn: b.dataset.signIn !== undefined });
+  if (!b) return;
+  const opts = { signIn: b.dataset.signIn !== undefined };
+  if (api.platform === 'browser') runOnEngine(b.dataset.runCommand, opts);
+  else runSuggestedCommand(b.dataset.runCommand, opts);
 });

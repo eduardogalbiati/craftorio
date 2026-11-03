@@ -667,5 +667,5 @@ registerView({
     for (const sel of ['#set-budget-day', '#set-budget-night']) $(sel).onchange = saveBudgetSettings;
     $('#set-oracle-wake').onchange = saveOracleWake;
   },
-  show: () => renderSettings(),
+  show: () => { window.SettingsClis.onShow(); renderSettings(); }, // #740: a visit not opened by the deep link drops it
 });

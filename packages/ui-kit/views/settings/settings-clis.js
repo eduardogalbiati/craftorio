@@ -12,6 +12,8 @@
 // - window.Settings.open(section, { highlight, onClose }): the deep link (the project wizard's Open Setup,
 //   fronts/build/views/projects/project-wizard.js): the Settings screen on that tab, the `highlight` CLI's row
 //   marked and scrolled to; the close button goes back to the screen it was opened from, then calls onClose.
+//   Leaving Settings another way ends that visit (onShow, settings.js's view show): a later visit marks no
+//   CLI and its close button calls no old onClose.
 // - window.SettingsClis = { render, run, consoleHtml }: settings.js renderTools draws the rows with render;
 //   setup.js runs its own rows' actions in the browser with run and shows consoleHtml.
 // Uses app.js globals ($, esc, t, state, showView, confirmDialog, showToast, errMsg), settings.js's
@@ -168,20 +170,37 @@
   }
 
   // ---------- the deep link ----------
+  // the deep link belongs to the visit it opened: a visit of Settings opened another way (the sidebar,
+  // after leaving through it) marks no CLI and its close button calls no old onClose
+  let opening = false;
+  function forget() {
+    clis.onClose = null;
+    clis.highlight = null;
+    clis.back = null;
+  }
+
   function open(section = 'agents', { highlight = null, onClose = null } = {}) {
     if (state.view !== 'settings') clis.back = state.view;
     clis.highlight = highlight || null;
     clis.onClose = typeof onClose === 'function' ? onClose : null;
-    showView('settings');
+    opening = true;
+    try {
+      showView('settings');
+    } finally {
+      opening = false;
+    }
     showSettingsTab(section);
+  }
+
+  // settings.js's view show: every visit of the Settings screen
+  function onShow() {
+    if (!opening) forget();
   }
 
   function close() {
     const done = clis.onClose;
     const back = clis.back;
-    clis.onClose = null;
-    clis.highlight = null;
-    clis.back = null;
+    forget();
     showView(back && back !== 'settings' ? back : 'dashboard');
     done?.();
   }
@@ -195,6 +214,6 @@
     watch();
   }
 
-  window.SettingsClis = { consoleHtml, mount, render, run };
+  window.SettingsClis = { consoleHtml, mount, onShow, render, run };
   window.Settings = { ...(window.Settings || {}), open };
 })();
