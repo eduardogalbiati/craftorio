@@ -15,8 +15,17 @@ function pathKey(p, platform = process.platform) {
 
 const samePath = (a, b, platform = process.platform) => pathKey(a, platform) === pathKey(b, platform);
 
+// whether `dir` is `root` or a path inside it (never one escaping it); strict: inside only, not the root itself
+function insideFolder(dir, root, { strict = false, platform = process.platform } = {}) {
+  const flavour = platform === 'win32' ? path.win32 : path.posix;
+  const rel = flavour.relative(pathKey(root, platform), pathKey(dir, platform));
+  if (rel === '') return !strict;
+  return !rel.startsWith('..') && !flavour.isAbsolute(rel);
+}
+
 module.exports = {
   caseInsensitive,
+  insideFolder,
   pathKey,
   samePath,
 };

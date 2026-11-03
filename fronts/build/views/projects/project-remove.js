@@ -7,7 +7,8 @@
 //   lists them (projects.remove_folder_changes) and asks again (confirmed: true);
 // - { needsName }: a folder the app did not make (outside <workspace>/repos/ and projects/): the owner types the
 //   project's name (projects.remove_type_name, data-testid="project-remove-name") to delete it;
-// - a refusal while a run of the project is running: a toast naming the run (projects.remove_running_run).
+// - { refused, running: [run ids] } while a run of the project is running: a toast naming the runs
+//   (projects.remove_running_run), nothing removed.
 // window.ProjectRemove.remove(p) resolves true once the project is removed. Uses app.js globals.
 
 (function () {
@@ -40,9 +41,6 @@
     });
   }
 
-  // the run a refusal names ("… a run in progress (<run id>) …"), for the translated toast
-  const runOf = (e) => (/run in progress \(([^)]+)\)/.exec(errMsg(e)) || [])[1] || null;
-
   async function remove(p) {
     const title = t('projects.remove_project');
     const lines = [t('projects.remove_goes'), t('projects.remove_stays')];
@@ -53,8 +51,11 @@
       let out;
       try { out = await api.removeProject(req); }
       catch (e) {
-        const run = runOf(e);
-        showToast(run ? t('projects.remove_running_run', { run }) : t('projects.remove_failed'), run ? '' : errMsg(e));
+        showToast(t('projects.remove_failed'), errMsg(e));
+        return false;
+      }
+      if (out?.running?.length) {
+        showToast(t('projects.remove_running_run', { run: out.running.join(', ') }));
         return false;
       }
       if (out?.needsName) {

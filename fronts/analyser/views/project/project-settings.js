@@ -8,8 +8,9 @@
 // "Install without scripts" (#472, data-testid="project-ignore-scripts") and "Prefer the repository's workflows"
 // (#554, data-testid="project-prefer-repository-workflows"). The workflows (project-workflows.js) and the
 // ways of working (project-ways-of-working.js) stay where they are, on the same page. Save (project-settings-save)
-// sends api.updateProject once, Cancel puts the saved values back; nothing saves while typing. The form is
-// not drawn again while it has unsaved edits (the page redraws on run events).
+// sends api.updateProject once (the name and the folder are required), Cancel puts the saved values back;
+// nothing saves while typing. The page redraws on run events: the form is drawn again (and the folder's command
+// detected again) only when the project's saved fields changed, never while it has unsaved edits.
 // window.ProjectSettings.show(project, box, { open }). Uses app.js globals.
 
 (function () {
@@ -96,6 +97,8 @@
     };
     $('#ps-error').textContent = '';
     if (!patch.name) { $('#ps-error').textContent = t('project.settings_name_required'); return; }
+    // an empty folder would resolve to the engine's own folder: the project keeps one
+    if (!patch.folder) { $('#ps-error').textContent = t('project.settings_folder_required'); return; }
     const btn = $('#ps-save');
     btn.disabled = true;
     try {
@@ -114,15 +117,24 @@
     }
   }
 
+  // the fields the form shows: the page redraws on run events, the form only when these change
+  const signature = (p) => JSON.stringify([p.name, p.description, p.repo, p.folder, p.localPreview, p.runDefaults?.base_branch,
+    !!p.ignoreInstallScripts, !!p.preferRepositoryWorkflows]);
+
   function show(p, box, { open = false, force = false } = {}) {
     if (!p || !box) return;
-    // unsaved edits of this project stay as typed; open: a card's Edit asks for the section
-    if (!force && cur?.id === p.id && cur.dirty && box.querySelector?.('#ps-form')) {
-      if (open) box.querySelector('details')?.setAttribute('open', '');
+    // unsaved edits of this project, or the same saved values, stay as they are (the focus too); open: a card's
+    // Edit asks for the section
+    const sig = signature(p);
+    if (!force && cur?.id === p.id && (cur.dirty || cur.sig === sig) && box.querySelector?.('#ps-form')) {
+      if (open) {
+        box.querySelector('details')?.setAttribute('open', '');
+        box.scrollIntoView?.({ block: 'start' });
+      }
       return;
     }
     const wasOpen = !!box.querySelector?.('details[open]') && cur?.id === p.id;
-    cur = { id: p.id, dirty: false, detected: null };
+    cur = { id: p.id, dirty: false, detected: null, sig };
     box.innerHTML = markup(p, open || wasOpen);
     const form = $('#ps-form');
     form.oninput = () => { cur.dirty = true; };

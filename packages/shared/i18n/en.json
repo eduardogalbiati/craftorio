@@ -3526,6 +3526,7 @@
   "project.settings_detected": "Detected:",
   "project.settings_hint": "Name, repository, folder, base branch, local preview",
   "project.settings_name_required": "Enter the project's name.",
+  "project.settings_folder_required": "Choose the project's folder.",
   "project.settings_pick_folder": "Choose the folder",
   "project.settings_saved": "Saved the settings of {name}",
   "project.show_simulated": "Show simulated",

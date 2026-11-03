@@ -1,26 +1,27 @@
 // Service area (#742): removing a project, and on request its folder. projects:remove (channels/projects.js)
 // takes a bare id (the record only, as before #742: true) or { id, deleteFolder, confirmed, confirmName }:
-// - a run of the project still running refuses the removal (a 400 naming the run), nothing removed;
+// - a run of the project still running refuses the removal, nothing removed: { refused: true, running: [run ids] };
 // - deleteFolder for a folder the app did not make (outside <workspace>/repos/ and <workspace>/projects/, e.g.
 //   the owner's own checkout) needs confirmName equal to the project's name, else { needsName: true, folder };
 // - a git folder with uncommitted changes or commits on no remote answers { needsConfirm: true, dirty, unpushed }
 //   until the same call comes with confirmed: true;
 // - the folder goes to the system trash (the host's trashItem), else is deleted;
 // - the project's data goes with it: its roadmap (<backlog>/<id>.json, .local.json, .queue.json), its architecture
-//   and refactor folders, its record (with its onboarding state, #741); the runs' history stays.
+//   and refactor folders, its Product Owner chat (<backlog>/<id>.po.jsonl), its record (with its onboarding state,
+//   #741); the runs' history stays.
 // The delete runs where the engine runs, so the browser and the desktop in remote mode do the same.
 
 const fs = require('fs');
 const path = require('path');
 const projects = require('../../domains/project/projects');
-const { clientError, requireId } = require('../common');
+const { requireId } = require('../common');
 
 // the files and folders of a project's own data in the workspace (never the runs)
 function projectData(ws, id) {
   const base = path.basename(String(id));
   const arch = ws.architecture || path.join(ws.root, 'architecture');
   return [
-    ...['.json', '.local.json', '.queue.json'].map((ext) => ws.backlog && path.join(ws.backlog, `${base}${ext}`)),
+    ...['.json', '.local.json', '.queue.json', '.po.jsonl'].map((ext) => ws.backlog && path.join(ws.backlog, `${base}${ext}`)),
     path.join(arch, base),
     ws.refactor && path.join(ws.refactor, base),
     ws.refactor && path.join(ws.refactor, `${base}.json`),
@@ -44,7 +45,8 @@ module.exports = (ctx) => {
     let p;
     try { p = projects.readProject(ws.projects, id); } catch { return projects.removeProject(ws.projects, id); }
     const running = (typeof ctx.activeRuns === 'function' ? ctx.activeRuns() : []).filter((r) => r.projectId === id);
-    if (running.length) throw clientError(`The project ${p.name} has a run in progress (${running.map((r) => r.runId).join(', ')}): stop it before removing the project.`);
+    // refused, nothing removed: the answer names the runs (the front's toast reads `running`)
+    if (running.length) return { refused: true, running: running.map((r) => r.runId) };
     const folder = opts.deleteFolder === true && p.folder ? path.resolve(p.folder) : null;
     if (folder && fs.existsSync(folder)) {
       const owned = projects.ownedFolder(folder, [ws.repos, ws.projects]);

@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execGit, repoNameFromUrl } = require('../workspace/workspace');
+const { insideFolder } = require('../machine/platform-paths');
 const { childEnv, PLATFORM_CLIS } = require('../../engine/child-env');
 const { cleanConfig } = require('../local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow
@@ -362,11 +363,7 @@ function removeProject(dir, id) {
  */
 function ownedFolder(folder, roots) {
   if (!folder) return false;
-  const target = path.resolve(String(folder));
-  return roots.filter(Boolean).some((root) => {
-    const rel = path.relative(path.resolve(root), target);
-    return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
-  });
+  return roots.filter(Boolean).some((root) => insideFolder(folder, root, { strict: true }));
 }
 
 /**

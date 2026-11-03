@@ -7,12 +7,11 @@
 // Opening Projects and a project's page reuses app.steps.js and projects.steps.js.
 //
 // What the screens expose (the renderer's contract for these steps), skills/ui-conventions:
-// - data-testid="project-workflows-block": the Workflows block, in the project dialog
-//   (data-testid="project-dialog") and in the project's Overview (data-testid="project-overview");
+// - data-testid="project-workflows-block": the Workflows block of the project's Overview
+//   (data-testid="project-overview"; the project dialog is gone, #741);
 // - #741: the project dialog's Create mode (its categories, hints and "Create one for this project") is gone:
 //   creating a project is the new-project wizard only; the steps of that mode below fail with that reason;
 // - data-testid="project-default-workflow": in the Overview's block, the project's default workflow's name.
-// The dialog's fields are found by their labels ("Name", "Folder"), its submit by "Create project".
 //
 // The folders are made under the scenario's scratch folder (e2e.scratch, next to the workspace that
 // MULTIAGENT_WORKSPACE points to); a repository one is a git repository (fixed identity, no machine

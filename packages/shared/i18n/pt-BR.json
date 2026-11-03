@@ -3526,6 +3526,7 @@
   "project.settings_detected": "Detectado:",
   "project.settings_hint": "Nome, repositório, pasta, branch base, prévia local",
   "project.settings_name_required": "Informe o nome do projeto.",
+  "project.settings_folder_required": "Escolha a pasta do projeto.",
   "project.settings_pick_folder": "Escolher a pasta",
   "project.settings_saved": "Configurações de {name} salvas",
   "project.show_simulated": "Mostrar simuladas",

@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs } = require('./cli-config-dirs');
-const { pathKey } = require('../machine/platform-paths');
+const { insideFolder } = require('../machine/platform-paths');
 const registry = require('@multiagent/shared/providers');
 
 /** The folder and the root of the git repository it is in (when it is in one). */
@@ -88,10 +88,7 @@ const APP_FOLDERS = [
   'workflows',
 ];
 
-function isInside(dir, root) {
-  const rel = path.relative(pathKey(root), pathKey(dir));
-  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
-}
+const isInside = (dir, root) => insideFolder(dir, root);
 
 /**
  * Trusts `dir` only when it is in one of the workspace's app folders (runs/, skills/, workflows/);

@@ -53,8 +53,13 @@ const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
 const PAID = ['projectMap'];
 
-// #741: two URLs of the same repository (case, a trailing slash or .git aside)
-const repoKey = (url) => String(url || '').trim().toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '');
+// #741: two URLs of the same repository (https or ssh, case, a trailing slash or .git aside), with the
+// registry's one normalization (Platforms.parseRepoUrl); a string it can't parse is compared cleaned
+const repoKey = (url) => {
+  const parsed = Platforms.parseRepoUrl(url);
+  if (parsed) return `${parsed.host}/${parsed.path.toLowerCase()}`;
+  return String(url || '').trim().toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '');
+};
 const sameRepo = (a, b) => !!repoKey(a) && repoKey(a) === repoKey(b);
 
 // a readable reason for an access check that did not reach the repository
