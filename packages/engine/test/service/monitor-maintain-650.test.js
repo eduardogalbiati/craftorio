@@ -54,8 +54,9 @@ function tmpDir(t) {
 }
 
 // A service with a project whose repository has the item "checkout", a log source with the 500, polled.
-async function setup(t) {
-  const { service, api } = makeService(t, { userDataDir: tmpDir(t) });
+// `fronts` (#775): the composition's fronts, default every installed one.
+async function setup(t, { fronts } = {}) {
+  const { service, api } = makeService(t, { userDataDir: tmpDir(t), fronts });
   const repo = gitRepo(t);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: repo.dir, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
   fs.mkdirSync(path.join(repo.dir, 'docs', 'work', 'checkout'), { recursive: true });
@@ -114,6 +115,24 @@ test('#650 monitor:diagnose with an item the repository does not have: ok false,
   assert.equal(cards.length, 1);
   const g = (await s.api['monitor:state']({ projectId: s.projectId })).groups.find((x) => x.fingerprint === s.group.fingerprint);
   assert.equal(g.state, 'intent');
+});
+
+// #775: the Monitor (ai front) calls the plan front's docs helpers only optionally: an engine serving the
+// ai front alone answers a diagnose with an item without crashing, writes nothing in docs/work and still
+// files the Inbox card
+test('#775 monitor:diagnose with an item on an engine without the plan front: ok false, nothing written in docs/work, the Inbox card still filed', async (t) => {
+  const s = await setup(t, { fronts: ['ai'] });
+  assert.equal(s.api['docs:intents'], undefined, 'the plan front is not served');
+  const head = s.git('rev-parse', 'HEAD');
+  const res = await s.api['monitor:diagnose']({ projectId: s.projectId, fingerprint: s.group.fingerprint, item: 'checkout' });
+  assert.equal(res?.ok, false, JSON.stringify(res));
+  assert.match(String(res.error || ''), /Documents/);
+  assert.deepEqual(workItems(s.repo.dir), ['checkout']);
+  assert.equal(fs.readFileSync(path.join(s.repo.dir, 'docs', 'work', 'checkout', 'maintain.md'), 'utf8'), MAINTAIN);
+  assert.equal(s.git('rev-parse', 'HEAD'), head);
+  const discovery = require('../../domains/discovery/discovery');
+  const cards = discovery.listCards(s.service.workspace().discovery, s.projectId, { column: 'inbox' }).filter((c) => c.type === 'intent');
+  assert.equal(cards.length, 1);
 });
 
 test('#650 diagnosing the same group again with its item records the incident once', async (t) => {
