@@ -5437,6 +5437,8 @@
   "term_dock.expand_the_terminal_panel": "Expandir o painel do terminal",
   "term_dock.label_in_an_external_window": "{label} em uma janela externa",
   "term_dock.opened_in_an_external_window": "Aberto em uma janela externa.",
+  "term_dock.this_terminal_is_read_only": "Este terminal é somente leitura.",
+  "term_dock.use_ctrl_v_to_paste": "Use Ctrl+V para colar",
 
   "usage.account_value_resets_resetson_included_minutes": "Conta {value} · reinicia em {resetsOn} · minutos incluídos:",
   "usage.actions_minutes_unavailable_error": "Minutos do Actions indisponíveis: {error}.",

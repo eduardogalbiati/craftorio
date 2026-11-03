@@ -142,6 +142,7 @@ async function openTerminal({ kind, sessionId, runId, label, open }) {
 
   const pane = document.createElement('div');
   pane.className = 'term-pane';
+  pane.dataset.testid = 'term-pane';
   $('#term-body').appendChild(pane);
   const { term, fit } = createXterm(kind);
   const tab = { key, id: null, kind, runId, sessionId, title: `${label || sessionId} · ${LOG_KINDS.includes(kind) ? 'log' : kind}`, term, fit, pane, exited: false, lastPaste: 0, sent: 0 };
@@ -218,22 +219,22 @@ function wireTerminal(tab) {
       copyFromTerm(tab);
       return false;
     }
-    if ((mod && k === 'v') || (e.shiftKey && e.key === 'Insert')) {
-      e.preventDefault();
-      pasteIntoTerm(tab);
-      return false;
-    }
+    // xterm must not send ^V, but the browser's native paste event goes through: it carries the
+    // clipboard text with no clipboard-read permission (a browser tab, the remote window, #746)
+    if ((mod && k === 'v') || (e.shiftKey && e.key === 'Insert')) return false;
     return true;
   });
-  // The keyboard path above does the paste; swallow the browser's native paste event so it
-  // never pastes a second time. A paste that did not come from our key handler (e.g. an Edit
-  // menu accelerator) is handled here instead, once.
+  // The paste of Ctrl+V / Cmd+V / Shift+Insert and of an Edit menu (#746): read from the event, then
+  // stop it so xterm's own listener never pastes a second time. A paste right after the context
+  // menu's clipboard read is the same one.
   pane.addEventListener('paste', (e) => {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (Date.now() - tab.lastPaste < 800) return;
     const text = e.clipboardData?.getData('text/plain');
-    if (text) { tab.lastPaste = Date.now(); term.paste(text); }
+    if (!text) return;
+    if (readOnlyTerm(tab.kind)) { (tab.flash || flashTermMsg)(t('term_dock.this_terminal_is_read_only')); return; }
+    term.paste(text);
   }, true);
   pane.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -251,17 +252,17 @@ async function copyFromTerm(tab) {
   try { await api.clipboardWrite(text); flash(t('term_dock.copied')); } catch (e) { flash(errMsg(e), true); }
 }
 
+// The context menu's paste reads the clipboard; a refused read (a browser, a remote window over
+// plain http) says to use Ctrl+V, whose paste event needs no permission (#746).
 async function pasteIntoTerm(tab) {
   tab.lastPaste = Date.now();
-  try {
-    const text = await api.clipboardRead();
-    tab.lastPaste = Date.now();
-    if (!text) return;
-    if (readOnlyTerm(tab.kind)) (tab.flash || flashTermMsg)('This terminal is read-only.');
-    tab.term.paste(text); // onData ignores it for live tabs
-  } catch (e) {
-    (tab.flash || flashTermMsg)(errMsg(e), true);
-  }
+  const flash = tab.flash || flashTermMsg;
+  let text;
+  try { text = await api.clipboardRead(); } catch { flash(t('term_dock.use_ctrl_v_to_paste'), true); return; }
+  tab.lastPaste = Date.now();
+  if (!text) return;
+  if (readOnlyTerm(tab.kind)) { flash(t('term_dock.this_terminal_is_read_only')); return; }
+  tab.term.paste(text);
 }
 
 let termMsgTimer = null;

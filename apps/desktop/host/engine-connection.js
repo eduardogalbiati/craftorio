@@ -21,7 +21,7 @@
 //                               engine's version and contract, or the reason it failed
 //   startUrl, routeUrl, allowRemotePermission   the browser's first address (the remote window sends
 //                               the token as `Authorization: Bearer` instead, #480), the remote window's
-//                               navigation and permission rules (clipboard-read only over https)
+//                               navigation and permission rules (clipboard-read only over https or loopback)
 //   lanAddresses, resolveListenHost   the server's side (packages/engine/server/listen-host.js, the
 //                               multiagent-engine bin): the addresses another
 //                               computer can type, and `--host tailscale` (this computer's Tailscale address);
@@ -279,14 +279,17 @@ function routeUrl(url, origin) {
 
 // The web permissions of the remote window: the clipboard (the terminals, Copy buttons) for the
 // engine's own origin; nothing else (the microphone needs a secure origin, and the rest is never used).
-// Reading the clipboard only over https (#480): a page replaced on the way must not read a password
-// the user just copied; writing it (Copy buttons) stays on http too.
+// Reading the clipboard only over https or loopback (#480, #746): a page replaced on the way must not
+// read a password the user just copied; an engine on this computer has no way in between. A plain-http
+// Tailscale address stays refused: Ctrl+V pastes through the browser's paste event, with no permission.
+// Writing it (Copy buttons) stays on http too.
 function allowRemotePermission(permission, requestingUrl, origin) {
   if (permission !== 'clipboard-sanitized-write' && permission !== 'clipboard-read') return false;
   let u;
   try { u = new URL(requestingUrl); } catch { return false; }
   if (u.origin !== origin) return false;
-  return permission === 'clipboard-sanitized-write' || u.protocol === 'https:';
+  return permission === 'clipboard-sanitized-write' || u.protocol === 'https:'
+    || (u.protocol === 'http:' && isLoopback(u.hostname));
 }
 
 module.exports = {

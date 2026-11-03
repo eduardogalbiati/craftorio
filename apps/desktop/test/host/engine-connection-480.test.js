@@ -177,9 +177,10 @@ test('#480 requests to another origin carry no Authorization header', async () =
   assert.equal(headers.authorization, undefined);
 });
 
+// a plain-http engine on another computer; loopback http may read it since #746
 test('#480 clipboard-read is denied to an http engine origin', async () => {
-  const s = await remoteWindow('http://127.0.0.1:7300');
-  assert.equal(permission(s, 'clipboard-read', 'http://127.0.0.1:7300/apps/desktop/renderer/index.html'), false);
+  const s = await remoteWindow('http://192.168.1.20:7300');
+  assert.equal(permission(s, 'clipboard-read', 'http://192.168.1.20:7300/apps/desktop/renderer/index.html'), false);
 });
 
 test('#480 clipboard-read is granted to an https engine origin', async () => {
