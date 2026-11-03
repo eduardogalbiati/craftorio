@@ -238,12 +238,9 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'backlog',
-      description: 'A project\'s synced backlog (the cache of the last sync) with each issue\'s runs, and its queue.',
+      description: 'A project\'s synced backlog (the cache of the last sync) with each issue\'s runs and roadmap stage.',
       inputSchema: obj({ projectId }, ['projectId']),
-      run: ({ projectId: id }) => {
-        const pid = path.basename(String(id));
-        return json({ backlog: ctx.withIssueRuns(backlog.readBacklog(ws().backlog, pid)), queue: backlog.readQueue(ws().backlog, pid) });
-      },
+      run: ({ projectId: id }) => json({ backlog: ctx.withIssueRuns(backlog.readBacklog(ws().backlog, path.basename(String(id)))) }),
     },
     {
       name: 'unpushed',

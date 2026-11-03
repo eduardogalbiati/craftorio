@@ -1,7 +1,7 @@
 // Backlog roadmap (packages/engine/domains/roadmap/roadmap.js): ordered stages of runs per project, each stage after the
 // previous one merged. Every channel returns the Backlog (withIssueRuns), whose `roadmap` the
 // screen shows (apps/desktop/renderer/backlog-roadmap.js); the service's dispatchRoadmaps runs it.
-// #281: an owner edit (save, propose, from-queue, clear, restore) first keeps the stages as they were
+// #281: an owner edit (save, propose, clear, restore) first keeps the stages as they were
 // (packages/engine/domains/roadmap/roadmap-history.js: backlog/<project>.roadmap.history/, the last 20). A save, a proposal that
 // replaces the roadmap, Clear and a restore answer with `edit` ({ id, label }): the last such edit of
 // a project is the one roadmap:undo takes back (packages/engine/domains/roadmap/roadmap-undo.js), kept in memory until the next
@@ -162,23 +162,6 @@ module.exports = (ctx) => {
         const { dropped } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId), alive: ctx.runAlive });
         const edit = edited(project(projectId), before, replace ? 'Replaced the roadmap' : 'Added a proposal to the roadmap', { undoable: !!replace });
         return { ...withEdit(projectId, edit), dropped };
-      },
-    },
-    // The plain queue's items become a planned stage at the end (they leave the queue).
-    {
-      channel: 'roadmap:from-queue',
-      method: 'roadmapFromQueue',
-      params: ['projectId'],
-      schema: { params: ON_PROJECT, result: BACKLOG },
-      fn: ({ projectId }) => {
-        const id = project(projectId);
-        const queue = backlog.readQueue(ctx.ws.backlog, id);
-        if (!queue.items.length) throw new Error('The queue is empty.');
-        const before = stagesOf(id);
-        roadmaps.propose(ctx.ws.backlog, id, [roadmaps.fromQueue(queue.items)], { issues: synced(id) });
-        for (const item of queue.items) backlog.unqueue(ctx.ws.backlog, id, item.number, { cancelGroup: true });
-        edited(id, before, 'Moved the queue into the roadmap', { undoable: false });
-        return current(id);
       },
     },
     // simulated: every item runs as a simulation (mock runs), whatever its own setting; stage: a

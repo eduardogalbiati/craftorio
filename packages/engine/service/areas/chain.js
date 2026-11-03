@@ -1,13 +1,14 @@
 // Service area: workflow chaining (#134, apps/desktop/renderer/chain-model.js). A run started with a `then`
 // (the Start drawer, the Backlog's Assign, a roadmap item, or a gate choice such as the issue
-// tracker's "Create and queue") hands its declared outputs to what follows when it finishes:
+// tracker's "Create and plan") hands its declared outputs to what follows when it finishes:
 // another workflow (its inputs mapped from the outputs, `from` recorded in the next run), the
 // Product Owner (the produced issues as planned roadmap stages, never started by itself), or the
-// Backlog queue. Only a success goes on (a development workflow must also have merged); anything
+// roadmap (action id 'queue', kept for older chain files: a new last stage for a workflow, #446).
+// Only a success goes on (a development workflow must also have merged); anything
 // else pauses the chain with a notice, and the owner resumes or drops it. The chain's state lives in
 // runs/<id>/chain.json (packages/engine/domains/run/runs.js readChain/writeChain). It never answers a gate: the next run's
-// gates wait for the owner like any run's. A simulated run only chains simulated runs, and queues
-// nothing (it filed no real issue).
+// gates wait for the owner like any run's. A simulated run only chains simulated runs, and plans
+// only simulated items.
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -85,7 +86,7 @@ module.exports = (ctx) => {
     acting.add(prev.runId);
     try {
       if (then.action === 'workflow') return await startNext(prev, then);
-      if (then.action === 'queue') return await queueIssues(prev, then);
+      if (then.action === 'queue') return await planIssues(prev, then);
       if (then.action === 'product_owner') return await askProductOwner(prev);
       return null;
     } catch (e) {
@@ -116,29 +117,30 @@ module.exports = (ctx) => {
     return started;
   }
 
-  // Queue / Assign (the issue tracker's "Create and queue"): the backlog is synced (the new issues
-  // are in it) and the produced issues are assigned like the Backlog's Assign does, in batches.
-  async function queueIssues(prev, then) {
-    if (prev.mock) {
-      write(prev.runDir, { state: 'done', reason: 'Simulated run: nothing queued (it filed no real issue).' });
-      return null;
-    }
-    if (!prev.projectId) throw new Error('the run has no project, so there is no Backlog to queue in');
+  // Plan (the issue tracker's "Create and plan", #446; the action keeps its old id 'queue', so older
+  // chain.json files still work): the backlog is synced (the new issues are in it) and the produced
+  // issues are planned like the Backlog's Assign does, in batches, as one new last roadmap stage that
+  // nothing starts by itself. A simulated run plans simulated items.
+  async function planIssues(prev, then) {
+    if (!prev.projectId) throw new Error('the run has no project, so there is no roadmap to plan in');
     const { ws } = ctx;
     const maxGroup = workspace.readSettings(ws).backlogMaxGroup || workspace.DEFAULT_SETTINGS.backlogMaxGroup;
     const batches = chain.queueBatches(prev.outputs, maxGroup);
     if (!batches.length) {
-      write(prev.runDir, { state: 'done', reason: 'No issue was produced: nothing queued.' });
+      write(prev.runDir, { state: 'done', reason: 'No issue was produced: nothing planned.' });
       return null;
     }
+    const simulated = prev.mock || simulation.simulationOnly();
     const project = projects.readProject(ws.projects, prev.projectId);
-    const platform = platformOrDefault(prev.inputs.git_platform).id;
-    await backlog.syncBacklog({ dir: ws.backlog, project, platform });
-    for (const batch of batches) {
-      await ctx.assignWorkflow({ projectId: project.id, numbers: batch.numbers, workflow: then.workflow, inputs: then.inputs || {}, mock: false, group: batch.group });
+    if (!simulated && project.repo) {
+      const platform = platformOrDefault(prev.inputs.git_platform).id;
+      await backlog.syncBacklog({ dir: ws.backlog, project, platform });
     }
+    await ctx.assignWorkflow({ projectId: project.id, batches, workflow: then.workflow, inputs: then.inputs || {}, mock: simulated });
     const n = batches.reduce((a, b) => a + b.numbers.length, 0);
-    write(prev.runDir, { state: 'done', reason: `${n} issue${n === 1 ? '' : 's'} queued for ${then.workflow}.` });
+    const text = `${n} issue${n === 1 ? '' : 's'} planned in the roadmap for ${then.workflow}.`;
+    write(prev.runDir, { state: 'done', reason: text });
+    notice(prev, 'done', text);
     return null;
   }
 

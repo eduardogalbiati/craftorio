@@ -1,14 +1,13 @@
 // Service area: Self-healing applies merged fixes to the app (#279, packages/engine/domains/workspace/app-update.js). The source
 // (the workspace project that is this app's repository) for Settings and the roadmap cards; the
 // trigger the roadmap calls when a marked item merged or a stage ended (appUpdateEvent); the cycle
-// with the roadmaps and the Backlog queues paused, the runs in progress waited for, `npm install`
+// with the roadmaps paused, the runs in progress waited for, `npm install`
 // only on a lockfile change and the restart through the host (apps/desktop/host/main.js, as app:relaunch does);
 // and, at the start of the new process, the intent read before the roadmap dispatch
 // (appUpdateAfterRestart). Never in simulation-only mode, never without a host that can restart.
 
 const path = require('path');
 const appUpdate = require('../../domains/workspace/app-update');
-const backlog = require('../../domains/backlog/backlog');
 const { resolveCommand } = require('../../engine/providers');
 const notifier = require('../../domains/workspace/notifications');
 const projects = require('../../domains/project/projects');
@@ -64,8 +63,8 @@ module.exports = (ctx) => {
       : { applies: false, reason: s.reason, updating: !!cycle };
   }
 
-  // nothing new starts: the running roadmaps pause with the reason, and the Backlog queues with items
-  function pauseAll(reason) {
+  // nothing new starts: the running roadmaps pause with the reason (the only planned work, #446)
+  function pauseRoadmaps(reason) {
     const { backlog: dir } = ctx.ws;
     const ids = [];
     for (const id of roadmaps.roadmapProjects(dir)) {
@@ -75,7 +74,6 @@ module.exports = (ctx) => {
         return { ...r, state: 'paused', pausedBy: null, error: reason };
       });
     }
-    backlog.pauseAll(dir, reason);
     return ids;
   }
 
@@ -85,11 +83,7 @@ module.exports = (ctx) => {
     for (const id of ids || []) {
       try { roadmaps.updateRoadmap(dir, id, (r) => (r.state === 'paused' && r.error === appUpdate.PAUSE_REASON ? { ...r, state: 'running', pausedBy: null, error: null } : null)); } catch (e) { console.error('app update resume:', id, e.message); }
     }
-    for (const id of backlog.queuedProjects(dir)) {
-      try { if (backlog.readQueue(dir, id).error === appUpdate.PAUSE_REASON) backlog.setPaused(dir, id, false); } catch (e) { console.error('app update queue:', id, e.message); }
-    }
     await ctx.dispatchRoadmaps();
-    ctx.dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
   }
 
   function startCycle({ sourceDir = null, apply } = {}) {
@@ -104,7 +98,7 @@ module.exports = (ctx) => {
       appDir: appDir(),
       sourceDir,
       apply,
-      pause: (reason) => { paused = pauseAll(reason); return paused; },
+      pause: (reason) => { paused = pauseRoadmaps(reason); return paused; },
       resume: resumeAll,
       activeRuns: () => [...ctx.active.entries()].map(([runId, live]) => ({ runId, gate: (live.approvals?.size || 0) > 0 })),
       install: npmInstall,

@@ -17,10 +17,9 @@
 //                  read at and how far its events.jsonl was read; artifact_paths maps a project copy's
 //                  path to the runs that saved it. Rebuilt from runs/ when missing.
 //   queues, queue_items, queue_claims
-//                  the Backlog queues (packages/engine/domains/backlog/backlog.js): every change is one IMMEDIATE transaction, and
-//                  a dispatcher claims the item it starts so two never take the same issue. The
-//                  backlog/<id>.queue.json files become a readable snapshot written under that lock;
-//                  a project with no row yet (a new or deleted index.db) is imported from its file.
+//                  the retired Backlog queues (#446): never written any more; the items an older
+//                  version left are taken once (takeLeftoverQueues) and planned in the roadmap
+//                  (packages/engine/domains/roadmap/roadmap.js moveLeftoverQueues). Migrations only grow, so the tables stay.
 //   gates          a row per approval.requested, closed on approval.resolved or the run's end; the
 //                  open gates of runs that did not survive a restart become `interrupted`.
 //   notifications  every notice (run started/finished/failed, gate waiting, CLI session waiting, push
@@ -35,7 +34,6 @@
 // store whose runs or backlog folder is `dir`, so packages/engine/domains/run/runs.js and packages/engine/domains/backlog/backlog.js use it when the
 // service has one and fall back to the plain files otherwise (scripts/run.js, unit tests).
 
-const fs = require('fs');
 const path = require('path');
 const { pathKey } = require('../machine/platform-paths');
 
@@ -46,8 +44,6 @@ const databaseClass = () => (sqlite ??= require('node:sqlite')).DatabaseSync;
 // Bump when the readRun object (`runs.info`) changes shape: the runs cache is emptied at the next
 // start and rebuilt from runs/.
 const RUNS_CACHE = 4;
-// A claim older than this belongs to a dispatcher that died: its item can be taken again.
-const CLAIM_TTL_MS = 10 * 60 * 1000;
 const BUSY_TIMEOUT_MS = 5000;
 
 // One entry per schema version, applied in order inside a transaction.
@@ -96,7 +92,6 @@ const parse = (s, fallback = null) => {
   try { return JSON.parse(s); } catch { return fallback; }
 };
 const now = () => new Date().toISOString();
-const REASON_MARK = 'reason:';
 
 /** The open store whose workspace has `dir` as its runs or backlog folder, or null. */
 function storeFor(dir) {
@@ -260,45 +255,21 @@ function openStore(ws) {
       return db.prepare('SELECT run_id FROM artifact_paths WHERE path = ? ORDER BY run_id DESC').all(norm(file)).map((r) => r.run_id);
     },
 
-    // ---- Backlog queues ------------------------------------------------------------------------
-    /** A project's queue ({ paused, error, inputs, items, skipped }), or null when it has none. */
-    readQueue(projectId) {
-      const q = db.prepare('SELECT * FROM queues WHERE project_id = ?').get(String(projectId));
-      if (!q) return null;
-      const items = db.prepare('SELECT item FROM queue_items WHERE project_id = ? ORDER BY position').all(String(projectId)).map((r) => parse(r.item)).filter(Boolean);
-      // #445: a structured pause reason is kept in the error column as JSON (no schema change)
-      const reason = q.error?.startsWith(REASON_MARK) ? parse(q.error.slice(REASON_MARK.length)) : null;
-      return { paused: !!q.paused, error: reason ? null : q.error ?? null, ...(reason ? { reason } : {}), inputs: parse(q.inputs, {}), items, skipped: parse(q.skipped, []) };
-    },
-    writeQueue(projectId, queue) {
-      const id = String(projectId);
-      const error = queue.reason ? REASON_MARK + JSON.stringify(queue.reason) : queue.error ?? null;
-      transaction(() => {
-        db.prepare(`INSERT INTO queues (project_id, paused, error, inputs, skipped) VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(project_id) DO UPDATE SET paused = excluded.paused, error = excluded.error, inputs = excluded.inputs, skipped = excluded.skipped`)
-          .run(id, queue.paused ? 1 : 0, error, JSON.stringify(queue.inputs || {}), JSON.stringify(queue.skipped || []));
-        db.prepare('DELETE FROM queue_items WHERE project_id = ?').run(id);
-        const add = db.prepare('INSERT INTO queue_items (project_id, position, number, added_at, item) VALUES (?, ?, ?, ?, ?)');
-        (queue.items || []).forEach((item, i) => add.run(id, i, Number.isFinite(+item.number) ? +item.number : null, item.addedAt ?? null, JSON.stringify(item)));
-        // a claim whose item left the queue (started, unqueued, skipped) is over
-        db.prepare('DELETE FROM queue_claims WHERE project_id = ? AND number NOT IN (SELECT number FROM queue_items WHERE project_id = ? AND number IS NOT NULL)').run(id, id);
+    // ---- the retired Backlog queues (#446) -----------------------------------------------------
+    /**
+     * The items an older version left in the queue tables, per project ({ <projectId>: items }),
+     * taken out of the tables in the same transaction: the one-time move into the roadmap reads them once.
+     */
+    takeLeftoverQueues() {
+      return transaction(() => {
+        const out = {};
+        for (const r of db.prepare('SELECT project_id, item FROM queue_items ORDER BY project_id, position').all()) {
+          const item = parse(r.item);
+          if (item) (out[r.project_id] ||= []).push(item);
+        }
+        db.exec('DELETE FROM queue_items; DELETE FROM queues; DELETE FROM queue_claims;');
+        return out;
       });
-      return queue;
-    },
-    queuedProjects() {
-      return db.prepare('SELECT project_id FROM queues ORDER BY project_id').all().map((r) => r.project_id);
-    },
-    /** Numbers of the items of a project that a dispatcher is starting (claims younger than CLAIM_TTL_MS). */
-    claimedNumbers(projectId) {
-      const since = new Date(Date.now() - CLAIM_TTL_MS).toISOString();
-      return new Set(db.prepare('SELECT number FROM queue_claims WHERE project_id = ? AND claimed_at > ?').all(String(projectId), since).map((r) => r.number));
-    },
-    claim(projectId, number, owner = String(process.pid)) {
-      db.prepare(`INSERT INTO queue_claims (project_id, number, owner, claimed_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(project_id, number) DO UPDATE SET owner = excluded.owner, claimed_at = excluded.claimed_at`).run(String(projectId), +number, owner, now());
-    },
-    release(projectId, number) {
-      db.prepare('DELETE FROM queue_claims WHERE project_id = ? AND number = ?').run(String(projectId), +number);
     },
 
     // ---- pending gates -------------------------------------------------------------------------
@@ -388,31 +359,10 @@ function openStore(ws) {
   };
 
   open.set(norm(ws.root), store);
-  migrateQueueFiles(store);
   return store;
 }
 
-// The queue files (backlog/<id>.queue.json: written before the index, or the snapshot of a deleted
-// index.db): a project the table does not have yet is imported; the table is the queue from then on.
-function migrateQueueFiles(store) {
-  let files = [];
-  try { files = fs.readdirSync(store.ws.backlog).filter((f) => f.endsWith('.queue.json')); } catch { return; }
-  for (const f of files) {
-    const file = path.join(store.ws.backlog, f);
-    const projectId = f.slice(0, -'.queue.json'.length);
-    try {
-      const q = JSON.parse(fs.readFileSync(file, 'utf8'));
-      store.transaction(() => {
-        if (!store.readQueue(projectId)) {
-          store.writeQueue(projectId, { paused: !!q.paused, error: q.error ?? null, reason: q.reason || null, inputs: q.inputs || {}, items: q.items || [], skipped: q.skipped || [] });
-        }
-      });
-    } catch (e) { console.error(`backlog queue import (${f}):`, e.message); }
-  }
-}
-
 module.exports = {
-  CLAIM_TTL_MS,
   MIGRATIONS,
   openStore,
   RUNS_CACHE,

@@ -559,8 +559,38 @@ function fromQueue(queueItems, name = 'From the queue') {
   return {
     name,
     note: 'Moved from the assignment queue.',
-    items: queueItems.map((q) => ({ workflow: q.workflow, workflowName: q.workflowName, inputs: q.inputs, mock: q.mock, issues: itemIssues(q) })),
+    items: queueItems.map((q) => ({ workflow: q.workflow, workflowName: q.workflowName, inputs: q.inputs, mock: q.mock, then: q.then, agentOverrides: q.agentOverrides, issues: itemIssues(q) })),
   };
+}
+
+/**
+ * #446: the plain queue is retired. The queues an older version left with items (`fromIndex`: the
+ * index's rows per project, store.takeLeftoverQueues; else the backlog/<id>.queue.json file) become one
+ * planned stage at the end of each project's roadmap, once (fromQueue's rule); their pause is not
+ * carried over (propose keeps the roadmap's state) and their files are removed, so nothing reads
+ * them again. A move that fails keeps its file for the next open. Returns the moved project ids.
+ * @param {string} dir the backlog folder
+ * @param {{ fromIndex?: Record<string, object[]>, issuesOf?: (projectId: string) => any[] }} [options]
+ */
+function moveLeftoverQueues(dir, { fromIndex = {}, issuesOf = () => [] } = {}) {
+  const SUFFIX = '.queue.json';
+  let files = [];
+  try { files = fs.readdirSync(dir).filter((f) => f.endsWith(SUFFIX)).map((f) => f.slice(0, -SUFFIX.length)); } catch { /* no backlog folder yet */ }
+  const moved = [];
+  for (const projectId of new Set([...Object.keys(fromIndex || {}), ...files])) {
+    const file = path.join(dir, `${projectId}${SUFFIX}`);
+    try {
+      let items = fromIndex?.[projectId];
+      if (!items) { try { items = JSON.parse(fs.readFileSync(file, 'utf8')).items; } catch { items = []; } }
+      items = (Array.isArray(items) ? items : []).filter((q) => q?.workflow && itemIssues(q).length);
+      if (items.length) {
+        propose(dir, projectId, [fromQueue(items)], { issues: issuesOf(projectId) });
+        moved.push(projectId);
+      }
+      for (const f of [file, `${file}.bak`]) fs.rmSync(f, { force: true });
+    } catch (e) { console.error(`backlog queue move (${projectId}):`, e.message); }
+  }
+  return moved;
 }
 
 // Owner actions on the roadmap: start (running; `simulated` starts every item as a simulation),
@@ -942,6 +972,7 @@ module.exports = {
   itemAction,
   markStarted,
   mergedPullRequest,
+  moveLeftoverQueues,
   normalizeItem,
   parkStage,
   pauseAfterStage,

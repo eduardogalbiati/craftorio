@@ -133,15 +133,16 @@ module.exports = (ctx) => {
   const REQUESTS = {
     'issue.file': (p, { mock }) => ctx.performAction('issue.file', p, { mock }),
     'issue.update': (p, { mock }) => ctx.performAction('issue.update', p, { mock }),
-    // the Backlog's Assign: the issues go to the plain queue on a workflow ({ issues, workflow, inputs?, group? })
+    // the Backlog's Assign with Run now (#446; the kind keeps its old name): the issues become a new
+    // last roadmap stage on a workflow, started on its own ({ issues, workflow, inputs?, group? })
     'queue.assign': async (p, { mock }) => {
       const numbers = numbersOf(p.issues ?? p.numbers);
-      if (!numbers.length) throw new Error('Say which issues to queue (issues).');
+      if (!numbers.length) throw new Error('Say which issues to run (issues).');
       if (!p.workflow) throw new Error('Say which workflow runs them (workflow).');
       const kept = ctx.keptWorkForIssues(numbers);
-      if (kept) throw new Error(`${kept.text} Nothing was queued: the owner decides between resuming that run and starting from scratch.`);
-      await ctx.assignWorkflow({ projectId: p.projectId, numbers, workflow: p.workflow, inputs: p.inputs || {}, mock, group: !!p.group });
-      return { text: `${refs(numbers)} queued on ${path.basename(String(p.workflow))}${p.group ? ' (one run)' : ''}.` };
+      if (kept) throw new Error(`${kept.text} Nothing was planned: the owner decides between resuming that run and starting from scratch.`);
+      await ctx.assignWorkflow({ projectId: p.projectId, numbers, workflow: p.workflow, inputs: p.inputs || {}, mock, group: !!p.group, runNow: true });
+      return { text: `${refs(numbers)} planned in a new roadmap stage on ${path.basename(String(p.workflow))}${p.group ? ' (one run)' : ''}, started now.` };
     },
     // the Product Owner's Add to roadmap: a new planned stage at the end ({ issues, workflow?, inputs?, group? });
     // the workflow defaults to the project's default workflow (#486), else Settings', as the Product Owner's own plans do

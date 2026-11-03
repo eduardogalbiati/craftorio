@@ -105,8 +105,7 @@ module.exports = (ctx) => {
         if (!ctx.ws || await memoryNow(applyMemorySettings())) return;
         clearInterval(memoryRetry);
         memoryRetry = null;
-        Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
-          .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
+        Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e));
       }, MEMORY_RETRY_MS);
       memoryRetry.unref?.();
     }
@@ -273,22 +272,9 @@ module.exports = (ctx) => {
     finishedPeers = finishedPeers.filter((f) => f.finishedAt >= oldest); // none left when nothing runs
   }
 
-  // What follows a run's end (its workflow.finished event): the next issues waiting in a Backlog
-  // queue start once this run is over; a queued issue whose run failed pauses its queue (a failure
-  // that repeats would otherwise burn through it). #445: only a run the queue started pauses it
-  // (not a roadmap item's, a release's, a chain's or one by hand), and the pause ends once the
-  // issues it names are done (closed on the platform, or a later run of them succeeded).
+  // What follows a run's end (its workflow.finished event): its chain, epic, refresh, release and
+  // conflict map, then the roadmap's next items (the plain queue is retired, #446).
   function afterRunFinished(run, ev) {
-    if (run.issues && run.projectId && !run.mock) {
-      try {
-        if (ev.status === 'failed' && run.fromQueue) backlog.pauseForFailure(ctx.ws.backlog, run.projectId, run.issues.map((i) => i.number));
-        else {
-          const ok = new Set(ev.status === 'success' ? run.issues.map((i) => i.number) : []);
-          const closed = new Set((backlog.readBacklog(ctx.ws.backlog, run.projectId)?.issues || []).filter((i) => i.state === 'closed').map((i) => i.number));
-          backlog.clearDonePause(ctx.ws.backlog, run.projectId, (n) => ok.has(n) || closed.has(n));
-        }
-      } catch (e) { console.error('backlog queue:', e); }
-    }
     // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
     ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
       .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
@@ -300,13 +286,12 @@ module.exports = (ctx) => {
     try { ctx.afterBaseReleased(run); } catch (e) { console.error('base health:', e.message); }
     // a merged run changes the conflict map the Product Owner plans with (#150)
     ctx.afterRunConflictMap(run, ev).catch((e) => console.error('conflict map:', e.message));
-    // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
-    // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
+    // a roadmap's next items (its stage may be over); a shutdown cancels it (#186: it would run
+    // after the workspace was closed, e.g. a test's removed one)
     const dispatch = setTimeout(() => {
       dispatchTimers.delete(dispatch);
       if (!ctx.ws) return;
-      Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
-        .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
+      Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e));
     }, 1000);
     dispatchTimers.add(dispatch);
   }
@@ -648,8 +633,7 @@ module.exports = (ctx) => {
   }
 
   // Before a restart (the code changed on disk, #83): refuses while runs are in progress unless
-  // the user confirmed interrupting them, and pauses the Backlog queues so nothing starts on the
-  // way out. Returns the runs the restart interrupts (to resume after it). A start still under way
+  // the user confirmed interrupting them. Returns the runs the restart interrupts (to resume after it). A start still under way
   // (e.g. cloning its repository) has no run to resume yet: the restart waits until it resolves.
   function prepareRestart({ interruptRuns = false } = {}) {
     if (reserved.size) {
@@ -659,7 +643,6 @@ module.exports = (ctx) => {
     if (list.length && !interruptRuns) {
       throw new Error(`${list.length} run${list.length > 1 ? 's are' : ' is'} in progress: confirm the restart to interrupt ${list.length > 1 ? 'them' : 'it'} (${list.map((r) => r.runId).join(', ')}).`);
     }
-    if (ctx.ws) backlog.pauseAll(ctx.ws.backlog, 'Paused for the app restart: resume to start the queued issues.');
     return { interrupted: list };
   }
 

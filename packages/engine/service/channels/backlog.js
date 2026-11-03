@@ -1,5 +1,5 @@
 // Backlog screen: a project's issues (the last sync, instant, and a new sync with gh/glab, each
-// issue with the runs working on it), the assignment queue and the local merges not pushed, and
+// issue with the runs working on it), Assign into the roadmap (#446) and the local merges not pushed, and
 // saving a Write & Review document back to its issue, archiving and restoring issues (#238).
 
 const path = require('path');
@@ -137,16 +137,16 @@ module.exports = (ctx) => {
       fn: ({ projectId }) => ctx.baseCheckState(project(projectId)),
     },
     { channel: 'backlog:watching', method: 'backlogWatching', schema: { result: BOOL }, fn: () => ctx.backlogWatching() },
-    // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
-    // When an ended run kept work for them, the answer is the kept-work question { confirm, kept, runId }
-    // (nothing queued) until `confirmed` (#170: Start from scratch).
+    // Assign a workflow to issues (#446): they are planned in the roadmap as a new last stage; with
+    // `runNow` that stage starts on its own (#141). When an ended run kept work for them, the answer is
+    // the kept-work question { confirm, kept, runId } (nothing planned) until `confirmed` (#170).
     {
       channel: 'backlog:assign',
       method: 'assignWorkflow',
       // then: what happens with each run's result when it finishes (#134); pipeline: a saved
       // pipeline's file (#135), whose first workflow and chain replace `workflow` and `then`;
       // agentOverrides: each run's provider / model / effort per agent (#262, run:start's)
-      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed', 'then', 'pipeline', 'agentOverrides'],
+      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed', 'then', 'pipeline', 'agentOverrides', 'runNow'],
       schema: {
         params: args({
           projectId: PROJECT_ID,
@@ -159,10 +159,11 @@ module.exports = (ctx) => {
           then: ANY,
           pipeline: orNone(PIPELINE_FILE),
           agentOverrides: nullable(OBJECT),
+          runNow: FLAG,
         }, ['projectId']),
-        result: described(BACKLOG, 'The Backlog with the issues queued, or the kept-work question { confirm, kept, runId } (nothing queued).'),
+        result: described(BACKLOG, 'The Backlog with the issues planned in a new last roadmap stage, or the kept-work question { confirm, kept, runId } (nothing planned).'),
       },
-      fn: ({ confirmed, ...opts }) => {
+      fn: ({ confirmed, batches: _internal, ...opts }) => {
         if (opts.numbers != null && !Array.isArray(opts.numbers)) throw clientError('Invalid issue numbers: expected a list.');
         if (opts.pipeline != null && opts.pipeline !== '') requireId(opts.pipeline, 'pipeline file');
         const kept = confirmed ? null : ctx.keptWorkForIssues(opts.numbers);
@@ -221,37 +222,6 @@ module.exports = (ctx) => {
         const id = project(projectId);
         const { results } = await backlog.restoreIssues({ ...platformTarget(id, simulate), numbers, dir: ctx.ws.backlog, projectId: id });
         return { results, backlog: current(id) };
-      },
-    },
-    // cancelGroup: an issue of a group takes the whole group out (else it only leaves the group)
-    {
-      channel: 'backlog:unqueue',
-      method: 'unqueueIssue',
-      params: ['projectId', 'number', 'cancelGroup'],
-      schema: { params: args({ projectId: PROJECT_ID, number: ISSUE_NUMBER, cancelGroup: FLAG }, ['projectId']), result: BACKLOG },
-      fn: async ({ projectId, number, cancelGroup }) => {
-        backlog.unqueue(ctx.ws.backlog, project(projectId), Number(number), { cancelGroup: !!cancelGroup });
-        return current(projectId);
-      },
-    },
-    // Resuming a queue whose next item would redo an ended run's kept work answers the kept-work
-    // question { confirm, kept, runId } (the queue stays paused) until `confirmed` (#170).
-    {
-      channel: 'backlog:pause',
-      method: 'pauseQueue',
-      params: ['projectId', 'paused', 'confirmed'],
-      schema: { params: args({ projectId: PROJECT_ID, paused: FLAG, confirmed: FLAG }, ['projectId']), result: BACKLOG },
-      fn: async ({ projectId, paused, confirmed }) => {
-        const head = paused ? null : backlog.readQueue(ctx.ws.backlog, project(projectId)).items[0];
-        if (head) {
-          const issues = backlog.itemIssues(head);
-          const kept = confirmed ? null : ctx.keptWorkForIssues(issues);
-          if (kept) return { ...current(projectId), confirm: kept.text, kept, runId: kept.runId };
-          if (confirmed) ctx.allowQueuedKeptWork(project(projectId), issues);
-        }
-        backlog.setPaused(ctx.ws.backlog, project(projectId), !!paused);
-        if (!paused) await ctx.dispatchQueue();
-        return current(projectId);
       },
     },
   ];

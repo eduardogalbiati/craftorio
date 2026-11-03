@@ -1,14 +1,17 @@
 // Service area: the open workspace ({ root, runs, repos, projects, skills, workflows, worktrees,
 // settings }, see packages/engine/domains/workspace/workspace.js). Opening one seeds the bundled skills, workflows, pipelines and
-// analysis seeds (#360), opens its index, pauses the Backlog queues and lets started roadmaps continue. `ctx.ws` is read at call
+// analysis seeds (#360), opens its index, moves a leftover Backlog queue into the roadmap once (#446)
+// and lets started roadmaps continue. `ctx.ws` is read at call
 // time: it changes with the workspace.
 
 const fs = require('fs');
 const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
 const pipelines = require('../../domains/workflow/pipelines');
+const roadmaps = require('../../domains/roadmap/roadmap');
 const seeds = require('../../domains/seed/seeds');
 const skills = require('../../domains/agents/skills');
+const { storeFor } = require('../../domains/workspace/store');
 const workflows = require('../../domains/workflow/workflows');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('../common');
 
@@ -44,8 +47,13 @@ module.exports = (ctx) => {
     ctx.resumePhoneGates();
     // processes of finished runs that keep using CPU (#390, areas/runs.js)
     ctx.watchStrayProcesses();
-    // queued issues never start on their own after a restart or a workspace change
-    try { backlog.pauseAll(ws.backlog, 'Paused when the app started: resume to start the queued issues.'); } catch (e) { console.error('backlog queues:', e); }
+    // #446: a plain queue an older version left becomes a planned roadmap stage, once (never started)
+    try {
+      roadmaps.moveLeftoverQueues(ws.backlog, {
+        fromIndex: storeFor(ws.backlog)?.takeLeftoverQueues() || {},
+        issuesOf: (id) => backlog.readBacklog(ws.backlog, id)?.issues || [],
+      });
+    } catch (e) { console.error('backlog queues:', e); }
     // after an app update's restart (#279, areas/app-update.js): the roadmaps it paused run again,
     // before the dispatch below starts their stage
     ctx.appUpdateAfterRestart();

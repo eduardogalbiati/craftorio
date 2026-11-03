@@ -1,8 +1,9 @@
-// Service area: a project's Backlog (packages/engine/domains/backlog/backlog.js). The synced issues with their runs, queue,
-// roadmap stage and local status; Assign (queue issues for a workflow, alone or as one group run,
-// with an optional chain, #134); the queue's dispatch into free run slots; and the issue tracker's
-// epic placement after a run filed issues (#138); the Backlog Refresh banner and the sync after a
-// refresh run (#161, packages/engine/domains/backlog/backlog-refresh.js). "Create and queue" is a chain (packages/engine/service/areas/chain.js).
+// Service area: a project's Backlog (packages/engine/domains/backlog/backlog.js). The synced issues with their runs,
+// roadmap stage and local status; Assign (plans issues for a workflow in the roadmap as a new last
+// stage, alone or as one group item, with an optional chain #134 and "Run now" #446); the issue
+// tracker's epic placement after a run filed issues (#138); the Backlog Refresh banner and the sync
+// after a refresh run (#161, packages/engine/domains/backlog/backlog-refresh.js). "Create and plan" is a chain
+// (packages/engine/service/areas/chain.js).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -16,13 +17,12 @@ const { git } = require('../../engine/worktree');
 const epics = require('../../domains/backlog/epics');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const { normalizeThen } = require('@multiagent/shared/chain-model');
-const { platformOrDefault, requestRef } = require('@multiagent/shared/platforms');
+const { platformOrDefault } = require('@multiagent/shared/platforms');
 const runs = require('../../domains/run/runs');
-const seedRuns = require('../seed-runs');
 
 module.exports = (ctx) => {
-  // A synced backlog with each issue's runs and place in the queue (computed on every read: runs
-  // come and go), plus the queue itself.
+  // A synced backlog with each issue's runs and roadmap stage (computed on every read: runs come and
+  // go). The plain queue is retired (#446): an older answer's `queue` is dropped.
   function withIssueRuns(data) {
     if (!data) return null;
     const { ws } = ctx;
@@ -33,7 +33,6 @@ module.exports = (ctx) => {
       const pr = ctx.withPrState(run?.pr || r.pr, r.mock); // the card's PR icon (#84)
       return run ? { ...r, status: 'running', waiting: run.approvals.size > 0, pr } : { ...r, pr };
     });
-    const queue = backlog.readQueue(ws.backlog, data.projectId);
     const local = backlog.readLocal(ws.backlog, data.projectId);
     // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
     // (#491 `shape`: what the light backlog:state compares to tell an edit of the stages)
@@ -46,7 +45,7 @@ module.exports = (ctx) => {
     // the issues filed from a discovery card (#258) name it (`discoveryCard`: { id, title }, the card's
     // badge); the card store is the discovery channels' (fronts/plan/engine/channels/discovery.js)
     const cards = ctx.discoveryIssueCards?.(data.projectId) || new Map();
-    const issues = ctx.markReleasedIssues(data.projectId, backlog.linkRuns(data.issues, live, queue, local))
+    const issues = ctx.markReleasedIssues(data.projectId, backlog.linkRuns(data.issues, live, local))
       .map((i) => (cards.has(i.number) ? { ...i, discoveryCard: cards.get(i.number) } : i))
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
@@ -58,7 +57,8 @@ module.exports = (ctx) => {
     const baseFailures = baseHealth.knownFailures(ws.root, data.projectId);
     // #465: the base check's last state (running, green, red), the Roadmap's "Base check" card
     const baseCheck = ctx.baseCheckState?.(data.projectId) || null;
-    return { ...data, queue, local, roadmap, refresh, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
+    const { queue: _retired, ...synced } = data;
+    return { ...synced, local, roadmap, refresh, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
   }
 
   // The Backlog Refresh banner (#161, packages/engine/domains/backlog/backlog-refresh.js): the merges on the base since the
@@ -108,15 +108,16 @@ module.exports = (ctx) => {
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
 
-  // Queues issues of a project's synced backlog for a workflow and starts the first ones if there
-  // are free run slots. Only open issues; the workflow needs a `task` input (the issue goes there).
-  // group: the issues go as one run (one branch, one PR/MR), up to the backlogMaxGroup setting; a
-  // backlog is one project's, so a group never mixes projects.
-  // allowKeptWork: the owner answered the kept-work question with Start from scratch (#170).
-  // then: what happens with each run's result when it finishes (#134, chain-model normalizeThen).
-  // pipeline: a saved pipeline's file (#135): its first workflow (with its fixed inputs under the
-  // owner's) receives the issues and the rest of the pipeline is each run's then.
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null, agentOverrides = null }) {
+  // Assign (#446): plans issues of a project's synced backlog for a workflow in the roadmap, as one
+  // new stage at the end; nothing waits in a queue. Only open issues; the workflow needs a `task`
+  // input (the issue goes there). group: the issues go as one item (one run, one branch, one PR/MR),
+  // up to the backlogMaxGroup setting, else one item per issue. allowKeptWork: the owner answered the
+  // kept-work question with Start from scratch (#170). then: what happens with each run's result when
+  // it finishes (#134, chain-model normalizeThen). pipeline: a saved pipeline's file (#135): its first
+  // workflow (with its fixed inputs under the owner's) receives the issues and the rest of the
+  // pipeline is each run's then. runNow: the new stage starts on its own (#141's "Run this stage").
+  // `batches` (a chain's produced issues, chain-model queueBatches): [{ numbers, group }], one item each.
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null, agentOverrides = null, runNow = false, batches = null }) {
     if (pipeline) {
       const first = ctx.pipelineAssign(pipeline);
       ({ workflow, then } = first);
@@ -126,24 +127,35 @@ module.exports = (ctx) => {
     const project = projects.readProject(ws.projects, path.basename(String(projectId)));
     const data = backlog.readBacklog(ws.backlog, project.id);
     if (!data) throw new Error('Sync the backlog first.');
-    // in the order they were selected
-    const issues = [...new Set((numbers || []).map(Number))].map((n) => data.issues.find((i) => i.number === n)).filter((i) => i?.state === 'open');
-    if (!issues.length) throw new Error('Select at least one open issue.');
+    // in the order they were selected; only open issues
+    const open = (list) => [...new Set((list || []).map(Number))].map((n) => data.issues.find((i) => i.number === n)).filter((i) => i?.state === 'open');
     const maxGroup = workspace.readSettings(ws).backlogMaxGroup || workspace.DEFAULT_SETTINGS.backlogMaxGroup;
-    if (group && issues.length > maxGroup) throw new Error(`One run takes at most ${maxGroup} issues (Settings › General › Backlog); ${issues.length} were selected.`);
+    const groups = (batches || [{ numbers, group }]).flatMap((b) => {
+      const issues = open(b.numbers);
+      return b.group ? [issues] : issues.map((i) => [i]);
+    }).filter((g) => g.length);
+    if (!groups.length) throw new Error('Select at least one open issue.');
+    const largest = Math.max(...groups.map((g) => g.length));
+    if (largest > maxGroup) throw new Error(`One run takes at most ${maxGroup} issues (Settings › General › Backlog); ${largest} were selected.`);
     const file = path.basename(String(workflow || ''));
     const wf = loadWorkflow(ctx.workflowPath(file).file);
     const chained = normalizeThen(then);
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
-    if (!mock) {
-      simulation.refuseReal('real runs from the Backlog');
-    }
-    // a pipeline's first stage keeps its workflow's agents (#262: the overrides were chosen for `workflow`)
-    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group, then: chained, agentOverrides: pipeline ? null : agentOverrides });
-    if (allowKeptWork) allowQueuedKeptWork(project.id, issues);
+    if (runNow && !mock) simulation.refuseReal('real runs from the Backlog');
+    const numbersOf = groups.flat().map((i) => i.number);
     // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
-    roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number), { alive: ctx.runAlive });
-    await dispatchQueue();
+    roadmaps.dropIssues(ws.backlog, project.id, numbersOf, { alive: ctx.runAlive });
+    const before = new Set(roadmaps.readRoadmap(ws.backlog, project.id).stages.map((s) => s.id));
+    // a pipeline's first stage keeps its workflow's agents (#262: the overrides were chosen for `workflow`)
+    const items = groups.map((list) => ({
+      workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, then: chained,
+      agentOverrides: pipeline ? null : agentOverrides, issues: list.map((i) => i.number),
+    }));
+    const { roadmap } = roadmaps.propose(ws.backlog, project.id, [{ name: '', note: '', items }], { issues: data.issues, alive: ctx.runAlive });
+    const added = roadmap.stages.find((s) => !before.has(s.id));
+    if (added && allowKeptWork) for (const x of added.items) ctx.allowKeptWork(project.id, x.id);
+    // a running roadmap runs the new stage in its turn: Run now never narrows what it runs
+    if (added && runNow && roadmap.state !== 'running') return ctx.startRoadmap({ projectId: project.id, simulated: false, stage: added.id });
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
   }
 
@@ -164,87 +176,9 @@ module.exports = (ctx) => {
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
 
-  // Queued issues the owner chose to start from scratch although an ended run kept work for them
-  // (#170: Start on the issue, Resume on the queue); in memory, used by their next start.
-  const keptWorkAllowed = new Set();
-  function allowQueuedKeptWork(projectId, issues) {
-    for (const i of issues || []) keptWorkAllowed.add(`${projectId}:${Number(i?.number ?? i)}`);
-  }
-
-  // Starts queued issues while there are free run slots: the oldest first across projects, a
-  // project at its own limit waiting. A start that fails (budget, missing CLI, bad input) pauses
-  // that project's queue with the reason.
-  let dispatching = false;
-  async function dispatchQueue() {
-    if (dispatching || !ctx.ws) return;
-    dispatching = true;
-    try {
-      for (;;) {
-        const { ws } = ctx;
-        // claimed atomically (with the index): another dispatcher on this workspace never takes it too
-        const next = backlog.claimQueued(ws.backlog, (projectId, item) => !ctx.slotProblem({ mock: !!item.mock, projectId }));
-        if (!next) return;
-        const { projectId, item } = next;
-        // #276: low memory holds a real start: the item goes back to the queue and a timer dispatches again
-        if (!item.mock && await ctx.memoryHold()) {
-          backlog.releaseQueued(ws.backlog, projectId, item.number);
-          return;
-        }
-        try {
-          const project = projects.readProject(ws.projects, projectId);
-          const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);
-          const cache = backlog.readBacklog(ws.backlog, projectId);
-          const platform = backlog.platformOf(project, cache?.platform || workspace.readSettings(ws).backlogPlatform);
-          const real = !item.mock && !!project.repo;
-          // a PR/MR may have been opened for an issue since it was queued: skip it, don't redo the work
-          // (an issue of a group leaves the group, which starts with the others)
-          if (real) {
-            const prs = await backlog.newPullRequests({ item, platform, repo: project.repo });
-            if (prs.length) {
-              for (const n of new Set(prs.map((p) => p.issue ?? item.number))) {
-                const mine = prs.filter((p) => (p.issue ?? item.number) === n);
-                backlog.skipQueued(ws.backlog, projectId, n, `open ${mine.map((p) => requestRef(platform, p.number)).join(', ')} since it was queued`);
-              }
-              continue;
-            }
-          }
-          // the platform is the source of truth (#168): the issues are read again now, the task is
-          // built from what was read and the queued copy updated; an issue closed meanwhile is skipped
-          const { issues: read, warnings } = await backlog.freshIssues({ item, platform, repo: project.repo, cache, fromPlatform: real });
-          backlog.refreshQueuedCopies(ws.backlog, projectId, read, { includeClaimed: true });
-          const closed = read.filter((i) => i.state === 'closed');
-          if (closed.length) {
-            for (const i of closed) backlog.skipQueued(ws.backlog, projectId, i.number, 'closed on the platform');
-            backlog.releaseQueued(ws.backlog, projectId, item.number);
-            continue;
-          }
-          const run = { ...item, ...read[0], issues: read.length > 1 ? read : undefined };
-          const keys = backlog.itemIssues(item).map((i) => `${projectId}:${i.number}`);
-          await ctx.startWorkflowRun({
-            file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder, seedRuns.runDefaultsNow(ctx, project)), mock: item.mock,
-            projectId, issues: backlog.recordedIssues(read), notices: warnings.map((message) => ({ level: 'warn', message })),
-            allowKeptWork: keys.some((k) => keptWorkAllowed.has(k)),
-            then: item.then || null,
-            agentOverrides: item.agentOverrides || null,
-            fromQueue: true, // #445: its failure pauses this queue
-          });
-          for (const k of keys) keptWorkAllowed.delete(k);
-          backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });
-        } catch (e) {
-          backlog.setPaused(ws.backlog, projectId, true, `Could not start ${backlog.itemIssues(item).map((i) => `#${i.number}`).join(', ')}: ${e.message}`);
-          backlog.releaseQueued(ws.backlog, projectId, item.number);
-        }
-      }
-    } finally {
-      dispatching = false;
-    }
-  }
-
   return {
     afterBacklogRefresh,
-    allowQueuedKeptWork,
     assignWorkflow,
-    dispatchQueue,
     placeFiledInEpic,
     withIssueRuns,
   };
