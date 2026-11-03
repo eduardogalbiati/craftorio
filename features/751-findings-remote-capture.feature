@@ -1,9 +1,10 @@
 Feature: Findings against a remote engine
   The Findings overlay freezes the view and keeps its picture in the finding also when the app runs
   against an engine on another computer: in a browser tab on the engine server and in the desktop app
-  in remote mode (window title "... engine on 127.0.0.1:<port>"), whose window has no preload and uses
-  the HTTP api (apps/web/renderer/api-http.js). There api.captureWindow returns a picture of the page
-  instead of refusing as "only available in the desktop app". When the capture really fails, the
+  in remote mode (window title "... engine on 127.0.0.1:<port>"), whose window uses the HTTP api
+  (apps/web/renderer/api-http.js) with only a minimal capture preload, without Node. There
+  api.captureWindow returns a picture of the page (the window's native capture in remote mode, the
+  page drawn to a canvas in a browser tab) instead of refusing as "only available in the desktop app". When the capture really fails, the
   overlay says so in the interface language and the finding can still be saved on a blank picture.
   The overlay's labels (the marking tools, the empty marks list) follow the interface language.
 

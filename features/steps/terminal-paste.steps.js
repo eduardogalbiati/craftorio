@@ -27,18 +27,7 @@ const termInput = (page) => activePane(page).getByRole('textbox', { name: 'Termi
 const termMessage = (page) => page.getByTestId('term-dock-message');
 
 // a call to the served engine's HTTP API (Authorization: Bearer <the served URL's token>)
-async function callEngine(e2e, channel, arg) {
-  const url = new URL(e2e.url);
-  const token = url.searchParams.get('token');
-  const res = await fetch(`${url.origin}/api/${encodeURIComponent(channel)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ arg: arg === undefined ? null : arg }),
-  });
-  const body = await res.json().catch(() => ({}));
-  expect(res.status, `${channel} answered ${res.status}: ${JSON.stringify(body).slice(0, 300)}`).toBe(200);
-  return body.result;
-}
+const { callEngine } = require('../support/engine-api');
 
 // a served engine on a new workspace opens the first-run Setup (#319) over every page
 Given('the served engine\'s first-run Setup is done', async ({ e2e }) => {

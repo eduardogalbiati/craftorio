@@ -15,6 +15,7 @@ const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
 const { servedEnv, startServer } = require('../support/served');
+const { callEngineAt } = require('../support/engine-api');
 
 const overlay = (page) => page.getByTestId('findings-overlay');
 const toolbar = (page) => overlay(page).getByTestId('findings-toolbar');
@@ -116,20 +117,6 @@ const captureError = (page) => overlay(page).getByTestId('findings-capture-error
 
 function removeScratch(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { /* EBUSY: the OS temp folder cleans it */ }
-}
-
-// a call to an engine server's HTTP API (Authorization: Bearer <the served URL's token>)
-async function callEngineAt(servedUrl, channel, arg) {
-  const url = new URL(servedUrl);
-  const token = url.searchParams.get('token');
-  const res = await fetch(`${url.origin}/api/${encodeURIComponent(channel)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ arg: arg === undefined ? null : arg }),
-  });
-  const body = await res.json().catch(() => ({}));
-  expect(res.status, `${channel} answered ${res.status}: ${JSON.stringify(body).slice(0, 300)}`).toBe(200);
-  return body.result;
 }
 
 function engineUrl(e2e) {

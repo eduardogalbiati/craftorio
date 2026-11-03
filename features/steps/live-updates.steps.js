@@ -61,18 +61,7 @@ async function badgeCount(page) {
 }
 
 // a call to the served engine's HTTP API, as another client makes it → the channel's result
-async function callEngine(e2e, channel, arg) {
-  const url = new URL(e2e.url);
-  const token = url.searchParams.get('token');
-  const res = await fetch(`${url.origin}/api/${encodeURIComponent(channel)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ arg: arg === undefined ? null : arg }),
-  });
-  const body = await res.json().catch(() => ({}));
-  expect(res.status, `${channel} answered ${res.status}: ${JSON.stringify(body).slice(0, 300)}`).toBe(200);
-  return body.result;
-}
+const { callEngine } = require('../support/engine-api');
 
 Given('the served engine has a project {string}', async ({ e2e }, name) => {
   await callEngine(e2e, 'projects:create', { name });
