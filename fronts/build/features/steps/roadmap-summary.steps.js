@@ -6,11 +6,11 @@
 // batch"). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screen exposes (the renderer's contract for these steps, new for #421):
-// - data-testid="roadmap-summary" in the roadmap bar: "Planned ≈ $X · ≈ T (n items, m stages)" for
-//   what is left, "+ n without estimate" when some items have no estimate, then "Spent $Y"; its
-//   title (tooltip) says the time is "work time; gates not included".
-// - data-testid="roadmap-summary-by-release": the "By release" toggle (a button, aria-expanded), only
-//   while the roadmap has a cut line.
+// - #750: the header's numbers band data-testid="roadmap-stats": the "Left" column "n items" / "in m stages", the
+//   "Forecast" column "≈ T" / "≈ $X" (+ "+ n without estimate"; its title says "work time; gates not included"),
+//   then the "Spent" column "$Y".
+// - data-testid="roadmap-summary-by-release": the "By release" toggle (a button, aria-expanded) of the view band
+//   (filter-row), only while the roadmap has a cut line.
 // - data-testid="roadmap-summary-releases": the open list; one data-testid="roadmap-summary-release-row"
 //   per cut line (its release's name, planned "≈ $X · ≈ T"), then a last row "after the last cut line".
 // For #425 the release blocks are #291's data-testid="roadmap-release-block" (data-release = version).
@@ -23,14 +23,15 @@ const { Given, When, Then } = require('../../../../features/steps/fixtures');
 const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const MONEY = String.raw`\$\s?\d[\d,]*(\.\d+)?`;
-const PLANNED_RE = new RegExp(String.raw`Planned\s+≈\s*${MONEY}\s*·\s*≈\s*\S.*\(\d+ items?, \d+ stages?\)`);
 const ROW_PLAN_RE = new RegExp(String.raw`≈\s*${MONEY}\s*·\s*≈\s*\S`);
 
-const summary = (page) => page.getByTestId('roadmap-bar').getByTestId('roadmap-summary');
-const byRelease = (page) => page.getByTestId('roadmap-bar').getByTestId('roadmap-summary-by-release');
+// #750: the summary is the header's numbers band (roadmap-stats): one roadmap-stat column per figure (label, value, detail)
+const stats = (page) => page.getByTestId('roadmap-stats');
+const column = (page, label) => stats(page).getByTestId('roadmap-stat').filter({ has: page.getByTestId('roadmap-stat-label').getByText(label, { exact: true }) });
+const byRelease = (page) => page.getByTestId('filter-row').getByTestId('roadmap-summary-by-release');
 const releaseRows = (page) => page.getByTestId('roadmap-summary-releases').getByTestId('roadmap-summary-release-row');
 
-// ---- #421: the bar's summary -----------------------------------------------------------------------
+// ---- #421: the header's numbers ---------------------------------------------------------------------
 
 // every cut line ("Release here", stage.release) taken off the demo roadmap's stages; the app follows
 // the roadmap file
@@ -43,25 +44,29 @@ Given('the roadmap has no cut lines', async ({ e2e }) => {
   fs.renameSync(tmp, file);
 });
 
+// Forecast: "≈ T" and "≈ $X"; Left: "n items", "in m stages"
 Then('the roadmap bar shows the planned cost and time of what is left, with its items and stages', async ({ e2e }) => {
-  await expect(summary(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(summary(e2e.window)).toContainText(PLANNED_RE);
+  const page = e2e.window;
+  await expect(stats(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(column(page, 'Forecast')).toContainText(new RegExp(String.raw`≈\s*\S[\s\S]*≈\s*${MONEY}`));
+  await expect(column(page, 'Left')).toContainText(/\d+ items?[\s\S]*in \d+ stages?/);
 });
 
 // the demo's test-batch item has no estimate (no past test-batch run)
 Then('the roadmap summary counts the items without an estimate', async ({ e2e }) => {
-  await expect(summary(e2e.window)).toContainText(/\+\s?[1-9]\d* without estimate/);
+  await expect(column(e2e.window, 'Forecast')).toContainText(/\+\s?[1-9]\d* without estimate/);
 });
 
+// the Spent column comes after the Forecast one
 Then('the roadmap summary shows what was spent next to it', async ({ e2e }) => {
-  const text = summary(e2e.window);
-  await expect(text).toContainText(new RegExp(`Spent\\s+${MONEY}`));
-  const all = await text.innerText();
-  expect(all.indexOf('Spent'), '"Spent" comes after the planned part').toBeGreaterThan(all.indexOf('Planned'));
+  const page = e2e.window;
+  await expect(column(page, 'Spent').getByTestId('roadmap-stat-value')).toContainText(new RegExp(MONEY));
+  const labels = await stats(page).getByTestId('roadmap-stat-label').allInnerTexts();
+  expect(labels.indexOf('Spent'), '"Spent" comes after the forecast').toBeGreaterThan(labels.indexOf('Forecast'));
 });
 
 Then("the roadmap summary's tooltip says {string}", async ({ e2e }, tip) => {
-  await expect(summary(e2e.window)).toHaveAttribute('title', new RegExp(escapeRe(tip)));
+  await expect(column(e2e.window, 'Forecast')).toHaveAttribute('title', new RegExp(escapeRe(tip)));
 });
 
 When('I open the roadmap summary by release', async ({ e2e }) => {
@@ -85,9 +90,9 @@ Then('release row {int} names {string} with its planned cost and time', async ({
 });
 
 Then('the roadmap summary offers no "By release" toggle', async ({ e2e }) => {
-  await expect(summary(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(stats(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(byRelease(e2e.window)).toHaveCount(0);
-  await expect(e2e.window.getByTestId('roadmap-bar').getByRole('button', { name: /By release/ })).toHaveCount(0);
+  await expect(e2e.window.getByTestId('roadmap-head').getByRole('button', { name: /By release/ })).toHaveCount(0);
 });
 
 // ---- #425: which releases the Planned | All switch shows ------------------------------------------------

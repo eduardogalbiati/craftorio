@@ -21,9 +21,9 @@
 //   (role="menuitem", built from a list) include [data-rm="clear"]. Clear still confirms.
 //   BacklogRoadmap.onKeyDown(e, ctx): Escape with the menu open closes it (ctx.render(), returns true).
 // - Filters: the Planned/All switch ([data-rm-view]), the date filter ([data-rm-since]) and Group by
-//   epic ([data-rm-by-epic]) render in a row `data-testid="filter-row"` (the E2E steps' name) placed BEFORE the bar in
-//   BacklogRoadmap.html's output; the bar keeps only the dot, the title, the counts
-//   (data-testid="roadmap-count") and the actions.
+//   epic ([data-rm-by-epic]) render in a row `data-testid="filter-row"` (the E2E steps' name); #750: that row is the
+//   header's last band, AFTER the bar, with the counts (data-testid="roadmap-count") on its right; the bar keeps only the
+//   dot, the title, the state pill and the actions.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
@@ -148,7 +148,8 @@ test('#269 the ⋮ menu opens with Clear as a menu item, Clear still confirms, a
   assert.equal(!!H.findEl(R.html(d, () => {}, view), (e) => e.attrs.role === 'menu'), false, 'Escape closed the menu');
 });
 
-test('#269 filters: Planned/All, the date filter and Group by epic sit in a filter row above the bar, not inside it; the bar keeps its counts', () => {
+// #750: the filter row is the header's last band (view and filters), after the state row, and holds the count on its right
+test('#269 #750 filters: Planned/All, the date filter and Group by epic sit in the filter row after the bar, not inside it; the count is in the filter row', () => {
   const { R } = load();
   const d = data({ state: 'running' });
   d.epics = [{ id: '#10', title: 'Epic Alpha', members: [1] }];
@@ -158,8 +159,8 @@ test('#269 filters: Planned/All, the date filter and Group by epic sit in a filt
   assert.deepEqual(inBar, [], 'no filter inside the bar');
   const row = H.findEl(html, (e) => e.attrs['data-testid'] === 'filter-row');
   assert.ok(row, 'a data-testid="filter-row" row');
-  assert.ok(row.start < bar.start, 'the filter row comes before the bar');
+  assert.ok(row.start > bar.start, 'the filter row comes after the bar (#750: band 4)');
   const inRow = ['data-rm-view', 'data-rm-since', 'data-rm-by-epic'].filter((a) => H.findEl(row.outer, (e) => a in e.attrs));
   assert.deepEqual(inRow, ['data-rm-view', 'data-rm-since', 'data-rm-by-epic']);
-  assert.ok(H.findEl(bar.outer, (e) => e.attrs['data-testid'] === 'roadmap-count'), 'the counts stay in the bar');
+  assert.ok(H.findEl(row.outer, (e) => e.attrs['data-testid'] === 'roadmap-count'), 'the count is in the filter row');
 });

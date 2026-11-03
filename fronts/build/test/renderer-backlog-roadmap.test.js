@@ -525,7 +525,8 @@ test('html: the stage run on its own is highlighted (running or paused), the bar
   const { BacklogRoadmap } = loadRoadmap();
   const running = BacklogRoadmap.html(threeStageData(['done', 'running', 'planned'], { state: 'running', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
   assert.match(running, /<section class="rm-stage current scoped" data-stage="1"[^>]*>[\s\S]*?<span class="badge live">Running this stage only<\/span>/);
-  assert.match(running, /<b>Roadmap<\/b> <span class="badge live" data-status="running">Running · stage 2 only<\/span>/);
+  // #750: the state is a pill after the title, then the scope badge names the stage
+  assert.match(running, /<b>Roadmap<\/b><span class="pill [^"]*"[^>]*>Running<\/span><span class="badge live" data-status="running">stage 2 only<\/span>/);
   // stage 1 (done) and stage 3 (planned, not scoped, not current) keep their own plain badges
   assert.match(running, /<section class="rm-stage finished" data-stage="0"[^>]*>[\s\S]*?<span class="badge" data-status="done">Done<\/span>/);
   assert.doesNotMatch(running, /data-stage="2"[^>]*>[\s\S]{0,400}badge live/);

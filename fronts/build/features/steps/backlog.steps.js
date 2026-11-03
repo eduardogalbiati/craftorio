@@ -200,14 +200,23 @@ Given('every item of stage {int} is done', async ({ e2e }, n) => {
 
 const rmBar = (page) => page.getByTestId('roadmap-bar');
 const confirmModal = (page) => page.getByTestId('confirm-modal');
-const simulatedBox = (page) => rmBar(page).getByRole('checkbox', { name: 'Simulated', exact: true });
+// #750: Simulated is an entry of the bar's ⋮ menu (a menuitemcheckbox that keeps the menu open); set it, then close the menu
+async function setSimulated(page, on) {
+  const menu = page.getByTestId('roadmap-menu');
+  if (!await menu.isVisible()) await rmBar(page).getByTestId('roadmap-menu-button').click();
+  const entry = menu.getByRole('menuitemcheckbox', { name: 'Simulated', exact: true });
+  if ((await entry.getAttribute('aria-checked')) !== String(on)) await entry.click();
+  await expect(entry).toHaveAttribute('aria-checked', String(on));
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+}
 
 // Simulated off: a start of real runs asks first (the scenario cancels it; the engine refuses real
 // runs anyway). The demo's stage 5 item pushes while the default workflow merges locally: the
 // "will push and open PRs" choice (#195) comes first, "Start anyway" goes on to the confirm.
 When('I press Resume on the roadmap with Simulated off', async ({ e2e }) => {
   const page = e2e.window;
-  await simulatedBox(page).uncheck();
+  await setSimulated(page, false);
   await rmBar(page).getByRole('button', { name: 'Resume', exact: true }).click();
   const dialog = confirmModal(page);
   await expect(dialog).toBeVisible();
@@ -217,7 +226,7 @@ When('I press Resume on the roadmap with Simulated off', async ({ e2e }) => {
 
 When('I resume the roadmap as a simulation', async ({ e2e }) => {
   const page = e2e.window;
-  await simulatedBox(page).check();
+  await setSimulated(page, true);
   await rmBar(page).getByRole('button', { name: 'Resume', exact: true }).click();
 });
 
@@ -237,14 +246,15 @@ When('I press Cancel in the confirm dialog', async ({ e2e }) => {
   await expect(dialog).toBeHidden();
 });
 
-// the roadmap bar's text: its state badge ("Paused · stage 5 only", #266: a readable status) and its message; the roadmap
-// may change on its own (the app's sequencing), hence the longer wait
+// the roadmap header's text (#750: the whole card): its state pill and scope badge ("Paused", "stage 5 only", #266: a readable
+// status) and its pause note (the activity band); the roadmap may change on its own (the app's sequencing), hence the longer wait
+const rmHead = (page) => page.getByTestId('roadmap-head');
 Then('the roadmap bar shows {string}', async ({ e2e }, text) => {
-  await expect(rmBar(e2e.window)).toContainText(text, { timeout: 20000 });
+  await expect(rmHead(e2e.window)).toContainText(text, { timeout: 20000 });
 });
 
 Then('the roadmap bar does not show {string}', async ({ e2e }, text) => {
-  await expect(rmBar(e2e.window)).not.toContainText(text, { timeout: 20000 });
+  await expect(rmHead(e2e.window)).not.toContainText(text, { timeout: 20000 });
 });
 
 Then('the Backlog shows no error {string}', async ({ e2e }, text) => {

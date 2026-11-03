@@ -3,7 +3,8 @@
 // patch: the list drawn again with its item rows kept in place; mergeState: the light backlog:state
 // (packages/engine/domains/backlog/backlog.js backlogState) merged into the Backlog shown, or null when only the full read can
 // tell; readLight: that state read with its key and mark; baseCheckHtml / baseCheckTerm: the "Base check since HH:MM · <commit>" line in the
-// roadmap header's activity band (activityHtml, #750) and its read-only log terminal ("View terminal", term-dock.js termAction).
+// roadmap header's activity band (#750) and its read-only log terminal ("View terminal", term-dock.js termAction);
+// statsHtml: the header's numbers band (#750) from RoadmapSummary.stats.
 // Uses app.js globals (esc, t).
 (() => {
   // the list drawn again with its item rows kept: when the same items are in the same stages and
@@ -124,10 +125,23 @@
     const msg = termMsg?.key === `${c.commit}:${c.startedAt}` ? termMsg : null;
     return `<div class="rm-base-check rm-head-line small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="${busy ? 'rm-spin' : 'rm-head-mark'}" aria-hidden="true"></span><b>${t('backlog_roadmap.base_check')}</b> <span class="muted" title="${esc(c.commit || '')}">${text}</span><span class="spacer"></span><span class="muted${msg?.error ? ' error' : ''}" data-term-msg data-check="${esc(`${c.commit}:${c.startedAt}`)}">${esc(msg?.text || '')}</span><button class="btn sm ghost" type="button" data-term="base-check" title="${esc(t('backlog_roadmap.follow_the_base_check_log'))}">${t('backlog_roadmap.view_terminal')}</button></div>`;
   }
-  // #750: the header's activity band around its lines (a background task, the pause note, the base's known failures); '' with none
-  function activityHtml(lines) {
-    const shown = (lines || []).filter(Boolean);
-    return shown.length ? `<div class="rm-head-activity" data-testid="roadmap-activity">${shown.join('')}</div>` : '';
+  // #750: the header's numbers band (rm-head-stats) from RoadmapSummary.stats: four columns (Stages, Left, Forecast, Spent), each a
+  // muted label, the value and a muted detail; "—" for an unknown value, the column always there. `minutes`: the view's time
+  // format; money in the interface's locale (I18n.formatCost)
+  function statsHtml(roadmap, { minutes }) {
+    const s = window.RoadmapSummary?.stats(roadmap);
+    if (!s) return '';
+    const I = window.I18n;
+    const money = (n) => I?.formatCost(n) ?? `$${Number(n).toFixed(2)}`;
+    const none = s.withoutEstimate.length ? t('backlog_roadmap.summary_without_estimate', { count: s.withoutEstimate.length }) : '';
+    const noneTip = none ? t('backlog_roadmap.summary_without_estimate_tip', { items: s.withoutEstimate.map((x) => x.title).join(', ') }) : '';
+    const col = (label, value, detail, tip = '') => `<div class="rm-head-stat" data-testid="roadmap-stat"${tip ? ` title="${esc(tip)}"` : ''}><small class="muted" data-testid="roadmap-stat-label">${esc(label)}</small><strong data-testid="roadmap-stat-value">${esc(value)}</strong><small class="muted" data-testid="roadmap-stat-detail">${esc(detail || '—')}</small></div>`;
+    return `<div class="rm-head-stats" data-testid="roadmap-stats">${[
+      col(t('backlog_roadmap.stat_stages'), I?.formatNumber(s.stages) ?? String(s.stages), t('backlog_roadmap.stat_disabled', { count: s.disabled })),
+      col(t('backlog_roadmap.stat_left'), t('backlog_roadmap.items_count', { count: s.left.items }), t('backlog_roadmap.stat_in_stages', { count: s.left.stages })),
+      col(t('backlog_roadmap.stat_forecast'), s.forecast ? `≈ ${minutes(s.forecast.minutes)}` : '—', s.forecast ? `≈ ${money(s.forecast.usd)}${none ? ` · ${none}` : ''}` : none, [t('backlog_roadmap.summary_tip'), noneTip].filter(Boolean).join('\n')),
+      col(t('backlog_roadmap.stat_spent'), s.spent ? money(s.spent.usd) : '—', t('backlog_roadmap.stat_so_far'), s.spent?.since ? t('backlog_roadmap.summary_spent_tip', { date: String(s.spent.since).slice(0, 10) }) : ''),
+    ].join('')}</div>`;
   }
   async function baseCheckTerm({ ctx, target }, btn) {
     const msg = await termAction(btn, { sessionId: ctx.projectId, runId: null, label: t('backlog_roadmap.base_check') });
@@ -140,11 +154,11 @@
   }
 
   window.BacklogLive = {
-    activityHtml,
     baseCheckHtml,
     baseCheckTerm,
     mergeState,
     patch,
     readLight,
+    statsHtml,
   };
 })();

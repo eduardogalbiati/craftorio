@@ -305,7 +305,7 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .rm-head-line code { font-family: var(--mono); }
 .rm-spin { flex: none; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
 .rm-head-mark { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .rm-spin { animation: none; } }
 .rm-head-filters { flex-wrap: wrap; gap: 8px 12px; }
 .rm-head-filters select { width: auto; flex: none; max-width: 220px; padding: 3px 6px; font-size: 12px; }
 .rm-head-filters select.active { border-color: #8B5CF6; }

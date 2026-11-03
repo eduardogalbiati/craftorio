@@ -11,9 +11,8 @@
 //   spent { usd, since }: the real cost of the finished and running items; since: the oldest item origin.
 //   releases: per cut line in stage order ({ version, at }: the stages after the previous line up to
 //     stage `at`, plus the release run's own estimate), then { after: true } for the rest; [] without lines.
-// #750: the Roadmap header's numbers band drawn from it: stats(roadmap) the values (null when unknown), statsHtml the four
-// columns (Stages, Left, Forecast, Spent); byReleaseHtml(roadmap, { open, money, minutes }) the "By release" button and list
-// of the view band (catalog text, #330).
+// #750: stats(roadmap) the Roadmap header's numbers as values (null when unknown; backlog-live.js statsHtml draws the four
+// columns); byReleaseHtml(roadmap, { open, money, minutes }) the "By release" button and list of its view band (catalog text, #330).
 (function (root) {
   const node = typeof module === 'object' && module.exports;
   const model = () => (node ? require('./roadmap-model') : root.RoadmapModel);
@@ -98,23 +97,6 @@
   }
 
   /**
-   * #750: the header's numbers band (rm-head-stats): four columns, each a muted label, the value and a muted detail; "—" for an
-   * unknown value, the column always there. `minutes`: the view's time format; money in the interface's locale (I18n.formatCost).
-   */
-  function statsHtml(roadmap, { minutes, money = (n) => i18n()?.formatCost(n) ?? `$${Number(n).toFixed(2)}` } = {}) {
-    const s = stats(roadmap);
-    const none = s.withoutEstimate.length ? t('backlog_roadmap.summary_without_estimate', { count: s.withoutEstimate.length }) : '';
-    const noneTip = none ? t('backlog_roadmap.summary_without_estimate_tip', { items: s.withoutEstimate.map((x) => x.title).join(', ') }) : '';
-    const col = (label, value, detail, tip = '') => `<div class="rm-head-stat" data-testid="roadmap-stat"${tip ? ` title="${esc(tip)}"` : ''}><small class="muted" data-testid="roadmap-stat-label">${esc(t(label))}</small><strong data-testid="roadmap-stat-value">${esc(value)}</strong><small class="muted" data-testid="roadmap-stat-detail">${esc(detail || '—')}</small></div>`;
-    return `<div class="rm-head-stats" data-testid="roadmap-stats">${[
-      col('backlog_roadmap.stat_stages', i18n()?.formatNumber(s.stages) ?? String(s.stages), t('backlog_roadmap.stat_disabled', { count: s.disabled })),
-      col('backlog_roadmap.stat_left', t('backlog_roadmap.items_count', { count: s.left.items }), t('backlog_roadmap.stat_in_stages', { count: s.left.stages })),
-      col('backlog_roadmap.stat_forecast', s.forecast ? `≈ ${minutes(s.forecast.minutes)}` : '—', s.forecast ? `≈ ${money(s.forecast.usd)}${none ? ` · ${none}` : ''}` : none, [t('backlog_roadmap.summary_tip'), noneTip].filter(Boolean).join('\n')),
-      col('backlog_roadmap.stat_spent', s.spent ? money(s.spent.usd) : '—', t('backlog_roadmap.stat_so_far'), s.spent?.since ? t('backlog_roadmap.summary_spent_tip', { date: String(s.spent.since).slice(0, 10) }) : ''),
-    ].join('')}</div>`;
-  }
-
-  /**
    * The "By release" button and its list (#421; #750: in the header's view band), one row per cut line; '' without a cut
    * line. `open`: its list drawn; `money`, `minutes`: the view's formats.
    */
@@ -122,7 +104,8 @@
     const S = summaryOf(stagesOf(roadmap));
     if (!S.releases.length) return '';
     const plan = (p) => `≈ ${money(p.usd)} · ≈ ${minutes(p.minutes)}`;
-    const none = (p) => (p.withoutEstimate.length ? ` <span class="warn-text" title="${esc(t('backlog_roadmap.summary_without_estimate_tip', { items: p.withoutEstimate.map((x) => x.title).join(', ') }))}">${esc(t('backlog_roadmap.summary_without_estimate', { count: p.withoutEstimate.length }))}</span>` : '');
+    const tip = (p) => t('backlog_roadmap.summary_without_estimate_tip', { items: p.withoutEstimate.map((x) => x.title).join(', ') });
+    const none = (p) => (p.withoutEstimate.length ? ` <span class="warn-text" title="${esc(tip(p))}">${esc(t('backlog_roadmap.summary_without_estimate', { count: p.withoutEstimate.length }))}</span>` : '');
     const rows = S.releases.map((x) => `<div class="rm-summary-row" data-testid="roadmap-summary-release-row"><b>${esc(x.after ? t('backlog_roadmap.summary_after_last_cut') : x.version)}</b><span class="muted">${plan(x)}${none(x)}</span></div>`);
     const list = open ? `<div class="bl-menu rm-summary-releases" data-testid="roadmap-summary-releases">${rows.join('')}</div>` : '';
     return `<span class="bl-menu-wrap rm-by-release"><button class="btn sm ghost" type="button" data-rm-summary-releases data-testid="roadmap-summary-by-release" aria-expanded="${open}" title="${esc(t('backlog_roadmap.summary_by_release_tip'))}">${esc(t('backlog_roadmap.summary_by_release'))} ${open ? '▴' : '▾'}</button>${list}</span>`;
@@ -131,7 +114,6 @@
   const api = {
     byReleaseHtml,
     stats,
-    statsHtml,
     summarize,
   };
   if (node) module.exports = api;

@@ -7,8 +7,8 @@
 // test/roadmap-summary-421.test.js for its contract) is evaluated into the sandbox here once it exists;
 // the view reads it when it draws (as it reads RoadmapModel), not when it loads.
 //
-// Test ids this test chooses: roadmap-summary (the summary, inside roadmap-bar),
-// roadmap-summary-by-release (the "By release" toggle).
+// Test ids: roadmap-summary-by-release (the "By release" toggle); #750: the figures are the header's numbers band
+// (roadmap-stats > roadmap-stat, backlog-live.js statsHtml), no longer a roadmap-summary sentence in roadmap-bar.
 // Items carry what the service sends: `estimate` ({ usd, minutes, runs, basis }), `actualUsd`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -21,6 +21,7 @@ const SUMMARY = ['..', '..', '..', 'packages', 'shared', 'roadmap-summary.js'];
 function load() {
   const out = H.loadRoadmap();
   if (H.exists(...SUMMARY)) vm.runInContext(H.read(...SUMMARY), out.sandbox);
+  vm.runInContext(H.read('views', 'backlog', 'backlog-live.js'), out.sandbox); // #750: statsHtml, the numbers band
   return out;
 }
 
@@ -45,41 +46,41 @@ function fixture({ cut = false } = {}) {
 }
 
 const byTestId = (html, id) => H.findAll(html, (e) => e.attrs['data-testid'] === id);
-function summaryOf(html) {
-  const bar = byTestId(html, 'roadmap-bar')[0];
-  assert.ok(bar, 'the roadmap bar');
-  const el = byTestId(bar.outer, 'roadmap-summary')[0];
-  assert.ok(el, 'a roadmap-summary inside the roadmap bar');
-  return el;
+// #750: the summary is the header's numbers band (roadmap-stats, drawn by backlog-live.js statsHtml): one column per figure
+function columnOf(html, label) {
+  const stats = byTestId(html, 'roadmap-stats')[0];
+  assert.ok(stats, 'the numbers band of the header');
+  const col = byTestId(stats.outer, 'roadmap-stat').find((c) => H.visibleText(byTestId(c.outer, 'roadmap-stat-label')[0].inner).trim() === label);
+  assert.ok(col, `a "${label}" column`);
+  return col;
 }
 // every title and aria-label inside an element (its tooltips)
 const tips = (el) => H.elements(el.outer).flatMap((e) => [e.attrs.title || '', e.attrs['aria-label'] || '']).join('\n');
 
-test('#421 the bar shows "Planned ≈ $X · ≈ T" for what is left (planned items, longest item per stage)', () => {
-  const text = H.visibleText(summaryOf(load().R.html(fixture(), () => {}, VIEW)).inner);
-  assert.match(text, /Planned/);
+test('#421 #750 the Forecast column shows "≈ T" and "≈ $X" for what is left (planned items, longest item per stage)', () => {
+  const text = H.visibleText(columnOf(load().R.html(fixture(), () => {}, VIEW), 'Forecast').inner);
   assert.match(text, /≈ \$5\.50/, text);
   assert.match(text, /≈ 1 h 40 min/, text);
 });
 
-test('#421 the planned part counts the items and stages left', () => {
-  const text = H.visibleText(summaryOf(load().R.html(fixture(), () => {}, VIEW)).inner);
+test('#421 #750 the Left column counts the items and stages left', () => {
+  const text = H.visibleText(columnOf(load().R.html(fixture(), () => {}, VIEW), 'Left').inner);
   assert.match(text, /4 items/, text);
   assert.match(text, /2 stages/, text);
 });
 
-test('#421 items without an estimate: "+ 1 without estimate", its tooltip names it', () => {
-  const el = summaryOf(load().R.html(fixture(), () => {}, VIEW));
+test('#421 #750 items without an estimate: "+ 1 without estimate", its tooltip names it', () => {
+  const el = columnOf(load().R.html(fixture(), () => {}, VIEW), 'Forecast');
   assert.match(H.visibleText(el.inner), /\+ ?1 without estimate/);
   assert.match(tips(el), /Issue 4|#4/);
 });
 
-test('#421 the tooltip says the time is work time, gates not included', () => {
-  assert.match(tips(summaryOf(load().R.html(fixture(), () => {}, VIEW))), /work time; gates not included/);
+test('#421 #750 the tooltip says the time is work time, gates not included', () => {
+  assert.match(tips(columnOf(load().R.html(fixture(), () => {}, VIEW), 'Forecast')), /work time; gates not included/);
 });
 
-test('#421 the bar shows "Spent $Y": the real cost of the finished and running items', () => {
-  assert.match(H.visibleText(summaryOf(load().R.html(fixture(), () => {}, VIEW)).inner), /Spent \$2\.50/);
+test('#421 #750 the Spent column shows "$Y": the real cost of the finished and running items', () => {
+  assert.match(H.visibleText(columnOf(load().R.html(fixture(), () => {}, VIEW), 'Spent').inner), /\$2\.50/);
 });
 
 test('#421 with a release cut line: a "By release" toggle', () => {
@@ -129,6 +130,6 @@ test('#421 the By release list closes with its toggle and with a click outside i
 
 test('#421 without cut lines: no "By release" toggle', () => {
   const html = load().R.html(fixture(), () => {}, VIEW);
-  summaryOf(html); // the summary is there
+  columnOf(html, 'Forecast'); // the summary is there
   assert.equal(byTestId(html, 'roadmap-summary-by-release').length, 0);
 });
