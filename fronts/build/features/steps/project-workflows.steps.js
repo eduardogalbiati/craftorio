@@ -30,10 +30,8 @@ const visible = (locator) => locator.filter({ visible: true });
 // a workflow's checkbox label starts with its name ("software-development", maybe a description after)
 const nameRe = (name) => new RegExp(`^\\s*${escapeRe(name)}(\\s|$)`);
 
-const projectDialog = (page) => visible(page.getByTestId('project-dialog')).first();
 const projectOverview = (page) => visible(page.getByTestId('project-page')).first().getByTestId('project-overview').first();
 const blockIn = (scope) => scope.getByTestId('project-workflows-block').first();
-const dialogBlock = (page) => blockIn(projectDialog(page));
 const overviewBlock = (page) => blockIn(projectOverview(page));
 // #741: the project dialog's Create mode is gone; its #486 steps say so instead of waiting for a dialog
 const createModeGone = () => {

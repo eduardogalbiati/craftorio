@@ -20,7 +20,7 @@
 // - a new workspace (no project, no run): how to start.
 // Registers itself with registerView (view-registry.js); uses viewRegistry and the globals of app.js and
 // the shared pieces ($, esc, state, dateOf, pendingGates, openGateOf, showRun, showView, openDrawer,
-// openProjectModal, issueRefs, displayName, fmtUsd, usageBusy).
+// issueRefs, displayName, fmtUsd, usageBusy).
 // renderDashboard is also called by app.js (init, and renderHeader on run events): it paints from
 // what was read last (nothing is redrawn while it reads the same) and reads again at most every
 // HOME_REFRESH_MS (at once when Home opens or the header's project changes; every HOME_REFRESH_MS
