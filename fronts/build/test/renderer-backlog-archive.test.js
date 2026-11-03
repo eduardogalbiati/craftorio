@@ -164,12 +164,14 @@ test('archived issues have Restore (data-restore), which calls api.restoreIssues
 test('the ⋯ menu holds Enrich in Write & Review above Archive; rows and cards draw Enrich only through the menu', () => {
   const menu = chunk('issueMenu');
   assert.ok(menu, 'issueMenu found');
-  const enrichAt = menu.search(/role="menuitem" data-enrich="\$\{i\.number\}"/);
-  const archiveAt = menu.search(/role="menuitem" data-archive="\$\{i\.number\}"/);
+  // #748: the entries are built by the shared menu (Menu.menuHtml), one object per entry
+  assert.match(menu, /Menu\.menuHtml\(\[/, 'the card menu is the shared ui-kit menu');
+  const enrichAt = menu.search(/attrs: `data-enrich="\$\{n\}"`/);
+  const archiveAt = menu.search(/attrs: `data-archive="\$\{n\}"`/);
   assert.ok(enrichAt >= 0, 'Enrich is a menu item');
   assert.ok(archiveAt > enrichAt, 'Enrich sits above Archive');
-  assert.match(menu, /data-testid="backlog-enrich"/);
-  assert.match(menu, />\$\{t\('backlog\.enrich_in_documents'\)\}</);
+  assert.match(menu, /testid: 'backlog-enrich'/);
+  assert.match(menu, /label: t\('backlog\.enrich_in_documents'\)/);
   assert.equal(en['backlog.enrich_in_documents'], 'Enrich in Documents');
   // the separate link is gone: Enrich appears in the view only inside the menu
   const drawers = chunks.filter((c) => /data-enrich="/.test(c.text)).map((c) => c.name);

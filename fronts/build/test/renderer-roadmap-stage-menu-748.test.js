@@ -65,11 +65,14 @@ function loadPage(data, { confirm = true } = {}) {
     api: {
       listWorkflows: async () => [],
       saveRoadmap: async (projectId, stages, label) => {
+        // Arrays copied into this realm: `stages` comes from the vm sandbox, and
+        // deepEqual also compares the Array prototype.
+        const list = Array.from(stages);
         calls.save.push({
           projectId: String(projectId),
-          stages: stages.filter((s) => s.kind !== 'release').map((s) => String(s.id)),
-          releases: stages.filter((s) => s.kind === 'release').map((s) => String(s.id)),
-          items: stages.flatMap((s) => (s.items || []).map((x) => String(x.id))),
+          stages: Array.from(list.filter((s) => s.kind !== 'release'), (s) => String(s.id)),
+          releases: Array.from(list.filter((s) => s.kind === 'release'), (s) => String(s.id)),
+          items: Array.from(list.flatMap((s) => Array.from(s.items || [])), (x) => String(x.id)),
           label: label == null ? null : String(label),
         });
         return { roadmap: { state: 'planned', stages }, issues: [] };
