@@ -46,13 +46,14 @@ test('navLayout: the groups come in their fixed order whatever the views\' order
 });
 
 // #634: Night watch moved into the Monitor group, after Errors
+// #648: Write & Review and AI Arena left the menu (write-doc's Documents screen, Arena mode in its draft)
 test('the menu built from the real views: Home, Plan & Design, Code & Build, Workflows (its tabs), AI, Monitor (Errors, Night watch), then Settings', () => {
   const { navLayout } = navGroups();
   const app = loadApp();
   const entries = navEntries(app.defs);
   const expected = [
     'Home',
-    '[plan]', 'Write & Review', 'AI Arena',
+    '[plan]', 'Documents',
     '[build]', 'Projects', 'Backlog', 'Roadmap', 'Sessions',
     '[workflows]', 'Definitions', 'Runs', 'Builder', 'Pipelines',
     '[ai]', 'Agents', 'Skills', 'Usage',
@@ -68,6 +69,10 @@ test('no menu entry is left for the Dashboard (now Home), the Supervisor (now a 
   const app = loadApp();
   const labels = navEntries(app.defs).map((e) => text(e.label));
   for (const gone of ['Dashboard', 'Supervisor', 'Artifacts']) {
+    assert.ok(!labels.includes(gone), `"${gone}" is still a menu entry: ${labels.join(', ')}`);
+  }
+  // #648: the Write & Review and AI Arena screens left the menu
+  for (const gone of ['Write & Review', 'AI Arena']) {
     assert.ok(!labels.includes(gone), `"${gone}" is still a menu entry: ${labels.join(', ')}`);
   }
   const home = navEntries(app.defs).find((e) => text(e.label) === 'Home');

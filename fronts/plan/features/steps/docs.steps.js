@@ -311,6 +311,17 @@ Then('the New item panel asks {string}, {string} and {string}', async ({ e2e }, 
   await expect(panel.getByTestId('docs-new-screen-add')).toBeVisible();
 });
 
+// #648: "Several writers" (Arena mode) is no longer disabled
+When('I turn on {string} in the New item panel', async ({ e2e }, label) => {
+  const control = newPanel(e2e.window).getByTestId(NEW_ITEM_FIELDS[label]);
+  await expect(control).toBeEnabled();
+  await control.check();
+});
+
+Then('the New item panel has {string} turned on', async ({ e2e }, label) => {
+  await expect(newPanel(e2e.window).getByTestId(NEW_ITEM_FIELDS[label])).toBeChecked();
+});
+
 Then('the New item panel offers {string}', async ({ e2e }, name) => {
   const start = newPanel(e2e.window).getByTestId('docs-new-item-start');
   await expect(start).toHaveAccessibleName(name);

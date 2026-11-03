@@ -13,7 +13,7 @@ Feature: Menu by the flow
     And the sidebar reads, top to bottom:
       | entry         | items                                   |
       | Home          |                                         |
-      | Plan & Design | Write & Review, AI Arena                |
+      | Plan & Design | Documents                               |
       | Code & Build  | Backlog, Roadmap, Sessions              |
       | Workflows     | Definitions, Runs, Builder, Pipelines   |
       | AI            | Agents, Skills, Usage                   |

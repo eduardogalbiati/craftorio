@@ -32,9 +32,10 @@ const defaultWorkflow = () => require('@multiagent/shared/default-workflow');
 const loadBundled = (name) => engine().loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`));
 const bundledIds = () => fs.readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/i.test(f)).map((f) => f.replace(/\.ya?ml$/i, '')).sort();
 
+// #648: ai-arena and writer-reviewer became write-doc (a Planning tool), issue-tracker became issue
 const CODE_AND_BUILD = [
-  'ai-arena', 'analyze-project', 'backlog-refresh', 'feature', 'fix', 'issue-tracker',
-  'refactor', 'release', 'retrospective', 'test-backfill', 'writer-reviewer',
+  'analyze-project', 'backlog-refresh', 'feature', 'fix', 'issue',
+  'refactor', 'release', 'retrospective', 'test-backfill',
 ];
 // #633: the SDLC flows are not Code & Build
 const PLANNING_TOOLS = ['sdlc-record', 'sdlc-release', 'sdlc-test', 'write-doc'];
@@ -70,10 +71,10 @@ function offered(input) {
 
 // ---- the bundled set -------------------------------------------------------------------------------
 
-test('#631 the bundled Code & Build set is the 11 workflows of the spec', () => {
+test('#631 the bundled Code & Build set is the workflows of the spec (9 since #648)', () => {
   const ids = bundledIds().filter((id) => !PLANNING_TOOLS.includes(id));
   assert.deepEqual(ids, CODE_AND_BUILD);
-  assert.equal(ids.length, 11);
+  assert.equal(ids.length, 9);
 });
 
 for (const name of ['analyze-project', 'test-backfill', 'retrospective']) {
@@ -136,10 +137,11 @@ test('#631 a default workflow saved as run-retrospective.yaml resolves to retros
 const pipelineFiles = () => fs.readdirSync(PIPELINES).filter((f) => pipelines().isPipelineFile(f)).sort();
 const stagesOf = (file) => (yaml.load(fs.readFileSync(path.join(PIPELINES, file), 'utf8')).stages || []);
 
-test('#631 five bundled pipelines, without develop-to-retrospective', () => {
+// #648: rfc-to-issues -> spec-to-issues, enrich-save-develop -> enrich-issue, ai-arena-write-review absorbed
+test('#631 the bundled pipelines, without develop-to-retrospective', () => {
   const files = pipelineFiles();
   assert.deepEqual(files, [
-    'ai-arena-write-review.yaml', 'enrich-save-develop.yaml', 'issue-to-roadmap.yaml', 'release-then-refactors.yaml', 'rfc-to-issues.yaml',
+    'enrich-issue.yaml', 'issue-to-roadmap.yaml', 'release-then-refactors.yaml', 'spec-to-issues.yaml',
   ]);
 });
 
@@ -165,7 +167,7 @@ test('#631 no bundled pipeline names a retired workflow file', () => {
 
 const readmeSections = () => [...fs.readFileSync(path.join(root, 'README.md'), 'utf8').matchAll(/^#+ .*\(`workflows\/([a-z0-9-]+)\.yaml`\)/gm)].map((m) => m[1]);
 
-test('#631 the README has a section for each of the 11 workflows', () => {
+test('#631 the README has a section for each of the Code & Build workflows', () => {
   const sections = readmeSections();
   assert.deepEqual(CODE_AND_BUILD.filter((id) => !sections.includes(id)), []);
 });
