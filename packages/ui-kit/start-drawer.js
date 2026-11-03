@@ -189,12 +189,14 @@ function selectWorkflow(file) {
     + `<textarea id="in-${key}" name="${key}" data-testid="start-main-input" data-wi-input="${esc(key)}" rows="7" placeholder="${t('start_drawer.describe_what_needs_to_be_done')}">${esc(values[key])}</textarea>`
     + `${def.description ? `<div class="hint">${esc(def.description)}</div>` : ''}</div>`;
   // a workflow's `mode` (e.g. auto | validated) and its tests (#203: unit_tests, e2e_tests, about
-  // half of a run's cost) and its screenshots (#205) change how the run goes: shown next to the task, not in Advanced
+  // half of a run's cost) and its screenshots (#205) change how the run goes: shown next to the task, not in Advanced;
+  // #759: `validation` (auto | validated, the old `mode` renamed by #630) stays next to the task too
   const upfront = (k) => [
     'e2e_tests',
     'mode',
     'screenshots',
     'unit_tests',
+    'validation',
   ].includes(k) && k !== mainKey;
   $('#inputs-form').innerHTML = entries.filter(([k]) => k === mainKey || upfront(k)).map((e) => (e[0] === mainKey ? mainHtml(e) : field(e))).join('');
   $('#adv-form').innerHTML = entries.filter(([k]) => k !== mainKey && !upfront(k)).map(field).join('');
