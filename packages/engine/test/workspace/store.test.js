@@ -1,5 +1,5 @@
-// The workspace's SQLite index (packages/engine/domains/workspace/store.js, #76): migrations, the runs cache, the Backlog queue
-// tables (claims), pending gates and notifications. packages/engine/domains/run/runs.js and packages/engine/domains/backlog/backlog.js already cover
+// The workspace's SQLite index (packages/engine/domains/workspace/store.js, #76): migrations, the runs cache, the retired
+// Backlog queue tables (#446: only read once), pending gates and notifications. packages/engine/domains/run/runs.js already covers
 // reading/writing through the store from their own seams; this file tests the store's own API and
 // its migration/restart/concurrency guarantees directly.
 const test = require('node:test');
@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
-const { openStore, MIGRATIONS, RUNS_CACHE, CLAIM_TTL_MS } = require('../../domains/workspace/store');
+const { openStore, MIGRATIONS, RUNS_CACHE } = require('../../domains/workspace/store');
 const { setupWorkspace } = require('../../domains/workspace/workspace');
 const runs = require('../../domains/run/runs');
 
@@ -47,7 +47,6 @@ test('openStore creates index.db on an empty workspace with the current schema, 
   closeAndRemove(t, ws, store);
   assert.ok(fs.existsSync(ws.index));
   assert.deepEqual(store.runRows(), []);
-  assert.equal(store.queuedProjects().length, 0);
   assert.deepEqual(store.gates(), []);
   assert.deepEqual(store.notifications(), []);
   assert.equal(store.unreadCount(), 0);
@@ -127,11 +126,10 @@ test('putRunArtifacts writes run_artifacts and, for each external file, artifact
   assert.deepEqual(store.artifactRunIds(copy), []);
 });
 
-test('closing and reopening the store (an already-migrated, existing workspace) keeps the runs cache, a queue, open gates and notifications', (t) => {
+test('closing and reopening the store (an already-migrated, existing workspace) keeps the runs cache, open gates and notifications', (t) => {
   const ws = tempWorkspace();
   const first = openStore(ws);
   first.putRun({ runId: 'r1', workflow: 'w', status: 'success', tokens: {} }, 'sig', null);
-  first.writeQueue('proj', { paused: false, error: null, inputs: {}, items: [{ number: 1, url: 'u1', title: 'T1', body: '', addedAt: '2026-01-01T00:00:00.000Z' }], skipped: [] });
   first.openGate('run-a', { approval_id: 'ap1', step_id: 'review', message: 'Accept?', choices: null, requested_at: '2026-01-01T00:00:00.000Z' });
   const notice = first.addNotification({ type: 'run.started', kind: 'run', runId: 'run-a', title: 'Run started' });
   first.close();
@@ -139,7 +137,6 @@ test('closing and reopening the store (an already-migrated, existing workspace) 
   const reopened = openStore(ws); // a fresh connection, as the next app start would open
   closeAndRemove(t, ws, reopened);
   assert.equal(reopened.runEntries().get('r1').info.runId, 'r1');
-  assert.deepEqual(reopened.readQueue('proj').items.map((i) => i.number), [1]);
   assert.deepEqual(reopened.openGates('run-a').map((g) => g.approval_id), ['ap1']);
   assert.deepEqual(reopened.notifications().map((n) => n.id), [notice.id]);
 });
@@ -148,7 +145,6 @@ test('a bump of the runs cache (RUNS_CACHE) empties only the runs table at the n
   const ws = tempWorkspace();
   const first = openStore(ws);
   first.putRun({ runId: 'r1', workflow: 'w', status: 'success', tokens: {} }, 'sig', null);
-  first.writeQueue('proj', { paused: false, error: null, inputs: {}, items: [], skipped: [] });
   first.openGate('run-a', { approval_id: 'ap1', step_id: 'review', requested_at: '2026-01-01T00:00:00.000Z' });
   first.addNotification({ type: 'run.started', title: 'Run started' });
   first.close();
@@ -161,7 +157,6 @@ test('a bump of the runs cache (RUNS_CACHE) empties only the runs table at the n
   const reopened = openStore(ws);
   closeAndRemove(t, ws, reopened);
   assert.deepEqual(reopened.runRows(), [], 'the runs cache is emptied: the next listing rebuilds it from runs/');
-  assert.ok(reopened.readQueue('proj'), 'the queue survives');
   assert.equal(reopened.openGates('run-a').length, 1, 'gates survive');
   assert.equal(reopened.notifications().length, 1, 'notifications survive');
 });
@@ -198,61 +193,6 @@ test('deleting index.db and restarting opens an empty index, which the next list
   assert.deepEqual(reopened.runRows(), [], 'index.db was deleted: nothing indexed yet');
   const after = runs.listRuns(ws.runs); // the files were never touched: the rebuild finds the same run
   assert.deepEqual(after, before);
-});
-
-test('two separate connections to the index never claim the same queued item', (t) => {
-  const ws = tempWorkspace();
-  const a = openStore(ws);
-  // a second, independent DatabaseSync connection to the same index.db: two services (two windows,
-  // or a server and the app) opening the same workspace, as #49 and #76 describe. Each process has
-  // its own require cache in real life; reloading the module here gets a second connection the same way.
-  const storePath = require.resolve('../../domains/workspace/store');
-  const original = require.cache[storePath];
-  delete require.cache[storePath];
-  const freshStoreModule = require('../../domains/workspace/store');
-  require.cache[storePath] = original; // restore the shared instance for the rest of this file
-  const b = freshStoreModule.openStore(ws);
-  closeAndRemove(t, ws, a, b);
-
-  a.writeQueue('proj', {
-    paused: false, error: null, inputs: {}, skipped: [],
-    items: [
-      { number: 1, url: 'u1', title: 'T1', body: '', addedAt: '2026-01-01T00:00:00.000Z' },
-      { number: 2, url: 'u2', title: 'T2', body: '', addedAt: '2026-01-01T00:00:01.000Z' },
-    ],
-  });
-
-  // the read-then-claim a dispatcher does in one transaction before starting an item (backlog.claimQueued)
-  const claimNext = (store) => store.transaction(() => {
-    const claimed = store.claimedNumbers('proj');
-    const item = store.readQueue('proj').items.find((i) => !claimed.has(i.number));
-    if (item) store.claim('proj', item.number);
-    return item || null;
-  });
-
-  const first = claimNext(a);
-  const second = claimNext(b);
-  assert.equal(first.number, 1);
-  assert.equal(second.number, 2, 'B sees A\'s committed claim and takes the other item');
-  assert.equal(claimNext(a), null, 'nothing left for either dispatcher');
-  assert.equal(claimNext(b), null);
-});
-
-test('a claim older than CLAIM_TTL_MS belongs to a dead dispatcher: the item can be claimed again', (t) => {
-  const ws = tempWorkspace();
-  const store = openStore(ws);
-  closeAndRemove(t, ws, store);
-  store.writeQueue('proj', { paused: false, error: null, inputs: {}, skipped: [], items: [{ number: 1, url: 'u1', title: 'T1', body: '', addedAt: '2026-01-01T00:00:00.000Z' }] });
-  store.claim('proj', 1);
-  assert.deepEqual([...store.claimedNumbers('proj')], [1]);
-
-  // backdates the claim past CLAIM_TTL_MS, as if its dispatcher died long ago
-  const db = new DatabaseSync(ws.index);
-  db.prepare('UPDATE queue_claims SET claimed_at = ? WHERE project_id = ? AND number = ?')
-    .run(new Date(Date.now() - CLAIM_TTL_MS - 1000).toISOString(), 'proj', 1);
-  db.close();
-
-  assert.deepEqual([...store.claimedNumbers('proj')], [], 'an expired claim no longer blocks the item');
 });
 
 test('gates: open, resolve and the run\'s end close them; a run\'s gates are listed oldest first', (t) => {
@@ -322,21 +262,23 @@ test('pruneNotifications deletes what is older than N days; 0 or less keeps ever
   assert.deepEqual(store.notifications().map((n) => n.id), [recent.id]);
 });
 
-test('a project\'s .queue.json is imported into the index once; a reopen never overwrites a row already there', (t) => {
+test('#446 takeLeftoverQueues hands out the items an older version left in the queue tables once, then empties them', (t) => {
   const ws = tempWorkspace();
-  fs.mkdirSync(ws.backlog, { recursive: true });
-  fs.writeFileSync(path.join(ws.backlog, 'proj.queue.json'), JSON.stringify({
-    paused: false, error: null, inputs: {}, skipped: [],
-    items: [{ number: 1, url: 'u1', title: 'From file', body: '', addedAt: '2026-01-01T00:00:00.000Z' }],
-  }));
-
-  const first = openStore(ws); // imports the file: the project has no row yet
-  assert.deepEqual(first.readQueue('proj').items.map((i) => i.title), ['From file']);
-
-  first.writeQueue('proj', { paused: false, error: null, inputs: {}, skipped: [], items: [] }); // started: now empty
+  const first = openStore(ws);
   first.close();
+  // an older version's rows, written straight into the retired tables
+  const db = new DatabaseSync(ws.index);
+  db.prepare("INSERT INTO queues (project_id, paused, error) VALUES ('proj', 1, 'paused by a roadmap')").run();
+  const add = db.prepare('INSERT INTO queue_items (project_id, position, number, added_at, item) VALUES (?, ?, ?, ?, ?)');
+  add.run('proj', 1, 2, '2026-01-01T00:00:01.000Z', JSON.stringify({ number: 2, url: 'u2', title: 'T2' }));
+  add.run('proj', 0, 1, '2026-01-01T00:00:00.000Z', JSON.stringify({ number: 1, url: 'u1', title: 'T1' }));
+  db.prepare("INSERT INTO queue_claims (project_id, number, claimed_at) VALUES ('proj', 1, '2026-01-01T00:00:00.000Z')").run();
+  db.close();
 
-  const reopened = openStore(ws); // the file still says one item, but the project already has a row
-  closeAndRemove(t, ws, reopened);
-  assert.deepEqual(reopened.readQueue('proj').items, [], 'the stale file is not imported again over the table');
+  const store = openStore(ws);
+  closeAndRemove(t, ws, store);
+  const taken = store.takeLeftoverQueues();
+  assert.deepEqual(Object.keys(taken), ['proj']);
+  assert.deepEqual(taken.proj.map((i) => i.number), [1, 2], 'in the queue\'s order');
+  assert.deepEqual(store.takeLeftoverQueues(), {}, 'taken once: the tables are empty');
 });

@@ -4,7 +4,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const backlogModule = require('../../domains/backlog/backlog');
 const roadmapModule = require('../../domains/roadmap/roadmap');
 const {
   ISSUE_WORKFLOW, makeService, makeResumeService, roadmapProject, until, watchRuns,
@@ -429,7 +428,7 @@ test('run:start: the old run covering fewer issues than asked says so, names the
   assert.match(askedVowel.kept.message, /^The app closed while it ran its first step\./);
 });
 
-test('backlog:assign: an ended run\'s kept work asks first (confirm/kept/runId) without queuing anything; confirmed, it queues and starts, redoing that run\'s own work', async (t) => {
+test('backlog:assign: an ended run\'s kept work asks first (confirm/kept/runId) without planning anything; confirmed with Run now, it plans and starts, redoing that run\'s own work', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();
   fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
@@ -447,42 +446,15 @@ test('backlog:assign: an ended run\'s kept work asks first (confirm/kept/runId) 
   assert.equal(asked.kept.runId, '20260930-100000-keptqueue1');
   assert.equal(asked.confirm, asked.kept.text);
   assert.equal(service.isRunning(), false, 'no duplicate run was started');
-  assert.deepEqual(api['backlog:get']({ projectId: p.id }).queue.items, [], 'nothing was queued before the owner answers');
+  assert.deepEqual(api['roadmap:get']({ projectId: p.id }).stages, [], 'nothing was planned before the owner answers');
   assert.deepEqual((await api['runs:list']()).runs.map((r) => r.runId), ['20260930-100000-keptqueue1']);
 
-  const started = await api['backlog:assign']({ projectId: p.id, numbers: [22], workflow: 'fixture-issue.yaml', mock: true, confirmed: true });
+  const started = await api['backlog:assign']({ projectId: p.id, numbers: [22], workflow: 'fixture-issue.yaml', mock: true, confirmed: true, runNow: true });
   assert.equal(started.kept, undefined);
   await until(() => api['runs:active']().length === 1);
   const active = api['runs:active']()[0];
   assert.notEqual(active.runId, '20260930-100000-keptqueue1');
   api['run:stop']({ runId: active.runId });
-});
-
-test('backlog:pause: resuming a queue whose next item would redo an ended run\'s kept work asks first; the queue stays paused until confirmed', async (t) => {
-  const { service, api } = makeService(t);
-  const ws = service.workspace();
-  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-kept-pause-'));
-  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
-  const p = await api['projects:create']({ name: 'demo', folder });
-  const issue = { number: 29, title: 'Issue 29', state: 'open', url: 'https://github.com/o/r/issues/29', body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } };
-  fs.mkdirSync(ws.backlog, { recursive: true });
-  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [issue] }));
-  const repo = keptWorkRepo(t);
-  fabricateKeptRun(ws, '20260930-100000-keptpause01', { issue: { number: 29, url: issue.url, title: issue.title }, worktreeDir: repo });
-  backlogModule.enqueue(ws.backlog, p.id, { issues: [issue], workflow: 'fixture-issue.yaml', inputs: { task: 't', repo_path: folder }, mock: true });
-  backlogModule.setPaused(ws.backlog, p.id, true, 'paused earlier');
-
-  const asked = await api['backlog:pause']({ projectId: p.id, paused: false });
-  assert.equal(asked.kept.runId, '20260930-100000-keptpause01');
-  assert.equal(asked.queue.paused, true, 'stays paused: the owner has not answered yet');
-  assert.equal(service.isRunning(), false);
-
-  const resumed = await api['backlog:pause']({ projectId: p.id, paused: false, confirmed: true });
-  assert.equal(resumed.kept, undefined);
-  assert.equal(resumed.queue.paused, false);
-  await until(() => api['runs:active']().length === 1);
-  api['run:stop']({ runId: api['runs:active']()[0].runId });
 });
 
 test('roadmap: an ended run\'s kept worktree commits fail the item and pause the roadmap; a confirmed Retry starts it anyway', async (t) => {

@@ -21,10 +21,9 @@ owner actions write to the platform (Save to issue, create, close, epics: `packa
 
 - `backlog/<project>.json`: the sync cache (`syncedAt`, every issue with its PRs/MRs and epic),
   rewritten by each sync (`syncBacklog`); a save to an issue re-reads that one issue into it.
-- Queue items (`<project>.queue.json` / the index) and roadmap items (`<project>.roadmap.json`)
-  keep a **copy** of each issue (`number`, `url`, `title`, `body`, `labels`, `updatedAt`,
+- Roadmap items (`<project>.roadmap.json`) keep a **copy** of each issue (`number`, `url`, `title`, `body`, `labels`, `updatedAt`,
   `knownPullRequests`) so the screen and the Product Owner can show it. Each sync refreshes the
-  copies of the items not started yet (`refreshQueuedCopies`, `roadmap.refreshCopies`); an item
+  copies of the items not started yet (`roadmap.refreshCopies`); an item
   with a run keeps the text its run used.
 - The roadmap file also holds the **Live roadmap** switch (#164, `packages/engine/domains/roadmap/live-roadmap.js`): `live`
   (true/false), `liveSince` and `liveBy` (when and who turned it on), `liveRefill` (the last refill:
@@ -32,7 +31,12 @@ owner actions write to the platform (Save to issue, create, close, epics: `packa
   and `liveRefills` (`[{ at, costUsd }]` of the last 24 h, for the daily budget). It is a file
   field like the state, so it survives a restart: the next dispatch refills a live roadmap whose
   last stage ended. Stop and Clear turn it off.
-- Right before a queued or roadmap item starts, the service reads its issues again
+- The Backlog's plain queue is retired (#446): Assign and a chain's old `queue` target plan a new
+  last roadmap stage. A project an older version left with a queue (`<project>.queue.json` or the
+  index's queue tables) gets its items once as a planned stage at the end, without the queue's
+  pause (`roadmap.moveLeftoverQueues`, when the workspace opens); the file is then removed and never
+  read or written again.
+- Right before a roadmap item starts, the service reads its issues again
   (`backlog.freshIssues`: `gh issue view` / `glab issue view`), builds the task from them, updates
   the item's copy, and skips issues found closed. If the read fails, the latest cache (or the copy,
   when it is newer) is used and said: a `log` warn "Issue #n read from the cache of HH:MM: …" and
@@ -43,11 +47,10 @@ owner actions write to the platform (Save to issue, create, close, epics: `packa
 
 ### Who writes the backlog files, and the change event (#204)
 
-- Writers of `backlog/`: the sync (`<project>.json`, `<project>.local.json`), the queue snapshot
-  (`writeQueueFile`), the roadmap (`writeRoadmap`, `packages/engine/domains/roadmap/roadmap.js`: the screen, the service's
+- Writers of `backlog/`: the sync (`<project>.json`, `<project>.local.json`), the roadmap (`writeRoadmap`, `packages/engine/domains/roadmap/roadmap.js`: the screen, the service's
   dispatch and live refill, the Oracle's `roadmap.stages`, the Product Owner), the refresh banner's
   dismissal (`<project>.refresh.json`), and anything outside the app (another window, a script).
-  The roadmap and the queue go through `packages/engine/domains/workspace/state-file.js` (temp file + rename, `.bak`).
+  The roadmap goes through `packages/engine/domains/workspace/state-file.js` (temp file + rename, `.bak`).
 - The conflict map (#150, `packages/engine/domains/project/conflict-map.js`): `<project>.conflict-map.json`, written (temp file +
   rename) when the Product Owner plans and finds none, and after a real run of a git project merges
   (`packages/engine/service/areas/conflict-map.js`, on `workflow.finished`). The Backlog payload (`conflictMap`)
@@ -64,7 +67,7 @@ owner actions write to the platform (Save to issue, create, close, epics: `packa
   switch it had (`roadmap-undo.js` `head`). A save or an Undo that would disable a stage while one
   of its items runs is refused with the reason (`saveStages`, `restoreStages`), whoever writes it.
 - **The roadmap's history** (#281, `packages/engine/domains/roadmap/roadmap-history.js`): before each owner edit of a roadmap
-  (a save from the screen, a proposal added or replacing it, the queue moved in, Clear, an Undo, a
+  (a save from the screen, a proposal added or replacing it, Clear, an Undo, a
   Restore) the roadmap channels keep its stages as they were in
   `backlog/<project>.roadmap.history/<time>-<n>.json` (`{ at, label, stages }`, the label being what
   the edit did: "Removed #279 from the roadmap"), the last 20 per project. The Roadmap's ⋮ menu
