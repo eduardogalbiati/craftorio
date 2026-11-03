@@ -13,7 +13,7 @@
 // item to another, items removed, a stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear; Retry / Skip on a failed item. A
 // stage's head has its number, its name and its state; its actions are in its ⋮ menu (#282, #748: ui-kit's Menu, grouped): Disable / Enable (#284: skipped
 // while the roadmap runs, dimmed, "Disabled"), Run this stage (#141) | Stop when finished, Stop now | Release after this stage | Move up / down | the note |
-// Remove from roadmap. A Product Owner proposal (#105, JSON) is added or replaces the roadmap as planned; the plain queue's items can be moved in. Every
+// Remove from roadmap. A Product Owner proposal (#105, JSON) is added or replaces the roadmap as planned (#446: no plain queue). Every
 // edit saves the whole list of stages (api.saveRoadmap); the service keeps each item's runs by id.
 // #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written elsewhere since, the service applies only this edit, or
 // refuses it (`conflict`): the screen shows the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or, when its item is
@@ -1007,7 +1007,7 @@
   }
 
   /**
-   * The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender`
+   * The Roadmap view (into #bl-list): its bar, the stages in order. `rerender`
    * redraws once the workflows are loaded. `view` (#217, #268): what backlog.js remembers, { epic,
    * showAll, since, project (its id: another project starts at its first page) }: Planned (showAll off) is the open work, a stage's finished items of the date
    * range folded; All is every item of the range; the epic keeps only its items and hides the stages
@@ -1024,7 +1024,6 @@
     const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs, runs: rv.runs };
     const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}|${rv.choice}`;
     if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
-    const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
     const { scoped, current, next } = RoadmapModel.highlight(r); // #141, #552: the running stage is current, the first open one Next
     const offStages = r.stages.filter((s) => s.disabled);
@@ -1052,9 +1051,6 @@
     const row = `<div class="rm-head-row" data-testid="roadmap-bar">${dot}<b>${t('backlog_roadmap.roadmap_2')}</b>${pill}${scopeBadge}${parkedBadgeHtml(r)}<span class="spacer"></span><span class="rm-head-controls">${acts.start.allowed || acts.resume.allowed
       ? `<button class="btn sm primary" type="button" data-rm="start"${-1 < scoped && acts.resume.allowed ? ` title="${t('backlog_roadmap.resume_stage_value_only', { value: scoped + 1 })}"` : ''}>${t(acts.resume.allowed ? 'backlog_roadmap.resume' : 'backlog_roadmap.start')}</button>` : ''}${acts.pause.allowed ? pauseHtml(r) : ''}${acts.stop.allowed
       ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="${t('backlog_roadmap.back_to_a_plan_nothing_starts')}">${ICON.stop}${t('backlog_roadmap.stop')}</button>` : ''}${menu}</span></div>`;
-    const queued = q.length ? `
-      <div class="bl-queue rm-queued small"><span>${t('backlog_roadmap.runs_in_the_plain_queue', { count: q.length, issues: esc(q.flatMap((x) => refs(x)).map((i) => `#${i.number}`).join(', ')) })}</span>
-        <span class="spacer"></span><button class="btn sm ghost" type="button" data-rm="from-queue">${t('backlog_roadmap.move_into_the_roadmap')}</button></div>` : '';
     const importBox = `
       <details class="rm-import"><summary class="small muted">${t('backlog_roadmap.product_owner_proposal')}</summary>
         <p class="small muted">${t('backlog_roadmap.paste_the_product_owner_s_build')}</p>
@@ -1137,7 +1133,7 @@
     const head = `<div class="rm-head" data-testid="roadmap-head">${row}${live?.statsHtml(r, { minutes: mins, money: cost }) || ''}${act}${filters}</div>`;
     // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
     const cmapHtml = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml() : '';
-    return `<div class="rm">${head}${lostHtml()}${queued}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
+    return `<div class="rm">${head}${lostHtml()}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
   }
 
   // #287: a save refused because its item (or its stage) was removed elsewhere: the reason and the
@@ -1843,7 +1839,6 @@
     { acts: ['simulate'], run: ({ ctx, r }) => { simulate = !simulating(r); ctx.render(); focusMenu('[data-rm="simulate"]'); return 'handled'; } }, // #750: the ⋮ menu stays open
     { acts: ['clear'], run: clearClicked },
     { acts: ['versions'], run: async ({ ctx }) => { menuOpen = false; ctx.render(); await openVersions(ctx); return 'handled'; } },
-    { acts: ['from-queue'], run: async ({ ctx }) => { ctx.setData(await api.roadmapFromQueue(ctx.projectId)); } },
     { acts: ['propose', 'replace'], run: proposeClicked },
     { selector: '[data-rm-item]', run: itemClicked },
     { selector: '[data-rm-mode]', run: modeClicked },

@@ -45,7 +45,7 @@
     return true;
   }
 
-  // each item's status, runs and live run, the stages' pauses, the roadmap's state, the queue, the
+  // each item's status, runs and live run, the stages' pauses, the roadmap's state, the
   // refresh banner and the base check. Null when only the whole Backlog can tell: the stages were
   // edited (`shape`), a stage or an item the screen does not know, an item that ended (its error, PR
   // and costs come with the full read), an item on another run (its workflow, steps and agents come
@@ -65,14 +65,8 @@
     }));
     if (stale) return null;
     const pauses = new Map(lr.stages.map((s) => [s.id, s.pause]));
-    const queue = light.queue && data.queue ? {
-      ...data.queue,
-      ...light.queue,
-      items: (light.queue.items || []).map((q) => ({ ...(data.queue.items || []).find((o) => o.id === q.id), ...q })),
-    } : light.queue ?? data.queue;
     return {
       ...data,
-      queue,
       refresh: light.refresh ? { ...data.refresh, ...light.refresh } : data.refresh,
       baseCheck: light.baseCheck ?? null,
       roadmap: {

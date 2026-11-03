@@ -1,5 +1,5 @@
 /* Backlog screen (views/backlog/): the Product Owner panel (backlog-po.js), the list, kanban, epics
-   and roadmap modes, the queue, the local merges and the assign / push / unqueue dialogs. The
+   and roadmap modes, the local merges and the assign / push dialogs. The
    sidebar badge (.nav-badge.warn) and .bl-grouping (also the Write & Review save dialog) stay in
    style.css. */
 /* ---------- Backlog › Product Owner (#105, backlog-po.js): teal, like its robot ---------- */
@@ -213,7 +213,6 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .bl-card-head .bl-check { align-self: flex-start; margin-top: 2px; }
 .bl-issue.selected, .bl-card.selected { border-color: var(--accent); }
 .bl-status { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; justify-self: end; }
-.bl-queued { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .bl-card-run { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 /* narrow columns (five with "Merged locally"): the workflow name ellipsizes instead of overflowing the card */
 .bl-card-run .bl-run { max-width: 100%; min-width: 0; }

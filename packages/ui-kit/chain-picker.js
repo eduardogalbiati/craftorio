@@ -1,10 +1,10 @@
 /* global api, ChainModel, WorkflowInputs */
 // "When it finishes" (#134): the optional chain of a run, in the Start drawer, the Backlog's Assign
 // dialog, the roadmap item's Edit form and the Run screen's chain editor. A select of what happens
-// with the result (Nothing, Start a workflow, Ask the Product Owner, Queue the issues); for a
+// with the result (Nothing, Start a workflow, Ask the Product Owner, Plan the issues in the roadmap); for a
 // workflow, which of the previous run's outputs feeds each of its inputs (proposed by
-// ChainModel.defaultMap, editable) and its own short inputs (mode…) drawn by WorkflowInputs; for a
-// queue, the workflow the issues are queued for. Under it, the workflows that will run and a rough
+// ChainModel.defaultMap, editable) and its own short inputs (mode…) drawn by WorkflowInputs; for the
+// roadmap (the action id stays 'queue', #446), the workflow the issues are planned for. Under it, the workflows that will run and a rough
 // cost from past runs (api.chainEstimate), marked as an estimate.
 //   const picker = ChainPicker.mount(el, { workflows: () => list, source: () => wf, value, onChange })
 //   picker.value() → the then (ChainModel.normalizeThen form) or null; picker.refresh() after the

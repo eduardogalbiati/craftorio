@@ -339,26 +339,26 @@
   };
 
   // ---- a group already applied (#140): derived from the Backlog's data (its issues' roadmap place,
-  // queue entry and live run), never remembered, so it holds after a reopen or a restart ------------
+  // and live run), never remembered, so it holds after a reopen or a restart ------------
   const liveRun = (i) => i?.runs?.find((x) => !x.enrich && ['pending', 'running'].includes(x.status));
   // An issue is "in the roadmap" when an item plans it, runs it or has done it (a skipped one is not).
   const inRoadmap = (i) => !!i?.roadmap && i.roadmap.status !== 'skipped';
   /**
-   * { kind: 'roadmap' | 'running' | 'queued' | 'partly' | null, stages: [n], covered: [numbers], rest: [numbers], runId }:
+   * { kind: 'roadmap' | 'running' | 'partly' | null, stages: [n], covered: [numbers], rest: [numbers], runId }:
    * every issue in the roadmap (or assigned), some of them (partly), or none (null: the group is still to apply).
    * A simulated answer's group may add issues counted as in the roadmap at a stage (`g.simulated`, #148).
    */
   function groupState(g) {
     const issues = g.issues.map((n) => ({ n, i: issueOf(n) }));
     const sim = (n) => !!g.simulated?.covered?.includes(n);
-    const covered = issues.filter(({ n, i }) => sim(n) || inRoadmap(i) || i?.queued || liveRun(i));
+    const covered = issues.filter(({ n, i }) => sim(n) || inRoadmap(i) || liveRun(i));
     const rest = issues.filter((x) => !covered.includes(x)).map(({ n }) => n);
     const stages = [...new Set(covered.map(({ n, i }) => (inRoadmap(i) ? i.roadmap.stage : sim(n) ? g.simulated.stage : null)).filter((s) => s != null))].sort((a, b) => a - b);
     const run = covered.map(({ i }) => liveRun(i)).find(Boolean);
     const out = { stages, covered: covered.map(({ n }) => n), rest, runId: run?.runId || null };
     if (!covered.length) return { ...out, kind: null };
     if (rest.length) return { ...out, kind: 'partly' };
-    return { ...out, kind: stages.length ? 'roadmap' : run ? 'running' : 'queued' };
+    return { ...out, kind: stages.length ? 'roadmap' : 'running' };
   }
   const stagesLabel = (s) => (s.length > 1 ? `Stages ${s.join(', ')}` : `Stage ${s[0]}`);
 
@@ -369,15 +369,15 @@
       return `<button class="badge po-applied" type="button" data-po-stage="${st.stages[0]}" title="${t('backlog_po.open_the_roadmap_at_stage_value', { value: st.stages[0] })}">${esc(label)}</button>`;
     }
     if (st.kind === 'running' && st.runId) return `<button class="badge po-applied live" type="button" data-po-run="${esc(st.runId)}" title="${t('backlog_po.open_run_runid', { runId: esc(st.runId) })}">${t('backlog_po.running')}</button>`;
-    if (st.kind === 'running' || st.kind === 'queued') return `<span class="badge po-applied" title="${t('backlog_po.assigned_in_the_queue_it_starts')}">${t('backlog_po.queued')}</span>`;
+    if (st.kind === 'running') return `<span class="badge po-applied live">${t('backlog_po.running')}</span>`;
     if (st.kind === 'partly') {
       const where = st.stages.length ? 'in the roadmap' : 'assigned';
       return `<span class="badge warn" title="${esc(`${st.covered.map((x) => `#${x}`).join(', ')} already ${where}; ${st.rest.map((x) => `#${x}`).join(', ')} not yet`)}">${t('backlog_po.partly_where_value', { where, value: esc(st.covered.map((x) => `#${x}`).join(', ')) })}</span>`;
     }
     return '';
   }
-  const applied = (st) => ['queued', 'roadmap', 'running'].includes(st.kind);
-  const appliedTitle = (st) => (st.kind === 'roadmap' ? `Already in the roadmap, ${stagesLabel(st.stages).toLowerCase()}` : st.kind === 'running' ? 'Already assigned: its run is in progress' : 'Already assigned: it is in the queue');
+  const applied = (st) => ['roadmap', 'running'].includes(st.kind);
+  const appliedTitle = (st) => (st.kind === 'roadmap' ? `Already in the roadmap, ${stagesLabel(st.stages).toLowerCase()}` : 'Already assigned: its run is in progress');
 
   // #169: open issues the owner did not attach that could join the group, each unchecked until the
   // owner keeps it (po.extras); only the checked ones go with Assign…, Add to roadmap and Add all
