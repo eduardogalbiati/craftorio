@@ -7,8 +7,7 @@
 // - the header's New project (#btn-new-project) and the empty state's (#empty-new-project, drawn when
 //   there is no project) open the wizard: #project-wizard shown on its 'start' step
 //   (window.ProjectWizard.open()), and #project-modal's title is not set;
-// - a card's Edit (data-act="edit") opens #project-modal titled "Edit project" with the project's
-//   name, description, repository, folder and Local preview in its fields, and no wizard.
+// - (#741: the card's Edit opens the project's settings; the old dialog is gone.)
 // Harness: packages/ui-kit/test/renderer-app-harness.js (the real page in a vm with a fake DOM).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -69,16 +68,5 @@ test('#643 Projects with no project: the empty state\'s New project opens the wi
   assert.equal(app.el('#project-modal-title').textContent, '', 'the old New project dialog was not opened');
 });
 
-test('#643 a project card\'s Edit still opens the project dialog with its fields filled, and no wizard', async () => {
-  const app = await onProjects({ projects: [PROJECT] });
-  await app.click('[data-testid="project-card"]', { dataset: { act: 'edit', id: 'p1', testid: 'project-card' }, within: ['#projects-list'] });
-  await app.settle(10);
-  assert.equal(app.el('#project-modal-title').textContent, 'Edit project');
-  assert.equal(app.el('#btn-pj-save').textContent, 'Save');
-  assert.deepEqual(
-    ['#pj-name', '#pj-description', '#pj-repo', '#pj-folder', '#pj-lp-install', '#pj-lp-command', '#pj-lp-url'].map((sel) => app.el(sel).value),
-    ['Shop', 'The web shop', 'https://github.com/o/shop.git', 'C:/p/shop', 'npm ci', 'npm start', 'http://localhost:5173'],
-  );
-  assert.equal(app.el('#project-modal').classList.contains('hidden'), false, 'the dialog is open');
-  assert.equal(wizardShown(app), false, 'the wizard is not shown');
-});
+// #741: a card's Edit no longer opens the old dialog (gone); it opens the project's settings. Covered by
+// fronts/build/test/projects-resume-741.test.js.

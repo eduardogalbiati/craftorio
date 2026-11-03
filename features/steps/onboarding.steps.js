@@ -740,6 +740,16 @@ Then('the suggested {string} workflow still has {string} picked, read in {string
   await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*(${texts.map(escapeRe).join('|')})\\s*$`), { timeout: LOAD_TIMEOUT });
 });
 
+// #741: the wizard reopened on an unfinished onboarding (its Continue, or New project with the same URL)
+// shows the pick made before it was closed: the same option, read in English
+Then('the suggested {string} workflow still has {string} picked', async ({ e2e }, kind, label) => {
+  const pick = e2e.workflowPicks?.[kind];
+  if (!pick || pick.label !== label) throw new Error(`no "${label}" was picked for the "${kind}" workflow: use "I pick {string} for the suggested {string} workflow" first`);
+  const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
+  await expect(select).toHaveValue(pick.value, { timeout: IMPORT_TIMEOUT });
+  await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
+});
+
 // ---- #724: the tray never covers the wizard; #739: the name from the URL; #743: cloning in place ---------
 // What the screens expose (#724 / #743):
 // - wizard-spinner: the circular spinner of a running import inside the wizard's footer, in

@@ -22,6 +22,7 @@
 //   (the New / Edit project modal card); its per-project settings are checkboxes named by their label
 //   ("Install dependencies without running their scripts"); its "Save" button saves and closes it.
 
+const fs = require('fs');
 const { expect } = require('@playwright/test');
 const { When, Then } = require('../../../../features/steps/fixtures');
 
@@ -173,4 +174,114 @@ Then('the project dialog is for editing {string} with the repository {string}', 
 When('I save the project dialog', async ({ e2e }) => {
   await projectDialog(e2e.window).getByRole('button', { name: 'Save', exact: true }).click();
   await expect(visible(e2e.window.getByTestId('project-dialog'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+// ---- #741: an unfinished onboarding resumes at its step; a card's Edit opens the project's settings -------
+// What the Projects screen exposes (to be added by #741):
+// - data-testid="project-onboarding-unfinished": on a project card whose onboarding (the new-project wizard)
+//   was closed before Finish, the badge "Onboarding not finished", next to it a role="button" named
+//   "Continue" that reopens the wizard at the step it was left on, with its picks;
+// - a card's "Edit" opens the project's settings: the project page (project-page) showing
+//   data-testid="project-settings" (its settings section or tab), never the old New / Edit project dialog.
+
+const unfinishedBadge = (card) => card.getByTestId('project-onboarding-unfinished');
+
+Then('the project {string} on the Projects screen says its onboarding is not finished and offers Continue', async ({ e2e }, name) => {
+  const card = projectCard(projectsScreen(e2e.window), name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(unfinishedBadge(card)).toBeVisible();
+  await expect(unfinishedBadge(card)).toContainText('Onboarding not finished');
+  await expect(card.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+});
+
+Then('the project {string} on the Projects screen does not say its onboarding is not finished', async ({ e2e }, name) => {
+  const card = projectCard(projectsScreen(e2e.window), name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(unfinishedBadge(card)).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Continue', exact: true })).toHaveCount(0);
+});
+
+When('I continue the onboarding of the project {string} from the Projects screen', async ({ e2e }, name) => {
+  const card = projectCard(projectsScreen(e2e.window), name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await card.getByRole('button', { name: 'Continue', exact: true }).click();
+});
+
+// Edit, without expecting the old dialog (what opens is checked by the next step)
+When('I choose Edit on the project {string} in the Projects screen', async ({ e2e }, name) => {
+  const card = projectCard(projectsScreen(e2e.window), name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await card.getByRole('button', { name: 'Edit', exact: true }).click();
+});
+
+Then('the settings of the project {string} are open', async ({ e2e }, name) => {
+  const page = projectPage(e2e.window);
+  await expect(page).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole('heading', { name, exact: true }).first()).toBeVisible();
+  await expect(visible(page.getByTestId('project-settings')).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the project dialog is not shown', async ({ e2e }) => {
+  await expect(visible(e2e.window.getByTestId('project-dialog'))).toHaveCount(0);
+});
+
+// ---- #742: removing a project can delete its folder -----------------------------------------------------
+// What the Remove project dialog exposes (the app's confirm dialog, data-testid="confirm-modal"):
+// - a role="checkbox" named "Also delete the folder <path>" (its label holds the project's folder), unchecked
+//   when the dialog opens; its "Remove" button removes the project from the list, and with the box ticked
+//   deletes the folder too (unticked: the folder stays, as before #742).
+// The project's folder is read from the app (window.api.listProjects) when Remove is chosen, then checked on
+// the disk of the scenario's scratch workspace.
+
+const confirmModal = (page) => page.getByTestId('confirm-modal');
+const deleteFolderBox = (page) => confirmModal(page).getByRole('checkbox', { name: /^\s*Also delete the folder\b/ });
+
+When('I choose Remove on the project {string} in the Projects screen', async ({ e2e }, name) => {
+  const page = e2e.window;
+  const card = projectCard(projectsScreen(page), name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const folder = await page.evaluate(async (n) => (await window.api.listProjects()).find((p) => p.name === n)?.folder || null, name);
+  if (!folder) throw new Error(`the project "${name}" has no folder`);
+  expect(fs.existsSync(folder), `the folder of "${name}" exists before Remove`).toBe(true);
+  e2e.projectFolders = { ...(e2e.projectFolders || {}), [name]: folder };
+  await card.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(confirmModal(page)).toBeVisible();
+});
+
+Then('the Remove project dialog offers to also delete the folder of {string}, unticked', async ({ e2e }, name) => {
+  const folder = e2e.projectFolders?.[name];
+  if (!folder) throw new Error(`choose Remove on the project "${name}" first`);
+  const box = deleteFolderBox(e2e.window);
+  await expect(box).toBeVisible();
+  await expect(box).not.toBeChecked();
+  await expect(confirmModal(e2e.window)).toContainText(folder);
+});
+
+When('I tick "Also delete the folder" in the Remove project dialog', async ({ e2e }) => {
+  await deleteFolderBox(e2e.window).check();
+  await expect(deleteFolderBox(e2e.window)).toBeChecked();
+});
+
+When('I confirm the Remove project dialog', async ({ e2e }) => {
+  const modal = confirmModal(e2e.window);
+  await modal.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(modal).toBeHidden({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the Projects screen no longer lists the project {string}', async ({ e2e }, name) => {
+  await expect(projectsScreen(e2e.window).getByTestId('project-card').filter({ hasText: name })).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the folder of the project {string} is still on the disk', async ({ e2e }, name) => {
+  const folder = e2e.projectFolders?.[name];
+  if (!folder) throw new Error(`choose Remove on the project "${name}" first`);
+  // the removal has had time to delete it, if it wrongly did
+  await e2e.window.waitForTimeout(500);
+  expect(fs.existsSync(folder), `the folder ${folder}`).toBe(true);
+});
+
+Then('the folder of the project {string} is gone from the disk', async ({ e2e }, name) => {
+  const folder = e2e.projectFolders?.[name];
+  if (!folder) throw new Error(`choose Remove on the project "${name}" first`);
+  await expect.poll(() => fs.existsSync(folder), { message: `the folder ${folder} is deleted`, timeout: LOAD_TIMEOUT }).toBe(false);
 });
