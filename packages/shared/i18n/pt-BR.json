@@ -2237,7 +2237,7 @@
   "docs.next_issues_help": "O Product Owner propõe um épico e uma sub-issue por fase da spec; você revisa antes de qualquer coisa ser criada.",
   "docs.next_plan_build_help": "A run de Code & Build pega as issues criadas a partir do plano aceito; ela nunca escreve docs/work/.",
   "docs.next_plan_issues_help": "O Product Owner cria uma issue por passo do plano aceito; você revisa antes de qualquer coisa ser criada.",
-  "docs.next_spec_help":"O writer faz o rascunho do spec.md a partir da intenção aceita; você edita e assina aqui.",
+  "docs.next_spec_help": "O writer faz o rascunho do spec.md a partir da intenção aceita; você edita e assina aqui.",
   "docs.next_step": "Próximo passo",
   "docs.no_change_yet": "Nenhuma mudança ainda: selecione um trecho e peça ao writer.",
   "docs.no_item_yet": "Nenhum item de trabalho ainda",

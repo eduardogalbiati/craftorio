@@ -2237,7 +2237,7 @@
   "docs.next_issues_help": "The Product Owner proposes an epic and one sub-issue per phase of the spec; you review before anything is filed.",
   "docs.next_plan_build_help": "The Code & Build run takes the issues filed from the accepted plan; it never writes docs/work/.",
   "docs.next_plan_issues_help": "The Product Owner files one issue per step of the accepted plan; you review before anything is filed.",
-  "docs.next_spec_help":"The writer drafts spec.md from the accepted intent; you edit and sign it off here.",
+  "docs.next_spec_help": "The writer drafts spec.md from the accepted intent; you edit and sign it off here.",
   "docs.next_step": "Next step",
   "docs.no_change_yet": "No change yet: select a passage and ask the writer.",
   "docs.no_item_yet": "No work item yet",

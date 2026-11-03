@@ -22,6 +22,8 @@ function skillEvals(root = ROOT) {
     names.add(s.id);
     const where = `skills/${s.id}/SKILL.md`;
     if (s.error) { failures.push(`${where}: does not read: ${s.error}`); continue; }
+    // no frontmatter at all: one failure, not a missing name and a missing description
+    if (!Object.keys(s.meta || {}).length) { failures.push(`${where}: no frontmatter`); continue; }
     // meta.name: the frontmatter's own (listSkills' name falls back to the folder)
     const name = String(s.meta?.name || '');
     if (name !== s.id) failures.push(`${where}: name "${name}" is not its folder "${s.id}"`);
