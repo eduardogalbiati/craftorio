@@ -100,4 +100,7 @@ async function launchServedUi({ size = '1400x900', slot: takeSlot = true } = {})
 
 module.exports = {
   launchServedUi,
+  // #751: the desktop app in remote mode runs against the same engine server, without the browser window
+  servedEnv,
+  startServer,
 };

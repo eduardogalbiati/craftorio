@@ -83,7 +83,7 @@ function setup({ mode = 'remote', saved = { mode: 'remote', address: URL_, token
 const decision = (over = {}) => ({ mode: 'remote', url: URL_, host: HOST, token: TOKEN, address: URL_, ...over });
 const navEvent = () => ({ prevented: false, preventDefault() { this.prevented = true; } });
 
-test('remote mode: the engine answers, its window loads <url>/ with no preload, isolated and sandboxed, in its own session', async () => {
+test('remote mode: the engine answers, its window loads <url>/ with only the capture preload, isolated and sandboxed, in its own session', async () => {
   const s = setup();
   await s.c.startRemote(decision());
   const w = s.remoteOf();
@@ -93,7 +93,8 @@ test('remote mode: the engine answers, its window loads <url>/ with no preload, 
   assert.equal(w.loadedUrl.includes('token='), false, w.loadedUrl);
   assert.equal(w.loadedUrl.includes(TOKEN), false, w.loadedUrl);
   const prefs = w.opts.webPreferences;
-  assert.equal(prefs.preload, undefined, 'no preload for remote content');
+  // #751: the only preload is the minimal capture one (no Node), see engine-connection-window-751.test.js
+  assert.equal(require('node:path').basename(String(prefs.preload || '')), 'remote-window-preload.js', 'only the capture preload for remote content');
   assert.equal(prefs.contextIsolation, true);
   assert.equal(prefs.nodeIntegration, false);
   assert.equal(prefs.sandbox, true);
