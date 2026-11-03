@@ -107,7 +107,7 @@
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
   const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
-  const resume = window.ProjectWizardResume({ cur: () => cur, render: () => render(), close: () => close() });
+  const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
     jobReason,
     kindField,
@@ -722,16 +722,6 @@
     }).catch(() => { if (cur?.projectId === pid) { cur.estimate = null; render(); } });
   }
 
-  // #741: the project's onboarding, just started or resumed at its saved step with its picks
-  function resumeAt(state, name) {
-    cur.projectId = state?.projectId || null;
-    if (!cur.projectId) return;
-    resume.apply(state.wizard);
-    names.set(cur.projectId, name || cur.model.name.trim());
-    remember(state);
-    if (cur.model.step === 'analysis') toAnalysis();
-  }
-
   async function call(fn) {
     cur.busy = true;
     render();
@@ -766,7 +756,7 @@
         const state = await begin();
         // #741: a finished project of this repository: say it exists; an unfinished one resumes at its step
         if (state?.exists) cur.exists = state.projectId;
-        else resumeAt(state, name);
+        else resume.at(state, name);
       } catch (e) {
         showToast(t(creating ? 'onboarding.new_create_failed' : 'onboarding.start_failed'), errMsg(e));
       } finally {
@@ -850,7 +840,7 @@
 
   async function onClick(e) {
     const act = e.target?.closest?.('[data-act]')?.dataset.act;
-    if (!act || !cur || resume.onClick(act)) return;
+    if (!act || !cur) return;
     if (act === 'close' || act === 'cancel') close();
     else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
     else if (onCreateClick(act, e) || onRepoClick(act, e)) return;
@@ -943,10 +933,9 @@
       root.setAttribute('aria-modal', 'true');
       root.setAttribute('aria-labelledby', 'project-wizard-title');
       root.className = 'project-wizard';
-      root.addEventListener('click', onClick);
+      root.addEventListener('click', (e) => { if (!resume.onClick(e)) onClick(e); }); // #741: the "already exists" notice first
       root.addEventListener('input', onInput);
-      root.addEventListener('change', onInput);
-      root.addEventListener('change', () => { if (cur) resume.save(); }); // #741: a pick made without a render
+      root.addEventListener('change', (e) => { onInput(e); if (cur) resume.save(); }); // #741: a pick made without a render
       root.addEventListener('keydown', onKey);
       root.addEventListener('focusout', (e) => { if (cur?.stale && e.target?.id === 'wizard-review-idea') { cur.stale = false; render(); } });
       document.body.appendChild(root);
@@ -958,8 +947,7 @@
     tray.refresh(); // #724: hidden while the wizard is open
     root.querySelector('.wizard-panel')?.focus?.();
     loadAccounts();
-    if (projectId) Promise.resolve(api.onboardingStatus(projectId)).then((s) => { if (cur && !cur.projectId && s) { resumeAt(s); render(); } })
-      .catch((e) => showToast(t('onboarding.action_failed'), errMsg(e)));
+    if (projectId) resume.load(projectId);
   }
 
   function close() {
@@ -1001,5 +989,5 @@
     close,
     open,
   };
-  window.Actions.register('openProjectWizard', (opts) => open(opts || {}));// Setup's First project step asks for it (setup.js)
+  window.Actions.register('openProjectWizard', (opts) => open(opts || {})); // Setup's First project step asks for it (setup.js)
 })();

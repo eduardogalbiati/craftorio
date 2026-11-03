@@ -29,7 +29,7 @@
 // - with no workflow: data-testid="pj-wf-empty" says "No workflow yet: new roadmap items use the
 //   Settings default" (i18n key projects.workflows_empty, en.json and pt-BR.json) and "+ Add a workflow"
 //   is there;
-// - Create Project's dialog (ProjectWorkflows.showDialog) is unchanged: the manifest's workflows checked.
+// - #741: the Create Project dialog (and its ProjectWorkflows.showDialog) is gone: creating is the wizard only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -447,25 +447,4 @@ test('#729 the empty state\'s line is translated: projects.workflows_empty in en
   assert.equal(en, 'No workflow yet: new roadmap items use the Settings default');
   assert.equal(typeof pt === 'string' && pt.trim().length > 0, true, 'a pt-BR text');
   assert.notEqual(pt, en, 'translated');
-});
-
-// ---- Create Project keeps its block --------------------------------------------------------------------
-
-test('#729 Create Project: the manifest\'s workflows still come in checked', { timeout: 20000 }, async () => {
-  const MANIFEST = { workflows: [{ name: 'backlog-refresh', category: 'intake', description: 'Refresh the issues' }, { name: 'feature', category: 'build' }] };
-  const app = loadApp({
-    api: {
-      listProjects: async () => [],
-      listWorkflows: async () => clone(INSTALLED),
-      projectManifest: async () => clone(MANIFEST),
-      getSettings: async () => ({}),
-    },
-  });
-  await app.boot();
-  const box = app.el('#pj-workflows-729');
-  await app.sandbox.ProjectWorkflows.showDialog(box, { folder: 'C:/work/new', url: 'https://github.com/o/new.git' });
-  await app.settle(10);
-  const checked = H.findAll(String(box.innerHTML), (e) => e.name === 'input' && e.attrs.type === 'checkbox' && 'checked' in e.attrs)
-    .map((e) => String(e.attrs['data-workflow'] ?? e.attrs.value ?? '').replace(/\.ya?ml$/i, ''));
-  assert.deepEqual([...new Set(checked)].sort(), ['backlog-refresh', 'feature']);
 });

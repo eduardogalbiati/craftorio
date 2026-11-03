@@ -1,4 +1,4 @@
-/* global api, esc, t */
+/* global api, errMsg, esc, showToast, t */
 // #741: the new-project wizard's memory, split out of project-wizard.js (its size cap). An onboarding closed
 // before Finish is not lost: the engine keeps the wizard's step and the owner's picks with the project
 // (onboarding:save-wizard, the project record's onboarding { step, picks, finished }), and the wizard opens
@@ -11,16 +11,19 @@
 //   suggested workflows' variants, kind, idea) to the engine once the project exists, only when they changed
 //   since the last save (fire and forget: a failed save never stops the wizard);
 // - apply(wizard): the saved step and picks onto the wizard's state (a pick not saved keeps its value);
+// - at(state, name): the onboarding just started (or resumed) onto the wizard: its project, saved step and picks;
+// - load(projectId): a card's Continue, the project's onboarding:status then at();
 // - existsBody(): the markup of a finished project imported again;
-// - onClick(act): Open the project, and Back from that notice; true when it handled the click.
-// Uses app.js globals (esc, t) and window.Actions.
+// - onClick(e): before the wizard's click handler: Open the project, and Back from that notice; true when handled.
+// The wizard passes its own helpers too: names (projectId → name), remember(state), toAnalysis().
+// Uses app.js globals (errMsg, esc, showToast, t) and window.Actions.
 
 (function () {
   const STEPS = ['repository', 'analysis', 'review'];
   const MODEL_PICKS = ['source', 'repository', 'name', 'analyzeLater'];
   const OWN_PICKS = ['workflowsMode', 'workflows', 'kind', 'idea'];
 
-  window.ProjectWizardResume = function ({ cur, render, close }) {
+  window.ProjectWizardResume = function ({ close, cur, names, remember, render, toAnalysis }) {
     const sent = new Map(); // projectId → the last step and picks sent (JSON)
 
     function snapshot() {
@@ -62,19 +65,45 @@
         </div>`;
     }
 
-    function onClick(act) {
+    // the project's onboarding, just started or resumed at its saved step with its picks
+    function at(state, name) {
       const c = cur();
-      if (!c?.exists) return false;
+      c.projectId = state?.projectId || null;
+      if (!c.projectId) return;
+      apply(state.wizard);
+      names.set(c.projectId, name || c.model.name.trim());
+      remember(state);
+      if (c.model.step === 'analysis') toAnalysis();
+    }
+
+    // a card's Continue: the project's onboarding state, then the wizard at its step
+    function load(projectId) {
+      Promise.resolve(api.onboardingStatus(projectId))
+        .then((s) => { const c = cur(); if (c && !c.projectId && s) { at(s); render(); } })
+        .catch((e) => showToast(t('onboarding.action_failed'), errMsg(e)));
+    }
+
+    // the wizard's clicks, before its own handler: true when it handled the click
+    function onClick(e) {
+      const act = e.target?.closest?.('[data-act]')?.dataset.act;
+      const c = cur();
+      if (!c?.exists || (act !== 'open-existing' && act !== 'back')) return false;
       if (act === 'open-existing') {
         const pid = c.exists;
         close();
         window.Actions.call('openProject', pid);
       }
       else if (act === 'back') { c.exists = null; render(); }
-      else return false;
       return true;
     }
 
-    return { apply, existsBody, onClick, save };
+    return {
+      apply,
+      at,
+      existsBody,
+      load,
+      onClick,
+      save,
+    };
   };
 })();
