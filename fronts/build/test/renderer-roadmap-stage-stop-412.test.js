@@ -41,15 +41,15 @@ async function menuEntries(s) {
 }
 const label = (e) => H.visibleText(e.inner).trim();
 
-test('#412 stage menu: a "Stop" entry sits right after "Pause after current step"', async () => {
+test('#412 stage menu: a "Stop now" entry sits right after "Stop when finished" (#748 labels)', async () => {
   const entries = await menuEntries(0);
   const pause = entries.findIndex((e) => 'data-rm-pause-stage' in e.attrs);
   assert.ok(pause >= 0, 'the stage menu has its pause entry');
-  assert.equal(entries[pause + 1] ? label(entries[pause + 1]) : '(none)', 'Stop');
+  assert.equal(entries[pause + 1] ? label(entries[pause + 1]) : '(none)', 'Stop now');
 });
 
 test('#412 stage menu: with a live run in the stage, Stop is on', async () => {
-  const stop = (await menuEntries(0)).find((e) => label(e) === 'Stop');
+  const stop = (await menuEntries(0)).find((e) => label(e) === 'Stop now');
   assert.ok(stop, 'the stage menu has Stop');
   assert.equal(stop.attrs['aria-disabled'] === 'true' || 'disabled' in stop.attrs, false);
 });
@@ -68,7 +68,7 @@ async function clickStop(s, { confirm = true } = {}) {
   const { ctx } = H.makeCtx();
   await R.onClick(H.clickOn(stageOf(R.html(d, () => {}, view), s).outer, (e) => e.attrs['data-testid'] === 'roadmap-stage-menu'), ctx, d);
   const stage = stageOf(R.html(d, () => {}, view), s);
-  await R.onClick(H.clickOn(stage.outer, (e) => e.attrs.role === 'menuitem' && label(e) === 'Stop'), ctx, d);
+  await R.onClick(H.clickOn(stage.outer, (e) => e.attrs.role === 'menuitem' && label(e) === 'Stop now'), ctx, d);
   return calls;
 }
 
@@ -88,7 +88,7 @@ test('#412 stage menu Stop: refusing the confirm stops nothing', async () => {
 });
 
 test('#412 stage menu: with no live run in the stage, Stop is off and its title says why', async () => {
-  const stop = (await menuEntries(1)).find((e) => label(e) === 'Stop');
+  const stop = (await menuEntries(1)).find((e) => label(e) === 'Stop now');
   assert.ok(stop, 'the stage menu has Stop');
   assert.equal(stop.attrs['aria-disabled'] === 'true' || 'disabled' in stop.attrs, true);
   assert.notEqual(H.decode(stop.attrs.title || '').trim(), '', 'the reason is in its title');

@@ -90,7 +90,7 @@ test('#391 bar: "Pause now" pauses as today (stop false, not after the stage)', 
   assert.notEqual(calls.pause[0][2], 'stage');
 });
 
-test('#391 stage menu: the stage\'s pause reads "Pause after current step"; its tooltip keeps the rule (agents finish their current turn)', async () => {
+test('#391 stage menu: the stage\'s pause reads "Stop when finished" (#748); its tooltip keeps the rule (agents finish their current turn)', async () => {
   const { R } = load();
   const d = data();
   const stageOf = (html) => H.findEl(html, (e) => e.attrs['data-testid'] === 'roadmap-stage' && e.attrs['data-stage'] === '1');
@@ -98,7 +98,7 @@ test('#391 stage menu: the stage\'s pause reads "Pause after current step"; its 
   await R.onClick(H.clickOn(stageOf(R.html(d, () => {}, view)).outer, (e) => e.attrs['data-testid'] === 'roadmap-stage-menu'), ctx, d);
   const entry = H.findEl(stageOf(R.html(d, () => {}, view)).outer, (e) => e.attrs.role === 'menuitem' && 'data-rm-pause-stage' in e.attrs);
   assert.ok(entry, 'the stage menu has its pause entry');
-  assert.equal(H.visibleText(entry.inner).trim(), 'Pause after current step');
+  assert.equal(H.visibleText(entry.inner).trim(), 'Stop when finished');
   assert.match(H.decode(entry.attrs.title || ''), /current turn/);
 });
 

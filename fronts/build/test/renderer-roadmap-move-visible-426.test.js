@@ -147,7 +147,8 @@ test('#426 guard (unchanged): only the roadmap\'s real first / last stage has "R
   const d = hiddenOnTop();
   const last = await openMenu(R, d, 3, PLANNED); // Q: the real last stage
   assert.equal(entryOf(last, 3, 'down').attrs['aria-disabled'], 'true');
-  assert.match(H.visibleText(menuOf(last, 3).inner), /It is the last stage/);
+  assert.match(H.decode(entryOf(last, 3, 'down').attrs.title || ''), /It is the last stage/); // #748: the reason in its tooltip only
+  assert.doesNotMatch(H.visibleText(menuOf(last, 3).inner), /It is the last stage/);
   await clickEntry(R, d, last, 3, 'down');
   assert.equal(saved.length, 0, 'nothing saved by the entry that is off');
 });

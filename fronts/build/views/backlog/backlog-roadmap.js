@@ -11,12 +11,10 @@
 // other inputs are edited in an Edit form built from the workflow's input definitions (api.listWorkflows, loaded once) by WorkflowInputs (workflow-inputs.js,
 // #116: human labels, pills, switches, show_if), with Save / Cancel. The plan is edited too: stages and items up/down or by drag, an issue dragged from one
 // item to another, items removed, a stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear; Retry / Skip on a failed item. A
-// stage's head has its number, its name and its state (its estimate only with more than one item); its actions are in its ⋮ menu (#282; the keyboard opens
-// it, the arrows move in it, Esc closes it): Disable / Enable (#284: a disabled stage is skipped while the roadmap runs; still listed, dimmed, with a
-// "Disabled" badge, counted apart in the bar), Run this stage (#141: only its items, then the roadmap pauses; out of order after a confirmation; off, with
-// the reason, while the roadmap runs or on a disabled stage), Release here, Run earlier / later, the note. A Product Owner proposal (#105, JSON) is added or
-// replaces the roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of stages (api.saveRoadmap); the service keeps
-// each item's runs by id.
+// stage's head has its number, its name and its state; its actions are in its ⋮ menu (#282, #748: ui-kit's Menu, grouped): Disable / Enable (#284: skipped
+// while the roadmap runs, dimmed, "Disabled"), Run this stage (#141) | Stop when finished, Stop now | Release after this stage | Move up / down | the note |
+// Remove from roadmap. A Product Owner proposal (#105, JSON) is added or replaces the roadmap as planned; the plain queue's items can be moved in. Every
+// edit saves the whole list of stages (api.saveRoadmap); the service keeps each item's runs by id.
 // #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written elsewhere since, the service applies only this edit, or
 // refuses it (`conflict`): the screen shows the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or, when its item is
 // gone, those values show in the "Not saved" box (`lost`, roadmap-save-conflict). `changedElsewhere` words what changed for the open form's notice
@@ -73,19 +71,12 @@
   };
   // #748: the menus' icons, one line set (ui-menu-icon draws them in its fixed column)
   const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-  const MI = {
-    power: svg('<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/>'),
-    run: svg('<path d="M7 4l12 8-12 8z"/>'),
-    pause: svg('<path d="M9 5v14M15 5v14"/>'),
-    stop: svg('<rect x="6" y="6" width="12" height="12" rx="1"/>'),
-    release: svg('<circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5 20 18M8.5 15.5 20 6"/>'),
-    up: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
-    down: svg('<path d="M12 5v14M6 13l6 6 6-6"/>'),
-    note: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/>'),
-    remove: svg('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
-    clear: svg('<path d="M4 7h16M6 7l1 13h10l1-13"/>'),
-    versions: svg('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'),
-  };
+  const MI = Object.fromEntries(Object.entries({
+    power: '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/>', run: '<path d="M7 4l12 8-12 8z"/>', pause: '<path d="M9 5v14M15 5v14"/>', // i18n-ignore
+    stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>', release: '<circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5 20 18M8.5 15.5 20 6"/>', // i18n-ignore
+    up: '<path d="M12 19V5M6 11l6-6 6 6"/>', down: '<path d="M12 5v14M6 13l6 6 6-6"/>', note: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', // i18n-ignore
+    remove: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>', clear: '<path d="M4 7h16M6 7l1 13h10l1-13"/>', versions: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', // i18n-ignore
+  }).map(([k, d]) => [k, svg(d)]));
   const COMPLEXITY =/^complexity\s*[:=/-]?\s*(\d+)/i;
   // an item's issues (RoadmapModel.itemIssues: an item stored before #163 is its own one issue)
   const refs = (x) => RoadmapModel.itemIssues(x);
@@ -118,17 +109,11 @@
   const inputDefs = (x) => wfOf(x)?.inputs || {};
 
   // #195: an item whose workflow pushes (a branch, a PR/MR, CI minutes) while the default merges locally
-  function pushesAgainstDefault(x) {
-    const def = window.DefaultWorkflow?.current();
-    return def?.merge === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote';
-  }
-  // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
-  // error without a run, e.g. kept work of an ended run), never while its run is alive
+  const pushesAgainstDefault = (x, def = window.DefaultWorkflow?.current()) => def?.merge === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote';
   const refusedStart = (x) => RoadmapModel.refusedStart(x);
-  const retryable = (x, r) => may(r, null, x).retry.allowed;
-  // #271: "Ask the Oracle about this failure" on an item whose run failed, was interrupted or stopped,
-  // or that could not start; never on a planned (no ended run), running, waiting or done one. The
-  // button and what it asks are the gate button's code (gate-oracle.js, looked up when drawn).
+  const retryable = (x, r) => may(r, null, x).retry.allowed; // #196: a failed run or a refused start, never while its run is alive
+  // #271: "Ask the Oracle about this failure" on an item whose run failed, was interrupted or stopped, or that could not start; never on a
+  // planned (no ended run), running, waiting or done one. The button and what it asks are the gate button's code (gate-oracle.js).
   const RUN_FAILED = new Set(['failed', 'cancelled', 'interrupted']);
   const askable = (x) => x.status === 'failed' || refusedStart(x) || (x.status === 'planned' && RUN_FAILED.has(x.run?.status));
   const askOracleHtml = (x) => (askable(x) && window.GateOracle?.failureButtonHtml ? window.GateOracle.failureButtonHtml(x, 'data-rm-ask-oracle data-testid="roadmap-ask-oracle"') : '');
@@ -137,15 +122,11 @@
   let [menuOpen, byReleaseOpen, pauseOpen] = [false, false, false];
   const pauseHtml = (r) => `<span class="bl-menu-wrap rm-pause-wrap"><button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="${t('backlog_roadmap.pause_after_this_stage_or_now')}" aria-haspopup="menu" aria-expanded="${pauseOpen}">${ICON.pause}${t('backlog_roadmap.pause')}</button>${pauseOpen ? Menu.menuHtml(RoadmapModel.pauseChoices(r).map((c) => ({ id: `pause-${c.after}`, iconHtml: c.after === 'stage' ? MI.pause : MI.stop, label: c.label, title: c.hint, testid: `roadmap-pause-${c.after === 'stage' ? 'after-stage' : 'now'}`, attrs: `data-rm="pause-${esc(c.after)}"` })), { className: 'rm-menu rm-pause-menu', testid: 'roadmap-pause-menu', label: t('backlog_roadmap.pause_the_roadmap') }) : ''}</span>`; // #748: the shared menu, each hint in its tooltip
   const pausingHtml = (r, at = RoadmapModel.pausingAfterStage(r)) => (at < 0 ? '' : `<span class="badge warn" data-testid="roadmap-pausing-badge">${t('backlog_roadmap.pausing_after_stage')} ${at + 1}</span> <button class="btn sm ghost" type="button" data-rm="cancel-pause" data-testid="roadmap-cancel-pause" title="${t('backlog_roadmap.take_the_pause_back_the_roadmap')}">${t('backlog_roadmap.cancel_pause')}</button>`);
-  const MENU = [
-    { id: 'clear', label: 'backlog_roadmap.clear', title: 'backlog_roadmap.clear_tip', show: (r) => r.stages.length > 0 },
-    { id: 'versions', label: 'backlog_roadmap.restore_an_earlier_version', title: 'backlog_roadmap.restore_an_earlier_version_tip', show: () => true },
-  ];
-  let editing = null; // the item whose Edit form is open
-  let adding = false; // its "add input" name + value pair is shown
-  let noteEditing = null; // the stage whose note is being edited
-  let kept = null; // #287: the values of an Edit form whose save was refused ({ id, inputs, mock })
-  let lost = null; // #287: a refused edit whose item is gone ({ item, reason }), its values shown apart
+  const MENU = [{ id: 'clear', label: 'backlog_roadmap.clear', title: 'backlog_roadmap.clear_tip', show: (r) => r.stages.length > 0 },
+    { id: 'versions', label: 'backlog_roadmap.restore_an_earlier_version', title: 'backlog_roadmap.restore_an_earlier_version_tip', show: () => true }];
+  // the item whose Edit form is open; its "add input" pair is shown; the stage whose note is edited; #287: the values of an Edit
+  // form whose save was refused ({ id, inputs, mock }); a refused edit whose item is gone ({ item, reason }), its values shown apart
+  let [editing, adding, noteEditing, kept, lost] = [null, false, null, null, null];
   // #138: the items grouped by their issues' epics instead of by stage (remembered)
   const BY_EPIC_KEY = 'multiagent.roadmapByEpic';
   let byEpic = (() => { try { return localStorage.getItem(BY_EPIC_KEY) === '1'; } catch { return false; } })();
@@ -672,23 +653,18 @@
   }).join(', ');
 
   // ---- the stage's ⋮ menu (#282): its rarely used actions, out of the head -------------------------------
-  // #748: the shared menu (packages/ui-kit/menu.js), in groups: Disable / Enable (#284) · Run this stage (#141) |
-  // Stop when finished (#368) · Stop now (#412) | Release after this stage (#260) | Move up · down | the note |
-  // Remove from roadmap. An entry that cannot be used stays in the menu, off (aria-disabled, so the keyboard
-  // still reaches it), its reason in its tooltip only. Opened and closed in the page, never by a redraw.
-  let stageMenu = null; // the id of the stage whose menu is open
-  let stageBinding = null; // its Menu.bindMenu (keys, outside click)
+  // #748: the shared menu (packages/ui-kit/menu.js), grouped; a refused entry stays, aria-disabled, its reason in its
+  // tooltip only. Opened and closed in the page, never by a redraw. #284: a finished stage has nothing to hold back.
+  let [stageMenu, stageBinding] = [null, null]; // the id of the stage whose menu is open; its Menu.bindMenu
   function stageMenuBody(stage, s, count, r, done) {
     const off = !!stage.disabled;
     const acts = may(r, stage); // with a stage, start is "Run this stage" (#141)
     const e = (id, icon, label, why, attrs, extra = {}) => ({ id, iconHtml: MI[icon], label: t(`backlog_roadmap.${label}`), title: t(`backlog_roadmap.${label}_tip`), disabledReason: why || '', attrs, ...extra });
     const sep = { divider: true };
     return Menu.menuHtml([
-      // #284: a finished stage has nothing left to hold back (a disabled one can always be enabled)
       off ? e('enable', 'power', 'enable', '', 'data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"') : done ? null : e('disable', 'power', 'disable', acts.disable.reason, 'data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"'),
       e('run', 'run', 'run_this_stage', acts.start.reason, 'data-rm-run-stage'),
       sep,
-      // #368: nothing is cut: its agents finish their turns, then its runs and the roadmap pause
       done ? null : e('pause', 'pause', 'stop_when_finished', acts.pauseStage.reason, 'data-rm-pause-stage data-testid="roadmap-stage-pause"'),
       done ? null : e('stop', 'stop', 'stop_now', acts.stopStage.reason, 'data-rm-stop-stage data-testid="roadmap-stage-stop"'),
       sep,
@@ -1518,18 +1494,16 @@
   // ---- the ⋮ menus (#269 the bar's, #282 a stage's) and the earlier versions (#281) ----------------------
   const focusMenu = (sel, wrap = '.rm-menu-wrap') => document.querySelector(`#bl-list ${wrap} ${sel}`)?.focus({ preventScroll: true });
   const stageButtonOf = (id) => [...(document.querySelectorAll?.('#bl-list [data-rm-stage-menu]') || [])].find((b) => b.dataset.rmStageMenu === id) || null;
-  // #748: the stage menu opens and closes in the page (its wrap next to its ⋮), never through a redraw:
-  // the scroll position, the paged cards and the clicked stage stay where they are
+  // #748: the stage menu opens and closes in the page, never by a redraw (scroll, paged cards, the stage stay put);
+  // without its button in the page, the next draw shows it open; near the window's bottom it opens upward
   function openStageMenu(r, id) {
-    const btn = stageButtonOf(id);
-    const s = r.stages.findIndex((st) => st.id === id);
-    stageMenu = id; // without its button in the page, the next draw shows it open
+    const [btn, s] = [stageButtonOf(id), r.stages.findIndex((st) => st.id === id)];
+    stageMenu = id;
     if (!btn || s < 0) return;
     const wrap = btn.closest('.rm-stage-menu-wrap');
     if (!wrap.querySelector('.rm-stage-menu')) wrap.insertAdjacentHTML('beforeend', stageMenuBody(r.stages[s], s, r.stages.length, r, !RoadmapModel.hasUnfinished(r.stages[s])));
     const menu = wrap.querySelector('.rm-stage-menu');
     btn.setAttribute('aria-expanded', 'true');
-    // near the window's bottom it opens upward: the page never scrolls to fit it
     const box = menu.getBoundingClientRect?.();
     if (box && window.innerHeight && box.bottom > window.innerHeight) menu.classList.add('up');
     stageBinding = Menu.bindMenu(menu, { anchor: btn, onClose: (why) => closeStageMenu(why === 'escape') });
@@ -1538,9 +1512,8 @@
   // `keep`: the menu stays in the page, hidden (an entry's click still finds its stage), until the click is done
   function closeStageMenu(focus = false, keep = false) {
     const id = stageMenu;
-    stageMenu = null;
     stageBinding?.close();
-    stageBinding = null;
+    [stageMenu, stageBinding] = [null, null];
     for (const menu of document.querySelectorAll?.('#bl-list .rm-stage-menu') || []) { if (keep) menu.hidden = true; else menu.remove(); }
     const btn = id != null ? stageButtonOf(id) : null;
     btn?.setAttribute('aria-expanded', 'false');
@@ -1560,53 +1533,42 @@
     if (stageMenu != null && e.key === 'Escape') { e.preventDefault?.(); closeStageMenu(true); return true; }
     if (!menuOpen && !pauseOpen) return false;
     const pause = pauseOpen;
+    const items = [...document.querySelectorAll('#bl-list .rm-menu [role="menuitem"]')];
+    if (e.key !== 'Escape' && ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !items.length)) return false;
+    e.preventDefault?.();
     if (e.key === 'Escape') {
-      e.preventDefault?.();
       closeMenu();
       ctx.render();
       focusMenu(...(pause ? ['[data-rm="pause"]', '.rm-pause-wrap'] : ['[data-rm-menu]']));
       return true;
     }
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return false;
-    const items = [...document.querySelectorAll('#bl-list .rm-menu [role="menuitem"]')];
-    if (!items.length) return false;
-    e.preventDefault?.();
     const at = items.indexOf(document.activeElement);
     items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus({ preventScroll: true });
     return true;
   }
 
-  // #281: an edit saved at once can be taken back from its toast: Undo puts back what the edit changed
-  // (api.undoRoadmap → packages/engine/domains/roadmap/roadmap-undo.js), "Restored" or why it cannot be done takes the toast's place
+  // #281: Undo in an edit's toast puts back what it changed (api.undoRoadmap → domains/roadmap/roadmap-undo.js), or says why it cannot
   function undoToast(ctx, out, title, detail) {
     if (!out?.edit?.id) return;
-    window.showToast?.(title, detail || '', null, null, {
-      action: {
-        label: t('common.undo'),
-        run: async () => {
-          const back = await api.undoRoadmap(ctx.projectId, out.edit.id);
-          // the screen moved to another project meanwhile: its data stays, the undo was done
-          if (ctx.current?.() === false) return;
-          ctx.setData(back);
-          ctx.render();
-        },
-      },
-    });
+    const run = async () => {
+      const back = await api.undoRoadmap(ctx.projectId, out.edit.id);
+      if (ctx.current?.() === false) return; // the screen moved to another project meanwhile: its data stays, the undo was done
+      ctx.setData(back);
+      ctx.render();
+    };
+    window.showToast?.(title, detail || '', null, null, { action: { label: t('common.undo'), run } });
   }
   const numbers = (x) => refs(x).map((i) => `#${i.number}`).join(', ');
   const brief = (text, max = 40) => (String(text).length > max ? `${String(text).slice(0, max - 1)}…` : String(text));
   const stageName = (stage, s) => (stage?.name ? `stage "${brief(stage.name)}"` : `stage ${s + 1}`);
 
-  // "Restore an earlier version…" (#281, the #rm-versions-modal dialog of backlog.js): the roadmap as it
-  // was before each of the last edits, newest first; Restore follows Undo's rule (the service refuses
-  // with the reason) and can itself be undone from its toast.
+  // "Restore an earlier version…" (#281, the #rm-versions-modal dialog of backlog.js): the roadmap before each of the last edits,
+  // newest first; Restore follows Undo's rule (the service refuses with the reason) and can itself be undone from its toast.
   const timeOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: zone() }); };
   async function openVersions(ctx) {
     const q = (sel) => document.querySelector(sel);
-    const modal = q('#rm-versions-modal');
+    const [modal, list, error] = [q('#rm-versions-modal'), q('#rm-versions'), q('#rm-versions-error')];
     if (!modal) return;
-    const list = q('#rm-versions');
-    const error = q('#rm-versions-error');
     const close = () => modal.classList.add('hidden');
     error.textContent = '';
     list.innerHTML = `<li class="muted small">${t('backlog_roadmap.loading')}</li>`;
@@ -1876,17 +1838,15 @@
     await save(ctx, r, stages, { label: gone ? t('backlog_roadmap.removed_value_from_the_roadmap', { value: numbers(gone) }) : t('backlog_roadmap.removed_an_item_from_the_roadmap'), detail });
     return 'handled';
   }
-  // #748 the stage menu's "Remove from roadmap": asks first, naming the stage and its items; the stage, its
-  // items and its cut line (folded on it) leave the roadmap, never the issues; refused while one runs or waits at a gate
+  // #748 "Remove from roadmap": asks first; the stage, its items and its cut line leave the roadmap, never the issues
   async function removeStageClicked({ ctx, r, stages, target }) {
     const { s } = locate(stages, target);
     const stage = stages[s];
     if (!stage || !may(r, r.stages[s]).removeStage.allowed) return 'handled';
     const cut = stage.release?.name ? ` ${t('backlog_roadmap.remove_stage_release', { name: stage.release.name })}` : '';
     if (!await confirmDialog(t('backlog_roadmap.remove_stage_and_items', { stage: s + 1, count: (stage.items || []).length }), `${t('backlog_roadmap.remove_stage_detail')}${cut}`, t('common.remove'))) return 'handled';
-    const name = stageName(stage, s);
     stages.splice(s, 1);
-    await save(ctx, r, stages, { label: t('backlog_roadmap.removed_stage_from_the_roadmap', { stage: name }) });
+    await save(ctx, r, stages, { label: t('backlog_roadmap.removed_stage_from_the_roadmap', { stage: stageName(stage, s) }) });
     return 'handled';
   }
   const EDITS = [

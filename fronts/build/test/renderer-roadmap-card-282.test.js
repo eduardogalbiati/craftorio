@@ -439,11 +439,11 @@ async function openStageMenu(R, d, s) {
   return { html: open, menu, items: H.findAll(menu.outer, (e) => e.attrs.role === 'menuitem' || e.attrs.role === 'menuitemcheckbox') };
 }
 
-test('#282 the stage menu lists Release here, Run this stage, Run earlier, Run later, add note and Disable', async () => {
+test('#282 the stage menu lists Release after this stage, Run this stage, Move up, Move down, add note and Disable (#748 labels)', async () => {
   const { R } = await ready();
   const { items } = await openStageMenu(R, twoStages('planned'), 1);
   const names = items.map((e) => text(e)).join(' | ');
-  assert.deepEqual([/Release here/, /Run this stage/, /Run earlier/i, /Run later/i, /add note/i, /Disable/].map((re) => re.test(names)), [true, true, true, true, true, true]);
+  assert.deepEqual([/Release after this stage/, /Run this stage/, /Move up/i, /Move down/i, /add note/i, /Disable/].map((re) => re.test(names)), [true, true, true, true, true, true]);
 });
 
 test('#282 while the roadmap runs, the menu\'s Run this stage is disabled and says why', async () => {

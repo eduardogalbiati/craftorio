@@ -1,6 +1,6 @@
 // #432: characterization of the Roadmap's click handling (BacklogRoadmap.onClick) before its chain of
 // closest() branches becomes a table: the branches no other test clicks (the city map, the earlier page,
-// a release run, Move on, the budget, Cancel pause, the versions dialog, From the queue, Propose/Replace,
+// a release run, the budget, Cancel pause, the versions dialog, From the queue, Propose/Replace,
 // an item's Move on / Skip, Add an input, a cut line removed, an item removed) and the shared ending
 // (false when the click is not the roadmap's, an error in the screen's error line, the redraw, the focus).
 const test = require('node:test');
@@ -163,34 +163,6 @@ test('#432 Resume from step opens the resume dialog when the app has it, and is 
   assert.equal(await withDialog.R.onClick({ target: target({ '[data-rm-resume]': { rmResume: 'run-4' } }) }, ctx, roadmapData()), true);
   assert.deepEqual(opened, ['run-4']);
   assert.equal(ctx._calls.render, 0);
-});
-
-test('#432 Move on from this stage asks, parks the stage and offers Undo; declined, nothing is parked', async () => {
-  const { R, calls } = load();
-  const ctx = makeCtx();
-  assert.equal(await R.onClick({ target: inStage('[data-rm-park-stage]', {}, 0) }, ctx, roadmapData()), true);
-  assert.deepEqual(calls.api, [['parkRoadmapStage', 'p1', 'st1']]);
-  assert.equal(calls.confirm.length, 1);
-  assert.deepEqual(calls.toasts, [['Moved on from stage "One"', 'Its runs at a gate still wait for you.']]);
-  assert.equal(ctx._calls.setData.length, 1);
-  assert.equal(ctx._calls.render, 1);
-
-  const no = load({ confirm: false });
-  const ctx2 = makeCtx();
-  assert.equal(await no.R.onClick({ target: inStage('[data-rm-park-stage]', {}, 1) }, ctx2, roadmapData()), true);
-  assert.equal(no.calls.api.length, 0);
-  assert.equal(ctx2._calls.render, 1, 'the shared ending redraws');
-});
-
-test('#432 a refused Move on in an open stage menu keeps the menu and calls nothing', async () => {
-  const { R, calls } = load();
-  const ctx = makeCtx();
-  assert.equal(await R.onClick({ target: target({ '[data-rm-stage-menu]': { rmStageMenu: 'st1' } }) }, ctx, roadmapData()), true);
-  assert.equal(ctx._calls.render, 1);
-  assert.equal(await R.onClick({ target: target({ '[data-rm-park-stage][data-refused]': {}, '[data-rm-park-stage]': {}, '[data-stage]': { stage: '0' } }) }, ctx, roadmapData()), true);
-  assert.equal(ctx._calls.render, 2);
-  assert.equal(calls.api.length, 0);
-  assert.equal(calls.confirm.length, 0);
 });
 
 test('#432 the budget\'s Raise goes on at once; Resume anyway asks first and does nothing when declined', async () => {

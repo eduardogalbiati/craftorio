@@ -30,6 +30,7 @@ const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..'
 const roadmapModelSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), 'utf8');
 const statusPillSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'status-pill.js'), 'utf8');
 const estimatesSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'estimates.js'), 'utf8');
+const menuSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'menu.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // `choiceDialog`: #195's push confirmation (checkPushes); `showRunCalls`/`scheduleRenderCalls`: #194's
@@ -93,6 +94,7 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, choiceDialo
   vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195)
   vm.runInContext(roadmapModelSrc, sandbox); // the real RoadmapModel (#349): the view's rules
   vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
+  vm.runInContext(menuSrc, sandbox); // the shared menu (#748) the stage menu is built with
   vm.runInContext(src, sandbox);
   return {
     BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls, liveCalls, showRunCalls, sandbox,

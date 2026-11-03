@@ -26,14 +26,15 @@ async function open(R, d, s) {
   return R.html(d, () => {}, view);
 }
 
-test('#282 stage menu: an entry that is off ignores the click, says why under it, and its menu stays open', async () => {
+test('#282 stage menu: an entry that is off ignores the click, says why in its tooltip (#748), and its menu stays open', async () => {
   const { R, calls } = load();
   const d = data('running');
   const html = await open(R, d, 1);
   const run = H.findEl(menuOf(html, 1).outer, entry('data-rm-run-stage'));
   assert.equal(run.attrs['aria-disabled'], 'true');
   assert.ok(!('disabled' in run.attrs), 'still reachable by the keyboard');
-  assert.match(H.visibleText(menuOf(html, 1).inner), /The roadmap is running: pause or stop it first/, 'the reason is on the line under the entry');
+  assert.match(H.decode(run.attrs.title || ''), /The roadmap is running: pause or stop it first/, 'the reason is in its tooltip');
+  assert.doesNotMatch(H.visibleText(menuOf(html, 1).inner), /The roadmap is running/, 'no line of text between the entries');
   const { ctx } = H.makeCtx();
   assert.equal(await R.onClick(H.clickOn(stageOf(html, 1).outer, entry('data-rm-run-stage')), ctx, d), true);
   assert.equal(calls.start, 0);
