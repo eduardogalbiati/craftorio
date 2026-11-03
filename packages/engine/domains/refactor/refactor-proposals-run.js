@@ -8,7 +8,8 @@
 //   architecture:estimate follows the workflow's runs too), then its findings added to the Refactor
 //   tab's proposals (<workspace>/refactor), as "Send to Refactor" adds them; a finding that matches a
 //   proposal (open or dismissed) or an open `refactor` issue of the synced backlog (every file of the
-//   finding in the issue's Target list) is dropped, with the reason;
+//   finding in the issue's Target list) is dropped, with the reason; each new proposal also files an
+//   `intent` card in the project's Discovery inbox (#633, spec R9);
 // - rank: #357's Product Owner ranking of the open proposals (packages/engine/domains/refactor/refactor-priority.js rankProject,
 //   the tab's own), the run's new proposals in rank order, the top `limit` kept;
 // - file: the kept proposals filed as `refactor` issues naming the Refactor workflow
@@ -20,6 +21,7 @@
 
 const arch = require('../oracle/oracle-architecture');
 const backlog = require('../backlog/backlog');
+const discovery = require('../discovery/discovery');
 const facts = require('../project/architecture-facts');
 const priority = require('./refactor-priority');
 const projects = require('../project/projects');
@@ -93,12 +95,42 @@ function targetFiles(issue) {
  * findings added to the Refactor tab's proposals.
  * → { report_id, added: [{ id, title }], dropped: [{ id, title, status, reason }] }
  */
-function proposeFindings({ wsRoot, projectId, report, costUsd = null, tokens = null, simulated = false, at = null }) {
+function proposeFindings({ wsRoot, projectId, report, costUsd = null, tokens = null, simulated = false, at = null, runId = null }) {
   const stores = storesOf(wsRoot);
   const checked = arch.validateReport(report);
   if (checked.error) throw new Error(checked.error);
   const saved = arch.saveReport(stores.architecture, projectId, { date: new Date().toISOString(), head: at?.head || null, branch: at?.branch || null, costUsd, tokens, simulated: !!simulated, report: checked.report });
-  return { report_id: saved.id, ...addFindings({ wsRoot, projectId, reportId: saved.id, findings: checked.report.findings }) };
+  const result = addFindings({ wsRoot, projectId, reportId: saved.id, findings: checked.report.findings });
+  const intents = fileIntents({ stores, projectId, runId, added: result.added });
+  return { report_id: saved.id, ...result, intents };
+}
+
+/**
+ * #633 (spec R9): each new proposal of the run also comes back as an `intent` card in the project's
+ * Discovery inbox (author analyze-project, links.from { workflow: 'analyze-project', runId, finding:
+ * the proposal's id }), as the Night watch files its findings. A finding already proposed (dropped)
+ * files none. → [{ id, finding }]; a card that cannot be written is skipped, the proposal stays.
+ */
+function fileIntents({ stores, projectId, runId, added }) {
+  const intents = [];
+  for (const { id } of added) {
+    const proposal = proposals.listProposals(stores.refactor, projectId).find((p) => p.id === id);
+    if (!proposal) continue;
+    const files = filesOf(proposal);
+    const say = (v) => (v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
+    const text = [say(proposal.evidence), files.length ? `Files: ${files.join(', ')}` : '', proposal.refactor ? `Refactor: ${say(proposal.refactor)}` : ''].filter(Boolean).join('\n\n');
+    try {
+      const card = discovery.createCard(stores.discovery, projectId, {
+        title: `analyze-project: ${proposal.title}`,
+        text,
+        type: 'intent',
+        author: 'analyze-project',
+        from: { workflow: 'analyze-project', runId, finding: id },
+      });
+      intents.push({ id: card.id, finding: id });
+    } catch { /* a project id that is no plain name, a full disk: the finding stays a Refactor proposal */ }
+  }
+  return intents;
 }
 
 /**

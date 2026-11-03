@@ -44,7 +44,7 @@ const methods = {
       const costUsd = turns.reduce((sum, s) => sum + (s.costUsd || 0) + (s.cliOnlyUsd || 0), 0);
       const factsId = this.wf.steps.find((s) => s.type === 'refactor_proposals' && s.action === 'facts')?.id;
       const at = factsId ? this.ctx.steps[factsId]?.output : null;
-      const output = work.proposeFindings({ ...place, report: from, costUsd, tokens: turns[0]?.tokens || null, simulated, at });
+      const output = work.proposeFindings({ ...place, report: from, costUsd, tokens: turns[0]?.tokens || null, simulated, at, runId: this.runId || null });
       log('info', `${output.added.length} new proposal(s); ${output.dropped.length} finding(s) dropped${output.dropped.length ? `: ${output.dropped.map((d) => `${d.title} (${d.reason})`).join('; ')}` : ''}.`);
       return output;
     }
