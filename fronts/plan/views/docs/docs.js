@@ -47,8 +47,6 @@
   // an item's front matter `stage` (or its latest document) → its SDLC step
   const STAGE_STEP = { intent: 0, spec: 1, design: 1, plan: 2, build: 2, test: 3, deploy: 4, maintain: 5 };
   const stepOfDoc = (doc) => SDLC.findIndex((s) => s.doc === doc);
-  // the list's button that opens each document
-  const OPEN_LABEL = { intent: () => t('docs.open_intent'), spec: () => t('docs.open_spec'), plan: () => t('docs.open_plan') };
   // the spec's cost estimates of a first draft (spec.md, Points of attention › Cost)
   const ESTIMATES = { intent: '$0.30–1.00', spec: '$1.00–3.00' };
 
@@ -97,7 +95,7 @@
     const names = it.docs.map((d) => d.doc);
     if (it.runId && !names.includes(it.runDoc)) names.push(it.runDoc);
     const run = (doc) => (it.runId && it.runDoc === doc ? ` data-run="${esc(it.runId)}"` : '');
-    const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${OPEN_LABEL[doc]?.() ?? t('docs.open_intent')}</button>`);
+    const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${DocsPanels.openLabel(doc)}</button>`);
     if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
     // #633 the plan (plan.md) is written from the signed-off spec, at its own gate
     if (spec && signedOff(spec.status) && !names.includes('plan')) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
@@ -161,10 +159,8 @@
   }
 
   function onListClick(e) {
-    const write = e.target.closest('[data-docs-write-spec]');
-    if (write) return startDoc(write.dataset.item, 'spec', null);
-    const plan = e.target.closest('[data-docs-write-plan]');
-    if (plan) return startDoc(plan.dataset.item, 'plan', null);
+    const write = e.target.closest('[data-docs-write-spec], [data-docs-write-plan]');
+    if (write) return startDoc(write.dataset.item, 'docsWritePlan' in write.dataset ? 'plan' : 'spec', null);
     const issues = e.target.closest('[data-docs-issues]');
     if (issues) return proposeIssues(issues.dataset.item);
     const open = e.target.closest('[data-docs-open]');

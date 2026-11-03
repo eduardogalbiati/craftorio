@@ -790,10 +790,22 @@
     openCard: (id) => { showView('inbox'); return openCard(id); },
   };
 
+  // Where a card came from (links.from): a committed card's id (a new learning), or a finding of a run
+  // (an intent of the Night watch or analyze-project, #633: { workflow, runId, finding }).
+  function fromHtml(from) {
+    if (!from) return '';
+    if (typeof from === 'object') {
+      const tip = t('discovery.from_finding', { workflow: esc(from.workflow || ''), runId: esc(from.runId || '') });
+      return `<span data-testid="card-from" title="${tip}">${t('discovery.from')} <span class="mono">${esc(from.workflow || '')}</span></span>`;
+    }
+    return `<span data-testid="card-from" title="${t('discovery.new_learning_from_the_committed_card', { from: esc(from) })}">${t('discovery.from')} <span class="mono">${esc(from)}</span></span>`;
+  }
+
   // a card's files and thread, drawn the same way in the Discovery board's card panel (#257)
   window.DiscoveryCardParts = {
     attachmentsHtml,
     CLIP,
+    fromHtml,
     hasFiles,
     IMAGE,
     readFiles,

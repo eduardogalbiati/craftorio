@@ -21,7 +21,7 @@
 
 const arch = require('../oracle/oracle-architecture');
 const backlog = require('../backlog/backlog');
-const discovery = require('../discovery/discovery');
+const { createIntent } = require('../discovery/intents');
 const facts = require('../project/architecture-facts');
 const priority = require('./refactor-priority');
 const projects = require('../project/projects');
@@ -121,7 +121,7 @@ function fileIntents({ stores, projectId, runId, added }) {
     if (!proposal) continue;
     const files = filesOf(proposal);
     const text = [say(proposal.evidence), files.length ? `Files: ${files.join(', ')}` : '', proposal.refactor ? `Refactor: ${say(proposal.refactor)}` : ''].filter(Boolean).join('\n\n');
-    const card = discovery.createIntent(stores.discovery, projectId, { workflow: 'analyze-project', runId, finding: id, title: `analyze-project: ${proposal.title}`, text });
+    const card = createIntent(stores.discovery, projectId, { workflow: 'analyze-project', runId, finding: id, title: `analyze-project: ${proposal.title}`, text });
     if (card) intents.push({ id: card.id, finding: id });
   }
   return intents;

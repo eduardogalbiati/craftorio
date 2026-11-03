@@ -67,7 +67,7 @@ What each run, queue, gate and notification file holds, and how old runs upgrade
   Backlog each issue's card from the `card.json` files alone), `filed/<iso ts>-issue-<n>.md` the
   text of each issue, a thread entry `{ kind: 'commit', issues }`; `links.from` on a card created
   from another (`createCard`'s `from`), or `{ workflow, runId, finding }` on an `intent` filed from
-  a run's finding (#633, `createIntent`: the Night watch, analyze-project). Its delivery is never stored: the `discovery:board`
+  a run's finding (#633, `intents.js` `createIntent`: the Night watch, analyze-project). Its delivery is never stored: the `discovery:board`
   channel computes it on each read from the synced backlog and the release history. Every
   file is written whole (temp file + rename, `writeFileAtomic` in `packages/engine/domains/workspace/state-file.js`); project
   ids, card ids and attachment names are checked before a path is built, so nothing outside a

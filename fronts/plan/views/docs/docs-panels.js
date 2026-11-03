@@ -128,8 +128,13 @@
       </div>`; // i18n-ignore
   }
 
+  // the list's button that opens each document (#633: plan.md, written from the signed-off spec)
+  const OPEN_LABEL = { intent: 'docs.open_intent', spec: 'docs.open_spec', plan: 'docs.open_plan' };
+  const openLabel = (doc) => t(OPEN_LABEL[doc] || OPEN_LABEL.intent);
+
   window.DocsPanels = {
     newItemPanel,
+    openLabel,
     review,
     signoff,
     toolbar,

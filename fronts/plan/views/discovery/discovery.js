@@ -743,17 +743,6 @@
     } catch (e) { detailError(errMsg(e)); }
   }
 
-  // Where the card came from: a committed card's id (a new learning), or a finding of a run (an
-  // intent of the Night watch or analyze-project, #633: { workflow, runId, finding }).
-  function cardFrom(from) {
-    if (!from) return '';
-    if (typeof from === 'object') {
-      const tip = t('discovery.from_finding', { workflow: esc(from.workflow || ''), runId: esc(from.runId || '') });
-      return `<span data-testid="card-from" title="${tip}">${t('discovery.from')} <span class="mono">${esc(from.workflow || '')}</span></span>`;
-    }
-    return `<span data-testid="card-from" title="${t('discovery.new_learning_from_the_committed_card', { from: esc(from) })}">${t('discovery.from')} <span class="mono">${esc(from)}</span></span>`;
-  }
-
   function renderDetail() {
     const c = dv.open;
     if (!c) return;
@@ -771,7 +760,7 @@
             <span>${esc(c.author)}</span>
             <span>${esc(dateOf(c.created))}</span>
             <span class="mono" title="${t('discovery.the_card_s_folder_in_the')}">${esc(c.id)}</span>
-            ${cardFrom(c.links?.from)}
+            ${parts().fromHtml(c.links?.from)}
             ${ro ? `<span class="badge" data-testid="card-read-only" title="${t('discovery.committed_to_the_backlog_the_card')}">${t('discovery.committed_read_only')}</span>` : ''}
           </p>
           <div class="dsc-fields">

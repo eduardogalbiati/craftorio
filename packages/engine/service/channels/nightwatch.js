@@ -35,7 +35,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const backlog = require('../../domains/backlog/backlog');
-const discovery = require('../../domains/discovery/discovery');
+const intents = require('../../domains/discovery/intents');
 const actions = require('../../domains/oracle/oracle-actions');
 const night = require('../../domains/night/night-watch');
 const nightLimits = require('../../domains/night/night-limits');
@@ -116,10 +116,10 @@ module.exports = (ctx) => {
     if (runId && projectId) fileIntent({ id, kind, runId, projectId, evidence });
   }
   // #633: a finding in a run of a project comes back as an intent in that project's Discovery inbox
-  // (discovery.createIntent; a card that cannot be written: the finding stays in the night log)
+  // (intents.createIntent; a card that cannot be written: the finding stays in the night log)
   function fileIntent({ id, kind, runId, projectId, evidence }) {
     const text = evidence == null ? '' : typeof evidence === 'string' ? evidence : JSON.stringify(evidence, null, 2);
-    discovery.createIntent(ctx.ws.discovery || workspace.layout(ctx.ws.root).discovery, projectId, {
+    intents.createIntent(ctx.ws.discovery || workspace.layout(ctx.ws.root).discovery, projectId, {
       workflow: 'night-watch', runId, finding: id, title: `Night watch: ${kind} in run ${runId}`, text, author: 'oracle',
     });
   }
