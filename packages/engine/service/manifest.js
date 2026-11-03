@@ -83,6 +83,7 @@ const PUSHED_EVENTS = [
   'backlog:changed',
   'baseCheck:changed',
   'chat:progress',
+  'cli-setup:changed',
   'notifications:changed',
   'onboarding:changed',
   'oracle:changed',

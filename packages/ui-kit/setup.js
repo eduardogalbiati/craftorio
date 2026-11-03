@@ -2,11 +2,14 @@
 // (#643: no Workflows step any more), and Back / Next / Skip (Enter = Next, Esc = Skip after a confirm, app.js). app.js
 // opens it once per workspace (settings.setupDone === false, after the workspace dialog and under
 // the sign-in screen while it shows); Settings › Agents & CLIs › Run setup again reopens it. Finish
-// or Skip saves setupDone, so it never opens by itself again.
+// or Skip saves setupDone, so it never opens by itself again. #740: it stays first-run only; the CLIs
+// are managed in Settings › Agents & CLIs (views/settings/settings-clis.js, the same rows: window.SetupRows),
+// which the project wizard's Open Setup opens instead of this modal.
 // - Agents: one row per CLI (env:details) with its status badge, version, account and what it is
 //   for (SetupModel), and one action, ▶ Install or ▶ Sign in, run in the terminal dock
 //   (runSuggestedCommand, command-hint.js); a row re-checks when its terminal exits; disabled with
-//   a tooltip where no terminal can run it (the browser UI, canRunCommands).
+//   a tooltip where no terminal can run it (canRunCommands). #740: in the browser UI the action runs on
+//   the engine's machine (SettingsClis.run, cli-setup:start) with its console under the rows.
 // - Try it safely: Show simulation mode (= settings.developerMode), on by default on a first run,
 //   and the machine profile's line (#367: runs at once and test workers sized from this machine).
 // - First project: the projects, and New project opening the onboarding wizard (#643,
@@ -89,22 +92,25 @@
   const statesOf = () => Object.fromEntries((setup.tools || []).map((t) => [t.id, window.SetupModel.statusBadge(t).state]));
   const bundled = () => (state.workflows || []).filter((w) => !w.error && w.origin !== 'custom' && w.requirements);
 
+  // #740: data-cli-id / data-cli-action name the engine's job (cli-setup:start) the button starts
   function actionButton(tool) {
     const off = !canRunCommands();
     const tip = off ? ` title="${esc(NO_TERMINAL_HINT)}"` : '';
-    if (!tool.path && tool.installCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.installCommand)}" data-testid="setup-install-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.install()}</button>`;
-    if (tool.path && !tool.connected && tool.auth && tool.signInCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.signInCommand)}" data-sign-in data-testid="setup-sign-in-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.signIn()}</button>`;
+    if (!tool.path && tool.installCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.installCommand)}" data-cli-id="${esc(tool.id)}" data-cli-action="install" data-testid="setup-install-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.install()}</button>`;
+    if (tool.path && !tool.connected && tool.auth && tool.signInCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.signInCommand)}" data-sign-in data-cli-id="${esc(tool.id)}" data-cli-action="login" data-testid="setup-sign-in-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.signIn()}</button>`;
     return '';
   }
 
-  function cliRow(tool) {
+  // One CLI's row (also Settings › Agents & CLIs', #740: window.SetupRows); `highlight`: the id of the CLI
+  // a deep link was opened for (data-highlight on its row only).
+  function cliRow(tool, { highlight = null } = {}) {
     const badge = window.SetupModel.statusBadge(tool);
     const need = window.SetupModel.toolRequirement(tool.id);
     const detail = tool.checking ? '' : tool.path ? [tool.version, tool.account ? t('setup.account', { account: tool.account }) : ''].filter(Boolean).join(' · ')
       : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: tool.installHint }) : '';
     const command = !tool.checking && !tool.path ? tool.installCommand : !tool.checking && !tool.connected && tool.auth ? tool.signInCommand : null;
     return `
-      <div class="s-row setup-cli" data-testid="setup-cli-${esc(tool.id)}">
+      <div class="s-row setup-cli${highlight && tool.id === highlight ? ' highlight' : ''}" data-testid="setup-cli-${esc(tool.id)}"${highlight && tool.id === highlight ? ' data-highlight' : ''}>
         <div class="s-label">
           <b>${esc(tool.name || window.SetupModel.toolName(tool.id))}</b>
           <span><span class="badge${need === t('setup.required') ? ' setup-required' : ''}">${esc(need)}</span>${detail ? ` <span title="${esc(detail)}">${esc(detail)}</span>` : ''}</span>
@@ -133,7 +139,8 @@
     const ids = ['claude', 'codex', 'grok', 'gh', 'glab', 'git'];
     const tools = setup.tools || ids.map((id) => ({ id, checking: true }));
     return `
-      <div class="s-group setup-clis">${tools.map(cliRow).join('')}</div>
+      <div class="s-group setup-clis">${tools.map((tool) => cliRow(tool)).join('')}</div>
+      ${setup.job && window.SettingsClis ? window.SettingsClis.consoleHtml(setup.job) : ''}
       <div class="row setup-row">
         <button type="button" class="btn sm ghost" data-setup-check data-testid="setup-check-again" ${setup.tools ? '' : 'disabled'}>${t('setup.check_again')}</button>
         <span class="muted small">${t('setup.check_again_help')}</span>
@@ -149,6 +156,18 @@
   }
 
   async function runAction(btn) {
+    // #740: in the browser UI the command runs on the engine's machine (Settings › Agents & CLIs' job),
+    // its console under the rows; the CLIs are checked again when it ends
+    if (api.platform === 'browser' && window.SettingsClis) {
+      await window.SettingsClis.run(btn.dataset.cliId, btn.dataset.cliAction, {
+        onChange: (job) => {
+          setup.job = job;
+          if (setup.open && STEPS[setup.step].id === 'agents') render();
+          if (job.status !== 'running' && job.status !== 'manual' && setup.open) checkAgents();
+        },
+      });
+      return;
+    }
     const tab = await runSuggestedCommand(btn.dataset.setupRun, { signIn: btn.dataset.signIn !== undefined });
     // the dock's own repaint, then this row's CLI checked again (the terminal ended: installed, signed in)
     if (tab) tab.onChange = () => { renderTermTabs(); if (setup.open) checkAgents(); };
@@ -308,4 +327,5 @@
 
   registerView({ id: 'setup', modals, mount });
   window.Setup = { isOpen: () => setup.open, open, skip };
+  window.SetupRows = { cliRow };
 })();

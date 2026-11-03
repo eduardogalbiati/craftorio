@@ -2,7 +2,7 @@
 // Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
 // its Rebuild index, packages/engine/domains/workspace/store.js), Agents & CLIs (installed CLIs and
-// their sign-in), Execution (where the engine runs (settings-engine.js), developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
+// their sign-in on the engine's machine, #740: settings-clis.js, also window.Settings.open's deep link), Execution (where the engine runs (settings-engine.js), developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js). #329: its markup is
@@ -570,22 +570,10 @@ async function clearDepsCache() {
   }
 }
 
+// #740: the CLIs' rows are the first-run Setup's (status, version, account, ▶ Install / ▶ Sign in, run on
+// the engine's machine): settings-clis.js
 async function renderTools() {
-  const box = $('#set-tools');
-  box.innerHTML = `<div class="s-row"><div class="s-label"><span>${t('settings.checking')}</span></div></div>`;
-  const tools = await api.envDetails();
-  if (typeof setCliStates === 'function') setCliStates(tools); // the Start panel's missing CLIs follow (#319)
-  box.innerHTML = tools.map((tool) => `
-    <div class="s-row">
-      <div class="s-label">
-        <b>${esc(tool.name)}</b>
-        <span>${tool.path ? esc(tool.version || t('settings.tools.unknown_version')) : t('settings.tools.not_in_path')}${tool.account ? t('settings.tools.account', { account: esc(tool.account) }) : ''}</span>
-        ${tool.path ? `<code>${esc(tool.path)}</code>` : tool.installCommand ? commandHint(tool.installCommand) : tool.installHint ? `<span>${t('settings.tools.install', { hint: esc(tool.installHint) })}</span>` : ''}
-        ${tool.path && !tool.connected && tool.auth && tool.signInCommand ? commandHint(tool.signInCommand, { signIn: true }) : ''}
-        ${tool.path && !tool.connected && tool.output ? `<pre class="small muted">${esc(tool.output)}</pre>` : ''}
-      </div>
-      <div class="s-ctrl"><span class="conn ${tool.connected ? 'on' : 'off'}"><span class="conn-dot"></span>${tool.connected ? t('settings.tools.connected') : tool.path ? (tool.auth ? t('setup.status.signed_out') : t('settings.tools.error')) : t('setup.status.missing')}</span></div>
-    </div>`).join('');
+  await window.SettingsClis.render();
 }
 
 async function renderAbout() {
@@ -622,6 +610,7 @@ registerView({
     $('#btn-fallbacks-save').onclick = () => saveFallbackSettings().catch((e) => { $('#set-fallbacks-msg').className = 'small error'; $('#set-fallbacks-msg').textContent = e.message; });
     $('#btn-fallbacks-cancel').onclick = renderFallbackSettings;
     $('#btn-setup-again').onclick = () => window.Setup.open();
+    window.SettingsClis.mount(); // #740: the CLIs' actions, the console and the close button
     document.querySelectorAll('[data-setting]').forEach((el) => (el.onchange = async () => {
       state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });
       if (el.dataset.setting === 'developerMode') applyDeveloperMode();

@@ -27,8 +27,10 @@ async function runSuggestedCommand(command, { signIn = false } = {}) {
 }
 
 // #319: whether a suggested command can run here: the browser UI (npm run serve) may be on another
-// computer than the app, and without the terminal component nothing can show the command.
-const canRunCommands = () => api.platform !== 'browser' && typeof Terminal !== 'undefined';
+// computer than the app, and without the terminal component nothing can show the command. #740: a CLI's
+// install / sign-in runs on the engine's machine as a job (cli-setup:start, Settings › Agents & CLIs,
+// views/settings/settings-clis.js) when the engine offers it, so the browser UI can run those too.
+const canRunCommands = () => (api.platform === 'browser' ? typeof api.cliSetupStart === 'function' : typeof Terminal !== 'undefined');
 const NO_TERMINAL_HINT = 'Run this on the computer where the app runs';
 
 document.addEventListener('click', (e) => {

@@ -28,4 +28,16 @@ body.setup-open .term-dock { z-index: 11; }
 .setup-cmd { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-modal .setup-out { margin: 4px 0 0; padding: 6px 8px; max-height: 6.5em; overflow: auto; font-size: 11px; white-space: pre-wrap; background: var(--panel-2); border-radius: 6px; color: var(--muted); }
 .setup-note { margin: 0; }
+/* #740 Settings › Agents & CLIs (views/settings/settings-clis.js): the same rows, the deep link's CLI marked,
+   and the console of an Install / Sign in run on the engine's machine */
+.settings-clis-head { align-items: center; gap: 8px; }
+.settings-clis-head .spacer { flex: 1; }
+.setup-cli.highlight { box-shadow: inset 3px 0 0 var(--accent); background: rgba(124,156,255,.08); }
+.cli-console { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.cli-console-head { align-items: center; gap: 8px; }
+.cli-console-head .spacer { flex: 1; }
+.cli-console .badge { font-family: inherit; }
+.cli-device { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cli-device-code { font-family: var(--mono); font-size: 16px; letter-spacing: 1px; }
+.cli-console-out { margin: 0; padding: 6px 8px; max-height: 14em; overflow: auto; font-size: 11px; font-family: var(--mono); white-space: pre-wrap; color: var(--muted); }
 .setup-empty { padding: 28px 16px; }

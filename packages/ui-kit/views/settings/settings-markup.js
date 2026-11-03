@@ -140,13 +140,21 @@
             </div>
 
             <div class="settings-page hidden" data-spage="agents">
-              <h2 class="settings-title">${t('settings.tabs.agents')}</h2>
-              <p class="muted small">${t('settings.agents.intro')}</p>
-              <div id="set-tools" class="s-group"><div class="s-row"><div class="s-label"><span>${t('settings.checking')}</span></div></div></div>
-              <div class="row">
-                <button id="btn-tools-refresh" class="btn sm ghost">${t('settings.agents.check_again')}</button>
-                <button id="btn-setup-again" class="btn sm ghost" data-testid="setup-again">${t('settings.agents.setup_again')}</button>
-              </div>
+              <!-- #740: the CLIs on the engine's machine (settings-clis.js), the Setup's rows, a close button, no stepper -->
+              <section class="settings-clis" data-testid="settings-clis" aria-labelledby="settings-clis-title">
+                <div class="row settings-clis-head">
+                  <h2 id="settings-clis-title" class="settings-title">${t('settings.tabs.agents')}</h2>
+                  <span class="spacer"></span>
+                  <button type="button" id="btn-settings-clis-close" class="icon-btn" data-testid="settings-clis-close" aria-label="${t('settings.agents.close')}" title="${t('settings.agents.close')}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg></button>
+                </div>
+                <p class="muted small">${t('settings.agents.intro')}</p>
+                <div id="set-tools" class="s-group"><div class="s-row"><div class="s-label"><span>${t('settings.checking')}</span></div></div></div>
+                <div id="set-cli-console"></div>
+                <div class="row">
+                  <button type="button" id="btn-tools-refresh" class="btn sm ghost">${t('settings.agents.check_again')}</button>
+                  <button type="button" id="btn-setup-again" class="btn sm ghost" data-testid="setup-again">${t('settings.agents.setup_again')}</button>
+                </div>
+              </section>
               <h3 class="s-subtitle">${t('settings.fallbacks.title')}</h3>
               <p class="muted small">${t('settings.fallbacks.intro')}</p>
               <div id="set-fallbacks" class="s-group" data-testid="settings-fallbacks"></div>

@@ -39,6 +39,7 @@ module.exports = [
   { channel: 'backlog:save-doc', reason: 'writes an issue with gh/glab' },
   { channel: 'backlog:sync', reason: 'reads the issues with gh/glab and fetches origin' },
   { channel: 'backlog:update-push', reason: 'git fetch/rebase/push of a project base branch' },
+  { channel: 'cli-setup:start', reason: 'installs software or signs a CLI in on the machine (#740)' },
   { channel: 'depsCache:clear', reason: "empties the machine's shared dependency cache, used by every run" },
   { channel: 'env:details', reason: 'runs every installed CLI (--version) and gh auth status (network): ~5 s on a machine with the CLIs' },
   { channel: 'localPreview:start', reason: "starts a project's dev server process" },

@@ -15,6 +15,10 @@ const {
   signInCommands,
 } = require('../../domains/machine/install-commands');
 const providerAccounts = require('../../domains/cli/provider-accounts');
+const {
+  simulatedInstallCommand,
+  simulatedState,
+} = require('../../domains/machine/simulated-clis');
 const { runTool } = require('../common');
 
 const lastLines = (text, n = 4) => String(text || '').split(/\r?\n/).filter((l) => l.trim()).slice(-n).join('\n') || null;
@@ -37,6 +41,9 @@ const accountOf = (out) => (String(out || '').match(/account (\S+)/) || String(o
 // check (#640) and the wizard's badges (#669).
 async function toolSignIn(id, env) {
   const tool = TOOLS.find((t) => t.id === id);
+  // #740: a CLI the E2E hook makes missing (simulation only), until its simulated Install
+  const simulated = simulatedState(id);
+  if (simulated) return { installed: simulated === 'installed', signedIn: false };
   const r = await resolveCommandAsync(id);
   if (!r) return { installed: false, signedIn: false };
   const a = tool?.auth ? await runTool(r.file, tool.auth, env) : null;
@@ -48,8 +55,12 @@ module.exports = () => {
     // #398: the brew commands only with Homebrew (looked up on macOS only)
     const opts = { brew: process.platform === 'darwin' && !!(await resolveCommandAsync('brew')) };
     return Promise.all(TOOLS.map(async (t) => {
-      const r = await resolveCommandAsync(t.id); // #389: never blocks the main process
       const signInCommand = signInCommands()[t.id] || null;
+      // #740: a CLI the E2E hook makes missing (simulation only): not found, then found and signed out
+      const simulated = simulatedState(t.id);
+      if (simulated === 'missing') return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts) || simulatedInstallCommand(t.id), installHint: null, signInCommand };
+      if (simulated === 'installed') return { id: t.id, name: t.name, path: `(simulated) ${t.id}`, version: `${t.id} (simulated)`, connected: false, auth: !!t.auth, signInCommand };
+      const r = await resolveCommandAsync(t.id); // #389: never blocks the main process
       if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts), installHint: installHint(t.id, process.platform, opts), signInCommand };
       const v = await runTool(r.file, t.args);
       const out = { id: t.id, name: t.name, path: r.file, version: v.ok ? v.out.split(/\r?\n/)[0] : null, connected: v.ok, auth: !!(t.auth || (t.signedIn && v.ok)), signInCommand };
