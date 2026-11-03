@@ -54,7 +54,7 @@ function seed({ ws, project, src, args }) {
   store.writeState(ws.monitor || path.join(ws.root, 'monitor'), project.id, {
     sources: [
       { id: 'sentry', type: 'sentry', label: 'Sentry', org: 'acme', project: 'api', polledAt: new Date(now - 2 * MIN).toISOString() },
-      { id: 'api-logs', type: 'log-file', label: 'api logs', path: '/var/log/api.log', polledAt: new Date(now - 4 * MIN).toISOString() },
+      { id: 'api-logs', type: 'log-file', label: 'api logs', path: '/var/log/api.log', every: 5 }, // not polled yet: "every 5 min", as in mock-8
     ],
     events: Object.fromEntries(evs.map((e) => [`${e.source}:${e.id}`, e])),
     groups,
