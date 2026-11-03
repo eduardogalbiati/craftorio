@@ -170,7 +170,7 @@ test('the ⋯ menu holds Enrich in Write & Review above Archive; rows and cards 
   assert.ok(archiveAt > enrichAt, 'Enrich sits above Archive');
   assert.match(menu, /data-testid="backlog-enrich"/);
   assert.match(menu, />\$\{t\('backlog\.enrich_in_write_review'\)\}</);
-  assert.equal(en['backlog.enrich_in_write_review'], 'Enrich in Write &amp; Review');
+  assert.equal(en['backlog.enrich_in_write_review'], 'Enrich in Documents');
   // the separate link is gone: Enrich appears in the view only inside the menu
   const drawers = chunks.filter((c) => /data-enrich="/.test(c.text)).map((c) => c.name);
   assert.deepEqual(drawers, ['issueMenu']);

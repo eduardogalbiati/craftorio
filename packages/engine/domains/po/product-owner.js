@@ -112,8 +112,8 @@ const PREVIOUS_EXCHANGES = 3;
 const CONTEXT_WARN_AT = 7;
 const TEST_TIME_WARN_AT = 5;
 const DEFAULT_COMPLEXITY = 3;
-// how to enrich an issue: the README's Writer & Reviewer section (Enrich in Write & Review)
-const ENRICH_GUIDE = 'https://github.com/eduardogalbiati/multiagent-orchestrator#writer--reviewer-workflowswriter-revieweryaml';
+// how to enrich an issue: the README's Write doc section (#648: the Backlog's Enrich starts write-doc)
+const ENRICH_GUIDE = 'https://github.com/eduardogalbiati/multiagent-orchestrator#write-doc-workflowswrite-docyaml';
 
 const ANSWER_SCHEMA = {
   type: 'object',

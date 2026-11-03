@@ -79,14 +79,9 @@ const SHAPE_TASK = [
   '<document>\n{{ card.document }}\n</document>',
   '<acceptance_criteria>\n{{ card.acceptance }}\n</acceptance_criteria>',
 ].join('\n\n');
-// the default `on_enter` of the columns (#259): what a move into them may start. Shape writes the
-// card's intent with write-doc (#648: it absorbed the AI Arena → Write & Review pipeline), under
-// docs/work/<card.item>/, the card's title as the item's name
+// the default `on_enter` of the columns (#259): what a move into them may start (#648: Shape writes the card's intent with write-doc)
 const ON_ENTER = {
-  shape: {
-    workflow: 'write-doc.yaml', name: 'Write doc', mode: 'ask',
-    inputs: { item: '{{ card.item }}', document: 'intent', title: '{{ card.title }}', prompt: SHAPE_TASK },
-  },
+  shape: { workflow: 'write-doc.yaml', name: 'Write doc', mode: 'ask', inputs: { item: '{{ card.item }}', document: 'intent', title: '{{ card.title }}', prompt: SHAPE_TASK } },
   ready: { check: 'clarity', name: 'Clarity check', mode: 'ask' },
 };
 // the document type Write & Review and the AI Arena shape a card into ({{ card.document_skill }})

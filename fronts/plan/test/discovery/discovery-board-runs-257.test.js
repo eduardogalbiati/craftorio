@@ -1,5 +1,5 @@
 // #257 Discovery board, what the acceptance tests leave out (the developer's own tests): a run
-// started from a card (Open in Write & Review / AI Arena) is tied to it and its document comes back
+// started for a card (Write a document; #648: the Write & Review / AI Arena buttons left the card, their past runs still come back) is tied to it and its document comes back
 // through discovery:record-result when the run finishes (window.DiscoveryRuns, views/discovery/
 // discovery.js, with the hooks in views/duo/duo.js and views/arena/arena.js), also when it ended
 // while nobody listened; a card outside the fast lane that skips Shape asks first; an edit with
@@ -85,62 +85,6 @@ test('a run that ended while nobody listened is caught up when the board opens',
   assert.deepEqual(page.callsTo('recordDiscoveryResult'), [[P, c.id, 'ai-arena', 'Arena answer', 'run-9']]);
   // the running run is still awaited and so is the one that could not be read; the deleted run's link is dropped
   assert.deepEqual(Object.keys(JSON.parse(page.sandbox.localStorage.getItem('discovery.runs'))), ['run-live', 'run-unread']);
-});
-
-test('Open in Write & Review fills the setup with the card\'s document; the run started there is the card\'s', async () => {
-  const c = card({ title: 'Export runs', type: 'prd', column: 'shape', document: 'As CSV, per night.', acceptance: '- a file is written' });
-  const page = await openBoard({ cards: [c], api: { startRun: async () => ({ runId: 'run-wr' }) } });
-  const detail = await page.openCard(c.id);
-  detail.querySelector('[data-testid="card-open-write-review"]').click();
-  await settle(20);
-  assert.equal(page.run('state.view'), 'duo');
-  const prompt = page.$('#duo-prompt').value;
-  assert.match(prompt, /Export runs/);
-  assert.match(prompt, /As CSV, per night\./);
-  assert.match(prompt, /a file is written/);
-  assert.ok(page.$('#duo-goal').value, 'a goal is prefilled');
-  assert.equal(page.$('#duo-skill').value, 'prd-writing', 'a PRD card asks for a PRD');
-  assert.match(page.$('#duo-issue').textContent, /Export runs/, 'the banner names the card');
-  page.$('#duo-mock').checked = false;
-  page.$('#duo-run').click();
-  await settle(40);
-  assert.equal(page.callsTo('startRun').length, 1);
-  finished(page, { run_id: 'run-wr', status: 'success', outputs: { document: '# PRD' } });
-  await settle(20);
-  assert.deepEqual(page.callsTo('recordDiscoveryResult'), [[P, c.id, 'write-review', '# PRD', 'run-wr']]);
-});
-
-test('"not about this card" unties Write & Review from the card: its run records nothing', async () => {
-  const c = card({ title: 'Export runs', column: 'shape', document: 'As CSV.' });
-  const page = await openBoard({ cards: [c], api: { startRun: async () => ({ runId: 'run-free' }) } });
-  const detail = await page.openCard(c.id);
-  detail.querySelector('[data-testid="card-open-write-review"]').click();
-  await settle(20);
-  page.$('#duo-card-clear').click();
-  page.$('#duo-mock').checked = false;
-  page.$('#duo-run').click();
-  await settle(40);
-  finished(page, { run_id: 'run-free', status: 'success', outputs: { document: '# Doc' } });
-  await settle(20);
-  assert.equal(page.callsTo('recordDiscoveryResult').length, 0);
-});
-
-test('Open in AI Arena fills the request with the card\'s document; the run started there is the card\'s', async () => {
-  const c = card({ title: 'Plugin API', type: 'rfc', column: 'shape', document: 'Steps from plugins.' });
-  const page = await openBoard({ cards: [c], api: { startRun: async () => ({ runId: 'run-ar' }) } });
-  const detail = await page.openCard(c.id);
-  detail.querySelector('[data-testid="card-open-arena"]').click();
-  await settle(20);
-  assert.equal(page.run('state.view'), 'arena');
-  assert.match(page.$('#arena-task').value, /Steps from plugins\./);
-  assert.match(page.$('#arena-card').textContent, /Plugin API/, 'the banner names the card');
-  page.$('#arena-mock').checked = false;
-  page.$('#arena-run').click();
-  await settle(40);
-  assert.equal(page.callsTo('startRun').length, 1);
-  finished(page, { run_id: 'run-ar', status: 'success', outputs: { document: '# RFC' } });
-  await settle(20);
-  assert.deepEqual(page.callsTo('recordDiscoveryResult'), [[P, c.id, 'ai-arena', '# RFC', 'run-ar']]);
 });
 
 test('an idea moved from Triage straight to Define asks first (it skips Shape); on no it stays', async () => {

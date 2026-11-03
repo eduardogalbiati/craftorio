@@ -20,8 +20,8 @@
 // card-move ("Move to…" → role="menuitem" items named by column title); discovery-wip-edit[data-column];
 // discovery-filter-type / -tag / -author, discovery-search; discovery-card-detail with
 // card-document-editor, card-document-preview, card-acceptance, card-attachments, card-thread,
-// card-versions > card-version (card-version-open, card-version-restore), card-open-write-review,
-// card-open-arena. A move past a WIP limit asks app.js's confirmDialog (#confirm-modal,
+// card-versions > card-version (card-version-open, card-version-restore), card-write-doc
+// (#648: no more card-open-write-review / card-open-arena). A move past a WIP limit asks app.js's confirmDialog (#confirm-modal,
 // #btn-confirm-yes / #btn-confirm-no).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -223,8 +223,10 @@ test('the card detail shows the document in an editor with a preview, the accept
   assert.match(page.text(part('card-acceptance')), /a file is written/);
   assert.match(page.text(part('card-attachments')), /mock\.png/);
   assert.match(page.text(part('card-thread')), /Looks good/);
-  assert.ok(part('card-open-write-review'), 'a Shape card offers Open in Write & Review');
-  assert.ok(part('card-open-arena'), 'a Shape card offers Open in AI Arena');
+  // #648: Write & Review and AI Arena left the card; a Shape card writes its document with write-doc
+  assert.ok(part('card-write-doc'), 'a Shape card offers Write a document');
+  assert.equal(part('card-open-write-review'), null, 'no Open in Write & Review');
+  assert.equal(part('card-open-arena'), null, 'no Open in AI Arena');
 });
 
 test('a Write & Review result shows in the detail as the newest version and a thread entry', async () => {

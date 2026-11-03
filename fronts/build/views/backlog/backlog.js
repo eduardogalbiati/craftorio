@@ -388,9 +388,7 @@
     window.showRun(el.dataset.run, { workflow: el.dataset.workflow });
   }
 
-  // "Enrich" (#103; #648: write-doc, Write & Review left the menu): the writer on the issue's spec, in
-  // this project, opened in the Documents editor (window.writeDocForCard, views/docs/docs.js); the run
-  // records the issue, the prompt is its title, number, labels and body (DuoIssue.issuePrompt).
+  // "Enrich" (#103; #648: write-doc in the Documents editor, window.writeDocForCard): the prompt is the issue (DuoIssue.issuePrompt)
   function enrichIssue(number) {
     const issue = bl.data?.issues?.find((i) => i.number === number);
     if (!issue) return;
