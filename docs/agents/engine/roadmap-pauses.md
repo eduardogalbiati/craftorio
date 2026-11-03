@@ -21,3 +21,13 @@ The three ways to pause a roadmap, where each one is written and when each one s
   scope ("stage N only" is #141's), `pausingAfterStage` is the bar's "Pausing after stage N" badge
   (with Cancel pause), read from the file so it survives a reload. Resume from a Pause now taken
   meanwhile runs the whole roadmap (the screen sends no stage).
+
+## A stage inserted before the running stage (#697)
+
+A stage put before the stage whose run is in progress (a save, a drag, an add stage, a Product Owner
+proposal) waits for it: `RoadmapModel.waitsFor` names the running stage while the first open stage is
+an earlier one, and `advance` then only steps the running stage (its planned items still start, a
+failure still pauses). Once that stage is finished, the inserted stage starts before any stage after
+it. An item parked at a human gate (#395) is not running: it holds nothing. The screen shows the
+inserted stage's "Waits for stage N" badge (`roadmap-stage-waits`) instead of Next; only the running
+stage is current.

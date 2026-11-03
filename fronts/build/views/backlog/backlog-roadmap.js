@@ -688,6 +688,8 @@
     return `<span class="bl-menu-wrap rm-stage-menu-wrap">${button}${open ? stageMenuBody(stage, s, count, r, done) : ''}</span>`;
   }
 
+  // #697: the Next stage before the running one also says it waits for it (it starts when that one is finished)
+  const waitsBadge = (next, current) => (next < current ? `<span class="badge" data-testid="roadmap-stage-waits">${t('backlog_roadmap.waits_for_stage', { stage: current + 1 })}</span>` : '');
   // `scoped`: the index of the stage run on its own (#141), -1 when none; `r`: the roadmap; `shown`:
   // what the view draws of it (visibleStages, pageOf): its `items`, its finished items `folded` under
   // the "+n done" chip (#267; `open`: unfolded, drawn below the chip), `cut`: only its first cards (#268,
@@ -715,7 +717,7 @@
     const pause = stage.pause ? `<p class="rm-stage-pause small" data-testid="roadmap-stage-pause-state" data-state="${esc(stage.pause.state)}">${esc(RunProgress.pauseLabel(stage.pause))}</p>` : '';
     const stateBadge = s === scoped ? `<span class="badge ${r.state === 'running' ? 'live' : 'warn'}">${r.state === 'running' ? t('backlog_roadmap.running_this_stage_only') : t('backlog_roadmap.this_stage_only_paused')}</span>`
       : s === current ? `<span class="badge live" data-testid="roadmap-stage-current">${t('backlog_roadmap.current')}</span>`
-        : s === next ? `<span class="badge" data-testid="roadmap-stage-next">${t('backlog_roadmap.next')}</span>` : done ? `<span class="badge" data-status="done">${t('backlog_roadmap.done_2')}</span>` : '';
+        : s === next ? `<span class="badge" data-testid="roadmap-stage-next">${t('backlog_roadmap.next')}</span>${waitsBadge(next, current)}` : done ? `<span class="badge" data-status="done">${t('backlog_roadmap.done_2')}</span>` : '';
     const offBadge = off ? `<span class="badge warn rm-disabled-badge" data-testid="roadmap-stage-disabled" title="${t('backlog_roadmap.skipped_while_the_roadmap_runs_it')}">${t('backlog_roadmap.disabled')}</span>` : '';
     return `
       <section class="rm-stage${s === current ? ' current' : ''}${s === scoped ? ' scoped' : ''}${done ? ' finished' : ''}${off ? ' disabled' : ''}" data-stage="${s}" data-drop-stage="${s}" data-testid="roadmap-stage"${off ? ' data-disabled="true"' : ''}${s === current ? ' data-current="true"' : ''}>

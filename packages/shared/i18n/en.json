@@ -1676,6 +1676,7 @@
   "backlog_roadmap.turn_on_the_roadmap_refills_itself": "Turn on: the roadmap refills itself from the backlog",
   "backlog_roadmap.value": "value",
   "backlog_roadmap.view_terminal": "View terminal",
+  "backlog_roadmap.waits_for_stage": "Waits for stage {stage}",
   "backlog_roadmap.waits_for_you": " · waits for you",
   "backlog_roadmap.when_the_last_stage_ends_the": "When the last stage ends, the Product Owner adds the next issues from the backlog and the roadmap goes on.",
   "backlog_roadmap.when_the_last_stage_ends_the_2": "When the last stage ends, the Product Owner adds the next issues from the backlog, again and again. {cost} Human gates still wait for you.",

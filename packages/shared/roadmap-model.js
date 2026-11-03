@@ -110,6 +110,14 @@
    * The screen's highlight; currentStage still decides what the automation starts next.
    */
   const runningStage = (roadmap) => stagesOf(roadmap).findLastIndex((s) => !s.disabled && itemsOf(s).some((x) => x.status === 'running' && !x.waiting));
+  /**
+   * #697: the running stage an open stage put before it waits for (nothing of that one starts until the
+   * running stage is finished), -1 when the first open stage is the running one or nothing runs.
+   */
+  const waitsFor = (roadmap) => {
+    const [first, running] = [currentStage(roadmap), runningStage(roadmap)];
+    return first >= 0 && running > first ? running : -1;
+  };
 
   /**
    * #237: the stage run on its own (#141, `scope`), or -1 when there is none or it is over (disabled,
@@ -472,6 +480,7 @@
     stageProgress,
     unfinishedItems,
     unfoldReleases,
+    waitsFor,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RoadmapModel = api;

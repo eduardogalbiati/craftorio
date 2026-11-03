@@ -48,9 +48,9 @@
 // Move on (#395): an item whose run waits at a human gate is parked (`itemAction` park, or the stage's
 // `parkStage`): it counts as finished, the next stage starts and the run keeps waiting at its gate,
 // the owner's to answer. Answered later, the item takes the run's outcome (done, or failed without
-// pausing the roadmap). A later stage's runs start without the parked change.
-// Main stays green (#405, packages/engine/domains/project/base-health.js): a red test on the base puts a fix item in a new stage
-// before the current one (`insertFrontStage`).
+// pausing the roadmap). A later stage's runs start without the parked change. A stage put before the
+// running one waits for it (#697, `waitsFor`): nothing of it starts until that stage is finished.
+// Main stays green (#405, packages/engine/domains/project/base-health.js): a red test on the base puts a fix item in a new stage before the current one (`insertFrontStage`).
 // The waiting refactor stage (#435): a disabled stage marked `waiting` (Send to Refactor's items,
 // fronts/analyser/engine/channels/refactor.js) stays last: `propose` adds its stages before it, and so does
 // `cleanStages` with the stages a save adds after it (the owner's add stage). Enabled, it loses
@@ -76,6 +76,7 @@ const {
   releaseEntries,
   stageNumber,
   STATES,
+  waitsFor,
 } = require('@multiagent/shared/roadmap-model');
 const { writeJsonSafe } = require('../workspace/state-file');
 const {
@@ -897,7 +898,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true, 
     const line = pendingRelease(r, at);
     if (line) return { roadmap: r, start: [], release: { id: line.id, name: line.name } };
     if (at < 0) return r.live ? { roadmap: r, start: [], refill: true } : { roadmap: finished, start: [] };
-    const step = stageStep(r, at, { closed, canStart, now });
+    const step = stageStep(r, waitsFor(r) >= 0 ? waitsFor(r) : at, { closed, canStart, now }); // #697: a stage put before the running one waits: only that one moves on
     if (step) return step;
   }
 }
