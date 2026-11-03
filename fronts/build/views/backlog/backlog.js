@@ -692,7 +692,8 @@
     }
   }
   const roadmapCtx = () => ({
-    projectId: bl.projectId, setData, render, setError: (msg) => { bl.error = msg; },
+    // #748: a roadmap edit redraws the list, the scroll position stays
+    projectId: bl.projectId, setData, render: () => { const view = $b('#view-backlog'); const top = view?.scrollTop; render(); if (view && top != null) view.scrollTop = top; }, setError: (msg) => { bl.error = msg; },
     // #269: the filter row's epic (the Board's choice too); #270: "Open the Roadmap" of the Board's alert
     setEpic: (id) => { bl.epic = String(id || ''); render(); },
     showRoadmap: () => showRoadmap(),
@@ -906,21 +907,31 @@
 
   // The issue's actions (#238), at the right of a row and the top right of a card: an open issue has
   // a ⋯ menu with Enrich in Write & Review (#103: Write & Review prefilled with the issue, nothing
-  // starts by itself) and Archive (disabled, with the reason shown, while it is planned in the roadmap
-  // or has a run in progress); an archived issue has Restore.
+  // starts by itself) and Archive (refused, aria-disabled with the reason in its tooltip, while it is
+  // planned in the roadmap or has a run in progress); an archived issue has Restore. #748: the shared
+  // menu (packages/ui-kit/menu.js), its keys bound after the render (bindIssueMenu).
   function issueMenu(i) {
     if (isArchived(i)) return `<button class="btn sm ghost" type="button" data-restore="${i.number}" data-testid="backlog-restore" title="${t('backlog.reopen_it_on_the_platform_and')}">${t('backlog.restore')}</button>`;
     if (i.state !== 'open') return '';
-    const why = archiveBlockReason(i);
     const open = bl.menu === i.number;
+    const label = t('backlog.actions_for_number', { number: i.number });
     return `<span class="bl-menu-wrap">
-        <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t('backlog.actions_for_number', { number: i.number })}" title="${t('backlog.actions')}">⋯</button>
-        ${open ? `<div class="bl-menu" role="menu" aria-label="${t('backlog.actions_for_number', { number: i.number })}">
-          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="${t('backlog.enrich_this_issue_in_write_review')}">${t('backlog.enrich_in_documents')}</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="${t('backlog.open_the_project_city_with_the')}">${t('backlog.show_on_the_map')}</button>
-          <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || t('backlog.close_it_as_not_planned_on'))}">${t('backlog.archive')}</button>
-          ${why ? `<p class="muted small bl-menu-why">${esc(why)}</p>` : ''}
-        </div>` : ''}
+        <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="${label}" title="${esc(t('backlog.actions'))}">⋯</button>
+        ${open ? Menu.menuHtml([
+          { id: 'enrich', label: t('backlog.enrich_in_documents'), title: t('backlog.enrich_this_issue_in_write_review'), testid: 'backlog-enrich', attrs: `data-enrich="${i.number}"` },
+          { id: 'map', label: t('backlog.show_on_the_map'), title: t('backlog.open_the_project_city_with_the'), testid: 'show-on-map', attrs: `data-show-map="${i.number}"` },
+          { divider: true },
+          { id: 'archive', label: t('backlog.archive'), title: t('backlog.close_it_as_not_planned_on'), disabledReason: archiveBlockReason(i), testid: 'backlog-archive', attrs: `data-archive="${i.number}"` },
+        ], { className: 'bl-menu', label }) : ''}
       </span>`;
+  }
+  // #748: the open card menu's keys (arrows, Home / End, Enter, Escape) and its outside click, by Menu.bindMenu
+  let issueMenuBinding = null;
+  function bindIssueMenu() {
+    issueMenuBinding?.close();
+    const el = bl.menu == null ? null : $b('#bl-list').querySelector('.bl-menu[role="menu"]');
+    issueMenuBinding = el ? Menu.bindMenu(el, { anchor: el.previousElementSibling, onClose: () => { if (bl.menu != null) { bl.menu = null; render(); } } }) : null;
+    el?.querySelector('[role="menuitem"]')?.focus({ preventScroll: true });
   }
 
   // Filed from a discovery card (#258, the service's `discoveryCard`): the card's title; a click opens
@@ -1566,9 +1577,9 @@
       if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, issueOf(Number(onMap.dataset.showMap))); return; } if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
       // #238: an issue's actions menu, its Archive, and Restore
       const menu = e.target.closest('[data-menu]');
-      if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }
+      if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); bindIssueMenu(); return; }
       const arch = e.target.closest('[data-archive]');
-      if (arch) { bl.menu = null; render(); if (!arch.disabled) await archive([Number(arch.dataset.archive)]); return; }
+      if (arch) { if (arch.getAttribute('aria-disabled') === 'true') return; bl.menu = null; render(); await archive([Number(arch.dataset.archive)]); return; }
       const back = e.target.closest('[data-restore]');
       if (back) { await restore(Number(back.dataset.restore)); return; }
       if (e.target.closest('.bl-menu, a')) return;
