@@ -127,6 +127,8 @@ function loadView(apiOver = {}) {
     $$: (sel) => box.querySelectorAll(sel),
     document: { querySelector: query, querySelectorAll: (sel) => box.querySelectorAll(sel), getElementById: (id) => query(`#${id}`), createElement: () => element(), addEventListener() {} },
     api,
+    // the ui-kit's Select (loaded early in the app): the item select is built with Select.markup (#383)
+    Select: require(path.join(ROOT, 'packages', 'ui-kit', 'select.js')),
   };
   sandbox.window = sandbox;
   vm.createContext(withI18n(sandbox));
