@@ -9,7 +9,9 @@
 //   number a short box; a `*branch` input a text box with the project's local branches; text a box;
 // - `show_if` ("mode == 'validated'"; `inputs.` optional, ==, !=, and, or, not, parentheses): the
 //   field is hidden while it is false. A hidden input keeps its value (read() still returns it);
-// - `description`: the muted help line under the control.
+// - `description`: the muted help line under the control;
+// - `group` and `main: true` (#431): drawn only when the host asks (formHtml's `groups`, the Product
+//   Owner drawer): the fields under small group labels, the main ones before "Show more options".
 // formHtml / fieldHtml return markup; every control carries data-wi-input="<key>" plus the host's
 // own attributes (id, name, data-…). read(root) returns the values as the YAML takes them (an enum's
 // value, a boolean as true/false, a "false"/"true" enum as its string); set(root, key, value) sets
@@ -190,12 +192,48 @@
   /**
    * The fields of `defs` ({ key: def }, in order). opts: values ({ key: value }; else each default),
    * id(key), attrs(key), context (values show_if reads besides these), autofocus (the first field).
+   * #431 `groups: true` (the Product Owner drawer): the fields under their input's `group` label, the
+   * `main: true` ones first and the rest in a .wi-more block behind a "Show more options" link (open
+   * when `moreOpen`). Inputs with neither `group` nor `main`: the same markup as without `groups`.
    */
-  function formHtml(defs, { values = {}, id = (k) => `wi-${k}`, attrs = () => '', context = {}, autofocus = false } = {}) {
+  function formHtml(defs, { values = {}, id = (k) => `wi-${k}`, attrs = () => '', context = {}, autofocus = false, groups = false, moreOpen = false } = {}) {
     const entries = Object.entries(defs || {});
     const all = { ...context };
     for (const [k, def] of entries) all[k] = values[k] ?? def?.default ?? '';
-    return entries.map(([k, def], n) => fieldHtml(k, def || {}, { value: all[k], id: id(k), attrs: attrs(k), context: all, autofocus: autofocus && n === 0 })).join('');
+    const field = ([k, def], n) => fieldHtml(k, def || {}, { value: all[k], id: id(k), attrs: attrs(k), context: all, autofocus: autofocus && n === 0 });
+    if (!groups || !entries.some(([, d]) => d?.group || d?.main)) return entries.map(field).join('');
+    const indexed = entries.map((e, n) => [e, n]);
+    const main = indexed.filter(([[, d]]) => d?.main === true);
+    const rest = indexed.filter(([[, d]]) => d?.main !== true);
+    if (!main.length || !rest.length) return groupedHtml(indexed, field);
+    return groupedHtml(main, field) + moreToggleHtml(moreOpen)
+      + `<div class="wi-more" data-testid="wf-more"${moreOpen ? '' : ' hidden'}>${groupedHtml(rest, field)}</div>`;
+  }
+  // #431: [[entry, index]] drawn by group, the groups in the order of their first input; an input
+  // without a group goes under "Other"
+  function groupedHtml(list, field) {
+    const byGroup = new Map();
+    for (const item of list) {
+      const g = String(item[0][1]?.group || '').trim() || t('workflow_inputs.other_group');
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g).push(item);
+    }
+    return [...byGroup].map(([g, items]) => `<div class="wi-group-label" data-testid="wf-group-label">${esc(g)}</div>${items.map(([e, n]) => field(e, n)).join('')}`).join('');
+  }
+  const moreToggleHtml = (open) => `<button type="button" class="link wi-more-toggle" data-testid="wf-more-toggle" aria-expanded="${open}">${t(open ? 'workflow_inputs.show_fewer_options' : 'workflow_inputs.show_more_options')}</button>`;
+
+  /** #431: opens or closes (`open`, else the other way) the "more options" of a grouped form under `rootEl`; returns whether open. */
+  function toggleMore(rootEl, open) {
+    const more = rootEl?.querySelector?.('[data-testid="wf-more"]');
+    const link = rootEl?.querySelector?.('[data-testid="wf-more-toggle"]');
+    if (!more) return false;
+    const next = open ?? more.hasAttribute('hidden');
+    more.hidden = !next;
+    if (link) {
+      link.setAttribute('aria-expanded', String(next));
+      link.textContent = t(next ? 'workflow_inputs.show_fewer_options' : 'workflow_inputs.show_more_options');
+    }
+    return next;
   }
 
   // ---- values ------------------------------------------------------------------------------
@@ -371,6 +409,7 @@
     refresh,
     scopeAttrs,
     set,
+    toggleMore,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.WorkflowInputs = api;

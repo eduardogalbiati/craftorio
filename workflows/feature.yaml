@@ -167,6 +167,8 @@ inputs:
   # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj, Cargo.toml; every one found, main first).
   language:
     label: "Language"
+    # #431: the Product Owner drawer draws its options under these group labels, `main: true` first
+    group: Project
     type: string
     enum: [js, python, go, java, csharp, rust]
     default: js
@@ -182,6 +184,7 @@ inputs:
   # Product Owner, a roadmap) still runs: setup moves that value to `validation`.
   mode:
     label: "Mode"
+    group: How it runs
     type: string
     enum: [local, remote, fork]
     default: local
@@ -191,12 +194,14 @@ inputs:
   # fork (set by the roadmap); depends_on names the parent's pull request for the PR's body
   parent_branch:
     label: "Parent branch"
+    group: How it runs
     type: string
     default: ""
     show_if: "mode == 'fork'"
     description: "Fork + PR: the branch on your fork this run starts from (the earlier item of a split implementation). Empty: the fork's default branch, synced with the original."
   depends_on:
     label: "Depends on"
+    group: How it runs
     type: string
     default: ""
     show_if: "mode == 'fork'"
@@ -204,6 +209,7 @@ inputs:
   # parent_pr (wait and rebase, set by the roadmap): the ci step waits for it to merge (wait.parent)
   parent_pr:
     label: "Parent pull request"
+    group: How it runs
     type: string
     default: ""
     show_if: "mode == 'fork'"
@@ -211,6 +217,9 @@ inputs:
   # validated: the run stops at developer_check after the developer (the old input `mode`, #630).
   validation:
     label: "Validation"
+    # #431: the owner's "Mode" (Automatic or Validated), one of the drawer's main options
+    group: How it runs
+    main: true
     type: string
     enum: [auto, validated]
     default: auto
@@ -219,6 +228,7 @@ inputs:
   # #630 (spec D14): E2E first writes the issue's scenarios with the acceptance tests, before the code
   test_order:
     label: "Test order"
+    group: Tests
     type: string
     enum: [e2e_first, code_first]
     default: e2e_first
@@ -227,6 +237,7 @@ inputs:
   # #630: the multi-model review (the old multi-model-review workflow) as a second reviewer on another model
   review:
     label: "Review"
+    group: How it runs
     type: string
     enum: [single, multi_model]
     default: single
@@ -235,11 +246,13 @@ inputs:
   # #631: the old develop-to-retrospective pipeline; the run chains retrospective.yaml on itself
   retrospective:
     label: "Retrospective after"
+    group: How it runs
     type: boolean
     default: false
     description: "When the run ends, the Retrospective workflow analyses it and reports what to change in the workflow first (one more model call)."
   git_platform:
     label: "Git platform"
+    group: How it runs
     type: string
     enum: [gh, gl]
     default: gh
@@ -251,6 +264,7 @@ inputs:
   # turn timeout from `models`, whichever way it was chosen
   developer_model:
     label: "Developer model"
+    group: Developer
     type: string
     enum: [claude-opus-5-5, claude-fable-5-1]
     default: claude-opus-5-5
@@ -260,6 +274,7 @@ inputs:
   # default for the model, the behaviour before #286); xhigh doubles the turn timeout
   developer_effort:
     label: "Developer effort"
+    group: Developer
     type: string
     enum: [default, low, medium, high, xhigh]
     default: default
@@ -268,6 +283,7 @@ inputs:
   # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
     label: "Validate every round"
+    group: How it runs
     type: boolean
     default: false
     show_if: "validation == 'validated'"
@@ -281,6 +297,8 @@ inputs:
     # only the suite (run_existing)
     default: write_and_run
     label: Unit tests
+    group: Tests
+    main: true
     options: { write_and_run: Write and run, run_existing: Run existing, "off": "Off" }
     description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-backfill workflow)."
   e2e_tests:
@@ -289,6 +307,8 @@ inputs:
     # owner 2026-10-03: quality first, the scenarios are written and run here by default
     default: write_and_run
     label: E2E tests
+    group: Tests
+    main: true
     options: { "off": "Off", write: Write, write_and_run: Write and run }
     description: "Write: the test writer writes the issue's end-to-end scenarios first, with the acceptance tests, and checks that they parse; the E2E release workflow runs them. Write and run: the orchestrator also runs them here, with the @smoke journeys, after the suite (no agent while they pass; starts the app). Off: none."
   # #223: the e2e step adds `--grep "@issue-<n>|@smoke"` (Playwright) to it
@@ -297,6 +317,7 @@ inputs:
     # #735: no Node assumption; the project's run defaults fill it when its facts found an E2E suite
     default: ""
     label: E2E command
+    group: Tests
     show_if: "e2e_tests == 'write_and_run'"
     description: "The project's Playwright E2E command; the orchestrator runs it with --grep on the issue's tag and @smoke. Empty: the project's own (its run defaults), else npm run test:e2e."
   # #205: the evidence screenshots (the Product Owner's Cost step sets it on a roadmap item:
@@ -306,16 +327,20 @@ inputs:
     enum: ["off", changed, all]
     default: all
     label: Screenshots
+    group: Tests
+    main: true
     options: { "off": "Off", changed: Changed screens, all: All }
     description: "All: the developer's UI states before your check and the evidence's captures. Changed: only the screens the issue changes, original and modified. Off: no screenshot step and no npm run screenshot by any agent; the evidence is the diff, the logs and the test results (cheapest: the evidence step costs about $0.3-1.5 and 5-10 min of a run)."
   # #588: where the project's UI and its E2E step definitions live (another layout than src/renderer/)
   ui_folders:
     label: "UI folders"
+    group: Tests
     type: array
     default: [src/renderer/]
     description: "The project's UI folders, repository-relative (one per line). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there."
   steps_folders:
     label: "Step definition folders"
+    group: Tests
     type: array
     default: [features/steps]
     description: "The folders of the project's E2E step definitions, repository-relative (one per line), read by the test id check."
@@ -323,12 +348,14 @@ inputs:
     type: string
     default: ""
     label: Test command
+    group: Tests
     description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml)."
   # #404: the project's fast rule checks, run after each develop commit (rule_check)
   check_command:
     type: string
     default: ""
     label: Check command
+    group: Checks
     description: "The project's fast rule checks (lint, layers, docs...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script from its package.json (npm run check); a project without one skips the step."
   # #396 (owner 2026-10-15): set before the run, never changed by an agent while it runs. With
   # continue, a suite red only outside the change goes on to the build without the test_failed gate.
@@ -337,6 +364,7 @@ inputs:
     enum: [ask, continue]
     default: ask
     label: Suite red outside the change
+    group: Tests
     options: { ask: Ask, continue: Continue }
     description: "When the suite still fails but every failing test is outside the change (its test file reaches no changed file, passes alone, or fails or hangs on the base too). Ask: the test_failed gate waits for you, as for any red suite. Continue: the run goes on to the build and the merge, reported as not tested green. A failure in the change always asks."
 

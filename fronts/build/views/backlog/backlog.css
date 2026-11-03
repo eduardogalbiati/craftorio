@@ -59,12 +59,25 @@ span.po-applied { cursor: default; }
 .po-for { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .po-wf-row { display: grid; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
 .po-wf-pick { display: flex; align-items: center; gap: 8px; }
+.po-wf-pick > label { display: flex; align-items: center; gap: 8px; flex: 0 1 400px; min-width: 0; margin: 0; }
 .po-wf-pick select { flex: 1; min-width: 0; max-width: 320px; }
+/* #431: minimized, a one-line summary of the values, the chevron on the right */
+.po-wf-summary { flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.po-wf-summary[hidden] { display: none; }
+.po-wf-toggle { flex: none; margin-left: auto; min-width: 24px; min-height: 24px; }
+.po-wf-toggle svg { transition: transform .15s; }
+.po-wf-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .po-wf-toggle svg { transition: none; } }
 .po-wf-options { max-height: 22vh; overflow: auto; }
+.po-wf-options[hidden] { display: none; }
 .po-wf-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 14px; align-items: center; }
+.po-wf-fields .wi-group-label, .po-wf-fields .wi-more-toggle { grid-column: 1 / -1; }
+.po-wf-fields .wi-more { display: contents; }
+.po-wf-fields .wi-more[hidden] { display: none !important; }
 .po-wf-fields .field { display: flex; align-items: center; gap: 8px; margin: 0; min-width: 0; }
 .po-wf-fields .field[hidden] { display: none; }
-.po-wf-fields .field > label { flex: none; width: 70px; margin: 0; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* #431: labels whole (not cut at 70px); the control takes what is left */
+.po-wf-fields .field > label { flex: none; max-width: 50%; margin: 0; font-size: 11px; color: var(--muted); }
 .po-wf-fields .wi-control { flex: 1; min-width: 0; }
 .po-wf-fields .seg button { padding: 2px 6px; font-size: 11px; white-space: nowrap; }
 .po-wf-fields select, .po-wf-fields input[type="text"], .po-wf-fields input[type="number"] { width: 100%; padding: 2px 6px; font-size: 12px; min-height: 0; height: 24px; }

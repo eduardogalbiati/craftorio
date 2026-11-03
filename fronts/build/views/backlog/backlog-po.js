@@ -458,7 +458,7 @@
     const defs = optionDefs(workflowOf(file));
     const box = $p('#po-workflow-options');
     box.innerHTML = Object.keys(defs).length
-      ? `<div class="po-wf-fields"${WorkflowInputs.scopeAttrs()}>${WorkflowInputs.formHtml(defs, { id: (k) => `po-wi-${k}` })}</div>` : '';
+      ? `<div class="po-wf-fields"${WorkflowInputs.scopeAttrs()}>${WorkflowInputs.formHtml(defs, { id: (k) => `po-wi-${k}`, groups: true, moreOpen: window.BacklogPoOptions?.moreOpen() })}</div>` : ''; // #431
     box.classList.toggle('hidden', !Object.keys(defs).length);
   }
 
@@ -705,6 +705,7 @@
     });
     // #235: the workflow of a plan question and its options (Plan mode only)
     $p('#po-wf-row').classList.toggle('hidden', issueMode || !po.projectId);
+    window.BacklogPoOptions?.apply(); // #431: minimized or expanded, as the viewer left it
     $p('#po-workflow').disabled = po.busy;
     showNotice(po.notice);
     $p('#po-files').classList.toggle('hidden', !issueMode || !po.files.length);

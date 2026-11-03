@@ -1413,9 +1413,9 @@
         <div id="po-chips" class="chips po-chips"></div>
         <!-- #235: the workflow a plan question is for, and that workflow's own options -->
         <div id="po-wf-row" class="po-wf-row hidden">
-          <label class="po-wf-pick small"><span class="muted">${t('backlog.plan_with')}</span>
-            <select id="po-workflow" class="po-wf" data-testid="po-workflow" aria-label="${t('backlog.workflow_the_product_owner_plans_with')}"></select>
-          </label>
+          <div class="po-wf-pick small"><label><span class="muted">${t('backlog.plan_with')}</span> <select id="po-workflow" class="po-wf" data-testid="po-workflow" aria-label="${t('backlog.workflow_the_product_owner_plans_with')}"></select></label>
+            <span id="po-wf-summary" class="po-wf-summary muted" data-testid="po-wf-summary" hidden></span><!-- #431: the options minimized to this line, the chevron toggles -->
+            <button id="po-wf-toggle" class="icon-btn po-wf-toggle" type="button" data-testid="po-wf-toggle" aria-controls="po-workflow-options" aria-expanded="true" title="${t('backlog.hide_the_workflow_options')}" aria-label="${t('backlog.hide_the_workflow_options')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg></button></div>
           <div id="po-workflow-options" class="po-wf-options" data-testid="po-workflow-options"></div>
         </div>
         <div id="po-files" class="po-files hidden"></div>

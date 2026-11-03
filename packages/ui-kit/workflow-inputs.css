@@ -19,6 +19,14 @@
 .wi-grid .wi-field > .wi-control { order: 0; grid-column: 2; }
 .wi-grid .wi-field > .hint { order: 0; grid-column: 2; margin-top: 0; }
 
+/* #431: a grouped form (formHtml's `groups`, the Product Owner drawer): small group labels, the main
+   options first and the rest in .wi-more behind a text link */
+.wi-group-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-top: 4px; }
+.wi-more[hidden] { display: none !important; }
+button.wi-more-toggle { justify-self: start; background: none; border: 0; padding: 2px 0; min-height: 24px; font-size: 12px; color: var(--accent); cursor: pointer; }
+button.wi-more-toggle:hover { text-decoration: underline; }
+button.wi-more-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+
 /* read-only pills of a run's inputs (inputPills, #216): roadmap and proposal cards, Assign, the run header */
 .badge.wi-pill { white-space: nowrap; }
 .badge.wi-pill-default { opacity: .6; }
