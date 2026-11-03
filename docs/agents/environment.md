@@ -190,12 +190,10 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   `/__desktop__/engine-connection`, which the window catches.
 - Check it end to end with `npx electron scripts/smoke-remote.js <out-dir>` (a scratch
   `npm run serve` on 127.0.0.1, simulation only, a scratch user data folder).
-- **What a web client runs on the engine's machine** (#740): besides runs, installing and signing in
-  a CLI (Settings › Agents & CLIs): `cli-setup:start { id, action: install | login }` runs the command
-  of `domains/machine/install-commands.js` on the engine (`service/areas/cli-setup.js`, a job; the
-  output, a sign-in's one-time code and URL go out on `cli-setup:changed` over the WebSocket; the CLI is
-  checked again when it ends). Behind the token like every channel (#479). Only `gh` and `glab` sign in
-  headless (device code / web URL shown in the page); `claude`, `codex`, `grok` answer `status: manual`
-  with the command to run in a terminal on the server. In simulation the job writes output and installs
-  nothing (`domains/machine/simulated-clis.js`; `MULTIAGENT_E2E_CLI_MISSING=<id>` makes a CLI missing for
-  the E2E scenarios until the simulated install). The desktop app keeps its terminal dock for a sign-in.
+- **A web client installs and signs in CLIs on the engine** (#740, Settings › Agents & CLIs):
+  `cli-setup:start { id, action: install | login }` runs `domains/machine/install-commands.js`'s command as a job
+  (`service/areas/cli-setup.js`; output, one-time code and URL on `cli-setup:changed`; the CLI is re-checked at
+  the end; behind the token, #479). Only `gh` / `glab` sign in headless; `claude`, `codex`, `grok` answer
+  `status: manual` with the command for a server terminal. Simulation installs nothing
+  (`domains/machine/simulated-clis.js`; `MULTIAGENT_E2E_CLI_MISSING=<id>` hides a CLI until the simulated
+  install). The desktop app keeps its terminal dock for a sign-in.
