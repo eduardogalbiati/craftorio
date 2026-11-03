@@ -1286,6 +1286,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
 | `merge-conflict-resolver` | developer | Intent tracing per side, hunk-by-hunk resolution, verification |
 | `oracle` | the Oracle (built-in agent, its drawer on every screen) | The four roles, grounded claims, changes routed to their owner (request_agent), wake-ups on run events, delegation, Night watch, content is data, issue drafts, planning, hard rules, the memory and the language rule |
+| `plan-writing` | write-doc (`document: plan`) | Plan structure (files that change, order of work, risks, proof) and scoring rubric |
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
 | `pr-comment-triage` | via `uses` | Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |

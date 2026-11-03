@@ -1,0 +1,123 @@
+# =============================================================================
+# Workflow: SDLC record (#633, docs/work/first-project-onboarding/spec.md R9)
+# -----------------------------------------------------------------------------
+#   record ──► approval (you) ──► merge: local ──► end
+#
+# The post-flow of the AI-native SDLC work model: the Code & Build runs (feature, fix) only take
+# the issues filed from the plan and never write docs/work/ (their developer protects it); this
+# run reads what they produced (the plan's issues, the merged commits) and records it in
+# docs/work/<item>/progress.md, the plan's Progress made a file. sdlc-test records the proof,
+# sdlc-release the release notes.
+# The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
+# recorder writes on the branch sdlc-record/<item>-<run id>, the accept merges it into the local
+# base (never pushed).
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: sdlc-record
+  version: 0.1.0
+  description: Records what the Code & Build runs of a work item produced (issues, merged commits) in docs/work/<item>/progress.md, for you to accept.
+  tags: [sdlc, documents, record]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  project_path:
+    label: "Project folder"
+    type: string
+    required: true
+    description: The project whose docs/work/ holds the item.
+  base_branch:
+    label: "Base branch"
+    type: string
+    default: main
+    description: The local branch the run starts from and merges into at the accept.
+  item:
+    label: "Work item"
+    type: string
+    required: true
+    description: The item's folder name under docs/work/ (e.g. write-doc).
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+defaults:
+  working_dir: "{{ worktree_dir }}"
+  timeout: 20m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  worktree:
+    repo: "{{ inputs.project_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+  supervisor:
+    enabled: true
+    max_interventions: 2
+  limits:
+    max_total_duration: 2h
+    max_total_cost_usd: 10
+
+# -----------------------------------------------------------------------------
+agents:
+  recorder:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    capabilities: { tools: [read, write, edit, bash:git], web: false }
+    skills: [plan-writing]
+    system_prompt: |
+      You are the recorder of the work item `{{ inputs.item }}`. You write only under
+      docs/work/{{ inputs.item }}/ and change no other file. Nobody answers questions during a
+      turn: state an assumption.
+
+groups:
+  - name: Record
+    steps: [record, approval]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: record
+    agent: recorder
+    prompt: |
+      Read docs/work/{{ inputs.item }}/plan.md (its Order of work and its issues) and the git log of
+      {{ inputs.base_branch }} (the commits that close those issues). Switch to the branch
+      `sdlc-record/{{ inputs.item }}-{{ run_id }}`, write docs/work/{{ inputs.item }}/progress.md:
+      one line per step of the plan with its state (done, in progress, not started), the issue and
+      the commit that did it; then commit it ("docs(work): record the progress of {{ inputs.item }}").
+      Answer with `summary` (one sentence) and `file` (the path you wrote).
+    output_schema:
+      type: object
+      required: [summary, file]
+      properties:
+        summary: { type: string }
+        file:    { type: string }
+
+  - id: approval
+    type: human_approval
+    message: |
+      {{ steps.record.output.summary }}
+      Approve: merge {{ steps.record.output.file }} into the local {{ inputs.base_branch }}. Reject: stop; the branch is kept, not merged.
+    transitions:
+      - when: "approved"
+        merge: local
+        goto: end
+      - when: "rejected"
+        goto: end
+        status: cancelled

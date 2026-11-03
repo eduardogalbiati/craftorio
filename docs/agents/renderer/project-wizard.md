@@ -38,6 +38,18 @@ finished" (`project-onboarding-unfinished`) with Continue. New project with the 
 project exists (`onboarding:start`, same repository whatever its case, trailing slash or `.git`) resumes it
 when unfinished, and for a finished one says it exists with Open the project: never a second project.
 
+## The work model (#633)
+
+Step 3 ends with the work model section (`wizard-work-model`, mock-5,
+`fronts/build/views/projects/project-wizard-work-model.js`, split out of the wizard for its size cap):
+how work on the project is documented, Light / Standard / Full (radios `wizard-work-model-<model>`,
+`WORK_MODELS` and `DEFAULT_WORK_MODEL` of `packages/shared/onboarding-model.js`), next to where the files
+live (`wizard-work-model-files`: `docs/work/<item>/intent.md · spec.md · plan.md`). The pick is the
+`workModel` of the saved picks (resumed like the others) and Finish writes it on the project
+(`updateProject`'s `workModel`, an unknown value ignored). The mock's `.html` files and its "Written by the
+run" line are left out on purpose (spec D16: Code & Build never writes `docs/work/`, the pre-flow
+write-doc and the post-flow `sdlc-*` workflows do).
+
 ## The steps
 
 The screens follow the spec's mockups (#669, `docs/work/first-project-onboarding/images/mock-1, 2, 4, 6,

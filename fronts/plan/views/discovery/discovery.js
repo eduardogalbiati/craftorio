@@ -39,7 +39,7 @@
 // CurrentProject, ImageViewer, DiscoveryCardParts (views/inbox/inbox.js), DuoIssue (the document
 // types' goals), openDuoForCard (views/duo/duo.js) and openArenaForCard (views/arena/arena.js).
 (() => {
-  const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix']; // the store's (discovery.TYPES)
+  const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix', 'intent']; // the store's (discovery.TYPES; #633 intent)
   const FAST = ['bug', 'hotfix']; // the fast lane's types
   // the runs whose result comes back to a card, by the `source` it is recorded under
   const SOURCES = { 'ai-arena': 'AI Arena', 'write-doc': 'Write a document', 'write-review': 'Write & Review' };

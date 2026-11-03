@@ -90,6 +90,9 @@ jobs:
         run: node scripts/docs.js --check
       - name: Tests (unit + mock flow)
         run: npm test
+      # #633: the bundled skills and workflows load and are well formed (scripts/evals.js, no model)
+      - name: Evals (skills and workflows)
+        run: npm run evals
       # Linux has no display: the UI steps below run under xvfb-run. Ubuntu 24.04's AppArmor refuses the
       # unprivileged user namespaces Chromium's sandbox needs (the packaged AppImage turns the sandbox
       # off itself, scripts/release-assets.js): allow them on the runner.

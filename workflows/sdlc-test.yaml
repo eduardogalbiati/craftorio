@@ -1,0 +1,122 @@
+# =============================================================================
+# Workflow: SDLC test (#633, docs/work/first-project-onboarding/spec.md R9)
+# -----------------------------------------------------------------------------
+#   record ──► approval (you) ──► merge: local ──► end
+#
+# The post-flow of the AI-native SDLC work model, after sdlc-record: reads the plan's Proof and
+# what the Code & Build runs left as evidence (their tests, the checks they ran) and records it in
+# docs/work/<item>/test.md: each proof of the plan with the test or check that shows it, or the
+# gap. The Code & Build runs never write docs/work/ (their developer protects it).
+# The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
+# recorder writes on the branch sdlc-test/<item>-<run id>, the accept merges it into the local
+# base (never pushed).
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: sdlc-test
+  version: 0.1.0
+  description: Records how each proof of a work item's plan is shown (the tests and checks of its runs, or the gap) in docs/work/<item>/test.md, for you to accept.
+  tags: [sdlc, documents, test]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  project_path:
+    label: "Project folder"
+    type: string
+    required: true
+    description: The project whose docs/work/ holds the item.
+  base_branch:
+    label: "Base branch"
+    type: string
+    default: main
+    description: The local branch the run starts from and merges into at the accept.
+  item:
+    label: "Work item"
+    type: string
+    required: true
+    description: The item's folder name under docs/work/ (e.g. write-doc).
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+defaults:
+  working_dir: "{{ worktree_dir }}"
+  timeout: 20m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  worktree:
+    repo: "{{ inputs.project_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+  supervisor:
+    enabled: true
+    max_interventions: 2
+  limits:
+    max_total_duration: 2h
+    max_total_cost_usd: 10
+
+# -----------------------------------------------------------------------------
+agents:
+  recorder:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    capabilities: { tools: [read, write, edit, bash:git], web: false }
+    skills: [plan-writing]
+    system_prompt: |
+      You are the test recorder of the work item `{{ inputs.item }}`. You write only under
+      docs/work/{{ inputs.item }}/ and change no other file; you never run the project's tests
+      (the runs did). Nobody answers questions during a turn: state an assumption.
+
+groups:
+  - name: Record
+    steps: [record, approval]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: record
+    agent: recorder
+    prompt: |
+      Read docs/work/{{ inputs.item }}/plan.md (its Proof) and spec.md (its requirements), and find
+      in the repository the tests that the item's commits on {{ inputs.base_branch }} added. Switch
+      to the branch `sdlc-test/{{ inputs.item }}-{{ run_id }}`, write docs/work/{{ inputs.item }}/test.md:
+      one line per proof or requirement with the test file (and test name) that shows it, or
+      "gap" and why; then commit it ("docs(work): record the tests of {{ inputs.item }}").
+      Answer with `summary` (one sentence, the number of gaps) and `file` (the path you wrote).
+    output_schema:
+      type: object
+      required: [summary, file]
+      properties:
+        summary: { type: string }
+        file:    { type: string }
+
+  - id: approval
+    type: human_approval
+    message: |
+      {{ steps.record.output.summary }}
+      Approve: merge {{ steps.record.output.file }} into the local {{ inputs.base_branch }}. Reject: stop; the branch is kept, not merged.
+    transitions:
+      - when: "approved"
+        merge: local
+        goto: end
+      - when: "rejected"
+        goto: end
+        status: cancelled

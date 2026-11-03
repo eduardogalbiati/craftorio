@@ -26,12 +26,16 @@
 // (never under Self-healing alone); the morning summary lists the runs that went past a day limit.
 // Release train (#489): at the night's end each project's last release candidate is promoted, proposed
 // or held (ctx.releaseTrain, packages/engine/service/areas/releases.js), logged as oracle.action / oracle.escalated.
+// Findings as intents (#633, spec R9): a finding in a run of a project (oracle.detected with its runId and
+// projectId) also files an `intent` card in that project's Discovery inbox (author oracle, links.from
+// { workflow: 'night-watch', runId, finding }), once per finding like the log entry.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const backlog = require('../../domains/backlog/backlog');
+const discovery = require('../../domains/discovery/discovery');
 const actions = require('../../domains/oracle/oracle-actions');
 const night = require('../../domains/night/night-watch');
 const nightLimits = require('../../domains/night/night-limits');
@@ -109,6 +113,20 @@ module.exports = (ctx) => {
     const id = crypto.randomUUID();
     open.set(key, id);
     night.logNight(dir(), 'oracle.detected', { id, kind, target: runId || projectId || 'all', runId, projectId, since, ...(evidence ? { evidence } : {}) });
+    if (runId && projectId) fileIntent({ id, kind, runId, projectId, evidence });
+  }
+  // #633: a finding in a run of a project comes back as an intent in that project's Discovery inbox
+  function fileIntent({ id, kind, runId, projectId, evidence }) {
+    try {
+      const text = evidence == null ? '' : typeof evidence === 'string' ? evidence : JSON.stringify(evidence, null, 2);
+      discovery.createCard(ctx.ws.discovery || workspace.layout(ctx.ws.root).discovery, projectId, {
+        title: `Night watch: ${kind} in run ${runId}`,
+        text,
+        type: 'intent',
+        author: 'oracle',
+        from: { workflow: 'night-watch', runId, finding: id },
+      });
+    } catch { /* a project id that is no plain name, a full disk: the finding stays in the night log */ }
   }
 
   // ---- Self-healing (#278) -------------------------------------------------------------------

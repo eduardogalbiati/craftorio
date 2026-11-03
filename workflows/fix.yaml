@@ -144,10 +144,13 @@ agents:
     effort: high
     session: persistent
     capabilities: { tools: [*toolchains, edit, read, write], web: false }
+    # #633: the SDLC documents are the pre-flow's (write-doc) and the post-flow's (sdlc-*), never the run's
+    protect_files:
+      - "docs/work/**"
     system_prompt: |
       You are the developer. You reproduce the bug, then fix its root cause on the run's branch with a
       small change that follows the project's conventions and a regression test that failed before
-      the fix. Never push, except in the push main step.
+      the fix. Never write under docs/work/. Never push, except in the push main step.
   reviewer:
     provider: claude
     model: claude-opus-5-5
@@ -156,7 +159,8 @@ agents:
     capabilities: { tools: [read, bash:git], web: false }
     skills: [code-review]
     system_prompt: |
-      You are the code reviewer. Follow the code-review skill; you change nothing.
+      You are the code reviewer. Follow the code-review skill; you change nothing. Read the project's
+      REVIEW.md (repository root) when it exists and apply its rules (#633).
   verifier:
     provider: claude
     model: claude-sonnet-5

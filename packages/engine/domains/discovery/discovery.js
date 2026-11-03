@@ -33,7 +33,7 @@
 // numbers of the issues filed from it and filed/ keeps the text of each one. A committed card never
 // moves again (moveCard refuses it) and is kept as it was committed (its text, files and score no
 // longer change; only links.release, the release that shipped its issues, is still written): new
-// learning is a new card whose links.from names it (createCard's `from`). COMMIT_BAR (85) is the
+// learning is a new card whose links.from names it (createCard's `from`; #633: or the finding of an intent). COMMIT_BAR (85) is the
 // clarity a commit needs: Grill me interviews a Ready card up to it, also past a lower bar of its own.
 // Column automations (#259): a board column may declare `on_enter`, what a card's move into it may
 // start: a saved pipeline or a workflow (`pipeline` / `workflow`: the file, `inputs` rendered from
@@ -59,7 +59,7 @@ const { slugify } = require('../project/projects');
 const { sniffImage } = require('../../engine/providers');
 const { renameWithRetry, writeFileAtomic } = require('../workspace/state-file');
 
-const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix'];
+const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix', 'intent']; // #633: intent, a Night watch / analyze-project finding
 // the board's columns, in order: the Inbox screen shows the first, the Discovery board the others
 // (#257); `wip` is the column's WIP limit (null: none), changed with setWip
 const BOARD_COLUMNS = [
@@ -375,14 +375,14 @@ function rescore(folder) {
 
 /**
  * Creates a card (an `idea` in the Inbox by default) with its document (`text`) and returns it.
- * `from`: the card it was learned from (#258: a committed card never returns to the board), kept as
- * links.from.
+ * `from`: the card it was learned from (#258), or the finding it came from (#633: { workflow, runId,
+ * finding }, an `intent` of the Night watch or analyze-project), kept as links.from.
  * Throws on an unknown type or column, a missing title, a `from` that is no card, or a project id
  * that is not a plain name.
  */
 function createCard(dir, projectId, { title, text = '', author = 'owner', type = 'idea', column = 'inbox', tags, from } = {}) {
   const base = path.join(ensureProject(dir, projectId), 'cards');
-  const source = from ? readCard(dir, projectId, from).id : null;
+  const source = from && typeof from === 'object' ? { workflow: String(from.workflow || ''), runId: from.runId ?? null, finding: from.finding ?? null } : from ? readCard(dir, projectId, from).id : null;
   const card = {
     id: null,
     title: checkTitle(title),

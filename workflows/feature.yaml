@@ -455,6 +455,8 @@ agents:
     protect_files:
       - "{{ steps.acceptance_tests.output.tests_added }}"
       - "{% if inputs.e2e_tests != 'off' %}{{ steps.acceptance_tests.output.e2e_files }}{% endif %}"
+      # #633: the SDLC documents are the pre-flow's (write-doc) and the post-flow's (sdlc-*), never the run's
+      - "docs/work/**"
     # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver is a step skill of
     # resolve_merge (#418: kept out of the develop prompt's 40K budget);
     # long-commands: installs, builds and focused checks in the foreground; ui-conventions: changes
@@ -514,6 +516,7 @@ agents:
     system_prompt: |
       You are the code reviewer of this workflow. Follow the code-review skill:
       detect the languages in the diff and read the rules for each one before the verdict.
+      Read the project's REVIEW.md (repository root) when it exists and apply its rules (#633).
 
   # #630: the multi-model review's second reviewer (inputs.review == 'multi_model'), on another model
   second_reviewer:
@@ -527,6 +530,7 @@ agents:
     system_prompt: |
       You are a second, independent code reviewer of this workflow, on another model than the first.
       Review the change on your own, following the code-review skill. Report real problems only.
+      Read the project's REVIEW.md (repository root) when it exists and apply its rules (#633).
 
   # #630: Remote mode pushes the branch, opens the PR/MR and watches its CI (fragments/pr-pipeline.yaml)
   ci_pusher:
