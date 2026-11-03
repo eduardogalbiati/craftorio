@@ -5,7 +5,8 @@
 // the badge opens the card; fix run · waiting for you → the badge opens the run, stopped at its gate).
 // The header lists the sources ("Sources…" adds one: Sentry with its token in the keychain, a log
 // URL or a log file); the line under the list is the automation (Ask me / On / Off, a daily cap).
-// The webhook and the daily budget come later (after the security review #466–#470): shown disabled.
+// "webhook" opens its dialog (on with a new key, its URL shown once; off); the daily budget comes in a
+// later phase: shown disabled.
 (function () {
   const MODES = ['ask', 'on', 'off'];
   const CAPS = [1, 3, 5, 10, 20];
@@ -64,8 +65,31 @@
       ${t('errors.automation')} ${t('errors.diagnose_new_groups')} ${mode('diagnose')} · ${t('errors.fix_runs')} ${mode('fix')} ·
       <button type="button" class="err-link" data-action="cap" title="${esc(t('errors.change_daily_cap'))}">${esc(t('errors.at_most_diagnoses_a_day', { count: auto.dailyCap }))}</button> ·
       <button type="button" class="err-link" disabled title="${esc(t('errors.daily_budget_later'))}">${t('errors.daily_budget')}</button> ·
-      <button type="button" class="err-link" disabled title="${esc(t('errors.webhook_later'))}">${t('errors.webhook')}</button>
+      <button type="button" class="err-link" data-action="webhook" data-testid="monitor-webhook" title="${esc(t('errors.webhook_title'))}">${t(er.data?.webhook?.enabled ? 'errors.webhook_on' : 'errors.webhook')}</button>
     </div>`;
+  }
+
+  // the Webhook… dialog: on (a new key, its URL shown this once) or off
+  function showWebhook(path) {
+    const on = !!er.data?.webhook?.enabled;
+    $('#ew-state').textContent = on ? t('errors.webhook_state_on') : t('errors.webhook_state_off');
+    $('#ew-state').className = `err-source${on ? ' ok' : ''}`;
+    const base = /^https?:/.test(location.origin) ? location.origin : '';
+    $('#ew-url').value = path ? `${base}${path}` : '';
+    $('#ew-url-field').classList.toggle('hidden', !path);
+    $('#btn-ew-on').textContent = on ? t('errors.webhook_new_key') : t('errors.webhook_turn_on');
+    $('#btn-ew-off').classList.toggle('hidden', !on);
+    $('#ew-error').textContent = '';
+  }
+  async function setWebhook(enable) {
+    try {
+      const res = await api.monitorWebhook({ projectId: er.projectId, enable });
+      if (er.data) er.data.webhook = { enabled: !!res?.enabled };
+      showWebhook(res?.path || null);
+      render();
+    } catch (e) {
+      $('#ew-error').textContent = errMsg(e);
+    }
   }
 
   function sourceChip(s) {
@@ -118,6 +142,7 @@
     const { action, fingerprint } = btn.dataset;
     if (action === 'open-run') return window.showRun(btn.dataset.run);
     if (action === 'open-card') return window.InboxActions?.openCard(btn.dataset.card);
+    if (action === 'webhook') { showWebhook(null); return openModal('#errors-webhook-modal'); }
     const auto = er.data?.automation || { diagnose: 'ask', fix: 'off', dailyCap: 5 };
     let res;
     try {
@@ -220,6 +245,20 @@
         <button type="submit" class="btn primary">${t('errors.add_source')}</button>
       </div>
     </form>
+  </div>
+  <div id="errors-webhook-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="errors-webhook-title">
+    <div class="modal-card">
+      <h3 id="errors-webhook-title">${t('errors.webhook_dialog')} <span id="ew-state" class="err-source"></span></h3>
+      <p class="muted small">${t('errors.webhook_help')}</p>
+      <div id="ew-url-field" class="field hidden"><label for="ew-url">${t('errors.webhook_url')}</label><input type="text" id="ew-url" class="mono" readonly data-testid="monitor-webhook-url" /><span class="muted small">${t('errors.webhook_url_help')}</span></div>
+      <p id="ew-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-ew-off" class="btn ghost hidden">${t('errors.webhook_turn_off')}</button>
+        <span class="spacer"></span>
+        <button type="button" id="btn-ew-close" class="btn ghost">${t('common.close')}</button>
+        <button type="button" id="btn-ew-on" class="btn primary" data-testid="monitor-webhook-on"></button>
+      </div>
+    </div>
   </div>`,
     mount() {
       const item = $('nav.sidebar .nav-item[data-view="errors"]');
@@ -235,6 +274,10 @@
       if (form) form.onsubmit = saveSource;
       const cancel = $('#btn-es-cancel');
       if (cancel) cancel.onclick = () => closeModal('#errors-sources-modal');
+      const hook = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
+      hook('#btn-ew-on', () => setWebhook(true));
+      hook('#btn-ew-off', () => setWebhook(false));
+      hook('#btn-ew-close', () => closeModal('#errors-webhook-modal'));
     },
     show: load,
   });

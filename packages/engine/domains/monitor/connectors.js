@@ -2,7 +2,9 @@
 // Sources: { id, type: 'log-file', path }, { id, type: 'log-url', url }, { id, type: 'sentry', org,
 // project }. Logs are JSON lines (blank or malformed lines skipped). Sentry is read with the token
 // from the system keychain (`getToken(source.id)`, never stored here). pollSource never throws: a
-// failure is { ok: false, error }. Called by fronts/ai/engine/channels/monitor.js.
+// failure is { ok: false, error }. webhookEvents maps a pushed payload (the Monitor's webhook) to the
+// same events. Called by fronts/ai/engine/areas/monitor.js.
+const crypto = require('crypto');
 const fs = require('fs');
 
 const SENTRY_API = 'https://sentry.io/api/0';
@@ -53,6 +55,48 @@ async function read(source, { fetch = globalThis.fetch, readFile, getToken, sinc
   return { ok: false, error: `Unknown source type: ${source.type}` };
 }
 
+// ---- pushed events (the Monitor's webhook, POST /hooks/monitor/<project> on the engine server) ----
+// the events one push may carry; more are dropped
+const MAX_PUSHED = 100;
+const isEvent = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+const isoOf = (v, now) => {
+  if (v == null || v === '') return now;
+  const d = typeof v === 'number' ? new Date(v < 1e12 ? v * 1000 : v) : new Date(String(v));
+  return Number.isNaN(d.getTime()) ? now : d.toISOString();
+};
+const pathOf = (url) => { try { return url ? new URL(url).pathname : undefined; } catch { return String(url); } };
+const digest = (ev) => crypto.createHash('sha256').update(JSON.stringify(ev)).digest('hex').slice(0, 24);
+
+// a Sentry webhook's event (an internal integration's data.event / data.error, the legacy plugin's event)
+function sentryPushed(ev, sourceId, payload, now) {
+  return {
+    id: ev.event_id || ev.eventID || ev.id || digest(ev),
+    at: isoOf(ev.datetime || ev.timestamp || ev.dateCreated, now),
+    source: sourceId,
+    status: 500,
+    message: String(ev.title || ev.message || payload.message || 'Error'),
+    method: ev.request?.method || undefined,
+    path: pathOf(ev.request?.url || tagOf(ev, 'url')),
+  };
+}
+
+/**
+ * The events of a pushed payload: a Sentry webhook, else one event or a list of events in the log
+ * lines' shape ({ id?, at?, status, method?, path?, worker?, message, file?, line? }; one with neither
+ * message nor status is no error and dropped). An event with no
+ * id gets one from its content (with its `at`): a payload sent twice counts once. Never throws.
+ */
+function webhookEvents(payload, sourceId, now = new Date().toISOString()) {
+  if (!payload || typeof payload !== 'object') return [];
+  const sentry = !Array.isArray(payload) && (payload.data?.event || payload.data?.error || payload.event);
+  if (isEvent(sentry)) return [sentryPushed(sentry, sourceId, payload, now)];
+  const errorLike = (ev) => isEvent(ev) && (ev.message != null || ev.status != null);
+  return (Array.isArray(payload) ? payload : [payload]).filter(errorLike).slice(0, MAX_PUSHED).map((ev) => {
+    const at = isoOf(ev.at, now);
+    return { ...ev, id: ev.id != null ? String(ev.id) : digest({ ...ev, at }), at, source: sourceId };
+  });
+}
+
 /** Polls one source → { ok: true, events, cursor } or { ok: false, error }; never throws. */
 async function pollSource(source, opts = {}) {
   try {
@@ -67,4 +111,5 @@ async function pollSource(source, opts = {}) {
 
 module.exports = {
   pollSource,
+  webhookEvents,
 };

@@ -33,7 +33,7 @@ module.exports = (ctx) => [
     channel: 'monitor:state',
     method: 'monitorState',
     params: 'opts',
-    schema: { params: onProject(), result: shape({ groups: listOf(GROUP), sources: listOf(SOURCE), automation: AUTOMATION }, ['groups', 'sources', 'automation']) },
+    schema: { params: onProject(), result: shape({ groups: listOf(GROUP), sources: listOf(SOURCE), automation: AUTOMATION, webhook: shape({ enabled: BOOL }, ['enabled']) }, ['groups', 'sources', 'automation']) },
     fn: async (arg) => ctx.monitorState(requireObject(arg, 'options')),
   },
   // { projectId, source: { type, label?, path | url | org + project, token? } } → { ok, source } (never the token)
@@ -75,5 +75,14 @@ module.exports = (ctx) => [
     params: 'opts',
     schema: { params: ON_GROUP, result: shape({ ok: BOOL, error: nullable(STRING), runId: nullable(STRING), existing: ANY }, ['ok']) },
     fn: async (arg) => ctx.monitorProposeFix(requireObject(arg, 'options')),
+  },
+  // { projectId, enable } → { ok, enabled, path }: the webhook on (a new key in the keychain; `path`, the
+  // engine server's POST /hooks/monitor/<project>?key=…, is shown this once) or off (no key)
+  {
+    channel: 'monitor:webhook',
+    method: 'monitorWebhook',
+    params: 'opts',
+    schema: { params: onProject({ enable: BOOL }, ['enable']), result: shape({ ok: BOOL, enabled: BOOL, path: nullable(STRING) }, ['ok', 'enabled']) },
+    fn: async (arg) => ctx.monitorWebhook(requireObject(arg, 'options')),
   },
 ];

@@ -11,6 +11,10 @@
 // process's memory only. A token is never written to a workspace file nor returned by a channel.
 // The sources are polled every POLL_MS once the Monitor was used in this session (an unref'd timer,
 // stopped by shutdown through stopMonitorWatch). Channels: fronts/ai/engine/channels/monitor.js.
+// The webhook (after the security review #466–#470): monitor:webhook turns it on with a new random
+// key (in the keychain, shown once in its URL) or off; the engine server's POST /hooks/monitor/<project>
+// ?key=… (packages/engine/server/index.js, outside the token gate) calls monitorWebhookIngest, which
+// checks the key in constant time and ingests the pushed events like a poll (source 'webhook').
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -29,6 +33,9 @@ const POLL_MS = 5 * 60 * 1000;
 // each source type's own fields (the token is never one: it goes to the keychain)
 const SOURCE_FIELDS = { 'log-file': ['path'], 'log-url': ['url'], sentry: ['org', 'project'] };
 const SOURCE_TYPES = Object.keys(SOURCE_FIELDS);
+// the pushed events' source id (never a saved source's: those are src-<hex>)
+const WEBHOOK_SOURCE = 'webhook';
+const hookPath = (projectId, key) => `/hooks/monitor/${encodeURIComponent(projectId)}?key=${key}`;
 
 module.exports = (ctx) => {
   const dir = () => ctx.ws.monitor || path.join(ctx.ws.root, 'monitor');
@@ -43,6 +50,8 @@ module.exports = (ctx) => {
     set: async (key, value) => { if (value) memory.set(key, value); else memory.delete(key); },
   };
   const tokenKey = (projectId, sourceId) => `monitor:${plain(projectId)}:${sourceId}`;
+  const webhookKey = (projectId) => tokenKey(projectId, WEBHOOK_SOURCE);
+  const sameKey = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a || '')).digest(), crypto.createHash('sha256').update(String(b || '')).digest());
 
   let timer = null;
   function watchMonitor() {
@@ -82,7 +91,8 @@ module.exports = (ctx) => {
       const hasToken = s.type === 'sentry' ? !!(await secrets().get(tokenKey(projectId, s.id))) : false;
       sources.push({ id: s.id, type: s.type, label: s.label, hasToken, polledAt: s.polledAt || null, error: s.error || null, every: POLL_MS / 60000 });
     }
-    return { groups: groupsOf(state), sources, automation: { ...state.automation } };
+    const webhook = { enabled: !!(await secrets().get(webhookKey(projectId))) };
+    return { groups: groupsOf(state), sources, automation: { ...state.automation }, webhook };
   }
 
   const defaultLabel = (s) => (s.type === 'sentry' ? 'Sentry' : s.type === 'log-file' ? path.basename(String(s.path || 'log')) : (() => { try { return new URL(s.url).host; } catch { return 'log URL'; } })());
@@ -104,22 +114,53 @@ module.exports = (ctx) => {
     return { ok: true, source: saved };
   }
 
-  async function monitorPoll({ projectId }) {
+  // events into the state (`add` changes it), deduplicated by source and id; the new groups are
+  // diagnosed when the automation says 'on'
+  async function ingest(projectId, add) {
     const state = read(projectId);
     const before = new Set(groupsOf(state).map((g) => g.fingerprint));
-    const errors = [];
-    for (const s of state.sources) {
-      const res = await connectors.pollSource(s, { getToken: (id) => secrets().get(tokenKey(projectId, id)), since: s.cursor || null });
-      s.polledAt = new Date().toISOString();
-      if (!res.ok) { s.error = res.error; errors.push(`${s.label}: ${res.error}`); continue; }
-      s.error = null;
-      s.cursor = res.cursor || s.cursor || null;
-      for (const ev of res.events) if (ev.id != null) state.events[`${s.id}:${ev.id}`] = ev;
-    }
+    await add(state);
     write(projectId, state);
     const fresh = groupsOf(state).filter((g) => !before.has(g.fingerprint) && g.state === 'new');
     if (state.automation.diagnose === 'on') await autoDiagnose(projectId, fresh);
+  }
+
+  async function monitorPoll({ projectId }) {
+    const errors = [];
+    await ingest(projectId, async (state) => {
+      for (const s of state.sources) {
+        const res = await connectors.pollSource(s, { getToken: (id) => secrets().get(tokenKey(projectId, id)), since: s.cursor || null });
+        s.polledAt = new Date().toISOString();
+        if (!res.ok) { s.error = res.error; errors.push(`${s.label}: ${res.error}`); continue; }
+        s.error = null;
+        s.cursor = res.cursor || s.cursor || null;
+        for (const ev of res.events) if (ev.id != null) state.events[`${s.id}:${ev.id}`] = ev;
+      }
+    });
     return { ok: true, groups: groupsOf(read(projectId)), errors };
+  }
+
+  // { projectId, enable } → on: a new key (the old one stops working), its URL path shown once; off: no key
+  async function monitorWebhook({ projectId, enable }) {
+    projects.readProject(ctx.ws.projects, plain(projectId));
+    if (!enable) {
+      await secrets().set(webhookKey(projectId), '');
+      return { ok: true, enabled: false, path: null };
+    }
+    const key = crypto.randomBytes(24).toString('hex');
+    await secrets().set(webhookKey(projectId), key);
+    return { ok: true, enabled: true, path: hookPath(plain(projectId), key) };
+  }
+
+  // the engine server's POST /hooks/monitor/<project>?key=… (never a channel): { ok, received } or
+  // { ok: false, status, error }; an unknown project and a wrong key answer the same
+  async function monitorWebhookIngest({ projectId, key, payload }) {
+    const expected = await secrets().get(webhookKey(projectId)).catch(() => null);
+    if (!expected || !key || !sameKey(key, expected)) return { ok: false, status: 401, error: 'Unknown webhook or wrong key.' };
+    const events = connectors.webhookEvents(payload, WEBHOOK_SOURCE).filter((ev) => ev.id != null);
+    if (!events.length) return { ok: false, status: 400, error: 'No error event in the body: send an event, a list of events or a Sentry webhook.' };
+    await ingest(projectId, (state) => { for (const ev of events) state.events[`${WEBHOOK_SOURCE}:${ev.id}`] = ev; });
+    return { ok: true, received: events.length };
   }
 
   // 'on': the new groups are diagnosed, at most dailyCap a day (and a fix run proposed when fix is 'on')
@@ -212,6 +253,8 @@ module.exports = (ctx) => {
     monitorSaveSource,
     monitorSetAutomation,
     monitorState,
+    monitorWebhook,
+    monitorWebhookIngest,
     stopMonitorWatch,
   };
 };

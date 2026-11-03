@@ -149,6 +149,9 @@ function createService({ host, fronts = null, installed = undefined }) {
     prepareRestart: ctx.prepareRestart,
     // the owner's answer from a paired phone (#226, packages/engine/domains/workspace/mobile-gates.js): never a channel
     answerPhoneGate: ctx.answerPhoneGate,
+    // #634: an error source's push to the Monitor's webhook (the engine server's POST /hooks/monitor/<project>,
+    // fronts/ai/engine/areas/monitor.js): never a channel; null when the ai front is not served
+    monitorWebhook: ctx.monitorWebhookIngest ? (arg) => ctx.monitorWebhookIngest(arg) : null,
     shutdown() {
       ctx.stopPhoneGates();
       ctx.stopPrTimer();

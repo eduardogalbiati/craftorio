@@ -18,6 +18,11 @@
 //
 //   POST /session         form body token=<token>: the one-shot sign-in (the 401 page of a browser is
 //                         its form) → 303 to / with the cookie; keeps the token out of the address bar
+//   POST /hooks/monitor/<project>?key=<key>  (#634) an error source's push to the Monitor (a Sentry
+//                         webhook, an event or a list of events; at most MAX_HOOK bytes) → 202
+//                         { ok, received } | 401 | 400. Outside the token gate: the key is the
+//                         project's webhook key (monitor:webhook, kept in the keychain), which only
+//                         adds error events; it never reaches a channel (service.monitorWebhook)
 //
 // Every request needs the server token: `Authorization: Bearer <token>`, or the cookie the server
 // sets after POST /session or when a browser opens /?token=<token> (the desktop app's startUrl). The
@@ -74,6 +79,9 @@ const COOKIE_MAX_AGE_S = 7 * 24 * 60 * 60;
 const MAX_FORM = 4096;
 // a pasted image of up to 10 MB travels as base64 (clipboard:saveImage, #130)
 const MAX_BODY = 15 * 1024 * 1024;
+// a Monitor webhook's push (#634): error events, not files
+const MAX_HOOK = 256 * 1024;
+const HOOK_PATH = /^\/hooks\/monitor\/([^/]+)$/;
 // the WebSocket ping and heartbeat period (#603): two heartbeats within the page's watchdog (20 s)
 const WS_PING_INTERVAL_MS = 10000;
 
@@ -96,8 +104,8 @@ function readBody(req, max) {
   });
 }
 
-async function readJson(req) {
-  const text = await readBody(req, MAX_BODY);
+async function readJson(req, max = MAX_BODY) {
+  const text = await readBody(req, max);
   try { return text ? JSON.parse(text) : {}; } catch { throw new HttpError(400, 'The body is not valid JSON.'); }
 }
 
@@ -220,6 +228,17 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
     sendJson(res, answer.status, answer.body);
   }
 
+  // the Monitor's webhook (#634): the key, not the server token, admits it (see the header)
+  async function monitorHook(req, res, project, key) {
+    if (req.method !== 'POST') throw new HttpError(405, 'Use POST.');
+    let projectId;
+    try { projectId = decodeURIComponent(project); } catch { throw new HttpError(400, 'Bad path.'); }
+    const payload = await readJson(req, MAX_HOOK);
+    const out = await service.monitorWebhook({ projectId, key, payload });
+    if (!out?.ok) throw new HttpError(out?.status || 400, out?.error || 'Refused.');
+    return sendJson(res, 202, { ok: true, received: out.received });
+  }
+
   function serveStatic(req, res, pathname) {
     if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Use GET.');
     let rel;
@@ -262,6 +281,8 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
         res.writeHead(303, { 'Set-Cookie': cookieHeader(req), Location: '/', 'Cache-Control': 'no-store' });
         return res.end();
       }
+      const hook = HOOK_PATH.exec(url.pathname);
+      if (hook && service.monitorWebhook) return await monitorHook(req, res, hook[1], url.searchParams.get('key'));
       if (!authorized(req)) {
         if (req.method === 'GET' && /text\/html/.test(req.headers.accept || '')) {
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY' });

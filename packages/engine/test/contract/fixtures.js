@@ -199,6 +199,7 @@ module.exports = {
   'monitor:propose-fix': { setup: project, arg: ({ projectId }) => ({ projectId, fingerprint: 'no-such-group' }), invalid: BAD_PROJECT },
   'monitor:save-source': { setup: project, arg: ({ projectId }) => ({ projectId, source: { type: 'log-file', label: 'contract log', path: UNREACHABLE_REPO } }), invalid: BAD_PROJECT },
   'monitor:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'monitor:webhook': { setup: project, arg: ({ projectId }) => ({ projectId, enable: false }), invalid: BAD_PROJECT },
   'nightwatch:morning': { arg: null },
   'nightwatch:report': { arg: null },
   'nightwatch:state': { arg: null },
