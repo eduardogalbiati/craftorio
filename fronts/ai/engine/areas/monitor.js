@@ -98,7 +98,7 @@ module.exports = (ctx) => {
       const s = state.groups[g.fingerprint] || {};
       // the sparkline of the last hour, ending at the group's last event (the screen's "· 1h")
       const spark = grouping.sparkOf(byFingerprint.get(g.fingerprint) || [], g.fingerprint, { now: Date.parse(g.lastSeen) || Date.now() });
-      return { ...g, spark, state: s.state || 'new', cardId: s.cardId || null, runId: s.runId || null };
+      return { ...g, spark, state: s.state || 'new', cardId: s.cardId || null, runId: s.runId || null, incident: s.incident || null };
     });
   }
 
