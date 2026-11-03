@@ -82,9 +82,11 @@ test('mergeState: null when the stages were edited (another shape)', () => {
   assert.equal(merged === null, true);
 });
 
-test('mergeState: merges a run change and a queue change, keeping the bodies the screen holds', () => {
+test('mergeState: merges a run change, keeping the bodies the screen holds; a light queue is not merged (#446)', () => {
   const L = load();
-  const merged = L.mergeState(shown(), light({
+  const base = shown();
+  const queueBefore = JSON.stringify(base.queue ?? null);
+  const merged = L.mergeState(base, light({
     items: { a: { id: 'a', status: 'running', runId: 'run-1', runs: ['run-1'], waiting: 'memory', run: { step: 'suite' } } },
     queue: { paused: true, items: [{ id: 'q1', status: 'starting' }] },
   }));
@@ -94,9 +96,7 @@ test('mergeState: merges a run change and a queue change, keeping the bodies the
   assert.equal(a.run.step, 'suite');
   assert.equal(a.body, 'long body A');
   assert.equal(a.title, 'Item A');
-  assert.equal(merged.queue.paused, true);
-  assert.equal(merged.queue.items[0].status, 'starting');
-  assert.equal(merged.queue.items[0].title, 'Queued one');
+  assert.equal(JSON.stringify(merged.queue ?? null), queueBefore, 'the light queue does not change what the screen holds');
 });
 
 test('mergeState: merges an item going from planned to running on the run it already had', () => {

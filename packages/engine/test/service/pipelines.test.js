@@ -273,7 +273,35 @@ test('pipelines:restore: the user\'s edited copy of a bundled pipeline is trashe
   assert.equal(after.name, before.name);
 });
 
-test('backlog:assign with a pipeline: its first workflow receives the issues, with the pipeline\'s fixed inputs and the rest of the pipeline as the chain', async (t) => {
+test('backlog:assign with a pipeline plans (#446) its first workflow with the issues, the pipeline\'s fixed inputs and the rest of the pipeline as the chain; nothing starts', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  writeFixtures(ws);
+  writePipeline(ws, 'pipe-backlog.yaml', 'name: Pipe Backlog\ncategory: build\nstages:\n  - workflow: fixture-issue.yaml\n    inputs:\n      language: go\n  - workflow: pl-three.yaml\n');
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-pipe-plan-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({
+    projectId: p.id, platform: 'github', repo: 'https://github.com/o/r',
+    issues: [{ number: 1, title: 'Issue 1', state: 'open', url: 'https://github.com/o/r/issues/1', body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } }],
+  }));
+
+  await api['backlog:assign']({ projectId: p.id, numbers: [1], mock: true, pipeline: 'pipe-backlog.yaml' });
+
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.stages.length, 1);
+  const item = roadmap.stages[0].items[0];
+  assert.equal(item.workflow, 'fixture-issue.yaml');
+  assert.equal(item.inputs.language, 'go');
+  assert.equal(item.then.workflow, 'pl-three.yaml');
+  assert.equal(item.then.pipeline.file, 'pipe-backlog.yaml');
+  assert.equal(item.then.pipeline.stage, 1);
+  assert.equal(api['runs:active']().length, 0);
+});
+
+test('backlog:assign with a pipeline and Run now: its first workflow starts with the issues, the pipeline\'s fixed inputs and the rest of the pipeline as the chain', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();
   fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
@@ -290,7 +318,7 @@ test('backlog:assign with a pipeline: its first workflow receives the issues, wi
   const started = [];
   service.events.on('run:event', (ev) => { if (ev.type === 'workflow.started') started.push(ev); });
 
-  await api['backlog:assign']({ projectId: p.id, numbers: [1], mock: true, pipeline: 'pipe-backlog.yaml' });
+  await api['backlog:assign']({ projectId: p.id, numbers: [1], mock: true, pipeline: 'pipe-backlog.yaml', runNow: true });
 
   await until(() => started.some((e) => e.file === 'fixture-issue.yaml'));
   const run1 = started.find((e) => e.file === 'fixture-issue.yaml');

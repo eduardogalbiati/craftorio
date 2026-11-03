@@ -149,14 +149,15 @@ test('by day, request_agent roadmap.skip runs at once: the item is skipped', asy
   assert.match(ofKind(await api['po:history']({ projectId: p.id }), 'roadmap.skip')[1].text, /^Done:/);
 });
 
-test('by day, request_agent queue.assign runs at once: its Done result is recorded', async (t) => {
+test('by day, request_agent queue.assign runs at once: its Done result is recorded (#446: planned in a new roadmap stage, started now)', async (t) => {
   const { api, p } = await poSetup(t, 'confirm-now-queue');
   const out = await api['oracle:requestAgent']({ to: 'po', kind: 'queue.assign', params: { issues: [1], workflow: 'fixture-issue.yaml' }, projectId: p.id, reason: 'test', mock: true });
   assert.equal(out.ok, true, JSON.stringify(out));
   assert.equal(out.pending, undefined);
   const mine = ofKind(await api['po:history']({ projectId: p.id }), 'queue.assign');
   assert.equal(mine.length, 2);
-  assert.equal(mine[1].text, 'Done: #1 queued on fixture-issue.yaml.');
+  assert.equal(mine[1].text, 'Done: #1 planned in a new roadmap stage on fixture-issue.yaml, started now.');
+  assert.deepEqual((await stagesOf(api, p.id)).map((s) => s.items.map(numbersIn)), [[[1]]]);
 });
 
 // ---- 2. a direct request (not the Oracle's model) runs at once ------------------------------------
@@ -190,7 +191,7 @@ test('a direct supervisor:request dispatch.restart runs at once, not pending', a
   const mine = ofRequest(await api['supervisor:chatHistory'](), 'direct-dispatch');
   assert.equal(mine.length, 2);
   assert.equal(mine[0].pending, undefined);
-  assert.equal(mine[1].text, 'Done: The roadmaps and queues were dispatched: the next planned items start when they can.');
+  assert.equal(mine[1].text, 'Done: The roadmaps were dispatched: the next planned items start when they can.');
 });
 
 // ---- 3. Night watch: the loop cap -----------------------------------------------------------------
