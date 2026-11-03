@@ -257,12 +257,13 @@
       const data = merged || await api.getBacklog(id);
       if (!data || bl.projectId !== id || bl.syncing) return;
       if (!merged && dataKey(id, data) === (shownData ??= dataKey(id, bl.data))) return;
-      const view = $b('#view-backlog');
-      const top = view?.scrollTop;
-      setData(data, { merged: !!merged });
-      render();
-      if (view && top != null) view.scrollTop = top;
+      renderKeepingScroll(() => setData(data, { merged: !!merged }));
     } catch { /* keep what is shown */ }
+  }
+  function renderKeepingScroll(change) { // the screen redrawn where it is: its scroll read before `change` (new data, #491) and the draw, then put back (#748)
+    const view = $b('#view-backlog'), top = view?.scrollTop;
+    if (typeof change === 'function') change();
+    render(); if (view && top != null) view.scrollTop = top;
   }
 
   // Runs start, move between steps, stop at gates and end while the screen is open (#214): only the
@@ -693,7 +694,7 @@
   }
   const roadmapCtx = () => ({
     projectId: bl.projectId, setData, setError: (msg) => { bl.error = msg; },
-    render: function renderKeepingScroll() { const view = $b('#view-backlog'); const top = view?.scrollTop; render(); if (view && top != null) view.scrollTop = top; }, // #748: the scroll stays
+    render: renderKeepingScroll, // #748: the scroll stays
     // #269: the filter row's epic (the Board's choice too); #270: "Open the Roadmap" of the Board's alert
     setEpic: (id) => { bl.epic = String(id || ''); render(); },
     showRoadmap: () => showRoadmap(),
@@ -921,8 +922,7 @@
   let issueMenuBinding = null; // #748: the open card menu's keys and outside click (Menu.bindMenu), bound after the render
   function bindIssueMenu() {
     issueMenuBinding?.close(); const el = bl.menu == null ? null : $b('#bl-list').querySelector('.bl-menu[role="menu"]');
-    issueMenuBinding = el ? Menu.bindMenu(el, { anchor: el.previousElementSibling, onClose: () => { if (bl.menu != null) { bl.menu = null; render(); } } }) : null;
-    el?.querySelector('[role="menuitem"]')?.focus({ preventScroll: true });
+    issueMenuBinding = el ? Menu.bindMenu(el, { anchor: el.previousElementSibling, onClose: () => { if (bl.menu != null) { bl.menu = null; render(); } } }) : null; el?.querySelector('[role="menuitem"]')?.focus({ preventScroll: true });
   }
 
   // Filed from a discovery card (#258, the service's `discoveryCard`): the card's title; a click opens
@@ -1350,7 +1350,7 @@
     } else {
       // (#491: the Roadmap keeps its item rows when only their content changed)
       if (bl.mode === 'roadmap') window.BacklogRoadmap.patch(list, window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }));
-      else list.innerHTML = bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
+      else { list.innerHTML = bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board); bindIssueMenu(); } // #748: an open card menu, redrawn, bound again
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
       if (bl.mode === 'roadmap') {
         window.BacklogRoadmap.mountChain(bl.data);
@@ -1568,7 +1568,7 @@
       if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, issueOf(Number(onMap.dataset.showMap))); return; } if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
       // #238: an issue's actions menu, its Archive, and Restore
       const menu = e.target.closest('[data-menu]'), arch = e.target.closest('[data-archive]'), back = e.target.closest('[data-restore]');
-      if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); bindIssueMenu(); return; }
+      if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }
       if (arch) { if (arch.getAttribute('aria-disabled') === 'true') return; bl.menu = null; render(); await archive([Number(arch.dataset.archive)]); return; }
       if (back) { await restore(Number(back.dataset.restore)); return; }
       if (e.target.closest('.bl-menu, a')) return;

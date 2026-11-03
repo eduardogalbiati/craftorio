@@ -77,7 +77,7 @@
     up: '<path d="M12 19V5M6 11l6-6 6 6"/>', down: '<path d="M12 5v14M6 13l6 6 6-6"/>', note: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', // i18n-ignore
     remove: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>', clear: '<path d="M4 7h16M6 7l1 13h10l1-13"/>', versions: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', // i18n-ignore
   }).map(([k, d]) => [k, svg(d)]));
-  const COMPLEXITY =/^complexity\s*[:=/-]?\s*(\d+)/i;
+  const COMPLEXITY = /^complexity\s*[:=/-]?\s*(\d+)/i;
   // an item's issues (RoadmapModel.itemIssues: an item stored before #163 is its own one issue)
   const refs = (x) => RoadmapModel.itemIssues(x);
   const may = (r, stage, x) => RoadmapModel.allowedActions(r, stage, x); // #349: the model decides the buttons
@@ -655,11 +655,11 @@
   // ---- the stage's ⋮ menu (#282): its rarely used actions, out of the head -------------------------------
   // #748: the shared menu (packages/ui-kit/menu.js), grouped; a refused entry stays, aria-disabled, its reason in its
   // tooltip only. Opened and closed in the page, never by a redraw. #284: a finished stage has nothing to hold back.
-  let [stageMenu, stageBinding] = [null, null]; // the id of the stage whose menu is open; its Menu.bindMenu
+  let [stageMenu, stageBinding, barBinding] = [null, null, null]; // the id of the stage whose menu is open; its Menu.bindMenu; the bar's (bindMenus)
   function stageMenuBody(stage, s, count, r, done) {
     const off = !!stage.disabled;
     const acts = may(r, stage); // with a stage, start is "Run this stage" (#141)
-    const e = (id, icon, label, why, attrs, extra = {}) => ({ id, iconHtml: MI[icon], label: t(`backlog_roadmap.${label}`), title: t(`backlog_roadmap.${label}_tip`), disabledReason: why || '', attrs, ...extra });
+    const e = (id, icon, label, why, attrs, extra = {}) => ({ id, iconHtml: MI[icon], label: t(`backlog_roadmap.${label}`), title: extra.title ?? t(`backlog_roadmap.${label}_tip`), disabledReason: why || '', attrs, ...extra });
     const sep = { divider: true };
     return Menu.menuHtml([
       off ? e('enable', 'power', 'enable', '', 'data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"') : done ? null : e('disable', 'power', 'disable', acts.disable.reason, 'data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"'),
@@ -921,6 +921,7 @@
   // changed whose page starts below earlier stages shows its current stage.
   let observer = null;
   function mounted(list, rerender, ownerBusy = busy) {
+    bindMenus(list, rerender);
     observer?.disconnect();
     observer = null;
     const row = list?.querySelector('[data-rm-load-more]');
@@ -1522,29 +1523,28 @@
   }
   /** Closes the open ⋮ menu (a click elsewhere on the page): a stage's in the page; true when the bar's was open (to redraw). */
   function closeMenu() {
-    closeStageMenu();
     const was = menuOpen || pauseOpen;
-    [menuOpen, pauseOpen] = [false, false];
+    closeStageMenu(); [menuOpen, pauseOpen] = [false, false];
     return was;
   }
-  /** Keys of the open ⋮ menu: Escape closes it (the focus goes back to its button), the arrows move between its entries. True when the key was the menu's. */
+  const focusBarButton = (pause) => focusMenu(...(pause ? ['[data-rm="pause"]', '.rm-pause-wrap'] : ['[data-rm-menu]']));
+  /** Escape with the focus outside the open ⋮ menu (inside it, Menu.bindMenu has the keys): closes it, the focus back on its button. True when the key was the menu's. */
   function onKeyDown(e, ctx) {
-    if (e.defaultPrevented) return false; // the stage menu's own keys (Menu.bindMenu)
-    if (stageMenu != null && e.key === 'Escape') { e.preventDefault?.(); closeStageMenu(true); return true; }
-    if (!menuOpen && !pauseOpen) return false;
+    if (e.defaultPrevented || e.key !== 'Escape') return false; // the menu's own keys (Menu.bindMenu)
+    if (stageMenu != null) { e.preventDefault?.(); closeStageMenu(true); return true; }
     const pause = pauseOpen;
-    const items = [...document.querySelectorAll('#bl-list .rm-menu [role="menuitem"]')];
-    if (e.key !== 'Escape' && ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !items.length)) return false;
-    e.preventDefault?.();
-    if (e.key === 'Escape') {
-      closeMenu();
-      ctx.render();
-      focusMenu(...(pause ? ['[data-rm="pause"]', '.rm-pause-wrap'] : ['[data-rm-menu]']));
-      return true;
-    }
-    const at = items.indexOf(document.activeElement);
-    items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus({ preventScroll: true });
+    if (!closeMenu()) return false;
+    e.preventDefault?.(); ctx.render(); focusBarButton(pause);
     return true;
+  }
+  // #748: a draw replaces the open menus' elements: they get the shared menu's keyboard and outside click again; the bar's close by a redraw (their outside: the page around the list)
+  function bindMenus(list, rerender) {
+    [barBinding, stageBinding].forEach((b) => b?.close());
+    const bar = (menuOpen || pauseOpen) ? list?.querySelector?.(`${pauseOpen ? '.rm-pause-wrap' : '.rm-menu-wrap'} > .ui-menu`) : null;
+    barBinding = bar ? Menu.bindMenu(bar, { anchor: list, onClose: (why) => { const pause = pauseOpen; [menuOpen, pauseOpen] = [false, false]; rerender(); if (why === 'escape') focusBarButton(pause); } }) : null;
+    const [menu, btn, at] = stageMenu == null ? [] : [list?.querySelector?.('.rm-stage-menu:not([hidden])'), stageButtonOf(stageMenu), document.activeElement];
+    stageBinding = menu && btn ? Menu.bindMenu(menu, { anchor: btn, onClose: (why) => closeStageMenu(why === 'escape') }) : null;
+    if (stageBinding && (!at || at === document.body || at.isConnected === false)) menu.querySelector('[role="menuitem"]')?.focus({ preventScroll: true });
   }
 
   // #281: Undo in an edit's toast puts back what it changed (api.undoRoadmap → domains/roadmap/roadmap-undo.js), or says why it cannot

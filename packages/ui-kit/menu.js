@@ -12,7 +12,8 @@
 //   between the entries (dividers skipped, refused entries reached); Enter clicks the focused entry; a
 //   click on an allowed entry calls onPick(id); Escape calls onClose('escape'); a press or a click
 //   outside the menu and its `anchor` (the button that opened it, or a function returning it) calls
-//   onClose('outside'), once. close() removes the listeners. The look is menu.css.
+//   onClose('outside'), once (a target already gone from the page is ignored). close() removes the
+//   listeners; a screen that redraws an open menu binds the new element again. The look is menu.css.
 // Browser: window.Menu; Node: module.exports.
 // load: early (the views draw their menus with it)
 (function (root) {
@@ -65,7 +66,8 @@
       const a = typeof anchor === 'function' ? anchor() : anchor;
       return menu.contains(target) || !!(a && a.contains(target));
     };
-    const onDoc = (e) => { if (!inside(e.target)) finish('outside'); };
+    // a target no longer in the page (the click that opened the menu redrew the screen, its button gone) is not outside
+    const onDoc = (e) => { if (e.target?.isConnected !== false && !inside(e.target)) finish('outside'); };
     function close() {
       open = false;
       menu.removeEventListener('keydown', onKey);

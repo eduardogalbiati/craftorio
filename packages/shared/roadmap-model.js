@@ -183,12 +183,12 @@
       const none = no(t('roadmap.no_stage_given'));
       return { disable: none, enable: none, parkStage: none, pauseStage: none, removeStage: none, stopStage: none };
     }
+    const busy = itemsOf(stage).some((x) => x.status === 'running');
     // #748: the stage and its items leave the roadmap (not the issues); never under a run that still changes
     const removeStage = () => {
       if (itemsOf(stage).some(atGate)) return no(t('roadmap.stage_remove_at_gate'));
-      return itemsOf(stage).some((x) => x.status === 'running') ? no(t('roadmap.stage_item_running')) : yes();
+      return busy ? no(t('roadmap.stage_item_running')) : yes();
     };
-    const busy = itemsOf(stage).some((x) => x.status === 'running');
     // #395: its items at a gate are parked and its planned ones not started skipped; never while a turn runs
     const parkStage = () => {
       if (stage.disabled) return no(t('roadmap.stage_disabled'));

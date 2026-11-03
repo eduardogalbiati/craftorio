@@ -75,6 +75,7 @@ function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' 
      function render() { renders += 1; }
      function setData(data) { bl.data = data; shownData = dataKey(bl.projectId, data); }
      ${pick(/async function reload\(\) \{[\s\S]*?\n  \}/)}
+     ${pick(/function renderKeepingScroll\(change\) \{[\s\S]*?\n  \}/)}
      ${pick(/async function backlogChanged\(\) \{[\s\S]*?\n  \}/)}
      ${pick(/function staleNotice\(\) \{[\s\S]*?\n  \}/)}
      ${pick(/const ownerBusy = \(\) => \{[\s\S]*?\n  \};/)}

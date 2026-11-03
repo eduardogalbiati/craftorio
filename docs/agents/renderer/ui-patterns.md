@@ -24,10 +24,12 @@ Page alerts, toasts with an action, ⋮ menus, the roadmap card and releases, an
   one click offers Undo in its toast** (or asks first when it cannot be undone): the Roadmap's edits
   do (`undoToast` in `backlog-roadmap.js`, `api.undoRoadmap`), with "Restore an earlier version…" in
   its ⋮ menu for a mistake noticed later.
-- **A menu of actions** (#269): secondary or rare actions go into a ⋮ menu built from a list
-  (`MENU` in `backlog-roadmap.js`: `.bl-menu-wrap`, a button with `aria-haspopup="menu"` and
-  `aria-expanded`, `role="menu"` / `role="menuitem"`, the first entry focused when it opens, Esc
-  closes it and gives the focus back), so a new action is a line in the list, not a new button.
+- **A menu of actions** (#269, #748): secondary or rare actions go into a ⋮ menu built from a list
+  with the shared component (`Menu.menuHtml` / `Menu.bindMenu` in `packages/ui-kit/menu.js`, its API
+  in `packages/ui-kit/AGENTS.md`: entries, dividers, a refused entry's reason in its tooltip, the
+  keyboard and the outside click), behind a button with `aria-haspopup="menu"` and `aria-expanded`;
+  the first entry focused when it opens, Esc closes it and gives the focus back. A new action is a
+  line in the list, not a new button.
 - **The roadmap item card** (#282, `itemHtml` in `backlog-roadmap.js`, `.rm-*` in `backlog.css`) reads in
   three bands. Band 1, `.rm-item-top`: the issues (`.rm-issues`: the titles, then the count and the
   complexity, `roadmap-issues-foot`) | cost and time (`metersHtml`: `roadmap-meter-cost` /
