@@ -21,6 +21,8 @@ Peça para a sua IA priorizar itens, colocar no backlog, startar o roadmap, anal
 
 Happy coding, qualquer problema podem abrir issues
 
+O épico que preciso finalizar porém acabou meus credittos é
+https://github.com/eduardogalbiati/multiagent-orchestrator/issues/785
 
 
 
