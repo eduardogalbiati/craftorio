@@ -44,6 +44,19 @@ Read when running from source; the packaged app ignores the ones marked "source 
 | `MULTIAGENT_SERVER_TOKEN` | The `npm run serve` token; unset, a random one at every start. Full control of the machine: keep it secret. |
 | `MULTIAGENT_E2E_WORKERS` | Parallel workers of `npm run test:e2e`; unset, sized from the machine. |
 
+## Running the app on this repository
+
+`main` is protected and only the maintainer merges. On your own clone, use the
+`ai-development-remote-hero` workflow: it pushes the run's branch, opens a pull request and stops at
+Team review, where the maintainer takes over.
+
+1. Add your clone as a project in the app.
+2. On the Workflows screen, accept `ai-development-remote-hero`. Accept it again whenever the file changes.
+3. Choose it when you start a run, or make it the project's default.
+
+Avoid `feature` and `fix` in Local mode here: they merge into your local `main`, GitHub refuses the
+push, and the run still ends with your work only on your machine.
+
 ## Checks
 
 - `npm test` runs the unit tests and a full simulated run of the feature workflow.
