@@ -24,7 +24,8 @@ Happy coding, qualquer problema podem abrir issues
 O épico que preciso finalizar porém acabou meus credittos é
 https://github.com/eduardogalbiati/multiagent-orchestrator/issues/785
 
-
+Se forem importar o APP dentro do APP para poder contribuir use esse workflow
+ai-development-remote-hero.yaml
 
 Electron app that runs multi-agent workflows defined in YAML (`<workspace>/workflows/`), opening
 **Claude Code**, **Codex CLI** and **Grok Build** sessions and recording the observability of each session
