@@ -329,7 +329,11 @@ and run `npm run icons`, then commit the four files.
 
 ## Account and privacy
 
-The app is free and open source. The packaged app asks you to sign in (Google, in the system
+The app is free and open source. **Sign-in is off for now** (`enabled: false` in
+`packages/engine/domains/account/auth-config.js`): the app opens without an account and records nothing.
+The rest of this section describes the app with sign-in on.
+
+With sign-in on, the packaged app asks you to sign in (Google, in the system
 browser) once: the account gates nothing, it only tells us how many people use the app. A signed-in
 app records its visit at every start and then at most once a day (best effort: a failure is never
 shown and never blocks anything; an offline start with a stored session stays signed in).

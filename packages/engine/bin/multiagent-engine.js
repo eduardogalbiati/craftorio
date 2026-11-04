@@ -132,7 +132,7 @@ if (!lock.ok) {
 // The account session of the server lives next to the user's home, readable only by this user
 // (there is no OS encryption here as in the desktop app).
 const accountFile = path.join(os.homedir(), '.multiagent-orchestrator', 'server-account.json');
-const authOff = process.env.MULTIAGENT_AUTH === 'off';
+const authOff = !authConfig.enabled || process.env.MULTIAGENT_AUTH === 'off';
 const storage = fileStorage(accountFile);
 const auth = createAuth({
   url: authOff ? '' : process.env.MULTIAGENT_SUPABASE_URL || authConfig.url,
@@ -209,7 +209,7 @@ function printAllowedHosts(names, magic) {
     console.log('  (shown once: the page keeps it in a cookie; clear this line from the shell history and the terminal\'s scrollback if others can read them.)');
     if (loopback) printAllowedHosts(allowedHosts, magic);
     else printRemoteAccess(host, port);
-    if (authOff) console.warn('MULTIAGENT_AUTH=off: runs do not need an account.');
+    if (authOff) console.warn('Sign-in is off: runs do not need an account.');
     else {
       const s = await auth.refresh().catch(() => auth.state());
       console.log(s.user ? `Account: ${s.user.email}` : 'Not signed in: sign in from the browser UI before starting runs.');
