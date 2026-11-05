@@ -76,3 +76,28 @@ test('#785 a report taken as an issue is written once in its thread', async (t) 
   const lines = fs.readFileSync(path.join(opts.runsDir, messages[0].thread, 'conversation.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   assert.deepEqual(lines.map((m) => m.role), ['user', 'po']);
 });
+
+// the conversation cleared (po:clear has no busy guard: another window) while the model answers
+function clearedDuringTheTurn(t, opts, answer) {
+  const providers = require('../../engine/providers');
+  const original = providers.runTurn;
+  t.after(() => { providers.runTurn = original; });
+  providers.runTurn = async () => {
+    productOwner.clearConversation(opts.backlogDir, opts.projectId);
+    return { text: `\`\`\`json\n${JSON.stringify(answer)}\n\`\`\``, costUsd: 0, usage: {} };
+  };
+}
+
+test('#785 a plan survives the conversation being cleared during its turn', async (t) => {
+  const opts = options(t);
+  clearedDuringTheTurn(t, opts, plan);
+  const { message } = await productOwner.ask(opts);
+  assert.equal(message.role, 'po');
+});
+
+test('#785 a report taken as an issue survives the conversation being cleared during its turn', async (t) => {
+  const opts = options(t, { question: REPORT });
+  clearedDuringTheTurn(t, opts, asking);
+  const { messages } = await productOwner.ask(opts);
+  assert.equal(messages.at(-1).role, 'po');
+});

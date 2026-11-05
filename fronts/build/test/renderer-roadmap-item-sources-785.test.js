@@ -20,13 +20,13 @@ const OLD_INPUTS = {
   steps_folders: 'features/steps', test_command: '', check_command: '', unit_tests: 'write_and_run',
 };
 
-async function openEditor(inputs, { language = 'pt-BR' } = {}) {
+async function openEditor(inputs, { language = 'pt-BR', hints = async () => plain(HINTS) } = {}) {
   const item = { id: 'it1', status: 'planned', workflow: 'feature.yaml', issues: [{ number: 7, title: 'Index the notes', url: 'u' }], inputs };
   const data = { projectId: 'p1', roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   const page = await loadPage({
     api: {
       listWorkflows: async () => [FEATURE],
-      projectInputHints: async () => plain(HINTS),
+      projectInputHints: hints,
       saveRoadmap: async (_p, stages) => ({ roadmap: { state: 'planned', stages } }),
     },
   });
@@ -49,8 +49,24 @@ async function openEditor(inputs, { language = 'pt-BR' } = {}) {
   const saves = () => page.callsTo('saveRoadmap').map((a) => plain(a[1][0].items[0].inputs));
   const source = (key) => textOf(byTestId(box, `workflow-input-source-${key}`));
   const field = (key) => box.querySelector(`[data-rm-field="${key}"]`)?.value ?? null;
-  return { page, box, clickOn, saves, source, field };
+  return { page, box, draw, clickOn, saves, source, field };
 }
+
+test('#785 the hints that failed are asked again: the next render shows the project\'s values', { timeout: 30000 }, async () => {
+  let asked = 0;
+  const e = await openEditor({}, { hints: async () => { asked += 1; if (asked === 1) throw new Error('offline'); return plain(HINTS); } });
+  assert.deepEqual([asked, e.field('mode'), e.source('mode')], [2, 'fork', 'do projeto']);
+});
+
+test('#785 the editor follows a project configuration changed while the project stays in view', { timeout: 30000, todo: 'known limit of #785: hintsFor and the 30 s hints cache keep the old values' }, async () => {
+  let hints = HINTS;
+  const e = await openEditor({}, { hints: async () => plain(hints) });
+  hints = { ...HINTS, runDefaults: { ...HINTS.runDefaults, mode: 'remote' } };
+  e.draw();
+  await settle(20);
+  e.draw();
+  assert.equal(e.field('mode'), 'remote');
+});
 
 test('#785 the editor of an item with no inputs starts from the project\'s values', { timeout: 30000 }, async () => {
   const e = await openEditor({});
