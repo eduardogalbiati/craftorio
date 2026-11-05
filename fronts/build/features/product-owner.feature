@@ -11,10 +11,10 @@ Feature: Backlog Product Owner
     And I watch the Product Owner's drawer
     And I click the suggested question "Build a roadmap"
     Then the Product Owner answers
-    And the suggested questions, "Register an issue…" and Ask were disabled while the Product Owner worked
+    And the suggested questions, "Register an issue" and Ask were disabled while the Product Owner worked
     And the text field stayed enabled while the Product Owner worked
     And the working line "Product Owner is working…" with its timer showed while the Product Owner worked
-    And the suggested questions, "Register an issue…" and Ask are enabled again
+    And the suggested questions, "Register an issue" and Ask are enabled again
     And the working line is gone
 
   @issue-234
@@ -26,34 +26,8 @@ Feature: Backlog Product Owner
     And I ask the Product Owner "Which issues should go first?"
     Then the Product Owner answers
     And my question "Which issues should go first?" was in view in the conversation as soon as I asked
-    And the suggested questions, "Register an issue…" and Ask were disabled while the Product Owner worked
-    And the suggested questions, "Register an issue…" and Ask are enabled again
-
-  # #777: the plan offers the files of workflows/ by display name (features/support/workflows.js).
-  # Feature is tests first: no Cost chip; Test backfill is not, and has the E2E tests input: Cost chip.
-  @issue-235
-  Scenario: Plan mode lists the workflows by name and Feature shows its own options
-    Given the app is open
-    When I open "Backlog" in the sidebar
-    And I open the Product Owner
-    And I switch the Product Owner to "Plan the backlog"
-    Then the plan's workflow choice offers "Feature" and "Test backfill"
-    When I plan with the workflow "Feature"
-    Then the Cost chip is hidden
-    And the plan shows the workflow's options
-    And "Write and run" is selected for "E2E tests"
-    And the Product Owner's header says "Planning for demo-app · Feature"
-
-  @issue-235
-  Scenario: Planning with Test backfill shows the Cost chip
-    Given the app is open
-    When I open "Backlog" in the sidebar
-    And I open the Product Owner
-    And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "Feature"
-    And I plan with the workflow "Test backfill"
-    Then the Cost chip is shown
-    And the Product Owner's header says "Planning for demo-app · Test backfill"
+    And the suggested questions, "Register an issue" and Ask were disabled while the Product Owner worked
+    And the suggested questions, "Register an issue" and Ask are enabled again
 
   # The simulated plan answer proposes to split the demo's big issue #15 (a long title, 12 tasks whose
   # text has `code` spans): its split card is the one checked
@@ -178,50 +152,86 @@ Feature: Backlog Product Owner
     And the proposal says no mockup is missing an issue
     And the proposal can be added to the roadmap
 
-  # #431: the drawer's foot ("Plan with [workflow]" and the workflow's options) takes less room. The
-  # main options (Mode, Unit tests, E2E tests, Screenshots) come first, under small group labels; the
-  # others wait behind "Show more options". A chevron on the "Plan with" row collapses the options to
-  # a one-line summary of the chosen values; the choice is remembered. Feature's (#777, once
-  # AI Development, local hero) defaults: Validation Automatic, E2E tests Write and run (#235). The issue's "Mode (Automatic or
-  # Validated)" is the input labelled "Validation" since #630.
-  @issue-431
-  Scenario: The plan shows the main options first, grouped, and the others behind "Show more options"
+  # #785: the Product Owner deduces each recommendation. The drawer asks nothing up front (three
+  # suggestions, the others behind "+ opções"; no Plan / Register toggle, no options block: #235's and
+  # #431's scenarios went with them); a recommendation shows its workflow and inputs as grouped decisions,
+  # each with where its value comes from, and "Editar" changes them before "Colocar no roadmap". An item
+  # keeps only the inputs chosen, so the project's configuration reaches the run. The scenarios read the
+  # sources as the issue words them, so the interface is in Portuguese; the inputs' labels and values
+  # ("E2E tests", "Fork + PR") are the workflow's own, the same in both languages. The project is the
+  # issue's: kind backend, variant fork-code, a Cargo.toml (test command "cargo test"), one open issue,
+  # so the simulated plan has one recommendation.
+  @issue-785
+  Scenario: A backend fork project's plan goes to the roadmap with the project's values, marked "do projeto"
     Given the app is open
-    When I open "Backlog" in the sidebar
+    And the workspace has a backend fork project "ai-memory" whose backlog has the open issue "Expor as métricas do cache"
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Backlog" in the sidebar
+    And I choose the project "ai-memory" in the header
     And I open the Product Owner
-    And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "Feature"
-    Then the plan's options show "Validation", "Unit tests", "E2E tests" and "Screenshots"
-    And the plan's options do not show "Check command"
-    And the plan's options are grouped under "How it runs" and "Tests"
-    When I click "Show more options" in the plan's options
-    Then the plan's options show "Check command"
-    And the plan's options offer "Show fewer options"
-
-  @issue-431
-  Scenario: Collapsing the plan's options leaves a one-line summary, and expanding them keeps the values
-    Given the app is open
-    When I open "Backlog" in the sidebar
-    And I open the Product Owner
-    And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "Feature"
-    And I collapse the plan's options
-    Then the plan's options are hidden, the "Plan with" row stays
-    And the plan's summary shows "Automatic"
-    And the plan's summary shows "E2E: Write and run"
-    When I expand the plan's options
-    Then "Automatic" is still chosen for "Validation" in the plan's options
-    And "Write and run" is still chosen for "E2E tests" in the plan's options
-
-  @issue-431
-  Scenario: The Product Owner's drawer remembers the plan's options collapsed
-    Given the app is open
-    When I open "Backlog" in the sidebar
-    And I open the Product Owner
-    And I switch the Product Owner to "Plan the backlog"
-    And I plan with the workflow "Feature"
-    And I collapse the plan's options
+    And I click the suggested question "Analisar o backlog e propor runs"
+    Then the Product Owner answers
+    When I put the recommendation on the roadmap with "Colocar no roadmap"
     And I close the Product Owner
+    And I open the Roadmap
+    And I edit the inputs of the roadmap item "Expor as métricas do cache"
+    Then the item editor shows "Fork + PR" for "Mode", marked "do projeto"
+    And the item editor shows "Off" for "E2E tests", marked "do projeto"
+    And the item editor shows "Code first" for "Test order", marked "do projeto"
+    And the item editor shows "Off" for "Screenshots", marked "do projeto"
+    And the item editor shows "cargo test" for "Test command", marked "do projeto"
+
+  @issue-785
+  Scenario: The drawer offers three translated suggestions and "+ opções", with no toggle and no options before the answer
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Backlog" in the sidebar
     And I open the Product Owner
-    Then the plan's options are hidden, the "Plan with" row stays
-    And the plan's summary shows "Automatic"
+    Then the Product Owner suggests only "Analisar o backlog e propor runs", "Montar um roadmap" and "Registrar uma issue"
+    And the Product Owner offers more suggestions behind "+ opções"
+    And the Product Owner's drawer has no toggle between planning and registering an issue
+    And the Product Owner's drawer shows no options before its answer
+    When I open the Product Owner's other suggestions
+    Then the Product Owner also suggests
+      | suggestion                                   |
+      | O que não deve rodar junto?                  |
+      | Quais issues estão grandes ou pouco claras?  |
+      | Quais issues são grandes demais para um run? |
+      | Organizar as issues abertas em épicos        |
+
+  @issue-785
+  Scenario: A recommendation shows its decisions grouped, and Editar changes E2E tests before it goes on the roadmap, saving only that value
+    Given the app is open
+    And the workspace has a backend fork project "ai-memory" whose backlog has the open issue "Expor as métricas do cache"
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Backlog" in the sidebar
+    And I choose the project "ai-memory" in the header
+    And I open the Product Owner
+    And I click the suggested question "Analisar o backlog e propor runs"
+    Then the Product Owner answers
+    And the recommendation names the workflow "Feature"
+    And the recommendation shows these decisions, with no input chips
+      | group       | decision        | value     | source      |
+      | How it runs | Mode            | Fork + PR | do projeto  |
+      | Tests       | E2E tests       | Off       | do projeto  |
+      | Tests       | Screenshots     | Off       | do projeto  |
+      | Agents      | Developer model | Opus 5.5  | do workflow |
+    And the recommendation does not show the decision "Test command"
+    When I open "Mais" on the recommendation
+    Then the recommendation's decision "Test command" shows "cargo test", marked "do projeto"
+    When I open "Editar" on the recommendation
+    Then "Off" is selected for "E2E tests"
+    When I pick "Write" for "E2E tests"
+    And I put the recommendation on the roadmap with "Colocar no roadmap"
+    And I close the Product Owner
+    And I open the Roadmap
+    And I edit the inputs of the roadmap item "Expor as métricas do cache"
+    Then the item editor shows "Write" for "E2E tests", marked "neste item"
+    And the item editor shows "Fork + PR" for "Mode", marked "do projeto"
+    And the item editor shows "Off" for "Screenshots", marked "do projeto"

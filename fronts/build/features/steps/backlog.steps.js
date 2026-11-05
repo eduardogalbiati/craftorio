@@ -1,7 +1,7 @@
 // Steps of fronts/build/features/backlog.feature and features/visual.feature (#222): the Backlog's Board (list,
 // kanban) and Roadmap on the demo project, and their visual baselines; the Roadmap's progress ring
 // popover (#236), its Resume confirm (#243) and a finished stage scope (#237), and
-// fronts/build/features/product-owner.feature's Product Owner drawer (#234, #235); epics kept off the Board and
+// fronts/build/features/product-owner.feature's Product Owner drawer (#234); epics kept off the Board and
 // listed on the Epics view (#253); the Roadmap opened from the menu (#254); the alerts at the top of
 // the Board and the Roadmap (#270). Locators are roles and data-testid only (skills/ui-conventions).
 
@@ -336,7 +336,7 @@ Then('the push dialog opens, titled {string}', async ({ e2e }, title) => {
   await expect(e2e.window.getByRole('heading', { name: title, exact: true })).toBeVisible();
 });
 
-// ---- Backlog › Product Owner (#234, #235) ------------------------------------------------------------
+// ---- Backlog › Product Owner (#234) ------------------------------------------------------------------
 
 const poDrawer = (page) => page.getByRole('complementary', { name: 'Product Owner', exact: true });
 const poAsk = (page) => poDrawer(page).getByTestId('agent-chat-send');
@@ -347,10 +347,6 @@ When('I open the Product Owner', async ({ e2e }) => {
   const page = e2e.window;
   await page.getByRole('button', { name: 'Product Owner', exact: true }).click();
   await expect(poDrawer(page)).toBeVisible();
-});
-
-When('I switch the Product Owner to {string}', async ({ e2e }, mode) => {
-  await poDrawer(e2e.window).getByRole('group', { name: 'What to do with the Product Owner' }).getByRole('button', { name: mode, exact: true }).click();
 });
 
 // The simulated Product Owner answers in a few milliseconds: a MutationObserver records the drawer's
@@ -452,45 +448,6 @@ Then('my question {string} was in view in the conversation as soon as I asked', 
   const entry = Object.entries(w.firstInView).find(([text, inView]) => inView !== null && text.includes(question));
   expect(entry, `a new "You" bubble with "${question}"`).toBeTruthy();
   expect(entry[1], 'the new "You" bubble was in view when it appeared').toBe(true);
-});
-
-const poWorkflow = (page) => poDrawer(page).getByTestId('po-workflow');
-
-Then("the plan's workflow choice offers {string} and {string}", async ({ e2e }, a, b) => {
-  const select = poWorkflow(e2e.window);
-  await expect(select).toBeVisible();
-  const labels = (await select.locator('option').allTextContents()).map((t) => t.trim());
-  for (const name of [a, b]) expect(labels.map((t) => t.toLowerCase())).toContain(name.toLowerCase());
-});
-
-When('I plan with the workflow {string}', async ({ e2e }, name) => {
-  const select = poWorkflow(e2e.window);
-  const labels = (await select.locator('option').allTextContents()).map((t) => t.trim());
-  // the display name, whatever the case of its words ("AI Development" / "AI development")
-  const label = labels.find((t) => t.toLowerCase() === name.toLowerCase());
-  expect(label, `the workflow "${name}" among ${labels.join(', ')}`).toBeTruthy();
-  await select.selectOption({ label });
-});
-
-const costChip = (page) => poDrawer(page).getByRole('combobox', { name: 'Cost of the next answer' });
-
-Then('the Cost chip is hidden', async ({ e2e }) => {
-  await expect(costChip(e2e.window)).toBeHidden();
-});
-
-Then('the Cost chip is shown', async ({ e2e }) => {
-  await expect(costChip(e2e.window)).toBeVisible();
-});
-
-Then("the plan shows the workflow's options", async ({ e2e }) => {
-  const options = poDrawer(e2e.window).getByTestId('po-workflow-options');
-  await expect(options).toBeVisible();
-  await expect(options.getByRole('radiogroup', { name: 'Unit tests' })).toBeVisible();
-  await expect(options.getByRole('radiogroup', { name: 'E2E tests' })).toBeVisible();
-});
-
-Then("the Product Owner's header says {string}", async ({ e2e }, text) => {
-  await expect(poDrawer(e2e.window).getByText(/^Planning for /)).toHaveText(new RegExp(`^${escapeRe(text)}$`, 'i'));
 });
 
 // ---- Backlog › Product Owner: a split proposal's card (#242) ------------------------------------------

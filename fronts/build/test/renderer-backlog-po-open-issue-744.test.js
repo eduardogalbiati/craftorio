@@ -1,8 +1,8 @@
 // #744 acceptance, written before the code: the Product Owner's side of the Next steps card's "Open the PO"
 // (fronts/build/views/backlog/backlog-po.js). The project page calls Actions.call('openPoIssue', projectId)
 // (packages/ui-kit/actions.js); the Build front registers that action and it opens the PO's drawer
-// (#po-drawer) in issue mode (Register an issue: #po-mode's data-po-mode="issue" active, the plan pills
-// #po-chips hidden) on that project's conversation (api.productOwnerHistory(projectId)).
+// (#po-drawer) in issue mode (Register an issue: the attach button shown, the plan pills #po-chips
+// hidden) on that project's conversation (api.productOwnerHistory(projectId)).
 // The whole page is loaded by packages/ui-kit/test/agent-chat-page-harness.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -33,8 +33,8 @@ test('#744 openPoIssue opens the conversation of the given project', { timeout: 
 
 test('#744 openPoIssue opens the drawer in issue mode (Register an issue)', { timeout: 30000 }, async () => {
   const page = await openedFromNextSteps();
-  const issue = page.$('#po-mode [data-po-mode="issue"]');
-  assert.equal(issue ? issue.classList.contains('active') : 'no #po-mode issue button', true);
+  // #785: no Plan / Register toggle; issue mode shows the attach button and hides the plan pills
+  assert.equal(page.$('#btn-po-attach').classList.contains('hidden'), false, 'attachments are offered');
   assert.equal(page.$('#po-chips').classList.contains('hidden'), true, 'the plan pills are hidden');
 });
 

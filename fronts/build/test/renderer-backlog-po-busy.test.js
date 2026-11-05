@@ -174,7 +174,7 @@ test('#234 while a pill\'s question is in flight, every suggested-question pill,
   await d.open();
   d.clickPill();
   const tags = pillTags(d);
-  assert.ok(tags.length >= 7, `the six suggested questions and "Register an issue…" are rendered (got ${tags.length})`);
+  assert.ok(tags.length >= 4, `the three suggestions and "+ options" are rendered (#785; got ${tags.length})`);
   for (const tag of tags) assert.ok(isDisabledTag(tag), `pill not disabled while busy: ${tag}`);
   assert.equal(d.$('#btn-po-ask').disabled, true, 'Ask is disabled while busy');
   assert.notEqual(d.$('#po-question').disabled, true, 'the text box stays enabled while busy');

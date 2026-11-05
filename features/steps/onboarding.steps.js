@@ -1004,8 +1004,8 @@ Then('no finding of the review has an issue yet', async ({ e2e }) => {
 //   #744 name it), each holding its button; the testids nested in an entry (next-step-po-issue-open,
 //   next-step-po-issue-link, next-step-reason) hold no button, so the entries are the "next-step-…" holding one;
 // - the PO entry reads "Create an issue with the PO", its button "Open the PO": the Product Owner's drawer
-//   (aside "Product Owner") opens on "Register an issue" (its "Registering an issue for <name>" line, the
-//   mode group's "Register an issue" active), for the card's project, its message box (agent-chat-input) focused;
+//   (aside "Product Owner") opens on "Register an issue" (its "Registering an issue for <name>" line; #785: the
+//   mode toggle is gone), for the card's project, its message box (agent-chat-input) focused;
 // - with no refactor proposals (once read) there is no next-step-refactors entry and no "… and add 0" button;
 // - a disabled button's reason: its title (or its wrapper's, as a disabled button gets no hover), the same text
 //   shown as a line of the entry.
@@ -1026,12 +1026,10 @@ When('I click {string} in the Next steps card', async ({ e2e }, label) => {
 });
 
 Then("the Product Owner's chat is open on {string} for the project {string}", async ({ e2e }, mode, name) => {
-  const page = e2e.window;
-  const drawer = poChat(page);
+  expect(mode, 'the only thing this step checks').toBe('Register an issue');
+  const drawer = poChat(e2e.window);
   await expect(drawer).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(drawer).toContainText(`Registering an issue for ${name}`, { timeout: LOAD_TIMEOUT });
-  const modeButton = drawer.getByRole('group', { name: 'What to do with the Product Owner' }).getByRole('button', { name: mode, exact: true });
-  await expect.poll(() => modeButton.evaluate((b) => b.classList.contains('active') || b.getAttribute('aria-pressed') === 'true'), { message: `"${mode}" is the chosen mode` }).toBe(true);
 });
 
 Then("the Product Owner's message box is focused", async ({ e2e }) => {

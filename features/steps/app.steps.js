@@ -16,6 +16,7 @@ const { expect } = require('@playwright/test');
 const { VISUAL_NOW } = require('../support/fixed-clock');
 const { Given, When, Then } = require('./fixtures');
 const { LOAD_TIMEOUT, runScreenStatus, demoProjectCard, openProjects } = require('../support/run-screen');
+const { FEATURE } = require('../support/workflows');
 
 const root = path.join(__dirname, '..', '..');
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -210,22 +211,45 @@ Then('the description of the pipeline {string} says {string} and gives a cost es
 
 const projectSelect = (page) => header(page).getByTestId('header-project');
 
-// A second project, with its own synced backlog of one open issue, added to the scratch workspace;
-// the app reloads to read the project list again
-Given('the workspace has a second project {string} whose backlog has the open issue {string}', async ({ e2e }, name, title) => {
+// A project with its own synced backlog of one open issue, added to the scratch workspace (`patch`: its
+// other settings, `files`: files of its folder); the app reloads to read the project list again
+async function addProject(e2e, name, title, { patch = {}, files = {} } = {}) {
   const workspace = require(path.join(root, 'packages', 'engine', 'domains', 'workspace', 'workspace'));
   const projects = require(path.join(root, 'packages', 'engine', 'domains', 'project', 'projects'));
   const { taskProgress } = require(path.join(root, 'packages', 'engine', 'domains', 'backlog', 'backlog'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const repo = `https://github.com/example/${name}`;
   const created = await projects.createProject(ws.projects, { name, description: 'A second project (simulated data)' });
-  const project = projects.updateProject(ws.projects, created.id, { repo });
+  const project = projects.updateProject(ws.projects, created.id, { repo, ...patch });
+  for (const [file, text] of Object.entries(files)) {
+    fs.mkdirSync(project.folder, { recursive: true });
+    fs.writeFileSync(path.join(project.folder, file), text);
+  }
   const now = new Date().toISOString();
   const issue = { number: 1, title, state: 'open', labels: [], body: '', url: `${repo}/issues/1`, author: 'octocat', assignees: [], tasks: taskProgress(''), createdAt: now, updatedAt: now };
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify({ projectId: project.id, platform: 'github', repo, syncedAt: now, issues: [issue], epics: [], epicsError: null }, null, 2));
   await e2e.window.reload();
   await e2e.window.waitForLoadState('domcontentloaded');
+}
+
+Given('the workspace has a second project {string} whose backlog has the open issue {string}', async ({ e2e }, name, title) => {
+  await addProject(e2e, name, title);
+});
+
+// #785: what the wizard saves for a Rust service the owner cannot push to (the issue's ai-memory): kind
+// backend, the variant fork-code on its Feature workflow, its fork; its Cargo.toml gives the detected test
+// command, "cargo test"
+Given('the workspace has a backend fork project {string} whose backlog has the open issue {string}', async ({ e2e }, name, title) => {
+  await addProject(e2e, name, title, {
+    patch: {
+      kind: 'backend',
+      workflows: [{ name: FEATURE.name, origin: 'bundled', category: 'build', variant: 'fork-code' }],
+      defaultWorkflow: FEATURE.name,
+      fork: { url: `https://github.com/owner/${name}`, upstream: `https://github.com/example/${name}` },
+    },
+    files: { 'Cargo.toml': `[package]\nname = "${name}"\nversion = "0.1.0"\n` },
+  });
 });
 
 Then('the header shows the project {string}', async ({ e2e }, name) => {

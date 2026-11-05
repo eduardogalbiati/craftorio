@@ -23,7 +23,8 @@ const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const roadmapItem = (page, title) => page.getByTestId('roadmap-item').filter({ hasText: title }).first();
-const editForm = (page, title) => roadmapItem(page, title).getByRole('group', { name: 'Edit the inputs of this item', exact: true });
+// #785 reads the editor in Portuguese
+const editForm = (page, title) => roadmapItem(page, title).getByRole('group', { name: /^(Edit the inputs of this item|Editar as entradas deste item)$/ });
 
 // ---- the demo workspace, edited before the screen opens (the app follows the files) -----------------
 
@@ -53,7 +54,7 @@ When('I edit the inputs of the roadmap item {string}', async ({ e2e }, title) =>
   const item = roadmapItem(e2e.window, title);
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
   await item.scrollIntoViewIfNeeded();
-  await item.getByRole('button', { name: 'Edit', exact: true }).click();
+  await item.getByRole('button', { name: /^(Edit|Editar)$/ }).click();
   await expect(editForm(e2e.window, title)).toBeVisible();
 });
 
