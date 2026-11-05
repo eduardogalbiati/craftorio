@@ -19,7 +19,8 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   literal stands for any folders (`path.join(ROOT, dir, 'views')` → `**/views`, so a screen folder
   added under `fronts/plan/views/` selects `apps/desktop/test/view-folders.test.js`); a read that
   cannot be resolved (a temp folder, an environment variable) adds nothing. A test that reads a
-  folder through a helper makes the read visible in its own code. A shared root
+  folder through a helper makes the read visible in its own code. A test file the change deleted
+  is never selected (the runner would fail on the missing file). A shared root
   (`package.json`, a lockfile, `scripts/test.js`) or a project without a JS/TS graph selects the
   whole suite. `node scripts/affected-tests.js --base main` prints the files and why each was
   chosen (`imports packages/engine/domains/roadmap/roadmap.js`); `--files` prints only the paths, for `npm test -- <files>`.

@@ -10,6 +10,8 @@
 // it reads, or a file under a folder it lists (`readdirSync(path.join(ROOT, dir, 'views'))` is
 // reached by `fronts/plan/views/docs/docs.js`), whether or not other files import the changed one;
 // a read that cannot be resolved adds nothing.
+// A test file the change deleted is never selected (there is nothing to run: the runner would fail
+// on the missing file), while the tests that still reach a deleted source stay selected.
 // A change to a shared root (package.json, a lockfile, the suite's runner scripts/test.js) selects
 // the whole suite (`mode: 'all'`), and so does a project without a JS/TS graph (other languages).
 // Slow tests (a test/slow/ folder or a `*.slow.test.js` name: whole simulated runs) never join the
@@ -206,7 +208,7 @@ function affectedTests({ root, base, changed } = {}) {
   if (shared.length) { out.why = `a shared root changed (${shared.join(', ')}): the whole suite`; return out; }
 
   const from = reach(importGraph(root, files, out.changed), out.changed);
-  const reached = [...from.keys()].filter(isTest).sort();
+  const reached = [...from.keys()].filter((f) => isTest(f) && fs.existsSync(path.join(root, f))).sort();
   out.slow = reached.filter(isSlow);
   out.files = reached.filter((f) => !isSlow(f));
   for (const f of out.files) out.reasons[f] = reasonOf(from.get(f), f);
