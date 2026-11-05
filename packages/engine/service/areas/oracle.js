@@ -49,6 +49,7 @@ const runs = require('../../domains/run/runs');
 const simulation = require('../../engine/simulation');
 const supervisor = require('../../domains/supervisor/supervisor');
 const usage = require('../../domains/usage/usage');
+const { runDefaultsNow } = require('../seed-runs');
 const workspace = require('../../domains/workspace/workspace');
 const { createBridge, mcpCommand } = require('../../domains/supervisor/supervisor-bridge');
 const { createWake } = require('../../domains/oracle/oracle-wake');
@@ -363,6 +364,7 @@ module.exports = (ctx) => {
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
       budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
       mock: sim, mode, timeZone: settings.timeZone,
+      runDefaults: runDefaultsNow(ctx, p), // #785
       language: settings.language, // #327, #328
     });
     const m = out.message || {};

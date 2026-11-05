@@ -95,8 +95,7 @@
 //                      activity line, timer, Stop and the last steps) | writing (the answer as it is
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
 //                      failed (an error with what was written kept); Stop: --click "#po-log [data-live-stop]",
-//                      the steps folded: --click "#po-log [data-live-steps]"; with --workflow <file>
-//                      the drawer plans with that workflow (#235, e.g. ai-development-local-hero.yaml)
+//                      the steps folded: --click "#po-log [data-live-steps]"
 //   --agents-window <agent>  the Agents window (#263) opened from the view on oracle | product-owner |
 //                      supervisor, and captured instead of the main window (--size sizes it: 700x800
 //                      shows the rail collapsed; --click applies inside it, e.g. a rail item)

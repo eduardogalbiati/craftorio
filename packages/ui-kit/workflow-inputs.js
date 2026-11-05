@@ -22,6 +22,8 @@
 // its data-wi-context (JSON) adds values that are not in it (the Roadmap item's mode).
 // inputPills(workflow, inputs) shows a run's inputs as read-only pills ("Unit tests: Run existing",
 // #216) on the cards that list them.
+// #785: resolved(defs, saved, runDefaults) gives each value and its source, formHtml's `sources` says
+// it per field; differing / differHtml: the saved values that differ from the project's.
 // Browser: window.WorkflowInputs (pills and show_if wired once on the document); Node: module.exports.
 (function (root) {
   const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
@@ -60,9 +62,8 @@
       const def = defs[k] || {};
       const atDefault = def.default != null && String(def.default) === String(v);
       if (atDefault && !defaults) return '';
-      const value = isBoolean(def) || typeof v === 'boolean' ? (truthy(v) ? 'On' : 'Off')
-        : def.multiple ? listOf(v).map((x) => optionLabel(def, x)).join(' + ') : optionLabel(def, v);
-      const tip = `${k}: ${v}${atDefault ? ' (the workflow default)' : ''}${def.description ? `\n${def.description}` : ''}`;
+      const value = valueText(def, v);
+      const tip =`${k}: ${v}${atDefault ? ' (the workflow default)' : ''}${def.description ? `\n${def.description}` : ''}`;
       return `<span class="badge wi-pill${atDefault ? ' wi-pill-default' : ''}" data-testid="input-pill" data-wi-pill="${esc(k)}" title="${esc(tip)}">${esc(label(k, def))}: ${esc(value)}</span>`;
     }).join('');
   }
@@ -71,6 +72,14 @@
 
   /** The items of a multi-value input's value: "rust, js" → ['rust', 'js']. */
   const listOf = (v) => [...new Set(String(v ?? '').split(',').map((x) => x.trim()).filter(Boolean))];
+
+  /** A value as people read it: On / Off, an option's label, "Rust + JavaScript"; a folder or a command as written. */
+  function valueText(def = {}, v) {
+    if (isBoolean(def) || typeof v === 'boolean') return t(truthy(v) ? 'workflow_inputs.on' : 'workflow_inputs.off');
+    if (def.multiple) return listOf(v).map((x) => optionLabel(def, x)).join(' + ');
+    if (Array.isArray(v)) return v.join(', ');
+    return def.type && !Array.isArray(def.enum) ? String(v ?? '') : optionLabel(def, v);
+  }
 
   /** The control of an input: switch | multi | pills | select | number | branch | run | textarea | text. */
   function kind(key, def = {}) {
@@ -145,9 +154,10 @@
   // ---- markup ----------------------------------------------------------------------------
   /**
    * One input's field. opts: value, id (the control's id), attrs (extra attributes of the control,
-   * e.g. `name="k"`), context (the values show_if reads; hidden at once when false), autofocus.
+   * e.g. `name="k"`), context (the values show_if reads; hidden at once when false), autofocus,
+   * source (#785: where the value comes from, a key of resolved()'s `sources`).
    */
-  function fieldHtml(key, def = {}, { value, id = `wi-${key}`, attrs = '', context = {}, autofocus = false } = {}) {
+  function fieldHtml(key, def = {}, { value, id = `wi-${key}`, attrs = '', context = {}, autofocus = false, source = null } = {}) {
     const k = kind(key, def);
     const val = value ?? def.default ?? '';
     const af = autofocus ? ' autofocus' : '';
@@ -184,8 +194,10 @@
     const showIf = def.show_if ? ` data-wi-show-if="${esc(def.show_if)}"${evalCondition(def.show_if, context) ? '' : ' hidden'}` : '';
     const forAttr = k === 'pills' || k === 'multi' ? '' : ` for="${esc(id)}"`;
     const help = def.description ? `<div class="hint">${esc(def.description)}</div>` : '';
+    // outside the label: the label is the control's accessible name
+    const from = sourceText(source) ? `<span class="wi-source" data-testid="workflow-input-source-${esc(key)}">${esc(sourceText(source))}</span>` : '';
     return `<div class="field wi-field wi-kind-${k}" data-wi-key="${esc(key)}"${showIf}>`
-      + `<label id="${esc(id)}-label"${forAttr}>${esc(label(key, def))}${def.required ? ' <span class="req">*</span>' : ''}<span class="wi-note"></span></label>`
+      + `<label id="${esc(id)}-label"${forAttr}>${esc(label(key, def))}${def.required ? ' <span class="req">*</span>' : ''}<span class="wi-note"></span></label>${from}`
       + `<div class="wi-control">${control}</div>${help}</div>`;
   }
 
@@ -195,12 +207,13 @@
    * #431 `groups: true` (the Product Owner drawer): the fields under their input's `group` label, the
    * `main: true` ones first and the rest in a .wi-more block behind a "Show more options" link (open
    * when `moreOpen`). Inputs with neither `group` nor `main`: the same markup as without `groups`.
+   * #785 `sources` ({ key: source }, resolved()'s): each field says where its value comes from.
    */
-  function formHtml(defs, { values = {}, id = (k) => `wi-${k}`, attrs = () => '', context = {}, autofocus = false, groups = false, moreOpen = false } = {}) {
+  function formHtml(defs, { values = {}, id = (k) => `wi-${k}`, attrs = () => '', context = {}, autofocus = false, groups = false, moreOpen = false, sources = null } = {}) {
     const entries = Object.entries(defs || {});
     const all = { ...context };
     for (const [k, def] of entries) all[k] = values[k] ?? def?.default ?? '';
-    const field = ([k, def], n) => fieldHtml(k, def || {}, { value: all[k], id: id(k), attrs: attrs(k), context: all, autofocus: autofocus && n === 0 });
+    const field = ([k, def], n) => fieldHtml(k, def || {}, { value: all[k], id: id(k), attrs: attrs(k), context: all, autofocus: autofocus && n === 0, source: sources?.[k] });
     if (!groups || !entries.some(([, d]) => d?.group || d?.main)) return entries.map(field).join('');
     const indexed = entries.map((e, n) => [e, n]);
     const main = indexed.filter(([[, d]]) => d?.main === true);
@@ -304,6 +317,48 @@
     return m ? m[1].trim().replace(/^./, (c) => c.toUpperCase()) : '';
   }
 
+  // ---- where a value comes from (#785) --------------------------------------------------------
+  // The screens' side of resolveRunInputs (packages/engine/domains/project/project-run-defaults.js,
+  // the truth for a run), without what is typed: an item's saved value (a blank one counts as not
+  // saved) > the project's run default (projects:inputHints' `runDefaults`) > the workflow's default.
+  const SOURCES = { project: 'workflow_inputs.from_project', roadmap: 'workflow_inputs.from_item', typed: 'workflow_inputs.from_item', workflow: 'workflow_inputs.from_workflow' };
+  const sourceText = (source) => (SOURCES[source] ? t(SOURCES[source]) : '');
+  const blank = (v) => v === undefined || v === null || (typeof v === 'string' && !v.trim());
+  const fits = (def, v) => !Array.isArray(def?.enum) || (def.multiple ? listOf(v) : [v]).every((x) => def.enum.map(String).includes(String(x)));
+  const projectValue = (key, def, runDefaults) => { const v = runDefaults?.[key]; return v !== undefined && v !== null && fits(def, v) ? v : undefined; };
+  /** What an input shows with nothing saved: the project's value, else the workflow's default. */
+  const shownDefault = (key, def, runDefaults) => projectValue(key, def, runDefaults) ?? def?.default;
+  /** One value: a list and its comma-separated text, a boolean and its word. */
+  const sameValue = (a, b) => (Array.isArray(a) ? a.join(',') : String(a ?? '')) === (Array.isArray(b) ? b.join(',') : String(b ?? ''));
+
+  /** Each input's value and where it comes from: { values, sources } for `saved` (an item's inputs). */
+  function resolved(defs, saved, runDefaults) {
+    const values = {};
+    const sources = {};
+    for (const [k, def] of Object.entries(defs || {})) {
+      const fromProject = projectValue(k, def, runDefaults);
+      const [source, value] = !blank(saved?.[k]) ? ['roadmap', saved[k]] : fromProject !== undefined ? ['project', fromProject] : ['workflow', def?.default];
+      if (value === undefined || value === null) continue;
+      values[k] = value;
+      sources[k] = source;
+    }
+    return { values, sources };
+  }
+
+  /** The saved inputs that differ from the project's value (a blank one too): what an old item's defaults hide. */
+  const differing = (defs, saved, runDefaults) => Object.keys(saved || {}).filter((k) => {
+    const fromProject = defs?.[k] ? projectValue(k, defs[k], runDefaults) : undefined;
+    return fromProject !== undefined && !sameValue(saved[k], fromProject);
+  });
+
+  /** The notice of an item whose saved values differ from the project's, with its one action; '' with none. */
+  function differHtml(keys, defs) {
+    if (!keys?.length) return '';
+    const list = keys.map((k) => label(k, defs?.[k])).join(', ');
+    return `<div class="wi-differ small" role="note" data-testid="workflow-inputs-differ"><span>${esc(t('workflow_inputs.differ_from_project', { list }))}</span>`
+      + `<button class="btn sm ghost" type="button" data-testid="workflow-inputs-use-project" data-wi-use-project>${esc(t('workflow_inputs.use_project_values'))}</button></div>`;
+  }
+
   // ---- what the app knows about the project ---------------------------------------------------
   const HINTS_TTL = 30000;
   const hintsCache = new Map(); // project id -> { at, promise }
@@ -394,9 +449,12 @@
 
   const api = {
     applyHints,
+    differHtml,
+    differing,
     evalCondition,
     fieldHtml,
     formHtml,
+    hintsOf,
     humanize,
     inputPills,
     isBoolean,
@@ -407,9 +465,14 @@
     optionLabel,
     read,
     refresh,
+    resolved,
+    sameValue,
     scopeAttrs,
     set,
+    shownDefault,
+    sourceText,
     toggleMore,
+    valueText,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.WorkflowInputs = api;

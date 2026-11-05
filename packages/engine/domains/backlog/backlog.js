@@ -524,7 +524,8 @@ function groupTask(issues) {
  * body; every issue of a group, see groupTask), the project folder in the path inputs left empty,
  * `issue` (the first issue's URL) and `issues` (every URL, in order) when the workflow has them.
  * #735: the item's saved inputs over the project's run defaults (`projectDefaults`, packages/engine/
- * domains/project/project-run-defaults.js), over the workflow's defaults.
+ * domains/project/project-run-defaults.js), over the workflow's defaults. #785: a blank string an old
+ * item saved hides neither of them.
  * @param {{ inputs: object }} wf the workflow (its input definitions)
  */
 function runInputs(item, wf, folder, projectDefaults = null) {
@@ -533,7 +534,10 @@ function runInputs(item, wf, folder, projectDefaults = null) {
   if (projectDefaults) {
     // the workflow's own defaults stay the engine's to fill (setup.js resolveInputs)
     const { values, sources } = resolveRunInputs({ roadmap: item.inputs, project: projectDefaults, workflow: wf });
-    for (const [k, v] of Object.entries(values)) if (sources[k] === 'project') inputs[k] = v;
+    for (const [k, v] of Object.entries(values)) {
+      if (sources[k] === 'project') inputs[k] = v;
+      else if (sources[k] === 'workflow') delete inputs[k];
+    }
   }
   const issues = itemIssues(item);
   if (defs.task) inputs.task = issues.length > 1 ? groupTask(issues) : `${item.title}\n\nIssue: ${item.url}\n\n${item.body || ''}`.trim();

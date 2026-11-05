@@ -1,14 +1,16 @@
-// Backlog › Product Owner drawer: the workflow options' two views (#431), on the "Plan with" row
-// (#po-wf-row, markup in backlog.js; the options drawn by backlog-po.js with WorkflowInputs.formHtml's
-// `groups`). The chevron (#po-wf-toggle) minimizes the options box (#po-workflow-options) to a one-line
-// summary of the main options' values (#po-wf-summary, "Automatic · Unit: Write and run · E2E: Write
-// and run · Screenshots: All") and expands it again; "Show more options" (wf-more-toggle) opens the options that are not
-// main. Both choices are the viewer's (localStorage, not per project). Neither changes a value: the
-// hidden fields stay in the box, so a question still sends every value (backlog-po.js ask()).
-// backlog-po.js calls apply() on each render and moreOpen() when it draws the options.
-/* global t */
+// Backlog › Product Owner drawer: a recommendation's decisions (#785), on its card (backlog-po.js
+// groupHtml). The PO chose the workflow and only the inputs that matter (normalizeAnswer); the card shows
+// what the run gets, grouped, each line a plain label and value with its source (WorkflowInputs.resolved:
+// "do projeto", "do workflow", "neste item") and the PO's one-line reason:
+// - How it runs, Tests and Agents; the other inputs (folders, commands, the Git platform...) behind "Mais";
+// - "Editar" expands the card into the inputs form (WorkflowInputs.formHtml's `groups`, the controls of
+//   every other form, with the workflow's select); the changes stay in the drawer's po.edits until
+//   "Colocar no roadmap" and, collapsed, the summary marks them (data-changed).
+// withEdits gives the group as it goes to the roadmap: the PO's inputs and the owner's changes, never
+// a value equal to the one shown anyway, so the project's configuration still reaches the run.
+// "Show more options" (wf-more-toggle) in the form is the viewer's choice (localStorage, not per project).
+/* global esc, t */
 (() => {
-  const MINIMIZED = 'po.wfOptions.minimized';
   const MORE = 'po.wfOptions.more';
   const memory = {}; // when localStorage is not available
   const remembered = (key) => {
@@ -18,71 +20,84 @@
     memory[key] = on;
     try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* this session only */ }
   };
-  const $ = (sel) => document.querySelector(sel);
 
-  // a field's value by its label: the chosen pill(s), the select's option, On/Off, the text
-  function valueText(field) {
-    const input = field.querySelector('[data-wi-input]');
-    if (!input) return '';
-    if (input.type === 'checkbox') return t(input.checked ? 'workflow_inputs.on' : 'workflow_inputs.off');
-    const pills = [...field.querySelectorAll('[data-wi-pill].active')].map((b) => b.textContent.trim());
-    if (pills.length) return pills.join(' + ');
-    const option = input.localName === 'select' ? [...input.querySelectorAll('option')].find((o) => o.value === input.value) : null;
-    return String(option ? option.textContent : input.value ?? '').trim();
-  }
-  const labelText = (field) => {
-    const label = field.querySelector('label[id]');
-    return String(label?.childNodes?.[0]?.textContent ?? label?.textContent ?? '').trim();
-  };
+  // what the Backlog sets per run: the task, the issues, the repository, its branch and paths
+  const SKIP_INPUTS = [
+    'base_branch',
+    'issue',
+    'issues',
+    'repo_path',
+    'task',
+  ];
+  const GROUPS = [
+    { id: 'run', testId: 'po-decision-group-run', title: 'backlog_po.decisions_how_it_runs', keys: ['workflow', 'mode', 'validation', 'review'] },
+    { id: 'tests', testId: 'po-decision-group-tests', title: 'backlog_po.decisions_tests', keys: ['test_order', 'unit_tests', 'e2e_tests', 'screenshots'] },
+    { id: 'agents', testId: 'po-decision-group-agents', title: 'backlog_po.decisions_agents', keys: ['developer_model', 'developer_effort'] },
+  ];
+  const GROUPED = GROUPS.flatMap((g) => g.keys);
+  const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && !v.trim());
+  const optionDefs = (wf) => Object.fromEntries(Object.entries(wf?.inputs || {}).filter(([k]) => !SKIP_INPUTS.includes(k) && !/path|dir/i.test(k)));
 
-  // the tests read short on one line ("Unit: Write and run · E2E: …"); the other fields by their labels
-  const SHORT = { unit_tests: 'backlog.summary_unit_tests', e2e_tests: 'backlog.summary_e2e_tests' };
-
-  /** "Automatic · Unit: Write and run · E2E: …": the shown fields outside "more options", by their labels. */
-  function summary(box) {
-    const fields = [...(box?.querySelectorAll('.wi-field[data-wi-key]') || [])]
-      .filter((f) => !f.hidden && !f.closest('[data-testid="wf-more"]'));
-    return fields.map((f) => {
-      const value = valueText(f);
-      const key = f.dataset.wiKey;
-      // the run's mode leads by its value alone, as the owner reads it ("Automatic")
-      if (['mode', 'validation'].includes(key) && fields[0] === f) return value;
-      return `${SHORT[key] ? t(SHORT[key]) : labelText(f)}: ${value}`;
-    }).filter(Boolean).join(' · ');
+  /** The group `g` with the owner's `edit` ({ workflow, values }): `wf` is the workflow it ends up on. */
+  function withEdits(g, edit, wf, runDefaults) {
+    const defs = wf?.inputs || {};
+    const inputs = { ...g.inputs };
+    for (const [k, v] of Object.entries(edit?.values || {})) {
+      if (isBlank(v) || window.WorkflowInputs.sameValue(v, window.WorkflowInputs.shownDefault(k, defs[k], runDefaults))) delete inputs[k];
+      else inputs[k] = v;
+    }
+    // another workflow: what the new one does not declare has no meaning there
+    if (edit?.workflow) for (const k of Object.keys(inputs)) if (!defs[k]) delete inputs[k];
+    return { ...g, workflow: edit?.workflow || g.workflow, inputs };
   }
 
-  /** Minimized or expanded as the viewer left it; the chevron's state, tooltip and the summary. */
-  function apply() {
-    const box = $('#po-workflow-options');
-    const toggle = $('#po-wf-toggle');
-    const line = $('#po-wf-summary');
-    if (!box || !toggle || !line) return;
-    const min = remembered(MINIMIZED);
-    box.hidden = min;
-    toggle.hidden = !box.querySelector('[data-wi-input]');
-    toggle.setAttribute('aria-expanded', String(!min));
-    const tip = t(min ? 'backlog.show_the_workflow_options' : 'backlog.hide_the_workflow_options');
-    toggle.title = tip;
-    toggle.setAttribute('aria-label', tip);
-    line.textContent = min ? summary(box) : '';
-    line.title = line.textContent;
-    line.hidden = !min;
+  // one line of the summary: label, value, source and the PO's reason
+  function lineHtml({ key, name, value, source, reason, changed }) {
+    const from = source ? `<span class="po-decision-source">${esc(source)}</span>` : '';
+    const why = reason ? `<span class="po-decision-reason">${esc(reason)}</span>` : '';
+    return `<div class="po-decision" data-testid="po-decision-${esc(key)}"${changed ? ' data-changed="true"' : ''}><span class="po-decision-label">${esc(name)}</span><span class="po-decision-value">${esc(value) || '—'}</span>${from}${why}</div>`;
+  }
+
+  /**
+   * The decisions of a recommendation. g: its group; key: its id in the drawer; edit: the owner's changes
+   * ({ workflow, values, open, more }); wf / workflows: the workflow it is on and the plan's list
+   * (backlog-po.js planWorkflows); title(wf, file): a workflow as people read it; done: already applied.
+   */
+  function decisionsHtml({ g, key, edit = {}, wf, workflows, title, runDefaults, done }) {
+    const WI = window.WorkflowInputs;
+    const shown = withEdits(g, edit, wf, runDefaults);
+    // an input the workflow does not declare (or a workflow no longer installed) still shows what was saved
+    const defs = { ...Object.fromEntries(Object.keys(shown.inputs || {}).map((k) => [k, {}])), ...optionDefs(wf) };
+    const { values, sources } = WI.resolved(defs, shown.inputs, runDefaults);
+    const changed = (k) => Object.prototype.hasOwnProperty.call(edit.values || {}, k);
+    const line = (k) => {
+      if (k === 'workflow') return lineHtml({ key: k, name: t('backlog_po.decisions_workflow'), value: title(wf, shown.workflow), source: edit.workflow ? WI.sourceText('roadmap') : '', reason: g.inputReasons?.workflow, changed: !!edit.workflow });
+      const def = defs[k];
+      if (!def || !WI.evalCondition(def.show_if, values)) return '';
+      return lineHtml({ key: k, name: WI.label(k, def), value: WI.valueText(def, values[k]), source: WI.sourceText(sources[k]), reason: g.inputReasons?.[k], changed: changed(k) });
+    };
+    const groups = GROUPS.map((x) => `<div class="po-decision-group" data-testid="${x.testId}"><div class="po-decision-title">${t(x.title)}</div>${x.keys.map(line).join('')}</div>`).join('');
+    const advanced = Object.keys(defs).filter((k) => !GROUPED.includes(k)).map(line).join('');
+    const more = advanced ? `<button class="link-btn small" type="button" data-testid="po-decisions-more" aria-expanded="${!!edit.more}">${t('backlog_po.decisions_more')}</button>` : '';
+    const editBtn = done ? '' : `<button class="link-btn small" type="button" data-testid="po-decisions-edit" aria-expanded="${!!edit.open}">${t(edit.open ? 'backlog_po.decisions_done' : 'backlog_po.decisions_edit')}</button>`;
+    const list = (workflows || []).some((w) => w.file === shown.workflow) ? workflows : [{ file: shown.workflow, name: shown.workflow }, ...(workflows || [])];
+    const form = `<div class="po-decisions-form po-wf-fields" data-testid="po-decisions-form"${WI.scopeAttrs()}>
+      <label class="po-decisions-pick small"><span class="muted">${t('backlog_po.decisions_workflow')}</span> <select class="po-wf" data-testid="po-decisions-workflow">${list.map((w) => `<option value="${esc(w.file)}"${w.file === shown.workflow ? ' selected' : ''}>${esc(title(w, w.file))}</option>`).join('')}</select></label>
+      ${WI.formHtml(defs, { values, sources, groups: true, moreOpen: remembered(MORE), id: (k) => `po-wi-${key}-${k}` })}</div>`;
+    return `<div class="po-decisions" data-testid="po-recommendation-decisions">
+      ${edit.open && !done ? form : `${groups}<div class="po-decision-group" data-testid="po-decisions-advanced"${edit.more ? '' : ' hidden'}>${advanced}</div>`}
+      <div class="row po-decisions-actions">${edit.open && !done ? '' : more}${editBtn}</div></div>`;
   }
 
   document.addEventListener('click', (e) => {
-    if (e.target?.closest?.('#po-wf-toggle')) {
-      remember(MINIMIZED, !remembered(MINIMIZED));
-      apply();
-      return;
-    }
     const link = e.target?.closest?.('[data-testid="wf-more-toggle"]');
-    const box = link?.closest('#po-workflow-options');
+    const box = link?.closest('[data-testid="po-decisions-form"]');
     if (box) remember(MORE, window.WorkflowInputs.toggleMore(box));
   });
 
   window.BacklogPoOptions = {
-    apply,
-    moreOpen: () => remembered(MORE),
-    summary,
+    decisionsHtml,
+    optionDefs,
+    withEdits,
   };
 })();

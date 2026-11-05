@@ -32,6 +32,8 @@
 // clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
 // #280: a line is the agents' shared record (packages/engine/domains/agents/agents-usage.js); every call is a one-shot session.
 //
+// #785 (po-chosen-inputs.js): a group keeps only the inputs chosen, with their reasons (`input_reasons`), and
+// the prompt names the project's `runDefaults`. Mode 'auto' (the drawer): the answer's `intent` says plan or register.
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
 // issue-writing, the code analyzer's cheaper model: ISSUE_AGENT); the draft carries its clarity score
@@ -84,6 +86,7 @@ const poCalibration = require('@multiagent/shared/po-calibration');
 const RoadmapModel = require('@multiagent/shared/roadmap-model');
 const poSplit = require('./po-split');
 const poMockups = require('./po-mockups');
+const poChosen = require('./po-chosen-inputs');
 const poFileIssues = require('./po-file-issues');
 const { decongestIssue } = poFileIssues;
 const { separateSharedFiles } = require('./po-hot-files');
@@ -131,8 +134,9 @@ const ANSWER_SCHEMA = {
           workflow: { type: 'string' },
           inputs: { type: 'object' },
           reason: { type: 'string' },
-          // why this `inputs.mode` (validated: the owner can try it in the app; auto: engine, refactor, docs, tests)
+          // why this `inputs.validation` (validated: the owner can try it in the app)
           mode_reason: { type: 'string' },
+          input_reasons: { type: 'object' }, // #785: { input: one short line }
           files: { type: 'array', items: { type: 'string' } },
           stage: { type: 'integer' },
           warnings: { type: 'array', items: { type: 'string' } },
@@ -226,9 +230,9 @@ const ANSWER_SCHEMA = {
 const RULES = [
   'You are the Product Owner of this project\'s backlog, inside the orchestrator\'s Backlog screen. The owner asks you a question; answer it from the backlog report below and, when you need to, from the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep).',
   'Propose groups of issues to implement in one run (same files, same feature, one reuses the other), pairs or sets that must not run in parallel (overlapping files, a repo-wide refactor or reformat), the order to run the groups in (`stage`: 1 first; groups of one stage may run in parallel), and the issues too vague to implement that should be enriched first.',
-  'Use only issue numbers and workflow files listed in the report. Suggest the workflow inputs that matter (for example `mode`). Leave a list empty when the question is not about it.',
+  'Use only issue numbers and workflow files listed in the report. Leave a list empty when the question is not about it.',
   'Give every group the default workflow (marked "(default)" in the report\'s Workflows) unless an issue needs another one; then say why in the group\'s `reason`.',
-  'When the workflow has a `mode` input, set it on every group and say why in `mode_reason`: `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour), `auto` for the engine, refactors, docs and tests.',
+  'A group\'s `inputs` hold only what it needs different from the project\'s run defaults and the workflow\'s defaults: never repeat a default, never an empty string. Give each decision that matters a one-line reason in `input_reasons` ({ input: reason }), also for a default worth saying. When the workflow has a `validation` input, set `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour) and say why in `mode_reason`; the engine, refactors, docs and tests stay at `auto`, its default.',
   'Split what is too big (`splits`): for an issue the report marks with split signals, propose 2-4 child issues. Each child has a title, the numbers of the parent\'s tasks it takes (every task in exactly one child, none dropped or invented), its complexity and its `stage` (children of one stage can run together). Say whether the parent becomes an umbrella linking its children or is closed in favour of them. Never split an issue without signals.',
   'Conflict map (the report\'s conflict-map section, when it has one): two groups expected to touch the same hot file or hot line go to different stages, or into one group when they belong together; every conflict you report names the hot file that causes it in `files`. List each hot spot (marked "hot") in `decongest` with a fix in the repository\'s terms (one item per line, sorted; a per-feature file plus a generated aggregate; a split by screen or module) and its `runs` and `of`.',
   'Shared test files count too: two groups of one stage that add scenarios to the same `.feature` file (or tests to the same test file) conflict in it at the merge, like a shared source file: put them in different stages or one group, and name that file in the conflict\'s `files`.',
@@ -340,14 +344,15 @@ function sizeGroup(numbers, issues, history) {
 // (see the header); `runs` (#206): the past runs, for each group's `costEstimate` and the plan's `estimateUsd`.
 // `workflow` (#235): the workflow the owner chose in the drawer: every group gets it (never another
 // one), with `inputs` (the owner's choices for its options) in its inputs; the Cost step is skipped
-// when it does not apply to that workflow (poCalibration.costApplies: tests first, or no such inputs).
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {}, workflow = null, inputs = null, spec = null }) {
+// when it does not apply to that workflow (poCalibration.costApplies: tests first, or no such inputs). `runDefaults`: #785.
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {}, workflow = null, inputs = null, spec = null, runDefaults = null }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
   const fallback = files.length ? DefaultWorkflow.resolve(defaultWorkflow, files).file : '';
   const chosen = workflow && files.includes(workflow) ? workflow : null;
   const chosenInputs = chosen && inputs && typeof inputs === 'object' && !Array.isArray(inputs) ? inputs : {};
+  const inputsOf = (file) => (workflows || []).find((w) => w.file === file)?.inputs;
   const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n)))];
   const isOpen = (n) => byNumber.get(n)?.state === 'open';
   const attached = new Set(keep(selection));
@@ -364,13 +369,15 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     }
     const size = sizeGroup(nums, issues, history);
     const simulated = mock && g.simulated ? keep(g.simulated.covered).filter((x) => nums.includes(x)) : [];
+    const file = chosen || (files.includes(g.workflow) ? g.workflow : fallback);
     return {
       name: String(g.name || `Group ${n + 1}`),
       issues: nums,
-      workflow: chosen || (files.includes(g.workflow) ? g.workflow : fallback),
-      inputs: { ...(g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {}), ...chosenInputs },
+      workflow: file,
+      inputs: poChosen.groupInputs(g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {}, chosenInputs, inputsOf(file), runDefaults),
       reason: String(g.reason || ''),
       ...(g.mode_reason ? { modeReason: String(g.mode_reason) } : {}),
+      ...poChosen.reasonsField(g.input_reasons),
       files: (g.files || []).map(String).slice(0, 20),
       stage: Number.isInteger(g.stage) && g.stage > 0 ? g.stage : n + 1,
       ...size,
@@ -518,6 +525,7 @@ function packGroups(groups, cap, { issues, history }) {
     Object.assign(into, {
       issues: nums,
       inputs: { ...g.inputs, ...into.inputs },
+      ...(into.inputReasons || g.inputReasons ? { inputReasons: { ...g.inputReasons, ...into.inputReasons } } : {}),
       reason: [into.reason, `With ${g.name}: ${g.reason}`.trim(), into.packed ? '' : PACKED].filter(Boolean).join(' '),
       files: [...new Set([...into.files, ...g.files])].slice(0, 20),
       ...size,
@@ -984,7 +992,10 @@ const threadDir = (where, thread) => path.join(where.runsDir || poDir(where.back
 
 // Appends an issue-mode message to the conversation and to its thread's conversation.jsonl.
 function recordIssueMessage(where, message) {
-  const m = appendMessage(where.backlogDir, where.projectId, message);
+  return copyToThread(where, appendMessage(where.backlogDir, where.projectId, message));
+}
+
+function copyToThread(where, m) {
   const dir = threadDir(where, m.thread);
   fs.mkdirSync(dir, { recursive: true });
   fs.appendFileSync(path.join(dir, 'conversation.jsonl'), `${JSON.stringify(m)}\n`);
@@ -1391,8 +1402,8 @@ function checkBudget(budget) {
  * @param data      the backlog with its runs (the service's withIssueRuns)
  * @param runs      the project's runs (runs.runsForProject), for the history
  * @param agent     the Product Owner agent (model, effort); registering an issue uses ISSUE_AGENT
- * @param mode      'plan' (default) or 'issue' (#117: register an issue; `attachments`: paths saved by saveAttachment,
- *                  moved to the thread's folder in `runsDir`, which also keeps the thread and each turn's analysis)
+ * @param mode      'plan' (default), 'auto' (#785: poChosen.turnMode) or 'issue' (#117: register an issue; `attachments`: paths
+ *                  saved by saveAttachment, moved to the thread's folder in `runsDir`, which also keeps the thread and each turn's analysis)
  * @param scenario  with `mock` only: a MOCK_SCENARIOS id forcing the simulated answer (#148)
  * @param onItem    #180: the turn's items as they arrive (packages/engine/domains/chat/chat-progress.js); a simulated turn then
  *                  streams fake steps (MOCK_STEPS) and its text first
@@ -1409,11 +1420,13 @@ function checkBudget(budget) {
 // `workflow` / `inputs` (#235): the workflow the owner chose in the drawer and its options: every
 // group gets them (recorded on the messages: lastWorkflow); no Cost step where it does not apply.
 // `timeZone` (#273): the owner's zone (settings.timeZone): the turn's prompt names it and the local time.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null, language = null }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null, language = null, runDefaults = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
-  const issueMode = mode === 'issue';
+  const previous = readConversation(backlogDir, projectId);
+  const turnMode = poChosen.turnMode(mode, { draftOpen: !!currentDraft(previous), mock, scenarioMode: MOCK_SCENARIOS[scenario], question: q });
+  let issueMode = turnMode === 'issue';
   const chosenWf = issueMode || !workflow ? null : (workflows || []).find((w) => w.file === workflow) || null;
   const chosen = chosenWf?.file || null;
   const costOff = !!chosenWf && !poCalibration.costApplies(chosenWf);
@@ -1432,15 +1445,14 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   const known = new Set((data?.issues || []).map((i) => i.number));
   const selected = issueMode ? [] : [...new Set((selection || []).map(Number))].filter((n) => known.has(n));
   const history = runHistory(runs, data?.issues);
-  const previous = readConversation(backlogDir, projectId);
   const where = { backlogDir, projectId, runsDir };
-  const thread = issueMode ? threadOf(previous, projectId) : null;
+  let thread = issueMode ? threadOf(previous, projectId) : null;
   // #240: a plan question another agent sent (handleRequest): its messages carry the request
-  const tag = issueMode ? { mode: 'issue', thread } : request ? { request } : {};
+  let tag = issueMode ? { mode: 'issue', thread } : request ? { request } : {};
   const record = (message) => (issueMode ? recordIssueMessage(where, message) : appendMessage(backlogDir, projectId, message));
   const staged = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
   const files = moveAttachments(where, thread, staged);
-  record({ role: 'user', text: q, ...tag, ...calib, ...chosenInputs, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
+  const asked = record({ role: 'user', text: q, ...tag, ...calib, ...chosenInputs, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
   const questionsLeft = MAX_QUESTIONS - questionsAsked(previous);
   let raw;
   let costUsd = 0;
@@ -1458,7 +1470,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       let failure = null;
       try {
         // a scenario of the other mode is ignored (the default simulated answer)
-        if (scenario && (MOCK_SCENARIOS[scenario] ?? mode) === mode) {
+        if (scenario && (MOCK_SCENARIOS[scenario] ?? turnMode) === turnMode) {
           raw = mockScenario(scenario, { data, question: q, previous, files, workflow: chosen || byDefault });
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
@@ -1482,8 +1494,8 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       // #150 / #526: the saved conflict map, a few seconds' wait at most; built in the background when missing
       const mapOf = issueMode ? null : { backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) };
       ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await withConflictMap(mapOf, (conflictMap) => callAgent({
-        mode, question: q, report: (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen }),
-        previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone, language,
+        mode: turnMode, question: q, report: (turnMode === 'plan' ? backlogReport : issueReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen }),
+        previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone, language, runDefaults,
       })));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
     }
@@ -1493,6 +1505,13 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       ? record({ role: 'po', ...tag, text: partial || 'Stopped before answering.', stopped: true, costUsd })
       : record({ role: 'po', ...tag, text: partial ? `${e.message}\n\nWritten before the error:\n\n${partial}` : e.message, error: true, costUsd });
     return { message, messages: readConversation(backlogDir, projectId) };
+  }
+  if (turnMode === 'auto' && raw?.intent === 'register') {
+    // the question went out before the intent was known: its thread gets it, the conversation keeps it
+    issueMode = true;
+    thread = threadOf(previous, projectId);
+    tag = { mode: 'issue', thread };
+    copyToThread(where, { ...asked, ...tag });
   }
   let message;
   if (issueMode) {
@@ -1505,7 +1524,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   } else {
     // #670: a question naming a spec: its issues (the model's, or one per phase when simulated) and their mockup coverage
     const spec = poMockups.specProposal({ folder, question: q, issues: raw?.spec?.issues, mock: !!mock });
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs, spec });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs, spec, runDefaults });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', ...tag, text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });
@@ -1583,6 +1602,7 @@ const TURNS = {
     fallback: (prose) => ({ summary: prose, groups: [], conflicts: [], enrich: [], splits: [], epics: {} }),
   },
 };
+TURNS.auto = poChosen.autoTurn(TURNS.plan, TURNS.issue);
 
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
@@ -1609,10 +1629,10 @@ function lastWorkflow(backlogDir, projectId) {
 // #670: a spec's mockups go into each screen task of a plan or issue turn (only when the question
 // names a spec that has some)
 function mockupsFor(mode, folder, question) {
-  return mode === 'plan' || mode === 'issue' ? poMockups.mockupSection({ folder, question }) : '';
+  return ['auto', 'issue', 'plan'].includes(mode) ? poMockups.mockupSection({ folder, question }) : '';
 }
 
-async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null, language = null }) {
+async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null, language = null, runDefaults = null }) {
   // the run modules, not engine/workflow: the engine reaches this module through refactor-priority (#378)
   const { extractJson, validateSchema } = require('../../engine/run/outputs');
   const { render } = require('../../engine/run/templates');
@@ -1624,7 +1644,7 @@ async function callAgent({ mode = 'plan', question = '', report, previous = [], 
   if (!resolveCommand(provider.command)) throw new Error(`The Product Owner needs ${provider.command}, which is not installed.`);
   if (!folder || !fs.existsSync(folder)) throw new Error('The project has no folder on this machine: the Product Owner reads its code there.');
   const issueMode = mode === 'issue';
-  const planMode = mode === 'plan';
+  const planMode = ['auto', 'plan'].includes(mode);
   const turn = TURNS[mode] || TURNS.plan;
   const { schema } = turn;
   const skills = turn.skills.map((s) => resolveSkill(skillsDirs, s));
@@ -1641,6 +1661,7 @@ async function callAgent({ mode = 'plan', question = '', report, previous = [], 
     planMode ? poCalibration.promptSection(calibration ?? agent?.calibration) : '',
     planMode && !costOff ? poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)) : '',
     planMode && workflow ? workflowSection(workflow, costOff) : '',
+    poChosen.runDefaultsSection(runDefaults, mode),
     selection.length ? SELECTION_RULES : '',
     mockupsFor(mode, folder, question),
     report,

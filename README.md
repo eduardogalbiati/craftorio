@@ -1138,8 +1138,16 @@ workflow's defaults**. The dialog marks the fields filled from the project with 
 project" hint. On the CLI, `--project <id>` (or the project whose folder is `--repo`) picks the
 project.
 
-The project's run defaults come from the wizard's picks (#729: the `local-*` / `remote-*`
-variants), the Ways of working profile (Edit profile saves them on the project, with the
+A roadmap item keeps only the inputs chosen for it (#785): what the owner changed in the Product
+Owner's recommendation or in the item's Edit form, or what the plan set on purpose (the Cost step's
+tests and screenshots). A value equal to the one shown anyway is not saved, and neither is an empty
+one, so the project's configuration reaches the run. The Edit form and the recommendation say where
+each value comes from ("from the project", "from the workflow", "on this item"). An item saved
+before this keeps its values; its Edit form lists the ones that differ from the project's, with
+"Use the project's values".
+
+The project's run defaults come from the wizard's picks (#729: the `local-*` / `remote-*` /
+`fork-*` variants), the Ways of working profile (Edit profile saves them on the project, with the
 project's kind) and the facts read from the files; a value saved on the project
 (`project.runDefaults`) wins over a derived one. No Node toolchain is assumed: a Rust project gets
 `cargo test`, and no `npm …` command is offered without a `package.json`.
@@ -1156,6 +1164,8 @@ Where each input of feature, fix and release gets its project value:
 | Input | Project value |
 | --- | --- |
 | `mode` | the wizard's variant (`local-*`, `remote-*`, `fork-*`), else the profile's mode (`fork` when you can't push to the repository, #738) |
+| `test_order` | the wizard's variant: `*-code` is `code_first`, `*-e2e` is `e2e_first` (#785) |
+| `language` | every language detected from the project's files, comma-separated (#785) |
 | `parent_branch` | set by the Roadmap for an item that `dependsOn` an earlier one (#738): its branch on the fork |
 | `base_branch` | the repository's default branch |
 | `test_command` (release: `unit_command`) | the profile's test command, else discovery (`package.json`, `go.mod`, `Cargo.toml` → `cargo test`, …) |

@@ -18,6 +18,7 @@ const simulation = require('../../engine/simulation');
 const usage = require('../../domains/usage/usage');
 const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
+const { runDefaultsNow } = require('../seed-runs');
 
 module.exports = (ctx) => {
   const refilling = new Set();
@@ -93,6 +94,7 @@ module.exports = (ctx) => {
       // as po:ask: its own and the Oracle's calls count in the monthly budget (a blocking one refuses)
       budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ws.backlog, new Date(), settings.timeZone), settings.prices),
       timeZone: settings.timeZone, // #273
+      runDefaults: runDefaultsNow(ctx, p), // #785
       mock: simulated,
       mode: 'plan',
       selection: picks.map((i) => i.number),

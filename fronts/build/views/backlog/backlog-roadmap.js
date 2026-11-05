@@ -103,6 +103,15 @@
       .catch(() => { workflows = new Map(); })
       .finally(() => { loading = false; });
   }
+  // #785: the project's run defaults: what the Edit form shows for what the item did not choose
+  let runDefaults = null;
+  let hintsFor = null;
+  function loadHints(rerender, projectId) {
+    if (projectId === hintsFor || typeof api.projectInputHints !== 'function') return;
+    hintsFor = projectId;
+    runDefaults = null;
+    if (projectId) WorkflowInputs.hintsOf(projectId).then((h) => { if (hintsFor === projectId) { runDefaults = h?.runDefaults || null; rerender?.(); } }).catch(() => {});
+  }
   // #630: an item saved under an old workflow name (software-development.yaml, ...) means its alias
   const fileOf = (x) => (!x.workflow || workflows?.has(x.workflow) ? x.workflow : window.DefaultWorkflow?.aliasOf(x.workflow)?.file || x.workflow);
   const wfOf = (x) => workflows?.get(fileOf(x));
@@ -298,9 +307,10 @@
     const key = modeIn(x).key;
     const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
     for (const k of Object.keys(x.inputs || {})) if (k !== key && k !== 'mode' && !defs[k]) fields[k] = {};
+    const { values, sources } = WorkflowInputs.resolved(fields, x.inputs, runDefaults); // #785: each value with its source
     const grid = Object.keys(fields).length
       ? WorkflowInputs.formHtml(fields, {
-        values: x.inputs || {}, context: modeIn(x).context, autofocus: !adding,
+        values, sources, context: modeIn(x).context, autofocus: !adding,
         id: (k) => `rm-f-${x.id}-${k}`, attrs: (k) => `data-rm-field="${esc(k)}"`,
       })
       : `<p class="small muted">${t('backlog_roadmap.this_workflow_has_no_other_inputs')}</p>`;
@@ -315,6 +325,7 @@
       : '';
     return `
       <div class="rm-form" role="group" aria-label="${t('backlog_roadmap.edit_the_inputs_of_this_item')}"${WorkflowInputs.scopeAttrs(modeIn(x).context)}>
+        ${WorkflowInputs.differHtml(WorkflowInputs.differing(defs, x.inputs, runDefaults), defs)}
         <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
         ${agents}
@@ -1017,6 +1028,7 @@
    */
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender, view.project || null);
+    loadHints(rerender, view.project || null);
     const { SINCE, cardCount } = RoadmapModel;
     const [since, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const sinceText = t(`backlog_roadmap.since_text_${since}`); // #750: "last 24 hours" in the interface's language
@@ -1268,9 +1280,11 @@
     for (const el of form.querySelectorAll('[data-rm-field]')) {
       const k = el.dataset.rmField;
       // a switch: true/false for a boolean, "true"/"false" for an enum of those strings
-      if (el.type === 'checkbox') inputs[k] = el.dataset.wiFlag === 'text' ? String(el.checked) : el.checked;
-      else if (el.value.trim() === '') delete inputs[k];
-      else inputs[k] = el.value.trim();
+      const v = el.type === 'checkbox' ? (el.dataset.wiFlag === 'text' ? String(el.checked) : el.checked) : el.value.trim();
+      // #785: a key the item did not save stays out while it shows what the item gets anyway
+      const unsaved = !String(inputs[k] ?? '').trim();
+      if (v === '' || (unsaved && WorkflowInputs.sameValue(v, WorkflowInputs.shownDefault(k, inputDefs(item)[k], runDefaults)))) delete inputs[k];
+      else inputs[k] = v;
     }
     const name = form.querySelector('[data-rm-newname]')?.value.trim();
     if (name) {
@@ -1734,12 +1748,15 @@
     const { s, n } = locate(stages, target);
     const item = stages[s]?.items[n];
     if (!item || !editable(item)) return 'handled';
-    applyForm(item, target.closest('.rm-form'));
+    // #785: "Use the project's values": the saved values that differ go, at once, with Undo
+    const useProject = !!target.closest('[data-wi-use-project]');
+    if (useProject) item.inputs = Object.fromEntries(Object.entries(item.inputs).filter(([k]) => !WorkflowInputs.differing(inputDefs(item), item.inputs, runDefaults).includes(k)));
+    else applyForm(item, target.closest('.rm-form'));
     editing = null;
     adding = false;
     kept = null;
     lost = null;
-    await save(ctx, r, stages, { label: t('backlog_roadmap.edited_the_inputs_of_item', { item: numbers(item) }), quiet: true, form: item });
+    await save(ctx, r, stages, { label: t(useProject ? 'backlog_roadmap.used_the_project_values_of_item' : 'backlog_roadmap.edited_the_inputs_of_item', { item: numbers(item) }), quiet: !useProject, form: item });
     return 'handled';
   }
   // #260: a cut line after the stage: named in the dialog (add, rename) or removed, saved at once
@@ -1849,6 +1866,7 @@
     { selector: '[data-rm-addinput]', run: () => { adding = true; } },
     { selector: '[data-rm-conflict-dismiss]', run: () => { lost = null; } },
     { selector: '[data-rm-save]', run: saveClicked },
+    { selector: '[data-wi-use-project]', run: saveClicked },
     { selector: '[data-rm-release]', run: releaseClicked },
     { selector: '[data-rm-toggle-stage]', run: async ({ ctx, r, stages, target }) => { await toggleStage(ctx, r, stages, target); return 'handled'; } },
     { selector: '[data-rm-addnote]', run: ({ r, stages, target }) => { noteEditing = r.stages[locate(stages, target).s]?.id ?? null; } },

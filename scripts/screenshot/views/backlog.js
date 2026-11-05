@@ -82,12 +82,12 @@ function demoPoConversation(ws, projectId, po = null) {
       estimateUsd: 27.4,
       estimateMissing: 1,
       groups: [
-        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['packages/engine/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
-        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in packages/engine/server.', files: ['packages/engine/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
-          inputs: { mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
+        { name: 'Rename crash', issues: [11], workflow: 'feature.yaml', inputs: {}, reason: 'It blocks the rest.', files: ['packages/engine/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
+        { name: 'Reports and health', issues: [12, 9], workflow: 'feature.yaml', inputReasons: { e2e_tests: 'Economy: the scenarios are written now and run at release.', unit_tests: 'Economy: the suite runs once, no new tests.' }, reason: 'Both add a server route: one run avoids a merge conflict in packages/engine/server.', files: ['packages/engine/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
+          inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
           costEstimate: { usd: 15.8, perPoint: 3.16, complexity: 5, runs: 12, estimated: false, basis: 'Median cost per step and complexity point of the last 12 successful runs of software-development-local-hero.yaml, × complexity 5 (test ×0.35, evidence ×0.5, developer_screenshots off).' },
           cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] } },
-        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['packages/ui-kit/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
+        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'feature.yaml', inputs: { validation: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['packages/ui-kit/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
       ],
       conflicts: [], enrich: [],
       // #124: the big issue split along its two areas; #138: #15 placed in an epic, a new one for the UI fixes
@@ -105,7 +105,7 @@ function demoPoConversation(ws, projectId, po = null) {
     { ts: at(150), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.09, calibration: 5, calibrationOverride: true, text: 'One validated run for #16; **#10** touches the same styles and could join it. #8 is closed: left out.', answer: {
       summary: 'One run.',
       groups: [
-        { name: 'Keyboard focus', issues: [16], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['packages/ui-kit/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],
+        { name: 'Keyboard focus', issues: [16], workflow: 'feature.yaml', inputs: { validation: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['packages/ui-kit/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],
           suggested: [{ issue: 10, reason: 'Same area (ui): the dialog and dock styles, one validated run.' }] },
       ],
       closed: [8],
@@ -227,8 +227,6 @@ async function afterOpen({ args, click, js, pause }) {
     await pause(800);
   }
   // --po (#180): the Product Owner's drawer, asking (working, writing) or with its last answer
-  // (#235: with --workflow, the workflow it plans with, as if the owner had chosen it for the project)
-  if (args.po && args.workflowGiven) await js(`localStorage.setItem('po.workflow.' + window.BacklogActions.projectId(), ${JSON.stringify(args.workflow)});`);
   if (['working', 'writing'].includes(args.po)) await js('window.BacklogPO.ask(\'Analyze the backlog and propose runs\'); await new Promise((r) => setTimeout(r, 500));');
   else if (args.po) await js('await window.BacklogPO.open();');
 }

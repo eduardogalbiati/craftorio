@@ -273,7 +273,7 @@ test('answerHtml shows proposed runs, pairs not to run in parallel, and issues t
 
 test('apply: Assign and Add to roadmap act on one proposed group through window.BacklogActions, only when the owner clicks', () => {
   const fn = /async function apply\(act, el\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /const answer = po\.messages\[m\]\?\.answer;/);
+  assert.match(fn, /const given = po\.messages\[m\]\?\.answer;/); // #785: `answer` is it with the owner's edits
   assert.match(fn, /if \(act === 'assign'\) \{\s*const skipped = await actions\(\)\.assignGroup\(g\);/);
   assert.match(fn, /const skipped = await actions\(\)\.roadmapGroup\(g\);/);
   assert.match(fn, /None of these issues is To do any more\./); // every issue in the group was skipped

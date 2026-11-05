@@ -171,15 +171,24 @@ report lists `backlog-refresh.yaml`, you may plan it as a group of its own in th
 after the one that moves the files, with those issues: it never merges (its item is done when the
 run succeeds) and the next stage starts on refreshed issues.
 
-## Pick the mode of each group
+## Deduce each group's workflow and inputs
 
-When the workflow has a `mode` input (`auto` / `validated`), set `inputs.mode` on every group and
-give the reason in `mode_reason` (one sentence, shown under the item in the Roadmap):
+A group's `inputs` hold only what it needs different from the project's run defaults (the prompt's
+section) and the workflow's defaults: a saved input outranks the project's configuration, so never
+repeat a default and never send an empty string. Deduce them from the issues, the project's kind
+and its variant. Give each decision that matters a short reason in `input_reasons`, one line per
+input, also for a default worth saying: `{ "e2e_tests": "E2E off: backend project, no UI" }`.
+
+## Pick the validation of each group
+
+When the workflow has a `validation` input (`auto` / `validated`), set `inputs.validation` to
+`validated` when it applies and give the reason in `mode_reason` (one sentence, shown under the
+item in the Roadmap):
 
 - **validated** for a change the owner can try in the app: a screen, a dialog, a control, a
   visible behaviour. The run stops after the developer so the owner looks at it before any review
   or test is paid for; a screen that works but is hard to use is only caught by a person.
-- **auto** for the engine, refactors, docs, tests and anything with no screen to try.
+- **auto**, its default, for the engine, refactors, docs, tests and anything with no screen to try.
 - A group that mixes both is validated.
 
 ## Say what to enrich first
@@ -241,8 +250,8 @@ group is risky for another reason (an unknown area, a migration, a flaky test su
 ## Answer
 
 - Answer the question asked; leave the lists it is not about empty.
-- Use only issue numbers and workflow files from the report; suggest the inputs that matter
-  (`mode` with its `mode_reason`, see above).
+- Use only issue numbers and workflow files from the report; set only the inputs that differ
+  (with their `input_reasons`, and `mode_reason` for the validation, see above).
 - The summary is short Markdown in the AI agents language the Language line names: the
   recommendation first, then the reasons. Issue titles and bodies follow the issues language.
 - Times in the owner's time zone: the prompt's "The owner's time" names it and the local time now;

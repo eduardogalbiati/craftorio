@@ -4,16 +4,19 @@
 // backlog/backlog.js runInputs) and scripts/run.js all use it.
 // - projectRunDefaults({ project, profile }): built from, in order, the project's own overrides
 //   (`project.runDefaults`, edited on the project page), the new-project wizard's picks (#729,
-//   `project.workflows[].variant`: local-* / remote-*), the ways-of-working profile (#630, may be
-//   null) and the facts read from the project's files (projectFacts): mode, base_branch (the
-//   repository's default branch), test_command, check_command, e2e_tests, e2e_command, ui_folders,
-//   screenshots, steps_folders and the project's kind (backend / frontend / full-stack). No Node
-//   assumption: an `npm …` command only when the project's package.json has that script; no E2E
-//   unless an E2E suite was found (and the profile does not say unit tests only). A backend project
-//   gets no UI default: ui_folders [], screenshots off, e2e_tests off, steps_folders [].
+//   `project.workflows[].variant`: local-* / remote-* / fork-*), the ways-of-working profile (#630,
+//   may be null) and the facts read from the project's files (projectFacts): mode, test_order and
+//   variant (#785: the wizard's pick, `*-code` is code_first, `*-e2e` e2e_first), language (#785:
+//   every detected one, comma-separated), base_branch (the repository's default branch),
+//   test_command, check_command, e2e_tests, e2e_command, ui_folders, screenshots, steps_folders and
+//   the project's kind (backend / frontend / full-stack). No Node assumption: an `npm …` command only
+//   when the project's package.json has that script; no E2E unless an E2E suite was found (and the
+//   profile does not say unit tests only). A backend project gets no UI default: ui_folders [],
+//   screenshots off, e2e_tests off, steps_folders [].
 // - resolveRunInputs({ typed, roadmap, project, workflow }) → { values, sources }: per input of the
 //   workflow, what the owner typed (the dialog, the CLI's --input) > the roadmap / queue item's saved
 //   inputs > the project's run defaults > the workflow's default; `sources[key]` says which one.
+//   #785: a blank string saved on an item (old items carry them) counts as not saved.
 //   A project value outside the input's enum, or for an input the workflow lacks, is left out;
 //   release.yaml's own names take theirs (unit_command ← test_command, e2e_suite ← e2e_tests).
 // - savedProfile(root, projectId): the last ways-of-working analysis' profile (the seed's model
@@ -103,7 +106,20 @@ function wizardMode(project) {
   return picked[0] || null;
 }
 
-const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+// #785: the wizard's variant for the project's workflows (`fork-code`...), the first of the local /
+// remote / fork ones, else the first given, or null
+function wizardVariant(project) {
+  const variants = (project?.workflows || []).map((w) => String(w?.variant || '')).filter(Boolean);
+  return variants.find((v) => /^(local|remote|fork)\b/.test(v)) || variants[0] || null;
+}
+
+// #785: the order of a variant's tests, or null when it does not say
+function variantTestOrder(variant) {
+  if (/-code$/.test(variant || '')) return 'code_first';
+  return /-e2e$/.test(variant || '') ? 'e2e_first' : null;
+}
+
+const str =(v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 /** The project's run defaults (see the header); every key always present. */
 async function projectRunDefaults({ project, profile = null } = {}) {
@@ -122,9 +138,13 @@ function runDefaultsWith({ project, profile = null, defaultBranch = null } = {})
   const suite = str(p.e2eCommand) || facts.e2eCommand;
   const noUi = kind === 'backend';
   const e2eOff = noUi || !suite || p.tests === 'unit';
+  const variant = wizardVariant(project);
   const defaults = {
     kind,
+    variant,
     mode,
+    test_order: variantTestOrder(variant),
+    language: folder ? detectLanguage(folder) : null,
     base_branch: defaultBranch,
     test_command: str(p.testCommand) || detectTestCommand(folder) || '',
     check_command: str(p.checkCommand) || checkCommand(folder) || '',
@@ -154,19 +174,28 @@ function withAliases(defaults) {
 }
 
 const given = (v) => v !== undefined && v !== null;
-const fits = (def, v) => !Array.isArray(def?.enum) || def.enum.includes(v);
+// #785: a `multiple` input ("rust,js") fits when each of its values does
+const fits = (def, v) => !Array.isArray(def?.enum) || (def.multiple ? String(v).split(',') : [v]).every((x) => def.enum.includes(x));
+// #785: what an item saved counts unless it is a blank string
+const saved = (v) => given(v) && !(typeof v === 'string' && !v.trim());
+// the project's value of an input, when it has one the input takes (undefined otherwise)
+function projectValue(k, def, project) {
+  const v = Object.prototype.hasOwnProperty.call(project || {}, k) ? project[k] : ALIASES[k]?.(project || {});
+  return given(v) && fits(def, v) ? v : undefined;
+}
+
+/** #785: what an input shows with nothing saved or typed: the project's value, else the workflow's default. */
+const shownDefault = (k, def, project) => projectValue(k, def, project) ?? def?.default;
 
 /** The run's inputs from the four sources, highest first (see the header) → { values, sources }. */
 function resolveRunInputs({ typed = {}, roadmap = {}, project = {}, workflow = {} } = {}) {
   const values = {};
   const sources = {};
-  const projectValue = (k) => (Object.prototype.hasOwnProperty.call(project || {}, k) ? project[k] : ALIASES[k]?.(project || {}));
   for (const [k, def] of Object.entries(workflow?.inputs || {})) {
-    const fromProject = projectValue(k);
     const picks = [
       ['typed', typed?.[k]],
-      ['roadmap', roadmap?.[k]],
-      ['project', given(fromProject) && fits(def, fromProject) ? fromProject : undefined],
+      ['roadmap', saved(roadmap?.[k]) ? roadmap[k] : undefined],
+      ['project', projectValue(k, def, project)],
       ['workflow', def?.default],
     ];
     const found = picks.find(([, v]) => given(v));
@@ -175,7 +204,7 @@ function resolveRunInputs({ typed = {}, roadmap = {}, project = {}, workflow = {
     sources[k] = found[0];
   }
   // what the owner or the item set for a key the workflow does not declare stays (the engine checks it)
-  for (const src of [roadmap, typed]) for (const [k, v] of Object.entries(src || {})) if (!(k in values) && given(v)) { values[k] = v; sources[k] = src === typed ? 'typed' : 'roadmap'; }
+  for (const src of [roadmap, typed]) for (const [k, v] of Object.entries(src || {})) if (!(k in values) && (src === typed ? given(v) : saved(v))) { values[k] = v; sources[k] = src === typed ? 'typed' : 'roadmap'; }
   return { values, sources };
 }
 
@@ -197,5 +226,6 @@ module.exports = {
   resolveRunInputs,
   runDefaultsWith,
   savedProfile,
+  shownDefault,
   withAliases,
 };

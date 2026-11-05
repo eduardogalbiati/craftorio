@@ -313,7 +313,7 @@ function cleanItem(raw, known, previous) {
   const agentOverrides = raw.agentOverrides && typeof raw.agentOverrides === 'object' && Object.keys(raw.agentOverrides).length ? raw.agentOverrides : null;
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
-    inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
+    inputs: Object.fromEntries(Object.entries(raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}).filter(([, v]) => typeof v !== 'string' || v.trim())), mock: !!raw.mock, // #785: never a blank input
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(source ? { source } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
     // #738: the earlier item this one builds on (a split implementation, roadmap-dependency.js)
     ...(agentOverrides ? { agentOverrides } : {}), ...dependsOnField(raw, old),

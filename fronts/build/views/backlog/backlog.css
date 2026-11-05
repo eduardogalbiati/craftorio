@@ -27,7 +27,22 @@
 .po-group .po-list li { overflow-wrap: anywhere; }
 /* #216: the proposal card in sections: the workflow and its pills, Why / Mode / Files / Estimate / Cost, the warnings */
 .po-wf, .po-cost { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.po-wf-name { color: var(--text); font-weight: 600; }
+/* #785: a recommendation's decisions: three titled groups of label / value lines, the form when editing */
+.po-decisions { display: grid; gap: 6px; min-width: 0; }
+.po-decision-group { display: grid; gap: 2px; min-width: 0; }
+.po-decision-group[hidden] { display: none; }
+.po-decision-title { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.po-decision { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr) max-content; gap: 0 8px; align-items: baseline; font-size: 12px; }
+.po-decision-label { color: var(--muted); }
+.po-decision-value { min-width: 0; overflow-wrap: anywhere; }
+.po-decision-source { color: var(--muted); font-size: 11px; }
+.po-decision-reason { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.po-decision[data-changed="true"] .po-decision-value { color: var(--accent); font-weight: 600; }
+.po-decisions-actions { gap: 12px; }
+.po-decisions-actions .link-btn { min-height: 24px; }
+.po-decisions-form { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.po-decisions-pick { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin: 0; }
+.po-decisions-pick select { flex: 1; min-width: 0; max-width: 320px; }
 .po-secs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 10px; margin: 0; }
 .po-secs dt { color: var(--muted); font-weight: 600; }
 .po-secs dd { margin: 0; min-width: 0; }
@@ -52,24 +67,10 @@ span.po-applied { cursor: default; }
 .po-chips { margin-bottom: 0; }
 .po-ask textarea { flex: 1; min-width: 0; resize: vertical; }
 /* Register an issue (#117): attachments, the draft preview and its actions */
-.po-foot > .seg { justify-self: start; }
+#btn-po-plan { justify-self: start; min-height: 24px; }
 .po-foot.dropping { outline: 2px dashed #2DD4BF; outline-offset: -4px; }
-/* #235: what the drawer plans for, and the workflow of a plan with its options (a framed, compact grid
-   whose height is capped so the conversation keeps its room) */
+/* #235: what the drawer plans for */
 .po-for { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.po-wf-row { display: grid; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
-.po-wf-pick { display: flex; align-items: center; gap: 8px; }
-.po-wf-pick > label { display: flex; align-items: center; gap: 8px; flex: 0 1 400px; min-width: 0; margin: 0; }
-.po-wf-pick select { flex: 1; min-width: 0; max-width: 320px; }
-/* #431: minimized, a one-line summary of the values, the chevron on the right */
-.po-wf-summary { flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.po-wf-summary[hidden] { display: none; }
-.po-wf-toggle { flex: none; margin-left: auto; min-width: 24px; min-height: 24px; }
-.po-wf-toggle svg { transition: transform .15s; }
-.po-wf-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
-@media (prefers-reduced-motion: reduce) { .po-wf-toggle svg { transition: none; } }
-.po-wf-options { max-height: 22vh; overflow: auto; }
-.po-wf-options[hidden] { display: none; }
 .po-wf-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 14px; align-items: center; }
 .po-wf-fields .wi-group-label, .po-wf-fields .wi-more-toggle { grid-column: 1 / -1; }
 .po-wf-fields .wi-more { display: contents; }

@@ -3,6 +3,8 @@
 // `mock` (the screen's developer mode) and MULTIAGENT_SIMULATION_ONLY answer from the simulated
 // Product Owner: no model call, no cost. po:ask's `issues` (#169): the issues the owner selected on
 // the Backlog and sent to the Product Owner, read in full and planned with suggested extra issues.
+// #785: `mode: 'auto'` (the drawer) lets the Product Owner decide whether it plans or registers, and
+// every question carries the project's run defaults.
 // Registering an issue (#117): `mode: 'issue'` drafts an issue in the same conversation; po:attach
 // stores a pasted or dropped file; po:file files the draft on the owner's click (create, append to
 // an existing issue's body, or comment), then syncs the backlog; po:discard drops it. `preview`
@@ -41,6 +43,7 @@ const { resolveCommand } = require('../../engine/providers');
 const { isArchived } = require('@multiagent/shared/backlog-archive');
 const { isRelease, stageCount } = require('@multiagent/shared/roadmap-model');
 const { requireObject } = require('../common');
+const { runDefaultsNow } = require('../seed-runs');
 const {
   ANY,
   args,
@@ -115,6 +118,7 @@ module.exports = (ctx) => {
       // #206: the prices of the estimates
       prices: settings.prices || {},
       timeZone: settings.timeZone, // #273: the owner's zone in the turn's prompt
+      runDefaults: p ? runDefaultsNow(ctx, p) : null, // #785: what the plan deduces from and never repeats
     };
   };
   // a discovery card's commit proposal asks the same Product Owner (#258, fronts/plan/engine/channels/discovery.js)
@@ -258,7 +262,8 @@ module.exports = (ctx) => {
           out = await productOwner.ask({
             ...base,
             question,
-            mode: mode === 'issue' ? 'issue' : 'plan',
+            // #785: 'auto', the drawer: the Product Owner decides whether it plans or registers
+            mode: ['auto', 'issue'].includes(mode) ? mode : 'plan',
             attachments: Array.isArray(attachments) ? attachments : [],
             // #169: the Backlog's selection sent to the Product Owner (plan mode)
             selection: Array.isArray(issues) ? issues : [],

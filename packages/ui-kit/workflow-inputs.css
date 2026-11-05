@@ -8,6 +8,9 @@
 .wi-field input.wi-compact, .wi-field select { max-width: 20rem; }
 .wi-field input.wi-number { max-width: 7rem; }
 .wi-field .wi-badge { font-size: 10px; font-weight: 500; margin-left: 6px; vertical-align: 1px; }
+/* #785: where a value comes from, and the notice of saved values that differ from the project's */
+.wi-source { display: block; color: var(--muted); font-size: 11px; }
+.wi-differ { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
 /* a switch: the switch, then its label, on one line (the help under them) */
 .wi-field.wi-kind-switch { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; }
 .wi-field.wi-kind-switch > label { order: 2; margin: 0; }

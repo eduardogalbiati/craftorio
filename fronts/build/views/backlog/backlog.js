@@ -1322,18 +1322,8 @@
         <div id="po-sim" class="po-sim hidden" role="group" aria-label="${t('backlog.simulated_scenario')}" title="${t('backlog.simulation_only_not_part_of_the')}">
           <span class="po-sim-label">${t('backlog.simulated_scenario')}</span><span id="po-scenario" class="po-sim-opts"></span>
         </div>
-        <div id="po-mode" class="seg sm" role="group" aria-label="${t('backlog.what_to_do_with_the_product')}">
-          <button type="button" data-po-mode="plan">${t('backlog.plan_the_backlog')}</button>
-          <button type="button" data-po-mode="issue">${t('backlog.register_an_issue')}</button>
-        </div>
+        <button id="btn-po-plan" class="link-btn small hidden" type="button" data-testid="po-back-to-plan">${t('backlog.back_to_planning')}</button>
         <div id="po-chips" class="chips po-chips"></div>
-        <!-- #235: the workflow a plan question is for, and that workflow's own options -->
-        <div id="po-wf-row" class="po-wf-row hidden">
-          <div class="po-wf-pick small"><label><span class="muted">${t('backlog.plan_with')}</span> <select id="po-workflow" class="po-wf" data-testid="po-workflow" aria-label="${t('backlog.workflow_the_product_owner_plans_with')}"></select></label>
-            <span id="po-wf-summary" class="po-wf-summary muted" data-testid="po-wf-summary" hidden></span><!-- #431: the options minimized to this line, the chevron toggles -->
-            <button id="po-wf-toggle" class="icon-btn po-wf-toggle" type="button" data-testid="po-wf-toggle" aria-controls="po-workflow-options" aria-expanded="true" title="${t('backlog.hide_the_workflow_options')}" aria-label="${t('backlog.hide_the_workflow_options')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg></button></div>
-          <div id="po-workflow-options" class="po-wf-options" data-testid="po-workflow-options"></div>
-        </div>
         <div id="po-files" class="po-files hidden"></div>
         <div id="po-attached" class="po-files po-attached hidden" aria-label="${t('backlog.attached_issues')}"></div>
         <!-- #234: the turn in flight, where the click happened; a click with no project says why nothing was sent -->
