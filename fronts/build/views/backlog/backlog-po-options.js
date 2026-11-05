@@ -89,7 +89,7 @@
     const editBtn = done ? '' : `<button class="link-btn small" type="button" data-testid="po-decisions-edit" aria-expanded="${!!edit.open}">${t(edit.open ? 'backlog_po.decisions_done' : 'backlog_po.decisions_edit')}</button>`;
     const list = (workflows || []).some((w) => w.file === shown.workflow) ? workflows : [{ file: shown.workflow, name: shown.workflow }, ...(workflows || [])];
     const form = `<div class="po-decisions-form po-wf-fields" data-testid="po-decisions-form"${WI.scopeAttrs()}>
-      <label class="po-decisions-pick small"><span class="muted">${t('backlog_po.decisions_workflow')}</span> <select class="po-wf" data-testid="po-decisions-workflow">${list.map((w) => `<option value="${esc(w.file)}"${w.file === shown.workflow ? ' selected' : ''}>${esc(title(w, w.file))}</option>`).join('')}</select></label>
+      <label class="po-decisions-pick small"><span class="muted">${t('backlog_po.decisions_workflow')}</span> ${window.Select.markup('class="po-wf" data-testid="po-decisions-workflow"', list.map((w) => [w.file, title(w, w.file)]), shown.workflow)}</label>
       ${WI.formHtml(defs, { values, sources, groups: true, moreOpen: remembered(MORE), id: (k) => `po-wi-${key}-${k}` })}</div>`;
     return `<div class="po-decisions" data-testid="po-recommendation-decisions">
       ${edit.open && !done ? form : `${groups}<div class="po-decision-group" data-testid="po-decisions-advanced"${edit.more ? '' : ' hidden'}>${advanced}</div>`}
