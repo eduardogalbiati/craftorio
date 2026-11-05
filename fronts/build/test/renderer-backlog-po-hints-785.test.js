@@ -12,6 +12,18 @@ test('#785 without the project\'s hints, a value the PO chose on purpose still g
   assert.deepEqual(page.added[0].inputs, { mode: 'local' });
 });
 
+test('#785 without the project\'s hints, the owner\'s change back to the workflow\'s default still goes to the roadmap', { timeout: 30000 }, async () => {
+  const page = await openDrawer({ history: recommendation({ inputs: { mode: 'remote' } }), api: { projectInputHints: async () => { throw new Error('offline'); } } });
+  await click(page, byTestId(page.$('#po-log'), 'po-decisions-edit'), '"Editar"');
+  const select = byTestId(page.$('#po-log'), 'po-decisions-form')?.querySelector('[data-wi-input="mode"]') ?? null;
+  assert.equal(select === null, false, 'the form\'s Mode select');
+  select.value = 'local';
+  select.dispatchEvent(new page.dom.classes.Event('change', { bubbles: true }));
+  await settle(30);
+  await click(page, page.$('#po-log [data-po-act="roadmap"]'), '"Colocar no roadmap"');
+  assert.deepEqual(page.added[0].inputs, { mode: 'local' });
+});
+
 test('#785 the hints of the previous project, arriving late, do not reach the card', { timeout: 30000 }, async () => {
   const late = deferred();
   const page = await openDrawer({
