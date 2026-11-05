@@ -17,7 +17,8 @@
 //   question, else the default one, the same rule as the drawer's Cost chip (backlog-po.js costOn).
 // - retagQuestion(file, asked, tag): an 'auto' question went out before its intent was known; once it is
 //   a register, its line in the conversation gets the thread's tag, so the next turn's prompt still
-//   has the owner's report (issueThread reads the tagged messages). Returns the tagged message.
+//   has the owner's report (issueThread reads the tagged messages). Returns the tagged message; a
+//   conversation cleared during the turn has no line to tag, and the turn's answer still counts.
 
 const fs = require('fs');
 const { costApplies } = require('@multiagent/shared/po-calibration');
@@ -78,7 +79,13 @@ const costOff = (chosen, workflows, byDefault) => !costApplies(chosen || (workfl
 /** The question of a turn that became a register: tagged in the conversation's file too (see the header). */
 function retagQuestion(file, asked, tag) {
   const message = { ...asked, ...tag };
-  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  let lines;
+  try {
+    lines = fs.readFileSync(file, 'utf8').split('\n');
+  } catch (e) {
+    if (e.code === 'ENOENT') return message;
+    throw e;
+  }
   const at = lines.lastIndexOf(JSON.stringify(asked));
   if (at < 0) return message;
   lines[at] = JSON.stringify(message);

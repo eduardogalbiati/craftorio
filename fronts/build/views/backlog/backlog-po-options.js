@@ -41,13 +41,16 @@
    * The group `g` with the owner's `edit` ({ workflow, values }), if any: `wf` is the workflow it ends up
    * on. An answer recorded before #785 (no `inputsChosen`) carries every input at the workflow's default:
    * those go too, so only what was chosen stays, and what the Cost step set on purpose (#205).
+   * No `runDefaults` (the hints failed or have not arrived): what the project gives is unknown, so a value
+   * equal to the workflow's default may still differ from it, and a chosen one stays.
    */
   function withEdits(g, edit, wf, runDefaults) {
     const { blank, chosen, sameValue, shownDefault } = window.RunInputs;
     const defs = wf?.inputs || {};
-    const inputs = { ...chosen(g.inputsChosen ? g.inputs : chosen(g.inputs, defs), defs, runDefaults), ...g.cost?.inputs };
+    const fromPo = g.inputsChosen ? g.inputs : chosen(g.inputs, defs);
+    const inputs = { ...(runDefaults ? chosen(fromPo, defs, runDefaults) : fromPo), ...g.cost?.inputs };
     for (const [k, v] of Object.entries(edit?.values || {})) {
-      if (blank(v) || sameValue(v, shownDefault(k, defs[k], runDefaults))) delete inputs[k];
+      if (blank(v) || (runDefaults && sameValue(v, shownDefault(k, defs[k], runDefaults)))) delete inputs[k];
       else inputs[k] = v;
     }
     // another workflow: what the new one does not declare has no meaning there
