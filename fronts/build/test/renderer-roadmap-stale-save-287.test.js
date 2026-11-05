@@ -19,7 +19,7 @@ const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
 const read = (...p) => fs.readFileSync(p[0].startsWith('..') ? path.join(__dirname, '..', '..', '..', 'apps', 'desktop', 'renderer', ...p) : require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), p.join('/')), 'utf8');
 const roadmapSrc = read('views', 'backlog', 'backlog-roadmap.js');
 const backlogSrc = read('views', 'backlog', 'backlog.js');
-const MODULES = ['status-pill.js', 'estimates.js', '../../../packages/shared/run-progress-model.js', '../../../packages/shared/default-workflow.js', '../../../packages/shared/roadmap-model.js', 'workflow-inputs.js'].map((f) => read(f));
+const MODULES = ['status-pill.js', 'estimates.js', '../../../packages/shared/run-progress-model.js', '../../../packages/shared/default-workflow.js', '../../../packages/shared/roadmap-model.js', '../../../packages/shared/run-inputs.js', 'workflow-inputs.js'].map((f) => read(f));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const SHOW_ALL = { showAll: true, since: 'total' };

@@ -396,7 +396,7 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     ...(level ? { calibration: level } : {}),
     ...(costLevel ? { cost: costLevel } : {}),
     ...(known.length ? { estimateUsd: Math.round(known.reduce((a, x) => a + x, 0) * 100) / 100, estimateMissing: planned.length - known.length } : {}),
-    groups: planned,
+    groups: planned.map((g) => ({ ...g, inputsChosen: true })), // #785: an answer recorded before has every input at its default
     ...(closed.length ? { closed } : {}),
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
     decongest: normalizeDecongest(answer.decongest),
@@ -1429,7 +1429,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   let issueMode = turnMode === 'issue';
   const chosenWf = issueMode || !workflow ? null : (workflows || []).find((w) => w.file === workflow) || null;
   const chosen = chosenWf?.file || null;
-  const costOff = !!chosenWf && !poCalibration.costApplies(chosenWf);
+  const costOff = poChosen.costOff(chosenWf, workflows, byDefault);
   const saved = poCalibration.clamp(agent?.calibration);
   const level = poCalibration.clamp(calibration, null) ?? poCalibration.fromQuestion(q) ?? saved;
   const savedCost = poCalibration.cost.clamp(agent?.cost);
@@ -1507,11 +1507,11 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     return { message, messages: readConversation(backlogDir, projectId) };
   }
   if (turnMode === 'auto' && raw?.intent === 'register') {
-    // the question went out before the intent was known: its thread gets it, the conversation keeps it
+    // the question went out before the intent was known: tagged now, in the conversation and its thread
     issueMode = true;
     thread = threadOf(previous, projectId);
     tag = { mode: 'issue', thread };
-    copyToThread(where, { ...asked, ...tag });
+    copyToThread(where, poChosen.retagQuestion(chatFile(backlogDir, projectId), asked, tag));
   }
   let message;
   if (issueMode) {

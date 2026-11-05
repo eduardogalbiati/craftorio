@@ -35,15 +35,19 @@
     { id: 'agents', testId: 'po-decision-group-agents', title: 'backlog_po.decisions_agents', keys: ['developer_model', 'developer_effort'] },
   ];
   const GROUPED = GROUPS.flatMap((g) => g.keys);
-  const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && !v.trim());
   const optionDefs = (wf) => Object.fromEntries(Object.entries(wf?.inputs || {}).filter(([k]) => !SKIP_INPUTS.includes(k) && !/path|dir/i.test(k)));
 
-  /** The group `g` with the owner's `edit` ({ workflow, values }): `wf` is the workflow it ends up on. */
+  /**
+   * The group `g` with the owner's `edit` ({ workflow, values }), if any: `wf` is the workflow it ends up
+   * on. An answer recorded before #785 (no `inputsChosen`) carries every input at the workflow's default:
+   * those go too, so only what was chosen stays, and what the Cost step set on purpose (#205).
+   */
   function withEdits(g, edit, wf, runDefaults) {
+    const { blank, chosen, sameValue, shownDefault } = window.RunInputs;
     const defs = wf?.inputs || {};
-    const inputs = { ...g.inputs };
+    const inputs = { ...chosen(g.inputsChosen ? g.inputs : chosen(g.inputs, defs), defs, runDefaults), ...g.cost?.inputs };
     for (const [k, v] of Object.entries(edit?.values || {})) {
-      if (isBlank(v) || window.WorkflowInputs.sameValue(v, window.WorkflowInputs.shownDefault(k, defs[k], runDefaults))) delete inputs[k];
+      if (blank(v) || sameValue(v, shownDefault(k, defs[k], runDefaults))) delete inputs[k];
       else inputs[k] = v;
     }
     // another workflow: what the new one does not declare has no meaning there

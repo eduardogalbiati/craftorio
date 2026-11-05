@@ -92,6 +92,7 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, choiceDialo
   vm.runInContext(estimatesSrc, sandbox); // the real Estimates module (#215; #272: the run timer's tooltip)
   vm.runInContext(runProgressSrc, sandbox); // the real RunProgress module (#194), not reimplemented
   vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195)
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'run-inputs.js'), 'utf8'), sandbox); // the real RunInputs module (#785)
   vm.runInContext(roadmapModelSrc, sandbox); // the real RoadmapModel (#349): the view's rules
   vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
   vm.runInContext(menuSrc, sandbox); // the shared menu (#748) the stage menu is built with

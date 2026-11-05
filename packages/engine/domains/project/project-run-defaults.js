@@ -19,6 +19,7 @@
 //   #785: a blank string saved on an item (old items carry them) counts as not saved.
 //   A project value outside the input's enum, or for an input the workflow lacks, is left out;
 //   release.yaml's own names take theirs (unit_command ← test_command, e2e_suite ← e2e_tests).
+//   The rule lives in packages/shared/run-inputs.js, shared with the screens; re-exported here.
 // - savedProfile(root, projectId): the last ways-of-working analysis' profile (the seed's model
 //   answer under <workspace>/architecture), or null.
 // Where each input's project value comes from: docs/readme/040-workflows.md (Project run defaults).
@@ -30,6 +31,7 @@ const { checkCommand } = require('../../engine/check-step');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { detectLanguage, listBranches } = require('./project-inputs');
 const { PROFILE, PROJECT_KINDS: KINDS } = require('@multiagent/shared/onboarding-model');
+const { resolveRunInputs, withAliases } = require('@multiagent/shared/run-inputs');
 
 // #738: local, remote and fork (Fork + PR), the profile's modes
 const MODES = PROFILE.mode;
@@ -119,7 +121,7 @@ function variantTestOrder(variant) {
   return /-e2e$/.test(variant || '') ? 'e2e_first' : null;
 }
 
-const str =(v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 /** The project's run defaults (see the header); every key always present. */
 async function projectRunDefaults({ project, profile = null } = {}) {
@@ -159,55 +161,6 @@ function runDefaultsWith({ project, profile = null, defaultBranch = null } = {})
   return defaults;
 }
 
-// release.yaml names some inputs its own way
-const ALIASES = {
-  unit_command: (d) => d.test_command,
-  e2e_suite: (d) => (d.e2e_tests == null ? undefined : d.e2e_tests === 'off' ? 'skip' : 'run'),
-};
-
-/** The defaults with release.yaml's names added (unit_command, e2e_suite), for the run dialog's fields. */
-function withAliases(defaults) {
-  if (!defaults) return defaults;
-  const out = { ...defaults };
-  for (const [k, of] of Object.entries(ALIASES)) if (!(k in out) && of(out) !== undefined) out[k] = of(out);
-  return out;
-}
-
-const given = (v) => v !== undefined && v !== null;
-// #785: a `multiple` input ("rust,js") fits when each of its values does
-const fits = (def, v) => !Array.isArray(def?.enum) || (def.multiple ? String(v).split(',') : [v]).every((x) => def.enum.includes(x));
-// #785: what an item saved counts unless it is a blank string
-const saved = (v) => given(v) && !(typeof v === 'string' && !v.trim());
-// the project's value of an input, when it has one the input takes (undefined otherwise)
-function projectValue(k, def, project) {
-  const v = Object.prototype.hasOwnProperty.call(project || {}, k) ? project[k] : ALIASES[k]?.(project || {});
-  return given(v) && fits(def, v) ? v : undefined;
-}
-
-/** #785: what an input shows with nothing saved or typed: the project's value, else the workflow's default. */
-const shownDefault = (k, def, project) => projectValue(k, def, project) ?? def?.default;
-
-/** The run's inputs from the four sources, highest first (see the header) → { values, sources }. */
-function resolveRunInputs({ typed = {}, roadmap = {}, project = {}, workflow = {} } = {}) {
-  const values = {};
-  const sources = {};
-  for (const [k, def] of Object.entries(workflow?.inputs || {})) {
-    const picks = [
-      ['typed', typed?.[k]],
-      ['roadmap', saved(roadmap?.[k]) ? roadmap[k] : undefined],
-      ['project', projectValue(k, def, project)],
-      ['workflow', def?.default],
-    ];
-    const found = picks.find(([, v]) => given(v));
-    if (!found) continue;
-    values[k] = found[1];
-    sources[k] = found[0];
-  }
-  // what the owner or the item set for a key the workflow does not declare stays (the engine checks it)
-  for (const src of [roadmap, typed]) for (const [k, v] of Object.entries(src || {})) if (!(k in values) && (src === typed ? given(v) : saved(v))) { values[k] = v; sources[k] = src === typed ? 'typed' : 'roadmap'; }
-  return { values, sources };
-}
-
 /** The profile of the project's last ways-of-working analysis, or null. */
 function savedProfile(root, projectId) {
   try {
@@ -226,6 +179,5 @@ module.exports = {
   resolveRunInputs,
   runDefaultsWith,
   savedProfile,
-  shownDefault,
   withAliases,
 };

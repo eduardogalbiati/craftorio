@@ -302,7 +302,7 @@ test('ask: a question is refused while another is pending, and the simulated fla
   assert.match(fn, /const calibration = mode === 'plan' \? window\.BacklogPoSettings\?\.override\(\) \?\? null : null;/);
   assert.match(fn, /const cost = mode === 'plan' \? window\.BacklogPoSettings\?\.costOverride\?\.\(\) \?\? null : null;/);
   assert.match(fn, /if \(mode === 'plan'\) window\.BacklogPoSettings\?\.clearOverride\(\);/);
-  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration, costOff \? null : cost, workflow, inputs\);/);
+  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration, cost, null, null\);/);
 });
 
 // Runs ask() for real (po, watching and api stubbed): the busy flag is set synchronously, before the

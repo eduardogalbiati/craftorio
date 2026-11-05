@@ -2,7 +2,8 @@
 // A saved item input outranks the project's run defaults (#735), so a group keeps only what was chosen:
 // never a blank string, never a value equal to the one shown anyway (the project's run default when it
 // has one, else the workflow's). The Cost step's inputs (#205) are set after this filter, on purpose.
-// - chosenInputs(inputs, defs, runDefaults): that filter; an input the workflow does not declare stays.
+// - chosenInputs(inputs, defs, runDefaults): that filter (packages/shared/run-inputs.js `chosen`, the
+//   drawer applies it too); an input the workflow does not declare stays.
 // - groupInputs(model, owner, defs, runDefaults): a group's inputs: the model's through that filter, the
 //   options the owner sent (they win) only against the workflow's defaults: they are the owner's choice.
 // - reasonsField(raw): a group's `inputReasons` from the answer's `input_reasons`, the one-line reason of
@@ -12,27 +13,19 @@
 //   revised ('issue'); simulated, the scenario or the message tells; else it stays 'auto'.
 // - autoTurn(plan, issue): the real 'auto' turn: the plan's and the issue's rules, an answer of either
 //   shape, `intent` saying which (no intent is a plan).
+// - costOff(chosen, workflows, byDefault): no Cost step for a plan (#235): the workflow sent with the
+//   question, else the default one, the same rule as the drawer's Cost chip (backlog-po.js costOn).
+// - retagQuestion(file, asked, tag): an 'auto' question went out before its intent was known; once it is
+//   a register, its line in the conversation gets the thread's tag, so the next turn's prompt still
+//   has the owner's report (issueThread reads the tagged messages). Returns the tagged message.
 
-const { shownDefault } = require('../project/project-run-defaults');
+const fs = require('fs');
+const { costApplies } = require('@multiagent/shared/po-calibration');
+const { blank, chosen: chosenInputs } = require('@multiagent/shared/run-inputs');
 
 const REGISTER = /regist(rar|re|er)|file an issue/i;
 // what the prompt names of the project's run defaults, in this order
 const PROMPT_KEYS = ['kind', 'variant', 'mode', 'test_order', 'language', 'e2e_tests', 'screenshots', 'test_command', 'check_command', 'e2e_command'];
-
-const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && !v.trim());
-// a list and its comma-separated text, a boolean and its word, are one value
-const comparable = (v) => (Array.isArray(v) ? v.join(',') : String(v ?? ''));
-
-/** The inputs worth saving (see the header). `defs`: the workflow's inputs; `runDefaults`: the project's, or null. */
-function chosenInputs(inputs, defs = {}, runDefaults = null) {
-  const out = {};
-  for (const [k, v] of Object.entries(inputs || {})) {
-    if (isBlank(v)) continue;
-    if (defs?.[k] && comparable(v) === comparable(shownDefault(k, defs[k], runDefaults))) continue;
-    out[k] = v;
-  }
-  return out;
-}
 
 /** A group's inputs from the model's and the owner's (see the header). */
 function groupInputs(model, owner, defs, runDefaults) {
@@ -50,7 +43,7 @@ function reasonsField(raw) {
 /** The prompt's section on what a run of this project takes by itself; '' without run defaults or outside a plan. */
 function runDefaultsSection(runDefaults, mode = 'plan') {
   if (!runDefaults || !['auto', 'plan'].includes(mode)) return '';
-  const rows = PROMPT_KEYS.filter((k) => !isBlank(runDefaults[k])).map((k) => `- ${k}: ${runDefaults[k]}`);
+  const rows = PROMPT_KEYS.filter((k) => !blank(runDefaults[k])).map((k) => `- ${k}: ${runDefaults[k]}`);
   return [
     '## The project\'s run defaults',
     'A run of this project takes these values by itself (`variant`: Fork + PR, remote or local, code or E2E first, as the owner set it up; `kind`: backend has no UI, E2E or screenshots):',
@@ -79,11 +72,27 @@ function autoTurn(plan, issue) {
   };
 }
 
+/** Whether a plan has no Cost step (see the header): `chosen` the workflow sent with the question, or null. */
+const costOff = (chosen, workflows, byDefault) => !costApplies(chosen || (workflows || []).find((w) => w.file === byDefault));
+
+/** The question of a turn that became a register: tagged in the conversation's file too (see the header). */
+function retagQuestion(file, asked, tag) {
+  const message = { ...asked, ...tag };
+  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  const at = lines.lastIndexOf(JSON.stringify(asked));
+  if (at < 0) return message;
+  lines[at] = JSON.stringify(message);
+  fs.writeFileSync(file, lines.join('\n'));
+  return message;
+}
+
 module.exports = {
   autoTurn,
   chosenInputs,
+  costOff,
   groupInputs,
   reasonsField,
+  retagQuestion,
   runDefaultsSection,
   turnMode,
 };

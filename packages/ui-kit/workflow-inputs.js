@@ -63,7 +63,7 @@
       const atDefault = def.default != null && String(def.default) === String(v);
       if (atDefault && !defaults) return '';
       const value = valueText(def, v);
-      const tip =`${k}: ${v}${atDefault ? ' (the workflow default)' : ''}${def.description ? `\n${def.description}` : ''}`;
+      const tip = `${k}: ${v}${atDefault ? ' (the workflow default)' : ''}${def.description ? `\n${def.description}` : ''}`;
       return `<span class="badge wi-pill${atDefault ? ' wi-pill-default' : ''}" data-testid="input-pill" data-wi-pill="${esc(k)}" title="${esc(tip)}">${esc(label(k, def))}: ${esc(value)}</span>`;
     }).join('');
   }
@@ -318,36 +318,23 @@
   }
 
   // ---- where a value comes from (#785) --------------------------------------------------------
-  // The screens' side of resolveRunInputs (packages/engine/domains/project/project-run-defaults.js,
-  // the truth for a run), without what is typed: an item's saved value (a blank one counts as not
-  // saved) > the project's run default (projects:inputHints' `runDefaults`) > the workflow's default.
+  // The rule is packages/shared/run-inputs.js, the run's own, without what is typed: an item's saved
+  // value (a blank one counts as not saved) > the project's run default (projects:inputHints'
+  // `runDefaults`) > the workflow's default.
   const SOURCES = { project: 'workflow_inputs.from_project', roadmap: 'workflow_inputs.from_item', typed: 'workflow_inputs.from_item', workflow: 'workflow_inputs.from_workflow' };
   const sourceText = (source) => (SOURCES[source] ? t(SOURCES[source]) : '');
-  const blank = (v) => v === undefined || v === null || (typeof v === 'string' && !v.trim());
-  const fits = (def, v) => !Array.isArray(def?.enum) || (def.multiple ? listOf(v) : [v]).every((x) => def.enum.map(String).includes(String(x)));
-  const projectValue = (key, def, runDefaults) => { const v = runDefaults?.[key]; return v !== undefined && v !== null && fits(def, v) ? v : undefined; };
-  /** What an input shows with nothing saved: the project's value, else the workflow's default. */
-  const shownDefault = (key, def, runDefaults) => projectValue(key, def, runDefaults) ?? def?.default;
-  /** One value: a list and its comma-separated text, a boolean and its word. */
-  const sameValue = (a, b) => (Array.isArray(a) ? a.join(',') : String(a ?? '')) === (Array.isArray(b) ? b.join(',') : String(b ?? ''));
+  const runInputs = () => (typeof module === 'object' && module.exports ? require('@multiagent/shared/run-inputs') : root.RunInputs);
+  const shownDefault = (...a) => runInputs().shownDefault(...a);
+  const sameValue = (...a) => runInputs().sameValue(...a);
 
   /** Each input's value and where it comes from: { values, sources } for `saved` (an item's inputs). */
-  function resolved(defs, saved, runDefaults) {
-    const values = {};
-    const sources = {};
-    for (const [k, def] of Object.entries(defs || {})) {
-      const fromProject = projectValue(k, def, runDefaults);
-      const [source, value] = !blank(saved?.[k]) ? ['roadmap', saved[k]] : fromProject !== undefined ? ['project', fromProject] : ['workflow', def?.default];
-      if (value === undefined || value === null) continue;
-      values[k] = value;
-      sources[k] = source;
-    }
-    return { values, sources };
-  }
+  const resolved = (defs, saved, runDefaults) => runInputs().resolveRunInputs({ roadmap: saved, project: runDefaults, workflow: { inputs: defs } });
 
   /** The saved inputs that differ from the project's value (a blank one too): what an old item's defaults hide. */
   const differing = (defs, saved, runDefaults) => Object.keys(saved || {}).filter((k) => {
-    const fromProject = defs?.[k] ? projectValue(k, defs[k], runDefaults) : undefined;
+    // an old `mode: validated` is the validation toggle's value, not a run mode against the project's
+    if (k === 'mode' && modeInput(defs, saved).old) return false;
+    const fromProject = defs?.[k] ? runInputs().projectValue(k, defs[k], runDefaults) : undefined;
     return fromProject !== undefined && !sameValue(saved[k], fromProject);
   });
 

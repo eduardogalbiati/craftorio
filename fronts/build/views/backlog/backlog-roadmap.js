@@ -110,7 +110,7 @@
     if (projectId === hintsFor || typeof api.projectInputHints !== 'function') return;
     hintsFor = projectId;
     runDefaults = null;
-    if (projectId) WorkflowInputs.hintsOf(projectId).then((h) => { if (hintsFor === projectId) { runDefaults = h?.runDefaults || null; rerender?.(); } }).catch(() => {});
+    if (projectId) WorkflowInputs.hintsOf(projectId).then((h) => { if (hintsFor === projectId) { runDefaults = h?.runDefaults || null; rerender?.(); } }).catch((e) => { if (hintsFor === projectId) hintsFor = null; console.error('roadmap project hints:', e); }); // the next render tries again
   }
   // #630: an item saved under an old workflow name (software-development.yaml, ...) means its alias
   const fileOf = (x) => (!x.workflow || workflows?.has(x.workflow) ? x.workflow : window.DefaultWorkflow?.aliasOf(x.workflow)?.file || x.workflow);

@@ -134,7 +134,7 @@
   // belong to that project's conversation and go.
   function setProject(projectId) {
     if (po.projectId === projectId) return;
-    Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {}, files: [], placeEpic: {}, attached: [], extras: {}, edits: {} });
+    Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {}, files: [], placeEpic: {}, attached: [], extras: {}, edits: {}, runDefaults: null });
   }
   // while a question is in flight the service already recorded it: render() leaves out the pending bubble
   // (no history yet may come back empty-handed: an empty conversation;
@@ -145,7 +145,9 @@
       if (po.projectId === projectId) po.messages = messages;
     } catch (e) { po.error = errMsg(e); }
     // #785: the values a recommendation shows for what it did not choose (no hints: the workflow's)
-    try { po.runDefaults = (await window.WorkflowInputs?.hintsOf(projectId))?.runDefaults || null; } catch { po.runDefaults = null; }
+    let hints = null;
+    try { hints = await window.WorkflowInputs?.hintsOf(projectId); } catch { /* the workflow's values, then */ }
+    if (po.projectId === projectId) po.runDefaults = hints?.runDefaults || null;
     // a draft still to file: back to Register an issue
     if (openDraftIndex() >= 0 && !po.busy) po.mode = 'issue';
   }
@@ -156,7 +158,7 @@
     // attachments not sent yet belong to the other project's conversation
     if (po.projectId !== projectId) Object.assign(po, { files: [], placeEpic: {} });
     if (po.projectId !== projectId) Object.assign(po, { attached: [], extras: {} });
-    if (po.projectId !== projectId) po.edits = {};
+    if (po.projectId !== projectId) Object.assign(po, { edits: {}, runDefaults: null });
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
     Object.assign(po, { open: true, unread: false });
     Object.assign(po, { unreadCount: 0, notice: projectId ? '' : NO_PROJECT });
@@ -233,10 +235,6 @@
     if (mode === 'plan') window.BacklogPoSettings?.clearOverride();
     // #785: no toggle: the PO decides from the message, unless the owner just left an open draft
     if (mode === 'plan' && !(po.leftDraft && openDraftIndex() >= 0)) mode = 'auto';
-    // #785: the PO chooses the workflow and the inputs of each recommendation: none go with a question
-    const workflow = null;
-    const inputs = null;
-    const costOff = false;
     Object.assign(po, { busy: true, pending: q, error: null, notice: '', since: Date.now(), live: window.LiveTurn.create({ agent: t('backlog_po.product_owner') }) });
     // #234: the question and the live turn in view, whatever the scroll position was
     render({ scroll: 'end' });
@@ -244,8 +242,9 @@
     // #180: the timer and "Still working" move even when no item arrives
     const tick = setInterval(renderLive, 1000);
     try {
-      // #148: the simulation-only scenario picker forces the simulated answer
-      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null, calibration, costOff ? null : cost, workflow, inputs);
+      // #148: the simulation-only scenario picker forces the simulated answer; #785: the PO chooses each
+      // recommendation's workflow and inputs, none go with a question
+      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null, calibration, cost, null, null);
       if (po.projectId === projectId) {
         po.messages = out.messages;
         if (mode === 'issue') po.files = [];
@@ -700,8 +699,8 @@
   }
 
   // ---- applying a proposal (the owner's click) ------------------------------------------------------
-  // #785: a recommendation with the owner's changes: what goes to the roadmap or the Assign dialog
-  const withEdits = (g, key) => (po.edits[key] ? window.BacklogPoOptions.withEdits(g, po.edits[key], workflowOf(po.edits[key].workflow || g.workflow), po.runDefaults) : g);
+  // #785: a recommendation as it goes to the roadmap or the Assign dialog: only what was chosen, with the owner's changes
+  const withEdits = (g, key) => window.BacklogPoOptions.withEdits(g, po.edits[key], workflowOf(po.edits[key]?.workflow || g.workflow), po.runDefaults);
   const leftOut = (skipped) => (skipped.length ? ` Left out (not To do): ${skipped.map((n) => `#${n}`).join(', ')}.` : '');
   async function apply(act, el) {
     const box = el.closest('[data-msg]');
@@ -961,7 +960,8 @@
     const k = el.dataset.wiInput;
     if (!k) return;
     const value = WorkflowInputs.read(el.closest('.wi-field'), { all: true })[k];
-    const shown = g.inputs?.[k] ?? WorkflowInputs.shownDefault(k, workflowOf(edit.workflow || g.workflow)?.inputs?.[k], po.runDefaults);
+    const wf = workflowOf(edit.workflow || g.workflow);
+    const shown = window.BacklogPoOptions.withEdits(g, null, wf, po.runDefaults).inputs[k] ?? WorkflowInputs.shownDefault(k, wf?.inputs?.[k], po.runDefaults);
     if (WorkflowInputs.sameValue(value, shown)) delete edit.values[k];
     else edit.values[k] = value;
   }
