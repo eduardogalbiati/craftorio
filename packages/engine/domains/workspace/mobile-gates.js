@@ -27,8 +27,13 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { continueText } = require('../session/session-cache');
-const { displayName } = require('@multiagent/shared/display-name');
+const {
+  gatePage,
+  gatesPage,
+  noticePage,
+  securityHeaders,
+  translator,
+} = require('./mobile-gates-page');
 
 const LINK_TTL_MS = 30 * 60e3;
 const CODE_TTL_MS = 10 * 60e3;
@@ -40,7 +45,6 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I: read off 
 
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const same = (a, b) => {
   const x = Buffer.from(String(a));
   const y = Buffer.from(String(b));
@@ -67,59 +71,10 @@ function readJson(req) {
   });
 }
 
-const SECURITY = (nonce) => ({
-  'Cache-Control': 'no-store',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'${nonce ? `; script-src 'nonce-${nonce}'` : ''}`,
-});
 const sendJson = (res, status, body) => {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...SECURITY() });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...securityHeaders() });
   res.end(JSON.stringify(body));
 };
-
-// ---- the page --------------------------------------------------------------------------------------
-const STYLE = `body{font:15px/1.45 system-ui,sans-serif;margin:0;background:#0f1115;color:#e6e6e6}
-main{max-width:640px;margin:0 auto;padding:14px}h1{font-size:18px;margin:4px 0 12px}
-.card{border:1px solid #2a2f3a;border-left:3px solid #f5a524;border-radius:10px;padding:12px;margin:0 0 12px;background:#161a22}
-.muted{color:#9aa3b2;font-size:13px}.rec{border:1px solid #2a2f3a;border-radius:8px;padding:8px;margin:8px 0;background:#11151c}
-.btns{display:grid;gap:8px;margin-top:10px}a.btn,button{display:block;text-align:center;padding:12px;border-radius:8px;border:1px solid #3a4150;background:#222837;color:#e6e6e6;font:inherit;text-decoration:none}
-.primary{background:#2563eb;border-color:#2563eb}.help{display:block;font-size:12px;color:#c3cad6;margin-top:2px}
-.error{color:#f87171}input{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #3a4150;background:#11151c;color:#e6e6e6;font:inherit}
-ul{padding-left:18px}`;
-
-function page(title, body, script = '') {
-  const nonce = crypto.randomBytes(12).toString('base64');
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${esc(title)}</title><style>${STYLE}</style></head>
-<body><main>${body}</main>${script ? `<script nonce="${nonce}">${script}</script>` : ''}</body></html>`;
-  return { html, headers: { 'Content-Type': 'text/html; charset=utf-8', ...SECURITY(script ? nonce : null) } };
-}
-
-// the device token lives in the phone's localStorage; pairing from `?pair=<code>` (the QR code)
-const PAIR_SCRIPT = `const K='multiagent-phone-token';
-async function pair(code){const name=(navigator.userAgent.match(/\\(([^;)]+)/)||[])[1]||'Phone';
-const r=await fetch('/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,name})});
-if(!r.ok)throw new Error('This pairing code is wrong or was already used: ask for a new one in Settings › Phone gates.');
-localStorage.setItem(K,(await r.json()).token);}`;
-
-const LIST_SCRIPT = `${PAIR_SCRIPT}
-const out=document.getElementById('gates');const e=(s)=>String(s??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
-async function load(){const tk=localStorage.getItem(K);if(!tk){out.innerHTML='<p>This phone is not paired. Scan the QR code in Settings › Phone gates, or type the pairing code:</p><form id="pf"><input id="pc" autocomplete="off" placeholder="Pairing code"><p><button class="primary">Pair this phone</button></p></form>';
-document.getElementById('pf').onsubmit=async(ev)=>{ev.preventDefault();try{await pair(document.getElementById('pc').value.trim());load();}catch(x){out.insertAdjacentHTML('beforeend','<p class="error">'+e(x.message)+'</p>');}};return;}
-const r=await fetch('/gates.json',{headers:{Authorization:'Bearer '+tk}});if(r.status===401){localStorage.removeItem(K);return load();}
-const g=(await r.json()).gates;out.innerHTML=g.length?g.map((x)=>'<div class="card"><b>'+e(x.title||x.runId)+'</b><div class="muted">'+e(x.stepId)+'</div><p>'+e(x.headline||x.message)+'</p><a class="btn primary" href="'+e(x.url)+'">Open the gate</a></div>').join(''):'<p class="muted">No gate is waiting for you.</p>';}
-(async()=>{const p=new URLSearchParams(location.search).get('pair');if(p){try{await pair(p);}catch(x){out.innerHTML='<p class="error">'+e(x.message)+'</p>';}history.replaceState(null,'','/');}load();})();`;
-
-const CONFIRM_SCRIPT = `${PAIR_SCRIPT}
-const f=document.getElementById('confirm');const msg=document.getElementById('msg');
-f.onsubmit=async(ev)=>{ev.preventDefault();const tk=localStorage.getItem(K);
-if(!tk){msg.innerHTML='<span class="error">This phone is not paired: open the gates page from the QR code in Settings › Phone gates first.</span>';return;}
-f.querySelector('button').disabled=true;const d=f.dataset;
-const r=await fetch(d.post,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tk},body:JSON.stringify({t:d.t,answer:d.answer,confirm:true,feedback:document.getElementById('fb').value||undefined})});
-const j=await r.json().catch(()=>({}));msg.innerHTML=r.ok?'<b>Answered.</b> The run goes on.':'<span class="error">'+(j.error||('Refused ('+r.status+')'))+'</span>';
-if(!r.ok)f.querySelector('button').disabled=false;else f.remove();};`;
 
 // ---- the server -----------------------------------------------------------------------------------
 // ---- paired devices (<workspace>/phone-gates/devices.json; the token itself is never stored) -------
@@ -155,8 +110,9 @@ function linkSecret(ws) {
 }
 
 // service: { api: { 'runs:active' }, workspace(), answerPhoneGate(runId, approvalId, answer, feedback, deviceId) }
+// language(): the workspace interface language, read per request; API errors stay English.
 // publicUrl(): the private address from outside (Tailscale, Cloudflare Tunnel) the gate links use, or ''
-function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = LINK_TTL_MS, publicUrl = () => '' } = {}) {
+function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = LINK_TTL_MS, publicUrl = () => '', language = () => 'en' } = {}) {
   const key = secret || crypto.randomBytes(32).toString('hex');
   const codes = new Map(); // code → expiry (ms)
   const pairFailures = new Map(); // client address → { count, since (ms) } (SEC-20)
@@ -206,32 +162,11 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
   const findGate = (runId, approvalId) => openGates().find((x) => x.run.runId === runId && x.gate.approval_id === approvalId) || null;
   // an Approve / Reject gate answers true / false (like the desktop), with its #213 labels and help
   const choicesOf = (g) => (Array.isArray(g.choices) && g.choices.length ? g.choices : [
-    { id: 'approve', label: g.approve?.label || 'Approve', help: g.approve?.help || '', value: true },
-    { id: 'reject', label: g.reject?.label || 'Reject', help: g.reject?.help || '', value: false },
+    { id: 'approve', label: g.approve?.label || translator(language()).t('approve'), help: g.approve?.help || '', value: true },
+    { id: 'reject', label: g.reject?.label || translator(language()).t('reject'), help: g.reject?.help || '', value: false },
   ]);
   const runTitle = (run) => run.title || run.workflow || run.runId;
   const gateLink = (runId, approvalId) => `${publicUrl() || base}/gates/${encodeURIComponent(runId)}/${encodeURIComponent(approvalId)}?t=${encodeURIComponent(gateToken(runId, approvalId))}`;
-
-  function gateHtml({ run, gate }, t, chosen) {
-    const brief = gate.brief || {};
-    const head = `<div class="muted">${esc(runTitle(run))} · ${esc(gate.step_id || '')}</div><h1>${esc(gate.message || 'Approval needed')}</h1>`;
-    const what = brief.headline ? `<p>${esc(brief.headline)}</p>` : '';
-    const rec = brief.recommendation ? `<div class="rec"><b>Recommended:</b> ${esc(brief.recommendation.label || brief.recommendation.choice || brief.recommendation)}${brief.recommendation.why ? `<div class="muted">${esc(brief.recommendation.why)}</div>` : ''}</div>` : '';
-    const evidence = (brief.evidence || []).filter((x) => x && /^https:\/\//.test(x.url || ''));
-    const links = evidence.length ? `<ul>${evidence.map((x) => `<li><a href="${esc(x.url)}" rel="noreferrer">${esc(x.label || x.url)}</a></li>`).join('')}</ul>` : '';
-    // #320: what Continue will re-read (the service's nextTurns of the run)
-    const turns = Array.isArray(run.nextTurns) ? `<p class="muted">${esc(continueText(run.nextTurns, (a) => displayName(a, run.agent_names)))}</p>` : '';
-    const self = `/gates/${encodeURIComponent(run.runId)}/${encodeURIComponent(gate.approval_id)}`;
-    if (chosen) {
-      return page('Confirm your answer', `<div class="card">${head}<p>You chose <b>${esc(chosen.label || chosen.id)}</b>${chosen.help ? `:</p><p class="rec">${esc(chosen.help)}</p>` : '.</p>'}
-        <form id="confirm" data-post="${esc(`${self}/answer`)}" data-t="${esc(t)}" data-answer="${esc(chosen.id)}">
-          <p><input id="fb" maxlength="2000" ${chosen.feedback_required ? 'required placeholder="Note for the run (required)"' : 'placeholder="Note for the run (optional)"'}></p>
-          <button class="primary" type="submit">Confirm: ${esc(chosen.label || chosen.id)}</button></form>
-        <p id="msg"></p><p><a href="${esc(`${self}?t=${encodeURIComponent(t)}`)}">Back</a></p></div>`, CONFIRM_SCRIPT);
-    }
-    const buttons = choicesOf(gate).map((c) => `<a class="btn" href="${esc(`${self}?t=${encodeURIComponent(t)}&answer=${encodeURIComponent(c.id)}`)}">${esc(c.label || c.id)}${c.help ? `<span class="help">${esc(c.help)}</span>` : ''}</a>`).join('');
-    return page(gate.message || 'Gate', `<div class="card">${head}${what}${rec}${links}${turns}<div class="btns">${buttons}</div></div><p class="muted"><a href="/">All open gates</a></p>`);
-  }
 
   // POST /pair: a one-time code from the desktop → a device token
   async function pair(req, res) {
@@ -255,7 +190,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
     const url = new URL(req.url, 'http://phone.local');
     const parts = url.pathname.split('/').slice(1);
     if (req.method === 'GET' && url.pathname === '/') {
-      const p = page('Gates', '<h1>Gates waiting for you</h1><div id="gates"><p class="muted">Loading…</p></div>', LIST_SCRIPT);
+      const p = gatesPage(language());
       res.writeHead(200, p.headers);
       res.end(p.html);
       return;
@@ -278,10 +213,15 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
       try { runId = decodeURIComponent(parts[1]); approvalId = decodeURIComponent(parts[2]); } catch { throw new HttpError(404, 'Not found.'); }
       if (parts.length === 3 && req.method === 'GET') {
         const t = url.searchParams.get('t');
-        if (!linkOk(t, runId, approvalId)) throw new HttpError(403, 'This link is expired or not for this gate.');
+        if (!linkOk(t, runId, approvalId)) {
+          const p = noticePage('link_invalid', language(), 403);
+          res.writeHead(p.status, p.headers);
+          res.end(p.html);
+          return;
+        }
         const found = findGate(runId, approvalId);
         if (!found) {
-          const p = page('Gate answered', '<div class="card"><h1>This gate is no longer waiting</h1><p class="muted">It was answered, or its run ended.</p></div><p><a href="/">All open gates</a></p>');
+          const p = noticePage('ended', language());
           res.writeHead(200, p.headers);
           res.end(p.html);
           return;
@@ -289,7 +229,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
         const want = url.searchParams.get('answer');
         const chosen = want ? choicesOf(found.gate).find((c) => c.id === want) : null;
         if (want && !chosen) throw new HttpError(400, 'Unknown answer.');
-        const p = gateHtml(found, t, chosen);
+        const p = gatePage(found, t, chosen, language(), choicesOf(found.gate));
         res.writeHead(200, p.headers);
         res.end(p.html);
         return;

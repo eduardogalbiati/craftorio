@@ -23,3 +23,17 @@ files, terminals, settings, the API) is reachable there. To use it:
 
 An agent, a script or the supervisor never answers a gate there: an answer needs a paired device,
 the gate's link and your confirmation.
+
+The phone page follows the workspace's **Interface** language in Settings, with English as the
+fallback. Reload an open page after changing the language. Gate messages, button meanings and your
+notes keep their original text. The pairing code and note fields have labels, status changes are
+announced to screen readers, and the page supports keyboard navigation and narrow phone screens.
+
+If the connection fails while reading the list, **Try again** reads it again without removing the
+pairing. A pairing that is no longer valid asks for a new code; an expired or invalid gate link
+offers the list so you can open a fresh link. An answered gate says it is no longer waiting.
+
+If the connection fails after you confirm an answer, its result may be unknown: the app might
+already have received it. **Check gate status** only reads the gate; it never resends the answer.
+If the gate is still open, choose and confirm again yourself. If it has ended, the page says so
+without claiming which answer ended it. There is no offline queue or automatic retry of answers.
