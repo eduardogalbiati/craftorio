@@ -64,3 +64,15 @@ test('#799 resume dialog: an input the run has no value for changes nothing unle
   const { page } = await openDialog(undefined, 'developer_effort', { type: 'string', enum: ['low', 'high'] });
   assert.equal((await pressResume(page))[6], undefined);
 });
+
+test('#799 resume dialog: an input the run has no value for reads Not set, ahead of the list', async () => {
+  const { select } = await openDialog(undefined, 'developer_effort', EFFORT);
+  assert.equal(select.value, '');
+  assert.deepEqual(Array.from(select.querySelectorAll('option')).map(textOf), ['Not set', 'Low', 'High']);
+});
+
+test('#799 resume dialog: the first value of the list can be chosen over Not set', async () => {
+  const { page, select } = await openDialog(undefined, 'developer_effort', EFFORT);
+  select.value = 'low';
+  assert.deepEqual((await pressResume(page))[6], { developer_effort: 'low' });
+});

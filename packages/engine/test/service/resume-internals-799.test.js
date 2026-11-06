@@ -199,6 +199,19 @@ test('#799 the Developer model never shows a fallback only another reader took',
   assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_model, 'a');
 });
 
+test('#799 the Developer model shows the developer\'s fallback when another reader fell back first', (t) => {
+  const events = [{ type: 'agent.fallback', agent: 'mapper', to: 'codex:of-mapper' }, ...fellBackOn('developer')];
+  const { area } = seeded(t, events, twoReaders);
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_model, 'gpt');
+});
+
+test('#799 in a workflow with no developer agent, the agent that reads the input stands for it', (t) => {
+  const flow = FLOW.replace('  developer: {', '  builder: {').replaceAll('agent: developer', 'agent: builder');
+  const events = [{ type: 'agent.fallback', agent: 'builder', to: 'codex:gpt' }, { type: 'step.started', step_id: 'develop' }, { type: 'workflow.finished', status: 'failed', error: 'It broke' }];
+  const { area } = seeded(t, events, { flow });
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_model, 'gpt');
+});
+
 test('#799 the new run is told when the developer moves to the model another reader fell back to', (t) => {
   const { area, started } = seeded(t, fellBackOn('mapper'), twoReaders);
   area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'gpt' } });
