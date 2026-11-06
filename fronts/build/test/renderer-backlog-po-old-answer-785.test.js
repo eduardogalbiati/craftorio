@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { openDrawer, recommendation, click, byTestId, textOf, settle } = require('./backlog-po-785-harness');
 
-const OLD = { mode: 'local', test_order: 'e2e_first', e2e_tests: 'write_and_run', screenshots: 'all', test_command: '' };
+const OLD = { mode: 'local', test_order: 'e2e_first', e2e_tests: 'write_and_run', screenshots: 'changed', test_command: '' };
 
 // a conversation whose group was saved as it was before #785
 function oldAnswer(inputs, extra = {}) {

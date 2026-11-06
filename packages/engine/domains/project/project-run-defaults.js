@@ -153,7 +153,7 @@ function runDefaultsWith({ project, profile = null, defaultBranch = null } = {})
     e2e_tests: e2eOff ? 'off' : 'write_and_run',
     e2e_command: e2eOff ? '' : suite,
     ui_folders: noUi ? [] : facts.uiFolders,
-    screenshots: noUi ? 'off' : 'all',
+    screenshots: noUi ? 'off' : 'changed',
     steps_folders: noUi ? [] : facts.stepsFolders,
   };
   const own = project?.runDefaults || {};

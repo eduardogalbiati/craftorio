@@ -34,7 +34,7 @@ const CUSTOM = {
     mode: { enum: ['local', 'remote', 'fork'], default: 'local' },
     unit_tests: { enum: ['write_and_run', 'run_existing', 'off'], default: 'write_and_run' },
     e2e_tests: { enum: ['off', 'write', 'write_and_run'], default: 'write_and_run' },
-    screenshots: { enum: ['off', 'changed', 'all'], default: 'all' },
+    screenshots: { enum: ['off', 'changed', 'all'], default: 'changed' },
   },
 };
 const ISSUES = [{ number: 1, state: 'open', title: 'Login page', labels: [{ name: 'complexity:2' }], body: 'x'.repeat(200) }];
@@ -87,7 +87,7 @@ test('#785 an option the owner changed is the only key of the group\'s inputs', 
 
 test('#785 a group that repeats the workflow\'s defaults keeps none of them (the full set of the owner\'s report)', () => {
   const inputs = {
-    mode: 'local', test_order: 'e2e_first', e2e_tests: 'write_and_run', screenshots: 'all', validate_every_round: false,
+    mode: 'local', test_order: 'e2e_first', e2e_tests: 'write_and_run', screenshots: 'changed', validate_every_round: false,
     ui_folders: 'src/renderer/', steps_folders: ['features/steps'], developer_effort: 'default',
   };
   assert.deepEqual({ ...normalized(group({ inputs })).inputs }, {});

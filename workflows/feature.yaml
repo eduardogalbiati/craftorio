@@ -325,7 +325,7 @@ inputs:
   screenshots:
     type: string
     enum: ["off", changed, all]
-    default: all
+    default: changed
     label: Screenshots
     group: Tests
     main: true
