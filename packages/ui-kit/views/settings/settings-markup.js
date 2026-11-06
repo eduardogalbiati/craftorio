@@ -44,10 +44,6 @@
                   <div class="s-ctrl"><select id="set-backlog-platform" aria-label="${t('settings.backlog.platform_label')}"></select></div>
                 </div>
                 <div class="s-row">
-                  <div class="s-label"><b>${t('settings.backlog.workflow')}</b><span>${t('settings.backlog.workflow_help')}</span><span id="set-default-wf-note" class="warn-text hidden"></span></div>
-                  <div class="s-ctrl"><select id="set-default-workflow" aria-label="${t('settings.backlog.workflow')}" data-testid="settings-default-workflow"></select></div>
-                </div>
-                <div class="s-row">
                   <div class="s-label"><b>${t('settings.backlog.group')}</b><span>${t('settings.backlog.group_help')}</span></div>
                   <div class="s-ctrl"><input type="number" id="set-backlog-group" min="2" max="20" aria-label="${t('settings.backlog.group_label')}" /></div>
                 </div>

@@ -6,6 +6,12 @@
 // the wizard's variant and CI pick, a clamped description, the Default badge, Make default / Remove),
 // and "+ Add a workflow" (pj-wf-add) opens a dialog (pj-wf-add-dialog) of the installed workflows not on
 // the project, by category, with a search; each action saves (api.updateProject: workflows, defaultWorkflow).
+// #790: the head shows the project's default in the project order (DefaultWorkflow.projectDefault with the
+// manifest's `default`), never a setting. #791: the block's Feature and Fix workflows
+// (project-kind-workflow-feature / -fix, selects over every installed workflow that takes a task, the
+// repository's included) show DefaultWorkflow.kindEntry's resolution (the record's workflowKinds, the
+// manifest's kinds, the picks...) and a change saves api.updateProject(id, { workflowKinds }), the Feature
+// one also as the default.
 // Uses app.js globals ($, esc, t, state, errMsg, showToast), workflows.js's
 // WF_SECTIONS, wfSectionOf and wfSectionName, DefaultWorkflow.firstBuild
 // (the default's rule, shared with packages/engine/domains/project/projects.js) and OnboardingModel's
@@ -13,14 +19,46 @@
 
 window.ProjectWorkflows = (() => {
   const bare = (s) => String(s || '').replace(/\.ya?ml$/i, '');
+  const fileName = (s) => String(s || '').replace(/^.*[\\/]/, '');
   // the repository's own and the manifest's entries are listed by the manifest itself
   const listed = (w) => !w.error && w.origin !== 'repository' && w.origin !== 'manifest';
   const nameOf = (w) => bare(w.file) || w.name;
 
   // api.listWorkflows(), read again at each opening of the dialog or the page (a workflow saved in
-  // the Builder since then is listed)
+  // the Builder since then is listed): { list: the cards' and the dialog's, all: every usable one (#791) }
   async function installed() {
-    try { return (await api.listWorkflows()).filter(listed); } catch { return []; }
+    try {
+      const all = (await api.listWorkflows()).filter((w) => !w.error);
+      return { list: all.filter(listed), all };
+    } catch { return { list: [], all: [] }; }
+  }
+
+  // #791: the Feature and Fix rows: each kind's entry resolved as the engine resolves it, its file among the
+  // installed workflows that take a task (a name none has stays as an option of its own)
+  const KIND_ROWS = ['feature', 'fix'];
+  const kindEntry = (kind) => DefaultWorkflow.kindEntry(page.p, page.manifest, kind);
+  function kindFile(name, options) {
+    return (options.find((w) => w.file === `${name}.yaml`) || options.find((w) => bare(fileName(w.file)) === name))?.file || `${name}.yaml`;
+  }
+  function kindsHtml() {
+    const options = (page.all || []).filter((w) => w.inputs?.task);
+    const row = (kind) => {
+      const entry = kindEntry(kind);
+      const value = kindFile(entry.name, options);
+      const choices = options.some((w) => w.file === value) ? options : [{ file: value, name: entry.name }, ...options];
+      const select = window.Select.markup(`class="pj-wf-kind-select" data-testid="project-kind-workflow-${esc(kind)}" data-kind="${esc(kind)}" aria-label="${esc(t(`projects.workflows_kind_${kind}`))}"`, choices.map((w) => [w.file, w.name || bare(w.file)]), value);
+      return `<label class="pj-wf-kind"><span class="muted small">${esc(t(`projects.workflows_kind_${kind}`))}</span>${select}</label>`;
+    };
+    return `<div class="pj-wf-kinds" data-testid="project-kind-workflows">${KIND_ROWS.map(row).join('')}
+        <p class="muted small pj-wf-kind-hint">${esc(t('projects.workflows_kind_hint'))}</p></div>`;
+  }
+  // a kind's select changed: the whole map saved (the other kind as resolved now), the Feature one the default too
+  function kindChanged(kind, file) {
+    const name = bare(fileName(file));
+    if (!name) return;
+    const workflowKinds = Object.fromEntries(KIND_ROWS.map((k) => [k, kindEntry(k)]));
+    workflowKinds[kind] = { name, inputs: { ...(workflowKinds[kind]?.inputs || {}) } };
+    save({ workflowKinds, ...(kind === 'feature' ? { defaultWorkflow: name } : {}) });
   }
 
   // ---- the project's page (Overview) --------------------------------------------------------
@@ -94,7 +132,8 @@ window.ProjectWorkflows = (() => {
   function draw() {
     const { p, list, manifest, box } = page;
     const known = new Map(list.map((w) => [nameOf(w), w]));
-    const def = bare(p.defaultWorkflow);
+    // #790: the project order (its own, the manifest's, the first build one, feature): always a value
+    const def = DefaultWorkflow.projectDefault(p, manifest?.default);
     const mine = (p.workflows || []).filter((w) => bare(w?.name));
     const on = new Set(mine.map((w) => bare(w.name)));
     // #487: the workflows the repository's .multiagent/ declares, not on the project
@@ -103,12 +142,15 @@ window.ProjectWorkflows = (() => {
     box.innerHTML = `
       <div class="pj-wf" data-testid="project-workflows-block">
         <div class="pj-wf-head"><span class="pj-wf-title">${t('projects.workflows')}</span>
-          <span class="muted small" data-testid="project-default-workflow">${t('projects.workflows_default')}: <span class="mono">${esc(def || t('projects.workflows_settings_default'))}</span></span></div>
+          <span class="muted small" data-testid="project-default-workflow">${t('projects.workflows_default')}: <span class="mono">${esc(def)}</span></span></div>
+        ${kindsHtml()}
         ${manifest?.errors?.length ? `<p class="error small" data-testid="project-workflows-manifest-errors">${t('projects.workflows_manifest_errors', { errors: esc(manifest.errors.join('; ')) })}</p>` : ''}
         ${mine.length ? `<ul class="pj-wf-cards">${mine.map((w) => cardHtml(w, known, def)).join('')}<li class="pj-wf-add-cell">${addBtn}</li></ul>`
           : `<p class="muted small" data-testid="pj-wf-empty">${t('projects.workflows_empty')}</p>${addBtn}`}
         ${repo.length ? `<p class="pj-wf-repo small"><span class="muted">${t('projects.workflows_in_repository')}:</span> ${repo.map((n) => `<span class="badge mono" data-testid="project-repository-workflow">${esc(n)}</span>`).join(' ')}</p>` : ''}
       </div>${adding ? addHtml() : ''}`;
+    // #791: the kind selects save on change (the page's click delegation knows no change)
+    for (const sel of box.querySelectorAll('.pj-wf-kind-select')) sel.addEventListener('change', (e) => kindChanged(sel.dataset.kind, e.target.value));
     if (!adding) return;
     const search = $('#pj-wf-add-search');
     if (search) {
@@ -133,13 +175,13 @@ window.ProjectWorkflows = (() => {
   async function showPage(p, box) {
     if (!p || !box) return;
     const seq = ++pageSeq;
-    const [list, manifest] = await Promise.all([
+    const [{ list, all }, manifest] = await Promise.all([
       installed(),
       p.folder ? api.projectManifest({ folder: p.folder }).catch(() => null) : null,
     ]);
     if (seq !== pageSeq) return;
     if (page?.p?.id !== p.id) adding = null;
-    page = { p, list, manifest, box };
+    page = { p, list, all, manifest, box };
     draw();
   }
 
@@ -147,9 +189,9 @@ window.ProjectWorkflows = (() => {
   async function openAdd() {
     if (!page) return;
     adding = { query: '', focus: true };
-    const list = await installed();
+    const { list, all } = await installed();
     if (!page || !adding) return;
-    page = { ...page, list };
+    page = { ...page, list, all };
     draw();
   }
 
@@ -185,7 +227,7 @@ window.ProjectWorkflows = (() => {
   }
 
   // the set without `name`, the others as they were; the default kept, else the service's rule for a new
-  // project (packages/shared/default-workflow.js), else the first, else none (Settings' default)
+  // project (packages/shared/default-workflow.js), else the first, else none (#790: then the manifest's, else feature)
   function removePatch(name) {
     const workflows = (state.pv.project?.workflows || []).filter((w) => bare(w?.name) !== name);
     const cur = bare(state.pv.project?.defaultWorkflow);

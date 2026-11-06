@@ -9,6 +9,9 @@
 //   wizard-workflows-retry, then Define manually), analyzed (the lines ended when the analysis ran in this wizard,
 //   the rows with the profile's reasons, wizard-workflow-reason) and manual (the rows editable, no reason, Analyze
 //   still offered). Each row: wizard-workflow data-kind with wizard-workflow-select (select.js, #383).
+//   #790: a repository whose manifest declares a `default` gets one more row, data-kind="default", offering
+//   the manifest's workflows on that default (cur.manifest, read by project-wizard.js; the owner's pick in
+//   cur.workflows.default is the project's default at Finish).
 //   #738: above the rows (analyzed and manual), wizard-way-of-working: Local / Remote / Fork + PR, from the
 //   fork choice of a repository the owner can't push to, else the profile's mode.
 // - cliWarning(cli), forkNotice(onboarding), forkPending(onboarding): the repository step's notices (the
@@ -141,6 +144,19 @@
           ${reason}
         </li>`;
       };
+      // #790: the manifest's default, among the manifest's workflows
+      const defaultRow = () => {
+        const manifest = cur().manifest;
+        const bare = (s) => String(s || '').replace(/\.ya?ml$/i, '');
+        if (!manifest?.default) return '';
+        const names = [...new Set([bare(manifest.default), ...(manifest.workflows || []).map((w) => bare(w?.name))].filter(Boolean))];
+        const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="default" aria-label="${esc(t('onboarding.workflow_default'))}"${busy ? ' disabled' : ''}`;
+        return `<li class="card wizard-workflow" data-testid="wizard-workflow" data-kind="default">
+          <label class="wizard-workflow-head"><strong>${esc(t('onboarding.workflow_default'))}</strong>
+            ${window.Select.markup(attrs, names.map((n) => [n, n]), bare(cur().workflows?.default) || bare(manifest.default))}</label>
+          <p class="muted small wizard-workflow-reason">${esc(t('onboarding.workflow_default_hint'))}</p>
+        </li>`;
+      };
       const head = `<h3>${esc(t('onboarding.workflows_title'))}</h3>
         <p class="muted">${esc(t(at === 'choose' ? 'onboarding.workflows_choose_line' : 'onboarding.workflows_line', { name }))}</p>`;
       let body;
@@ -156,7 +172,7 @@
             <div class="wizard-actions">${choiceButton('manual', true)}</div>
           </div>`;
       } else {
-        const list = `<ul class="wizard-workflows" data-testid="wizard-workflows-rows"${busy ? ' aria-busy="true" aria-disabled="true" inert' : ''}>${WORKFLOW_KINDS.map(row).join('')}</ul>`;
+        const list = `<ul class="wizard-workflows" data-testid="wizard-workflows-rows"${busy ? ' aria-busy="true" aria-disabled="true" inert' : ''}>${defaultRow()}${WORKFLOW_KINDS.map(row).join('')}</ul>`;
         const overlay = busy ? `<div class="wizard-workflows-analyzing" data-testid="wizard-workflows-analyzing" role="status">${phasesHtml()}</div>` : '';
         // #781: once analyzed in this wizard the lines stay, ended, with what they found (a new project's rows have no analysis)
         const ended = at === 'analyzed' && cur().workflowsMode === 'analyze' ? phasesHtml() : '';

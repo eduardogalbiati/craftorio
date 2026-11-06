@@ -6,6 +6,11 @@
 // and `requires` (the app versions it needs, e.g. `>=1.2`). Pure: parsing and checks only. What the
 // repository's files may do (accepted per commit, capped) is packages/engine/engine/run/load.js's
 // loadRepositoryWorkflow; the listing and the acceptance are packages/engine/service/areas/workflows.js's.
+// #790: an optional `default: <name>`, the project's default development workflow (a clone takes it);
+// #791: an optional `kinds` map, the workflow and inputs of each kind of work (`feature: { name }`,
+// `fix: { name: fix, mode: remote }`: every key but `name` is an input). Both must name one of the
+// manifest's `workflows`: another name is an error naming it, and that value is ignored (`default`
+// null, the kind left out), as the other manifest problems are.
 
 const fs = require('fs');
 const path = require('path');
@@ -78,13 +83,48 @@ function requiresProblem(appVersion, range) {
   return ok ? null : `requires app version ${range}, this app is ${appVersion}.`;
 }
 
+// #791: the kinds a manifest may map (packages/shared/default-workflow.js KINDS; refactor uses the Feature entry)
+const { KINDS } = require('@multiagent/shared/default-workflow');
+const EMPTY = () => ({ version: null, requires: null, workflows: [], default: null, kinds: {}, errors: [] });
+
+// #790: the manifest's `default`, one of its workflows (`seen`), else null with the error
+function parseDefault(doc, seen, errors) {
+  const name = str(doc.default);
+  if (name == null) return null;
+  if (seen.has(name)) return name;
+  errors.push(`${MANIFEST_FILE}: default "${name}" is not one of the manifest's workflows.`);
+  return null;
+}
+
+// #791: the manifest's `kinds` → { <kind>: { name, inputs } }, an entry naming an unknown workflow left out with its error
+function parseKinds(doc, seen, errors) {
+  const out = {};
+  const kinds = doc.kinds;
+  if (kinds == null) return out;
+  if (typeof kinds !== 'object' || Array.isArray(kinds)) {
+    errors.push(`${MANIFEST_FILE}: kinds must be a mapping of ${KINDS.join(' / ')} to { name, <inputs> }.`);
+    return out;
+  }
+  for (const kind of KINDS) {
+    const v = kinds[kind];
+    if (v == null) continue;
+    const given = typeof v === 'string' ? { name: v } : v;
+    const name = given && typeof given === 'object' && !Array.isArray(given) ? str(given.name) : null;
+    if (!name) { errors.push(`${MANIFEST_FILE}: kinds.${kind} needs a name (one of the manifest's workflows).`); continue; }
+    if (!seen.has(name)) { errors.push(`${MANIFEST_FILE}: kinds.${kind} names "${name}", not one of the manifest's workflows.`); continue; }
+    const { name: _n, ...inputs } = given;
+    out[kind] = { name, inputs };
+  }
+  return out;
+}
+
 /**
  * Parses a manifest's text. A manifest with errors declares no workflows: the project runs on the
  * workspace's workflows as without one.
- * @returns {{ version: *, requires: string|null, workflows: object[], errors: string[] }}
+ * @returns {{ version: *, requires: string|null, workflows: object[], default: string|null, kinds: object, errors: string[] }}
  */
 function parseManifest(text, { appVersion } = {}) {
-  const out = { version: null, requires: null, workflows: [], errors: [] };
+  const out = EMPTY();
   let doc;
   try { doc = yaml.load(String(text ?? '')); } catch (e) {
     out.errors.push(`${MANIFEST_FILE}: not valid YAML (${e.reason || e.message}).`);
@@ -113,14 +153,18 @@ function parseManifest(text, { appVersion } = {}) {
     if (workflow.name) seen.add(workflow.name);
     list.push(workflow);
   }
+  // #790, #791: the default and the kinds, each checked against the names above; a wrong name drops
+  // that value and counts as a manifest error like any other
+  out.default = parseDefault(doc, seen, out.errors);
+  out.kinds = parseKinds(doc, seen, out.errors);
   return { ...out, workflows: out.errors.length ? [] : list };
 }
 
-/** The manifest of a project's folder; none: no workflows and no error. */
+/** The manifest of a project's folder; none: no workflows, no default, no kinds and no error. */
 function readManifest(projectDir, opts = {}) {
   let text;
-  try { text = fs.readFileSync(path.join(projectDir, ...MANIFEST_FILE.split('/')), 'utf8'); } catch {
-    return { version: null, requires: null, workflows: [], errors: [] };
+  try { text = fs.readFileSync(path.join(String(projectDir || ''), ...MANIFEST_FILE.split('/')), 'utf8'); } catch {
+    return EMPTY();
   }
   return parseManifest(text, opts);
 }

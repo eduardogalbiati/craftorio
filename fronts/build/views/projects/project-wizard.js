@@ -645,6 +645,7 @@
       cur.onboarding = state;
       // #738: the fork suggestion holds the repository step until the owner chooses
       if (cur.model.step === 'repository' && CLONED.includes(state.status) && !forkPending(state)) toAnalysis();
+      else if (CLONED.includes(state.status)) loadManifest(); // #790: the clone's folder may be known now
       if (cur.model.step === 'review') loadReview(); // an analysis done meanwhile: read what it made
       activity.followAnalysis(); // #781
       renderSoon();
@@ -683,6 +684,7 @@
     const running = ACTIVE.includes(cur.onboarding?.status);
     const workflows = pickedWorkflows();
     const extra = { platform: platformOfRepo(cur.model.repository)?.id || cur.provider || null, kind: cur.kind || null, workModel: workModel.picked() };
+    const picked = { default: cur.workflows?.default, manifest: cur.manifest?.default };
     close();
     if (!pid) return;
     if (running) finished.add(pid);
@@ -692,7 +694,13 @@
     // the project's page opens: its reads (listProjectRuns) then see them; the page opens whether the save succeeds or fails.
     // The saved record goes into state.projects (the backlog's pickers read the set and default there), as project-workflows.js's
     // save() does. #745: the platform picked (a self-hosted host its URL does not name: the Backlog never asks again); #735: the kind
-    const patch = { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature', ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v)) };
+    // #790: the default is the owner's pick in step 3's Default row, else the repository manifest's `default`, else
+    // what the clone saved on the record (its manifest's default), else feature; #791: the Feature and Fix picks stay
+    // in `workflows` with their variant (projects.workflowForKind resolves them), the manifest's map, when the clone
+    // saved one, stays on the record untouched
+    const record = (typeof state === 'object' && state?.projects?.find?.((p) => p.id === pid)) || null;
+    const defaultWorkflow = picked.default || picked.manifest || record?.defaultWorkflow || DefaultWorkflow.firstBuild(workflows) || 'feature';
+    const patch = { workflows, defaultWorkflow, ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v)) };
     new Promise((resolve) => resolve(api.updateProject(pid, patch)))
       .then((saved) => {
         if (typeof state === 'undefined' || !Array.isArray(state.projects)) return;
@@ -707,8 +715,26 @@
     if (idea) Promise.resolve(api.createDiscoveryCard(pid, idea.slice(0, 200), idea, 'idea')).catch(failed);
   }
 
+  // #790: the repository's workflows manifest (api.projectManifest: the clone's folder once the record has it,
+  // else the URL), for step 3's Default row and Finish's default; read again when the folder becomes known
+  function loadManifest() {
+    const pid = cur.projectId;
+    if (!pid || typeof api.projectManifest !== 'function') return;
+    const folder = (typeof state === 'object' && state?.projects?.find?.((p) => p.id === pid)?.folder) || '';
+    const target = folder ? { folder } : { url: cur.model.repository };
+    const key = JSON.stringify(target);
+    if (cur.manifestFor === key) return;
+    cur.manifestFor = key;
+    Promise.resolve(api.projectManifest(target)).then((m) => {
+      if (!cur || cur.projectId !== pid || cur.manifestFor !== key) return;
+      cur.manifest = m && typeof m === 'object' ? m : null;
+      renderSoon();
+    }).catch(() => { if (cur?.projectId === pid && cur.manifestFor === key) cur.manifest = null; });
+  }
+
   function toAnalysis() {
     cur.model = { ...cur.model, step: 'analysis' };
+    loadManifest();
     if (cur.estimate !== undefined) return;
     const pid = cur.projectId;
     Promise.resolve(api.architectureEstimate?.(pid)).then((r) => {
@@ -864,7 +890,7 @@
     else if (act === 'finish') finish();
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
-      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, workflowsMode: undefined, ...freshReview() };
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }

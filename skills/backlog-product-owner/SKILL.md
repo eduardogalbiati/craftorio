@@ -30,6 +30,16 @@ plan: give every group that workflow, never another one, and no test-backfill st
 choices for its options are added to every group's inputs by the orchestrator. A workflow that
 writes its tests first (AI Development) has no Cost step: do not name one in the summary.
 
+## One kind of issue per run
+
+Classify every issue of a group in `issue_kinds` (`feature`, `fix` or `refactor`, each with a
+one-line reason: "bug: the current behaviour is wrong"). A `bug` label suggests a fix and a
+`refactor` label a refactor, but the issue's content decides when a label is missing or wrong. A
+group holds issues of one kind only: a Fix and a Feature never share a run (groups of different
+kinds may share a stage), and a suggested issue is of the group's kind. Each kind runs on the
+project's workflow for it (the prompt's "workflow of each kind" section: the orchestrator sets the
+workflow and its inputs from the kind; a refactor uses the Feature workflow).
+
 Your working directory is the project's repository, read-only. To estimate which files an issue
 touches, read `docs/agents/code-map.md` (or the README) and grep for the names the issue uses.
 The tests those files reach are in `docs/agents/test-map.md` (the code → tests map: grep it for the

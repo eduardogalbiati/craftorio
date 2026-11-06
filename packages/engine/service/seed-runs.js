@@ -7,9 +7,12 @@
 // state lives per service context (a WeakMap on ctx), read at call time.
 // runDefaultsOf (#735): a project's run defaults over its last ways-of-working profile, for the run
 // dialog's hints, the Backlog's queue and the Roadmap.
+// productOwnerWorkflows (#790, #791): what the Product Owner may plan on for a project (the channel
+// po:ask, the chains, the live roadmap and the Oracle give it the same).
 
 const { execFile, exec: execShell } = require('child_process');
 const path = require('path');
+const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const agents = require('../domains/agents/agents');
 const oracleSeeds = require('../domains/oracle/oracle-seeds');
 const projects = require('../domains/project/projects');
@@ -137,10 +140,26 @@ function runDefaultsNow(ctx, project) {
   return runDefaults.runDefaultsWith({ project, profile: runDefaults.savedProfile(seedsRoot(ctx), project.id) });
 }
 
+/**
+ * #790, #791: the Product Owner's workflow options for a project: only the project's workflows
+ * (DefaultWorkflow.projectWorkflows of ctx.listWorkflows), its default (projectDefaultWorkflow, the
+ * project order, never a setting) and the workflow and inputs of a Feature and a Fix
+ * (projects.workflowForKind, already resolved: the manifest is read here, not by the Product Owner).
+ */
+function productOwnerWorkflows(ctx, project) {
+  const workflowKinds = project ? { feature: projects.workflowForKind(project, 'feature'), fix: projects.workflowForKind(project, 'fix') } : null;
+  return {
+    workflows: DefaultWorkflow.projectWorkflows(ctx.listWorkflows(), project, workflowKinds),
+    defaultWorkflow: projects.projectDefaultWorkflow(project),
+    workflowKinds,
+  };
+}
+
 module.exports = {
   commitGone,
   commitsSince,
   git,
+  productOwnerWorkflows,
   projectOf,
   runDefaultsNow,
   runDefaultsOf,

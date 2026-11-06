@@ -34,6 +34,13 @@
 //
 // #785 (po-chosen-inputs.js): a group keeps only the inputs chosen, with their reasons (`input_reasons`), and
 // the prompt names the project's `runDefaults`. Mode 'auto' (the drawer): the answer's `intent` says plan or register.
+// #791: each issue of a plan gets a kind (DefaultWorkflow.KINDS: feature, fix, refactor; kindOf: the
+// model's `issue_kinds` first, else the labels, `bug` a fix, `refactor` a refactor) with a one-line
+// reason; normalizeAnswer splits a mixed group into one group per kind (`kind`, `kindReason`), gives
+// each one that kind's workflow and inputs from the project's `workflowKinds` (ask's option, the
+// service's projects.workflowForKind; refactor uses the Feature entry; the owner's chosen workflow
+// still wins), suggests no issue of another kind, and Economy never packs two kinds into one run.
+// The workflows offered are only the project's (DefaultWorkflow.projectWorkflows, #790).
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
 // issue-writing, the code analyzer's cheaper model: ISSUE_AGENT); the draft carries its clarity score
@@ -145,6 +152,15 @@ const ANSWER_SCHEMA = {
             type: 'array',
             items: { type: 'object', required: ['issue', 'reason'], properties: { issue: { type: 'integer' }, reason: { type: 'string' } } },
           },
+          // #791: the kind of each issue of the group (one kind per group), with a one-line reason
+          issue_kinds: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['issue', 'kind', 'reason'],
+              properties: { issue: { type: 'integer' }, kind: { type: 'string', enum: [...DefaultWorkflow.KINDS] }, reason: { type: 'string' } },
+            },
+          },
         },
       },
     },
@@ -231,7 +247,7 @@ const RULES = [
   'You are the Product Owner of this project\'s backlog, inside the orchestrator\'s Backlog screen. The owner asks you a question; answer it from the backlog report below and, when you need to, from the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep).',
   'Propose groups of issues to implement in one run (same files, same feature, one reuses the other), pairs or sets that must not run in parallel (overlapping files, a repo-wide refactor or reformat), the order to run the groups in (`stage`: 1 first; groups of one stage may run in parallel), and the issues too vague to implement that should be enriched first.',
   'Use only issue numbers and workflow files listed in the report. Leave a list empty when the question is not about it.',
-  'Give every group the default workflow (marked "(default)" in the report\'s Workflows) unless an issue needs another one; then say why in the group\'s `reason`.',
+  'Classify each issue (`issue_kinds`: feature, fix or refactor, with a one-line reason; a `bug` label suggests fix and a `refactor` label suggests refactor, the content decides when a label is missing or wrong) and never put two kinds in one group: a Fix and a Feature never share a run. A group gets its kind\'s workflow and inputs (the section "The project\'s workflow of each kind of issue"), else the default workflow (marked "(default)" in the report\'s Workflows), unless an issue needs another one; then say why in the group\'s `reason`.',
   'A group\'s `inputs` hold only what it needs different from the project\'s run defaults and the workflow\'s defaults: never repeat a default, never an empty string. Give each decision that matters a one-line reason in `input_reasons` ({ input: reason }), also for a default worth saying. When the workflow has a `validation` input, set `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour) and say why in `mode_reason`; the engine, refactors, docs and tests stay at `auto`, its default.',
   'Split what is too big (`splits`): for an issue the report marks with split signals, propose 2-4 child issues. Each child has a title, the numbers of the parent\'s tasks it takes (every task in exactly one child, none dropped or invented), its complexity and its `stage` (children of one stage can run together). Say whether the parent becomes an umbrella linking its children or is closed in favour of them. Never split an issue without signals.',
   'Conflict map (the report\'s conflict-map section, when it has one): two groups expected to touch the same hot file or hot line go to different stages, or into one group when they belong together; every conflict you report names the hot file that causes it in `files`. List each hot spot (marked "hot") in `decongest` with a fix in the repository\'s terms (one item per line, sorted; a per-feature file plus a generated aggregate; a split by screen or module) and its `runs` and `of`.',
@@ -244,12 +260,31 @@ const RULES = [
 // #169: added to RULES when the owner attached issues from the Backlog
 const SELECTION_RULES = [
   'The owner attached issues to this question (the report\'s "Attached issues", in full): the question is about them. Propose groups and stages for these issues only: one run or separate runs, the workflow and its mode, the stage order, what must not run in parallel, and each group\'s size.',
-  'For each group, list in `suggested` the other open issues to do that could join it (the same files or area), each with why. Never put an issue the owner did not attach in a group\'s `issues`: the owner decides whether a suggested issue joins.',
+  'For each group, list in `suggested` the other open issues to do that could join it (the same files or area, and the same kind: a bug never joins a feature\'s run), each with why. Never put an issue the owner did not attach in a group\'s `issues`: the owner decides whether a suggested issue joins.',
   'Leave the attached issues that are closed out of every group.',
 ].join('\n');
 
 const clip =(s, n) => { s = String(s ?? '').trim(); return s.length > n ? `${s.slice(0, n)}… (${s.length - n} more characters)` : s; };
 const minutes = (ms) => Math.round((ms || 0) / 60e3);
+
+// #791: what a label says of an issue's kind, with the one-line reason the plan shows
+const LABEL_KINDS = [
+  ['fix', /^bug$/i, 'Label `bug`: the current behaviour is wrong.'],
+  ['refactor', /^refactor(ing)?$/i, 'Label `refactor`: the code changes, not what it does.'],
+];
+const labelNames = (issue) => (issue?.labels || []).map((l) => String(l?.name ?? l));
+
+/**
+ * #791: the kind of work an issue is (DefaultWorkflow.KINDS) → { kind, reason }: the model's
+ * classification (`given`, a group's `issue_kinds`) when it names a known kind, else the labels
+ * (`bug` a fix, `refactor` a refactor), else a feature; the reason is one line.
+ */
+function kindOf(issue, given = []) {
+  const model = (Array.isArray(given) ? given : []).find((k) => Number(k?.issue) === Number(issue?.number) && DefaultWorkflow.KINDS.includes(k?.kind));
+  if (model) return { kind: model.kind, reason: String(model.reason || '').split('\n')[0].trim() || 'Classified by the Product Owner from the issue.' };
+  for (const [kind, re, reason] of LABEL_KINDS) if (labelNames(issue).some((n) => re.test(n))) return { kind, reason };
+  return { kind: 'feature', reason: 'No bug or refactor label: new or changed behaviour.' };
+}
 
 /** The complexity of an issue from its `complexity:n` label (null when it has none). */
 function complexityOf(issue) {
@@ -345,7 +380,9 @@ function sizeGroup(numbers, issues, history) {
 // `workflow` (#235): the workflow the owner chose in the drawer: every group gets it (never another
 // one), with `inputs` (the owner's choices for its options) in its inputs; the Cost step is skipped
 // when it does not apply to that workflow (poCalibration.costApplies: tests first, or no such inputs). `runDefaults`: #785.
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {}, workflow = null, inputs = null, spec = null, runDefaults = null }) {
+// `workflowKinds` (#791): the project's { feature, fix: { name, inputs } }: each group is classified
+// (kindOf), split into one group per kind, and gets its kind's workflow (when installed) and inputs.
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {}, workflow = null, inputs = null, spec = null, runDefaults = null, workflowKinds = null }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
@@ -357,34 +394,50 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
   const isOpen = (n) => byNumber.get(n)?.state === 'open';
   const attached = new Set(keep(selection));
   const closed = [...attached].filter((n) => !isOpen(n));
-  const groups = (answer.groups || []).map((g, n) => {
+  // #791: a kind's workflow among the installed files (its own name, or a repository copy of it), and its inputs
+  const kindEntry = (kind) => workflowKinds?.[kind === 'refactor' ? 'feature' : kind] || null;
+  const kindFile = (kind) => {
+    const name = DefaultWorkflow.label(kindEntry(kind)?.name);
+    return name ? files.find((f) => f === `${name}.yaml`) || files.find((f) => DefaultWorkflow.label(path.basename(f)) === name) || null : null;
+  };
+  const kindInputs = (kind, file) => (file && kindFile(kind) === file ? { ...(kindEntry(kind)?.inputs || {}) } : {});
+  const groups = (answer.groups || []).flatMap((g, n) => {
     const named = keep(g.issues);
     const nums = attached.size ? named.filter((x) => attached.has(x) && isOpen(x)) : named;
     const moved = named.filter((x) => !attached.has(x)).map((issue) => ({ issue, reason: 'Named by the Product Owner for this group.' }));
-    const suggested = [];
-    for (const s of [...(g.suggested || []), ...(attached.size ? moved : [])]) {
-      const x = Number(s?.issue);
-      if (!isOpen(x) || attached.has(x) || nums.includes(x) || suggested.some((y) => y.issue === x)) continue;
-      suggested.push({ issue: x, reason: String(s.reason || '') });
-    }
-    const size = sizeGroup(nums, issues, history);
-    const simulated = mock && g.simulated ? keep(g.simulated.covered).filter((x) => nums.includes(x)) : [];
-    const file = chosen || (files.includes(g.workflow) ? g.workflow : fallback);
-    return {
-      name: String(g.name || `Group ${n + 1}`),
-      issues: nums,
-      workflow: file,
-      inputs: poChosen.groupInputs(g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {}, chosenInputs, inputsOf(file), runDefaults),
-      reason: String(g.reason || ''),
-      ...(g.mode_reason ? { modeReason: String(g.mode_reason) } : {}),
-      ...poChosen.reasonsField(g.input_reasons),
-      files: (g.files || []).map(String).slice(0, 20),
-      stage: Number.isInteger(g.stage) && g.stage > 0 ? g.stage : n + 1,
-      ...size,
-      warnings: [...new Set([...size.warnings, ...(g.warnings || []).map(String)])],
-      ...(suggested.length ? { suggested } : {}),
-      ...(simulated.length ? { simulated: { covered: simulated, stage: Number.isInteger(g.simulated.stage) && g.simulated.stage > 0 ? g.simulated.stage : 1 } } : {}),
-    };
+    const kindsOf = new Map(nums.map((x) => [x, kindOf(byNumber.get(x), g.issue_kinds)]));
+    // #791: one group per kind, in KINDS order; the parts share the stage
+    const parts = DefaultWorkflow.KINDS.map((kind) => ({ kind, issues: nums.filter((x) => kindsOf.get(x).kind === kind) })).filter((p) => p.issues.length);
+    return parts.map(({ kind, issues: part }) => {
+      const suggested = [];
+      for (const s of [...(g.suggested || []), ...(attached.size ? moved : [])]) {
+        const x = Number(s?.issue);
+        if (!isOpen(x) || attached.has(x) || nums.includes(x) || suggested.some((y) => y.issue === x)) continue;
+        if (kindOf(byNumber.get(x), g.issue_kinds).kind !== kind) continue; // never an issue of another kind
+        suggested.push({ issue: x, reason: String(s.reason || '') });
+      }
+      const size = sizeGroup(part, issues, history);
+      const simulated = mock && g.simulated ? keep(g.simulated.covered).filter((x) => part.includes(x)) : [];
+      const file = chosen || kindFile(kind) || (files.includes(g.workflow) ? g.workflow : fallback);
+      const given = g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {};
+      return {
+        name: String(g.name || `Group ${n + 1}`),
+        issues: part,
+        kind,
+        kindReason: part.map((x) => kindsOf.get(x).reason).find(Boolean) || '',
+        workflow: file,
+        inputs: poChosen.groupInputs({ ...kindInputs(kind, file), ...given }, chosenInputs, inputsOf(file), runDefaults),
+        reason: String(g.reason || ''),
+        ...(g.mode_reason ? { modeReason: String(g.mode_reason) } : {}),
+        ...poChosen.reasonsField(g.input_reasons),
+        files: (g.files || []).map(String).slice(0, 20),
+        stage: Number.isInteger(g.stage) && g.stage > 0 ? g.stage : n + 1,
+        ...size,
+        warnings: [...new Set([...size.warnings, ...(g.warnings || []).map(String)])],
+        ...(suggested.length ? { suggested } : {}),
+        ...(simulated.length ? { simulated: { covered: simulated, stage: Number.isInteger(g.simulated.stage) && g.simulated.stage > 0 ? g.simulated.stage : 1 } } : {}),
+      };
+    });
   }).filter((g) => g.issues.length);
   const level = calibration == null ? null : poCalibration.clamp(calibration);
   const costOff = !!chosen && !poCalibration.costApplies((workflows || []).find((w) => w.file === chosen));
@@ -510,13 +563,14 @@ const PACKED = 'Grouped to pay the run overhead once (same area or files).';
 /**
  * #205 (Economy): a stage's groups of the same workflow and area (areasOf) packed into one run while
  * the sum of their complexity stays within `cap`; the packed group's reason says so (PACKED).
+ * #791: never two kinds in one run, even on one workflow.
  */
 function packGroups(groups, cap, { issues, history }) {
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const out = [];
   for (const g of groups) {
     const areas = areasOf(g, byNumber);
-    const into = out.find((h) => h.stage === g.stage && h.workflow === g.workflow && !h.simulated && !g.simulated
+    const into = out.find((h) => h.stage === g.stage && h.workflow === g.workflow && h.kind === g.kind && !h.simulated && !g.simulated
       && h.complexity + g.complexity <= cap && [...areasOf(h, byNumber)].some((a) => areas.has(a)));
     if (!into) { out.push(g); continue; }
     const nums = [...into.issues, ...g.issues];
@@ -710,6 +764,8 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
 // a shared area are packed together too, "to pay the run overhead once".
 // `conflictMap` (#150): groups whose issues name the same hot file go to different stages (listed as a
 // conflict naming the file), and the map's hot spots are the answer's `decongest`.
+// #791: an issue joins a group of its topic and its kind only (kindOf: the labels), each group
+// classifying its issues in `issue_kinds`; normalizeAnswer gives each kind the project's workflow.
 function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT, workflow = DefaultWorkflow.LOCAL, cost = null, conflictMap = null }) {
   const costStep = cost == null ? null : poCalibration.cost.step(cost);
   const step = { ...poCalibration.step(calibration), ...(costStep ? { maxComplexity: poCalibration.groupCap(calibration, cost) } : {}) };
@@ -726,12 +782,14 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   };
   const refactor = todo.filter((i) => /refactor|reformat|rename|move files|lint/i.test(i.title));
   const others = todo.filter((i) => !refactor.includes(i));
+  const kindIn = (n) => kindOf(todo.find((i) => i.number === n));
   const groups = [];
   for (const i of others) {
     const c = complexityOf(i) ?? DEFAULT_COMPLEXITY;
-    const g = topic(i) ? groups.find((x) => x.topic === topic(i) && x.size + c <= step.maxComplexity)
-      : costStep?.pack && groups.find((x) => x.packed && x.size + c <= step.maxComplexity);
-    if (g) { g.issues.push(i.number); g.size += c; } else groups.push({ topic: topic(i), issues: [i.number], size: c, packed: !topic(i) && !!costStep?.pack });
+    const { kind } = kindOf(i);
+    const g = topic(i) ? groups.find((x) => x.topic === topic(i) && x.kind === kind && x.size + c <= step.maxComplexity)
+      : costStep?.pack && groups.find((x) => x.packed && x.kind === kind && x.size + c <= step.maxComplexity);
+    if (g) { g.issues.push(i.number); g.size += c; } else groups.push({ topic: topic(i), kind, issues: [i.number], size: c, packed: !topic(i) && !!costStep?.pack });
   }
   const group = (g, stage) => ({
     name: g.topic || (g.packed && g.issues.length > 1 ? 'Small issues' : `#${g.issues[0]}`),
@@ -744,6 +802,7 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     files: [],
     stage,
     suggested: suggest(g.issues),
+    issue_kinds: g.issues.map((n) => (g.refactor ? { issue: n, kind: 'refactor', reason: 'The title says it is a repo-wide refactor or reformat.' } : { issue: n, ...kindIn(n) })),
   });
   const splits = todo.map((i) => poSplit.proposeSplit(i, { complexity: complexityOf(i) })).filter(Boolean);
   const epicPlan = attached.size ? { place: [], create: [], merge: [], split: [] } : mockEpics(data);
@@ -1420,7 +1479,9 @@ function checkBudget(budget) {
 // `workflow` / `inputs` (#235): the workflow the owner chose in the drawer and its options: every
 // group gets them (recorded on the messages: lastWorkflow); no Cost step where it does not apply.
 // `timeZone` (#273): the owner's zone (settings.timeZone): the turn's prompt names it and the local time.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null, language = null, runDefaults = null }) {
+// `workflowKinds` (#791): the project's workflow and inputs of a Feature and a Fix (already resolved):
+// the prompt names them, and the answer's groups get their kind's (normalizeAnswer).
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null, language = null, runDefaults = null, workflowKinds = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
@@ -1495,7 +1556,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       const mapOf = issueMode ? null : { backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) };
       ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await withConflictMap(mapOf, (conflictMap) => callAgent({
         mode: turnMode, question: q, report: (turnMode === 'plan' ? backlogReport : issueReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen }),
-        previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone, language, runDefaults,
+        previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone, language, runDefaults, workflowKinds,
       })));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
     }
@@ -1524,7 +1585,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   } else {
     // #670: a question naming a spec: its issues (the model's, or one per phase when simulated) and their mockup coverage
     const spec = poMockups.specProposal({ folder, question: q, issues: raw?.spec?.issues, mock: !!mock });
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs, spec, runDefaults });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs, spec, runDefaults, workflowKinds });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', ...tag, text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });
@@ -1632,7 +1693,24 @@ function mockupsFor(mode, folder, question) {
   return ['auto', 'issue', 'plan'].includes(mode) ? poMockups.mockupSection({ folder, question }) : '';
 }
 
-async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null, language = null, runDefaults = null }) {
+// #791: a plan turn's prompt section on the project's workflow of each kind of issue, and the one-kind-per-group rule
+function kindsSection(workflowKinds) {
+  const line = (kind) => {
+    const e = workflowKinds?.[kind];
+    if (!e?.name) return `- ${kind}: the default workflow`;
+    const inputs = Object.entries(e.inputs || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+    return `- ${kind}: ${DefaultWorkflow.label(e.name)}.yaml${inputs ? ` (${inputs})` : ''}`;
+  };
+  return [
+    '## The project\'s workflow of each kind of issue',
+    'Classify every issue of a group in `issue_kinds` ({ issue, kind, reason }: `feature`, `fix` or `refactor`, the reason one line). A `bug` label suggests fix and a `refactor` label suggests refactor, but the issue\'s content decides when a label is missing or wrong. A group holds issues of one kind only (a Fix and a Feature never share a run; groups of different kinds may share a stage), and runs on that kind\'s workflow and inputs, which the orchestrator sets from these:',
+    line('feature'),
+    line('fix'),
+    '- refactor: the Feature workflow',
+  ].join('\n');
+}
+
+async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null, language = null, runDefaults = null, workflowKinds = null }) {
   // the run modules, not engine/workflow: the engine reaches this module through refactor-priority (#378)
   const { extractJson, validateSchema } = require('../../engine/run/outputs');
   const { render } = require('../../engine/run/templates');
@@ -1661,6 +1739,7 @@ async function callAgent({ mode = 'plan', question = '', report, previous = [], 
     planMode ? poCalibration.promptSection(calibration ?? agent?.calibration) : '',
     planMode && !costOff ? poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)) : '',
     planMode && workflow ? workflowSection(workflow, costOff) : '',
+    planMode ? kindsSection(workflowKinds) : '',
     poChosen.runDefaultsSection(runDefaults, mode),
     selection.length ? SELECTION_RULES : '',
     mockupsFor(mode, folder, question),
@@ -1710,6 +1789,7 @@ module.exports = {
   handleRequest,
   ISSUE_AGENT,
   ISSUE_SCHEMA,
+  kindOf,
   lastWorkflow,
   MOCK_SCENARIOS,
   mockAnswer,

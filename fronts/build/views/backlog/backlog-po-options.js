@@ -8,6 +8,8 @@
 //   "Colocar no roadmap" and, collapsed, the summary marks them (data-changed).
 // withEdits gives the group as it goes to the roadmap: the PO's inputs and the owner's changes, never
 // a value equal to the one shown anyway, so the project's configuration still reaches the run.
+// #791: an edit with a `kind` (Feature / Fix chosen on the card) starts from that kind's inputs
+// (`kindInputs`, the project's) instead of the PO's.
 // "Show more options" (wf-more-toggle) in the form is the viewer's choice (localStorage, not per project).
 /* global esc, t */
 (() => {
@@ -47,7 +49,7 @@
   function withEdits(g, edit, wf, runDefaults) {
     const { blank, chosen, sameValue, shownDefault } = window.RunInputs;
     const defs = wf?.inputs || {};
-    const fromPo = g.inputsChosen ? g.inputs : chosen(g.inputs, defs);
+    const fromPo = edit?.kindInputs ? edit.kindInputs : g.inputsChosen ? g.inputs : chosen(g.inputs, defs);
     const inputs = { ...(runDefaults ? chosen(fromPo, defs, runDefaults) : fromPo), ...g.cost?.inputs };
     for (const [k, v] of Object.entries(edit?.values || {})) {
       if (blank(v) || (runDefaults && sameValue(v, shownDefault(k, defs[k], runDefaults)))) delete inputs[k];
