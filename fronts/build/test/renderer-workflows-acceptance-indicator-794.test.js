@@ -315,6 +315,105 @@ test('#794 the Backlog\'s Update and push updates the count', async () => {
   assert.equal(shown(page.$(SIDEBAR)), '1');
 });
 
+test('#794 the Backlog\'s Check again updates the count', async () => {
+  const table = { p1: [] };
+  const data = {
+    issues: [{ number: 7, title: 'A merged issue', column: 'local', labels: [] }],
+    local: { ahead: 0, behind: 0, base: 'main', commits: [], issues: [], error: 'origin not reached' },
+  };
+  const page = await open(table, {
+    getBacklog: async () => data,
+    syncBacklog: async () => data,
+    checkLocal: async () => { table.p1 = [waiting('flow-alpha')]; return {}; },
+  });
+  await backlog(page);
+  page.$('#bl-alerts [data-check]').click();
+  await settle(30);
+  assert.equal(page.callsTo('checkLocal').length, 1, 'the button checked');
+  assert.equal(shown(page.$(SIDEBAR)), '1');
+});
+
+// The window's focus reads at most once per 5 s. Date.now is the page's clock (a vm has its own Date).
+const repositoryReads = (page) => page.callsTo('listWorkflows').filter(([opts]) => opts?.repositoryOnly).length;
+const stopClock = (page) => page.run('var testNow = 1800000000000; Date.now = () => testNow;');
+const advanceClock = (page, ms) => page.run(`testNow += ${ms};`);
+const focusAndSettle = async (page) => { focusWindow(page); await settle(30); };
+
+test('#794 two focuses in a row read the workflows once', async () => {
+  const page = await open({ p1: [] });
+  stopClock(page);
+  const before = repositoryReads(page);
+  await focusAndSettle(page);
+  advanceClock(page, 4999);
+  await focusAndSettle(page);
+  assert.equal(repositoryReads(page), before + 1);
+});
+
+test('#794 a focus after the 5 s gap reads again and updates the count', async () => {
+  const table = { p1: [] };
+  const page = await open(table);
+  stopClock(page);
+  await focusAndSettle(page);
+  table.p1 = [waiting('flow-alpha')];
+  advanceClock(page, 1000);
+  await focusAndSettle(page);
+  assert.equal(shown(page.$(SIDEBAR)), null, 'still inside the gap');
+  advanceClock(page, 4000);
+  await focusAndSettle(page);
+  assert.equal(shown(page.$(SIDEBAR)), '1');
+});
+
+// ---- a project change that does not go through the header ----------------------------------------
+
+// the engine's project list is mutable too; removeProject takes the project out of it
+const withProjects = (list) => {
+  const projects = { list };
+  return {
+    projects,
+    api: {
+      listProjects: async () => projects.list,
+      removeProject: async ({ id }) => { projects.list = projects.list.filter((p) => p.id !== id); return {}; },
+    },
+  };
+};
+async function removeProject(page, id) {
+  page.run("showView('projects')");
+  await settle(30);
+  page.$(`[data-testid="project-card"][data-id="${id}"] [data-act="remove"]`).click();
+  await settle(10);
+  page.$('#btn-confirm-yes').click();
+  await settle(30);
+}
+
+test('#794 removing the current project on the Projects screen makes the count follow the next one', async () => {
+  const engineProjects = withProjects(PROJECTS);
+  const page = await open({ p1: [waiting('flow-alpha')], p2: [waiting('flow-beta'), waiting('flow-gamma')] }, engineProjects.api);
+  assert.equal(shown(page.$(SIDEBAR)), '1', 'p1 first');
+  await removeProject(page, 'p1');
+  assert.equal(page.run('CurrentProject.get()'), 'p2');
+  assert.equal(shown(page.$(SIDEBAR)), '2');
+  assert.equal(titleOf(page, SIDEBAR).includes('flow-alpha'), false, 'no longer names the removed project\'s');
+});
+
+test('#794 removing the only project hides the count', async () => {
+  const engineProjects = withProjects([PROJECTS[0]]);
+  const page = await open({ p1: [waiting('flow-alpha')] }, engineProjects.api);
+  assert.equal(shown(page.$(SIDEBAR)), '1', 'p1 first');
+  await removeProject(page, 'p1');
+  assert.equal(shown(page.$(SIDEBAR)), null);
+});
+
+test('#794 the first project, created through the onboarding, gets its count with no focus and no reload', async () => {
+  const engineProjects = withProjects([]);
+  const page = await open({ p1: [waiting('flow-alpha')] }, engineProjects.api);
+  assert.equal(shown(page.$(SIDEBAR)), null, 'no project yet');
+  engineProjects.projects.list = [PROJECTS[0]];
+  for (const fn of page.handlers.onOnboardingChanged) fn({ projectId: 'p1', name: 'demo', status: 'running' });
+  await settle(30);
+  assert.equal(page.run('CurrentProject.get()'), 'p1');
+  assert.equal(shown(page.$(SIDEBAR)), '1');
+});
+
 // ---- the Definitions tab's top block -------------------------------------------------------------
 
 test('#794 the waiting workflows come first: the block leads the sections and the workspace cards', async () => {
@@ -386,6 +485,17 @@ test('#794 the diff since the last accepted commit stays on a waiting card', asy
   const text = norm(textOf(diff));
   assert.equal(text.includes('+ prompt: new work'), true, text);
   assert.equal(text.includes('9876543'), true, 'the accepted commit, short');
+});
+
+test('#794 an unreadable repository workflow not accepted is counted and in the block: menu and screen agree', async () => {
+  const file = 'workflows/broken-flow.yaml';
+  const page = await definitions({ p1: [waiting('broken-flow', { name: file, file, error: 'bad yaml', steps: [] })] });
+  assert.equal(shown(page.$(SIDEBAR)), '1');
+  assert.equal(titleOf(page, SIDEBAR).includes(file), true, 'the title names it');
+  const card = waitingCard(page, file);
+  assert.equal(card !== null, true, 'in the block');
+  assert.equal(card.classList.contains('awaiting-acceptance'), true, 'highlighted');
+  assert.equal(card.querySelector('[data-testid="workflow-accept"]') !== null, true, 'Accept is offered');
 });
 
 test('#794 a waiting card\'s badge is orange and says it in words', async () => {
