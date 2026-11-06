@@ -28,6 +28,8 @@ const {
 // `more` (#282, #284, --roadmap states): the running run is in a fix round, the stage "Reports and
 // health" is disabled and the last stage's item is simulated (the test-backfill item has no estimate).
 // `more` parked (#395, --roadmap parked): the item waiting at the developer's gate is parked.
+// `more` merge (#797, --roadmap merge): the failed item's run ended well, its PR waits for a person's
+// merge (nothing stands in for gh here, so the card also says why the made-up PR could not be read).
 function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   const states = more === 'states';
   const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
@@ -54,7 +56,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   // rings) and a start refused for kept work that paused the roadmap (#196: Retry / Skip)
   // #391 (--roadmap pausing): no "Tonight" stage; the roadmap runs (simulated) and pauses after stage 2
   const pausing = more === 'pausing';
-  const tonight = live === 'off' && !pausing ? demoRoadmapRuns(ws, projectId, { fixRound: states }) : null;
+  const tonight = live === 'off' && !pausing ? demoRoadmapRuns(ws, projectId, { fixRound: states, prOpen: more === 'merge' }) : null;
   const refused = 'Could not start #14: #14 already has work from a cancelled run, 20260119-221000-demo0014 (3 commits on its branch). Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.';
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
@@ -70,7 +72,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
           // #395 (--roadmap parked): the roadmap moved on past it, its run still waits at the gate
           ...(more === 'parked' ? { status: 'parked', parked: { at: at(2, 40), gate: 'Developer check' } } : {}),
         }),
-        item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.failed, runs: [tonight.failed] }),
+        item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.prOpen || tonight.failed, runs: [tonight.prOpen || tonight.failed] }),
         item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
         // #215: done, real cost and time against the estimate (folded under the stage's "+2 done" chip, #267)
         item('item-9', 'software-development-local-hero.yaml', [9], { status: 'done', runId: tonight.better, runs: [tonight.better] }),
@@ -107,7 +109,8 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
 // tonight's runs: one in code review, one waiting at the developer's gate (both live in "another app",
 // studio-pc, whose heartbeat this script keeps fresh), one that failed in its tests. → their run ids.
 // `fixRound` (--roadmap states): the running one is back in Develop after its review (round 2).
-function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
+// `prOpen` (--roadmap merge): one more run, that ended well with its PR open.
+function demoRoadmapRuns(ws, projectId, { fixRound = false, prOpen = false } = {}) {
   const file = 'software-development-local-hero.yaml';
   const workflow = 'software-development-local-hero';
   const groups = [
@@ -234,7 +237,18 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   demoCostRuns(ws, projectId);
   demoCacheRun(ws, projectId);
   demoArtifactRuns(ws, projectId);
-  return { running, resumed, waiting, failed, better, worse };
+  const openPr = () => {
+    const runId = `${stamp(95)}-223000-run00113`;
+    const start = now - 95 * min;
+    const steps = PATH.map(([s, m]) => [s, Math.round(m * 0.9)]);
+    const { lines, end } = events(start, steps, null);
+    const output = { pr_url: `${DEMO_REPO}/pull/113`, pr_number: 113 };
+    write(runId, [...lines, ev(end, 'step.finished', { step_id: 'pr_open', output }), ev(end, 'workflow.finished', { status: 'success' })], {
+      status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps), sessions: sessionsOf(steps, 0.9),
+    });
+    return runId;
+  };
+  return { running, resumed, waiting, failed, better, worse, prOpen: prOpen ? openPr() : null };
 }
 
 // #320: a run stopped at its Developer check gate (`-cch00320`, no summary: read from its events)

@@ -31,3 +31,25 @@ failure still pauses). Once that stage is finished, the inserted stage starts be
 it. An item parked at a human gate (#395) is not running: it holds nothing. The screen shows the
 inserted stage's "Waits for stage N" badge (`roadmap-stage-waits`) instead of Next; only the running
 stage is current.
+
+## An item that waits for its PR's merge (#797)
+
+A run that succeeded with a PR it did not merge itself (`ai-development-remote-hero` stops at
+`pr_review`, the merge happens on the platform) is no failure: its item is `waiting_merge` (derived in
+`roadmap-status.js`, never stored), with `error: null` and `pr: { number, url, state, detail, checkedAt }`.
+It is not finished, so it holds its stage and no later stage starts from a base without that work, and
+the roadmap keeps running (`stageStep` does not pause on it). The owner's Skip goes on without the merge.
+
+- `roadmapRun` only looks at the PR cache (`run-pr.js prCache`): it runs on every draw and poll.
+- The PR is read on a dispatch and when the Roadmap opens (`backlog:get`, in the background), both
+  under the cache's 5 minutes, and fresh on a `backlog:sync`. `roadmap:get` and `backlog:state` never
+  read, and neither does the dispatch of a workspace that opens (its starts never wait for gh).
+- Merged: the item is done, stored with `mergedCommit`. Closed: failed, "PR #n was closed without
+  merging", and the roadmap pauses as for any failure. A failed read keeps it waiting (`pr.state:
+  'unknown'`, `pr.detail` says why).
+- Fork + PR (#738): a PR known only by its number is placed on the project's upstream (`prOnProject`).
+- A roadmap the old rule paused (`pausedBy` this item, "finished without merging") goes on by itself
+  (`advance`) once its item waits or is done. A parked item (#395) whose run ended this way stays
+  parked until the PR merges or closes.
+- Known limit: a closed PR stays in the cache until the app restarts, so a PR reopened meanwhile is
+  only seen then.

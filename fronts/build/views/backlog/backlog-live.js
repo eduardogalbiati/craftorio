@@ -77,8 +77,8 @@
         error: lr.error,
         stages: r.stages.map((s) => {
           const merged = s.items.map((x) => {
-            const { run, status, runId, runs, waiting, actualUsd } = items.get(x.id);
-            return { ...x, status, runId, runs, waiting, ...(actualUsd != null ? { actualUsd } : {}), ...(run ? { run: { ...x.run, ...run } } : {}) };
+            const { run, status, runId, runs, waiting, actualUsd, pr } = items.get(x.id);
+            return { ...x, status, runId, runs, waiting, ...(actualUsd != null ? { actualUsd } : {}), ...(run ? { run: { ...x.run, ...run } } : {}), ...(pr ? { pr } : {}) };
           });
           // #615: a live run's new cost moves the stage's total (its items' actualUsd summed)
           const actualUsd = window.RoadmapModel.stageActualUsd(merged) ?? s.actualUsd;

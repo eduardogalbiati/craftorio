@@ -57,7 +57,17 @@ module.exports = (ctx) => {
   };
   const progress = new Map(); // #781: project id → the sync in progress: { source, what, read, total }
   return [
-    { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], schema: { params: ON_PROJECT, result: BACKLOG }, fn: ({ projectId }) => current(projectId) },
+    // #797: never in `current`, which backlog:state polls: only an open reads the PRs the roadmap's items wait for
+    {
+      channel: 'backlog:get',
+      method: 'getBacklog',
+      params: ['projectId'],
+      schema: { params: ON_PROJECT, result: BACKLOG },
+      fn: ({ projectId }) => {
+        ctx.checkWaitingPrs(project(projectId));
+        return current(projectId);
+      },
+    },
     // #491: the Roadmap's live reloads read only what changes while runs go (packages/engine/domains/backlog/backlog.js backlogState)
     {
       channel: 'backlog:state',
@@ -65,7 +75,7 @@ module.exports = (ctx) => {
       params: ['projectId'],
       schema: {
         params: ON_PROJECT,
-        result: described(nullable(OBJECT), 'The light state: { projectId, roadmap: { state, updatedAt, scope, pausedBy, error, stages: [{ id, pause, items: [{ id, status, runId, runs, waiting, startedAt, elapsed, run? }] }] }, queue, refresh, baseCheck }; no issue bodies.'),
+        result: described(nullable(OBJECT), 'The light state: { projectId, roadmap: { state, updatedAt, scope, pausedBy, error, stages: [{ id, pause, items: [{ id, status, runId, runs, waiting, startedAt, elapsed, run?, pr? }] }] }, queue, refresh, baseCheck }; no issue bodies.'),
       },
       fn: ({ projectId }) => backlog.backlogState(current(projectId)),
     },
@@ -100,6 +110,7 @@ module.exports = (ctx) => {
             backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, followed: !!followed, onProgress: (p) => progress.set(id, { source, ...p }) }),
             ctx.refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
           ]);
+          await ctx.syncWaitingPrs(id); // #797
           return ctx.withIssueRuns(data);
         } finally {
           progress.delete(id);

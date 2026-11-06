@@ -239,7 +239,7 @@ module.exports = {
   modes: ['list', 'kanban', 'roadmap', 'epics'],
   open,
   // the options only this view takes, and their values: the Live roadmap (#164), more states of the
-  // roadmap card (#282, #284; #395: an item parked at its gate), the Product Owner's drawer (#180)
-  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['parked', 'states'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS },
+  // roadmap card (#282, #284; #395: an item parked at its gate; #797: one waiting for its PR's merge), the Product Owner's drawer (#180)
+  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['merge', 'parked', 'states'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS },
   seed,
 };

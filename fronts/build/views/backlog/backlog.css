@@ -402,7 +402,7 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-error-hint { margin-top: 2px; }
 .rm-item[draggable="true"] { cursor: grab; }
 .rm-item.rm-failed { border-color: var(--red); }
-.rm-item.rm-waiting { border-color: var(--yellow); }
+.rm-item.rm-waiting, .rm-item.rm-waiting_merge { border-color: var(--yellow); }
 /* drop feedback while dragging (#163): the item an issue joins, the place an item lands (before an
    item, or at the end of a stage), and a refused target with its reason */
 .rm-item.rm-drop-target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--panel-2); }

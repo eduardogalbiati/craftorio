@@ -38,6 +38,8 @@
     success: ['success', 'Succeeded'],
     todo: ['idle', 'To do'],
     waiting: ['cancelled', 'Waiting for you'],
+    // #797: a roadmap item whose run ended well, its PR a person's to merge
+    waiting_merge: ['cancelled', 'Waiting for PR merge'],
   };
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 

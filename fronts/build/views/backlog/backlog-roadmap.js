@@ -401,18 +401,9 @@
     }
   }
 
-  // how a run that ended reads on an item planned again (the roadmap stopped, a Retry not started yet)
-  const RUN_END = { success: 'done', failed: 'failed', cancelled: 'stopped', interrupted: 'interrupted' };
-  function chipStatus(x) {
-    if (x.waiting) return 'waiting';
-    if (x.status !== 'planned') return x.status;
-    return RUN_END[x.run?.status] || x.run?.status || 'planned';
-  }
-  // the status block's pill: the same, but a run that ended under an item still marked running says its end
-  function pillStatus(x, est) {
-    if (x.status !== 'running' || x.waiting) return chipStatus(x);
-    return est.state === 'failed' ? 'failed' : est.state === 'stopped' ? RUN_END[x.run?.status] || 'stopped' : est.state === 'waiting' ? 'waiting' : 'running';
-  }
+  // what the run chip and the status block's pill say (RoadmapModel)
+  const chipStatus = (x) => RoadmapModel.chipStatus(x);
+  const pillStatus = (x, est) => RoadmapModel.pillStatus(x, est);
 
   // What the card says about an item's run (null without one): its estimate, where it is (the group
   // or the step's readable name, #245: the id only in tooltips), its fix round (#272: `round` > 1 while
@@ -488,10 +479,16 @@
       ? `<button class="btn sm ghost" type="button" data-rm-resume="${esc(x.runId)}" data-testid="roadmap-item-resume" title="${t('backlog_roadmap.resume_its_run_runid_from_a', { runId: esc(x.runId) })}">${t('backlog_roadmap.resume_run')}</button>` : '';
     // #395: Move on past an item whose run waits at a human gate (the gate stays the owner's)
     const moveOn = may(r, null, x).park.allowed ? `<button class="btn sm ghost" type="button" data-rm-item="park" data-testid="roadmap-item-move-on" title="${t('backlog_roadmap.the_next_stage_starts_without_this')}">${t('backlog_roadmap.move_on')}</button>` : '';
-    const fail = `${moveOn}${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? t('backlog_roadmap.start_it_again_when_an_ended') : t('backlog_roadmap.run_it_again_a_new_run')}">${t('backlog_roadmap.retry')}</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="${t('backlog_roadmap.count_it_as_finished_the_roadmap')}">${t('backlog_roadmap.skip')}</button>${resume}` : ''}${askOracleHtml(x)}`;
+    const retry = retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? t('backlog_roadmap.start_it_again_when_an_ended') : t('backlog_roadmap.run_it_again_a_new_run')}">${t('backlog_roadmap.retry')}</button>` : '';
+    // #797: Skip alone on an item that waits for its PR's merge (its run succeeded: nothing to retry)
+    const skip = may(r, null, x).skip.allowed ? `<button class="btn sm ghost" type="button" data-rm-item="skip" title="${t('backlog_roadmap.count_it_as_finished_the_roadmap')}">${t('backlog_roadmap.skip')}</button>` : '';
+    const fail = `${moveOn}${retry}${skip}${resume}${askOracleHtml(x)}`;
     const move = locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="${t('backlog_roadmap.earlier_in_the_stage_or_into')}" aria-label="${t('backlog_roadmap.earlier_in_the_stage')}"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button><button class="btn sm ghost" type="button" data-rm-move="down" title="${t('backlog_roadmap.later_in_the_stage_or_into')}" aria-label="${t('backlog_roadmap.later_in_the_stage')}">↓</button><button class="link-btn small" type="button" data-rm-remove title="${t('backlog_roadmap.take_this_item_out_of_the')}">${t('common.remove')}</button>`;
-    return `<div class="rm-status" data-testid="roadmap-status">${state}${parkedHtml(x)}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
+    return `<div class="rm-status" data-testid="roadmap-status">${state}${prLinkHtml(x)}${parkedHtml(x)}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
   }
+
+  // #797: the PR an item waits for, on the platform (a PR known only by its number has no URL when its project has no repository)
+  const prLinkHtml = (x) => (x.pr?.url ? `<a class="link-btn small" href="${esc(x.pr.url)}" target="_blank" rel="noopener" draggable="false" data-testid="roadmap-item-pr-link" title="${t('backlog_roadmap.open_pr')}">${esc(x.pr.number ? `#${x.pr.number}` : t('backlog_roadmap.open_pr'))}</a>` : '');
 
   // #395: a parked item's line, "Parked at <gate>": it opens the run at its gate (backlog.js: any
   // [data-run]); a run interrupted there (a closed app) is resumed first, as the gate card says
@@ -650,6 +647,7 @@
         ${reasonHtml(x)}
         ${x.error ? `<div class="small rm-error ${x.status === 'failed' || refused ? 'error' : 'muted'}">${esc(x.error)}${refused
     ? `<div class="rm-error-hint muted">${t('backlog_roadmap.retry_starts_it_again_when_an')}</div>` : ''}</div>` : ''}
+        ${x.pr?.state === 'unknown' ? `<div class="small muted rm-error" data-testid="roadmap-item-merge-wait">${esc(x.pr.detail)}</div>` : ''}
         ${open ? formHtml(x) : ''}
       </div>`;
   }
@@ -1058,7 +1056,8 @@
     const scopeBadge = pausingHtml(r) || (scoped >= 0
       ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${t('backlog_roadmap.only_stage_n', { value: scoped + 1 })}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}</span>`
       : r.simulated ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '');
-    const failures = data?.baseFailures?.length ? `<details class="small rm-base-failures rm-head-line" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : '';
+    const prs = RoadmapModel.mergeWaits(r); // #797: what the next stage waits for
+    const failures = (prs ? `<div class="small muted rm-head-line" data-testid="roadmap-merge-wait">${esc(t('backlog_roadmap.merge_wait', { prs }))}</div>` : '') + (data?.baseFailures?.length ? `<details class="small rm-base-failures rm-head-line" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : '');
     const menuItems = MENU.filter((m) => m.show(r, acts));
     const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="${t('backlog_roadmap.roadmap_actions')}" title="${t('backlog_roadmap.more_actions')}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? Menu.menuHtml(menuItems.map((m) => ({ id: m.id, iconHtml: MI[m.id], checked: m.checked?.(r), label: t(m.label), title: t(m.title), attrs: `data-rm="${m.id}"` })), { className: 'rm-menu', testid: 'roadmap-menu', label: t('backlog_roadmap.roadmap_actions') }) : ''}</span>`;
     // band 1: on the right only the controls, always in this order: Start / Resume (primary) or Pause (amber), Stop (red), ⋮

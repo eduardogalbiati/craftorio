@@ -69,7 +69,7 @@ module.exports = (ctx) => {
     // continues where it was: its runs that ended meanwhile settle their stage (an interrupted one
     // pauses it), the next stage starts when the current one is over
     setTimeout(() => ctx.recoverLiveRuns(recovering)
-      .then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e)), 0);
+      .then(() => ctx.dispatchRoadmaps({ readPrs: false })).catch((e) => console.error('roadmap dispatch:', e)), 0);
     return ws;
   }
 

@@ -5,8 +5,9 @@
 // queue's item shape, so `itemIssues`/`runInputs` start it like an assigned group) run in parallel
 // up to the concurrency limit. A stage is over when every item is done (finished successfully and
 // merged: `localMerge` for the local workflow, the `gh pr merge`/`glab mr merge` action for
-// software-development, success for a simulation or for a workflow with `metadata.merges: false`
-// such as backlog-refresh, #161) or skipped. A failed, cancelled or interrupted
+// software-development, a PR a person merged on the platform, #797, success for a simulation or for
+// a workflow with `metadata.merges: false` such as backlog-refresh, #161) or skipped; an item whose
+// PR is open waits for its merge and holds its stage (roadmap-status.js). A failed, cancelled or interrupted
 // run pauses the roadmap at its stage (`pausedBy`): the owner resumes the run (#100, `adoptResumed`),
 // retries or skips the item, or stops the roadmap; nothing is skipped or approved by itself.
 // `advance` is the pure sequencing step; the service's `dispatchRoadmaps` applies it after each run
@@ -85,6 +86,10 @@ const {
   dependsOnField,
   forgetGoneParents,
 } = require('./roadmap-dependency');
+const {
+  mergedPullRequest,
+  withStatus,
+} = require('./roadmap-status');
 
 /** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
 /** @typedef {((runId: string) => any) | null} Alive `alive(runId)`: as for `runIsAlive` */
@@ -170,45 +175,9 @@ function persisted(roadmap) {
     // a stage's `pause` (#368: its pause line) is the screen's too
     stages: normalizeStages(roadmap.stages || [], true).map(({ pause: _p, ...s }) => ({
       ...s,
-      // `waiting` and `run` (#194: its progress for the card) are the screen's, never stored
-      items: (s.items || []).map(({ waiting: _w, run: _r, ...x }) => (isFinished(x) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
+      // `waiting`, `pr` (#797: the PR it waits for) and `run` (#194: its progress for the card) are the screen's, never stored
+      items: (s.items || []).map(({ waiting: _w, pr: _p, run: _r, ...x }) => (isFinished(x) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
     })),
-  };
-}
-
-const runFailure = (runId, run) => `Run ${runId} ${run.status === 'success' ? 'finished without merging: merge it, then skip the item'
-  : `${run.status === 'interrupted' ? 'was interrupted' : run.status}${run.error ? `: ${String(run.error).slice(0, 200)}` : ''}`}`;
-
-// An item's status from its run: running (a live run, in this process or another one, `waiting` at
-// a gate), paused (#368: its run paused after its current turn, never a failure), done (it merged),
-// failed (it ended otherwise, or it could not start), else as stored.
-// #395: a parked item stays parked while its run waits (or was interrupted, or paused); once its gate
-// is answered it takes the run's outcome: done when it merged, else failed, still marked `parked` so
-// it never holds its stage or pauses the roadmap (packages/shared/roadmap-model.js isFinished).
-function itemStatus(item, runOf) {
-  if (item.status === 'parked') {
-    const parked = item.parked || { at: null, gate: null };
-    const run = item.runId ? runOf(item.runId) : null;
-    if (!run) return { status: 'failed', error: `Run ${item.runId} no longer exists.`, parked };
-    if (['interrupted', 'paused', 'pending', 'running'].includes(run.status)) return { status: 'parked', error: null, parked };
-    if (run.status === 'success' && run.merged) return { status: 'done', error: null, parked };
-    return { status: 'failed', error: runFailure(item.runId, run), parked };
-  }
-  if (isFinished(item)) return { status: item.status, error: item.error || null };
-  if (!item.runId) return item.error ? { status: 'failed', error: item.error } : { status: 'planned', error: null };
-  const run = runOf(item.runId);
-  if (!run) return { status: 'failed', error: `Run ${item.runId} no longer exists.` };
-  if (['pending', 'running'].includes(run.status)) return { status: 'running', error: null, ...(run.waiting ? { waiting: true } : {}) };
-  if (run.status === 'paused') return { status: 'paused', error: null };
-  if (run.status === 'success' && run.merged) return { status: 'done', error: null };
-  return { status: 'failed', error: runFailure(item.runId, run) };
-}
-
-/** The roadmap with each item's status derived from its run (`runOf` as in `advance`). */
-function withStatus(roadmap, runOf) {
-  return {
-    ...roadmap,
-    stages: (roadmap.stages || []).map((s) => ({ ...s, items: (s.items || []).map(({ waiting: _w, ...x }) => ({ ...x, ...itemStatus(x, runOf) })) })),
   };
 }
 
@@ -724,19 +693,6 @@ function adoptResumed(dir, projectId, oldRunId, newRunId) {
   }));
 }
 
-/** Whether a run's events show a PR/MR merged by its action (`gh pr merge` / `glab mr merge`, exit 0). */
-function mergedPullRequest(runDir) {
-  let text;
-  try { text = fs.readFileSync(path.join(runDir, 'events.jsonl'), 'utf8'); } catch { return false; }
-  return text.split('\n').some((l) => {
-    if (!l.includes('"action.executed"')) return false;
-    try {
-      const ev = JSON.parse(l);
-      return ev.exit_code === 0 && !ev.skipped && /\b(gh\s+pr|glab\s+mr)\s+merge\b/.test(ev.command || '');
-    } catch { return false; }
-  });
-}
-
 // #555: the release entry `id` patched with `patch` (its run's fields), the others as they are
 const patchRelease = (r, id, patch) => r.stages.map((s) => (isRelease(s) && s.id === id ? { ...s, ...patch } : s));
 const hasRelease = (dir, projectId, id) => isRelease(findStage(readRoadmap(dir, projectId), id));
@@ -841,7 +797,8 @@ function stageStep(r, at, { closed, canStart, now }) {
   }
   if (stage.items.every((x) => isFinished(x))) return null;
   // #368: what is left of the stage is runs the owner paused: the roadmap waits at it, paused, for Resume
-  if (!stage.items.some((x) => ['planned', 'running'].includes(x.status))) {
+  // (#797: items that only wait for their PR's merge hold the stage with the roadmap running)
+  if (!stage.items.some((x) => ['planned', 'running'].includes(x.status)) && stage.items.some((x) => x.status === 'paused')) {
     return { roadmap: { ...pauseRoadmap(r, `${stageName(r, at)}: its runs are paused. Resume continues them where they stopped.`), pausedStage: stage.id, pausedAt: r.pausedAt || now().toISOString() }, start: [] };
   }
   return { roadmap: r, start: stage.items.filter((x) => x.status === 'planned' && canStart(x)) };
@@ -865,8 +822,9 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true, 
   // process owns as running, so an item is never failed while its run is alive; and a roadmap paused
   // by an item whose run is alive again (resumed, or judged by another app process) goes on.
   let r = withStatus(roadmap, runOf);
+  // #797: so does one paused by a run "finished without merging" whose PR waits or merged on the platform
   const blocker = r.pausedBy && findItem(r, r.pausedBy);
-  if (blocker?.status === 'running') r = { ...r, pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state };
+  if (['done', 'running', 'waiting_merge'].includes(blocker?.status)) r = { ...r, pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state };
   const finished = finishRoadmap(r);
   const scopeOver = (at) => {
     // #391: a pause after the last stage still pauses when a refill (#164) or a release (#260) would come next

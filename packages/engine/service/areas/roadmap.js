@@ -8,6 +8,8 @@
 // Cut lines (#260): a roadmap that reached one starts its release run (areas/releases.js roadmapRelease).
 // Move on (#395): parkItem / parkStage park the items whose runs wait at a human gate (`gateRun`: the
 // gate's step name, also for a run interrupted there) and dispatch; nothing answers the gate.
+// A PR a person merges (#797): an item waits for it (`roadmapRun`). Its state is read on a dispatch, a
+// sync (fresh, syncWaitingPrs) and when the Roadmap opens (checkWaitingPrs), never on a draw or a poll.
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -19,7 +21,7 @@ const budget = require('../../domains/usage/budget');
 const costEstimate = require('../../domains/usage/cost-estimate');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
-const { prOfEvents } = require('../../domains/run/run-pr');
+const runPr = require('../../domains/run/run-pr');
 const seedRuns = require('../seed-runs');
 const RoadmapModel = require('@multiagent/shared/roadmap-model');
 const RunProgress = require('@multiagent/shared/run-progress-model');
@@ -76,8 +78,8 @@ module.exports = (ctx) => {
         status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate, atGate,
         progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
-        // #614: the commit the run merged (the card's Merge station is done with it)
-        mergedCommit: r.localMerge?.commit || r.outputs?.merged_commit || null,
+        // #614: the commit the run merged (the card's Merge station is done with it); #797: or its PR did
+        mergedCommit: r.localMerge?.commit || r.outputs?.merged_commit || x.mergedCommit || null,
       };
     };
     const prices = workspace.readSettings(ctx.ws).prices || {};
@@ -135,16 +137,24 @@ module.exports = (ctx) => {
     return true;
   }
 
-  async function dispatchRoadmaps() {
+  // #797 `readPrs: false` (a workspace that opens): the roadmaps settle on what is known, their starts
+  // never wait for gh (30 s a read); the Roadmap's opening reads the PRs, and so does any later dispatch
+  async function dispatchRoadmaps({ readPrs = true } = {}) {
     if (!ctx.ws) return;
     if (roadmapBusy) { roadmapAgain = true; return; }
     roadmapBusy = true;
+    let read = readPrs;
     try {
       do {
         roadmapAgain = false;
         for (const projectId of roadmaps.roadmapProjects(ctx.ws.backlog)) {
-          try { await advanceRoadmap(projectId); } catch (e) { console.error('roadmap:', projectId, e); }
+          try {
+            // before advanceRoadmap reads the roadmap: an edit made during the read is never overwritten
+            if (read && roadmaps.readRoadmap(ctx.ws.backlog, projectId).state !== 'planned') await refreshWaitingPrs(projectId);
+            await advanceRoadmap(projectId);
+          } catch (e) { console.error('roadmap:', projectId, e); }
         }
+        read = true;
       } while (roadmapAgain);
     } finally {
       roadmapBusy = false;
@@ -155,13 +165,44 @@ module.exports = (ctx) => {
   // a local merge, a PR/MR merge action, or a simulation that succeeded (simulations never merge);
   // a run of a workflow that never merges (`metadata.merges: false`, e.g. backlog-refresh, #161)
   // counts as merged when it succeeds.
+  // #797: any other run that succeeded with a PR is a person's to merge on the platform: `pr` with what
+  // the cache last read (never read here: this runs on every draw), merged or `prClosed` as it says.
   function roadmapRun(runId, find = findRun) {
     const live = runId && ctx.active.get(runId);
     if (live) return { status: 'running', waiting: live.approvals.size > 0 };
     // its index row when current (#389: no events.jsonl parsed per item and per read)
     const r = runId ? find(runId) : null;
     if (!r) return null;
-    return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file, r.projectId)) };
+    const merged = r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file, r.projectId));
+    if (merged || r.status !== 'success' || !r.pr) return { status: r.status, error: r.error, merged };
+    const pr = endedRunPr(r);
+    return { status: r.status, error: r.error, merged: pr.state === 'merged', mergedCommit: pr.mergedCommit, prClosed: pr.state === 'closed', pr };
+  }
+
+  // #797: the PR of a run that ended, as last read; one the project cannot place (a number, no repository) can never be read
+  function endedRunPr(r) {
+    const pr = r.pr.url ? r.pr : runPr.prOnProject(r.pr, projectOf(r.projectId));
+    return pr.url ? ctx.withPrState(pr, r.mock) : { ...pr, state: 'unknown', detail: 'could not read the PR: the project has no repository to find it on', checkedAt: null };
+  }
+  const projectOf = (projectId) => { try { return projects.readProject(ctx.ws.projects, projectId); } catch { return null; } };
+
+  // #797: reads the PRs a project's items wait for (`maxAgeMs`: 0 reads them again, else the cache's 5
+  // minutes keep it from polling) → the PRs read. A failed read comes back `unknown`, never an error.
+  async function refreshWaitingPrs(projectId, options) {
+    const r = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId))), roadmapRun);
+    return Promise.all(r.stages.flatMap((s) => s.items).filter((x) => x.pr).map((x) => ctx.refreshPr(x.pr, options)));
+  }
+
+  // #797: a sync reads the waiting PRs fresh (a merge done a minute ago counts), then the roadmap goes on
+  async function syncWaitingPrs(projectId) {
+    if ((await refreshWaitingPrs(projectId, { maxAgeMs: 0 })).length) await dispatchRoadmaps();
+  }
+
+  // #797: opening the Roadmap reads them in the background, and only a PR that ended moves the roadmap
+  function checkWaitingPrs(projectId) {
+    refreshWaitingPrs(projectId)
+      .then((prs) => (prs.some((pr) => ['closed', 'merged'].includes(pr.state)) ? dispatchRoadmaps() : null))
+      .catch((e) => console.error('roadmap PRs:', projectId, e.message));
   }
 
   // #395: roadmapRun, with `waiting` and `gate` (the step's name) when the run waits at a human gate:
@@ -219,7 +260,7 @@ module.exports = (ctx) => {
     let events = [];
     try { events = runs.runEvents(r.runDir); } catch { /* no events: no branch */ }
     const branch = events.filter((e) => e.type === 'step.finished' && typeof e.output?.branch === 'string' && e.output.branch.trim()).at(-1)?.output.branch.trim() || null;
-    const pr = prOfEvents(events);
+    const pr = runPr.prOfEvents(events);
     return { branch, merged: !!roadmapRun(runId)?.merged, prNumber: pr?.number || null, prUrl: pr?.url || null };
   }
 
@@ -410,6 +451,7 @@ module.exports = (ctx) => {
 
   return {
     allowKeptWork,
+    checkWaitingPrs,
     dispatchRoadmaps,
     parkItem,
     parkStage,
@@ -417,5 +459,6 @@ module.exports = (ctx) => {
     pauseStage,
     roadmapView,
     startRoadmap,
+    syncWaitingPrs,
   };
 };

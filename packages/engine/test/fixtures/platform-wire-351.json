@@ -738,7 +738,7 @@
         "--repo",
         "github.com/o/r",
         "--json",
-        "state,isDraft,mergeable,mergeStateStatus,statusCheckRollup"
+        "state,isDraft,mergeable,mergeStateStatus,statusCheckRollup,mergeCommit"
       ]
     ],
     "result": {

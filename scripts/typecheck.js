@@ -17,6 +17,7 @@ const ROOT = path.join(__dirname, '..');
 // files that opted in with // @ts-check (sorted, one per line)
 const CHECKED = [
   'packages/engine/domains/roadmap/roadmap.js',
+  'packages/engine/domains/roadmap/roadmap-status.js',
   'packages/engine/domains/run/run-costs.js',
   'packages/engine/domains/usage/cost-estimate.js',
   'packages/engine/engine/run/accounts.js',

@@ -147,6 +147,8 @@
       const m = /^https:\/\/([A-Za-z0-9.-]+(?::\d+)?)\/([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)\/-\/(merge_requests|pipelines)\/(\d+)(?:[/?#].*)?$/.exec(String(url ?? '').trim());
       return m ? { host: m[1], repo: m[2], kind: m[3] === 'merge_requests' ? 'pr' : 'run', id: +m[4] } : null;
     },
+    // #797: a merge request's URL from its repository's (https://host/group/repo) and its number
+    requestUrl: (repo, number) => `${repo}/-/merge_requests/${number}`,
   };
 
   if (typeof module === 'object' && module.exports) module.exports = gitlab;
