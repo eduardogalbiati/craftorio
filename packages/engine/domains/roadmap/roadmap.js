@@ -604,13 +604,14 @@ function setLive(dir, projectId, on, { by = 'owner', now = new Date() } = {}) {
 }
 
 // Owner actions on an item: retry (planned again, its runs kept in `runs`), skip (counts as finished).
-// On the item that paused the roadmap, the roadmap goes on (the owner decided what to do with it).
+// On the item that paused the roadmap, the roadmap goes on (the owner decided what to do with it);
+// #804: a skip with `keepPaused` clears that pause and leaves the roadmap paused until Resume.
 // `alive(runId)`: whether a process (this one or another app) still runs it (#112): a retry then
 // would start the same work twice, so it is refused (and a skip: stop the run first).
 // park (#395, "Move on"): the item's run waits at a human gate (`runOf(runId).waiting`, as advance's
 // env, with the gate's name in `gate`): the item is parked (finished for its stage) and the run is
 // left as it is, still waiting at the same gate for the owner.
-function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date() } = {}) {
+function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date(), keepPaused = false } = {}) {
   if (!['park', 'retry', 'skip'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
   return updateRoadmap(dir, projectId, (r) => {
     const item = findItem(r, itemId);
@@ -621,8 +622,9 @@ function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null
     }
     const status = action === 'retry' ? 'planned' : 'skipped';
     const unblocked = r.pausedBy === itemId;
+    const goesOn = r.state === 'paused' && !(keepPaused && action === 'skip');
     return {
-      ...r, ...(unblocked ? { pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state } : {}),
+      ...r, ...(unblocked ? { pausedBy: null, error: null, state: goesOn ? 'running' : r.state } : {}),
       // a retried item runs again from its stage: it is no longer parked (#395)
       stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...(action === 'retry' ? unparked(x) : x), status, runId: action === 'retry' ? null : x.runId, error: action === 'skip' ? 'Skipped by the owner.' : null } : x)) })),
     };

@@ -282,12 +282,14 @@ module.exports = (ctx) => {
     // or an ended run's of the same issues, still has commits of its own, the answer is the kept-work
     // question { confirm, kept, runId } (#170: Resume the old run / Start from scratch) until
     // `confirmed` (Start from scratch), which lets the item's next start go past that work.
+    // #804: `keepPaused` on the skip of the item that paused the roadmap: it stays paused, nothing
+    // starts until Resume (without it the roadmap goes on, as ever).
     {
       channel: 'roadmap:item',
       method: 'roadmapItem',
-      params: ['projectId', 'itemId', 'action', 'confirmed'],
-      schema: { params: args({ projectId: PROJECT_ID, itemId: ITEM_ID, action: ACTION, confirmed: FLAG }, ['projectId']), result: BACKLOG },
-      fn: async ({ projectId, itemId, action, confirmed }) => {
+      params: ['projectId', 'itemId', 'action', 'confirmed', 'keepPaused'],
+      schema: { params: args({ projectId: PROJECT_ID, itemId: ITEM_ID, action: ACTION, confirmed: FLAG, keepPaused: FLAG }, ['projectId']), result: BACKLOG },
+      fn: async ({ projectId, itemId, action, confirmed, keepPaused }) => {
         requireText(action, 'roadmap item action', 40);
         const id = project(projectId);
         const item = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
@@ -305,7 +307,7 @@ module.exports = (ctx) => {
             if (kept) return { ...current(projectId), confirm: kept.text, kept, runId: kept.runId };
           } else ctx.allowKeptWork(id, item.id);
         }
-        roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), String(action), { alive: ctx.runAlive });
+        roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), String(action), { alive: ctx.runAlive, keepPaused: !!keepPaused });
         await ctx.dispatchRoadmaps();
         return current(projectId);
       },

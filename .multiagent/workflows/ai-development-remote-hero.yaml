@@ -643,7 +643,7 @@ groups:
     steps: [code_review, human_review]
   - name: Validate
     steps: [test, suite, e2e, heal, test_failed, build, build_failed, evidence, verify_change, verify_failed]
-  - name: Merge
+  - name: Open PR
     steps: [pr_open, pr_review, resolve_merge, merge_blocked]
 
 # -----------------------------------------------------------------------------

@@ -5,23 +5,21 @@
 // follows the live channel's backlog:state, #615) | the status block (the ring with the percent, the StatusPill and the step, the fix round in full; a pill alone
 // without a run: Planned, Skipped, "Failed to start" with the error when the start was refused before any run, #266; then Retry / Skip, or move and Remove).
 // 2: the Workflow band: the workflow's name with "Open run →" (the run chip) or Edit, the mode toggle with its icons (saved at once on planned and failed items,
-// locked while the item runs), the push badge (#195), Simulated, the chain and the other inputs; and the pipeline, the workflow's stations always visible
-// (RunProgress.pipeline: done, at work with the agent's name, sent back, not reached, the Validated mode's "Your check" gate; a merged run's Merge station is
+// locked while the item runs), the ending badge (#792: how its run ends; #195: its title says when that differs from the default), Simulated, the chain and the other inputs; and the pipeline, the workflow's stations always visible
+// (RunProgress.pipeline: done, at work with the agent's name, sent back, not reached, the Validated mode's "Your check" gate; a merged run's last station, Merge or Open PR (#792), is
 // done, its title the merged commit, #614; a station opens the run there). 3: the Product Owner's reason (#105), then the error line and the Edit form. The
 // other inputs are edited in an Edit form built from the workflow's input definitions (api.listWorkflows, loaded once) by WorkflowInputs (workflow-inputs.js,
 // #116: human labels, pills, switches, show_if), with Save / Cancel. The plan is edited too: stages and items up/down or by drag, an issue dragged from one
-// item to another, items removed, a stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear; Retry / Skip on a failed item. A
+// item to another, items removed, a stage renamed or given a note. Start (optionally simulated), Pause, Stop, Clear; Retry / Skip on a failed item (#804: a Skip that would resume the roadmap and start work says what starts, and can stay paused: skipDialog, kept-work-dialog.js). A
 // stage's head has its number, its name and its state; its actions are in its ⋮ menu (#282, #748: ui-kit's Menu, grouped): Disable / Enable (#284: skipped
 // while the roadmap runs, dimmed, "Disabled"), Run this stage (#141) | Stop when finished, Stop now | Release after this stage | Move up / down | the note |
-// Remove from roadmap. A Product Owner proposal (#105, JSON) is added or replaces the roadmap as planned (#446: no plain queue). Every
-// edit saves the whole list of stages (api.saveRoadmap); the service keeps each item's runs by id.
+// Remove from roadmap. A Product Owner proposal (#105, JSON) is added or replaces the roadmap as planned (#446: no plain queue). Every edit saves the whole list of stages (api.saveRoadmap); the service keeps each item's runs by id.
 // #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written elsewhere since, the service applies only this edit, or
 // refuses it (`conflict`): the screen shows the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or, when its item is
 // gone, those values show in the "Not saved" box (`lost`, roadmap-save-conflict). `changedElsewhere` words what changed for the open form's notice
 // (backlog.js staleNotice). "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics, each with its stage and the
 // epic's items done. Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it on otherwise asks to start the
-// roadmap) and the last refill; `liveBanner` is the banner backlog.js shows on top of every view while it is on.
-// When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the ChainPicker (chain-picker.js), mounted by mountChain.
+// roadmap) and the last refill; `liveBanner` is the banner backlog.js shows on top of every view while it is on. When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the ChainPicker (chain-picker.js), mounted by mountChain.
 // Cost (#205, #206): each item shows its estimate ("≈ $X", tooltip: how and from how many runs; "no estimate yet" without history), its real cost once it has
 // a run, and the Product Owner's Cost step (a badge: the tests, screenshots and grouping it chose); a stage of several items its estimate. A roadmap the
 // budget cap paused offers "Raise for today" and "Resume anyway" (api.roadmapBudget). Time (#215): the estimated time next to the cost ("≈ 1 h 45 min"; a
@@ -35,13 +33,11 @@
 // The date range (`since`: last 24 hours by default … Total) filters by an item's last activity (added, its run's start, its run's end): in Planned the open
 // items show whatever their date and the range picks the finished items folded under a stage's green "+n done" chip (#267: a click unfolds that stage only,
 // remembered per stage id while it has something to fold); in All it filters every item. The header counts "N of M items · last 24 hours"; the epic keeps
-// only its items. Stage numbers and edits use the real indexes.
-// Pages (#268): about 15 stages (60 items) at a time, from a little before the current stage (#552: the running one); a "Loading…" row loads the next page
+// only its items. Stage numbers and edits use the real indexes. Pages (#268): about 15 stages (60 items) at a time, from a little before the current stage (#552: the running one); a "Loading…" row loads the next page
 // when it comes near the screen (mounted), "earlier stages" the page above; a change of the view goes back to the first page, a re-read keeps them.
 // An item with a run (#194) has a progress ring in its status block: the estimated % (RunProgress.estimateProgress over the item's `run` from the service:
 // its trail and its workflow's typical step times), the current step or group, the gate / failure / done states; hovering or clicking the ring shows the
-// run's summary (estimate, elapsed and time left, now, gate, run id; #236: the ring and the step text carry no native title over the app's popover). The
-// run's steps are the pipeline of the Workflow band (#282), no longer in that popover.
+// run's summary (estimate, elapsed and time left, now, gate, run id; #236: the ring and the step text carry no native title over the app's popover). The run's steps are the pipeline of the Workflow band (#282), no longer in that popover.
 // The run's timer (#272, in the time line since #282): "23:41", gate waits left out, frozen at the end; tick() moves it every second, green within the item's
 // time estimate, amber up to 130% of it, red beyond. A run sent back to a step it had done (a fix round) keeps the progress it had earned and says "Round 2 ·
 // fix round after Code review" under the step: the same run, not a new one. A refused start (#196: kept work, the item that paused the roadmap, an error
@@ -50,16 +46,14 @@
 // Cut lines (#260, #555, docs/features/release.md): "Release here" (a stage's ⋮ menu, the #cut-line-modal dialog of backlog.js) adds a release entry after the
 // stage, drawn folded (RoadmapModel.foldReleases) as a dashed line (its run's state and link, ↑ ↓, Rename and Remove while no run is going) then its card,
 // planned included. A finished stage hidden by the open-work filter still shows its waiting line, so does the view grouped by epic. Planned: the latest only
-// (#425). The stage whose run is in progress is the Current one; the first open stage, when another, shows Next (#552).
-// The header (#269, #750: one card in four bands): the state's dot and pill, then on the right Start / Resume or Pause, Stop (asks first), a ⋮ menu from MENU
+// (#425). The stage whose run is in progress is the Current one; the first open stage, when another, shows Next (#552). The header (#269, #750: one card in four bands): the state's dot and pill, then on the right Start / Resume or Pause, Stop (asks first), a ⋮ menu from MENU
 // (Simulated in dev mode, Clear, Restore an earlier version…; arrows, Esc) | the numbers | the activity | the view (epic, releases, the date range, Planned |
 // All, Group by epic; the count). A pause by an item's failure is the error alert (#270, alerts(): Retry / Skip); other pause notes are activity lines. Ask the Oracle
 // (#271): a failed, interrupted, stopped or unstarted card has "Ask the Oracle about this failure" (gate-oracle.js). Undo (#281): each edit's toast has Undo
 // (app.js showToast's action; api.undoRoadmap); "Restore an earlier version…" lists the versions kept before each edit.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError, setShowAll, setSince, setEpic, showRoadmap }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
-// fmtDur, agentLabel, scheduleRender, showToast), run-list.js's (progressAvatar, robotAvatar, PERSON_SVG, ENGINE_SVG),
-// choiceDialog (kept-work-dialog.js), RoadmapModel, RunProgress, StatusPill, DefaultWorkflow and GateOracle.
+// fmtDur, agentLabel, scheduleRender, showToast), run-list.js's (progressAvatar, robotAvatar, PERSON_SVG, ENGINE_SVG), choiceDialog and skipDialog (kept-work-dialog.js), RoadmapModel, RunProgress, StatusPill, DefaultWorkflow and GateOracle.
 /* global api */
 (() => {
   const ICON = {
@@ -117,8 +111,11 @@
   const wfOf = (x) => workflows?.get(fileOf(x));
   const inputDefs = (x) => wfOf(x)?.inputs || {};
 
+  // #792: how the item's run ends (pr, local, fork, null: it does neither): its own inputs (an old workflow name's alias under them), over the project's run default (backlog.runInputs does the same)
+  const itemEnding = (x) => window.DefaultWorkflow?.ending(wfOf(x), { mode: runDefaults?.mode, ...DefaultWorkflow.oldValidation(fileOf(x) === x.workflow ? x.inputs : DefaultWorkflow.aliasInputs(DefaultWorkflow.aliasOf(x.workflow), x.inputs)) }) ?? null;
+  const ENDING = { fork: ['backlog_roadmap.ending_fork', 'backlog_roadmap.ending_fork_line', 'backlog_roadmap.ending_default_fork'], local: ['backlog_roadmap.ending_local', 'backlog_roadmap.ending_local_line', 'backlog_roadmap.ending_default_local'], pr: ['backlog_roadmap.ending_pr', 'backlog_roadmap.ending_pr_line', 'backlog_roadmap.ending_default_pr'] };
   // #195: an item whose workflow pushes (a branch, a PR/MR, CI minutes) while the default merges locally
-  const pushesAgainstDefault = (x, def = window.DefaultWorkflow?.current()) => def?.merge === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote';
+  const pushesAgainstDefault = (x, def = window.DefaultWorkflow?.current()) => def?.ending === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote';
   const refusedStart = (x) => RoadmapModel.refusedStart(x);
   const retryable = (x, r) => may(r, null, x).retry.allowed; // #196: a failed run or a refused start, never while its run is alive
   // #271: "Ask the Oracle about this failure" on an item whose run failed, was interrupted or stopped, or that could not start; never on a
@@ -520,7 +517,7 @@
     const run = v?.run;
     // the workflow as installed; a run of a workflow that is not: what its trail and its groups say
     const steps = wf?.steps?.length ? wf.steps : [...new Map((run?.progress || []).map((e) => [e.step, { id: e.step, type: e.type }])).values()];
-    const groups = wf?.groups?.length ? wf.groups : run?.groups || [];
+    const groups = RunProgress.endingGroups(wf?.groups?.length ? wf.groups : run?.groups || [], itemEnding(x)); // #792
     const status = !run || run.status === 'running' || run.status === 'pending' ? 'running' : run.status;
     const list = RunProgress.pipeline({ steps, groups, mode: modeOf(x) || null, progress: run?.progress || [], status, sentBackBy: v?.round ? v.est.sentBackBy : null, merged: run?.mergedCommit || null }); // #614
     // the roadmap knows the gate before the trail says so
@@ -562,7 +559,7 @@
     const stepNames = run?.stepNames || Object.fromEntries((wf?.steps || []).filter((s) => s.display).map((s) => [s.id, s.display]));
     const active = !!run && (run.status === 'running' || run.status === 'pending');
     const html = stations.map((st) => {
-      const name = st.gate ? t('backlog_roadmap.your_check') : st.grouped ? st.name : readable(st.name, stepNames);
+      const name = st.gate ? t('backlog_roadmap.your_check') : st.name === RunProgress.OPEN_PR ? t('run_list.open_pr') : st.grouped ? st.name : readable(st.name, stepNames);
       const text = {
         done: '✓', skipped: '—', todo: active ? t('backlog_roadmap.station_next') : '—', gate: stationWord('gate'), back: `↩ ${stationWord('back')}`,
         running: t('backlog_roadmap.station_working', { worker: v?.worker || t('backlog_roadmap.orchestrator') }), waiting: t('backlog_roadmap.station_waiting'), failed: `✕ ${stationWord('failed')}`, stopped: stationWord('stopped'),
@@ -579,12 +576,12 @@
 
   // ---- the Workflow band (#282): what runs the item and how ----------------------------------------------
   // Left: the workflow's name with "Open run →" (#266: the run chip; an item with a run) or Edit (an
-  // editable item), the mode toggle, then the rest in one row: the push badge (#195), Simulated, the
+  // editable item), the mode toggle, then the rest in one row: the ending badge (#792), Simulated, the
   // chain (#134), the Product Owner's Cost step (#205) and the other inputs (#216, WorkflowInputs.
   // inputPills). Right: the pipeline. Not drawn (#285): the "Update the app after this" switch of
   // #279 (data-testid="roadmap-update-after"), which the E2E steps assert absent on every card.
   function workflowHtml(x, locked, open, v) {
-    const push = pushesAgainstDefault(x);
+    const [end, def] = [itemEnding(x), window.DefaultWorkflow?.current()];
     const name = readable(String(x.run?.workflow || fileOf(x) || '').replace(/\.ya?ml$/i, ''));
     const full = x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow;
     const gate = x.waiting && x.run?.gate ? x.run.gate : '';
@@ -594,9 +591,10 @@
       ? `<button class="rm-run-chip" type="button" data-testid="run-chip" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="${esc(t('backlog_roadmap.open_the_run_runid_of_workflow', { runId: x.runId, workflow: x.workflow }))}"><span class="sr-only">${StatusPill.statusPill(chipStatus(x), { title: gate })}</span><span class="rm-wf-name" data-testid="roadmap-workflow-name">${esc(name)}</span><span class="rm-open-run">${t('backlog_roadmap.open_run')}</span></button>`
       : `<span class="rm-wf-name" data-testid="roadmap-workflow-name" title="${esc(full)}">${esc(name)}</span>`;
     const edit = locked || open ? '' : `<button class="link-btn small" type="button" data-rm-edit title="${t('backlog_roadmap.edit_this_item_s_inputs')}">${t('backlog_roadmap.edit')}</button>`;
-    const pushBadge = push ? `<span class="badge rm-wf rm-wf-push" title="${esc(`${full}. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally`)}"><span aria-hidden="true">⇡ </span>${t('backlog_roadmap.pushes_a_pr_mr')}</span>` : '';
+    const differs = !!end && !!def?.ending && def.ending !== end; // #195: the badge stands out and its title says so
+    const endBadge = end ? `<span class="badge rm-wf${differs ? ' rm-wf-push' : ''}" data-testid="roadmap-item-ending" data-ending="${end}" title="${esc(`${full}. ${t(ENDING[end][1])}${differs ? ` ${t(ENDING[def.ending][2], { file: def.file })}` : ''}`)}">${end === 'local' ? '' : '<span aria-hidden="true">⇡ </span>'}${t(ENDING[end][0])}</span>` : '';
     const sim = x.mock || x.run?.mock ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '';
-    const meta = `${pushBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(wfOf(x) || null, x.inputs, { skip: ['mode'] })}`;
+    const meta = `${endBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(wfOf(x) || null, x.inputs, { skip: ['mode'] })}`;
     return `
         <div class="rm-workflow" data-testid="roadmap-workflow">
           <div class="rm-wf-config">
@@ -1198,7 +1196,7 @@
     const act = (action) => async () => {
       try {
         if (action === 'park') await moveOn(ctx, item);
-        else await itemAction(ctx, r.pausedBy, action);
+        else await itemAction(ctx, r.pausedBy, action, r);
       } catch (err) { failed(ctx, 'edit', err); }
       ctx.render();
     };
@@ -1465,9 +1463,12 @@
   }
 
   // Retry or Skip an item (its card's buttons, the paused roadmap's alert): a retry that would redo an
-  // ended run's kept work asks first (#112, #170): resume that run or start from scratch
-  async function itemAction(ctx, itemId, action) {
-    let out = await api.roadmapItem(ctx.projectId, itemId, action);
+  // ended run's kept work asks first (#112, #170): resume that run or start from scratch; a skip that would start work too (#804, `r`: the roadmap): go on or stay paused
+  async function itemAction(ctx, itemId, action, r = null) {
+    const next = action === 'skip' ? RoadmapModel.nextAfterSkip(r, itemId) : null;
+    const choice = next ? await skipDialog(next) : 'go_on';
+    if (!choice) return;
+    let out = await api.roadmapItem(ctx.projectId, itemId, action, ...(choice === 'stay' ? [undefined, true] : []));
     if (out?.kept) {
       if (await keptWorkDialog(out.kept) !== 'scratch') return;
       out = await api.roadmapItem(ctx.projectId, itemId, action, true);
@@ -1731,7 +1732,7 @@
   async function itemClicked({ ctx, r, target }, el) {
     const box = target.closest('[data-item]');
     if (el.dataset.rmItem === 'park') await moveOn(ctx, r.stages.flatMap((s) => s.items).find((x) => x.id === box.dataset.item));
-    else await itemAction(ctx, box.dataset.item, el.dataset.rmItem);
+    else await itemAction(ctx, box.dataset.item, el.dataset.rmItem, r);
   }
   // the mode toggle: saved at once, on planned and failed items only
   async function modeClicked({ ctx, r, stages, target }, el) {

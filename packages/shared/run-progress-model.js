@@ -9,6 +9,7 @@
 // estimateProgress (#194): a run's estimated % along its workflow's steps, weighted by the typical
 // time of each step in past runs (typicalStepTimes), for the roadmap card's ring; runClock,
 // clockText and timerTone (#272): the card's run timer.
+// endingGroups and OPEN_PR (#792): the group where a run's work lands, named after how the run ends.
 // Browser: window.RunProgress; Node: module.exports.
 // Loaded before the renderer's files, like every packages/shared/ module (app.js draws its run lists with it).
 (function (root) {
@@ -219,11 +220,24 @@
    *   (the step it is at, on the station it is at), agents (who worked there, as progressGroups').
    * Without a trail every station is todo (a gate: gate).
    * #614: `merged` (the commit a run merged, null: none): a clean merge is no step of its own, so the
-   * station of the group named Merge is done with it, entered or not, and names the commit (`merged`).
+   * station where the work lands (landsWork) is done with it, entered or not, and names the commit (`merged`).
    */
   function pipeline({ merged = null, ...opts } = {}) {
     const list = trailStations(opts);
-    return merged ? list.map((st) => (st.grouped && st.name === 'Merge' ? { ...st, state: 'done', merged } : st)) : list;
+    return merged ? list.map((st) => (landsWork(st) ? { ...st, state: 'done', merged } : st)) : list;
+  }
+  // #792: a group's name is the workflow's to choose: the group of these steps lands the work under
+  // any name (merge_blocked is no sign: write-doc holds it in its Review)
+  const LANDING_STEPS = new Set(['pr_open', 'pr_review', 'resolve_merge']);
+  const landsWork = (st) => st.grouped && (st.name === MERGE || st.name === OPEN_PR || st.steps.some((id) => LANDING_STEPS.has(id)));
+  // #792: the group where the work lands, as the workflows name it and as a run ending in a PR draws it
+  // (the data stays in English; the screens translate it: run_list.open_pr)
+  const MERGE = 'Merge';
+  const OPEN_PR = 'Open PR';
+  /** #792: a workflow's groups for a run with this ending (DefaultWorkflow.ending): pr or fork rename its Merge group to OPEN_PR; the same list otherwise. */
+  function endingGroups(groups, ending) {
+    if (ending !== 'pr' && ending !== 'fork') return groups;
+    return (groups || []).map((g) => (g.name === MERGE ? { ...g, name: OPEN_PR } : g));
   }
   function trailStations({ steps = [], groups = [], mode = null, progress = [], status = 'running', sentBackBy = null } = {}) {
     const stations = workflowStations({ steps, groups, mode });
@@ -410,8 +424,10 @@
   }
 
   const api = {
+    OPEN_PR,
     StepTrail,
     clockText,
+    endingGroups,
     estimateProgress,
     hydrationEvents,
     pauseLabel,
