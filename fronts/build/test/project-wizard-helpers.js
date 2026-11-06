@@ -27,8 +27,9 @@ const CLONE_FAILED = { projectId: PID, status: 'failed', code: 'clone-failed', r
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
-// start: what api.startOnboarding resolves to; accounts / repos: api.onboardingAccounts / onboardingRepos
-function page({ start = CLONING, accounts = [], repos = {} } = {}) {
+// start: what api.startOnboarding resolves to; accounts / repos: api.onboardingAccounts / onboardingRepos;
+// api: more window.api methods, over these (#781)
+function page({ start = CLONING, accounts = [], repos = {}, api = {} } = {}) {
   return loadApp({
     api: {
       listProjects: async () => [],
@@ -39,6 +40,7 @@ function page({ start = CLONING, accounts = [], repos = {} } = {}) {
       analyzeOnboarding: async (id) => ({ ...clone(ANALYZING), projectId: id }),
       retryOnboarding: async (id) => ({ ...clone(CLONING), projectId: id }),
       architectureEstimate: async () => null,
+      ...api,
     },
   });
 }
@@ -135,8 +137,8 @@ async function imported(state = CLONING, opts = {}) {
   return app;
 }
 
-async function atAnalysis() {
-  const app = await imported(CLONING);
+async function atAnalysis(opts = {}) {
+  const app = await imported(CLONING, opts);
   await emit(app, READY);
   if (currentStep(app) !== 'analysis') await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'analysis', 'the wizard is on the analysis step');

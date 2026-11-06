@@ -353,10 +353,11 @@ test('#373 layoutCity: at 5,000 drawn files, nothing is aggregated: one building
 
 // ---------- colour by ----------
 
-test('#373 defaultColourBy: quadrant when complexity was measured, zone otherwise', () => {
+test('#373 #782 defaultColourBy: quadrant when most files were measured, churn when most were not (zone: city-measured-share-782.test.js)', () => {
   const { defaultColourBy } = load();
-  assert.equal(defaultColourBy(planModel()), 'quadrant');
-  assert.equal(defaultColourBy(planModel({ complexity: null })), 'zone');
+  assert.equal(defaultColourBy(planModel({ complexity: { ...COMPLEXITY, files: FILES.map((f) => f.path) } })), 'quadrant');
+  assert.equal(defaultColourBy(planModel()), 'churn', '11 of the 15 files have no measure');
+  assert.equal(defaultColourBy(planModel({ complexity: null })), 'churn');
 });
 
 // ---------- the overlay API ----------

@@ -163,11 +163,11 @@ test('#373 City: the overlay API reaches the city on screen, and Colour by chang
   assert.equal(w.ProjectCity.flyTo('src/engine/run.js'), true);
   assert.equal(w.ProjectCity.flyTo('no/such.js'), false);
   const legend = () => text(q(city.el, 'project-city-legend'));
-  assert.match(legend(), /src/, 'zones by default (complexity not measured)');
+  assert.match(legend(), /\d+ commits?/, '#782: churn by default (complexity not measured)');
   const select = city.el.querySelector('[data-pc-colour]');
-  select.value = 'churn';
+  select.value = 'zone';
   select.dispatchEvent(new w.Event('change', { bubbles: true }));
-  assert.match(legend(), /commits/);
+  assert.match(legend(), /src/);
   city.destroy();
   assert.equal(w.ProjectCity.current(), null);
 });

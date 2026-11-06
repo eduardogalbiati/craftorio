@@ -8,8 +8,8 @@
 // innerHTML, #btn-po-ask.disabled, #po-question, #po-log's scrollTop, the text of the drawer).
 // - pills, "Register an issue…" and Ask are disabled while busy; the text box is not, and keeps what
 //   the owner typed; Enter while busy sends nothing;
-// - a click scrolls the log to its end; a working line ("Product Owner is working" + 0:00) shows
-//   while busy, gone after the answer;
+// - a click scrolls the log to its end; a working line (#781: an ActivityLine, "Reading N open issues" +
+//   0:00) shows while busy, gone after the answer;
 // - a click with no project selected says "Choose a project in the Backlog first" and sends nothing;
 // - everything is enabled again after the answer or an error;
 // - style.css: `.chip:disabled` looks disabled (opacity, cursor: not-allowed).
@@ -62,8 +62,8 @@ function fakeEl(selector) {
   return el;
 }
 
-// The drawer loaded whole; `projectId` is what the Backlog's project select holds (null: none).
-function loadDrawer({ projectId = 'demo' } = {}) {
+// The drawer loaded whole; `projectId` is what the Backlog's project select holds (null: none); `issues`: the Backlog's.
+function loadDrawer({ projectId = 'demo', issues = [] } = {}) {
   const els = new Map();
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, fakeEl(sel)); return els.get(sel); };
   const docListeners = {};
@@ -116,7 +116,7 @@ function loadDrawer({ projectId = 'demo' } = {}) {
     BacklogActions: {
       projectId: () => current.projectId,
       project: () => (current.projectId ? { id: current.projectId, name: 'Demo project' } : null),
-      data: () => ({ issues: [] }),
+      data: () => ({ issues }),
       assignGroup: async () => [],
       roadmapGroup: async () => [],
       showData: () => {},
@@ -131,6 +131,8 @@ function loadDrawer({ projectId = 'demo' } = {}) {
   sandbox.window = sandbox;
   vm.createContext(withI18n(sandbox));
   vm.runInContext(read('live-turn.js'), sandbox);
+  // #781: the drawer's working line
+  if (pageFileOf('activity-line.js')) vm.runInContext(read('activity-line.js'), sandbox);
   // #274: the drawer's chat goes through the agents' shared component
   vm.runInContext(read('agent-chat.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'po-calibration.js'), sandbox);
@@ -213,16 +215,16 @@ test('#234 a pill click scrolls the conversation to its end, even when the owner
   assert.equal(log.scrollTop, log.scrollHeight - log.clientHeight);
 });
 
-test('#234 while busy a working line says "Product Owner is working" with the elapsed time (0:00); it is gone once the answer lands', async () => {
-  const d = loadDrawer();
+test('#234 #781 while busy a working line says what it reads with the elapsed time (0:00); it is gone once the answer lands', async () => {
+  const d = loadDrawer({ issues: [{ number: 1, state: 'open', title: 'One' }, { number: 2, state: 'open', title: 'Two' }] });
   await d.open();
   d.clickPill();
   const busy = d.allText();
-  assert.match(busy, /Product Owner is working/);
+  assert.match(busy, /Reading 2 open issues/);
   assert.match(busy, /\b0:0\d\b/, 'an elapsed time as m:ss');
   d.answer();
   await tick();
-  assert.doesNotMatch(d.allText(), /Product Owner is working/);
+  assert.doesNotMatch(d.allText(), /Reading 2 open issues/);
 });
 
 test('#234 a pill click with no project selected shows "Choose a project in the Backlog first" and sends no question', async () => {
@@ -284,5 +286,5 @@ test('#234 a drawer closed while busy and reopened after the answer has its pill
   await tick();
   for (const tag of pillTags(d)) assert.ok(!isDisabledTag(tag), `pill still disabled: ${tag}`);
   assert.equal(d.$('#btn-po-ask').disabled, false);
-  assert.doesNotMatch(d.allText(), /Product Owner is working/);
+  assert.doesNotMatch(d.allText(), /Reading \d+ open issues?/);
 });
