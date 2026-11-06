@@ -139,6 +139,16 @@ const jsonFields = (read) => String(read[read.indexOf('--json') + 1]).split(',')
 const repoOf = (read) => read[read.indexOf('--repo') + 1];
 const notPaused = (r) => [r.state === 'paused', r.pausedBy ?? null];
 
+test('#797 a PR known by its number on a project with no repository: the item waits, says why, and nothing is read', async (t) => {
+  const c = await seeded(t, { output: { pr_number: 7 }, repo: '' });
+  await c.dispatch();
+  const x = c.first();
+  assert.deepEqual([x.status, x.error, x.pr.number, x.pr.state], ['waiting_merge', null, 7, 'unknown']);
+  assert.match(x.pr.detail, /could not read the PR: the project has no repository/);
+  assert.deepEqual(notPaused(c.view()), [false, null]);
+  assert.equal(c.reads.length, 0);
+});
+
 // ---- an open PR: the item waits, the roadmap does not pause ----------------------------------------
 
 test('#797 a success run with an open PR: after a dispatch the item waits for the merge with its PR, no error, the roadmap not paused and stage 2 not started', async (t) => {

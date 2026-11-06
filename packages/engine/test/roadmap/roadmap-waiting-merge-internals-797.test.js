@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { prEnded, prOnProject } = require('../../domains/run/run-pr');
 const roadmaps = require('../../domains/roadmap/roadmap');
+const { stagesShape } = require('../../domains/backlog/backlog');
 const RoadmapModel = require('@multiagent/shared/roadmap-model');
 const RoadmapSummary = require('@multiagent/shared/roadmap-summary');
 
@@ -59,6 +60,27 @@ test('#797 a waiting item stays in every date range and is named by mergeWaits',
   assert.equal(RoadmapModel.inRange(x, 1000, Date.now()), true);
   assert.equal(RoadmapModel.mergeWaits({ stages: [{ items: [x, { ...x, pr: { number: 8 } }, item('b', 'done')] }] }), '#7, #8');
   assert.equal(RoadmapModel.mergeWaits({ stages: [{ items: [item('b', 'done')] }] }), '');
+});
+
+test('#797 mergeWaits: a PR known by no number still counts as a wait', () => {
+  const x = item('a', 'waiting_merge', { pr: { number: null, url: 'https://github.com/o/r/pull/7' } });
+  assert.equal(RoadmapModel.mergeWaits({ stages: [{ items: [x] }] }), '#?');
+});
+
+test('#797 allowedActions: a waiting item can be skipped, never retried, edited or moved, each refusal with its reason', () => {
+  const x = item('a', 'waiting_merge', { pr: { number: 7 } });
+  for (const r of [roadmap([x]), roadmap([x], { state: 'paused', pausedBy: 'a' })]) {
+    const acts = RoadmapModel.allowedActions(r, r.stages[0], x);
+    assert.deepEqual([acts.skip.allowed, acts.retry.allowed, acts.edit.allowed, acts.move.allowed], [true, false, false, false]);
+    assert.ok(acts.retry.reason && acts.edit.reason && acts.move.reason);
+  }
+});
+
+test('#797 the shape of the stages ignores what a read of a PR changes: a new read is no new layout', () => {
+  const stages = (extra) => [{ id: 's1', items: [item('a', 'waiting_merge', extra)] }];
+  const shape = stagesShape(stages({ pr: { number: 7, state: 'open' } }));
+  assert.equal(stagesShape(stages({ pr: { number: 7, state: 'unknown', detail: 'gh failed' } })), shape);
+  assert.equal(stagesShape(stages({ mergedCommit: 'abc' })), shape);
 });
 
 test('#797 prEnded: only a merged or closed PR is at its last state', () => {

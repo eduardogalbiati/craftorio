@@ -106,8 +106,28 @@ test('#797 roadmap card: an item whose PR was closed without merging keeps Retry
   assert.ok(H.visibleText(box.outer).includes(CLOSED));
 });
 
+const catalog = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n', name), 'utf8'));
+
+test('#797 roadmap card: a PR with no URL has no link, and the item still waits with nothing red', () => {
+  const box = H.itemEl(render([waitingItem({ pr: pr({ url: null }) })]), 'a');
+  assert.equal(box.attrs['data-status'], 'waiting_merge');
+  assert.equal(byTestId(box.outer, 'roadmap-item-pr-link'), null);
+});
+
+test('#797 roadmap card: a PR with no number links with the words of the catalog', () => {
+  const link = byTestId(H.itemEl(render([waitingItem({ pr: pr({ number: null }) })]), 'a').outer, 'roadmap-item-pr-link');
+  assert.equal(link === null, false, 'the card has the PR link');
+  assert.equal(H.visibleText(link.inner), catalog('en.json')['backlog_roadmap.open_pr']);
+});
+
+test('#797 roadmap card: a parked item whose run waits for its merge links its PR and says why a read failed', () => {
+  const box = H.itemEl(render([ended('a', 'parked', { parked: { at: null, gate: 'Check' }, pr: pr({ state: 'unknown', detail: READ_FAILED }) })]), 'a');
+  assert.equal(box.attrs['data-status'], 'parked');
+  assert.equal(byTestId(box.outer, 'roadmap-item-pr-link') === null, false, 'the card has the PR link');
+  assert.ok(H.visibleText(byTestId(box.outer, 'roadmap-item-merge-wait').inner).includes(READ_FAILED));
+});
+
 test('#797 i18n: the catalogs hold the state\'s label in English and Portuguese', () => {
-  const catalog = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n', name), 'utf8'));
   assert.equal(catalog('en.json')['status_pill.status_waiting_merge'], 'Waiting for PR merge');
   assert.equal(catalog('pt-BR.json')['status_pill.status_waiting_merge'], 'Aguardando merge do PR');
 });
