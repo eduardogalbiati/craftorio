@@ -30,7 +30,8 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   run stopped, the failed step, the suggested step, the worktree (and whether it still exists), the
   agents with sessions/handoffs, `limit` (the run's own, or a provider's with `providerLimit: true`, #799:
   read from the message the run failed with), `turns` (what each agent's next turn re-reads, #320), and
-  `inputs` / `inputDefs` (`developer_model` and `developer_effort` when the workflow declares them).
+  `inputs` / `inputDefs` (`developer_model` and `developer_effort` when the workflow declares them;
+  a value is what the developer ran on, so an override of another reader, the mapper, never shows).
 - **A paused run** (#368, status `paused`): `runs:resume` without a step continues where it paused
   (summary.json `paused.step`): every step it visited is seeded from its summary (`resume.paused`:
   seedResume seeds the resumed step's finished visits too), so no finished turn runs again and the

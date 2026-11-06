@@ -25,15 +25,20 @@ const offeredInputs = (wf) => Object.keys(wf.inputs || {}).filter((k) => RESUME_
 // #799: whether a workflow's agent setting (its model, its effort) reads one of these inputs
 const readsInput = (value, names) => inputsRead(value).some((x) => names.includes(x));
 
+// #799: the agent's setting (its model, its effort) that reads an input, or undefined
+const settingReading = (wf, agent, key) => ['model', 'effort'].find((s) => readsInput(wf.agents?.[agent]?.[s], [key]));
+
 // #799: the value an input stood for in the run: an agent override (the run's choice, or a fallback
 // it took) is applied over the inputs, so the agent ran on the override's value, not the input's.
-// A blank override (effort: '') is the provider's default, which the inputs call `default`.
+// RESUME_INPUTS are the developer's: another agent reading one (the mapper) may have fallen back
+// alone, and that says nothing of what the developer ran on. Without a developer reading it, the
+// first reader stands for the input. A blank override (effort: '') is the provider's default, which
+// the inputs call `default`.
 function inputInEffect(spec, wf, key) {
-  for (const [agent, override] of Object.entries(spec.agentOverrides || {})) {
-    const setting = ['model', 'effort'].find((s) => override[s] != null && readsInput(wf.agents?.[agent]?.[s], [key]));
-    if (setting) return override[setting] || 'default';
-  }
-  return spec.inputs[key] ?? wf.inputs?.[key]?.default;
+  const readers = Object.keys(wf.agents || {}).filter((agent) => settingReading(wf, agent, key));
+  const agent = readers.includes('developer') ? 'developer' : readers[0];
+  const override = spec.agentOverrides?.[agent]?.[settingReading(wf, agent, key)];
+  return override == null ? spec.inputs[key] ?? wf.inputs?.[key]?.default : override || 'default';
 }
 
 // #799: the line of a run's error that says a provider's limit stopped it, or null. A CLI's message

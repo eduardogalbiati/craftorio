@@ -4383,6 +4383,7 @@
   "resume_dialog.it_is_recorded_as_your_approval": "It is recorded as your approval in the new run.",
   "resume_dialog.its_worktree_folder_is_recreated_from": ": its worktree folder is recreated from it, with the previous attempt's uncommitted work",
   "resume_dialog.kept": "Kept:",
+  "resume_dialog.not_set": "Not set",
   "resume_dialog.optional": "(optional)",
   "resume_dialog.reading_the_run": "Reading the run…",
   "resume_dialog.resume_from_step": "Resume from step",

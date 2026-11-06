@@ -80,17 +80,19 @@ function resumeLimitNote(o) {
 
 // The inputs the owner may change for the new run (#799: the developer's model and effort), at the
 // values the run's agents ran on; the service says which, each with the workflow's own definition.
-// An override may have run outside the input's list: that value leads the select, and stays unless
-// the owner picks another (only a value that differs from what ran goes to the new run).
+// An override may have run outside the input's list, and a run may have no value at all (no default,
+// none recorded): that value, or Not set, leads the select and stays unless the owner picks another
+// (only a value that differs from what ran goes to the new run).
 const resumeInputKeys = (o) => Object.keys(o.inputDefs || {}).filter((key) => o.inputDefs[key].enum?.length);
 const resumeInputSelect = (key) => $(`[data-testid="resume-input-${key}"]`);
+const resumeInputRan = (o, key) => String(o.inputs?.[key] ?? '');
 
 function resumeInputFields(o) {
   const fields = resumeInputKeys(o).map((key) => {
     const def = o.inputDefs[key];
-    const ran = o.inputs?.[key];
-    const values = ran == null || def.enum.some((v) => String(v) === String(ran)) ? def.enum : [ran, ...def.enum];
-    const options = values.map((v) => [v, WorkflowInputs.optionLabel(def, v)]);
+    const ran = resumeInputRan(o, key);
+    const options = def.enum.map((v) => [v, WorkflowInputs.optionLabel(def, v)]);
+    if (!def.enum.some((v) => String(v) === ran)) options.unshift([ran, ran ? WorkflowInputs.optionLabel(def, ran) : t('resume_dialog.not_set')]);
     return `<div class="field"><label for="resume-input-${esc(key)}">${esc(WorkflowInputs.label(key, def))}</label>
       ${window.Select.markup(`id="resume-input-${esc(key)}" data-testid="resume-input-${esc(key)}"`, options, ran)}</div>`;
   });
@@ -99,7 +101,7 @@ function resumeInputFields(o) {
 
 // What the owner changed, or null: the run's other inputs stay as it recorded them
 function resumeInputChanges(o) {
-  const changed = resumeInputKeys(o).filter((key) => resumeInputSelect(key).value !== String(o.inputs?.[key]));
+  const changed = resumeInputKeys(o).filter((key) => resumeInputSelect(key).value !== resumeInputRan(o, key));
   return changed.length ? Object.fromEntries(changed.map((key) => [key, resumeInputSelect(key).value])) : null;
 }
 

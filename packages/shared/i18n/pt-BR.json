@@ -4383,6 +4383,7 @@
   "resume_dialog.it_is_recorded_as_your_approval": "Isso fica registrado como sua aprovação na nova execução.",
   "resume_dialog.its_worktree_folder_is_recreated_from": ": a pasta do worktree é recriada a partir dela, com o trabalho sem commit da tentativa anterior",
   "resume_dialog.kept": "Mantido:",
+  "resume_dialog.not_set": "Não definido",
   "resume_dialog.optional": "(opcional)",
   "resume_dialog.reading_the_run": "Lendo a execução…",
   "resume_dialog.resume_from_step": "Retomar da etapa",
