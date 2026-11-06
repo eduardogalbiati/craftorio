@@ -180,7 +180,12 @@
       return status === 'done' ? states.map((s) => (s === 'running' || s === 'pending' ? 'done' : s)) : states;
     }
     if (status === 'running') return ['running', 'pending', 'pending'];
-    if (status === 'done') return ['done', 'done', job.simulated ? 'skipped' : 'done'];
+    if (status === 'done') {
+      const ended = ['done', 'done', 'done'];
+      // a simulated job asks no oracle
+      if (job.simulated) ended[2] = 'skipped';
+      return ended;
+    }
     return ['pending', 'pending', 'pending'];
   }
 
