@@ -11,9 +11,12 @@
 // - #792 ending(wf, inputs): how a run of a workflow (engine shape or workflows:list summary) ends:
 //   'pr', 'local', 'fork' or null (it neither merges nor opens a PR): the `mode` input of a workflow
 //   that has local | remote | fork (feature, fix), else mergeOf;
+// - #792 runEnding(wf, resolved, alias): ending for a run's RunInputs.resolveRunInputs result, in the
+//   engine's order (backlog.runInputs, then aliasInputs): a value only the workflow gives stays out, so
+//   an old name's `alias` goes under what the item or the project chose;
 // - current(): the renderer's default: the header project's (state.projects) through projectDefault,
-//   among state.workflows (app.js globals), with its `merge` and its `ending` (the mode the project's
-//   Feature entry gives it);
+//   among state.workflows (app.js globals), with its `merge`, the `inputs` of the project's Feature
+//   entry and the `ending` they give it;
 // - firstBuild(set): a project's default without a given one (#486, packages/engine/domains/project/projects.js and the Overview);
 // - projectFirst(list): the pickers' workflows with the header project's set first (#486).
 // - #791 KINDS (feature, fix, refactor: the kinds of work the Product Owner tells apart) and
@@ -117,6 +120,8 @@
     if (!modes?.enum?.includes('local')) return merge === 'remote' ? 'pr' : 'local';
     return MODE_ENDINGS[oldValidation(inputs)?.mode ?? modes.default] || 'local';
   }
+  /** #792: how a run with these resolved inputs ({ values, sources }) ends (see the header). */
+  const runEnding = (wf, { values, sources }, alias = null) => ending(wf, aliasInputs(alias, sources.mode && sources.mode !== 'workflow' ? { mode: values.mode } : {}));
 
   // #486: the categories of a development workflow (the manifest's solo/team, the bundled ones' build;
   // #630: a composed set's feature)
@@ -215,7 +220,8 @@
     const out = resolve(own, files);
     const wf = list.find((w) => w.file === out.file);
     const target = kindTarget(kindEntry(project, project?.manifest, 'feature'), files);
-    return { ...out, name: wf?.name || out.file, merge: wf?.merge || null, ending: wf ? ending(wf, target.file === out.file ? target.inputs : {}) : null };
+    const inputs = target.file === out.file ? target.inputs : {};
+    return { ...out, name: wf?.name || out.file, merge: wf?.merge || null, inputs, ending: wf ? ending(wf, inputs) : null };
   }
 
   /** #486: `list` (workflows with a file) with the header project's set first, each part in its order. */
@@ -257,6 +263,7 @@
     projectFirst,
     projectWorkflows,
     resolve,
+    runEnding,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.DefaultWorkflow = api;

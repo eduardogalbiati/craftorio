@@ -111,11 +111,11 @@
   const wfOf = (x) => workflows?.get(fileOf(x));
   const inputDefs = (x) => wfOf(x)?.inputs || {};
 
-  // #792: how the item's run ends (pr, local, fork, null: it does neither): its own inputs (an old workflow name's alias under them), over the project's run default (backlog.runInputs does the same)
-  const itemEnding = (x) => window.DefaultWorkflow?.ending(wfOf(x), { mode: runDefaults?.mode, ...DefaultWorkflow.oldValidation(fileOf(x) === x.workflow ? x.inputs : DefaultWorkflow.aliasInputs(DefaultWorkflow.aliasOf(x.workflow), x.inputs)) }) ?? null;
+  // #792: how the item's run ends (pr, local, fork, null: it does neither), by the run's own rule; the default's the same way, the project's run defaults over its Feature entry
+  const itemEnding = (x) => window.DefaultWorkflow?.runEnding(wfOf(x), WorkflowInputs.resolved(inputDefs(x), x.inputs, runDefaults), fileOf(x) === x.workflow ? null : DefaultWorkflow.aliasOf(x.workflow)) ?? null;
+  const defaultNow = (def = window.DefaultWorkflow?.current(), wf = workflows?.get(def?.file)) => (wf ? { ...def, ending: DefaultWorkflow.runEnding(wf, WorkflowInputs.resolved(wf.inputs || {}, {}, { ...def.inputs, ...runDefaults })) } : def);
   const ENDING = { fork: ['backlog_roadmap.ending_fork', 'backlog_roadmap.ending_fork_line', 'backlog_roadmap.ending_default_fork'], local: ['backlog_roadmap.ending_local', 'backlog_roadmap.ending_local_line', 'backlog_roadmap.ending_default_local'], pr: ['backlog_roadmap.ending_pr', 'backlog_roadmap.ending_pr_line', 'backlog_roadmap.ending_default_pr'] };
-  // #195: an item whose workflow pushes (a branch, a PR/MR, CI minutes) while the default merges locally
-  const pushesAgainstDefault = (x, def = window.DefaultWorkflow?.current()) => def?.ending === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote';
+  const pushesAgainstDefault = (x, def = defaultNow()) => def?.ending === 'local' && fileOf(x) !== def.file && wfOf(x)?.merge === 'remote'; // #195: it pushes (a branch, a PR/MR, CI minutes) while the default merges locally
   const refusedStart = (x) => RoadmapModel.refusedStart(x);
   const retryable = (x, r) => may(r, null, x).retry.allowed; // #196: a failed run or a refused start, never while its run is alive
   // #271: "Ask the Oracle about this failure" on an item whose run failed, was interrupted or stopped, or that could not start; never on a
@@ -410,7 +410,7 @@
     if (!est) return null;
     const run = x.run;
     const last = (run.progress || []).at(-1);
-    const groupOf = new Map((run.groups || []).flatMap((g) => (g.steps || []).map((id) => [id, g.name])));
+    const groupOf = new Map((run.groups || []).flatMap((g) => (g.steps || []).map((id) => [id, RunProgress.groupName(g.name, t)])));
     const where = est.step ? groupOf.get(est.step) || readable(est.step, run.stepNames) : 'starting';
     const whereId = est.step && !groupOf.has(est.step) ? ` (${est.step})` : '';
     const label = { waiting: 'Waiting for you', failed: `Failed at ${where}`, stopped: `Stopped at ${where}`, done: 'Done' }[est.state] || where;
@@ -559,7 +559,7 @@
     const stepNames = run?.stepNames || Object.fromEntries((wf?.steps || []).filter((s) => s.display).map((s) => [s.id, s.display]));
     const active = !!run && (run.status === 'running' || run.status === 'pending');
     const html = stations.map((st) => {
-      const name = st.gate ? t('backlog_roadmap.your_check') : st.name === RunProgress.OPEN_PR ? t('run_list.open_pr') : st.grouped ? st.name : readable(st.name, stepNames);
+      const name = st.gate ? t('backlog_roadmap.your_check') : st.grouped ? RunProgress.groupName(st.name, t) : readable(st.name, stepNames);
       const text = {
         done: '✓', skipped: '—', todo: active ? t('backlog_roadmap.station_next') : '—', gate: stationWord('gate'), back: `↩ ${stationWord('back')}`,
         running: t('backlog_roadmap.station_working', { worker: v?.worker || t('backlog_roadmap.orchestrator') }), waiting: t('backlog_roadmap.station_waiting'), failed: `✕ ${stationWord('failed')}`, stopped: stationWord('stopped'),
@@ -581,7 +581,7 @@
   // inputPills). Right: the pipeline. Not drawn (#285): the "Update the app after this" switch of
   // #279 (data-testid="roadmap-update-after"), which the E2E steps assert absent on every card.
   function workflowHtml(x, locked, open, v) {
-    const [end, def] = [itemEnding(x), window.DefaultWorkflow?.current()];
+    const [end, def] = [itemEnding(x), defaultNow()];
     const name = readable(String(x.run?.workflow || fileOf(x) || '').replace(/\.ya?ml$/i, ''));
     const full = x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow;
     const gate = x.waiting && x.run?.gate ? x.run.gate : '';

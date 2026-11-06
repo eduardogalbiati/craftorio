@@ -9,7 +9,7 @@
 // estimateProgress (#194): a run's estimated % along its workflow's steps, weighted by the typical
 // time of each step in past runs (typicalStepTimes), for the roadmap card's ring; runClock,
 // clockText and timerTone (#272): the card's run timer.
-// endingGroups and OPEN_PR (#792): the group where a run's work lands, named after how the run ends.
+// endingGroups, OPEN_PR and groupName (#792): the group where a run's work lands, named after how the run ends, and its name on screen.
 // Browser: window.RunProgress; Node: module.exports.
 // Loaded before the renderer's files, like every packages/shared/ module (app.js draws its run lists with it).
 (function (root) {
@@ -239,6 +239,8 @@
     if (ending !== 'pr' && ending !== 'fork') return groups;
     return (groups || []).map((g) => (g.name === MERGE ? { ...g, name: OPEN_PR } : g));
   }
+  /** #792: a group's name on screen (`t`: the screen's translator): OPEN_PR is translated, a workflow's own names are not. */
+  const groupName = (name, t) => (name === OPEN_PR ? t('run_list.open_pr') : name);
   function trailStations({ steps = [], groups = [], mode = null, progress = [], status = 'running', sentBackBy = null } = {}) {
     const stations = workflowStations({ steps, groups, mode });
     const idle = (st) => ({ ...st, state: st.gate ? 'gate' : 'todo', round: 0, current: null, agents: [] });
@@ -429,6 +431,7 @@
     clockText,
     endingGroups,
     estimateProgress,
+    groupName,
     hydrationEvents,
     pauseLabel,
     pipeline,

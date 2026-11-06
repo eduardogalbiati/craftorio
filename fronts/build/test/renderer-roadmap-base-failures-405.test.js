@@ -62,6 +62,7 @@ function loadRoadmap() {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox);
+  vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'run-inputs.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('menu.js'), sandbox); // the shared menu (#748)

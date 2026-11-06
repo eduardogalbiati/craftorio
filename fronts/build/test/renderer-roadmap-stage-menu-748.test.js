@@ -98,6 +98,7 @@ function loadPage(data, { confirm = true } = {}) {
   vm.runInContext(H.read('..', '..', '..', 'packages', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(H.read('..', '..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(H.read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox);
+  vm.runInContext(H.read('..', '..', '..', 'packages', 'shared', 'run-inputs.js'), sandbox);
   vm.runInContext(H.read('workflow-inputs.js'), sandbox);
   if (H.exists('estimates.js')) vm.runInContext(H.read('estimates.js'), sandbox);
   if (H.exists('menu.js')) vm.runInContext(H.read('menu.js'), sandbox, { filename: 'menu.js' });

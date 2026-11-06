@@ -629,14 +629,9 @@ function progressChip(c, names, workflow, stepNames) {
   })() : '');
   return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
     <div class="rp-avs">${avs}</div>
-    <div class="rp-name">${esc(c.grouped ? groupName(c.name) : stepName(c.name, stepNames))}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
+    <div class="rp-name">${esc(c.grouped ? RunProgress.groupName(c.name, t) : stepName(c.name, stepNames))}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
     <div class="rp-state">${esc(label)}</div>
   </div>`;
-}
-
-// #792: a group's name on screen: the station of a run ending in a PR is translated, a workflow's own names are not
-function groupName(name) {
-  return name === RunProgress.OPEN_PR ? t('run_list.open_pr') : name;
 }
 
 // The progress strip of a run's row: the live trail for a run this window follows from its start.
@@ -648,7 +643,7 @@ function runProgressStrip(r) {
   const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
   const skipped = chips.length - MAX_CHIPS;
   const stepNames = r.stepNames || live?.run?.stepNames;
-  const folded = skipped > 0 ? `Earlier steps: ${chips.slice(0, skipped).map((c) => (c.grouped ? groupName(c.name) : stepName(c.name, stepNames))).join(' › ')}` : '';
+  const folded = skipped > 0 ? `Earlier steps: ${chips.slice(0, skipped).map((c) => (c.grouped ? RunProgress.groupName(c.name, t) : stepName(c.name, stepNames))).join(' › ')}` : '';
   return `<div class="rp-strip" data-testid="run-progress-strip">${skipped > 0 ? `<span class="rp-skip" tabindex="0" aria-label="${esc(folded)}">+${skipped}${foldCard(folded)}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow, stepNames)).join('<span class="rp-sep">›</span>')}</div>`;
 }
 

@@ -64,6 +64,7 @@ function loadRoadmap({ listWorkflows, now = NOW, runTitle } = {}) {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
+  vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'run-inputs.js'), sandbox); // the real rule of a run's inputs (#792: the card's ending)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (exists('estimates.js')) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('menu.js'), sandbox, { filename: 'menu.js' }); // the shared menu (#748)
