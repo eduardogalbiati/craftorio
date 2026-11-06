@@ -131,8 +131,8 @@ function readBacklog(dir, projectId) {
 
 /**
  * Fetches the project's issues and caches them.
- * #781: onProgress({ what: 'issues', read, total }): what is read so far (total null until known). The platform's
- * CLI answers the whole list at once: 0 of unknown, then all of them.
+ * #781: onProgress({ what: 'issues', read, total }): what is read so far (total null until known), growing with each
+ * step of the list (issues.js fetchIssues), with read === total at the end.
  * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function, onProgress?: Function }} opts
  */
 async function syncBacklog({ dir, project, platform: asked, exec, onProgress }) {
@@ -143,7 +143,7 @@ async function syncBacklog({ dir, project, platform: asked, exec, onProgress }) 
   let pullRequestsError = null;
   onProgress?.({ what: 'issues', read: 0, total: null });
   const [fetched, prs] = await Promise.all([
-    fetchIssues({ platform, repo: project.repo, exec }).then((issues) => {
+    fetchIssues({ platform, repo: project.repo, exec, onProgress }).then((issues) => {
       onProgress?.({ what: 'issues', read: issues.length, total: issues.length });
       return issues;
     }),

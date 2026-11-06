@@ -16,6 +16,8 @@
   const REQUEST_FIELDS = 'number,title,url,isDraft,body';
   const CLOSING_FIELD = 'closingIssuesReferences';
   const TYPED_EPICS = '.[] | select(((.type.name // "") | ascii_downcase) == "epic") | .number';
+  const LIST_STEPS = [40, 100, 200];
+  const ISSUE_COUNT_QUERY = 'query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issues{totalCount}}}';
   const cmd = (args) => ({ cli: 'gh', args });
   // the catalog's helper, at call time (in the browser i18n.js loads after this file)
   const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
@@ -46,6 +48,15 @@
 
     // ---- issues
     issueListCommand: (target, limit) => cmd(['issue', 'list', '--repo', target, '--state', 'all', '--limit', String(limit), '--json', ISSUE_FIELDS]),
+    // #781: the list read in steps, so a count can grow: `gh issue list` has no offset, so each step reads the list
+    // again with a higher limit (upTo: the most issues read once the step ended; adds: its answer joins the others')
+    issueListSteps: (target, limit) => [...LIST_STEPS.filter((n) => n < limit), limit].map((upTo) => ({ ...github.issueListCommand(target, upTo), upTo, adds: false })),
+    // how many issues the repository has, in one cheap call (the "of 120" of the count)
+    issueCountCommand: ({ host, path }) => {
+      const [owner, name] = path.split('/');
+      return cmd(['api', 'graphql', ...github.apiHostArgs({ host }), '-f', `query=${ISSUE_COUNT_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '--jq', '.data.repository.issues.totalCount']);
+    },
+    parseIssueCount: (out) => (/^\d+$/.test(String(out).trim()) ? Number(out) : null),
     issueViewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--json', ISSUE_FIELDS]),
     issueCreateCommand: ({ target, title, labels, file }) => cmd(['issue', 'create', '--repo', target, '--title', title, '--body-file', file, ...labels.flatMap((l) => ['--label', l])]),
     issueSaveCommand: ({ target, n, mode, file }) => cmd(['issue', mode === 'replace' ? 'edit' : 'comment', n, '--repo', target, '--body-file', file]),
