@@ -1384,6 +1384,13 @@ const colourAction = (page, colour) => {
 const unmeasuredLine = (page) => cityLegend(page).getByTestId('project-city-unmeasured');
 const cityLabels = (page) => visible(tab(page).getByTestId('city-label'));
 const labelsOf = async (page) => (await cityStats(page))?.labels ?? null;
+// what the page really draws: the `.r3d button` reset takes the border and the padding from a rule that loses to it
+const expectFramed = async (button) => {
+  await expect.poll(() => button.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { border: parseFloat(style.borderTopWidth) > 0, padding: parseFloat(style.paddingTop) > 0 && parseFloat(style.paddingLeft) > 0 };
+  }), { timeout: LOAD_TIMEOUT, message: 'the border and the padding of the secondary button' }).toEqual({ border: true, padding: true });
+};
 
 Then('the city is coloured by {string}', async ({ e2e }, colour) => {
   await expect(byId(e2e.window, 'project-city-colour')).toHaveValue(colour.toLowerCase(), { timeout: LOAD_TIMEOUT });
@@ -1405,6 +1412,7 @@ Then('the city offers to colour by {string}', async ({ e2e }, colour) => {
   const action = colourAction(e2e.window, colour);
   await expect(action).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(action).toContainText(colour);
+  await expectFramed(action);
 });
 
 When('I accept the city\'s offer to colour by {string}', async ({ e2e }, colour) => {
@@ -1431,13 +1439,17 @@ When('I move the pointer off the city', async ({ e2e }) => {
   await e2e.window.mouse.move(1, 1);
 });
 
-// the button of the plan's note, primary or secondary (the primary one has the class r3d-primary)
+// the button of the plan's note, primary or secondary (the primary one has the class r3d-primary, the secondary
+// one has none and keeps its own frame)
 Then('the City tab\'s analysis button is {word}', async ({ e2e }, kind) => {
   if (!['primary', 'secondary'].includes(kind)) throw new Error(`the analysis button is primary or secondary, not "${kind}"`);
   const button = analyzeButton(e2e.window);
   await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
   if (kind === 'primary') await expect(button).toHaveClass(/\br3d-primary\b/);
-  else await expect(button).not.toHaveClass(/\br3d-primary\b/);
+  else {
+    await expect(button).not.toHaveClass(/\br3d-primary\b/);
+    await expectFramed(button);
+  }
 });
 
 Then('the city says when {string} was analyzed and at which commit', async ({ e2e }, name) => {
