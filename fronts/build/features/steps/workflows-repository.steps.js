@@ -13,6 +13,17 @@
 //   workflow-acceptance            the card's acceptance state: "Not accepted" / "Accepted ..."
 //   workflow-accept                the card's Accept button (a repository workflow not accepted yet)
 //   workflows-manifest-error       the screen's report of a malformed repository manifest (role alert or status)
+//   nav-workflows-acceptance       #794: the sidebar's orange indicator on the "Definitions" entry: text = the
+//                                  count of the current project's repository workflows waiting for acceptance,
+//                                  title names them; hidden with none
+//   nav-group-workflows-acceptance the same on the "Workflows" group's title, shown only when the group is collapsed
+//   workflows-tab-acceptance       the same on the Workflows screen's Definitions tab
+//   workflows-awaiting-acceptance  the block at the top of the Definitions page holding the waiting cards; a
+//                                  repository-workflow card in it has the class awaiting-acceptance, and once
+//                                  accepted the card sits in its category section
+//   workflow-acceptance-reason     inside a waiting card, the line saying why: the commit's short sha and "changed"
+// An indicator's count joins the accessible name of its button ("Definitions 1"), which entryName of
+// app.steps.js allows: no aria-label on an indicator, it would change that name.
 //
 // The repository is the demo project's folder made a git repository (fixed identity, no machine
 // config) with one commit holding the manifest, after the app opened; the app reloads to read it.
@@ -77,6 +88,7 @@ Given('the project\'s repository has a malformed workflows manifest', async ({ e
   await commitToProject(e2e, { '.multiagent/project.yaml': 'workflows: [software-development\n  - : : not yaml\n' });
 });
 
+// only an accepted workflow is in its section: one waiting for acceptance sits on top of the page (#794)
 Then('the workflow {string} is listed in the {string} section with a repository badge at the repository\'s latest commit', async ({ e2e }, name, category) => {
   const short = e2e.repoHead.slice(0, 7);
   const inSection = section(e2e.window, category).getByTestId('repository-workflow')
@@ -127,6 +139,70 @@ Then('the {string} section is shown with its explanation', async ({ e2e }, name)
   const explanation = section(e2e.window, name).getByTestId('workflow-category-explanation');
   await expect(explanation).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(explanation).not.toHaveText(/^\s*$/);
+});
+
+// ---- what waits for the owner's acceptance (#794) -----------------------------------------------------
+
+const indicator = (page, testid) => visible(page.getByTestId(testid));
+const groupIndicator = (group) => `nav-group-${group.toLowerCase()}-acceptance`;
+const awaitingCard = (page, name) => visible(page.getByTestId('workflows-awaiting-acceptance')).getByTestId('repository-workflow')
+  .filter({ has: page.getByRole('heading', { name: nameRe(name) }) });
+
+async function expectCount(page, testid, count) {
+  await expect(indicator(page, testid)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(indicator(page, testid)).toHaveText(String(count), { timeout: LOAD_TIMEOUT });
+}
+
+async function expectCountNaming(page, testid, count, name) {
+  await expectCount(page, testid, count);
+  await expect(indicator(page, testid)).toHaveAttribute('title', new RegExp(escapeRe(name)));
+}
+
+const expectNoCount = (page, testid) => expect(indicator(page, testid)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+
+Then('the sidebar shows {int} workflow(s) waiting for acceptance, naming {string}', async ({ e2e }, count, name) => {
+  await expectCountNaming(e2e.window, 'nav-workflows-acceptance', count, name);
+});
+
+Then('the sidebar shows no workflow waiting for acceptance', async ({ e2e }) => {
+  await expectNoCount(e2e.window, 'nav-workflows-acceptance');
+});
+
+Then('the {string} menu group shows {int} workflow(s) waiting for acceptance, naming {string}', async ({ e2e }, group, count, name) => {
+  await expectCountNaming(e2e.window, groupIndicator(group), count, name);
+});
+
+Then('the {string} menu group shows no workflow waiting for acceptance', async ({ e2e }, group) => {
+  await expectNoCount(e2e.window, groupIndicator(group));
+});
+
+Then('the Definitions tab shows {int} workflow(s) waiting for acceptance', async ({ e2e }, count) => {
+  await expectCount(e2e.window, 'workflows-tab-acceptance', count);
+});
+
+Then('the Definitions tab shows no workflow waiting for acceptance', async ({ e2e }) => {
+  await expectNoCount(e2e.window, 'workflows-tab-acceptance');
+});
+
+Then('the workflow {string} is highlighted first, saying which commit changed it', async ({ e2e }, name) => {
+  const page = e2e.window;
+  const short = e2e.repoHead.slice(0, 7);
+  await expect(visible(cardsOf(page)).first().getByRole('heading', { name: nameRe(name) })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const c = awaitingCard(page, name);
+  await expect(c).toHaveClass(/awaiting-acceptance/);
+  await expect(c.getByTestId('workflow-acceptance')).toHaveText(/not accepted/i);
+  const reason = c.getByTestId('workflow-acceptance-reason');
+  await expect(reason).toContainText(short);
+  await expect(reason).toContainText(/changed/i);
+});
+
+Then('the workflow {string} is no longer highlighted', async ({ e2e }, name) => {
+  const page = e2e.window;
+  const c = card(page, name);
+  await expect(c).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(awaitingCard(page, name)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await expect(c).not.toHaveClass(/awaiting-acceptance/);
+  await expect(c.getByTestId('workflow-acceptance-reason')).toHaveCount(0);
 });
 
 // ---- which copy of a workflow a project's run uses (#554) ---------------------------------------------

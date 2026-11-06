@@ -533,6 +533,7 @@
   "app.supervisor_on_step": "◆ Supervisor on \"{step}\": {action}",
   "app.supervisor_on_step_of_run": "◆ Supervisor on \"{step}\" ({run}): {action}",
   "app.the_run_ended_status_the_document": "The run ended {status}: the document was not accepted.",
+  "app.workflows_waiting_acceptance": { "one": "{count} workflow to accept: {names}", "other": "{count} workflows to accept: {names}" },
 
   "arena.accept": "Accept",
   "arena.add_a_model": "Add a model",
@@ -5709,6 +5710,9 @@
   "workflows.approval_gate": "+ Approval gate",
   "workflows.artifacts": "Artifacts",
   "workflows.ask_the_supervisor_about_workflows_and": "Ask the Supervisor about workflows and runs: its chat opens at the side",
+  "workflows.awaiting_acceptance_hint": "A run of them is refused until you accept each one for the current commit.",
+  "workflows.awaiting_acceptance_title": "Waiting for your acceptance",
+  "workflows.awaiting_reason": "The file changed in commit {commit}: review and accept it",
   "workflows.builder": "Builder",
   "workflows.builder_import_an_agent_agents_menu": "Builder: import an agent (Agents menu) into a desk -->",
   "workflows.builder_the_skills_of_a_desk": "Builder: the skills of a desk -->",

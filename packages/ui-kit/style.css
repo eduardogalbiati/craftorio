@@ -133,6 +133,9 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 /* a low-emphasis caution (#269, the Roadmap's Pause): burnt amber text and border, never filled */
 .btn.warn-ghost { background: transparent; color: var(--amber); border-color: rgba(217,164,65,.45); }
 .btn.warn-ghost:hover:not(:disabled) { border-color: var(--amber); }
+/* #794: the action that waits for the owner (Accept a repository workflow) */
+.btn.orange { background: var(--orange); border-color: var(--orange); color: #1a1a1a; }
+.btn.orange:hover:not(:disabled) { filter: brightness(1.08); }
 .row { display: flex; gap: 6px; align-items: center; }
 .spacer { flex: 1; }
 .icon-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; padding: 4px; cursor: pointer; display: grid; place-items: center; }
@@ -176,6 +179,8 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .nav-group.collapsed .nav-group-title svg { transform: rotate(-90deg); }
 /* a folded group that holds the open screen */
 .nav-group.collapsed:has(.nav-item.active) .nav-group-title { color: var(--accent); }
+/* #794: a folded group carries its entries' count (workflows waiting for acceptance); open, the entry shows it */
+.nav-group:not(.collapsed) .nav-group-title .nav-badge { display: none; }
 .nav-group-items { display: flex; flex-direction: column; gap: 2px; }
 .nav-group + .nav-item { margin-top: 8px; }
 .nav-item { flex: none; }
@@ -265,6 +270,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .warn-text { color: var(--yellow); }
 .badge.warn { color: var(--yellow); }
+.badge.orange { color: var(--orange); } /* #794: waits for the owner (a repository workflow not accepted) */
 /* a run's chain (#134, chain-model.js): "→ then: …" / "← from …" */
 .badge.chain-badge { color: var(--accent); font-family: inherit; white-space: nowrap; }
 .badge.chain-badge.warn { color: var(--yellow); }
@@ -1146,6 +1152,8 @@ body.resizing-dock .term-body { pointer-events: none; }
   padding: 1px 5px; border-radius: 4px; background: var(--supervisor-soft); color: var(--supervisor);
 }
 .nav-badge.warn { background: var(--orange); color: #1a1a1a; }
+/* #794: the same count on a page tab (Workflows › Definitions) */
+.tab .nav-badge { margin-left: 6px; vertical-align: middle; }
 /* a preview screen's badge: drawn here so the entry's text and accessible name stay its label */
 .nav-lab::after { content: 'lab'; }
 .bl-grouping { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px 8px; margin: 8px 0; display: grid; gap: 4px; }
