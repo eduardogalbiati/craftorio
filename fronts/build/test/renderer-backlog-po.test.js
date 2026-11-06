@@ -22,14 +22,17 @@ function loadWorkflowSelect() {
   const draftWorkflow = /const draftWorkflow = new Map\(\); \/\/ message index.*\n/.exec(src)[0];
   const workflowForFn = /const workflowFor = \(m\) => [^\n]+;/.exec(src)[0];
   const workflowSelectFn = /function workflowSelect\(m, busy\) \{[\s\S]*?\n  \}/.exec(src)[0];
-  for (const [name, code] of Object.entries({ draftWorkflow, workflowForFn, workflowSelectFn })) {
+  // #791: the select lists the project's workflows; here no project, so every one that takes a task
+  const taskWorkflowsFn = /const taskWorkflows = [^\n]+;/.exec(src)[0];
+  const planWorkflowsFn = /const planWorkflows = [^\n]+;/.exec(src)[0];
+  for (const [name, code] of Object.entries({ draftWorkflow, workflowForFn, workflowSelectFn, taskWorkflowsFn, planWorkflowsFn })) {
     assert.ok(code, `${name} not found in backlog-po.js: the source moved`);
   }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const sandbox = { esc, state: { workflows: [], settings: { defaultWorkflow: null } } };
   vm.createContext(withI18n(sandbox));
   vm.runInContext(defaultWorkflowSrc, sandbox);
-  vm.runInContext(`${draftWorkflow}\n${workflowForFn}\n${workflowSelectFn}\nthis.helpers = { workflowSelect, workflowFor, draftWorkflow };`, sandbox);
+  vm.runInContext(`const projectRecord = () => null;\n${taskWorkflowsFn}\n${planWorkflowsFn}\n${draftWorkflow}\n${workflowForFn}\n${workflowSelectFn}\nthis.helpers = { workflowSelect, workflowFor, draftWorkflow };`, sandbox);
   return { helpers: sandbox.helpers, sandbox };
 }
 
@@ -465,7 +468,7 @@ test('workflowFor: once a workflow is picked for a draft (draftWorkflow.set, as 
   assert.equal(helpers.workflowFor(0), 'feature.yaml'); // another draft: unaffected
 });
 
-test('workflowSelect: lists the task workflows, the picked one selected, the default (the setting\'s, or the fallback) marked "(default)"', () => {
+test('workflowSelect: lists the task workflows, the picked one selected, the default (the project\'s, or the fallback) marked "(default)"', () => {
   const { helpers, sandbox } = loadWorkflowSelect();
   sandbox.state.workflows = [
     { file: 'software-development.yaml', name: 'Software development', inputs: { task: {} } },

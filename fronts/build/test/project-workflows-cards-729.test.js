@@ -178,7 +178,8 @@ test('#729 Overview: one card per workflow of the project, and none for the inst
   const app = await overviewOf({ workflows: [FEATURE, REFRESH], defaultWorkflow: 'feature' });
   assert.equal(H.visibleText(boxMarkup(app)).includes('backlog-refresh'), true, 'the Workflows block is drawn in #project-workflows');
   assert.deepEqual(cardIds(app), ['feature', 'backlog-refresh'], 'two cards data-testid="pj-wf-card", in the project\'s order');
-  const block = H.visibleText(H.dropWhere(boxMarkup(app), (e) => e.attrs['data-testid'] === 'pj-wf-add-dialog'));
+  // #791: the Feature and Fix selects offer any installed workflow; the cards stay the project's own
+  const block = H.visibleText(H.dropWhere(boxMarkup(app), (e) => e.attrs['data-testid'] === 'pj-wf-add-dialog' || e.name === 'select'));
   for (const absent of ['my-flow', 'retrospective']) assert.equal(block.includes(absent), false, `${absent} (not on the project) is not in the block: ${block}`);
   const boxes = H.findAll(boxMarkup(app), (e) => e.name === 'input' && e.attrs.type === 'checkbox').length;
   assert.equal(boxes, 0, 'no checkbox rows any more');
