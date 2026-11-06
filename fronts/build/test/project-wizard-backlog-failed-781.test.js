@@ -27,6 +27,12 @@ test('#781 a backlog read that fails shows its reason and Retry, not an empty ba
   assert.equal(lineText(app).includes('gh auth login'), true, lineText(app));
   assert.equal(lineText(app).includes('No open issues.'), false, lineText(app));
   assert.equal(byTestId(wizardMarkup(app), 'wizard-review-backlog-retry') === null, false, 'its Retry');
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-review-backlog')?.attrs['data-state'], 'failed', 'the section says so too');
+});
+
+test('#781 the review\'s sync asks for the steps: its card shows the count', { timeout: 20000 }, async () => {
+  const app = await atReview({ syncBacklog: async () => ({ issues: [] }) });
+  assert.deepEqual(app.callsTo('syncBacklog').map((args) => [...args].map(String)), [[PID, 'null', 'true']]);
 });
 
 test('#781 Retry reads the backlog again and shows what it read', { timeout: 20000 }, async () => {

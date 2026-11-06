@@ -22,11 +22,18 @@ function notes({ analysed, analysis = {}, timeZone = null }) {
 const buttons = (html) => (html.match(/data-testid="project-city-analyze"/g) || []).length;
 
 test('#782 the analyzed commit gone from the history: the primary action and why, not the current plan', () => {
-  const html = notes({ analysed: { date: DATE, commit: 'abc1234', commitsSince: null } });
+  const html = notes({ analysed: { date: DATE, commit: 'abc1234', commitsSince: null, commitGone: true } });
   assert.match(html, /data-testid="project-city-moved"/);
   assert.match(html, /abc1234 is no longer in the history/);
   assert.match(html, /r3d-primary/);
   assert.doesNotMatch(html, /data-testid="project-city-plan"/);
+});
+
+test('#782 a count not known (git timed out) is not a commit gone: the plan stays current', () => {
+  const html = notes({ analysed: { date: DATE, commit: 'abc1234', commitsSince: null, commitGone: false } });
+  assert.match(html, /data-testid="project-city-plan"/);
+  assert.doesNotMatch(html, /no longer in the history/);
+  assert.doesNotMatch(html, /r3d-primary/);
 });
 
 test('#782 a report with no commit stays a current plan', () => {

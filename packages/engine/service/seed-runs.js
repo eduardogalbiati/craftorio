@@ -37,9 +37,20 @@ const git = (folder, argv) => new Promise((resolve) => {
 
 /** The commits on the project's HEAD after `head` (a seed run's, an analysis' commit), or null when not known. */
 async function commitsSince(p, head) {
-  if (!head || !p.isGit) return null;
+  if (!head) return null; // not p.isGit: a worktree's or a submodule's .git is a file, and git reads those too
   const n = await git(p.folder, ['rev-list', '--count', `${head}..HEAD`]);
   return n != null && /^\d+$/.test(n) ? Number(n) : null;
+}
+
+/**
+ * #782: whether the project's repository says it no longer has commit `head` (a rebase, a force-push and a gc). Only
+ * git's own answer counts: a folder with no repository or a git that timed out is "not known", so false.
+ */
+async function commitGone(p, head) {
+  if (!head || await git(p.folder, ['rev-parse', '--git-dir']) == null) return false;
+  return new Promise((resolve) => {
+    execFile('git', ['cat-file', '-e', `${head}^{commit}`], { cwd: p.folder, timeout: GIT_TIMEOUT_MS, windowsHide: true }, (err) => resolve(!!err && !err.killed));
+  });
 }
 
 // #781: what a turn's item says it reads: a tool call with its target, or the model's words; null for the rest (a
@@ -127,6 +138,7 @@ function runDefaultsNow(ctx, project) {
 }
 
 module.exports = {
+  commitGone,
   commitsSince,
   git,
   projectOf,

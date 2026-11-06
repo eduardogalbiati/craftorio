@@ -131,11 +131,12 @@ function readBacklog(dir, projectId) {
 
 /**
  * Fetches the project's issues and caches them.
- * #781: onProgress({ what: 'issues', read, total }): what is read so far (total null until known), growing with each
- * step of the list (issues.js fetchIssues), with read === total at the end.
- * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function, onProgress?: Function }} opts
+ * #781: onProgress({ what: 'issues', read, total }): what is read so far (total null until known), with read === total
+ * at the end. `followed`: a screen shows the count, so the list is read in steps and the count grows (issues.js
+ * fetchIssues); the steps read more, so any other sync keeps the single read.
+ * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function, onProgress?: Function, followed?: boolean }} opts
  */
-async function syncBacklog({ dir, project, platform: asked, exec, onProgress }) {
+async function syncBacklog({ dir, project, platform: asked, exec, onProgress, followed = false }) {
   if (!project.repo) throw new Error('This project has no repository. Add one in Projects to sync its issues.');
   // #745: the project's platform (its host, or the one stored on it) wins over the one asked
   const platform = platformOf(project, asked);
@@ -143,7 +144,7 @@ async function syncBacklog({ dir, project, platform: asked, exec, onProgress }) 
   let pullRequestsError = null;
   onProgress?.({ what: 'issues', read: 0, total: null });
   const [fetched, prs] = await Promise.all([
-    fetchIssues({ platform, repo: project.repo, exec, onProgress }).then((issues) => {
+    fetchIssues({ platform, repo: project.repo, exec, onProgress: followed ? onProgress : undefined }).then((issues) => {
       onProgress?.({ what: 'issues', read: issues.length, total: issues.length });
       return issues;
     }),

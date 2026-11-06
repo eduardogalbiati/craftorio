@@ -7,7 +7,7 @@
 // again"), then the plan's validation problems and the aggregation of small files over 5,000 (#428:
 // no note for the edges not read). html({ model, validation, layout, analysis, analysed, ready }) → the notes' HTML
 // ('' when there is none); `analysis`: { running, step, error, estimate, estimateTitle } from the Architecture
-// tab; `analysed`: architecture:city's { date, commit, commitsSince } | null; `ready`: whether the action can start
+// tab; `analysed`: architecture:city's { date, commit, commitsSince, commitGone } | null; `ready`: whether the action can start
 // (the tab gave the city an onAnalyze). The notes are one
 // panel (#441: data-city-panel="notes", "City plan" with its chevron, project-city-panels.js).
 // releaseHtml({ validation, from, plan, open }) → the release card's notes (#439): the base's validation
@@ -49,7 +49,7 @@
   // #782: why the code moved since the analysis: its commits, or its commit gone (a rebase, a force-push); '' when it did not
   function movedReason(analysed) {
     if (analysed?.commitsSince > 0) return t('project_city_notes.commits_since', { count: analysed.commitsSince });
-    return analysed?.commit && analysed.commitsSince == null ? t('project_city_notes.commit_gone', { commit: analysed.commit }) : '';
+    return analysed?.commit && analysed.commitGone ? t('project_city_notes.commit_gone', { commit: analysed.commit }) : '';
   }
 
   /** The notes' HTML, see the header. */

@@ -128,7 +128,7 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    the city (`wizard-review-city`, Open the city) and the findings (`wizard-review-findings`, #730: the
    Oracle's report from the project map run), then the backlog (#781: the activity line
    `wizard-review-backlog-activity` says from where it reads and how far, `backlog:progress`, then the summary or
-   that it is empty; the count grows because this sync reads the list in steps, the adapter's `issueListSteps`: gh has
+   that it is empty; the count grows because this sync, `backlog:sync` with `followed`, reads the list in steps, the adapter's `issueListSteps`: gh has
    no offset, so it reads again with a higher limit (40, 100, 200, 300), glab reads pages, and `issueCountCommand`
    gives the total; a sync no screen follows keeps the single read; a read that fails shows its reason with `wizard-review-backlog-retry`, and a project with no platform to read from is an
    empty backlog) and an idea for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each finding (`wizard-review-finding`) with

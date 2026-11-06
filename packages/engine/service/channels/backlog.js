@@ -82,13 +82,14 @@ module.exports = (ctx) => {
         return current(project(projectId));
       },
     },
-    // a sync also checks the local commits not pushed (fetching origin/<base>)
+    // a sync also checks the local commits not pushed (fetching origin/<base>); #781: `followed`, a screen shows the
+    // count (backlog:progress), so the list is read in steps
     {
       channel: 'backlog:sync',
       method: 'syncBacklog',
-      params: ['projectId', 'platform'],
-      schema: { params: args({ projectId: PROJECT_ID, platform: nullable(STRING) }, ['projectId']), result: BACKLOG },
-      fn: async ({ projectId, platform }) => {
+      params: ['projectId', 'platform', 'followed'],
+      schema: { params: args({ projectId: PROJECT_ID, platform: nullable(STRING), followed: FLAG }, ['projectId']), result: BACKLOG },
+      fn: async ({ projectId, platform, followed }) => {
         const id = project(projectId);
         const proj = projects.readProject(ctx.ws.projects, id);
         const asked = platform || workspace.readSettings(ctx.ws).backlogPlatform;
@@ -96,7 +97,7 @@ module.exports = (ctx) => {
         progress.set(id, { source, what: 'issues', read: 0, total: null });
         try {
           const [data] = await Promise.all([
-            backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, onProgress: (p) => progress.set(id, { source, ...p }) }),
+            backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, followed: !!followed, onProgress: (p) => progress.set(id, { source, ...p }) }),
             ctx.refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
           ]);
           return ctx.withIssueRuns(data);

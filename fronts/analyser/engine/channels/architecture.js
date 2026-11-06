@@ -13,8 +13,9 @@
 // districts without one) with its edges and validation (packages/engine/domains/project/architecture-facts.js readCity, core
 // packages/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
 // it, keeping the one it replaces. Neither starts a model call.
-// #782: it also says when the project was last analyzed, `analysed`: { date, commit, commitsSince } | null, from the
-// last saved report (commit: short, commitsSince: the commits on HEAD after it; both null when not known).
+// #782: it also says when the project was last analyzed, `analysed`: { date, commit, commitsSince, commitGone } | null,
+// from the last saved report (commit: short, commitsSince: the commits on HEAD after it; both null when not known;
+// commitGone: git says that commit no longer exists, never a guess from a null commitsSince).
 // The project map (#372): architecture:city also says whether to advise "Refresh the map"
 // (CityModel.refreshSignal: never without a saved plan) and names the project map run in progress;
 // the tab starts that workflow itself (run:start, workflows/analyze-project.yaml), only on a click.
@@ -77,7 +78,7 @@ const FACTS = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commi
 const ESTIMATE = shape({ estimate: nullable(shape({ usd: { type: 'number' }, basis: INT }, ['usd', 'basis'])) }, ['estimate']);
 const REPORT_VIEW = shape({ report: nullable(OBJECT), findings: listOf(OBJECT), gone: listOf(OBJECT), runsSince: nullable(INT), previousId: nullable(STRING), running: nullable(OBJECT) }, ['report', 'findings', 'gone']);
 const REFRESH = shape({ suggested: { type: 'boolean' }, unmatchedShare: { type: 'number' }, newFolders: listOf(STRING) }, ['suggested', 'unmatchedShare', 'newFolders']);
-const ANALYSED = shape({ date: STRING, commit: nullable(STRING), commitsSince: nullable(INT) }, ['date']);
+const ANALYSED = shape({ date: STRING, commit: nullable(STRING), commitsSince: nullable(INT), commitGone: FLAG }, ['date']);
 const CITY = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), validation: nullable(OBJECT), refresh: REFRESH, mapRun: nullable(STRING), analysed: nullable(ANALYSED) }, ['state', 'model', 'validation', 'refresh']);
 const TOUCH = shape({ session_id: STRING, agent: nullable(STRING), step: nullable(STRING), provider: nullable(STRING), model: nullable(STRING), tool: STRING, kind: { type: 'string', enum: ['change', 'read'] }, path: STRING, ts: nullable(STRING) }, ['session_id', 'kind', 'path']);
 const AGENTS = shape({
@@ -144,7 +145,8 @@ module.exports = (ctx) => {
     const report = arch.listReports(root(), p.id)[0];
     if (!report) return null;
     const commit = report.head?.commit || null;
-    return { date: report.date, commit: commit ? commit.slice(0, 7) : null, commitsSince: await seedRuns.commitsSince(p, commit) };
+    const commitsSince = await seedRuns.commitsSince(p, commit);
+    return { date: report.date, commit: commit ? commit.slice(0, 7) : null, commitsSince, commitGone: commitsSince == null && await seedRuns.commitGone(p, commit) };
   }
 
   const projectOf = (projectId) => {

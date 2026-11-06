@@ -452,9 +452,10 @@
     return cur.model.analyzeLater && !ACTIVE.includes(cur.onboarding?.status) ? 'later' : 'pending';
   }
 
-  // a card of the review: its head (title, then an action or the pending badge), then its body once ready; #781: `pending`: a key, or its markup's function
-  function reviewSection(id, title, job, read, body, pending, action = '') {
-    const state = sectionState(job, read);
+  // a card of the review: its head (title, then an action or the pending badge), then its body once ready; #781: `pending`:
+  // a key, or its markup's function; `failure`: the markup of a read that failed, for a card with no job to say so
+  function reviewSection(id, title, job, read, body, pending, action = '', failure = '') {
+    const state = failure ? 'failed' : sectionState(job, read);
     const own = state === 'pending' && typeof pending === 'function';
     const words = {
       // #725: the failed job's reason, as its row of step 3 says it
@@ -466,7 +467,7 @@
     const badge = state === 'pending' && !own ? `<span class="badge job-running">${esc(t('onboarding.job_status_running'))}</span>` : '';
     return `<section class="card wizard-review-section" data-testid="wizard-review-${id}" data-state="${state}">
         <header class="wizard-review-head"><h3>${esc(t(title))}</h3>${action || badge}</header>
-        ${state === 'ready' ? body() : own ? pending() : `<p class="muted small">${esc(words[state]())}</p>`}
+        ${failure || (state === 'ready' ? body() : own ? pending() : `<p class="muted small">${esc(words[state]())}</p>`)}
       </section>`;
   }
 
@@ -554,7 +555,7 @@
           ${reviewSection('findings', 'onboarding.review_findings_title', 'projectMap', r.report !== undefined, findingsBody, 'onboarding.review_pending_findings', jobOf('projectMap').status === 'failed' ? retryButton('projectMap') : '')}
         </div>
         <div class="wizard-review-more">
-          ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, activity.backlogBody, activity.backlogLine)}
+          ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, activity.backlogBody, activity.backlogLine, '', activity.backlogFailure())}
           <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
             <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
             <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
