@@ -10,7 +10,8 @@
 // #791: an optional `kinds` map, the workflow and inputs of each kind of work (`feature: { name }`,
 // `fix: { name: fix, mode: remote }`: every key but `name` is an input). Both must name one of the
 // manifest's `workflows`: another name is an error naming it, and that value is ignored (`default`
-// null, the kind left out), as the other manifest problems are.
+// null, the kind left out), as the other manifest problems are. Any error voids the whole manifest:
+// no workflows, so no default and no kinds either.
 
 const fs = require('fs');
 const path = require('path');
@@ -119,8 +120,8 @@ function parseKinds(doc, seen, errors) {
 }
 
 /**
- * Parses a manifest's text. A manifest with errors declares no workflows: the project runs on the
- * workspace's workflows as without one.
+ * Parses a manifest's text. A manifest with errors declares no workflows, default or kinds: the
+ * project runs on the workspace's workflows as without one.
  * @returns {{ version: *, requires: string|null, workflows: object[], default: string|null, kinds: object, errors: string[] }}
  */
 function parseManifest(text, { appVersion } = {}) {
@@ -157,13 +158,13 @@ function parseManifest(text, { appVersion } = {}) {
   // that value and counts as a manifest error like any other
   out.default = parseDefault(doc, seen, out.errors);
   out.kinds = parseKinds(doc, seen, out.errors);
-  return { ...out, workflows: out.errors.length ? [] : list };
+  return out.errors.length ? { ...out, workflows: [], default: null, kinds: {} } : { ...out, workflows: list };
 }
 
 /** The manifest of a project's folder; none: no workflows, no default, no kinds and no error. */
 function readManifest(projectDir, opts = {}) {
   let text;
-  try { text = fs.readFileSync(path.join(String(projectDir || ''), ...MANIFEST_FILE.split('/')), 'utf8'); } catch {
+  try { text = fs.readFileSync(path.join(projectDir, ...MANIFEST_FILE.split('/')), 'utf8'); } catch {
     return EMPTY();
   }
   return parseManifest(text, opts);

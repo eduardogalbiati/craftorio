@@ -1,42 +1,52 @@
 // #791: the kind of work of each issue of a plan (DefaultWorkflow.KINDS: feature, fix, refactor), split out
 // of product-owner.js (its size cap). kindOf: the model's `issue_kinds` first, else the labels (`bug` a
-// fix, `refactor` a refactor), with a one-line reason. kindGroups (normalizeAnswer's groups): a group of
-// the model becomes one group per kind (`kind`, `kindReason`), each on that kind's workflow and inputs
-// from the project's `workflowKinds` (the service's projects.workflowForKind; refactor uses the Feature
-// entry; the owner's chosen workflow still wins), suggesting no issue of another kind. kindsSection:
-// what a plan turn's prompt says of them. The workflows offered are only the project's
+// fix, `refactor` a refactor), with a one-line reason; a reason of this code (not the model's words) also
+// carries its `reasonKey`, the i18n key the drawer shows. kindGroups (normalizeAnswer's groups): a group of
+// the model becomes one group per kind (`kind`, `kindReason`, the first; `kindReasons`, each issue's), each
+// on that kind's workflow and inputs from the project's `workflowKinds` (the service's
+// projects.workflowForKind; refactor uses the Feature entry; the owner's chosen workflow still wins, and a
+// kind's input wins over the model's), suggesting no issue of another kind. kindsSection: what a plan
+// turn's prompt says of them. The workflows offered are only the project's
 // (DefaultWorkflow.projectWorkflows, #790).
 
-const path = require('path');
 const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const poChosen = require('./po-chosen-inputs');
 
-// what a label says of an issue's kind, with the one-line reason the plan shows
+// what a label says of an issue's kind, with the one-line reason the plan shows and its i18n key
 const LABEL_KINDS = [
-  ['fix', /^bug$/i, 'Label `bug`: the current behaviour is wrong.'],
-  ['refactor', /^refactor(ing)?$/i, 'Label `refactor`: the code changes, not what it does.'],
+  ['fix', /^bug$/i, 'Label `bug`: the current behaviour is wrong.', 'po.kind.reason_bug'],
+  ['refactor', /^refactor(ing)?$/i, 'Label `refactor`: the code changes, not what it does.', 'po.kind.reason_refactor'],
+];
+// the reasons of this code, the simulated plan's included: a key the model sends is not one of them unless listed
+const REASON_KEYS = [
+  'po.kind.reason_bug',
+  'po.kind.reason_feature',
+  'po.kind.reason_model',
+  'po.kind.reason_refactor',
+  'po.kind.reason_title_refactor',
 ];
 const labelNames = (issue) => (issue?.labels || []).map((l) => String(l?.name ?? l));
 
 /**
- * The kind of work an issue is (DefaultWorkflow.KINDS) → { kind, reason }: the model's classification
- * (`given`, a group's `issue_kinds`) when it names a known kind, else the labels (`bug` a fix,
- * `refactor` a refactor), else a feature; the reason is one line.
+ * The kind of work an issue is (DefaultWorkflow.KINDS) → { kind, reason, reasonKey? }: the model's
+ * classification (`given`, a group's `issue_kinds`) when it names a known kind, else the labels (`bug`
+ * a fix, `refactor` a refactor), else a feature; the reason is one line.
  */
 function kindOf(issue, given = []) {
   const model = (Array.isArray(given) ? given : []).find((k) => Number(k?.issue) === Number(issue?.number) && DefaultWorkflow.KINDS.includes(k?.kind));
-  if (model) return { kind: model.kind, reason: String(model.reason || '').split('\n')[0].trim() || 'Classified by the Product Owner from the issue.' };
-  for (const [kind, re, reason] of LABEL_KINDS) if (labelNames(issue).some((n) => re.test(n))) return { kind, reason };
-  return { kind: 'feature', reason: 'No bug or refactor label: new or changed behaviour.' };
+  if (model) {
+    const reason = String(model.reason || '').split('\n')[0].trim();
+    if (!reason) return { kind: model.kind, reason: 'Classified by the Product Owner from the issue.', reasonKey: 'po.kind.reason_model' };
+    return { kind: model.kind, reason, ...(REASON_KEYS.includes(model.reasonKey) ? { reasonKey: model.reasonKey } : {}) };
+  }
+  for (const [kind, re, reason, reasonKey] of LABEL_KINDS) if (labelNames(issue).some((n) => re.test(n))) return { kind, reason, reasonKey };
+  return { kind: 'feature', reason: 'No bug or refactor label: new or changed behaviour.', reasonKey: 'po.kind.reason_feature' };
 }
 
-const entryOf = (kind, workflowKinds) => workflowKinds?.[kind === 'refactor' ? 'feature' : kind] || null;
+const entryOf = (kind, workflowKinds) => workflowKinds?.[DefaultWorkflow.entryKind(kind)] || null;
 
-// a kind's workflow among the installed files (its own name, or a repository copy of it)
-function kindFile(kind, { files, workflowKinds }) {
-  const name = DefaultWorkflow.label(entryOf(kind, workflowKinds)?.name);
-  return name ? files.find((f) => f === `${name}.yaml`) || files.find((f) => DefaultWorkflow.label(path.basename(f)) === name) || null : null;
-}
+// a kind's workflow among the installed files
+const kindFile = (kind, { files, workflowKinds }) => DefaultWorkflow.installedFile(entryOf(kind, workflowKinds)?.name, files);
 
 // the issues that could join a kind's group: open, not in the model's group, of the same kind, once each
 function suggestedOf(g, kind, nums, plan) {
@@ -66,7 +76,7 @@ function workflowOf(g, kind, plan) {
   const file = chosen || own || (files.includes(g.workflow) ? g.workflow : fallback);
   const given = g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {};
   const fromKind = file && own === file ? entryOf(kind, workflowKinds)?.inputs : null;
-  return { workflow: file, inputs: poChosen.groupInputs({ ...fromKind, ...given }, chosenInputs, inputsOf(file), runDefaults) };
+  return { workflow: file, inputs: poChosen.groupInputs({ ...given, ...fromKind }, chosenInputs, inputsOf(file), runDefaults) };
 }
 
 /**
@@ -89,6 +99,7 @@ function kindGroups(g, n, plan) {
       issues: part,
       kind,
       kindReason: part.map((x) => kindsOf.get(x).reason).find(Boolean) || '',
+      kindReasons: part.map((x) => { const { kind: _k, ...why } = kindsOf.get(x); return { issue: x, ...why }; }),
       ...workflowOf(g, kind, plan),
       reason: String(g.reason || ''),
       ...(g.mode_reason ? { modeReason: String(g.mode_reason) } : {}),

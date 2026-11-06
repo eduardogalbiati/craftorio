@@ -26,6 +26,7 @@ const { isRelease } = require('@multiagent/shared/roadmap-model');
 const projects = require('../../domains/project/projects');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const workspace = require('../../domains/workspace/workspace');
+const { projectListing } = require('../seed-runs');
 const simulation = require('../../engine/simulation');
 const depsCache = require('../../engine/deps-cache');
 const {
@@ -48,11 +49,12 @@ module.exports = (ctx) => {
   const pending = new Map();
   const onRed = () => ({ ...workspace.DEFAULT_SETTINGS.baseCheck, ...(workspace.readSettings(ctx.ws).baseCheck || {}) }).onRed;
   // #413, #790: the fix item runs the project's default development workflow, as the Product Owner's
-  // plans and the Assign dialog; one that was deleted or renamed falls back to an installed one
-  const fixWorkflow = (projectId) => DefaultWorkflow.resolve(
-    projects.projectDefaultWorkflow(projects.listProjects(ctx.ws.projects).find((p) => p.id === projectId)),
-    (ctx.listWorkflows?.() || []).filter((w) => !w.error && w.inputs?.task).map((w) => w.file),
-  ).file;
+  // plans and the Assign dialog, among the project's workflows (its repository's too); one that was
+  // deleted or renamed falls back to an installed one
+  function fixWorkflow(projectId) {
+    const project = projects.listProjects(ctx.ws.projects).find((p) => p.id === projectId);
+    return DefaultWorkflow.resolve(projects.projectDefaultWorkflow(project), projectListing(ctx, project).filter((w) => w.inputs?.task).map((w) => w.file)).file;
+  }
   // where an issue goes: the synced backlog's platform and repository (else the project's); none in simulation
   function issueTarget(projectId) {
     const data = backlog.readBacklog(ctx.ws.backlog, projectId);

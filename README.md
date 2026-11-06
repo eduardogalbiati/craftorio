@@ -1134,7 +1134,8 @@ Fix and a Feature never share a run, a recommendation shows its kind as a badge 
 reason, the plan sums up its runs by kind, and a Feature | Fix | Other control swaps the workflow
 (Other lists every workflow that takes a task). Without a map, a Feature runs the project's default
 and a Fix runs `fix` in the project's way of working (Local, Remote or Fork + PR). Both names must be
-among the manifest's `workflows`: another name is reported as a manifest error and ignored.
+among the manifest's `workflows`: another name is reported as a manifest error and ignored, and a
+manifest with errors counts as none (its workflows, default and kinds are all ignored).
 
 ## Workflows in your repository
 

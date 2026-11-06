@@ -37,7 +37,7 @@ const manifestTarget = (arg) => {
 };
 
 module.exports = (ctx) => [
-  { channel: 'projects:list', method: 'listProjects', schema: { result: listOf(OBJECT) }, fn: () => projects.listProjects(ctx.ws.projects) },
+  { channel: 'projects:list', method: 'listProjects', schema: { result: listOf(OBJECT) }, fn: () => projects.listProjects(ctx.ws.projects).map(projects.withManifest) },
   { channel: 'projects:create', method: 'createProject', params: 'data', schema: { params: PROJECT_DATA, result: OBJECT }, fn: (data) => projects.createProject(ctx.ws.projects, requireObject(data, 'project'), { reposDir: ctx.ws.repos }) },
   { channel: 'projects:update', method: 'updateProject', params: ['id', 'patch'], schema: { params: args({ id: PROJECT_ID, patch: PROJECT_DATA }, ['id']), result: OBJECT }, fn: ({ id, patch }) => projects.updateProject(ctx.ws.projects, requireId(id, 'project id'), patch) },
   // #742: a bare id (the record only) or { id, deleteFolder, confirmed, confirmName } (service/areas/project-remove.js)

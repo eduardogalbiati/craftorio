@@ -30,6 +30,7 @@ const oracleSeeds = require('../oracle/oracle-seeds');
 const { checkCommand } = require('../../engine/check-step');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { detectLanguage, listBranches } = require('./project-inputs');
+const { modeOfPicks, modeOfVariant } = require('@multiagent/shared/default-workflow');
 const { PROFILE, PROJECT_KINDS: KINDS } = require('@multiagent/shared/onboarding-model');
 const { resolveRunInputs, withAliases } = require('@multiagent/shared/run-inputs');
 
@@ -102,17 +103,13 @@ function projectFacts(folder) {
 }
 
 // #729: the mode the wizard picked for the project's workflows (variant local-* / remote-* / fork-*, #738), or null
-function wizardMode(project) {
-  const variants = (project?.workflows || []).map((w) => String(w?.variant || ''));
-  const picked = variants.map((v) => (v.match(/^(local|remote|fork)\b/) || [])[1]).filter(Boolean);
-  return picked[0] || null;
-}
+const wizardMode = (project) => modeOfPicks(project?.workflows);
 
 // #785: the wizard's variant for the project's workflows (`fork-code`...), the first of the local /
 // remote / fork ones, else the first given, or null
 function wizardVariant(project) {
   const variants = (project?.workflows || []).map((w) => String(w?.variant || '')).filter(Boolean);
-  return variants.find((v) => /^(local|remote|fork)\b/.test(v)) || variants[0] || null;
+  return variants.find(modeOfVariant) || variants[0] || null;
 }
 
 // #785: the order of a variant's tests, or null when it does not say

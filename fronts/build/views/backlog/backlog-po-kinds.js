@@ -3,9 +3,10 @@
 // never colour alone), the plan is summed up (po-kind-summary, "3 Features · 2 Fixes") and grouped by kind
 // (po-kind-group-<kind>), and a Feature | Fix | Outro control (po-kind-control, aria-pressed) replaces the
 // long select: Feature / Fix swap the workflow and inputs for the project's of that kind
-// (DefaultWorkflow.kindEntry over the header project's record; the edit's kind / kindInputs, which
-// backlog-po-options.js withEdits starts from), Outro opens the select of every workflow that takes a task
-// (po-kind-other-select), a choice saved on that item. An answer recorded before has no kinds: a plain list.
+// (DefaultWorkflow.kindEntry over the header project's record and its manifest; the edit's kind / kindInputs,
+// which backlog-po-options.js withEdits starts from), Outro opens the select of every workflow that takes a
+// task (po-kind-other-select), a choice saved on that item, as a workflow picked in the card's form is
+// (pickForm). po-kind-reason: why each issue is of its kind. An answer recorded before has no kinds: a plain list.
 /* global DefaultWorkflow, esc, t */
 (() => {
   const CHOICES = ['feature', 'fix', 'other'];
@@ -24,28 +25,41 @@
     return `<div class="po-kind-row"><div class="seg sm po-kind-control" data-testid="po-kind-control" role="group" aria-label="${esc(t('po.kind.reason'))}">${CHOICES.map(choice).join('')}</div><span class="po-kind-other"${kind === 'other' ? '' : ' hidden'}>${other}</span></div>`;
   }
 
-  // a kind's installed file: `<name>.yaml`, else a repository copy of that name, else the name itself
-  function fileOf(name, workflows) {
-    return (workflows.find((w) => w.file === `${name}.yaml`) || workflows.find((w) => DefaultWorkflow.label(String(w.file || '').replace(/^.*[\\/]/, '')) === name))?.file || `${name}.yaml`;
+  // why each issue is of its kind: a reason of the engine's by its i18n key, the model's as written; one
+  // line when they all say the same, else one per issue; an answer recorded before has only `kindReason`
+  function reasonHtml(g) {
+    const list = g.kindReasons?.length ? g.kindReasons : g.kindReason ? [{ reason: g.kindReason }] : [];
+    if (!list.length) return '';
+    const text = (r) => (r.reasonKey ? t(r.reasonKey) : r.reason);
+    const body = new Set(list.map(text)).size === 1 ? esc(text(list[0])) : list.map((r) => `<div>#${esc(r.issue)} ${esc(text(r))}</div>`).join('');
+    return `<dt>${t('po.kind.reason')}</dt><dd data-testid="po-kind-reason">${body}</dd>`;
   }
 
   /**
    * The owner's choice of a kind on a recommendation: that kind's workflow and inputs replace the PO's
    * (the PO's own kind again: no change); Outro keeps the workflow until one is picked in its select.
-   * `project`: the header project's record (it holds a clone's manifest map; the renderer reads no manifest).
+   * `project`: the header project's record, its `manifest` (projects:list) the repository's map.
    */
   function choose(edit, g, kind, { project, workflows }) {
     edit.values = {};
     if (kind === g.kind || (kind === 'other' && !g.kind)) { delete edit.kind; edit.workflow = null; edit.kindInputs = null; return; }
     edit.kind = kind;
     if (kind === 'other') { edit.workflow = edit.workflow || g.workflow; edit.kindInputs = null; return; }
-    const entry = DefaultWorkflow.kindEntry(project, null, kind);
-    edit.workflow = fileOf(entry.name, workflows);
+    const entry = DefaultWorkflow.kindEntry(project, project?.manifest, kind);
+    edit.workflow = DefaultWorkflow.installedFile(entry.name, workflows.map((w) => w.file)) || `${entry.name}.yaml`;
     edit.kindInputs = { ...entry.inputs };
   }
 
   /** A workflow picked in Outro: that item's choice, Outro pressed. */
   const pickOther = (edit, file) => Object.assign(edit, { kind: 'other', workflow: file, kindInputs: null, values: {} });
+
+  /** A workflow picked in the card's form: a choice like Outro's, the values changed so far kept; the PO's own again: no choice. */
+  function pickForm(edit, g, file) {
+    const back = file === g.workflow;
+    Object.assign(edit, { workflow: back ? null : file, kindInputs: null });
+    if (back || !g.kind) delete edit.kind;
+    else edit.kind = 'other';
+  }
 
   // the plan's groups by kind, KINDS order, the ones without a kind last ("other"); [] when none has a kind
   function byKind(groups) {
@@ -65,8 +79,10 @@
     badge,
     choose,
     controlHtml,
+    pickForm,
     pickOther,
     planHtml,
+    reasonHtml,
     shown,
   };
 })();

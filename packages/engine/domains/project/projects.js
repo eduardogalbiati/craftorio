@@ -9,7 +9,8 @@
 // (projectDefaultWorkflow: the one order of packages/shared/default-workflow.js projectDefault, the
 // clone taking the manifest's `default`); #791: `workflowKinds` ({ feature?, fix?: { name, inputs } },
 // the clone saving the manifest's `kinds`) and workflowForKind(project, kind), the workflow and
-// inputs of a Feature or a Fix (DefaultWorkflow.kindEntry's order, the manifest read here).
+// inputs of a Feature or a Fix (DefaultWorkflow.kindEntry's order, the manifest read here);
+// withManifest(project): the record the screens get, with its manifest's `default` and `kinds`.
 // #639: the clone is a background job: a project has a `status` (`cloning | ready | failed`, none = ready),
 // `cloneError` the reason of a failed clone; a `cloning` record no job of this process runs (the app closed
 // during the clone) reads `failed`; retryClone clones a failed one again; checkAccess runs `git ls-remote`.
@@ -244,11 +245,16 @@ function updateProject(dir, id, patch) {
 
 // updateProject's workflows. #486: the project's set ({ name, origin, category? }) and its default for new
 // items; #791: the workflow and inputs of each kind of work ({ feature?, fix?: { name, inputs } }); null or
-// empty: none of its own
+// empty: none of its own. The Feature entry is the default workflow: whoever saves a new default (the
+// Overview's Make default and Remove, the wizard's Finish) moves a saved Feature entry to it, its inputs kept
 function patchWorkflows(next, patch) {
+  const before = next.defaultWorkflow;
   if (patch.workflows !== undefined) next.workflows = cleanWorkflows(patch.workflows);
   if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
   if (patch.workflowKinds !== undefined) next.workflowKinds = cleanWorkflowKinds(patch.workflowKinds);
+  else if (next.workflowKinds?.feature && next.defaultWorkflow && next.defaultWorkflow !== before) {
+    next.workflowKinds = { ...next.workflowKinds, feature: { ...next.workflowKinds.feature, name: next.defaultWorkflow } };
+  }
 }
 
 // updateProject's folder change: the old folder joins previousFolders; #639: a project whose clone failed,
@@ -355,6 +361,15 @@ function workflowForKind(project, kind) {
   return kindEntry(project, manifestOf(project), kind);
 }
 
+/**
+ * #790, #791: a project's record for the screens, which read no file: with `manifest` ({ default, kinds })
+ * when its repository declares either, so DefaultWorkflow.current and kindEntry follow the engine's order.
+ */
+function withManifest(project) {
+  const m = manifestOf(project);
+  return m?.default || Object.keys(m?.kinds || {}).length ? { ...project, manifest: { default: m.default, kinds: m.kinds } } : project;
+}
+
 const AFTER_CLONE = 'The repository could not be read without credentials: its workflows manifest will be read after cloning.';
 
 /**
@@ -457,5 +472,6 @@ module.exports = {
   retryClone,
   slugify,
   updateProject,
+  withManifest,
   workflowForKind,
 };

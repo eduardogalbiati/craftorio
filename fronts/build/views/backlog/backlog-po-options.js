@@ -106,7 +106,7 @@
     const k = el.dataset.wiInput;
     if (!k) return;
     const value = WI.read(el.closest('.wi-field'), { all: true })[k];
-    const shown = withEdits(g, null, wf, runDefaults).inputs[k] ?? WI.shownDefault(k, wf?.inputs?.[k], runDefaults);
+    const shown = withEdits(g, { ...edit, values: {} }, wf, runDefaults).inputs[k] ?? WI.shownDefault(k, wf?.inputs?.[k], runDefaults);
     if (WI.sameValue(value, shown)) delete edit.values[k];
     else edit.values[k] = value;
   }

@@ -514,7 +514,7 @@ function packGroups(groups, cap, { issues, history }) {
     const size = sizeGroup(nums, issues, history);
     const own = (x) => (x.warnings || []).filter((w) => !/^Complexity \d+/.test(w));
     Object.assign(into, {
-      issues: nums,
+      issues: nums, kindReasons: [...(into.kindReasons || []), ...(g.kindReasons || [])],
       inputs: { ...g.inputs, ...into.inputs },
       ...(into.inputReasons || g.inputReasons ? { inputReasons: { ...g.inputReasons, ...into.inputReasons } } : {}),
       reason: [into.reason, `With ${g.name}: ${g.reason}`.trim(), into.packed ? '' : PACKED].filter(Boolean).join(' '),
@@ -739,7 +739,7 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     files: [],
     stage,
     suggested: suggest(g.issues),
-    issue_kinds: g.issues.map((n) => (g.refactor ? { issue: n, kind: 'refactor', reason: 'The title says it is a repo-wide refactor or reformat.' } : { issue: n, ...kindIn(n) })),
+    issue_kinds: g.issues.map((n) => (g.refactor ? { issue: n, kind: 'refactor', reason: 'The title says it is a repo-wide refactor or reformat.', reasonKey: 'po.kind.reason_title_refactor' } : { issue: n, ...kindIn(n) })),
   });
   const splits = todo.map((i) => poSplit.proposeSplit(i, { complexity: complexityOf(i) })).filter(Boolean);
   const epicPlan = attached.size ? { place: [], create: [], merge: [], split: [] } : mockEpics(data);

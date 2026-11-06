@@ -434,7 +434,7 @@
         ${g.kind ? window.BacklogPoKinds.controlHtml({ g, edit: po.edits[key], done, workflows: taskWorkflows(), title: workflowTitle }) : ''}
         ${window.BacklogPoOptions.decisionsHtml({ g, key, edit: po.edits[key], wf, workflows: planWorkflows(), title: workflowTitle, runDefaults: po.runDefaults, done })}
         <dl class="po-secs small">
-          ${g.kindReason ? `<dt>${t('po.kind.reason')}</dt><dd>${esc(g.kindReason)}</dd>` : ''}
+          ${window.BacklogPoKinds.reasonHtml(g)}
           ${g.reason ? `<dt>${t('backlog_po.why')}</dt><dd class="md md-compact">${markdownHtml(g.reason)}</dd>` : ''}
           ${g.modeReason ? `<dt>${t('backlog_po.mode')}</dt><dd class="md md-compact">${markdownHtml(g.modeReason)}</dd>` : ''}
           ${g.files?.length ? `<dt>${t('backlog_po.files')}</dt><dd>${window.BacklogPoOptions.filesHtml(g.files)}</dd>` : ''}
@@ -956,7 +956,7 @@
     const edit = editOf(el);
     const g = groupOf(el);
     if (el.matches('[data-testid="po-decisions-workflow"]')) {
-      edit.workflow = el.value === g.workflow ? null : el.value;
+      window.BacklogPoKinds.pickForm(edit, g, el.value);
       render();
       return;
     }

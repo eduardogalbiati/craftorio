@@ -11,7 +11,8 @@
 // (project-kind-workflow-feature / -fix, selects over every installed workflow that takes a task, the
 // repository's included) show DefaultWorkflow.kindEntry's resolution (the record's workflowKinds, the
 // manifest's kinds, the picks...) and a change saves api.updateProject(id, { workflowKinds }), the Feature
-// one also as the default.
+// one also as the default; the other way, a new default moves a saved Feature entry (projects.js
+// patchWorkflows, for Make default, Remove and the wizard's Finish alike).
 // Uses app.js globals ($, esc, t, state, errMsg, showToast), workflows.js's
 // WF_SECTIONS, wfSectionOf and wfSectionName, DefaultWorkflow.firstBuild
 // (the default's rule, shared with packages/engine/domains/project/projects.js) and OnboardingModel's
@@ -37,9 +38,7 @@ window.ProjectWorkflows = (() => {
   // installed workflows that take a task (a name none has stays as an option of its own)
   const KIND_ROWS = ['feature', 'fix'];
   const kindEntry = (kind) => DefaultWorkflow.kindEntry(page.p, page.manifest, kind);
-  function kindFile(name, options) {
-    return (options.find((w) => w.file === `${name}.yaml`) || options.find((w) => bare(fileName(w.file)) === name))?.file || `${name}.yaml`;
-  }
+  const kindFile = (name, options) => DefaultWorkflow.installedFile(name, options.map((w) => w.file)) || `${name}.yaml`;
   function kindsHtml() {
     const options = (page.all || []).filter((w) => w.inputs?.task);
     const row = (kind) => {

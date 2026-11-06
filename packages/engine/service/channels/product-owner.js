@@ -45,6 +45,7 @@ const { isRelease, stageCount } = require('@multiagent/shared/roadmap-model');
 const { requireObject } = require('../common');
 const {
   productOwnerWorkflows,
+  projectListing,
   runDefaultsNow,
 } = require('../seed-runs');
 const {
@@ -162,8 +163,9 @@ module.exports = (ctx) => {
       // propose leaves archived issues out silently: refuse them here, so none is reported as added
       const archived = numbers.filter((n) => isArchived(issues.find((i) => i.number === n)));
       if (archived.length) throw new Error(`${refs(archived)} ${archived.length > 1 ? 'are' : 'is'} archived: restore ${archived.length > 1 ? 'them' : 'it'} in the Backlog before planning. Nothing was added.`);
-      const files = ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task).map((w) => w.file);
-      const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(projects.projectDefaultWorkflow(projects.readProject(ctx.ws.projects, id)), files).file;
+      const project = projects.readProject(ctx.ws.projects, id);
+      const files = projectListing(ctx, project).filter((w) => w.inputs?.task).map((w) => w.file);
+      const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(projects.projectDefaultWorkflow(project), files).file;
       if (!files.includes(workflow)) throw new Error(`Workflow ${workflow} is not installed, or has no task input to receive an issue.`);
       const inputs = p.inputs && typeof p.inputs === 'object' ? p.inputs : {};
       const items = p.group ? [{ workflow, inputs, issues: numbers }] : numbers.map((n) => ({ workflow, inputs, issues: [n] }));
