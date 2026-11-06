@@ -165,6 +165,10 @@
     await selectProject(window.CurrentProject.refresh(bl.projects));
   }
 
+  // The project's workflows, its repository's included (#485): state.workflows, read at start with no
+  // project, misses one only the repository declares. A file both have is listed once.
+  const projectWorkflows = async (id) => [...new Map((await api.listWorkflows({ projectId: id })).map((w) => [w.file, w])).values()];
+
   async function selectProject(id) {
     bl.projectId = id;
     // the Product Owner's drawer, open for another project (the header stays reachable): this one's conversation
@@ -179,6 +183,8 @@
     bl.labelsOpen = false;
     bl.epic = '';
     if (!id) { render(); return; }
+    // the Product Owner's selects read state.workflows
+    Promise.resolve().then(() => projectWorkflows(id)).then((list) => { if (bl.projectId === id) state.workflows = list; }).catch(() => {});
     try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
     // #745: the project's platform (its host, or the one stored on it), never a global setting
     bl.platform = knownPlatform() || bl.data?.platform || DEFAULT_PLATFORM;
@@ -532,7 +538,7 @@
     if (!shownSelected().length) return;
     $b('#assign-error').textContent = '';
     try {
-      bl.chainWorkflows = (await api.listWorkflows()).filter((w) => !w.error);
+      bl.chainWorkflows = (await projectWorkflows(bl.projectId)).filter((w) => !w.error);
       bl.workflows = bl.chainWorkflows.filter((w) => w.inputs?.task);
       // the pipelines whose first workflow can receive the issues (#135)
       const pipes = api.listPipelines ? await api.listPipelines().catch(() => []) : [];
@@ -596,7 +602,7 @@
     const list = issues.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter((i) => i && !i.isEpic);
     const skipped = issues.filter((n) => !list.some((i) => i.number === n));
     if (!list.length) return skipped;
-    const wf = (await api.listWorkflows()).find((w) => w.file === workflow);
+    const wf = (await projectWorkflows(bl.projectId)).find((w) => w.file === workflow);
     await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
       issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1, reason, modeReason, origin, cost,
     });
