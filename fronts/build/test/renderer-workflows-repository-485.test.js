@@ -50,7 +50,7 @@ test('#485 the Definitions tab renders the listed workspace workflows (guards th
 });
 
 test('#485 each repository workflow has a repository card in its category section', async () => {
-  const page = await definitions();
+  const page = await definitions({ listWorkflows: async () => WORKFLOWS.map((w) => (w.origin === 'repository' ? { ...w, accepted: true } : w)) });
   const names = cards(page).map((c) => norm(textOf(c)));
   assert.equal(names.filter((t) => t.includes('repo-flow')).length >= 1, true, 'repo-flow has a card');
   assert.equal(names.filter((t) => t.includes('kept-flow')).length >= 1, true, 'kept-flow has a card');

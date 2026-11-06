@@ -1,9 +1,10 @@
 Feature: Workflows a repository declares
   A repository declares its workflows in its manifest: bundled ones by name, its own copies by file.
   The Workflows screen lists them in their category sections with a "repository @ <short sha>" badge,
-  read-only. A repository workflow stays off until the owner accepts it for that commit. A malformed
-  manifest is reported on the Workflows screen and the project runs on the workspace's workflows.
-  Each category section says in one line what it is for.
+  read-only. A repository workflow stays off until the owner accepts it for that commit: until then
+  it sits highlighted at the top of the page, with an orange count in the menu, and accepting moves
+  it to its category section. A malformed manifest is reported on the Workflows screen and the
+  project runs on the workspace's workflows. Each category section says in one line what it is for.
 
   # Assumes the demo project's folder made a git repository with one commit holding the manifest and
   # the repository's own copy of a workflow (category "intake").
@@ -12,10 +13,48 @@ Feature: Workflows a repository declares
     Given the app is open
     And the project's repository declares its own workflow "repo-triage" in the "Intake" category
     When I open "Definitions" in the sidebar
-    Then the workflow "repo-triage" is listed in the "Intake" section with a repository badge at the repository's latest commit
-    And the workflow "repo-triage" is not accepted
+    Then the workflow "repo-triage" is not accepted
     When I accept the workflow "repo-triage"
     Then the workflow "repo-triage" is accepted
+    And the workflow "repo-triage" is listed in the "Intake" section with a repository badge at the repository's latest commit
+
+  # #794: what waits for the owner's acceptance shows in the menu and on top of the Definitions page
+  @issue-794
+  Scenario: A repository workflow waiting for acceptance is counted in the menu and highlighted until accepted
+    Given the app is open
+    And the project's repository declares its own workflow "repo-triage" in the "Intake" category
+    Then the sidebar shows 1 workflow waiting for acceptance, naming "repo-triage"
+    When I open "Definitions" in the sidebar
+    Then the workflow "repo-triage" is highlighted first, saying which commit changed it
+    And the Definitions tab shows 1 workflow waiting for acceptance
+    When I accept the workflow "repo-triage"
+    Then the workflow "repo-triage" is accepted
+    And the workflow "repo-triage" is no longer highlighted
+    And the sidebar shows no workflow waiting for acceptance
+    And the Definitions tab shows no workflow waiting for acceptance
+    And the workflow "repo-triage" is listed in the "Intake" section with a repository badge at the repository's latest commit
+
+  @issue-794
+  Scenario: A collapsed Workflows menu group shows the count on the group
+    Given the app is open
+    And the project's repository declares its own workflow "repo-triage" in the "Intake" category
+    Then the sidebar shows 1 workflow waiting for acceptance, naming "repo-triage"
+    And the "Workflows" menu group shows no workflow waiting for acceptance
+    When I collapse the "Workflows" menu group
+    Then the "Workflows" menu group shows 1 workflow waiting for acceptance, naming "repo-triage"
+
+  # The second project has no repository workflows; demo-app stays the header's project after the reloads
+  @issue-794
+  Scenario: The count follows the project chosen in the header
+    Given the app is open
+    And the workspace has a second project "billing-service" whose backlog has the open issue "Refund a failed payment"
+    And the project's repository declares its own workflow "repo-triage" in the "Intake" category
+    Then the header shows the project "demo-app"
+    And the sidebar shows 1 workflow waiting for acceptance, naming "repo-triage"
+    When I choose the project "billing-service" in the header
+    Then the sidebar shows no workflow waiting for acceptance
+    When I choose the project "demo-app" in the header
+    Then the sidebar shows 1 workflow waiting for acceptance, naming "repo-triage"
 
   @issue-485
   Scenario: A malformed repository manifest is reported and the workspace's workflows are still listed
