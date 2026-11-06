@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const projects = require('../../domains/project/projects');
 const { MANIFEST_FILE, parseManifest } = require('../../domains/project/project-manifest');
-const { repositoryEntry } = require('../../domains/workflow/workflows');
+const { editedWorkspaceCopy, repositoryEntry } = require('../../domains/workflow/workflows');
 const { gitOut } = require('../common');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
@@ -101,9 +101,20 @@ module.exports = (ctx) => {
     return items.find((w) => w.entry === entry) || null;
   }
 
+  // The file to read `file`'s inputs and metadata from for a project, as a run of it finds it
+  // (runs.js runWorkflowFile, without its acceptance check: the run refuses that when it starts): a
+  // workflow only the repository declares has no workspace copy, so ctx.workflowPath cannot find it
+  function projectWorkflowFile(projectId, file) {
+    const repo = projectId ? repositoryWorkflow(projectId, file) : null;
+    if (!repo) return ctx.workflowPath(file).file;
+    const edited = editedWorkspaceCopy([file, repo.file], ctx.workflowDirs());
+    return edited && !projectOf(projectId)?.preferRepositoryWorkflows ? path.join(ctx.ws.workflows, edited) : repo.path;
+  }
+
   return {
     acceptWorkflow,
     isRepositoryCopy,
+    projectWorkflowFile,
     repositoryWorkflow,
     repositoryWorkflows,
   };

@@ -139,7 +139,7 @@ module.exports = (ctx) => {
     const largest = Math.max(...groups.map((g) => g.length));
     if (largest > maxGroup) throw new Error(`One run takes at most ${maxGroup} issues (Settings › General › Backlog); ${largest} were selected.`);
     const file = path.basename(String(workflow || ''));
-    const wf = loadWorkflow(ctx.workflowPath(file).file);
+    const wf = loadWorkflow(ctx.projectWorkflowFile(project.id, file));
     const chained = normalizeThen(then);
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
     if (runNow && !mock) simulation.refuseReal('real runs from the Backlog');

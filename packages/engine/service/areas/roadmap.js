@@ -161,7 +161,7 @@ module.exports = (ctx) => {
     // its index row when current (#389: no events.jsonl parsed per item and per read)
     const r = runId ? find(runId) : null;
     if (!r) return null;
-    return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file)) };
+    return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file, r.projectId)) };
   }
 
   // #395: roadmapRun, with `waiting` and `gate` (the step's name) when the run waits at a human gate:
@@ -238,9 +238,9 @@ module.exports = (ctx) => {
     };
   }
 
-  function neverMerges(file) {
+  function neverMerges(file, projectId) {
     if (!file) return false;
-    try { return loadWorkflow(ctx.workflowPath(file).file).metadata?.merges === false; } catch { return false; }
+    try { return loadWorkflow(ctx.projectWorkflowFile(projectId, file)).metadata?.merges === false; } catch { return false; }
   }
 
   async function advanceRoadmap(projectId) {
@@ -283,7 +283,7 @@ module.exports = (ctx) => {
       if (!mockOf(item) && await ctx.memoryHold()) break;
       try {
         const project = projects.readProject(ws.projects, projectId);
-        const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);
+        const wf = loadWorkflow(ctx.projectWorkflowFile(projectId, item.workflow));
         // the platform is the source of truth (#168): the issues are read again now, the task is built
         // from what was read and the item's copy updated (a simulation reads the synced cache only)
         const platform = backlog.platformOf(project, cache?.platform || workspace.readSettings(ws).backlogPlatform);
