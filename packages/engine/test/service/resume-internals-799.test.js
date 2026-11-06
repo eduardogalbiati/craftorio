@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const resumeArea = require('../../service/areas/resume');
 const { isAnyQuotaError, isQuotaError } = require('../../engine/providers');
+const { inputsRead } = require('../../engine/run/templates');
 const { makeResumeService } = require('./helpers');
 
 const FLOW = `apiVersion: multiagent/v1
@@ -112,6 +113,12 @@ test('#799 a blank effort override reads as the input\'s default, never as an em
   assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_effort, 'default');
 });
 
+test('#799 a blank effort override reads as default even when the input\'s list has no default', (t) => {
+  const flow = blankEffort.flow.replace('developer_effort: { type: string, default: low }', 'developer_effort: { type: string, enum: [low, high], default: low }');
+  const { area } = seeded(t, fellBack.slice(3), { ...blankEffort, flow });
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_effort, 'default');
+});
+
 test('#799 the notice over a blank effort override names the value it had', (t) => {
   const { area, started } = seeded(t, fellBack.slice(3), blankEffort);
   area.resumeRun({ runId: 'run-799', inputs: { developer_effort: 'high' } });
@@ -122,6 +129,80 @@ test('#799 the new run is told what changed', (t) => {
   const { area, started } = seeded(t, fellBack);
   area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'b' } });
   assert.deepEqual(started[0].notices, [{ level: 'info', message: 'Inputs changed on this resume: developer_model: gpt → b.' }]);
+});
+
+test('#799 the inputs a template reads are named whole, so a longer name is not its prefix', () => {
+  assert.deepEqual(inputsRead("{{ inputs.developer_model_note or inputs.developer_effort }}"), ['developer_model_note', 'developer_effort']);
+  assert.deepEqual(inputsRead('a fixed model'), []);
+  assert.deepEqual(inputsRead(undefined), []);
+});
+
+// the developer reads an input whose name starts with the one the owner changes
+const longerName = {
+  flow: FLOW
+    .replace('  validation:', '  developer_model_note: { type: string, default: n }\n  validation:')
+    .replace("{{ inputs.developer_model or 'a' }}", '{{ inputs.developer_model_note }}'),
+};
+
+test('#799 a changed input leaves the fallback of an agent that reads a longer name', (t) => {
+  const { area, started } = seeded(t, fellBack, longerName);
+  area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'b' } });
+  assert.deepEqual(started[0].agentOverrides, { developer: { provider: 'codex', model: 'gpt' } });
+  assert.equal(started[0].resume.sessions.developer, 'on-codex');
+});
+
+test('#799 the options never take the override of an agent that reads a longer name', (t) => {
+  const { area } = seeded(t, fellBack, longerName);
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_model, 'a');
+});
+
+// two agents read developer_model, as the developer and the mapper of feature.yaml do; a fallback
+// moves one of them, the other stays on the input the run recorded
+const twoReaders = {
+  flow: FLOW.replace('  developer: {', '  mapper: { provider: claude, model: "{{ inputs.developer_model }}", session: persistent }\n  developer: {'),
+};
+const fellBackOn = (agent) => [
+  { type: 'session.opened', session: { agent: 'developer', provider: agent === 'developer' ? 'codex' : 'claude', provider_session_id: 'of-developer' } },
+  { type: 'session.opened', session: { agent: 'mapper', provider: agent === 'mapper' ? 'codex' : 'claude', provider_session_id: 'of-mapper' } },
+  { type: 'agent.fallback', agent, to: 'codex:gpt' },
+  { type: 'step.started', step_id: 'develop' },
+  { type: 'workflow.finished', status: 'failed', error: 'It broke' },
+];
+
+test('#799 with two readers, a changed model drops the one fallback and both take the new input', (t) => {
+  const { area, started } = seeded(t, fellBackOn('developer'), twoReaders);
+  area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'b' } });
+  assert.equal(started[0].inputs.developer_model, 'b');
+  assert.equal(started[0].agentOverrides, null);
+});
+
+test('#799 with two readers, only the agent that left its provider loses its conversation', (t) => {
+  const { area, started } = seeded(t, fellBackOn('developer'), twoReaders);
+  area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'b' } });
+  assert.deepEqual(started[0].resume.sessions, { mapper: 'of-mapper' });
+});
+
+test('#799 with two readers, a resume with no inputs keeps the fallback and both conversations', (t) => {
+  const { area, started } = seeded(t, fellBackOn('mapper'), twoReaders);
+  area.resumeRun({ runId: 'run-799' });
+  assert.deepEqual(started[0].agentOverrides, { mapper: { provider: 'codex', model: 'gpt' } });
+  assert.deepEqual(started[0].resume.sessions, { developer: 'of-developer', mapper: 'of-mapper' });
+});
+
+test('#799 the Developer model shows the fallback the developer ran on', (t) => {
+  const { area } = seeded(t, fellBackOn('developer'), twoReaders);
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_model, 'gpt');
+});
+
+test('#799 the Developer model never shows a fallback only another reader took', (t) => {
+  const { area } = seeded(t, fellBackOn('mapper'), twoReaders);
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_model, 'a');
+});
+
+test('#799 the new run is told when the developer moves to the model another reader fell back to', (t) => {
+  const { area, started } = seeded(t, fellBackOn('mapper'), twoReaders);
+  area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'gpt' } });
+  assert.deepEqual(started[0].notices, [{ level: 'info', message: 'Inputs changed on this resume: developer_model: a → gpt.' }]);
 });
 
 test('#799 a failed run resumes at the step its error route failed at, not at the step that took the error', (t) => {
