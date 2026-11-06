@@ -15,7 +15,7 @@ function tmp(t, prefix) {
   return dir;
 }
 
-async function lastOf(t, item) {
+async function lastOf(t, ...items) {
   const before = process.env.MULTIAGENT_SIMULATION_ONLY;
   process.env.MULTIAGENT_SIMULATION_ONLY = '0';
   t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
@@ -31,7 +31,7 @@ async function lastOf(t, item) {
     oracleService: () => ({
       budgetRefusal: () => null,
       oneTurn: async ({ onItem }) => {
-        onItem(item);
+        items.forEach(onItem);
         last = seedRuns.runState(ctx, project, 'ways-of-working').running.last;
         throw new Error('stop here');
       },
@@ -51,4 +51,14 @@ test('#781 a tool call with no input says the tool', async (t) => {
 
 test('#781 text stays the text', async (t) => {
   assert.equal(await lastOf(t, { kind: 'text', text: 'Reading the tags' }), 'Reading the tags');
+});
+
+test('#781 a tool\'s result, the usage and the session leave the last reading', async (t) => {
+  const read = { kind: 'tool_call', name: 'Read', input: { file_path: 'Cargo.toml' } };
+  const rest = [{ kind: 'tool_result', output: 'x' }, { kind: 'usage', usage: {} }, { kind: 'context', tokens: 1 }, { kind: 'session', sessionId: 's' }, { kind: 'thinking', text: 'hm' }];
+  assert.equal(await lastOf(t, read, ...rest), 'Read Cargo.toml');
+});
+
+test('#781 nothing read yet: no reading, not the item\'s kind', async (t) => {
+  assert.equal(await lastOf(t, { kind: 'session', sessionId: 's' }), null);
 });

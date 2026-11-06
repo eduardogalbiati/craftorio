@@ -1,23 +1,26 @@
-/* global api, t */
+/* global api, errMsg, esc, t */
 // #781: what the wizard is doing, as activity lines (packages/ui-kit/activity-line.js), split out of
-// project-wizard.js (its size cap). window.ProjectWizardActivity({ cur, jobOf, platformLabel, renderSoon }):
+// project-wizard.js (its size cap). window.ProjectWizardActivity({ cur, jobOf, loadReview, platformLabel, renderSoon }):
 // - analysisPhases(): wizard-analysis-phases, step 3's lines wizard-phase-git / -files / -oracle
 //   (OnboardingModel.analysisPhases over the profile job and cur().interview);
 // - followAnalysis(): api.workflowInterviewState while the profile job runs: at each onboarding:changed and every
 //   second, one last read when it ended, none before nor after. A failed read changes nothing;
 // - backlogLine(): wizard-review-backlog-activity while the backlog is read (api.backlogProgress at the opening and
-//   every second, followBacklog) and backlogDone(count) with its summary, or that the backlog is empty;
+//   every second, followBacklog) and backlogBody(): its summary and issues, that it is empty, or the failed read's
+//   reason with wizard-review-backlog-retry (readBacklog(pid) reads it; onClick(e), before the wizard's: that Retry);
 // - stop(): the timers, when the wizard closes.
 // Each read draws the wizard only when a line changed; the Oracle's reading and its clock move in place, so a second's
 // tick neither takes the focus from the step nor restarts the shine.
-// Uses app.js globals (api, t), window.OnboardingModel, window.ActivityLine and window.AgentChat.elapsed (m:ss).
+// Uses app.js globals (api, errMsg, esc, t), window.OnboardingModel, window.ActivityLine and window.AgentChat.elapsed (m:ss).
 
 (function () {
   const TICK_MS = 1000;
   // the engine's language ids (project-inputs.js detectLanguage) as people write them; any other shows as it is
   const LANGUAGE_NAMES = { csharp: 'C#', go: 'Go', java: 'Java', js: 'JavaScript', php: 'PHP', python: 'Python', ruby: 'Ruby', rust: 'Rust', ts: 'TypeScript' };
+  // the engine's words (backlog.js syncBacklog, issues.js fetchIssues) for a project with no platform to read issues from
+  const NO_TRACKER = /no repository|not a recognizable git URL/i;
 
-  window.ProjectWizardActivity = function ({ cur, jobOf, platformLabel, renderSoon }) {
+  window.ProjectWizardActivity = function ({ cur, jobOf, loadReview, platformLabel, renderSoon }) {
     const M = window.OnboardingModel;
     const Line = () => window.ActivityLine;
     let analysisTimer = null;
@@ -103,6 +106,37 @@
 
     const backlogDone = (count) => Line().html({ state: 'done', testid: 'wizard-review-backlog-activity', text: t('onboarding.review_backlog_empty'), summary: count ? t('onboarding.backlog_read', { count }) : '' });
 
+    // the Backlog card once read: the failed read's reason with its Retry, the summary and the issues, or that it is empty
+    function backlogBody() {
+      const c = cur();
+      if (c.backlogError) return Line().html({ state: 'failed', testid: 'wizard-review-backlog-activity', reason: c.backlogError, retry: { label: t('onboarding.retry'), attrs: 'data-act="retry-backlog" data-testid="wizard-review-backlog-retry"' } });
+      const issues = c.review.backlog?.issues || [];
+      if (!issues.length) return backlogDone(0);
+      return `${backlogDone(issues.length)}<ul class="wizard-review-list">${issues.map((i) => `<li class="fit-box"><span class="mono muted">#${esc(i.number)}</span> <span class="text-cut" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
+    }
+
+    // the review's read: the cache, synced when it was never read. Nowhere to read from is an empty backlog; any other
+    // failure (not signed in, no network) is kept for the card, which answers null either way
+    function readBacklog(pid) {
+      const c = cur();
+      return Promise.resolve(api.getBacklog?.(pid)).then((data) => data || api.syncBacklog?.(pid)).catch((e) => {
+        if (!NO_TRACKER.test(errMsg(e))) c.backlogError = errMsg(e);
+        return null;
+      });
+    }
+
+    // the wizard's clicks, before its own handler: the Backlog's Retry puts the card back to reading; true when handled
+    function onClick(e) {
+      const c = cur();
+      if (!c || e.target?.closest?.('[data-act]')?.dataset.act !== 'retry-backlog') return false;
+      c.backlogError = null;
+      c.backlogProgress = null;
+      delete c.review.backlog;
+      loadReview();
+      renderSoon();
+      return true;
+    }
+
     function stopBacklog() {
       clearInterval(backlogTimer);
       backlogTimer = null;
@@ -128,10 +162,12 @@
 
     return {
       analysisPhases,
-      backlogDone,
+      backlogBody,
       backlogLine,
       followAnalysis,
       followBacklog,
+      onClick,
+      readBacklog,
       stop,
     };
   };

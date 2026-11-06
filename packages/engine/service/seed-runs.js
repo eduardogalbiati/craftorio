@@ -35,6 +35,22 @@ const git = (folder, argv) => new Promise((resolve) => {
   execFile('git', argv, { cwd: folder, timeout: GIT_TIMEOUT_MS, windowsHide: true }, (err, out) => resolve(err ? null : String(out).trim()));
 });
 
+/** The commits on the project's HEAD after `head` (a seed run's, an analysis' commit), or null when not known. */
+async function commitsSince(p, head) {
+  if (!head || !p.isGit) return null;
+  const n = await git(p.folder, ['rev-list', '--count', `${head}..HEAD`]);
+  return n != null && /^\d+$/.test(n) ? Number(n) : null;
+}
+
+// #781: what a turn's item says it reads: a tool call with its target, or the model's words; null for the rest (a
+// tool's result, the usage, the session), which leave the last reading on screen
+function readingOf(it) {
+  if (it?.kind === 'text') return it.text || null;
+  if (it?.kind !== 'tool_call') return null;
+  const on = it.input?.file_path || it.input?.path || it.input?.pattern || it.input?.command || '';
+  return `${it.name || ''} ${on}`.trim() || null;
+}
+
 // A recorded tool's command, through the shell (the owner wrote it), in the project's folder → stdout
 const runTool = (command, { cwd }) => new Promise((resolve, reject) => {
   execShell(command, { cwd, timeout: TOOL_TIMEOUT_MS, maxBuffer: MAX_OUTPUT, windowsHide: true }, (err, out, errOut) => {
@@ -82,9 +98,8 @@ async function runSeed(ctx, { project: p, seed, mock }) {
     const head = p.isGit ? await git(p.folder, ['rev-parse', 'HEAD']) : null;
     const onItem = (it) => {
       now.items++;
-      // #781: a tool call with what it reads (the wizard's Oracle line says it)
-      const on = it?.input?.file_path || it?.input?.path || it?.input?.pattern || it?.input?.command || '';
-      now.last = String((it && (it.text || (it.name && `${it.name} ${on}`.trim()) || it.kind)) || '').slice(0, PROGRESS_TEXT) || null;
+      const reading = readingOf(it); // #781: the wizard's Oracle line says it
+      if (reading) now.last = String(reading).slice(0, PROGRESS_TEXT);
     };
     return await oracleSeeds.runSeed({
       root: seedsRoot(ctx), project: p, seed, mock: simulated, head, onItem,
@@ -112,6 +127,7 @@ function runDefaultsNow(ctx, project) {
 }
 
 module.exports = {
+  commitsSince,
   git,
   projectOf,
   runDefaultsNow,

@@ -3983,6 +3983,7 @@
   "project_city_notes.analyzed_on_commit": "Analyzed on {date} · {commit}",
   "project_city_notes.analyzing_this_project": "Analyzing this project",
   "project_city_notes.city_plan": "City plan",
+  "project_city_notes.commit_gone": "The analyzed commit {commit} is no longer in the history",
   "project_city_notes.commits_since": { "one": "{count} commit since the last analysis", "other": "{count} commits since the last analysis" },
   "project_city_notes.no_city_plan_yet": "No city plan yet",
   "project_city_notes.of_the_files_value_of_drawn": "of the files ({value} of {drawn}) match no district: they stand in the Outskirts. \"Analyze this project\" refreshes the map (the names you saw stay) and the analysis.",

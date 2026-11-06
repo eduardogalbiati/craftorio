@@ -1,6 +1,6 @@
 // The notes under the City view's header (#373, #381; project-city.js draws them): no plan (the
 // folders as districts), a stale plan (the unmatched share), commits since the last analysis
-// (#782: project-city-moved, how many) or a current plan (#730: its districts and coverage; #782: "Analyzed on
+// (#782: project-city-moved, how many, or that the analyzed commit is gone) or a current plan (#730: its districts and coverage; #782: "Analyzed on
 // <date> · <commit>" and the action as a quiet "Analyze again", no r3d-primary), the others with the tab's one action
 // "Analyze this project" (#381: the map and the Oracle's analysis as one run, with its combined
 // estimate next to it) and the action's state (running with its step, or its error with "Analyze
@@ -38,13 +38,18 @@
 
   // #782: "Analyzed on <date> · <commit>" in the owner's language and zone; '' when the date is not known
   function analysedLine(analysed) {
-    const at = new Date(analysed?.date);
-    if (!analysed?.date || Number.isNaN(at.getTime())) return '';
-    /* global TimeZone, uiLocale */
-    const locale = typeof uiLocale === 'function' ? uiLocale() : undefined;
-    const date = at.toLocaleDateString(locale, { timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined });
+    if (!analysed?.date) return '';
+    const zone = window.TimeZone;
+    const date = zone ? zone.formatLocale(analysed.date, { dateStyle: 'short' }, zone.current()) : analysed.date.slice(0, 10);
+    if (!date) return '';
     const text = analysed.commit ? t('project_city_notes.analyzed_on_commit', { date, commit: analysed.commit }) : t('project_city_notes.analyzed_on', { date });
     return `<p>${esc(text)}</p>`;
+  }
+
+  // #782: why the code moved since the analysis: its commits, or its commit gone (a rebase, a force-push); '' when it did not
+  function movedReason(analysed) {
+    if (analysed?.commitsSince > 0) return t('project_city_notes.commits_since', { count: analysed.commitsSince });
+    return analysed?.commit && analysed.commitsSince == null ? t('project_city_notes.commit_gone', { commit: analysed.commit }) : '';
   }
 
   /** The notes' HTML, see the header. */
@@ -60,9 +65,11 @@
       // #730: a current plan keeps the action, as a refresh of the plan
       const share = Math.floor((validation?.coverage ?? 1) * 1000) / 10;
       const plan = `<p class="small muted">${esc(t('project_architecture.city_plan_districts', { count: (model.districts || []).length, share }))}</p>`;
-      // #782: only commits since the analysis ask for a new one; a current plan just says when it was made
-      if (analysed?.commitsSince > 0) notes.push(note('project-city-moved', '', `<b>${esc(t('project_city_notes.commits_since', { count: analysed.commitsSince }))}</b>${plan}${action}`));
-      else notes.push(note('project-city-plan', '', `${analysedLine(analysed)}${plan}${actionHtml(t('project_city_notes.analyze_again'), analysis, ready, true)}`));
+      // #782: only code that moved asks for a new analysis; a current plan just says when it was made. With an
+      // error, the error card below holds the one "Analyze again"
+      const moved = movedReason(analysed);
+      if (moved) notes.push(note('project-city-moved', '', `<b>${esc(moved)}</b>${plan}${action}`));
+      else notes.push(note('project-city-plan', '', `${analysedLine(analysed)}${plan}${analysis?.error ? '' : actionHtml(t('project_city_notes.analyze_again'), analysis, ready, true)}`));
     }
     const state = stateHtml(analysis, ready);
     if (state) notes.push(state);

@@ -84,7 +84,7 @@
   // review's: review { backlog, city, facts, report } (undefined: not read yet), reading, filing (the finding
   // whose issue is being filed), idea }
   let cur = null;
-  const freshReview = () => ({ review: {}, reading: new Set(), filing: null, idea: '', interview: null, backlogProgress: null });
+  const freshReview = () => ({ review: {}, reading: new Set(), filing: null, idea: '', interview: null, backlogProgress: null, backlogError: null });
   let opener = null; // the element that had the focus when the wizard opened
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
@@ -102,7 +102,7 @@
     : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
-  const activity =window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
+  const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
   const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), phasesHtml: activity.analysisPhases });
   const workModel = window.ProjectWizardWorkModel({ cur: () => cur }); // #633: step 3's work model section
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
@@ -484,12 +484,6 @@
       <p class="muted small">${esc(t('onboarding.review_city', { districts: districts.length, files }))}</p>`;
   }
 
-  function backlogBody() {
-    const issues = cur.review.backlog?.issues || [];
-    if (!issues.length) return activity.backlogDone(0);
-    return `${activity.backlogDone(issues.length)}<ul class="wizard-review-list">${issues.map((i) => `<li class="fit-box"><span class="mono muted">#${esc(i.number)}</span> <span class="text-cut" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
-  }
-
   // #730: each finding of the Oracle's report, its severity, then Create issue / Create issue and prioritize,
   // or its issue's link once filed
   function findingsBody() {
@@ -560,7 +554,7 @@
           ${reviewSection('findings', 'onboarding.review_findings_title', 'projectMap', r.report !== undefined, findingsBody, 'onboarding.review_pending_findings', jobOf('projectMap').status === 'failed' ? retryButton('projectMap') : '')}
         </div>
         <div class="wizard-review-more">
-          ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, activity.backlogLine)}
+          ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, activity.backlogBody, activity.backlogLine)}
           <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
             <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
             <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
@@ -658,11 +652,11 @@
 
   // The review's reads, without waiting: each one once its analysis is done (the backlog at once, synced
   // when it was never read: a project just imported has no cache); a failed read counts as answered with nothing
+  // (#781: the backlog's says why, with its Retry)
   function loadReview() {
     const pid = cur.projectId;
     if (!pid) return;
-    const backlogRead = () => Promise.resolve(api.getBacklog?.(pid)).then((data) => data || api.syncBacklog?.(pid));
-    const reads = [['backlog', backlogRead, true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
+    const reads = [['backlog', () => activity.readBacklog(pid), true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
       ['facts', () => api.architectureFacts?.(pid), jobDone('projectMap')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
     for (const [key, read, due] of reads) {
       if (!due || cur.review[key] !== undefined || cur.reading.has(key)) continue;
@@ -935,7 +929,7 @@
       root.setAttribute('aria-modal', 'true');
       root.setAttribute('aria-labelledby', 'project-wizard-title');
       root.className = 'project-wizard';
-      root.addEventListener('click', (e) => { if (!resume.onClick(e)) onClick(e); }); // #741: the "already exists" notice first
+      root.addEventListener('click', (e) => { if (!resume.onClick(e) && !activity.onClick(e)) onClick(e); }); // #741: the "already exists" notice first; #781: the Backlog's Retry
       root.addEventListener('input', onInput);
       root.addEventListener('change', (e) => { onInput(e); if (cur) resume.save(); }); // #741: a pick made without a render
       root.addEventListener('keydown', onKey);

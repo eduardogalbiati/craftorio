@@ -144,8 +144,7 @@ module.exports = (ctx) => {
     const report = arch.listReports(root(), p.id)[0];
     if (!report) return null;
     const commit = report.head?.commit || null;
-    const since = commit ? await seedRuns.git(p.folder, ['rev-list', '--count', `${commit}..HEAD`]) : null;
-    return { date: report.date, commit: commit ? commit.slice(0, 7) : null, commitsSince: since == null ? null : Number(since) };
+    return { date: report.date, commit: commit ? commit.slice(0, 7) : null, commitsSince: await seedRuns.commitsSince(p, commit) };
   }
 
   const projectOf = (projectId) => {

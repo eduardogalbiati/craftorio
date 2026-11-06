@@ -3983,6 +3983,7 @@
   "project_city_notes.analyzed_on_commit": "Analisado em {date} · {commit}",
   "project_city_notes.analyzing_this_project": "Analisando este projeto",
   "project_city_notes.city_plan": "Plano da cidade",
+  "project_city_notes.commit_gone": "O commit analisado {commit} não está mais no histórico",
   "project_city_notes.commits_since": { "one": "{count} commit desde a última análise", "other": "{count} commits desde a última análise" },
   "project_city_notes.no_city_plan_yet": "Ainda sem plano da cidade",
   "project_city_notes.of_the_files_value_of_drawn": "dos arquivos ({value} de {drawn}) não correspondem a nenhum distrito: ficam na Periferia. \"Analisar este projeto\" atualiza o mapa (os nomes que você viu ficam) e a análise.",
