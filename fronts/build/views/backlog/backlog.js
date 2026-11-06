@@ -251,6 +251,8 @@
       if (seq === bl.seq) bl.syncing = false;
       render();
     }
+    // #797: a failed sync never read the roadmap's PRs: this read does, and its card says why when it fails too
+    if (bl.error && seq === bl.seq) reload();
   }
 
   // Re-reads the cached issues with their runs and roadmap (cheap, no sync). An automatic refresh

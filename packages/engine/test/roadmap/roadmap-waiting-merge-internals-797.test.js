@@ -2,9 +2,10 @@
 // whose run ends with an open PR, and a stage whose paused run sits next to an item waiting for its merge.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { prOnProject } = require('../../domains/run/run-pr');
+const { prEnded, prOnProject } = require('../../domains/run/run-pr');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const RoadmapModel = require('@multiagent/shared/roadmap-model');
+const RoadmapSummary = require('@multiagent/shared/roadmap-summary');
 
 const PR = { number: 7, url: null };
 const item = (id, status, extra = {}) => ({ id, workflow: 'w.yaml', number: 1, status, runId: `run-${id}`, runs: [], error: null, ...extra });
@@ -58,4 +59,14 @@ test('#797 a waiting item stays in every date range and is named by mergeWaits',
   assert.equal(RoadmapModel.inRange(x, 1000, Date.now()), true);
   assert.equal(RoadmapModel.mergeWaits({ stages: [{ items: [x, { ...x, pr: { number: 8 } }, item('b', 'done')] }] }), '#7, #8');
   assert.equal(RoadmapModel.mergeWaits({ stages: [{ items: [item('b', 'done')] }] }), '');
+});
+
+test('#797 prEnded: only a merged or closed PR is at its last state', () => {
+  assert.deepEqual(['merged', 'closed', 'open', 'unknown', null].map(prEnded), [true, true, false, false, false]);
+});
+
+test('#797 the summary counts a waiting item as left, with nothing left to spend, and never as without an estimate', () => {
+  const stage = { items: [item('a', 'waiting_merge', { estimate: { usd: 5, minutes: 30 }, actualUsd: 4 }), item('b', 'waiting_merge'), item('c', 'planned', { estimate: { usd: 2, minutes: 10 } })] };
+  const { planned, spent } = RoadmapSummary.summarize({ stages: [stage] });
+  assert.deepEqual([planned.items, planned.usd, planned.minutes, planned.withoutEstimate.length, spent.usd], [3, 2, 10, 0, 4]);
 });

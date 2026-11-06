@@ -110,12 +110,15 @@ function prOnProject(pr, project) {
 // A PR with what was read of it (`mergedCommit`, #797: only a merged one has it)
 const withRead = (pr, { state, detail, checkedAt, mergedCommit }) => ({ ...pr, state, detail, checkedAt, ...(mergedCommit ? { mergedCommit } : {}) });
 
-// PR states by URL, with the time they were read. A merged or closed PR does not change any more;
+// Whether a PR's state is its last: a merged or closed PR does not change any more
+const prEnded = (state) => ['closed', 'merged'].includes(state);
+
+// PR states by URL, with the time they were read. An ended PR (prEnded) is not read again;
 // the others are read again after `ttlMs` (finished runs: on demand, when shown).
 function prCache({ reader, ttlMs = 5 * 60 * 1000, now = Date.now } = {}) {
   const byUrl = new Map(); // url → { state, detail, mergedCommit?, checkedAt, at }
   const pending = new Map(); // url → promise
-  const fresh = (hit, maxAgeMs) => hit && (['merged', 'closed'].includes(hit.state) || now() - hit.at < maxAgeMs);
+  const fresh = (hit, maxAgeMs) => hit && (prEnded(hit.state) || now() - hit.at < maxAgeMs);
   return {
     get: (url) => byUrl.get(url) || null,
     // { number, url } → the PR with { state, detail, checkedAt }; maxAgeMs: 0 reads it again
@@ -171,6 +174,7 @@ module.exports = {
   glMrDisplay,
   PR_STATES,
   prCache,
+  prEnded,
   prOfEvents,
   prOfOutput,
   prOnProject,

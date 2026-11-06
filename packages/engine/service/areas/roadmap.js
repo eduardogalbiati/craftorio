@@ -188,9 +188,15 @@ module.exports = (ctx) => {
 
   // #797: reads the PRs a project's items wait for (`maxAgeMs`: 0 reads them again, else the cache's 5
   // minutes keep it from polling) → the PRs read. A failed read comes back `unknown`, never an error.
+  // A read that changes what a card says pushes backlog:changed: no file changes with it, and nothing
+  // else redraws the screen when no run is active (a failed read says why at once)
   async function refreshWaitingPrs(projectId, options) {
-    const r = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId))), roadmapRun);
-    return Promise.all(r.stages.flatMap((s) => s.items).filter((x) => x.pr).map((x) => ctx.refreshPr(x.pr, options)));
+    const id = path.basename(String(projectId));
+    const items = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, id), roadmapRun).stages.flatMap((s) => s.items).filter((x) => x.pr);
+    const prs = await Promise.all(items.map((x) => ctx.refreshPr(x.pr, options)));
+    const changed = prs.some((pr, n) => pr.state !== items[n].pr.state || pr.detail !== items[n].pr.detail);
+    if (changed) ctx.events?.emit('backlog:changed', { projectId: id, file: 'roadmap', watching: !!ctx.backlogWatching?.() });
+    return prs;
   }
 
   // #797: a sync reads the waiting PRs fresh (a merge done a minute ago counts), then the roadmap goes on
@@ -201,7 +207,7 @@ module.exports = (ctx) => {
   // #797: opening the Roadmap reads them in the background, and only a PR that ended moves the roadmap
   function checkWaitingPrs(projectId) {
     refreshWaitingPrs(projectId)
-      .then((prs) => (prs.some((pr) => ['closed', 'merged'].includes(pr.state)) ? dispatchRoadmaps() : null))
+      .then((prs) => (prs.some((pr) => runPr.prEnded(pr.state)) ? dispatchRoadmaps() : null))
       .catch((e) => console.error('roadmap PRs:', projectId, e.message));
   }
 

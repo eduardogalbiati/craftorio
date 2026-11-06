@@ -297,6 +297,8 @@ function runState(state) {
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
     // #395: where the roadmap moved on past the item's gate
     ...(state.parked ? { parked: state.parked } : {}),
+    // #797: the commit a person's merge left: a done item's PR is never read again
+    ...(state.mergedCommit ? { mergedCommit: state.mergedCommit } : {}),
   };
 }
 
