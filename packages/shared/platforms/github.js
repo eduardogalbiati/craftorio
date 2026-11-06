@@ -158,6 +158,8 @@
       const m = /^https:\/\/([A-Za-z0-9.-]+(?::\d+)?)\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/(pull|actions\/runs)\/(\d+)(?:[/?#].*)?$/.exec(String(url ?? '').trim());
       return m ? { host: m[1], repo: m[2], kind: m[3] === 'pull' ? 'pr' : 'run', id: +m[4] } : null;
     },
+    // #797: a pull request's URL from its repository's (https://host/owner/repo) and its number
+    requestUrl: (repo, number) => `${repo}/pull/${number}`,
   };
 
   if (typeof module === 'object' && module.exports) module.exports = github;

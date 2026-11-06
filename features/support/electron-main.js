@@ -13,8 +13,14 @@
 // - the locale is en-US, so the interface is English until a scenario chooses another (#329);
 // - the service's base-health area (packages/engine/service/areas/base-health.js) is kept in
 //   global.multiagentE2E.baseHealth when the service loads it, so a step can start the base check a
-//   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527).
+//   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527);
+// - with MULTIAGENT_E2E_PR_FILE (a file name in the launch's scratch folder, which does not exist
+//   before the launch), a run's PR is read from that JSON file on each call, at the service's
+//   host.readPrJson: gh's answer, or { fail: message } for a read that fails. Sync then reaches the
+//   real backlog:sync, with only its read of the platform's issues replaced by the cached ones, and
+//   global.multiagentE2E.backlogSyncs counts the syncs answered (#797).
 
+const fs = require('fs');
 const path = require('path');
 const { app, ipcMain, nativeTheme } = require('electron');
 const { shiftClock } = require('./fixed-clock');
@@ -45,6 +51,7 @@ app.on('browser-window-created', (_e, win) => {
   }
 });
 
+const handleIpc = ipcMain.handle.bind(ipcMain);
 simulateChannels(ipcMain);
 
 // the base-health area as the service creates it (the service requires the area files by path: the
@@ -56,5 +63,34 @@ require.cache[baseHealthArea].exports = (ctx) => {
   global.multiagentE2E = { ...(global.multiagentE2E || {}), baseHealth: area };
   return area;
 };
+
+// #797: the PR's answers, and a sync that reads them (simulateChannels answers it with backlog:get, which
+// reads no PR). The host is completed in place: it has getters to read later (locale). main.js requires
+// the service by its package name, which resolves to this same file
+if (process.env.MULTIAGENT_E2E_PR_FILE) {
+  const engine = path.join(__dirname, '..', '..', 'packages', 'engine');
+  const answers = path.resolve(path.dirname(process.env.MULTIAGENT_WORKSPACE), process.env.MULTIAGENT_E2E_PR_FILE);
+  const readPrJson = async () => {
+    const answer = JSON.parse(fs.readFileSync(answers, 'utf8'));
+    if (answer.fail) throw new Error(answer.fail);
+    return answer;
+  };
+  const serviceFile = require.resolve(path.join(engine, 'service'));
+  const service = require(serviceFile);
+  require.cache[serviceFile].exports = {
+    ...service,
+    createService: (options) => service.createService({ ...options, host: Object.assign(options.host, { readPrJson }) }),
+  };
+  const backlog = require(path.join(engine, 'domains', 'backlog', 'backlog'));
+  backlog.syncBacklog = async ({ dir, project }) => backlog.readBacklog(dir, project.id);
+  global.multiagentE2E = { ...(global.multiagentE2E || {}), backlogSyncs: 0 };
+  const simulated = ipcMain.handle;
+  ipcMain.handle = (channel, fn) => {
+    if (channel !== 'backlog:sync') return simulated(channel, fn);
+    return handleIpc(channel, async (e, arg) => {
+      try { return await fn(e, arg); } finally { global.multiagentE2E.backlogSyncs += 1; }
+    });
+  };
+}
 
 require(path.join(__dirname, '..', '..', 'apps', 'desktop', 'host', 'main'));

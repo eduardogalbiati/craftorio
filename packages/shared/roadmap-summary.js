@@ -6,8 +6,9 @@
 // summarize({ stages, releases }) -> { planned, spent, releases }
 //   planned { usd, minutes, items, stages, withoutEstimate: [{ id, title }] }: the enabled stages' items
 //     not finished; a running item counts its estimate minus what its run spent and elapsed (never below
-//     zero); an item without an estimate is listed, never counted as zero. Stages run in sequence, a
-//     stage's items in parallel: minutes is the sum of each stage's longest remainder (gates not counted).
+//     zero); an item waiting for its merge (#797) counts as an item, with nothing left to spend; an item
+//     without an estimate is listed, never counted as zero. Stages run in sequence, a stage's items in
+//     parallel: minutes is the sum of each stage's longest remainder (gates not counted).
 //   spent { usd, since }: the real cost of the finished and running items; since: the oldest item origin.
 //   releases: per cut line in stage order ({ version, at }: the stages after the previous line up to
 //     stage `at`, plus the release run's own estimate), then { after: true } for the rest; [] without lines.
@@ -26,6 +27,7 @@
     for (const x of Array.isArray(stage.items) ? stage.items : []) {
       if (model().isFinished(x) || x.status === 'skipped') continue;
       part.items += 1;
+      if (x.status === 'waiting_merge') continue; // #797: its run ended, only a person's merge is left
       const usd = num(x.estimate?.usd);
       if (usd === null) { part.withoutEstimate.push({ id: x.id, title: x.title || (Array.isArray(x.issues) ? x.issues : []).map((i) => `#${i.number} ${i.title || ''}`.trim()).join(', ') || String(x.id) }); continue; }
       const running = x.status === 'running';
@@ -58,7 +60,7 @@
     let costed = 0; // #750: the items with a real cost (the header's Spent is "—" without one)
     let since = null;
     for (const x of list.flatMap((s) => (Array.isArray(s.items) ? s.items : []))) {
-      if ((x.status === 'done' || x.status === 'running' || x.status === 'parked') && num(x.actualUsd) !== null) { spent += num(x.actualUsd); costed += 1; }
+      if (['done', 'parked', 'running', 'waiting_merge'].includes(x.status) && num(x.actualUsd) !== null) { spent += num(x.actualUsd); costed += 1; }
       if (x.origin && (!since || Date.parse(x.origin) < Date.parse(since))) since = x.origin;
     }
     const lines = (Array.isArray(releases) ? releases : []).filter((x) => num(x?.at) !== null && x.at >= 0).sort((a, b) => a.at - b.at);

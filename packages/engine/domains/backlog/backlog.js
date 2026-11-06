@@ -569,7 +569,9 @@ const LIVE_KEYS = new Set([
   'error',
   'estimate',
   'finishedAt',
+  'mergedCommit',
   'pause',
+  'pr',
   'run',
   'runHistory',
   'runId',
@@ -598,6 +600,8 @@ function backlogState(data) {
     id: x.id, status: x.status || null, runId: x.runId || null, runs: x.runs || [], waiting: !!x.waiting,
     startedAt: x.run?.startedAt || null, elapsed: x.run?.startedAt ? (Date.parse(x.run.finishedAt) || Date.now()) - Date.parse(x.run.startedAt) : null,
     ...runOf(x),
+    // #797: the PR the item waits for, also once its read changes
+    ...(x.pr ? { pr: x.pr } : {}),
   });
   return {
     projectId: data.projectId,

@@ -64,6 +64,31 @@ function light(edit = {}) {
   };
 }
 
+// #797: an item waiting for its PR's merge, on the screen and in the light state
+const waitingOn = (data, pr) => {
+  Object.assign(data.roadmap.stages[0].items[0], { status: 'waiting_merge', pr });
+  return data;
+};
+const lightWaiting = (pr) => light({ items: { a: { id: 'a', status: 'waiting_merge', runId: 'run-1', runs: ['run-1'], ...(pr ? { pr } : {}) } } });
+
+test('#797 mergeState: a new read of a waiting item\'s PR reaches the card without a full read', () => {
+  const L = load();
+  const merged = L.mergeState(waitingOn(shown(), { number: 7, state: 'open' }), lightWaiting({ number: 7, state: 'unknown', detail: 'could not read the PR' }));
+  const x = merged.roadmap.stages[0].items[0];
+  assert.deepEqual([x.status, x.pr.state, x.pr.detail, x.body], ['waiting_merge', 'unknown', 'could not read the PR', 'long body A']);
+});
+
+test('#797 mergeState: a light state with no PR keeps the one shown', () => {
+  const L = load();
+  const merged = L.mergeState(waitingOn(shown(), { number: 7, state: 'open' }), lightWaiting(null));
+  assert.equal(merged.roadmap.stages[0].items[0].pr.state, 'open');
+});
+
+test('#797 mergeState: null when a run ends waiting for its merge (the full read brings its PR and costs)', () => {
+  const L = load();
+  assert.equal(L.mergeState(shown(), lightWaiting({ number: 7, state: 'open' })) === null, true);
+});
+
 test('mergeState: null when an item moved to another run (the full read brings its workflow)', () => {
   const L = load();
   const merged = L.mergeState(shown(), light({ items: { a: { id: 'a', status: 'running', runId: 'run-2', runs: ['run-1', 'run-2'] } } }));

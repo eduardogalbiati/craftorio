@@ -60,6 +60,10 @@ Page alerts, toasts with an action, ⋮ menus, the roadmap card and releases, an
   was interrupted); the bar counts `roadmap-parked-count` ("N parked at a gate"). Parked items stay in
   Planned. The stage menu has no "Move on from this stage" any more (#748): parking is the card's.
   Screenshot state: `--roadmap parked`.
+- **An item that waits for its PR's merge** (#797): the card has `data-status="waiting_merge"`, the
+  amber pill, `roadmap-item-pr-link` and Skip without Retry; `roadmap-item-merge-wait` (muted, never
+  an error) only after a failed read; the header's activity band says what the next stage waits for
+  (`roadmap-merge-wait`). Screenshot state: `--roadmap merge`.
 - **Releases on the Roadmap** (#291, `releaseView` / `releaseBlockHtml` / `releaseLineHtml` in
   `backlog-roadmap.js`, `.rm-release*` in `backlog.css`): `data.releases` comes with the Backlog read
   (`roadmapReleases` in `packages/engine/service/areas/releases.js`: the history plus the release runs not

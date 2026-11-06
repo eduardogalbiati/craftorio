@@ -16,7 +16,7 @@ const { resolveCommand } = require('../../engine/providers');
 const { execShim } = require('../machine/shell');
 const github = require('@multiagent/shared/platforms/github');
 const gitlab = require('@multiagent/shared/platforms/gitlab');
-const { resolvePlatform } = require('@multiagent/shared/platforms');
+const { parseRepoUrl, projectPlatform, resolvePlatform } = require('@multiagent/shared/platforms');
 
 // ---- the PR of a run ---------------------------------------------------------------------------
 // One step output → { number, url } or null.
@@ -45,7 +45,9 @@ const PR_STATES = ['closed', 'conflict', 'draft', 'failing', 'merged', 'open', '
 // `gh pr view --json state,isDraft,mergeable,mergeStateStatus,statusCheckRollup` → { state, detail }
 function ghPrDisplay(pr) {
   const s = ghPrState(pr);
-  if (s.state === 'merged' || s.state === 'closed') return { state: s.state, detail: s.detail };
+  // #797: a merged PR's commit is what its roadmap item keeps
+  if (s.state === 'merged') return { state: s.state, detail: s.detail, ...(pr.mergeCommit?.oid ? { mergedCommit: pr.mergeCommit.oid } : {}) };
+  if (s.state === 'closed') return { state: s.state, detail: s.detail };
   if (pr.isDraft) return { state: 'draft', detail: 'draft PR' };
   if (s.state === 'conflict') return { state: 'conflict', detail: s.detail };
   if (s.state === 'failed') return { state: 'failing', detail: s.detail };
@@ -57,7 +59,10 @@ function ghPrDisplay(pr) {
 // `glab mr view <iid> --output json` → { state, detail }
 function glMrDisplay(mr) {
   const s = glMrState(mr);
-  if (s.state === 'merged' || s.state === 'closed') return { state: s.state, detail: s.detail };
+  // #797: a squashed MR has no merge commit of its own: its squash commit is what landed
+  const commit = mr.merge_commit_sha || mr.squash_commit_sha;
+  if (s.state === 'merged') return { state: s.state, detail: s.detail, ...(commit ? { mergedCommit: commit } : {}) };
+  if (s.state === 'closed') return { state: s.state, detail: s.detail };
   if (mr.draft || mr.work_in_progress) return { state: 'draft', detail: 'draft MR' };
   if (s.state === 'conflict') return { state: 'conflict', detail: s.detail };
   if (s.state === 'failed') return { state: 'failing', detail: s.detail };
@@ -69,7 +74,7 @@ function glMrDisplay(mr) {
 }
 
 // gh pr view's --json fields (glab mr view returns its whole JSON)
-const REQUEST_FIELDS = 'state,isDraft,mergeable,mergeStateStatus,statusCheckRollup';
+const REQUEST_FIELDS = 'state,isDraft,mergeable,mergeStateStatus,statusCheckRollup,mergeCommit';
 // a request's JSON → { state, detail }, per platform
 const DISPLAY = { [github.id]: ghPrDisplay, [gitlab.id]: glMrDisplay };
 
@@ -93,19 +98,34 @@ async function fetchPrState(pr, { reader = readJson } = {}) {
   return DISPLAY[p.id](await reader(c.cli, c.args));
 }
 
-// PR states by URL, with the time they were read. A merged or closed PR does not change any more;
+// #797: a PR a run's output names by its number only → with its URL, on the project's upstream when it
+// works on a fork (#738: the PR lives there), else on its repository; as it was when neither is known
+function prOnProject(pr, project) {
+  if (pr?.url || !pr?.number) return pr;
+  const at = parseRepoUrl(project?.fork?.upstream || project?.repo);
+  const platform = projectPlatform(project);
+  return at && platform ? { ...pr, url: platform.requestUrl(`https://${at.host}/${at.path}`, pr.number) } : pr;
+}
+
+// A PR with what was read of it (`mergedCommit`, #797: only a merged one has it)
+const withRead = (pr, { state, detail, checkedAt, mergedCommit }) => ({ ...pr, state, detail, checkedAt, ...(mergedCommit ? { mergedCommit } : {}) });
+
+// Whether a PR's state is its last: a merged or closed PR does not change any more
+const prEnded = (state) => ['closed', 'merged'].includes(state);
+
+// PR states by URL, with the time they were read. An ended PR (prEnded) is not read again;
 // the others are read again after `ttlMs` (finished runs: on demand, when shown).
 function prCache({ reader, ttlMs = 5 * 60 * 1000, now = Date.now } = {}) {
-  const byUrl = new Map(); // url → { state, detail, checkedAt, at }
+  const byUrl = new Map(); // url → { state, detail, mergedCommit?, checkedAt, at }
   const pending = new Map(); // url → promise
-  const fresh = (hit, maxAgeMs) => hit && (['merged', 'closed'].includes(hit.state) || now() - hit.at < maxAgeMs);
+  const fresh = (hit, maxAgeMs) => hit && (prEnded(hit.state) || now() - hit.at < maxAgeMs);
   return {
     get: (url) => byUrl.get(url) || null,
     // { number, url } → the PR with { state, detail, checkedAt }; maxAgeMs: 0 reads it again
     async refresh(pr, { maxAgeMs = ttlMs } = {}) {
       if (!pr?.url) return pr;
       const hit = byUrl.get(pr.url);
-      if (fresh(hit, maxAgeMs)) return { ...pr, state: hit.state, detail: hit.detail, checkedAt: hit.checkedAt };
+      if (fresh(hit, maxAgeMs)) return withRead(pr, hit);
       if (!pending.has(pr.url)) {
         pending.set(pr.url, fetchPrState(pr, { reader })
           .catch((e) => ({ state: 'unknown', detail: `could not read the PR: ${e.message}` }))
@@ -116,8 +136,7 @@ function prCache({ reader, ttlMs = 5 * 60 * 1000, now = Date.now } = {}) {
           })
           .finally(() => pending.delete(pr.url)));
       }
-      const s = await pending.get(pr.url);
-      return { ...pr, state: s.state, detail: s.detail, checkedAt: s.checkedAt };
+      return withRead(pr, await pending.get(pr.url));
     },
   };
 }
@@ -155,8 +174,11 @@ module.exports = {
   glMrDisplay,
   PR_STATES,
   prCache,
+  prEnded,
   prOfEvents,
   prOfOutput,
+  prOnProject,
   readMeta,
+  withRead,
   writeTitle,
 };

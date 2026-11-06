@@ -10,14 +10,15 @@
 //   disable, enable              the stage's switch (#284)
 //   pauseStage                   the stage's "Pause after current step" (#368): its runs and the roadmap
 //   edit, move                   the item's editor, drag and ↑/↓/Remove (only planned or failed items)
-//   retry, skip                  the item that failed or could not start (#196), never a paused one
+//   retry, skip                  the item that failed or could not start (#196), never a paused one;
+//                                skip also goes on past an item that waits for its PR's merge (#797)
 //   park                         the item's "Move on" (#395): its run waits at a human gate, the roadmap goes on
 //   parkStage                    the stage's "Move on from this stage" (#395): parks its items at a gate, skips the planned
 //   removeStage                  the stage's "Remove from roadmap" (#748): never while one of its items runs or waits at a gate
 // The Roadmap view's rules: releaseView (Planned: the latest release only, #425), the date ranges (SINCE, inRange) and its pages (pageOf).
 // Any load order: read only when a screen draws.
 /** An item's status, ITEM_STATES as a type (#346): the file stores planned, done, parked or skipped.
- * @typedef {'done' | 'failed' | 'parked' | 'paused' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
+ * @typedef {'done' | 'failed' | 'parked' | 'paused' | 'planned' | 'running' | 'skipped' | 'waiting_merge'} RoadmapItemStatus */
 (function (root) {
   const node = typeof module === 'object' && module.exports;
   // the catalog's helper (#330), at call time: the reasons are in the interface language
@@ -26,7 +27,8 @@
   const STATES = ['done', 'paused', 'planned', 'running'];
   // paused (#368): its run ended paused after its current turn; the roadmap's Resume continues it
   // parked (#395): the owner (or the Night watch) moved on while its run waits at a human gate
-  const ITEM_STATES = ['done', 'failed', 'parked', 'paused', 'planned', 'running', 'skipped'];
+  // waiting_merge (#797): its run ended well and a person merges its PR; not finished: it holds its stage
+  const ITEM_STATES = ['done', 'failed', 'parked', 'paused', 'planned', 'running', 'skipped', 'waiting_merge'];
   // an item done (merged), skipped (the owner, or every issue closed) or parked counts as finished
   const FINISHED = new Set(['done', 'parked', 'skipped']);
   // an item whose run still changes (#491): its live run is in the light backlog:state
@@ -228,6 +230,7 @@
     paused: 'roadmap.locked_paused',
     running: 'roadmap.locked_running',
     skipped: 'roadmap.locked_skipped',
+    waiting_merge: 'roadmap.locked_waiting_merge',
   };
   const lockedReason = (status, fallback) => t(LOCKED[status] || fallback);
 
@@ -242,12 +245,13 @@
     // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
     // error without a run, e.g. kept work of an ended run), never while its run is alive
     // a paused run (#368) is not a failure: only the roadmap's Resume continues it
-    const failed = item.status === 'failed' || (!['paused', 'running'].includes(item.status) && (r?.pausedBy === item.id || refusedStart(item)));
+    const failed = item.status === 'failed' || (!['paused', 'running', 'waiting_merge'].includes(item.status) && (r?.pausedBy === item.id || refusedStart(item)));
     const fix = failed ? yes() : no(item.status === 'running' ? t('roadmap.item_running_stop_first') : lockedReason(item.status, 'roadmap.item_not_failed'));
     // #395: Move on only past a human gate; the gate stays the owner's (nothing answers it)
     const park = atGate(item) ? yes() : no(t(item.status === 'parked' ? LOCKED.parked
       : item.status === 'running' ? 'roadmap.item_in_turn' : 'roadmap.item_not_at_gate'));
-    return { edit: locked, move: locked, park, retry: fix, skip: fix };
+    // #797: its run succeeded, nothing to retry; the owner may still go on without the merge
+    return { edit: locked, move: locked, park, retry: fix, skip: item.status === 'waiting_merge' ? yes() : fix };
   }
 
   /**
@@ -325,10 +329,25 @@
   // An item's last activity: the latest of when it joined the roadmap (`origin`), its run's start and
   // its run's end; a run in progress is active now. An item without any date is in every range.
   function inRange(x, rangeMs, now) {
-    if (rangeMs == null || x.status === 'running' || x.waiting) return true;
+    if (rangeMs == null || ['running', 'waiting_merge'].includes(x.status) || x.waiting) return true;
     const at = [x.origin, x.run?.startedAt, x.run?.finishedAt].map(toMs).filter((t) => t != null);
     return !at.length || Math.max(...at) >= now - rangeMs;
   }
+  // how a run that ended reads on an item planned again (the roadmap stopped, a Retry not started yet)
+  const RUN_END = { success: 'done', failed: 'failed', cancelled: 'stopped', interrupted: 'interrupted' };
+  /** The status the run chip of an item says. */
+  function chipStatus(x) {
+    if (x.waiting) return 'waiting';
+    if (x.status !== 'planned') return x.status;
+    return RUN_END[x.run?.status] || x.run?.status || 'planned';
+  }
+  /** The status block's pill: the same, but a run that ended under an item still marked running says its end. */
+  function pillStatus(x, est) {
+    if (x.status !== 'running' || x.waiting) return chipStatus(x);
+    return est.state === 'failed' ? 'failed' : est.state === 'stopped' ? RUN_END[x.run?.status] || 'stopped' : est.state === 'waiting' ? 'waiting' : 'running';
+  }
+  /** #797: the PRs the roadmap's items wait for ("#12, #13"), '' with none. */
+  const mergeWaits = (r) => stagesOf(r).flatMap(itemsOf).filter((x) => x.status === 'waiting_merge' && x.pr).map((x) => `#${x.pr.number ?? '?'}`).join(', ');
   // the cards a visible stage draws (its folded items only when its "+n done" chip is unfolded)
   const cardCount = (x) => x.items.length + (x.open ? x.folded.length : 0);
   const PAGE_STAGES = 15;
@@ -448,6 +467,7 @@
     allowedActions,
     atGate,
     cardCount,
+    chipStatus,
     currentStage,
     drawnNeighbour,
     dropProblem,
@@ -462,6 +482,7 @@
     isRelease,
     itemIssues,
     itemRuns,
+    mergeWaits,
     moveIssue,
     moveRelease,
     moveStage,
@@ -469,6 +490,7 @@
     pauseChoices,
     pausingAfterStage,
     pendingRelease,
+    pillStatus,
     refusedStart,
     releaseEntries,
     releaseView,

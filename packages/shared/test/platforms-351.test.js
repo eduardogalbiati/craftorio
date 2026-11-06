@@ -62,6 +62,15 @@ test('PLATFORMS: the two adapters, GitHub first', () => {
   assert.deepEqual(PLATFORMS.map((p) => p.short), ['gh', 'gl']);
 });
 
+test('requestUrl (#797): a request\'s URL on a repository, in each platform\'s form, read back as that request', () => {
+  const pr = github().requestUrl('https://github.com/o/r', 7);
+  const mr = gitlab().requestUrl('https://gitlab.example.com/g/s/r', 7);
+  assert.equal(pr, 'https://github.com/o/r/pull/7');
+  assert.equal(mr, 'https://gitlab.example.com/g/s/r/-/merge_requests/7');
+  assert.equal(github().parseTargetUrl(pr).kind, 'pr');
+  assert.equal(gitlab().parseTargetUrl(mr).kind, 'pr');
+});
+
 test('parseIssueUrl (GitHub): host, repository and number of an issue URL', () => {
   const p = github();
   assert.deepEqual(p.parseIssueUrl('https://github.com/o/r/issues/12'), { host: 'github.com', repo: 'o/r', number: 12 });

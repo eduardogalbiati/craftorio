@@ -20,8 +20,11 @@ module.exports = (ctx) => {
     if (!pr) return null;
     if (unreadPr(mock)) return { ...pr, ...SIMULATED_PR, checkedAt: null };
     const hit = prs.get(pr.url);
-    return hit ? { ...pr, state: hit.state, detail: hit.detail, checkedAt: hit.checkedAt } : { ...pr, state: null, detail: null, checkedAt: null };
+    return hit ? runPr.withRead(pr, hit) : { ...pr, state: null, detail: null, checkedAt: null };
   }
+
+  // #797: a PR read through the same cache the lists use (areas/roadmap.js: the PRs its items wait for)
+  const refreshPr = (pr, options) => prs.refresh(pr, options);
 
   async function refreshLivePr(run, maxAgeMs) {
     if (!run.pr) return;
@@ -66,6 +69,7 @@ module.exports = (ctx) => {
   return {
     liveTitle,
     refreshLivePr,
+    refreshPr,
     runPrState,
     setRunTitle,
     stopPrTimer: () => clearInterval(prTimer),

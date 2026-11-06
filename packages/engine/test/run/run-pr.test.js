@@ -165,6 +165,28 @@ test('prCache: get() reads the cache without triggering a read; null before the 
   assert.equal(cache.get('https://github.com/acme/app/pull/5').state, 'ready');
 });
 
+// #797: the commit a merged PR leaves is what its roadmap item keeps
+test('ghPrDisplay: a merged PR carries its merge commit; one the platform gives none for carries no field', () => {
+  assert.equal(ghPrDisplay(ghPr({ state: 'MERGED', mergeCommit: { oid: 'abc' } })).mergedCommit, 'abc');
+  assert.equal('mergedCommit' in ghPrDisplay(ghPr({ state: 'MERGED', mergeCommit: null })), false);
+  assert.equal('mergedCommit' in ghPrDisplay(ghPr({ state: 'CLOSED', mergeCommit: { oid: 'abc' } })), false);
+});
+
+test('glMrDisplay: a merged MR carries its merge commit first, its squash commit without one, and none with neither', () => {
+  assert.equal(glMrDisplay(glMr({ state: 'merged', merge_commit_sha: 'abc', squash_commit_sha: 'def' })).mergedCommit, 'abc');
+  assert.equal(glMrDisplay(glMr({ state: 'merged', merge_commit_sha: null, squash_commit_sha: 'def' })).mergedCommit, 'def');
+  assert.equal('mergedCommit' in glMrDisplay(glMr({ state: 'merged', merge_commit_sha: null, squash_commit_sha: null })), false);
+  assert.equal('mergedCommit' in glMrDisplay(glMr({ state: 'closed', merge_commit_sha: 'abc' })), false);
+});
+
+test('prCache: a merged PR keeps its merge commit on the read and on the reads the cache answers', async () => {
+  const cache = prCache({ reader: async () => ghPr({ state: 'MERGED', mergeCommit: { oid: 'abc' } }) });
+  const pr = { number: 6, url: 'https://github.com/acme/app/pull/6' };
+  assert.equal((await cache.refresh(pr)).mergedCommit, 'abc');
+  assert.equal((await cache.refresh(pr, { maxAgeMs: 0 })).mergedCommit, 'abc');
+  assert.equal(cache.get(pr.url).mergedCommit, 'abc');
+});
+
 // ---- the run's title ----------------------------------------------------------------------------
 
 test('writeTitle: trims and collapses whitespace; an empty title clears it back to the default', (t) => {

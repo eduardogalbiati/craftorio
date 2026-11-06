@@ -205,7 +205,8 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
   and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`
   (backlog-refresh, #161): its item is done when its run succeeds (service `roadmapRun` reads the run's
-  workflow file). Any other end pauses the roadmap (`pausedBy`); a resumed run
+  workflow file). A run that succeeded with a PR a person merges (#797, `pr_review`) waits for it:
+  see `roadmap-pauses.md`. Any other end pauses the roadmap (`pausedBy`); a resumed run
   (`resume.runId` = the item's run) takes the item's place (`adoptResumed`).
   The stage a dispatch runs is `currentStage`: the first **enabled** stage with an item not done or
   skipped. A stage with `disabled: true` (#284, the owner's switch in the stage's ⋮ menu) is skipped

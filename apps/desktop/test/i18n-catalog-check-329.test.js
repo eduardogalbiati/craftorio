@@ -88,8 +88,11 @@ test('#329 (b) a translation uses the same {placeholders} as its English text', 
 // #437: a status pill's label (status_pill.status_*) of any language fits a pill on one line: at most
 // STATUS_LABEL_MAX characters, so pt-BR reads as short as English ("Rodando", not "Em execução").
 const STATUS_LABEL_MAX = 16;
+// #797: the one exception, its text set by the issue ("Aguardando merge do PR"); only the Roadmap's card
+// draws it, on a line of its own that wraps (.rm-status-line), and the pill still keeps one line
+const STATUS_LABEL_LONGER = new Set(['status_pill.status_waiting_merge']);
 const statusLabelsTooLong = (catalog) => Object.entries(catalog)
-  .filter(([k]) => k.startsWith('status_pill.status_'))
+  .filter(([k]) => k.startsWith('status_pill.status_') && !STATUS_LABEL_LONGER.has(k))
   .flatMap(([k, v]) => (typeof v === 'string' ? [[k, v]] : Object.values(v || {}).map((s) => [k, s])))
   .filter(([, s]) => [...String(s)].length > STATUS_LABEL_MAX)
   .map(([k, s]) => `${k}: "${s}" (${[...String(s)].length} > ${STATUS_LABEL_MAX})`);
