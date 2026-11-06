@@ -32,7 +32,8 @@ const { writeResultSummary } = require('../domains/evidence/result-summary');
 const { stopProcessesIn } = require('./processes');
 const { sharedMemoryGuard } = require('./memory-guard');
 const machineActions = require('./machine-actions');
-const { StepTrail } = require('@multiagent/shared/run-progress-model');
+const { StepTrail, endingGroups } = require('@multiagent/shared/run-progress-model');
+const { ending } = require('@multiagent/shared/default-workflow');
 const chain = require('@multiagent/shared/chain-model');
 const Language = require('@multiagent/shared/language');
 const { BUNDLED_SKILLS, methods: sessionsMethods } = require('./run/sessions');
@@ -410,8 +411,13 @@ class WorkflowRun extends EventEmitter {
       agent_overrides: Object.keys(this.agentOverrides).length ? this.agentOverrides : undefined,
       display: this.displayNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
-      groups: this.wf.groups,
+      groups: this.progressGroups(),
     });
+  }
+
+  // #792: the groups a run's progress draws: the last one named after how this run ends
+  progressGroups() {
+    return endingGroups(this.wf.groups, ending(this.wf, this.inputs));
   }
 
   async start() {
@@ -881,7 +887,7 @@ class WorkflowRun extends EventEmitter {
       ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
       ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
       // step visits in order with their agents (runs list); this event's own update lands in it
-      groups: this.wf.groups, progress: this.trail.steps,
+      groups: this.progressGroups(), progress: this.trail.steps,
       ...(outputs ? { outputs } : {}),
       ...(this.then ? { then: this.then } : {}),
       ...(this.from ? { from: this.from } : {}),

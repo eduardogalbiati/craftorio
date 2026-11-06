@@ -8,8 +8,15 @@
 //   fallback is the local workflow when `files` has it, else the first);
 // - mergeOf(wf): how a workflow's work lands: 'local' (merged into the local base, no push),
 //   'remote' (pushed: a branch and a PR/MR) or 'none' (no worktree, or it never merges);
+// - #792 ending(wf, inputs): how a run of a workflow (engine shape or workflows:list summary) ends:
+//   'pr', 'local', 'fork' or null (it neither merges nor opens a PR): the `mode` input of a workflow
+//   that has local | remote | fork (feature, fix), else mergeOf;
+// - #792 runEnding(wf, resolved, alias): ending for a run's RunInputs.resolveRunInputs result, in the
+//   engine's order (backlog.runInputs, then aliasInputs): a value only the workflow gives stays out, so
+//   an old name's `alias` goes under what the item or the project chose;
 // - current(): the renderer's default: the header project's (state.projects) through projectDefault,
-//   among state.workflows (app.js globals);
+//   among state.workflows (app.js globals), with its `merge`, the `inputs` of the project's Feature
+//   entry and the `ending` they give it;
 // - firstBuild(set): a project's default without a given one (#486, packages/engine/domains/project/projects.js and the Overview);
 // - projectFirst(list): the pickers' workflows with the header project's set first (#486).
 // - #791 KINDS (feature, fix, refactor: the kinds of work the Product Owner tells apart) and
@@ -102,6 +109,19 @@
     if (tree.remote === false || (wf.steps || []).some((s) => (s.transitions || []).some((t) => t.merge === 'local'))) return 'local';
     return wf.metadata?.merges === false ? 'none' : 'remote';
   }
+
+  // #792: what each value of a workflow's local | remote | fork `mode` ends in
+  const MODE_ENDINGS = { fork: 'fork', local: 'local', remote: 'pr' };
+  /** #792: how a run ends (see the header). feature's own `merge` is always local: its mode decides; an old `mode: auto | validated` is no mode of its. */
+  function ending(wf, inputs) {
+    const merge = wf?.merge ?? mergeOf(wf);
+    if (merge === 'none') return null;
+    const modes = wf.inputs?.mode;
+    if (!modes?.enum?.includes('local')) return merge === 'remote' ? 'pr' : 'local';
+    return MODE_ENDINGS[oldValidation(inputs)?.mode ?? modes.default] || 'local';
+  }
+  /** #792: how a run with these resolved inputs ({ values, sources }) ends (see the header). */
+  const runEnding = (wf, { values, sources }, alias = null) => ending(wf, aliasInputs(alias, sources.mode && sources.mode !== 'workflow' ? { mode: values.mode } : {}));
 
   // #486: the categories of a development workflow (the manifest's solo/team, the bundled ones' build;
   // #630: a composed set's feature)
@@ -199,7 +219,9 @@
     const own = !files.includes(named) ? aliasOf(named)?.file || named : named;
     const out = resolve(own, files);
     const wf = list.find((w) => w.file === out.file);
-    return { ...out, name: wf?.name || out.file, merge: wf?.merge || null };
+    const target = kindTarget(kindEntry(project, project?.manifest, 'feature'), files);
+    const inputs = target.file === out.file ? target.inputs : {};
+    return { ...out, name: wf?.name || out.file, merge: wf?.merge || null, inputs, ending: wf ? ending(wf, inputs) : null };
   }
 
   /** #486: `list` (workflows with a file) with the header project's set first, each part in its order. */
@@ -225,6 +247,7 @@
     REMOTE,
     VALIDATION,
     current,
+    ending,
     entryKind,
     firstBuild,
     installedFile,
@@ -240,6 +263,7 @@
     projectFirst,
     projectWorkflows,
     resolve,
+    runEnding,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.DefaultWorkflow = api;

@@ -90,4 +90,4 @@ taken back with `roadmap:undo` (`{ projectId, editId }` from the save's answer).
 | `restore-stage` | `roadmap:undo` for the last edit; an older stage: `roadmap:versions`, then `roadmap:save` with that stage put back |
 | `move-stage-after` | `roadmap:get`, then `roadmap:save` with the stage moved after the other one |
 
-A retry or a skip of the item that paused a roadmap: `roadmap:item` `{ projectId, itemId, action: "retry" | "skip" }`.
+A retry or a skip of the item that paused a roadmap: `roadmap:item` `{ projectId, itemId, action: "retry" | "skip", keepPaused }`; `keepPaused: true` on a skip leaves the roadmap paused until it is resumed (#804).

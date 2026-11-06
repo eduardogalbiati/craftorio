@@ -15,6 +15,7 @@
 //   park                         the item's "Move on" (#395): its run waits at a human gate, the roadmap goes on
 //   parkStage                    the stage's "Move on from this stage" (#395): parks its items at a gate, skips the planned
 //   removeStage                  the stage's "Remove from roadmap" (#748): never while one of its items runs or waits at a gate
+// nextAfterSkip (#804): what a skip of the item that paused the roadmap would start.
 // The Roadmap view's rules: releaseView (Planned: the latest release only, #425), the date ranges (SINCE, inRange) and its pages (pageOf).
 // Any load order: read only when a screen draws.
 /** An item's status, ITEM_STATES as a type (#346): the file stores planned, done, parked or skipped.
@@ -139,6 +140,31 @@
     const stages = stagesOf(roadmap);
     const reached = at < 0 ? stages : stages.slice(0, at);
     return reached.find((s) => isRelease(s) && s.status !== 'shipped') || null;
+  }
+  /**
+   * #804: what skipping the item `itemId` would start, the way the engine's advance would go on: null
+   * when it is not the item that paused the roadmap, or nothing would start; else { release: name },
+   * { refill: true } (a live roadmap's next stages) or { stage: name, number, items } (the planned
+   * items of the stage that moves on). `roadmap`: as stored or folded (foldReleases).
+   */
+  function nextAfterSkip(roadmap, itemId) {
+    if (roadmap?.state !== 'paused' || !itemId || roadmap.pausedBy !== itemId) return null;
+    const stages = releaseEntries(unfoldReleases(roadmap.leadReleases, stagesOf(roadmap)))
+      .map((s) => ({ ...s, items: itemsOf(s).map((x) => (x.id === itemId ? { ...x, status: 'skipped' } : x)) }));
+    const after = { ...roadmap, stages };
+    const first = currentStage(after);
+    const scoped = roadmap.scope ? stages.findIndex((s) => s.id === roadmap.scope.stage && !s.disabled) : -1;
+    if (!roadmap.scope) {
+      const line = pendingRelease(after, first);
+      if (line) return { release: line.name };
+      if (first < 0) return roadmap.live ? { refill: true } : null;
+    }
+    const at = roadmap.scope ? scoped : waitsFor(after) >= 0 ? waitsFor(after) : first;
+    const items = itemsOf(stages[at]);
+    // a failure left in the stage pauses the roadmap again
+    if (items.some((x) => x.status === 'failed' && !isFinished(x))) return null;
+    const planned = items.filter((x) => x.status === 'planned');
+    return planned.length ? { stage: stages[at].name || '', number: stageNumber(after, at), items: planned } : null;
   }
   /** #391: the roadmap bar's two pauses, the default first ([{ after, label, hint }]; the stage in progress named). */
   function pauseChoices(roadmap) {
@@ -486,6 +512,7 @@
     moveIssue,
     moveRelease,
     moveStage,
+    nextAfterSkip,
     pageOf,
     pauseChoices,
     pausingAfterStage,

@@ -31,8 +31,8 @@ const { createServer } = require('../../server');
 // docs:intents, and monitor:diagnose takes `item` and answers `intent`; #446: backlog:unqueue,
 // backlog:pause and roadmap:from-queue removed, backlog:assign takes `runNow`; #781: backlog:progress, and
 // backlog:sync takes `followed`; #782: architecture:city answers `analysed`; #797: backlog:state's items
-// answer `pr`).
-const MAIN_CONTRACT = '73d299755308';
+// answer `pr`; #804: roadmap:item takes `keepPaused`).
+const MAIN_CONTRACT = '80f9bfa312d0';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;

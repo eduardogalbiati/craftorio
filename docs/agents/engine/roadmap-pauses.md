@@ -22,6 +22,17 @@ The three ways to pause a roadmap, where each one is written and when each one s
   (with Cancel pause), read from the file so it survives a reload. Resume from a Pause now taken
   meanwhile runs the whole roadmap (the screen sends no stage).
 
+## A skip of the item that paused the roadmap (#804)
+
+`itemAction` sets a roadmap paused by the item back to `running` on a retry or a skip, and the channel's
+`dispatchRoadmaps` starts the next work at once. So the screen asks first: `RoadmapModel.nextAfterSkip`
+mirrors `advance` and names what would start (a stage's planned items, a release, a live refill), or
+null when nothing would: no dialog, the skip as ever. `skipDialog` (`packages/ui-kit/kept-work-dialog.js`)
+offers to go on or to stay paused; staying is `roadmap:item` with `keepPaused`: `pausedBy` and `error`
+are cleared, the state stays `paused` and the bar reads plain Paused until Resume. `keepPaused` only
+counts on a skip. A retry, a park and the roadmap's own skips (`skipClosed`, the base-health `skipItem`)
+are as they were.
+
 ## A stage inserted before the running stage (#697)
 
 A stage put before the stage whose run is in progress (a save, a drag, an add stage, a Product Owner

@@ -46,7 +46,7 @@ function loadRoadmap() {
   sandbox.showRun = () => {};
   withI18n(sandbox);
   vm.createContext(sandbox);
-  for (const f of ['packages/ui-kit/status-pill.js', 'packages/ui-kit/estimates.js', 'packages/shared/run-progress-model.js', 'packages/shared/default-workflow.js', 'packages/shared/roadmap-model.js', 'packages/ui-kit/workflow-inputs.js', 'fronts/build/views/backlog/backlog-roadmap.js']) {
+  for (const f of ['packages/ui-kit/status-pill.js', 'packages/ui-kit/estimates.js', 'packages/shared/run-progress-model.js', 'packages/shared/default-workflow.js', 'packages/shared/roadmap-model.js', 'packages/shared/run-inputs.js', 'packages/ui-kit/workflow-inputs.js', 'fronts/build/views/backlog/backlog-roadmap.js']) {
     vm.runInContext(read(f), sandbox, { filename: path.basename(f) });
   }
   return sandbox.window.BacklogRoadmap;

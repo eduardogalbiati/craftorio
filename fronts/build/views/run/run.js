@@ -702,7 +702,7 @@ function renderSteps() {
     const open = v.openGroups.get(sec.name) ?? sec.steps.some((s) => s.id === current);
     const st = sec.steps.some((s) => s.status === 'running') ? 'running' : sec.steps.some((s) => s.status === 'waiting') ? 'waiting' : sec.steps.some((s) => s.visits) ? 'done' : 'pending';
     return `<details class="step-group ${st}" data-group="${esc(sec.name)}" ${open ? 'open' : ''}>
-      <summary><span class="dot"></span><b>${esc(sec.name)}</b><span class="muted small">${sec.steps.filter((s) => s.visits).length}/${sec.steps.length}</span></summary>
+      <summary><span class="dot"></span><b>${esc(RunProgress.groupName(sec.name, t))}</b><span class="muted small">${sec.steps.filter((s) => s.visits).length}/${sec.steps.length}</span></summary>
       <ol class="steps">${sec.steps.map(item).join('')}</ol>
     </details>`;
   }).join('');

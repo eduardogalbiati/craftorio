@@ -481,7 +481,7 @@ export function Pipeline({ shown, onSelect }) {
     const grouped = new Set(run.groups.flatMap((g) => g.steps || []));
     const loose = layout.stations.filter((st) => !grouped.has(st.id)).map((st) => st.id);
     return [...(loose.length ? [{ name: t('run3d.prepare'), steps: loose }] : []), ...run.groups]
-      .map((g) => ({ name: g.name, stations: (g.steps || []).map((id) => layout.byId[id]).filter(Boolean) })).filter((g) => g.stations.length);
+      .map((g) => ({ name: window.RunProgress.groupName(g.name, t), stations: (g.steps || []).map((id) => layout.byId[id]).filter(Boolean) })).filter((g) => g.stations.length);
   }, [run, layout]);
   const liveAt = groups.findIndex((g) => g.stations.some((st) => st.id === m.activeId));
   const at = m.finished ? (m.merged ? t('run3d.merged_into', { base: m.merged.base }) : t('run3d.finished_lower', { final: run.final })) : m.activeId ? t('run3d.at_step', { step: m.activeId }) : t('run3d.in_the_issue_inbox');
