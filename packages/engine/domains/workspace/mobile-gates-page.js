@@ -17,7 +17,7 @@ const securityHeaders = (nonce) => ({
 const STYLE = `*{box-sizing:border-box}body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#0f1115;color:#e6e6e6;color-scheme:dark}
 main{max-width:640px;margin:0 auto;padding:16px;overflow-wrap:anywhere}h1{font-size:22px;line-height:1.3;margin:4px 0 16px}h2{font-size:18px;margin:0 0 8px}
 .card{border:1px solid #2a2f3a;border-left:3px solid #f5a524;border-radius:10px;padding:16px;margin:0 0 16px;background:#161a22}
-.muted{color:#aab3c2;font-size:14px}.rec{border:1px solid #2a2f3a;border-radius:8px;padding:12px;margin:12px 0;background:#11151c}
+.brief-body{white-space:pre-line}.muted{color:#aab3c2;font-size:14px}.rec{border:1px solid #2a2f3a;border-radius:8px;padding:12px;margin:12px 0;background:#11151c}
 .btns{display:grid;gap:8px;margin-top:16px}a{color:#a9c9ff}a.btn,button{display:block;min-height:44px;width:100%;text-align:center;padding:12px;border-radius:8px;border:1px solid #3a4150;background:#222837;color:#e6e6e6;font:inherit;text-decoration:none;white-space:normal;overflow-wrap:anywhere}
 a.primary,button.primary{background:#1d4ed8;border-color:#1d4ed8;color:#fff}.help{display:block;font-size:14px;color:#c3cad6;margin-top:4px}
 .error{color:#fca5a5}label{display:block;margin-bottom:8px}input{width:100%;min-height:44px;padding:12px;border-radius:8px;border:1px solid #3a4150;background:#11151c;color:#e6e6e6;font:inherit}
@@ -35,7 +35,7 @@ function page(title, body, language, client = false) {
   // '<' is escaped for script context, even if a future translation contains </script>.
   const strings = Object.fromEntries([
     'open', 'loading', 'list_ready', 'empty', 'refresh', 'retry', 'unpaired', 'pair_invalid',
-    'pairing', 'pair_limited', 'pair_refused', 'pair_failed', 'storage_failed', 'list_failed',
+    'storage_unavailable', 'pairing', 'pair_limited', 'pair_refused', 'pair_failed', 'storage_failed', 'list_failed',
     'sending', 'answered', 'answer_invalid', 'answer_unknown', 'link_invalid', 'ended', 'all',
   ].map((key) => [key, t(key)]));
   const data = JSON.stringify(strings).replace(/</g, '\\u003c');
@@ -63,6 +63,17 @@ function noticePage(kind, language, status = 200) {
   return { ...page(t('title'), body, language), status };
 }
 
+function briefHtml(brief, t) {
+  const rec = brief.recommendation;
+  const label = typeof rec === 'string' ? rec : rec?.label || rec?.answer || '';
+  const reason = typeof rec === 'object' && rec ? rec.reason || rec.why || '' : '';
+  const recommendation = rec ? `<div class="rec"><b>${esc(t('recommended'))}</b> ${esc(label)}${reason ? `<p>${esc(reason)}</p>` : ''}</div>` : '';
+  const body = brief.body ? `<p class="brief-body">${esc(brief.body)}</p>` : '';
+  const options = Array.isArray(brief.options) ? `<ul>${brief.options.map((option) => `<li>${esc(option)}</li>`).join('')}</ul>` : '';
+  const action = brief.user_action ? `<p><b>${esc(t('owner_action'))}</b> ${esc(brief.user_action)}</p>` : '';
+  return body + recommendation + options + action;
+}
+
 function gatePage({ run, gate }, token, chosen, language, choices) {
   const { t } = translator(language);
   const brief = gate.brief || {};
@@ -70,8 +81,7 @@ function gatePage({ run, gate }, token, chosen, language, choices) {
   const self = `/gates/${encodeURIComponent(run.runId)}/${encodeURIComponent(gate.approval_id)}?t=${encodeURIComponent(token)}`;
   if (chosen) return confirmationPage({ head, self, token, chosen, language });
   const what = brief.headline ? `<p>${esc(brief.headline)}</p>` : '';
-  const recommendation = brief.recommendation;
-  const rec = recommendation ? `<div class="rec"><b>${esc(t('recommended'))}</b> ${esc(recommendation.label || recommendation.choice || recommendation)}${recommendation.why ? `<p class="muted">${esc(recommendation.why)}</p>` : ''}</div>` : '';
+  const rec = briefHtml(brief, t);
   const evidence = (brief.evidence || []).filter((x) => x && /^https:\/\//.test(x.url || ''));
   const links = evidence.length ? `<ul>${evidence.map((x) => `<li><a href="${esc(x.url)}" rel="noreferrer">${esc(x.label || x.url)}</a></li>`).join('')}</ul>` : '';
   const turns = Array.isArray(run.nextTurns) ? `<p class="muted">${esc(continueText(run.nextTurns, (a) => displayName(a, run.agent_names), (key) => t(`turn_${key}`)))}</p>` : '';

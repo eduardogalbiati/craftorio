@@ -3,6 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { gateBrief } = require('../../engine/gate-summary');
 const { createMobileGatesServer } = require('../../domains/workspace/mobile-gates');
 
 async function phoneGatesFixture() {
@@ -11,15 +12,15 @@ async function phoneGatesFixture() {
   const state = { language: 'en', time: Date.now(), open: true, answers: [] };
   const gate = {
     approval_id: 'approval-mobile', step_id: 'review', message: 'Review the mobile recovery change',
-    brief: {
-      headline: 'Phone gates now explains connection failures before you answer.',
-      recommendation: { label: 'Request changes', why: 'Review the screenshots and test evidence before shipping.' },
-      evidence: [{ label: 'Implementation evidence', url: 'https://example.test/evidence/phone-gates-accessibility-and-connection-recovery' }],
-    },
     choices: [
       { id: 'approve', label: 'Approve release', help: 'Merges the branch into main.' },
       { id: 'redo', label: 'Request changes', help: 'Returns the change to the developer with your note.', feedback_required: true },
     ],
+  };
+  gate.brief = {
+    ...gateBrief({ message: gate.message, summary: 'Review the mobile recovery change.\nThe connection recovery checks passed.',
+      recommend: 'redo: Review the evidence before shipping.', answers: gate.choices }),
+    evidence: [{ label: 'Implementation evidence', url: 'https://example.test/evidence/phone-gates' }],
   };
   const run = {
     runId: 'simulated-mobile', title: 'Phone gates: accessible recovery', gates: [gate],

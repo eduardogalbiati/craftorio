@@ -196,3 +196,28 @@ test('HTTP navigation errors are localized HTML while API errors remain English 
   assert.match(await (await fetch(url)).text(), /lang="en"/);
   assert.match(await (await fetch(m.gateLink('r1', 'gone'))).text(), /This gate is no longer waiting/);
 });
+
+test('the real engine brief keeps reasons, body, options and owner actions without object strings', () => {
+  const { gateBrief } = require('../../engine/gate-summary');
+  for (const recommend of ['ship: Review this check.', 'A free-text recommendation.']) {
+    const brief = gateBrief({ message: GATE.message, summary: 'Check the release.\nOne check failed.', recommend, answers: GATE.choices,
+      diagnosis: { options: ['Inspect the log'], user_action: 'Verify the configuration' } });
+    const html = gatePage({ run: RUN, gate: { ...GATE, brief } }, 't', null, 'en', GATE.choices).html;
+    for (const text of [brief.recommendation.reason, brief.body, brief.options[0], brief.user_action]) assert.ok(html.includes(text));
+    assert.ok(!html.includes('[object Object]'));
+  }
+});
+
+test('blocked storage is reported before any list read or answer request', async () => {
+  for (const confirmation of [false, true]) {
+    let calls = 0;
+    const b = await browser(confirmation ? confirmHtml() : gatesPage('en').html, async () => { calls++; return reply({}); }, {
+      configure: (s) => { s.localStorage.getItem = () => { throw new Error('SecurityError'); }; },
+    });
+    if (confirmation) await submit(b);
+    assert.match(b.message(), /cannot access the pairing storage/);
+    assert.doesNotMatch(b.message(), /may have been received|Check the connection/);
+    assert.equal(calls, 0);
+    if (confirmation) assert.equal(b.get('answer-submit').disabled, false);
+  }
+});

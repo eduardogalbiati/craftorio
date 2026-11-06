@@ -16,7 +16,8 @@ function phoneGatesClient(text) {
   }
 
   function token() {
-    return localStorage.getItem(key);
+    try { return localStorage.getItem(key); }
+    catch { const error = new Error('Storage unavailable'); error.storage = true; throw error; }
   }
 
   async function request(url, options = {}) {
@@ -76,8 +77,8 @@ function phoneGatesClient(text) {
       status(r.data.gates.length ? 'list_ready' : 'empty', false, focus);
       retry.textContent = text.refresh;
       retry.hidden = false;
-    } catch {
-      status('list_failed', true, focus);
+    } catch (error) {
+      status(error.storage ? 'storage_unavailable' : 'list_failed', true, focus);
       retry.textContent = text.retry;
       retry.hidden = false;
     } finally {
@@ -136,11 +137,13 @@ function phoneGatesClient(text) {
       status('sending');
       let result = 'answer_unknown';
       let correctable = false;
+      let sent = false;
       try {
         const tk = token();
         if (!tk) result = 'unpaired';
         else {
           const d = form.dataset;
+          sent = true;
           const r = await request(d.post, {
             method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk },
             body: JSON.stringify({ t: d.t, answer: d.answer, confirm: true, feedback: byId('fb').value || undefined }),
@@ -153,7 +156,10 @@ function phoneGatesClient(text) {
           result = answerRefused(r.status);
           correctable = r.status === 400;
         }
-      } catch { /* The server may have received the answer: never retry a POST automatically. */ }
+      } catch {
+        // Only an attempted POST has an uncertain result; storage failures happen before sending.
+        if (!sent) { result = 'storage_unavailable'; correctable = true; }
+      }
       finally { busy = false; }
       locked = !correctable;
       button.disabled = locked;
