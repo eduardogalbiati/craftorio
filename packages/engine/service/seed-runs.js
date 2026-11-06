@@ -145,11 +145,16 @@ function runDefaultsNow(ctx, project) {
  * (DefaultWorkflow.projectWorkflows of ctx.listWorkflows), its default (projectDefaultWorkflow, the
  * project order, never a setting) and the workflow and inputs of a Feature and a Fix
  * (projects.workflowForKind, already resolved: the manifest is read here, not by the Product Owner).
+ * `chosen`: a workflow the owner picked (#235, the question's or the last recorded one): it stays on
+ * the list even outside the project's, the owner's choice is never dropped.
  */
-function productOwnerWorkflows(ctx, project) {
+function productOwnerWorkflows(ctx, project, chosen = null) {
   const workflowKinds = project ? { feature: projects.workflowForKind(project, 'feature'), fix: projects.workflowForKind(project, 'fix') } : null;
+  const all = ctx.listWorkflows();
+  const own = DefaultWorkflow.projectWorkflows(all, project, workflowKinds);
+  const picked = own.some((w) => w.file === chosen) ? null : all.find((w) => w.file === chosen && !w.error && w.inputs?.task);
   return {
-    workflows: DefaultWorkflow.projectWorkflows(ctx.listWorkflows(), project, workflowKinds),
+    workflows: picked ? [...own, picked] : own,
     defaultWorkflow: projects.projectDefaultWorkflow(project),
     workflowKinds,
   };

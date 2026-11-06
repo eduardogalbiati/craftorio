@@ -10,6 +10,8 @@
 // a value equal to the one shown anyway, so the project's configuration still reaches the run.
 // #791: an edit with a `kind` (Feature / Fix chosen on the card) starts from that kind's inputs
 // (`kindInputs`, the project's) instead of the PO's.
+// valueChanged keeps what the form changed; workflowTitle and filesHtml: how the card names a workflow and
+// its files.
 // "Show more options" (wf-more-toggle) in the form is the viewer's choice (localStorage, not per project).
 /* global esc, t */
 (() => {
@@ -98,6 +100,41 @@
       <div class="row po-decisions-actions">${edit.open && !done ? '' : more}${editBtn}</div></div>`;
   }
 
+  // a control of the form: a value back at what the card showed is no change
+  function valueChanged(el, edit, g, wf, runDefaults) {
+    const WI = window.WorkflowInputs;
+    const k = el.dataset.wiInput;
+    if (!k) return;
+    const value = WI.read(el.closest('.wi-field'), { all: true })[k];
+    const shown = withEdits(g, null, wf, runDefaults).inputs[k] ?? WI.shownDefault(k, wf?.inputs?.[k], runDefaults);
+    if (WI.sameValue(value, shown)) delete edit.values[k];
+    else edit.values[k] = value;
+  }
+
+  // #216: the files a group touches, as code paths (the first FILES_SHOWN, the rest folded)
+  const FILES_SHOWN = 3;
+  const filesHtml = (files) => {
+    const li = (f) => `<li><code>${esc(f)}</code></li>`;
+    const rest = files.slice(FILES_SHOWN);
+    return `<ul class="po-files">${files.slice(0, FILES_SHOWN).map(li).join('')}</ul>${rest.length
+      ? `<details class="po-files-more"><summary class="small muted">${t('backlog_po.length_more', { length: rest.length })}</summary><ul class="po-files">${rest.map(li).join('')}</ul></details>` : ''}`;
+  };
+
+  // A workflow as people read it: software-development-local-hero → "Software development, local
+  // hero" (the variant of another workflow after a comma), ai-development → "AI development".
+  const VARIANTS = [
+    'local-hero',
+  ];
+  const words = (slug) => window.WorkflowInputs.humanize(slug).replace(/\b(ai|ci|e2e|pr|ui)\b/gi, (m) => m.toUpperCase());
+  function workflowTitle(wf, file, workflows) {
+    const slug = String(wf?.name || file || '').replace(/\.ya?ml$/i, '');
+    // a known variant names its base even when the base workflow is not installed (#235: AI Development, local hero)
+    const variant = VARIANTS.find((v) => slug.endsWith(`-${v}`));
+    const base = (workflows || []).map((w) => w.name).filter((s) => s && slug.startsWith(`${s}-`)).sort((a, b) => b.length - a.length)[0]
+      || (variant ? slug.slice(0, -variant.length - 1) : '');
+    return base ? `${words(base)}, ${words(slug.slice(base.length + 1)).replace(/^\w/, (c) => c.toLowerCase())}` : words(slug);
+  }
+
   document.addEventListener('click', (e) => {
     const link = e.target?.closest?.('[data-testid="wf-more-toggle"]');
     const box = link?.closest('[data-testid="po-decisions-form"]');
@@ -106,7 +143,10 @@
 
   window.BacklogPoOptions = {
     decisionsHtml,
+    filesHtml,
     optionDefs,
+    valueChanged,
     withEdits,
+    workflowTitle,
   };
 })();

@@ -69,7 +69,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'packages/engine/domains/po/product-owner.js:callAgent': 33,
   'packages/engine/domains/po/product-owner.js:fileDraft': 40,
   'packages/engine/domains/po/product-owner.js:mockScenario': 28,
-  'packages/engine/domains/po/product-owner.js:normalizeAnswer/map callback #4': 28,
   'packages/engine/domains/roadmap/roadmap-merge.js:mergeEdit': 65,
   'packages/engine/domains/roadmap/roadmap.js:cleanItem': 38,
   'packages/engine/domains/run/occupancy.js:occupancyOf': 28,

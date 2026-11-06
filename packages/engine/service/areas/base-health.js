@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const baseHealth = require('../../domains/project/base-health');
 const backlog = require('../../domains/backlog/backlog');
+const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const { isRelease } = require('@multiagent/shared/roadmap-model');
 const projects = require('../../domains/project/projects');
 const roadmaps = require('../../domains/roadmap/roadmap');
@@ -46,8 +47,12 @@ module.exports = (ctx) => {
   // projectId -> the merge whose check a release deferred (the latest one: it checks the newest tip)
   const pending = new Map();
   const onRed = () => ({ ...workspace.DEFAULT_SETTINGS.baseCheck, ...(workspace.readSettings(ctx.ws).baseCheck || {}) }).onRed;
-  // #413, #790: the fix item runs the project's default development workflow, as the Product Owner's plans and the Assign dialog
-  const fixWorkflow = (projectId) => projects.projectDefaultWorkflow(projects.listProjects(ctx.ws.projects).find((p) => p.id === projectId));
+  // #413, #790: the fix item runs the project's default development workflow, as the Product Owner's
+  // plans and the Assign dialog; one that was deleted or renamed falls back to an installed one
+  const fixWorkflow = (projectId) => DefaultWorkflow.resolve(
+    projects.projectDefaultWorkflow(projects.listProjects(ctx.ws.projects).find((p) => p.id === projectId)),
+    (ctx.listWorkflows?.() || []).filter((w) => !w.error && w.inputs?.task).map((w) => w.file),
+  ).file;
   // where an issue goes: the synced backlog's platform and repository (else the project's); none in simulation
   function issueTarget(projectId) {
     const data = backlog.readBacklog(ctx.ws.backlog, projectId);

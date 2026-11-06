@@ -88,7 +88,7 @@ module.exports = (ctx) => {
       data,
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === projectId),
       runs: runs.runsForProject(runs.listRuns(ws.runs), p),
-      ...productOwnerWorkflows(ctx, p), // #790, #791: the project's workflows, its default and its kinds
+      ...productOwnerWorkflows(ctx, p, chosen?.workflow), // #790, #791: the project's workflows, its default and its kinds
       folder: p.folder,
       agent: agents.readAgent(ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ws.skills, ctx.BUNDLED_SKILLS_DIR],

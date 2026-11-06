@@ -40,9 +40,12 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   a folder's manifest from disk; a remote one through `gh api .../contents/` or `glab api .../files/.../raw`,
   else an unauthenticated raw read; never clones. No manifest: `null`; a repository nothing can read:
   `{ workflows: [], pending: true }` ("will be read after cloning"). The project record keeps the checked
-  `workflows: [{ name, origin, category }]` and `defaultWorkflow` (a name, the first solo or team one);
-  `projectDefaultWorkflow(p)` gives the roadmap, the Product Owner, the chain and the Oracle that default
-  before Settings' one.
+  `workflows: [{ name, origin, category }]`, `defaultWorkflow` (#790: the manifest's `default`, else the
+  first solo or team one) and `workflowKinds` (#791: the manifest's `kinds` map, `{ feature | fix | refactor:
+  { name, inputs } }`); `projectDefaultWorkflow(p)` resolves the project's `defaultWorkflow`, then the
+  manifest's `default`, then the first build workflow, then `feature`, for the roadmap, the Product Owner,
+  the chain, the Oracle and Fix the base (no global setting); `workflowForKind(p, kind)` gives the
+  workflow and inputs of a Feature or a Fix (the project's map, the manifest's, the wizard's picks).
 - The owner's per-agent model choices stay in the workspace: a repository copy carries none. When the
   repository copy runs and the workspace holds an edited copy of the name, that copy's
   `agents.<name>.provider` / `model` / `effort` are layered onto the repository copy (`ownerCopy`,

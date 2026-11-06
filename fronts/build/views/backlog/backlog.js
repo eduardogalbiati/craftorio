@@ -554,7 +554,7 @@
       ? `<optgroup label="Workflows">${options}</optgroup><optgroup label="Pipelines">${bl.pipelines.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
       : options;
     const files = [...bl.workflows.map((w) => w.file), ...bl.pipelines.map((p) => PIPE + p.file)];
-    // nothing remembered: the default development workflow (#195, Settings › General › Backlog; #486: the project's own first, its set first in the list)
+    // nothing remembered: the project's default workflow (#195, #486, #790: its own, then its manifest's; its set first in the list)
     sel.value = [prefill?.workflow, load(WORKFLOW_KEY), DefaultWorkflow.current().file, files[0]].find((f) => f && files.includes(f));
     // real runs by default: Simulation is opt-in (checked only where real runs are refused anyway)
     $b('#assign-mock').checked = !!state.simulationOnly;

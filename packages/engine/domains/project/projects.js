@@ -223,11 +223,7 @@ function updateProject(dir, id, patch) {
   if (patch.localPreviewConfirmed !== undefined) next.localPreviewConfirmed = patch.localPreviewConfirmed ? String(patch.localPreviewConfirmed) : null;
   // #485: the repository workflows the owner accepted, { <file>: { commit, blob } } (a changed file asks again)
   if (patch.acceptedWorkflows !== undefined) next.acceptedWorkflows = { ...(patch.acceptedWorkflows || {}) };
-  // #486: the project's workflow set ({ name, origin, category? }) and its default for new items
-  if (patch.workflows !== undefined) next.workflows = cleanWorkflows(patch.workflows);
-  if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
-  // #791: the workflow and inputs of each kind of work ({ feature?, fix?: { name, inputs } }); null or empty: none of its own
-  if (patch.workflowKinds !== undefined) next.workflowKinds = cleanWorkflowKinds(patch.workflowKinds);
+  patchWorkflows(next, patch);
   // #360: each analysis seed's deterministic tool, { <seed id>: command }, run instead of the Oracle
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
   // #745: the project's git platform (github / gitlab) for a self-hosted host; null: read from the URL
@@ -244,6 +240,15 @@ function updateProject(dir, id, patch) {
   if (patch.folder !== undefined) moveFolder(next, cur, patch.folder, jobs.has(jobKey(dir, id)));
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);
+}
+
+// updateProject's workflows. #486: the project's set ({ name, origin, category? }) and its default for new
+// items; #791: the workflow and inputs of each kind of work ({ feature?, fix?: { name, inputs } }); null or
+// empty: none of its own
+function patchWorkflows(next, patch) {
+  if (patch.workflows !== undefined) next.workflows = cleanWorkflows(patch.workflows);
+  if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
+  if (patch.workflowKinds !== undefined) next.workflowKinds = cleanWorkflowKinds(patch.workflowKinds);
 }
 
 // updateProject's folder change: the old folder joins previousFolders; #639: a project whose clone failed,

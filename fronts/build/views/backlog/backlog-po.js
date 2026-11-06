@@ -56,14 +56,8 @@
 // decides whether it plans or registers, and each recommendation's workflow and inputs. The Cost chip
 // shows only where the Cost axis applies to the default workflow (PoCalibration.costApplies). The header
 // (#po-for) names the project. "Back to planning" (#btn-po-plan) leaves Register an issue.
-// #791: each recommendation shows its kind (po-kind-badge: an icon and the kind's name, data-kind) with
-// the PO's one-line reason, the plan is summed up (po-kind-summary, "3 Features · 2 Fixes") and grouped
-// by kind (po-kind-group-<kind>), and a Feature | Fix | Outro control (po-kind-control, aria-pressed)
-// replaces the long select: Feature / Fix swap the workflow and inputs for the project's of that kind
-// (DefaultWorkflow.kindEntry over the header project's record; po.edits[key].kind / kindInputs), Outro
-// opens the select of every workflow that takes a task (po-kind-other-select). Every other picker of
-// the drawer (the form's, a draft's, a split's) offers only the project's workflows
-// (DefaultWorkflow.projectWorkflows, #790: the default is the project's too).
+// #791 (backlog-po-kinds.js): a recommendation's kind, the plan by kind and Feature | Fix | Outro; the other
+// pickers of the drawer offer only the project's workflows (DefaultWorkflow.projectWorkflows).
 // The conversation, the text box, Ask and the working line go through the agents' shared chat (#274,
 // agent-chat.js, adopting #po-chat's markup): the box empties as soon as Ask is clicked and gets the
 // question back when it fails; the pills (#po-chips, its 'pills' slot) and BacklogPO.ask send through it.
@@ -81,8 +75,8 @@
     'backlog_po.suggest_too_big_for_one_run',
     'backlog_po.suggest_organize_into_epics',
   ];
-  // the workflow a filed issue is planned or assigned with: the default development workflow (#195,
-  // Settings › General › Backlog) unless picked in the select next to Create + roadmap (per draft)
+  // the workflow a filed issue is planned or assigned with: the project's default workflow (#195,
+  // #790) unless picked in the select next to Create + roadmap (per draft)
   const draftWorkflow = new Map(); // message index → the workflow picked
   const workflowFor = (m) => draftWorkflow.get(m) || DefaultWorkflow.current().file;
   const MAX_CANDIDATES = 3;
@@ -406,29 +400,8 @@
       }).join('')}</div>`;
   }
 
-  // #216: the files a group touches, as code paths (the first FILES_SHOWN, the rest folded)
-  const FILES_SHOWN = 3;
-  const filesHtml = (files) => {
-    const li = (f) => `<li><code>${esc(f)}</code></li>`;
-    const rest = files.slice(FILES_SHOWN);
-    return `<ul class="po-files">${files.slice(0, FILES_SHOWN).map(li).join('')}</ul>${rest.length
-      ? `<details class="po-files-more"><summary class="small muted">${t('backlog_po.length_more', { length: rest.length })}</summary><ul class="po-files">${rest.map(li).join('')}</ul></details>` : ''}`;
-  };
   const workflowOf = (file) => (state.workflows || []).find((w) => w.file === file) || null;
-  // A workflow as people read it: software-development-local-hero → "Software development, local
-  // hero" (the variant of another workflow after a comma), ai-development → "AI development".
-  const VARIANTS = [
-    'local-hero',
-  ];
-  const words = (slug) => WorkflowInputs.humanize(slug).replace(/\b(ai|ci|e2e|pr|ui)\b/gi, (m) => m.toUpperCase());
-  function workflowTitle(wf, file) {
-    const slug = String(wf?.name || file || '').replace(/\.ya?ml$/i, '');
-    // a known variant names its base even when the base workflow is not installed (#235: AI Development, local hero)
-    const variant = VARIANTS.find((v) => slug.endsWith(`-${v}`));
-    const base = (state.workflows || []).map((w) => w.name).filter((s) => s && slug.startsWith(`${s}-`)).sort((a, b) => b.length - a.length)[0]
-      || (variant ? slug.slice(0, -variant.length - 1) : '');
-    return base ? `${words(base)}, ${words(slug.slice(base.length + 1)).replace(/^\w/, (c) => c.toLowerCase())}` : words(slug);
-  }
+  const workflowTitle = (wf, file) => window.BacklogPoOptions.workflowTitle(wf, file, state.workflows);
 
   // the header project's record (its set, its default, #791 its workflowKinds), as the Backlog holds it
   const projectRecord = () => actions()?.project?.() || (state.projects || []).find((p) => p.id === po.projectId) || null;
@@ -437,45 +410,6 @@
   const planWorkflows = () => DefaultWorkflow.projectWorkflows(taskWorkflows(), projectRecord());
   // the Cost chip and its steps: not on a tests-first workflow, nor one without the inputs it sets
   const costOn = () => window.PoCalibration.costApplies(workflowOf(DefaultWorkflow.current().file));
-
-  // ---- #791: the kinds of a plan -------------------------------------------------------------------
-  const KIND_CHOICES = ['feature', 'fix', 'other'];
-  const KIND_GLYPHS = { feature: '✦', fix: '⚒', refactor: '↻', other: '…' };
-  // the project's workflow of a kind (the record holds a clone's manifest map; the renderer reads no manifest)
-  const kindEntryOf = (kind) => DefaultWorkflow.kindEntry(projectRecord(), null, kind);
-  // its installed file: `<name>.yaml`, else a repository copy of that name, else the name itself
-  function kindFileOf(kind) {
-    const name = kindEntryOf(kind).name;
-    const list = state.workflows || [];
-    return (list.find((w) => w.file === `${name}.yaml`) || list.find((w) => DefaultWorkflow.label(String(w.file || '').replace(/^.*[\\/]/, '')) === name))?.file || `${name}.yaml`;
-  }
-  const kindShown = (g, edit) => edit?.kind || g.kind || null;
-  const kindBadge = (kind) => (kind ? `<span class="badge po-kind-badge" data-testid="po-kind-badge" data-kind="${esc(kind)}"><span class="po-kind-icon" aria-hidden="true">${KIND_GLYPHS[kind] || ''}</span>${esc(t(`po.kind.${kind}`))}</span>` : '');
-  // Feature | Fix | Outro, the recommendation's kind pressed; Outro shows the select of every workflow that takes a task
-  function kindControlHtml(g, edit, done) {
-    const kind = kindShown(g, edit);
-    const choice = (c) => `<button type="button" class="${kind === c ? 'active' : ''}" data-po-kind="${c}" data-testid="po-kind-choice-${c}" aria-pressed="${kind === c}"${done ? ' disabled' : ''}>${esc(t(`po.kind.${c}`))}</button>`;
-    const current = edit?.workflow || g.workflow;
-    const all = taskWorkflows();
-    const list = all.some((w) => w.file === current) ? all : [{ file: current, name: current }, ...all];
-    const other = window.Select.markup(`class="po-wf" data-po-kind-other data-testid="po-kind-other-select" aria-label="${esc(t('backlog_po.decisions_workflow'))}"${done ? ' disabled' : ''}`, list.map((w) => [w.file, workflowTitle(w, w.file)]), current);
-    return `<div class="po-kind-row"><div class="seg sm po-kind-control" data-testid="po-kind-control" role="group" aria-label="${esc(t('po.kind.reason'))}">${KIND_CHOICES.map(choice).join('')}</div><span class="po-kind-other"${kind === 'other' ? '' : ' hidden'}>${other}</span></div>`;
-  }
-  // the owner's choice of a kind on a recommendation: that kind's workflow and inputs replace the PO's
-  // (the PO's own kind again: no change); Outro keeps the workflow until one is picked in its select
-  function chooseKind(edit, g, kind) {
-    edit.values = {};
-    if (kind === g.kind || (kind === 'other' && !g.kind)) { delete edit.kind; edit.workflow = null; edit.kindInputs = null; return; }
-    edit.kind = kind;
-    if (kind === 'other') { edit.workflow = edit.workflow || g.workflow; edit.kindInputs = null; return; }
-    edit.workflow = kindFileOf(kind);
-    edit.kindInputs = { ...kindEntryOf(kind).inputs };
-  }
-  // the plan's groups by kind, KINDS order, the ones without a kind last ("other"); [] when none has a kind
-  function groupsByKind(groups) {
-    if (!groups.some((g) => g.kind)) return [];
-    return [...DefaultWorkflow.KINDS, 'other'].map((kind) => ({ kind, items: groups.map((g, n) => ({ g, n })).filter(({ g }) => (g.kind || 'other') === kind) })).filter((x) => x.items.length);
-  }
 
   const projectName = () => actions()?.project?.()?.name || (state.projects || []).find((p) => p.id === po.projectId)?.name || po.projectId;
   function groupHtml(g, m, n) {
@@ -492,18 +426,18 @@
       <div class="po-group${done ? ' applied' : ''}" data-msg="${m}" data-group="${n}" data-testid="po-recommendation">
         <div class="po-group-head">
           <span class="badge">${t('backlog_po.stage')} ${g.stage}</span>
-          ${kindBadge(kindShown(g, po.edits[key]))}
+          ${window.BacklogPoKinds.badge(window.BacklogPoKinds.shown(g, po.edits[key]))}
           <b>${esc(g.name)}</b>
           <span class="po-issues">${g.issues.map(issueRef).join('')}</span>
           ${appliedBadge(st, already)}
         </div>
-        ${g.kind ? kindControlHtml(g, po.edits[key], done) : ''}
+        ${g.kind ? window.BacklogPoKinds.controlHtml({ g, edit: po.edits[key], done, workflows: taskWorkflows(), title: workflowTitle }) : ''}
         ${window.BacklogPoOptions.decisionsHtml({ g, key, edit: po.edits[key], wf, workflows: planWorkflows(), title: workflowTitle, runDefaults: po.runDefaults, done })}
         <dl class="po-secs small">
           ${g.kindReason ? `<dt>${t('po.kind.reason')}</dt><dd>${esc(g.kindReason)}</dd>` : ''}
           ${g.reason ? `<dt>${t('backlog_po.why')}</dt><dd class="md md-compact">${markdownHtml(g.reason)}</dd>` : ''}
           ${g.modeReason ? `<dt>${t('backlog_po.mode')}</dt><dd class="md md-compact">${markdownHtml(g.modeReason)}</dd>` : ''}
-          ${g.files?.length ? `<dt>${t('backlog_po.files')}</dt><dd>${filesHtml(g.files)}</dd>` : ''}
+          ${g.files?.length ? `<dt>${t('backlog_po.files')}</dt><dd>${window.BacklogPoOptions.filesHtml(g.files)}</dd>` : ''}
           <dt>${t('backlog_po.estimate')}</dt><dd class="po-size">${sizeText(g)}</dd>
           ${g.cost ? `<dt>${t('backlog_po.cost')}</dt><dd>${costHtml(g)}</dd>` : ''}
         </dl>
@@ -536,13 +470,8 @@
     if (a.groups?.length) {
       const allDone = a.groups.every((g) => applied(groupState(g)));
       const allTitle = allDone ? 'Every group is already in the roadmap or assigned' : 'Every group as a planned stage (by its stage number) at the end of the roadmap';
-      // #791: the runs summed up and grouped by kind; an answer without kinds (recorded before) as a plain list
-      const byKind = groupsByKind(a.groups);
-      const summary = byKind.length ? `<div class="small muted po-kind-summary" data-testid="po-kind-summary">${byKind.map(({ kind, items }) => esc(t(`po.kind.count_${kind}`, { count: items.length }))).join(' · ')}</div>` : '';
-      const cards = byKind.length
-        ? byKind.map(({ kind, items }) => `<div class="po-kind-group" data-testid="po-kind-group-${esc(kind)}">${items.map(({ g, n }) => groupHtml(g, m, n)).join('')}</div>`).join('')
-        : a.groups.map((g, n) => groupHtml(g, m, n)).join('');
-      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.proposed_runs')}</div>${summary}${cards}
+      // #791: the runs summed up and grouped by kind
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.proposed_runs')}</div>${window.BacklogPoKinds.planHtml(a.groups, (g, n) => groupHtml(g, m, n))}
         <div class="row"><button class="btn sm ghost" type="button" data-po-act="roadmap-all" data-msg="${m}" title="${allTitle}"${allDone ? ' disabled' : ''}>${t('backlog_po.add_all_to_the_roadmap')}</button>
         ${po.notes[`${m}:all`] ? `<span class="small ${po.notes[`${m}:all`].error ? 'error' : 'muted'}">${esc(po.notes[`${m}:all`].text)}</span>` : ''}</div></div>`);
     }
@@ -998,7 +927,7 @@
     // #791: Feature | Fix | Outro on a recommendation
     const kind = e.target.closest('[data-po-kind]');
     if (kind) {
-      if (!kind.disabled) { chooseKind(editOf(kind), groupOf(kind), kind.dataset.poKind); render(); }
+      if (!kind.disabled) { window.BacklogPoKinds.choose(editOf(kind), groupOf(kind), kind.dataset.poKind, { project: projectRecord(), workflows: state.workflows || [] }); render(); }
       return;
     }
     // #785: a recommendation's "Editar" (the form) and "Mais" (the advanced lines)
@@ -1031,25 +960,14 @@
       render();
       return;
     }
-    const k = el.dataset.wiInput;
-    if (!k) return;
-    const value = WorkflowInputs.read(el.closest('.wi-field'), { all: true })[k];
-    const wf = workflowOf(edit.workflow || g.workflow);
-    const shown = window.BacklogPoOptions.withEdits(g, null, wf, po.runDefaults).inputs[k] ?? WorkflowInputs.shownDefault(k, wf?.inputs?.[k], po.runDefaults);
-    if (WorkflowInputs.sameValue(value, shown)) delete edit.values[k];
-    else edit.values[k] = value;
+    window.BacklogPoOptions.valueChanged(el, edit, g, workflowOf(edit.workflow || g.workflow), po.runDefaults);
   }
   const inDecisionsForm = (e) => !!e.target.closest?.('[data-testid="po-decisions-form"]');
   const onLogInput = (e) => (inDecisionsForm(e) ? decisionChanged(e.target) : window.BacklogPoProposals.onInput(e, proposalsCtx()));
   const onLogChange = (e) => {
     if (inDecisionsForm(e)) { decisionChanged(e.target); return; }
-    // #791: a workflow picked in Outro: that item's choice, Outro pressed
-    if (e.target.matches('[data-po-kind-other]')) {
-      const edit = editOf(e.target);
-      Object.assign(edit, { kind: 'other', workflow: e.target.value, kindInputs: null, values: {} });
-      render();
-      return;
-    }
+    // #791: a workflow picked in Outro
+    if (e.target.matches('[data-po-kind-other]')) { window.BacklogPoKinds.pickOther(editOf(e.target), e.target.value); render(); return; }
     // a draft's workflow select (#195): kept for that draft, the Create + roadmap tooltip follows it
     if (e.target.matches('[data-po-wf]')) {
       draftWorkflow.set(Number(e.target.closest('[data-msg]')?.dataset.msg), e.target.value);

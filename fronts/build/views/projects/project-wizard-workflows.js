@@ -1,4 +1,4 @@
-/* global esc, t */
+/* global api, DefaultWorkflow, esc, state, t */
 // #725: the new-project wizard's step 3 right column, "Suggested workflows" (mock-4, #630), split out of
 // project-wizard.js (its size cap). window.ProjectWizardColumn({ cur, jobOf, phasesHtml }) gives the wizard, over
 // its own state (`cur()`: the onboarding, the model, the owner's picks and cur.workflowsMode):
@@ -19,6 +19,7 @@
 // - jobReason(job): a failed job in the interface's language from the engine's code (failureOf in
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
 // - profileOf(), workflowChoices(), pickedWorkflows() (#729: Finish saves them as the project's workflows).
+// - #790 loadManifest(): reads cur.manifest for the Default row; pickedDefault(workflows): Finish's default.
 // - #726 textOf(x): the model's i18n keys (a key, { key, params }, an array) in the interface's language: the
 //   reasons (after the highlighted wizard-workflow-why "Why:" label), the selects' options, the profile line.
 // Uses app.js globals (esc, t), window.OnboardingModel and window.Select.
@@ -26,7 +27,7 @@
 (function () {
   const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
 
-  window.ProjectWizardColumn = function ({ cur, jobOf, phasesHtml }) {
+  window.ProjectWizardColumn = function ({ cur, jobOf, phasesHtml, renderSoon }) {
     const M = window.OnboardingModel;
     const jobReason = (job) => {
       const reason = job?.reason || job?.error || t('onboarding.no_reason');
@@ -200,11 +201,41 @@
       return `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${control}${mark}</div>`;
     }
 
+    const recordOf = (pid) => (typeof state === 'object' && state?.projects?.find?.((p) => p.id === pid)) || null;
+
+    // #790: the repository's workflows manifest (api.projectManifest: the clone's folder once the record has it,
+    // else the URL), for step 3's Default row and Finish's default; read again when the folder becomes known
+    function loadManifest() {
+      const pid = cur().projectId;
+      if (!pid || typeof api.projectManifest !== 'function') return;
+      const folder = recordOf(pid)?.folder || '';
+      const target = folder ? { folder } : { url: cur().model.repository };
+      const key = JSON.stringify(target);
+      if (cur().manifestFor === key) return;
+      cur().manifestFor = key;
+      const current = () => cur()?.projectId === pid && cur().manifestFor === key;
+      Promise.resolve(api.projectManifest(target)).then((m) => {
+        if (!current()) return;
+        cur().manifest = m && typeof m === 'object' ? m : null;
+        renderSoon();
+      }).catch(() => { if (current()) cur().manifest = null; });
+    }
+
+    // #790: the default Finish saves: the owner's pick in the Default row, else the repository manifest's
+    // `default`, else what the clone saved on the record (its manifest's default), else the first build
+    // workflow; #791: the Feature and Fix picks stay in `workflows` with their variant
+    // (projects.workflowForKind resolves them), a clone's manifest map stays on the record untouched
+    function pickedDefault(workflows) {
+      return cur().workflows?.default || cur().manifest?.default || recordOf(cur().projectId)?.defaultWorkflow || DefaultWorkflow.firstBuild(workflows) || 'feature';
+    }
+
     return {
       cliWarning,
       forkNotice,
       forkPending,
       jobReason,
+      loadManifest,
+      pickedDefault,
       kindField,
       pickedWorkflows,
       profileOf,

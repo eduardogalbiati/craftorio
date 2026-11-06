@@ -104,7 +104,7 @@ module.exports = (ctx) => {
     language: settings.language, // #327, #328: the turn's [Language] line, the simulated draft's headings
   });
   // What every question to the Product Owner reads: the synced backlog, the runs, the workflows, its agent and budget.
-  const askOptions = (id, simulated) => {
+  const askOptions = (id, simulated, chosen = null) => {
     const p = projects.readProject(ctx.ws.projects, id);
     const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
     if (!data) throw new Error('Sync the backlog first: the Product Owner reads the synced issues.');
@@ -115,7 +115,7 @@ module.exports = (ctx) => {
       data,
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
       runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
-      ...productOwnerWorkflows(ctx, p), // #790, #791: only the project's workflows, its default and its kinds
+      ...productOwnerWorkflows(ctx, p, chosen), // #790, #791: only the project's workflows, its default and its kinds
       mock: simulated,
       // #206: the prices of the estimates
       prices: settings.prices || {},
@@ -256,7 +256,7 @@ module.exports = (ctx) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
         const simulated = !!mock || simulation.simulationOnly();
-        const base = askOptions(id, simulated);
+        const base = askOptions(id, simulated, workflow);
         // #180: its progress is pushed on chat:progress; chat:cancel ('po', id) stops it
         const turn = ctx.chatTurns.start('po', id);
         let out;
