@@ -131,16 +131,22 @@ function readBacklog(dir, projectId) {
 
 /**
  * Fetches the project's issues and caches them.
- * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function }} opts
+ * #781: onProgress({ what: 'issues', read, total }): what is read so far (total null until known). The platform's
+ * CLI answers the whole list at once: 0 of unknown, then all of them.
+ * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function, onProgress?: Function }} opts
  */
-async function syncBacklog({ dir, project, platform: asked, exec }) {
+async function syncBacklog({ dir, project, platform: asked, exec, onProgress }) {
   if (!project.repo) throw new Error('This project has no repository. Add one in Projects to sync its issues.');
   // #745: the project's platform (its host, or the one stored on it) wins over the one asked
   const platform = platformOf(project, asked);
   // the issues are what the screen needs: PRs that cannot be read leave a note, not an error
   let pullRequestsError = null;
+  onProgress?.({ what: 'issues', read: 0, total: null });
   const [fetched, prs] = await Promise.all([
-    fetchIssues({ platform, repo: project.repo, exec }),
+    fetchIssues({ platform, repo: project.repo, exec }).then((issues) => {
+      onProgress?.({ what: 'issues', read: issues.length, total: issues.length });
+      return issues;
+    }),
     fetchOpenPullRequests({ platform, repo: project.repo, exec }).catch((e) => { pullRequestsError = e.message; return []; }),
   ]);
   // epics, like the PRs, never fail the sync: an error leaves a note (epicsError)

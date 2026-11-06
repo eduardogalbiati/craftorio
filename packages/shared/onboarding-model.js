@@ -16,6 +16,9 @@
 // - #725 workflowsColumnState({ mode, profileJob }): step 3's right column, 'choose' | 'analyzing' |
 //   'failed' | 'analyzed' | 'manual', from the owner's choice and the profile job; FAILURE_CODES: the
 //   codes of a failed job the engine knows (failureOf in project-onboarding.js) and the wizard words;
+// - #781 analysisPhases({ job, interview }): step 3's activity lines from the profile job and
+//   workflowInterviewState's answer: [{ id: 'git' | 'files', state, found }, { id: 'oracle', state, reading, since }],
+//   state an ActivityLine state (not-needed → skipped);
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
 //   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
 // - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
@@ -168,6 +171,34 @@
     return validProfile(profileJob.profile) ? 'analyzed' : 'failed';
   }
 
+  // #781: the phases' states: the interview's when it answered, else what the job alone tells (it just started, or
+  // a resumed wizard on a restarted engine); a job that ended settles what a late read left unended
+  function phaseStates(job, known) {
+    const status = job?.status;
+    if (known) {
+      const states = ['git', 'files', 'oracle'].map((id) => (known[id]?.status === 'not-needed' ? 'skipped' : known[id]?.status || 'pending'));
+      return status === 'done' ? states.map((s) => (s === 'running' || s === 'pending' ? 'done' : s)) : states;
+    }
+    if (status === 'running') return ['running', 'pending', 'pending'];
+    if (status === 'done') return ['done', 'done', job.simulated ? 'skipped' : 'done'];
+    return ['pending', 'pending', 'pending'];
+  }
+
+  function analysisPhases({ job, interview } = {}) {
+    const known = interview?.phases || null;
+    const states = phaseStates(job, known);
+    // a failed job: the phase it stopped at, the first one not ended
+    if (job?.status === 'failed' && !states.includes('failed')) {
+      const stopped = states.findIndex((s) => s === 'running' || s === 'pending');
+      if (stopped >= 0) states[stopped] = 'failed';
+    }
+    return [
+      { id: 'git', state: states[0], found: known?.git?.found || null },
+      { id: 'files', state: states[1], found: known?.files?.found || null },
+      { id: 'oracle', state: states[2], reading: known?.oracle?.reading || null, since: known?.oracle?.since || null },
+    ];
+  }
+
   function costSummary(analyses) {
     const parts = (analyses || []).filter((a) => a?.checked)
       .map((a) => ({ id: a.id, estimate: Number.isFinite(a.estimate) ? a.estimate : null }));
@@ -238,6 +269,7 @@
     PROJECT_KINDS,
     STEPS,
     WORK_MODELS,
+    analysisPhases,
     back,
     canGoNext,
     ciChoice,

@@ -1,12 +1,14 @@
 // The notes under the City view's header (#373, #381; project-city.js draws them): no plan (the
-// folders as districts), a stale plan (the unmatched share) or a current plan (#730: its districts and
-// coverage, the action as a refresh), each with the tab's one action
+// folders as districts), a stale plan (the unmatched share), commits since the last analysis
+// (#782: project-city-moved, how many) or a current plan (#730: its districts and coverage; #782: "Analyzed on
+// <date> · <commit>" and the action as a quiet "Analyze again", no r3d-primary), the others with the tab's one action
 // "Analyze this project" (#381: the map and the Oracle's analysis as one run, with its combined
 // estimate next to it) and the action's state (running with its step, or its error with "Analyze
 // again"), then the plan's validation problems and the aggregation of small files over 5,000 (#428:
-// no note for the edges not read). html({ model, validation, layout, analysis, ready }) → the notes' HTML ('' when
-// there is none); `analysis`: { running, step, error, estimate, estimateTitle } from the Architecture
-// tab; `ready`: whether the action can start (the tab gave the city an onAnalyze). The notes are one
+// no note for the edges not read). html({ model, validation, layout, analysis, analysed, ready }) → the notes' HTML
+// ('' when there is none); `analysis`: { running, step, error, estimate, estimateTitle } from the Architecture
+// tab; `analysed`: architecture:city's { date, commit, commitsSince } | null; `ready`: whether the action can start
+// (the tab gave the city an onAnalyze). The notes are one
 // panel (#441: data-city-panel="notes", "City plan" with its chevron, project-city-panels.js).
 // releaseHtml({ validation, from, plan, open }) → the release card's notes (#439): the base's validation
 // of today's plan keeps only the plan's own problems (schema, unknown zone, duplicate id); the files and
@@ -18,12 +20,12 @@
   const pct = (x) => `${Math.round(x * 100)}%`;
   const note = (testid, cls, body) => `<div class="r3d-card pc-note${cls ? ` ${cls}` : ''}" data-testid="${testid}">${body}</div>`;
 
-  // the action with its estimate
-  function actionHtml(label, analysis, ready) {
+  // the action with its estimate; #782: `quiet`, the secondary look of a refresh nothing asks for
+  function actionHtml(label, analysis, ready, quiet = false) {
     const a = analysis || {};
     const estimate = a.estimate ? `<span class="pc-estimate" title="${esc(a.estimateTitle || '')}">${esc(a.estimate)}</span>` : '';
     const title = a.running ? t('project_city_notes.the_analysis_is_running') : t('project_city_notes.analyze_title');
-    return `<div class="pc-actions"><button type="button" class="r3d-primary inline" data-pc-analyze data-testid="project-city-analyze" ${ready && !a.running ? '' : 'disabled'} title="${esc(title)}">${esc(label)}</button>${estimate}</div>`;
+    return `<div class="pc-actions"><button type="button" class="${quiet ? 'pc-secondary' : 'r3d-primary inline'}" data-pc-analyze data-testid="project-city-analyze" ${ready && !a.running ? '' : 'disabled'} title="${esc(title)}">${esc(label)}</button>${estimate}</div>`;
   }
 
   function stateHtml(analysis, ready) {
@@ -34,8 +36,19 @@
     return '';
   }
 
+  // #782: "Analyzed on <date> · <commit>" in the owner's language and zone; '' when the date is not known
+  function analysedLine(analysed) {
+    const at = new Date(analysed?.date);
+    if (!analysed?.date || Number.isNaN(at.getTime())) return '';
+    /* global TimeZone, uiLocale */
+    const locale = typeof uiLocale === 'function' ? uiLocale() : undefined;
+    const date = at.toLocaleDateString(locale, { timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined });
+    const text = analysed.commit ? t('project_city_notes.analyzed_on_commit', { date, commit: analysed.commit }) : t('project_city_notes.analyzed_on', { date });
+    return `<p>${esc(text)}</p>`;
+  }
+
   /** The notes' HTML, see the header. */
-  function html({ model, validation, layout, analysis, ready }) {
+  function html({ model, validation, layout, analysis, analysed = null, ready }) {
     const notes = [];
     const running = !!analysis?.running;
     const action = running ? '' : actionHtml(t('project_city_notes.analyze_this_project'), analysis, ready);
@@ -46,7 +59,10 @@
     } else if (action) {
       // #730: a current plan keeps the action, as a refresh of the plan
       const share = Math.floor((validation?.coverage ?? 1) * 1000) / 10;
-      notes.push(note('project-city-plan', '', `<p class="small muted">${esc(t('project_architecture.city_plan_districts', { count: (model.districts || []).length, share }))}</p>${action}`));
+      const plan = `<p class="small muted">${esc(t('project_architecture.city_plan_districts', { count: (model.districts || []).length, share }))}</p>`;
+      // #782: only commits since the analysis ask for a new one; a current plan just says when it was made
+      if (analysed?.commitsSince > 0) notes.push(note('project-city-moved', '', `<b>${esc(t('project_city_notes.commits_since', { count: analysed.commitsSince }))}</b>${plan}${action}`));
+      else notes.push(note('project-city-plan', '', `${analysedLine(analysed)}${plan}${actionHtml(t('project_city_notes.analyze_again'), analysis, ready, true)}`));
     }
     const state = stateHtml(analysis, ready);
     if (state) notes.push(state);

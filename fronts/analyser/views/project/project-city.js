@@ -5,11 +5,15 @@
 // The HUD is this file's, with the run's 3D view classes (run3d.css; project-city.css places them):
 // - the header: the project (the mode's title, #440), its files, zones and districts, the Danger Zone count, the plan's
 //   coverage and the commit; a search that flies to a file, a district or a zone; "Colour by" (Quadrant, the default
-//   when a tool measured the complexity, Zone otherwise, Churn) with its legend; the Tests toggle; City life and Glow
+//   when a tool measured the complexity, Zone otherwise, Churn; #782: Churn by default when most of the code has no
+//   measure, the owner's pick remembered per project and winning) with its legend, in Quadrant and Churn with
+//   project-city-unmeasured (how much is not measured, what each language needs, why it opened in Churn,
+//   project-city-colour-churn / -quadrant, project-city-install-hint: never run here); the Tests toggle; City life and Glow
 //   (#450: switches on by default, sent as scene updates); the dark / light toggle shared with the run's 3D view
 //   (Run3DTheme); Expand (#381): the city over the whole window (`expanded`), Close or Esc brings it back as it was;
-// - the notes under it (project-city-notes.js): no plan or a stale plan, each with the tab's one action "Analyze this
-//   project" (#381: `onAnalyze`, its combined estimate next to it) and its state, the plan's problems, the edges not read;
+// - the notes under it (project-city-notes.js): no plan, a stale plan or commits since the analysis, each with the tab's
+//   one action "Analyze this project" (#381: `onAnalyze`, its combined estimate next to it), a current plan with when it
+//   was analyzed and a quiet "Analyze again" (#782), the action's state, the plan's problems, the edges not read;
 // - the hover card of a building, a district or a zone, the card a click pins (project-city-cards.js), the camera
 //   buttons (zoom, home); the states: the facts still loading, not a git repository, no commits, an error with Retry.
 // The overlay API, for the city epic's modules (they add their own files, not code here):
@@ -26,6 +30,7 @@
   const MISSING = 'The City view is not built: run `npm run build:3d` (or `npm install`) and reload. The Facts view has the same numbers, as tables.';
   const ZOOM_IN = 0.72, ZOOM_OUT = 1.38;
   const COLOUR_LABEL = { quadrant: 'Quadrant', zone: 'Zone', churn: 'Churn' };
+  const COLOUR_STORE = 'cityColour'; // #782: { projectId: the colour the owner picked }
   const ICON_CITY = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="7" width="4" height="8" rx="1"/><rect x="6" y="2" width="4" height="13" rx="1"/><rect x="11" y="5" width="4" height="10" rx="1"/></svg>';
   const ICON_EXPAND = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>', ICON_CLOSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg>'; // i18n-ignore
   // #450's switches (fronts/analyser/poc/city-modes.html's icons: a tree and a lamp, a sun's rays): the flag, its test id and label key, its icon
@@ -38,6 +43,14 @@
   const plural = (n, key) => t(key, { count: n });
   const pct = (x) => `${Math.round(x * 100)}%`;
   const theme = () => window.Run3DTheme?.load() || 'dark';
+
+  // #782: the owner's colour per project; a browser without storage only forgets it
+  function savedColours() {
+    try { return JSON.parse(localStorage.getItem(COLOUR_STORE) || '{}') || {}; } catch { return {}; }
+  }
+  function saveColour(projectId, colour) {
+    try { localStorage.setItem(COLOUR_STORE, JSON.stringify({ ...savedColours(), [projectId]: colour })); } catch { /* kept until the view closes */ }
+  }
 
   function webglProblem() {
     if (gl != null) return gl;
@@ -117,7 +130,11 @@
     function relayout() {
       const model = c.answer?.model;
       c.layout = model && window.CityLayout ? CityLayout.layoutCity(model, { quadrants: byFile('quadrant'), scores: byFile('score') }) : null;
-      if (c.layout && !c.colour) c.colour = CityLayout.defaultColourBy(model);
+      if (c.layout && !c.colour) {
+        const picked = savedColours()[projectId];
+        c.colourAuto = !CityLayout.COLOUR_BY.includes(picked); // #782: the app chose it: the legend says why
+        c.colour = c.colourAuto ? CityLayout.defaultColourBy(model) : picked;
+      }
       // a new layout starts with nothing hovered or pinned (the scene drops its own too)
       c.hover = null;
       c.pinned = null;
@@ -214,13 +231,29 @@
     }
 
     // the notes under the header (project-city-notes.js): the action (#381), its state, the plan's problems (none on a past release's city, #440)
-    const notesHtml = (model, validation) => (self.mode === 'release' ? '' : window.ProjectCityNotes?.html({ model, validation, layout: c.layout, analysis: c.analysis, ready: typeof onAnalyze === 'function' }) || '');
+    const notesHtml = (model, validation) => (self.mode === 'release' ? '' : window.ProjectCityNotes?.html({ model, validation, layout: c.layout, analysis: c.analysis, analysed: c.answer?.analysed ?? null, ready: typeof onAnalyze === 'function' }) || '');
+
+    // #782: why the Quadrant view is grey: how much has no measure, what each language needs, the way to a colour that
+    // works and how to get a tool (a command to copy: nothing here installs anything)
+    function unmeasuredHtml() {
+      if (!['quadrant', 'churn'].includes(c.colour)) return '';
+      const { unmeasured, share, languages } = CityLayout.measuredShare(c.answer?.model);
+      if (!unmeasured) return '';
+      const tooled = languages.filter((l) => l.tool);
+      const said = tooled.map((l) => t('project_city.not_measured_language', { pct: Math.round(l.share * 100), language: l.language, tool: l.tool })).join(' · ');
+      const to = c.colour === 'churn' ? 'quadrant' : 'churn';
+      const why = c.colourAuto && c.colour === 'churn' ? `<p>${esc(t('project_city.churn_because'))}</p>` : '';
+      const tools = [...new Set(tooled.map((l) => l.tool))].join(', ');
+      const hint = tools ? `<p class="pc-install-hint" data-testid="project-city-install-hint">${esc(t('project_city.install_hint', { tools }))} <code>${esc(window.ArchitectureModel?.LIZARD_INSTALL || '')}</code></p>` : '';
+      return `<div class="pc-unmeasured" data-testid="project-city-unmeasured"><p>${esc(said || t('project_city.not_measured_total', { pct: Math.round(share * 100) }))}</p>${why}
+        <button type="button" class="pc-secondary" data-pc-colour-to="${to}" data-testid="project-city-colour-${to}">${esc(t(`project_city.colour_by_${to}`))}</button>${hint}</div>`;
+    }
 
     // a mode's own rows (setLegend) in place of Colour by's, after the legend's close (#441)
     function renderLegend() {
       const box = hud.querySelector('[data-testid="project-city-legend"]');
       if (!box) return;
-      box.innerHTML = `${window.ProjectCityPanels?.legendClose() || ''}${[...c.rows.values()].join('') || `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>`}`;
+      box.innerHTML = `${window.ProjectCityPanels?.legendClose() || ''}${[...c.rows.values()].join('') || `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>${unmeasuredHtml()}`}`;
     }
 
     const stateMessage = (testid, title, text) => stageMessage(`<p><b>${esc(title)}</b></p><p>${esc(text)}</p>`, { testid });
@@ -304,6 +337,17 @@
       return true;
     }
 
+    // #782: the owner's colour, from the select or the legend's action: remembered, it wins over the default
+    function setColour(value) {
+      Object.assign(c, { colour: value, colourAuto: false });
+      saveColour(projectId, value);
+      const select = hud.querySelector('[data-pc-colour]');
+      if (select) select.value = value;
+      if (c.handle) c.handle.update(paint());
+      else c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend;
+      renderLegend();
+    }
+
     function setTheme(name) {
       c.theme = name;
       el.dataset.theme = name;
@@ -343,14 +387,12 @@
       else if (t.closest('[data-pc-expand]')) setExpanded(!c.expanded);
       else if (t.closest('[data-pc-flag]')) { const b = t.closest('[data-pc-flag]'), k = b.dataset.pcFlag; c[k] = !c[k]; b.setAttribute('aria-pressed', String(c[k])); c.handle?.update({ [k]: c[k] }); }
       else if (t.closest('[data-pc-analyze]')) onAnalyze?.(projectId);
+      else if (t.closest('[data-pc-colour-to]')) setColour(t.closest('[data-pc-colour-to]').dataset.pcColourTo);
     });
     el.addEventListener('change', (e) => {
       const t = e.target;
       if (t.matches('[data-pc-colour]')) {
-        c.colour = t.value;
-        if (c.handle) c.handle.update(paint());
-        else c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend;
-        renderLegend();
+        setColour(t.value);
       } else if (t.matches('[data-pc-tests]')) {
         c.tests = t.checked;
         c.handle?.update({ tests: c.tests });

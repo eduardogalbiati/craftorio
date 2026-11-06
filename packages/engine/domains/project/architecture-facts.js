@@ -36,6 +36,7 @@ const {
   checkComplexity,
   DEFAULT_EXCLUDES,
   globRe,
+  LIZARD_INSTALL,
   parseIgnoreRevs,
 } = require('@multiagent/shared/architecture-model');
 const { buildCity } = require('@multiagent/shared/city-model');
@@ -50,7 +51,6 @@ const TOOL_TIMEOUT_MS = 300e3;
 // a larger JavaScript file is a bundle, not code written by hand
 const MAX_SOURCE_BYTES = 1 << 20;
 const PARSE_BATCH = 25;
-const LIZARD_INSTALL = 'pip install lizard';
 const MAX_BUFFER = 1 << 28;
 const CACHE_SIZE = 20;
 const DEFAULT_BRANCHES = ['main', 'master'];

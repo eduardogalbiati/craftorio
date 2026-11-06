@@ -5,7 +5,8 @@
 // city and reports what the pointer is on.
 //   ProjectCityScene.mount(element, { layout, paint, markers, tests, pins, theme, cityLife, glow, relationsOf, onHover, onPick }) → handle
 //   - layout: packages/shared/city-layout.js layoutCity; paint: { colours: [hex], greyed: [bool] } per
-//     building (colourBy, then applyOverlay); markers: applyOverlay's; tests: draw the test files;
+//     building (colourBy, then applyOverlay; #782: the district and landmark labels only for what is hovered, pinned
+//     or flown to, city-layout.js labelsShown); markers: applyOverlay's; tests: draw the test files;
 //     pins: the file paths whose connections stay drawn (#382, the connections panel); theme: 'dark'
 //     | 'light' (run3d-theme.js); cityLife, glow (#450, both on by default): the street life (trees,
 //     lamps, benches, cars, the lamps' pools) and the bloom with its vignette; relationsOf(kind, id) → { requires, requiredBy } (city-layout.js
@@ -13,7 +14,7 @@
 //     position; onPick({ kind, id } | null) on a click (null: the empty sky).
 //   - handle: update(patch of the same keys; a new layout drops the hover and the pinned card, the
 //     pins stay), pin(target | null) (the card's target), flyTo(flyTarget), home(), zoom(factor),
-//     stats() → { firstFrameMs, fps, buildings, cityLife, glow, props } (the time to the first frame,
+//     stats() → { firstFrameMs, fps, buildings, cityLife, glow, props, labels } (labels: labelsShown's; the time to the first frame,
 //     the frame rate while the camera moves; per drawn file { path, archetype, greyed }: its v2
 //     building's kind, scene.jsx buildingsOf, and whether the overlay greys it; the two switches; the
 //     life props shown, props.js lifeCount, 0 with City life off), unmount() (React Three Fiber gives
@@ -23,6 +24,7 @@
 import { Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
+import { labelsShown } from '@multiagent/shared/city-layout.js';
 import { lifeCount } from './props.js';
 import { buildingsOf, CityScene } from './scene.jsx';
 import { cityTheme } from './theme.js';
@@ -38,22 +40,28 @@ class SceneBoundary extends Component {
   }
 }
 
-// the tags that float over the scene: landmarks (always visible), ports and, up close, the scores of
-// the district under the camera (#449, coloured as their building); Rig moves them
+// the tags that float over the scene: #782 the landmarks and ports of what is hovered, pinned or flown to
+// (labelsShown) and, up close, the scores of the district under the camera (#449, coloured as their
+// building); Rig moves them: a new tag waits hidden for the frame that places it
+const UNPLACED = { visibility: 'hidden' };
+
 function Tags({ store }) {
-  const { layout, paint, scoreDistrict, tests } = useStore(store);
-  const ref = (id) => (el) => { if (el) store.tagEls.set(id, el); else store.tagEls.delete(id); };
+  const { layout, paint, scoreDistrict, tests, hover, pinned, fly } = useStore(store);
+  const shown = labelsShown(layout, { hover, pinned, fly });
+  const ref = (id) => (el) => {
+    if (el) { store.tagEls.set(id, el); store.invalidate(); } else store.tagEls.delete(id);
+  };
   return (
     <div className="r3d-tags">
-      {layout.landmarks.map((l) => (
-        <button type="button" key={`landmark:${l.path}`} ref={ref(`landmark:${l.path}`)} className="r3d-tag live" title={l.path}
+      {layout.landmarks.filter((l) => shown.landmarks.includes(l.path)).map((l) => (
+        <button type="button" key={`landmark:${l.path}`} ref={ref(`landmark:${l.path}`)} className="r3d-tag live" data-testid="city-label" style={UNPLACED} title={l.path}
           onClick={() => store.pick('building', l.path)}>
           <i className="r3d-dot" />
           {l.label} <span children={l.path.split('/').pop()} />
         </button>
       ))}
-      {layout.ports.map((p) => (
-        <div key={`port:${p.id}`} ref={ref(`port:${p.id}`)} className="r3d-tag sel" title={t('city3d.talks_to', { files: p.via.join(', ') })}>
+      {layout.ports.filter((p) => shown.ports.includes(p.id)).map((p) => (
+        <div key={`port:${p.id}`} ref={ref(`port:${p.id}`)} className="r3d-tag sel" data-testid="city-label" style={UNPLACED} title={t('city3d.talks_to', { files: p.via.join(', ') })}>
           <i className="r3d-dot" />
           {p.name} <span children={t('city3d.files', { count: p.via.length })} />
         </div>
@@ -89,7 +97,7 @@ function App({ store }) {
 const same = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
 
 function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, cityLife = true, glow = true, relationsOf, onHover, onPick }) {
-  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), cityLife: !!cityLife, glow: !!glow, paused: false, level: 0, scoreDistrict: null, hover: null, pinned: null, glError: '' });
+  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), cityLife: !!cityLife, glow: !!glow, paused: false, level: 0, scoreDistrict: null, hover: null, pinned: null, fly: null, glError: '' });
   Object.assign(store, {
     tagEls: new Map(),
     tagAnchors: new Map(),
@@ -105,7 +113,7 @@ function mount(element, { layout, paint, markers = [], tests = true, pins = [], 
     },
     pick(kind, id) {
       const next = kind && id != null ? { kind, id } : null;
-      store.set({ pinned: next });
+      store.set({ pinned: next, fly: null });
       onPick?.(next);
     },
   });
@@ -123,17 +131,18 @@ function mount(element, { layout, paint, markers = [], tests = true, pins = [], 
       const next = { ...patch };
       if (patch.theme) next.theme = cityTheme(patch.theme);
       if (patch.pins) next.pins = [...patch.pins];
-      if (patch.layout && patch.layout !== store.get().layout) Object.assign(next, { layoutKey: store.get().layoutKey + 1, scoreDistrict: null, hover: null, pinned: null });
+      if (patch.layout && patch.layout !== store.get().layout) Object.assign(next, { layoutKey: store.get().layoutKey + 1, scoreDistrict: null, hover: null, pinned: null, fly: null });
       store.set(next);
     },
-    pin(target) { store.set({ pinned: target || null }); },
-    flyTo(target) { if (target) store.rig?.fly(target); },
-    home() { store.rig?.home(); },
+    // #782: the label of a search's target stays until its card closes or the camera goes home
+    pin(target) { store.set(target ? { pinned: target } : { pinned: null, fly: null }); },
+    flyTo(target) { if (target) { store.set({ fly: target }); store.rig?.fly(target); } },
+    home() { store.set({ fly: null }); store.rig?.home(); },
     zoom(factor) { store.rig?.zoom(factor); },
     stats: () => {
-      const { layout, paint, cityLife, glow } = store.get(), built = buildingsOf(layout);
+      const { layout, paint, cityLife, glow, hover, pinned, fly } = store.get(), built = buildingsOf(layout);
       const buildings = (layout?.buildings || []).map((b, i) => ({ path: b.path, archetype: built[i]?.kind || null, greyed: !!paint?.greyed?.[i] }));
-      return { firstFrameMs: store.stats.firstFrameMs, fps: store.stats.fps, buildings, cityLife, glow, props: lifeCount(layout, cityLife) };
+      return { firstFrameMs: store.stats.firstFrameMs, fps: store.stats.fps, buildings, cityLife, glow, props: lifeCount(layout, cityLife), labels: labelsShown(layout, { hover, pinned, fly }) };
     },
     unmount() {
       seer?.disconnect();

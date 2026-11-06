@@ -17,6 +17,7 @@ const {
   BOOL,
   described,
   FLAG,
+  INT,
   ISSUE_NUMBER,
   listOf,
   nullable,
@@ -37,6 +38,8 @@ const PUSHED = shape({ local: nullable(OBJECT), backlog: BACKLOG });
 const NUMBERS = listOf(ISSUE_NUMBER);
 // archive and restore: one result per issue, and the Backlog after them
 const PER_ISSUE = shape({ results: listOf(shape({ number: ISSUE_NUMBER, ok: BOOL, error: ANY }, ['ok'])), backlog: BACKLOG }, ['results']);
+// #781: the sync in progress, what the wizard's Backlog card says
+const PROGRESS = nullable(shape({ source: STRING, what: STRING, read: nullable(INT), total: nullable(INT) }, ['source', 'what']));
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -52,6 +55,7 @@ module.exports = (ctx) => {
       ...(simulate || simulation.simulationOnly() ? { exec: async () => '' } : {}),
     };
   };
+  const progress = new Map(); // #781: project id → the sync in progress: { source, what, read, total }
   return [
     { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], schema: { params: ON_PROJECT, result: BACKLOG }, fn: ({ projectId }) => current(projectId) },
     // #491: the Roadmap's live reloads read only what changes while runs go (packages/engine/domains/backlog/backlog.js backlogState)
@@ -65,6 +69,8 @@ module.exports = (ctx) => {
       },
       fn: ({ projectId }) => backlog.backlogState(current(projectId)),
     },
+    // #781: how far the sync in progress went, null with none
+    { channel: 'backlog:progress', method: 'backlogProgress', params: ['projectId'], schema: { params: ON_PROJECT, result: PROGRESS }, fn: ({ projectId }) => progress.get(project(projectId)) || null },
     // the Backlog Refresh banner's "Dismiss for today" (#161, packages/engine/domains/backlog/backlog-refresh.js)
     {
       channel: 'backlog:dismiss-refresh',
@@ -83,15 +89,20 @@ module.exports = (ctx) => {
       params: ['projectId', 'platform'],
       schema: { params: args({ projectId: PROJECT_ID, platform: nullable(STRING) }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, platform }) => {
-        const [data] = await Promise.all([
-          backlog.syncBacklog({
-            dir: ctx.ws.backlog,
-            project: projects.readProject(ctx.ws.projects, project(projectId)),
-            platform: platform || workspace.readSettings(ctx.ws).backlogPlatform,
-          }),
-          ctx.refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
-        ]);
-        return ctx.withIssueRuns(data);
+        const id = project(projectId);
+        const proj = projects.readProject(ctx.ws.projects, id);
+        const asked = platform || workspace.readSettings(ctx.ws).backlogPlatform;
+        const source = backlog.platformOf(proj, asked);
+        progress.set(id, { source, what: 'issues', read: 0, total: null });
+        try {
+          const [data] = await Promise.all([
+            backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, onProgress: (p) => progress.set(id, { source, ...p }) }),
+            ctx.refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
+          ]);
+          return ctx.withIssueRuns(data);
+        } finally {
+          progress.delete(id);
+        }
       },
     },
     // Local merges not pushed: check again (fetch), push the base, or rebase it onto origin and push.

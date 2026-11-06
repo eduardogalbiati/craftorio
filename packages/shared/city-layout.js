@@ -29,6 +29,9 @@
 //   rect) → [{ y0, y1, cells }], the order kept.
 // - COLOUR_BY, defaultColourBy(model), colourBy(layout, mode, { light }) → { colours, legend }: by
 //   quadrant (campus files quieter), by zone (a tint per zone kind) or by churn (a heat ramp).
+// - #782 measuredShare(model) → { files, measured, unmeasured, share, languages: [{ language, files, share, tool }] }:
+//   how much of the code (no test files) a tool measured; over half unmeasured, the city opens in churn.
+// - #782 labelsShown(layout, { hover, pinned, fly }) → { districts, landmarks, ports }: the labels drawn now.
 // - The overlay API the city epic's modules build on: applyOverlay(layout, { highlight { path:
 //   colour }, markers [path] }) greys every building not highlighted and puts each marker on its
 //   building's roof; flyTarget(layout, name) is the point to fly to for a file, a district or a zone
@@ -79,8 +82,9 @@
   // the facts' quadrants and the product's test-file patterns, resolved at call time (in the browser
   // packages/shared/globs.js loads after this file)
   const node = typeof module === 'object' && module.exports;
+  const architectureModel = () => (node ? require('./architecture-model') : root.ArchitectureModel);
   const quadrantNames = () => {
-    const m = node ? require('./architecture-model') : root.ArchitectureModel;
+    const m = architectureModel();
     return (m && m.QUADRANTS) || [];
   };
   // the mast's rule is the v2 buildings' (packages/shared/city-buildings.js, loaded before this file);
@@ -453,8 +457,27 @@
 
   // ---------- colour by ----------
 
-  /** Quadrant when a tool measured the complexity, the zones otherwise. */
-  const defaultColourBy = (model) => (model && model.complexity && model.complexity.status === 'measured' ? 'quadrant' : 'zone');
+  /** #782: how much of the code a tool measured, see the header. Test files have their own legend row. */
+  function measuredShare(model) {
+    const m = architectureModel() || {};
+    const code = arr(model && model.buildings).filter((b) => !isTest(b.path));
+    const missing = code.filter((b) => b.complexity == null);
+    const counts = new Map();
+    for (const b of missing) {
+      const language = m.languageOf ? m.languageOf(b.path) : 'Other';
+      counts.set(language, (counts.get(language) || 0) + 1);
+    }
+    const languages = [...counts].sort((a, b) => b[1] - a[1] || byString(a[0], b[0]))
+      .map(([language, files]) => ({ language, files, share: files / code.length, tool: (m.COMPLEXITY_TOOLS || {})[language] || null }));
+    return { files: code.length, measured: code.length - missing.length, unmeasured: missing.length, share: code.length ? missing.length / code.length : 0, languages };
+  }
+
+  /** #782: churn when most of the code has no measure, quadrant when a tool measured it, the zones otherwise. */
+  function defaultColourBy(model) {
+    const { files, share } = measuredShare(model);
+    if (files && share > 0.5) return 'churn';
+    return files && model.complexity && model.complexity.status === 'measured' ? 'quadrant' : 'zone';
+  }
 
   // #RRGGBB between two colours
   function mix(a, b, t) {
@@ -521,6 +544,20 @@
     return z ? area('zone', z) : null;
   }
 
+  /** #782: the labels of what is hovered, pinned or flown to ({ kind, id } each, or null), see the header. */
+  function labelsShown(layout, { hover = null, pinned = null, fly = null } = {}) {
+    const districts = new Set(), landmarks = new Set(), ports = new Set();
+    for (const target of [hover, pinned, fly]) {
+      if (target && target.kind === 'district') districts.add(target.id);
+      const b = target && target.kind === 'building' ? arr(layout.buildings).find((x) => x.path === target.id) : null;
+      if (!b) continue;
+      districts.add(b.district);
+      if (b.landmark) landmarks.add(b.path);
+      for (const p of arr(layout.ports)) if (arr(p.via).includes(b.path)) ports.add(p.id);
+    }
+    return { districts: [...districts], landmarks: [...landmarks], ports: [...ports] };
+  }
+
   /** The search's matches for `query` (files by path, districts and zones by name): [{ kind, id, label }]. */
   function findTargets(layout, query, limit = 8) {
     const q = String(query || '').trim().toLowerCase();
@@ -561,10 +598,12 @@
     gapOf,
     heightOf,
     isTest,
+    labelsShown,
     layoutCity,
     LEDGES_MAX,
     ledgesOf,
     MAX_BUILDINGS,
+    measuredShare,
     neighbours,
     perLineOf,
     SIDEWALK,

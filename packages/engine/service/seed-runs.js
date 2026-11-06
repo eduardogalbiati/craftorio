@@ -82,7 +82,9 @@ async function runSeed(ctx, { project: p, seed, mock }) {
     const head = p.isGit ? await git(p.folder, ['rev-parse', 'HEAD']) : null;
     const onItem = (it) => {
       now.items++;
-      now.last = String((it && (it.text || it.name || it.kind)) || '').slice(0, PROGRESS_TEXT) || null;
+      // #781: a tool call with what it reads (the wizard's Oracle line says it)
+      const on = it?.input?.file_path || it?.input?.path || it?.input?.pattern || it?.input?.command || '';
+      now.last = String((it && (it.text || (it.name && `${it.name} ${on}`.trim()) || it.kind)) || '').slice(0, PROGRESS_TEXT) || null;
     };
     return await oracleSeeds.runSeed({
       root: seedsRoot(ctx), project: p, seed, mock: simulated, head, onItem,

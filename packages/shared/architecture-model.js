@@ -54,6 +54,7 @@
     Swift: 'lizard',
   };
   const MEASURED_IN_APP = ['JavaScript', 'TypeScript'];
+  const LIZARD_INSTALL = 'pip install lizard'; // the one tool the app runs itself for the other languages
   const ANY_LANGUAGE_TOOL = 'lizard (any other language)';
 
   // `{a => b}/c` or `a => b` (a --numstat rename) → [old, new]
@@ -424,10 +425,12 @@
     byHotness,
     byScore,
     checkComplexity,
+    COMPLEXITY_TOOLS,
     countCommits,
     DEFAULT_EXCLUDES,
     globRe,
     languageOf,
+    LIZARD_INSTALL,
     median,
     parseIgnoreRevs,
     parseLog,

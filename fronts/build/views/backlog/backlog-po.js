@@ -50,7 +50,7 @@
 // Its button and drawer are part of the Backlog's markup (backlog.js registerView): wired as it loads.
 // While a question is in flight (#234) the pills, "Register an issue…" and Ask/Send are locked (the
 // text box stays free; Enter sends nothing), the log jumps to the question and the live turn, and
-// a working line under the pills (#po-working) shows the elapsed time; a click with no project says
+// a working line under the pills (#po-working, an ActivityLine, #781) shows the elapsed time; a click with no project says
 // so (#po-notice). #785: nothing is chosen before the answer: three suggestions in the interface's language
 // ("+ opções" shows the others), no workflow and no options; a question goes as mode 'auto' and the PO
 // decides whether it plans or registers, and each recommendation's workflow and inputs. The Cost chip
@@ -828,6 +828,13 @@
     return `<div class="po-empty"><span class="po-empty-robot" aria-hidden="true">${avatar()}</span>
         <p class="muted small">${empty}</p></div>`;
   }
+  // #781: the working line: the issues it starts from, then the live turn's current step (the line animates its own "…")
+  function workingLine(time) {
+    const v = po.live ? window.LiveTurn.view(po.live) : null;
+    const open = (window.BacklogActions?.data()?.issues || []).filter((i) => String(i.state).toLowerCase() === 'open').length;
+    const said = !v || v.status === 'starting' ? open && t('backlog_po.reading_open_issues', { count: open }) : '';
+    return { state: 'running', text: String(said || v?.label || t('backlog_po.product_owner_is_answering')).replace(/…$/, ''), meta: time };
+  }
   // ask() keeps the turn's own state (busy, the live turn, unread); a failed one gives the question back
   // `from`: the chat the question is sent from (the drawer's or the Agents window's, #263): the other
   // one shows it as a turn started elsewhere
@@ -839,6 +846,7 @@
     // #234: no silent no-op when no project is selected (the text stays in the box)
     beforeSend: () => { if (po.projectId) return true; showNotice(NO_PROJECT); return false; },
     send: async (q) => { po.liveIn = from(); await ask(q); return po.error ? { ok: false } : null; },
+    workingLine,
     onStop: stopTurn,
     onDone: () => render(),
   });
