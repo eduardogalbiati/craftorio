@@ -16,7 +16,8 @@ metadata:
   name: internals-799
 inputs:
   developer_model: { type: string, default: a }
-  developer_model_note: { type: string, default: "" }
+  developer_effort: { type: string, default: low }
+  validation: { type: string, default: validated }
 agents:
   planner: { provider: claude, model: m, session: persistent }
   developer: { provider: claude, model: "{{ inputs.developer_model or 'a' }}", session: persistent }
@@ -47,7 +48,7 @@ function seeded(t, events) {
   fs.writeFileSync(path.join(runDir, 'events.jsonl'), `${all.map((e) => JSON.stringify(e)).join('\n')}\n`);
   const started = [];
   const area = resumeArea({
-    runFolder: () => runDir, runIsLive: () => false, runAlive: () => false, projectWorkflowFile: () => file,
+    ws: { runs: root }, runFolder: () => runDir, runIsLive: () => false, runAlive: () => false, projectWorkflowFile: () => file,
     startWorkflowRun: (opts) => { started.push(opts); return { runId: 'new' }; },
   });
   return { area, started };
@@ -68,11 +69,29 @@ test('#799 a changed model drops the fallback it replaces, and the conversation 
   assert.deepEqual(started[0].resume.sessions, { planner: 'on-claude' });
 });
 
-test('#799 an input no agent setting reads keeps the fallback, even with a longer name of the same start', (t) => {
+test('#799 an input no agent setting reads keeps the fallback', (t) => {
   const { area, started } = seeded(t, fellBack);
-  area.resumeRun({ runId: 'run-799', inputs: { developer_model_note: 'x' } });
+  area.resumeRun({ runId: 'run-799', inputs: { developer_effort: 'high' } });
   assert.deepEqual(started[0].agentOverrides, { developer: { provider: 'codex', model: 'gpt' } });
   assert.equal(started[0].resume.sessions.developer, 'on-codex');
+});
+
+test('#799 a resume refuses an input it does not offer, and nothing starts', (t) => {
+  const { area, started } = seeded(t, fellBack);
+  assert.throws(() => area.resumeRun({ runId: 'run-799', inputs: { validation: 'auto', developer_model: 'b' } }), /Cannot change validation on a resume/);
+  assert.equal(started.length, 0);
+});
+
+test('#799 the options give the value the agent ran on, not the input an override covered', (t) => {
+  const { area } = seeded(t, fellBack);
+  assert.deepEqual(area.resumeOptions({ runId: 'run-799' }).inputs, { developer_model: 'gpt', developer_effort: 'low' });
+});
+
+test('#799 choosing the recorded input over the override that ran drops the override, and says so', (t) => {
+  const { area, started } = seeded(t, fellBack);
+  area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'a' } });
+  assert.equal(started[0].agentOverrides, null);
+  assert.deepEqual(started[0].notices, [{ level: 'info', message: 'Inputs changed on this resume: developer_model: gpt → a.' }]);
 });
 
 test('#799 a resume with no inputs hands on what the run recorded and says nothing', (t) => {
@@ -85,7 +104,19 @@ test('#799 a resume with no inputs hands on what the run recorded and says nothi
 test('#799 the new run is told what changed', (t) => {
   const { area, started } = seeded(t, fellBack);
   area.resumeRun({ runId: 'run-799', inputs: { developer_model: 'b' } });
-  assert.deepEqual(started[0].notices, [{ level: 'info', message: 'Inputs changed on this resume: developer_model: a → b.' }]);
+  assert.deepEqual(started[0].notices, [{ level: 'info', message: 'Inputs changed on this resume: developer_model: gpt → b.' }]);
+});
+
+test('#799 a failed run resumes at the step its error route failed at, not at the step that took the error', (t) => {
+  const { area, started } = seeded(t, [
+    { type: 'step.started', step_id: 'plan' },
+    { type: 'step.finished', step_id: 'plan', error: true, output: { error: "You've hit your weekly limit" } },
+    { type: 'step.started', step_id: 'develop' },
+    { type: 'workflow.finished', status: 'failed', error: 'It broke' },
+  ]);
+  area.resumeRun({ runId: 'run-799' });
+  assert.equal(started[0].resume.fromStep, 'develop');
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).suggested, 'develop');
 });
 
 test('#799 a failed run resumes at the step it stopped at, not at an error it got past', (t) => {

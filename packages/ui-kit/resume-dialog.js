@@ -79,15 +79,19 @@ function resumeLimitNote(o) {
 }
 
 // The inputs the owner may change for the new run (#799: the developer's model and effort), at the
-// run's values; the service says which, each with the workflow's own definition.
+// values the run's agents ran on; the service says which, each with the workflow's own definition.
+// An override may have run outside the input's list: that value leads the select, and stays unless
+// the owner picks another (only a value that differs from what ran goes to the new run).
 const resumeInputKeys = (o) => Object.keys(o.inputDefs || {}).filter((key) => o.inputDefs[key].enum?.length);
 const resumeInputSelect = (key) => $(`[data-testid="resume-input-${key}"]`);
 
 function resumeInputFields(o) {
   const fields = resumeInputKeys(o).map((key) => {
     const def = o.inputDefs[key];
-    const options = def.enum.map((v) => `<option value="${esc(v)}"${String(v) === String(o.inputs?.[key]) ? ' selected' : ''}>${esc(def.options?.[v] ?? v)}</option>`).join('');
-    return `<div class="field"><label for="resume-input-${esc(key)}">${esc(def.label || key)}</label>
+    const ran = o.inputs?.[key];
+    const values = ran == null || def.enum.some((v) => String(v) === String(ran)) ? def.enum : [ran, ...def.enum];
+    const options = values.map((v) => `<option value="${esc(v)}"${String(v) === String(ran) ? ' selected' : ''}>${esc(WorkflowInputs.optionLabel(def, v))}</option>`).join('');
+    return `<div class="field"><label for="resume-input-${esc(key)}">${esc(WorkflowInputs.label(key, def))}</label>
       <select id="resume-input-${esc(key)}" data-testid="resume-input-${esc(key)}">${options}</select></div>`;
   });
   return fields.length ? `<div class="resume-inputs">${fields.join('')}</div>` : '';

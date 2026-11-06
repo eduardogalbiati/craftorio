@@ -13,11 +13,26 @@ const sessionCache = require('@multiagent/shared/session-cache');
 const supervisor = require('../../domains/supervisor/supervisor');
 const { gitOut } = require('../common');
 
-// #799: the inputs the Resume from step… dialog offers to change, when the workflow declares them
+// #799: the inputs a resume may change, when the workflow declares them. No other: an input like
+// `validation` decides whether a run meets a human gate, and a resume never goes past one.
 const RESUME_INPUTS = [
   'developer_effort',
   'developer_model',
 ];
+const offeredInputs = (wf) => Object.keys(wf.inputs || {}).filter((k) => RESUME_INPUTS.includes(k));
+
+// #799: whether a workflow's agent setting (its model, its effort) reads one of these inputs
+const readsInput = (value, names) => (String(value ?? '').match(/\binputs\.\w+/g) || []).some((x) => names.includes(x.slice('inputs.'.length)));
+
+// #799: the value an input stood for in the run: an agent override (the run's choice, or a fallback
+// it took) is applied over the inputs, so the agent ran on the override's value, not the input's
+function inputInEffect(spec, wf, key) {
+  for (const [agent, override] of Object.entries(spec.agentOverrides || {})) {
+    const setting = ['model', 'effort'].find((s) => override[s] != null && readsInput(wf.agents?.[agent]?.[s], [key]));
+    if (setting) return override[setting];
+  }
+  return spec.inputs[key] ?? wf.inputs?.[key]?.default;
+}
 
 // #799: the line of a run's error that says a provider's limit stopped it, or null. A CLI's message
 // may end in |<epoch>, when the limit resets.
@@ -30,7 +45,7 @@ const quotaLine = (text) => String(text || '').split('\n').map((l) => l.replace(
 function withChangedInputs(spec, wf, inputs) {
   const names = Object.keys(inputs || {});
   if (!names.length) return { agentOverrides: spec.agentOverrides, sessions: spec.sessions, notices: [] };
-  const decided = (value) => (String(value ?? '').match(/\binputs\.\w+/g) || []).some((x) => names.includes(x.slice('inputs.'.length)));
+  const decided = (value) => readsInput(value, names);
   const sessions = { ...spec.sessions };
   const left = Object.entries(spec.agentOverrides || {}).map(([agent, override]) => {
     const def = wf.agents?.[agent];
@@ -42,7 +57,7 @@ function withChangedInputs(spec, wf, inputs) {
     }
     return [agent, kept];
   }).filter(([, kept]) => Object.keys(kept).length);
-  const changes = names.filter((k) => inputs[k] !== spec.inputs[k]).map((k) => `${k}: ${spec.inputs[k] ?? '(none)'} → ${inputs[k]}`);
+  const changes = names.map((k) => [k, inputInEffect(spec, wf, k)]).filter(([k, was]) => inputs[k] !== was).map(([k, was]) => `${k}: ${was ?? '(none)'} → ${inputs[k]}`);
   return {
     agentOverrides: left.length ? Object.fromEntries(left) : null,
     sessions,
@@ -261,8 +276,9 @@ module.exports = (ctx) => {
   // stopped, starts at the first step. Starting over stays the owner's choice of the first step.
   // The workflow is found as a new run finds it (#799, projectWorkflowFile); startWorkflowRun refuses
   // a repository workflow not accepted at HEAD, naming it.
-  // inputs (#799): the inputs that change, over the ones the run recorded. They apply to the new run
-  // and its workflow.started records them; the run resumed from is only read.
+  // inputs (#799): the inputs that change, over the ones the run recorded, only RESUME_INPUTS the
+  // workflow declares. They apply to the new run and its workflow.started records them; the run
+  // resumed from is only read.
   function resumeRun({ runId, step, instruction, mock, confirmGate = null, images = [], inputs = null }, child = null) {
     const runDir = ctx.runFolder(runId);
     if (ctx.runIsLive(path.basename(runDir))) throw new Error('The run is still active: wait for it to end (or stop it) before resuming it.');
@@ -270,6 +286,8 @@ module.exports = (ctx) => {
     const spec = supervisor.resumeSpec(runDir, step);
     if (!spec.file) throw new Error('The run does not record its workflow file.');
     const wf = loadWorkflow(ctx.projectWorkflowFile(spec.projectId, spec.file));
+    const refused = Object.keys(inputs || {}).filter((k) => !offeredInputs(wf).includes(k));
+    if (refused.length) throw new Error(`Cannot change ${refused.join(', ')} on a resume: a resume only changes ${offeredInputs(wf).join(', ') || 'no input of this workflow'}.`);
     const pausedAt = step ? null : pausedStep(runDir);
     const fromStep = step || pausedAt?.step || spec.stoppedAt || wf.steps[0].id;
     if (!wf.steps.some((s) => s.id === fromStep)) throw new Error(`Cannot resume: step "${fromStep}" does not exist in the current version of the workflow.`);
@@ -322,7 +340,8 @@ module.exports = (ctx) => {
   // stopped, the steps a decided gate keeps out of reach), the suggested step and what is kept.
   // #799: limit also names a provider's limit (providerLimit: true), turns says what each agent's next
   // turn re-reads, and inputs / inputDefs are the RESUME_INPUTS the workflow declares, in its order:
-  // the run's values and the definitions as the workflow has them.
+  // the values the run's agents ran on (inputInEffect: an override's, which may be outside the input's
+  // enum) and the definitions as the workflow has them.
   function resumeOptions({ runId }) {
     const runDir = ctx.runFolder(runId);
     const id = path.basename(runDir);
@@ -361,13 +380,13 @@ module.exports = (ctx) => {
     const paused = status === 'paused' ? pausedStep(runDir) : null;
     const suggested = [paused?.step, spec.stoppedAt, stoppedAt, failedStep, before].find(allowed) || steps.find((s) => !s.blockedBy)?.id || null;
     const wt = spec.worktree;
-    const offered = Object.keys(wf.inputs || {}).filter((k) => RESUME_INPUTS.includes(k));
+    const offered = offeredInputs(wf);
     return {
       runId: id, workflow: wf.metadata?.name || spec.file, file: spec.file, status, active: status === 'running', mock: spec.mock,
       steps, stoppedAt, failedStep, suggested, limit: status === 'running' ? null : limit, providerLimit: status !== 'running' && providerLimit,
       worktree: wt ? { dir: wt.dir, branch: wt.branch, exists: fs.existsSync(wt.dir) } : null,
       sessions: Object.keys(spec.sessions), handoffs: Object.keys(spec.handoffs),
-      inputs: Object.fromEntries(offered.map((k) => [k, spec.inputs[k] ?? wf.inputs[k].default])),
+      inputs: Object.fromEntries(offered.map((k) => [k, inputInEffect(spec, wf, k)])),
       inputDefs: Object.fromEntries(offered.map((k) => [k, wf.inputs[k]])),
       turns: status === 'running' ? [] : nextTurns(readSummary(runDir)),
       // #368: a paused run's { step, next, at, turns } (Resume without a step continues there)

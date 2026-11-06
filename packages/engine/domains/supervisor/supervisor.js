@@ -365,14 +365,15 @@ function resumeSpec(runDir, fromStep) {
     childRuns: [...childRuns.values()], agentOverrides: Object.keys(agentOverrides).length ? agentOverrides : null };
 }
 
-// #799: where a run stopped: a failed run's step that reported the error with nothing finished after
-// it, else the last step started; null for a run that ended well or never reached a step
+// #799: where a run stopped: a failed run's step that reported the error with no step started after
+// it (an error its on_error route took on is past), else the last step started; null for a run that
+// ended well or never reached a step
 function stoppedStep(events) {
   let lastStarted = null;
   let failedAt = null;
   let status = null;
   for (const ev of events) {
-    if (ev.type === 'step.started') lastStarted = ev.step_id;
+    if (ev.type === 'step.started') { lastStarted = ev.step_id; failedAt = null; }
     if (ev.type === 'step.finished') failedAt = ev.error ? ev.step_id : null;
     if (ev.type === 'workflow.finished') ({ status } = ev);
   }
