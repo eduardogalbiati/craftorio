@@ -181,6 +181,14 @@ test('#791 the swap shows on the card: its badge, its pressed choice and its wor
   assert.deepEqual(shown, ['fix', 'true', true]);
 });
 
+test('#791 a swap moves the plan\'s summary and its groups, in the whole drawer', { timeout: 30000 }, async () => {
+  const page = await openDrawer(conversation([run([7]), run([8]), run([9])]));
+  await choose(page, 7, 'fix');
+  const inGroup = (kind) => Array.from(page.$(`#po-log [data-testid="po-kind-group-${kind}"]`)?.querySelectorAll('.po-group') || []).map(issuesOf).sort();
+  assert.equal(textOf(page.$('#po-log [data-testid="po-kind-summary"]')).includes('1 Feature · 2 Fixes'), true);
+  assert.deepEqual([inGroup('feature'), inGroup('fix')], [['#9'], ['#7', '#8']]);
+});
+
 test('#791 "Add all to the roadmap" sends the swap too', { timeout: 30000 }, async () => {
   const page = await openDrawer(conversation([run([7])]));
   await choose(page, 7, 'fix');

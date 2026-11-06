@@ -1,8 +1,7 @@
 // #790: one order everywhere. The Product Owner's roadmap.add, its plans and the live roadmap's refill use
 // the project's default, in the project order, with no setting behind it. Acceptance tests, written
 // before the code. Seams: the channels po:request and po:ask (simulated: no model) and a roadmap's live
-// refill, driven as live-roadmap-785.test.js drives it. The chains and the Oracle pass the same value:
-// they are held by the source scan of test/project-default-repository-790-791.test.js.
+// refill, driven as live-roadmap-785.test.js drives it. The chains and the Oracle: product-owner-reach-790-791.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

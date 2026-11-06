@@ -64,6 +64,18 @@ test('#791 the Add dialog stays the workspace\'s, in the workspace\'s categories
   assert.deepEqual(Array.from(page.document.querySelectorAll('.pj-wf-group')).map((g) => g.getAttribute('data-category')), ['build']);
 });
 
+test('#791 opening the Add dialog reads the repository again: a workflow declared since reaches the Fix select', { timeout: 30000 }, async () => {
+  const declared = plain(REPOSITORY);
+  const { page } = await overview({ repository: async () => plain(declared) });
+  assert.equal(fixOptions(page).includes('late.yaml'), false);
+  declared.push({ file: 'late.yaml', name: 'late', category: 'solo', origin: 'repository', inputs: task });
+  page.$('[data-testid="pj-wf-add"]').click();
+  await settle(40);
+  assert.equal(fixOptions(page).includes('late.yaml'), true);
+  const options = Array.from(page.document.querySelectorAll('[data-testid="pj-wf-add-option"]')).map((o) => o.getAttribute('data-workflow-id'));
+  assert.equal(options.includes('late'), false, 'the dialog stays the workspace\'s');
+});
+
 // backlog-po-kinds.js alone: the markup and the edit, no drawer
 function kinds() {
   const window = { Select: { markup: () => '' } };
