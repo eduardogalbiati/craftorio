@@ -1,12 +1,13 @@
 /* global esc, t */
 // #725: the new-project wizard's step 3 right column, "Suggested workflows" (mock-4, #630), split out of
-// project-wizard.js (its size cap). window.ProjectWizardColumn({ cur, jobOf }) gives the wizard, over its
-// own state (`cur()`: the onboarding, the model, the owner's picks and cur.workflowsMode):
+// project-wizard.js (its size cap). window.ProjectWizardColumn({ cur, jobOf, phasesHtml }) gives the wizard, over
+// its own state (`cur()`: the onboarding, the model, the owner's picks and cur.workflowsMode):
 // - workflowsColumn(): wizard-workflows-column data-state = OnboardingModel.workflowsColumnState: choose
 //   (wizard-workflows-choice-analyze / -manual, no rows), analyzing (wizard-workflows-rows aria-busy, inert,
-//   selects disabled, under wizard-workflows-analyzing with wizard-workflows-spinner), failed
-//   (wizard-workflows-failed: the reason, wizard-workflows-retry and Define manually), analyzed (the rows
-//   with the profile's reasons, wizard-workflow-reason) and manual (the rows editable, no reason, Analyze
+//   selects disabled, under wizard-workflows-analyzing with the analysis' activity lines, #781 phasesHtml(),
+//   project-wizard-activity.js), failed (wizard-workflows-failed: an ActivityLine with the reason and
+//   wizard-workflows-retry, then Define manually), analyzed (the lines ended when the analysis ran in this wizard,
+//   the rows with the profile's reasons, wizard-workflow-reason) and manual (the rows editable, no reason, Analyze
 //   still offered). Each row: wizard-workflow data-kind with wizard-workflow-select (select.js, #383).
 //   #738: above the rows (analyzed and manual), wizard-way-of-working: Local / Remote / Fork + PR, from the
 //   fork choice of a repository the owner can't push to, else the profile's mode.
@@ -22,7 +23,7 @@
 (function () {
   const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
 
-  window.ProjectWizardColumn = function ({ cur, jobOf }) {
+  window.ProjectWizardColumn = function ({ cur, jobOf, phasesHtml }) {
     const M = window.OnboardingModel;
     const jobReason = (job) => {
       const reason = job?.reason || job?.error || t('onboarding.no_reason');
@@ -148,19 +149,20 @@
         const job = jobOf('profile');
         // Retry: the engine's retry runs a failed profile job again, and one done without a valid profile
         const why = job.status === 'failed' ? jobReason(job) : t('onboarding.workflows_no_profile');
-        body = `<div class="wizard-alert error" role="alert" data-testid="wizard-workflows-failed">
+        const retry = { label: t('onboarding.retry'), attrs: 'data-act="retry" data-testid="wizard-workflows-retry"' };
+        body = `<div class="wizard-alert error" data-testid="wizard-workflows-failed">
             <strong>${esc(t('onboarding.workflows_failed'))}</strong>
-            <p title="${esc(job.error || '')}">${esc(why)}</p>
-            <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry" data-testid="wizard-workflows-retry">${esc(t('onboarding.retry'))}</button>${choiceButton('manual', true)}</div>
+            <div title="${esc(job.error || '')}">${window.ActivityLine.html({ state: 'failed', reason: why, retry })}</div>
+            <div class="wizard-actions">${choiceButton('manual', true)}</div>
           </div>`;
       } else {
         const list = `<ul class="wizard-workflows" data-testid="wizard-workflows-rows"${busy ? ' aria-busy="true" aria-disabled="true" inert' : ''}>${WORKFLOW_KINDS.map(row).join('')}</ul>`;
-        const overlay = busy ? `<div class="wizard-workflows-analyzing" data-testid="wizard-workflows-analyzing" role="status">
-            <span class="spinner" data-testid="wizard-workflows-spinner" role="progressbar" aria-label="${esc(t('onboarding.workflows_analyzing', { name }))}"></span>
-            <span>${esc(t('onboarding.workflows_analyzing', { name }))}</span></div>` : '';
+        const overlay = busy ? `<div class="wizard-workflows-analyzing" data-testid="wizard-workflows-analyzing" role="status">${phasesHtml()}</div>` : '';
+        // #781: once analyzed in this wizard the lines stay, ended, with what they found (a new project's rows have no analysis)
+        const ended = at === 'analyzed' && cur().workflowsMode === 'analyze' ? phasesHtml() : '';
         // Define manually keeps Analyze the repository on offer
         const analyze = at === 'manual' ? `<div class="wizard-workflows-choices">${choiceButton('analyze')}</div>` : '';
-        body = `${busy ? '' : wayOfWorking()}<div class="wizard-workflows-stage">${list}${overlay}</div>${analyze}`;
+        body = `${ended}${busy ? '' : wayOfWorking()}<div class="wizard-workflows-stage">${list}${overlay}</div>${analyze}`;
       }
       return `<div class="wizard-column wizard-workflows-column" data-testid="wizard-workflows-column" data-state="${at}">${head}${body}
         <p class="muted small">${esc(t('onboarding.workflows_more'))}</p></div>`;
@@ -168,12 +170,18 @@
 
     // #735: the review's project kind, confirmed by the owner (empty: the engine detects it from the
     // files, projectFacts); a backend gets no UI step. wizard-kind-select, cur().kind
+    // #781: it opens on the kind the analysis found (profile.kind), marked wizard-kind-detected until the owner
+    // changes it; "Detect from the files" stays only while no kind is known. Not changed, no kind is sent (#735)
     function kindField() {
-      const value = cur().kind || '';
-      const kinds = [['', t('onboarding.kind_detect')], ...Object.entries(M.KIND_LABELS || {}).map(([v, key]) => [v, t(key)])];
+      const labels = M.KIND_LABELS || {};
+      const found = profileOf()?.kind;
+      const detected = labels[found] ? found : '';
+      const value = cur().kind || detected;
+      const kinds = [...(detected ? [] : [['', t('onboarding.kind_detect')]]), ...Object.entries(labels).map(([v, key]) => [v, t(key)])];
       const attrs = `data-testid="wizard-kind-select" aria-label="${esc(t('ways_of_working.f_kind'))}"`;
       const control = window.Select.markup(attrs, kinds, value);
-      return `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${control}</div>`;
+      const mark = detected && !cur().kind ? `<span class="small muted" data-testid="wizard-kind-detected">${esc(t('onboarding.kind_detected', { kind: t(labels[detected]) }))}</span>` : '';
+      return `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${control}${mark}</div>`;
     }
 
     return {

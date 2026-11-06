@@ -142,6 +142,7 @@ module.exports = {
   'backlog:dismiss-refresh': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:local': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'backlog:progress': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:unpushed': { arg: null },
   'backlog:watching': { arg: null },

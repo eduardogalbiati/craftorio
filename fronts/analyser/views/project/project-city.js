@@ -5,11 +5,12 @@
 // The HUD is this file's, with the run's 3D view classes (run3d.css; project-city.css places them):
 // - the header: the project (the mode's title, #440), its files, zones and districts, the Danger Zone count, the plan's
 //   coverage and the commit; a search that flies to a file, a district or a zone; "Colour by" (Quadrant, the default
-//   when a tool measured the complexity, Zone otherwise, Churn) with its legend; the Tests toggle; City life and Glow
+//   when a tool measured the complexity, Zone otherwise, Churn; #782: the pick and the unmeasured code's part of the
+//   legend are project-city-notes.js's) with its legend; the Tests toggle; City life and Glow
 //   (#450: switches on by default, sent as scene updates); the dark / light toggle shared with the run's 3D view
 //   (Run3DTheme); Expand (#381): the city over the whole window (`expanded`), Close or Esc brings it back as it was;
-// - the notes under it (project-city-notes.js): no plan or a stale plan, each with the tab's one action "Analyze this
-//   project" (#381: `onAnalyze`, its combined estimate next to it) and its state, the plan's problems, the edges not read;
+// - the notes under it (project-city-notes.js): no plan, a stale plan, commits since the analysis or a current plan
+//   (#782), with the tab's one action (#381: `onAnalyze`, its combined estimate next to it) and its state, the plan's problems;
 // - the hover card of a building, a district or a zone, the card a click pins (project-city-cards.js), the camera
 //   buttons (zoom, home); the states: the facts still loading, not a git repository, no commits, an error with Retry.
 // The overlay API, for the city epic's modules (they add their own files, not code here):
@@ -65,17 +66,6 @@
     return bundle;
   }
 
-  // the overlay's layers merged: { highlight, markers }
-  function mergedOverlay() {
-    const highlight = {};
-    const markers = [];
-    for (const l of layers.values()) {
-      Object.assign(highlight, l.highlight || {});
-      markers.push(...(l.markers || []));
-    }
-    return { highlight, markers };
-  }
-
   /** A City view for project `projectId`: { el, update({ facts, estimate, analysis }), reload(), destroy(), flyTo(name), refreshOverlay(), setPins(paths), onLayout(fn) }. */
   function create({ projectId, name = '', onOpenFacts = () => {}, onAnalyze = null }) {
     const el = document.createElement('div');
@@ -117,7 +107,7 @@
     function relayout() {
       const model = c.answer?.model;
       c.layout = model && window.CityLayout ? CityLayout.layoutCity(model, { quadrants: byFile('quadrant'), scores: byFile('score') }) : null;
-      if (c.layout && !c.colour) c.colour = CityLayout.defaultColourBy(model);
+      if (c.layout && !c.colour) Object.assign(c, window.ProjectCityNotes?.openingColour(projectId, model) || { colour: CityLayout.defaultColourBy(model) });
       // a new layout starts with nothing hovered or pinned (the scene drops its own too)
       c.hover = null;
       c.pinned = null;
@@ -130,7 +120,7 @@
     function paint() {
       const { colours, legend } = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' });
       const coloured = { ...c.layout, buildings: c.layout.buildings.map((b, i) => ({ ...b, colour: colours[i] })) };
-      const out = CityLayout.applyOverlay(coloured, mergedOverlay());
+      const out = CityLayout.applyOverlay(coloured, CityLayout.mergeOverlays(layers.values()));
       c.legend = legend;
       return { paint: { colours: out.buildings.map((b) => b.colour), greyed: out.buildings.map((b) => b.greyed) }, markers: out.markers };
     }
@@ -214,13 +204,13 @@
     }
 
     // the notes under the header (project-city-notes.js): the action (#381), its state, the plan's problems (none on a past release's city, #440)
-    const notesHtml = (model, validation) => (self.mode === 'release' ? '' : window.ProjectCityNotes?.html({ model, validation, layout: c.layout, analysis: c.analysis, ready: typeof onAnalyze === 'function' }) || '');
+    const notesHtml = (model, validation) => (self.mode === 'release' ? '' : window.ProjectCityNotes?.html({ model, validation, layout: c.layout, analysis: c.analysis, analysed: c.answer?.analysed ?? null, ready: typeof onAnalyze === 'function' }) || '');
 
     // a mode's own rows (setLegend) in place of Colour by's, after the legend's close (#441)
     function renderLegend() {
       const box = hud.querySelector('[data-testid="project-city-legend"]');
       if (!box) return;
-      box.innerHTML = `${window.ProjectCityPanels?.legendClose() || ''}${[...c.rows.values()].join('') || `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>`}`;
+      box.innerHTML = `${window.ProjectCityPanels?.legendClose() || ''}${[...c.rows.values()].join('') || `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>${window.ProjectCityNotes?.unmeasuredHtml({ model: c.answer?.model, colour: c.colour, auto: c.colourAuto }) || ''}`}`;
     }
 
     const stateMessage = (testid, title, text) => stageMessage(`<p><b>${esc(title)}</b></p><p>${esc(text)}</p>`, { testid });
@@ -304,6 +294,17 @@
       return true;
     }
 
+    // #782: the owner's colour, from the select or the legend's action: remembered, it wins over the default
+    function setColour(value) {
+      Object.assign(c, { colour: value, colourAuto: false });
+      window.ProjectCityNotes?.saveColour(projectId, value);
+      const select = hud.querySelector('[data-pc-colour]');
+      if (select) select.value = value;
+      if (c.handle) c.handle.update(paint());
+      else c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend;
+      renderLegend();
+    }
+
     function setTheme(name) {
       c.theme = name;
       el.dataset.theme = name;
@@ -343,14 +344,12 @@
       else if (t.closest('[data-pc-expand]')) setExpanded(!c.expanded);
       else if (t.closest('[data-pc-flag]')) { const b = t.closest('[data-pc-flag]'), k = b.dataset.pcFlag; c[k] = !c[k]; b.setAttribute('aria-pressed', String(c[k])); c.handle?.update({ [k]: c[k] }); }
       else if (t.closest('[data-pc-analyze]')) onAnalyze?.(projectId);
+      else if (t.closest('[data-pc-colour-to]')) setColour(t.closest('[data-pc-colour-to]').dataset.pcColourTo);
     });
     el.addEventListener('change', (e) => {
       const t = e.target;
       if (t.matches('[data-pc-colour]')) {
-        c.colour = t.value;
-        if (c.handle) c.handle.update(paint());
-        else c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend;
-        renderLegend();
+        setColour(t.value);
       } else if (t.matches('[data-pc-tests]')) {
         c.tests = t.checked;
         c.handle?.update({ tests: c.tests });

@@ -504,6 +504,7 @@
 
   window.ProjectHealth = {
     focus,
+    languagesHtml, // #781: the wizard's review draws the same bar
     onChange,
     onClick,
     show,

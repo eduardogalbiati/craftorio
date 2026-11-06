@@ -514,8 +514,8 @@ Then("the workspace's {string} has no remote", async ({ e2e }, rel) => {
 // - wizard-workflows-choice-analyze / wizard-workflows-choice-manual: the two choices, buttons named
 //   "Analyze the repository" / "Define manually", shown until one is chosen (no row before);
 // - wizard-workflows-rows: the rows' list (the wizard-workflow rows of #630), aria-busy="true" while dimmed;
-// - wizard-workflows-analyzing: the loading notice over the dimmed rows, "Analyzing <name>'s ways of
-//   working…", holding wizard-workflows-spinner;
+// - wizard-workflows-analyzing (#781): the role="status" wrapper over the dimmed rows, holding
+//   wizard-analysis-phases and its three activity lines (no spinner in the column);
 // - a failed job's row of the left column (data-part="<job>", as the cost's parts) holds
 //   wizard-job-error-<job> (the reason under its title) and wizard-job-retry-<job> (Retry:
 //   api.retryOnboarding(projectId)); its amount reads "—";
@@ -570,12 +570,25 @@ When("I choose {string} in the wizard's suggested workflows", async ({ e2e }, la
   await choice.click();
 });
 
-Then("the wizard's suggested workflows are dimmed under {string} with a spinner", async ({ e2e }, notice) => {
+// #781: the "ways of working" job is held before it reads anything, so the git history's line runs and the
+// other two wait (OnboardingModel.analysisPhases: a running job with no interview yet)
+Then("the wizard's suggested workflows are dimmed under the analysis phases, with no spinner", async ({ e2e }) => {
   const column = workflowsColumn(e2e.window);
   const analyzing = column.getByTestId('wizard-workflows-analyzing');
   await expect(analyzing).toBeVisible();
-  await expect(analyzing).toContainText(notice);
-  await expect(analyzing.getByTestId('wizard-workflows-spinner')).toBeVisible();
+  await expect(analyzing).toHaveRole('status');
+  const phases = analyzing.getByTestId('wizard-analysis-phases');
+  await expect(phases).toBeVisible();
+  const git = phases.getByTestId('wizard-phase-git');
+  await expect(git).toHaveAttribute('data-state', 'running');
+  await expect(git).toContainText(/git history/i);
+  const files = phases.getByTestId('wizard-phase-files');
+  await expect(files).toHaveAttribute('data-state', 'pending');
+  await expect(files).toContainText(/files/i);
+  const oracle = phases.getByTestId('wizard-phase-oracle');
+  await expect(oracle).toHaveAttribute('data-state', 'pending');
+  await expect(oracle).toContainText(/Oracle/);
+  await expect(column.locator('.spinner'), 'no spinner in the column').toHaveCount(0);
   const rows = column.getByTestId('wizard-workflows-rows');
   await expect(rows).toBeVisible();
   await expect(rows).toHaveAttribute('aria-busy', 'true');
@@ -902,8 +915,8 @@ Then('the wizard shows no import status card and its repository fields are read-
 // - the review's "Open the city" (wizard-open-city) finishes the wizard and opens the project's
 //   City tab (#730; window.ProjectArchitecture.openCity);
 // - the City tab: project-city-header ("<n> districts", "plan covers <share>"), no project-city-no-plan;
-//   its "Analyze this project" (architecture-analyze or project-city-analyze) is offered with a plan too,
-//   its title the refresh one ("a refresh keeps the names you saw").
+//   its action (architecture-analyze or project-city-analyze; #782: "Analyze again" on a current plan) is
+//   offered with a plan too, its title the refresh one ("a refresh keeps the names you saw").
 //
 // E2E HOOK THE DEVELOPER MUST ADD, read by the simulated onboarding's projectMap job only when
 // MULTIAGENT_SIMULATION_ONLY=1: MULTIAGENT_E2E_CITY_PLAN_FAIL=1 makes drawing the city plan throw
@@ -1181,4 +1194,57 @@ Then("the wizard's work model files show the chips {string}, {string} and {strin
 
 Then("the wizard's work model looks like the baseline {string}", async ({ e2e }, name) => {
   await expect(workModel(e2e.window)).toHaveScreenshot(name);
+});
+
+// ---- #781: the analysis says what it is doing and what it found -------------------------------------------------
+// Acceptance tests, written before the code. What the screens expose (ActivityLine, packages/ui-kit/activity-line.js:
+// its root carries data-state = pending | running | done | failed | skipped and the line's test id; done starts with ✓):
+// - step 3: wizard-analysis-phases holds wizard-phase-git, wizard-phase-files and wizard-phase-oracle, shown while
+//   analyzing and, once the analysis ran in this wizard, after it;
+// - step 4: wizard-review-languages in the project card holds the Health tab's language bar
+//   (architecture-languages-bar, architecture-language-segment, architecture-language-legend,
+//   architecture-language-entry, the text "JavaScript 74.3%"; ordered by share, Other last);
+// - wizard-kind-select opens on the detected kind, with no "Detect from the files" option, and
+//   wizard-kind-detected says "Detected: <kind>"; wizard-review-backlog-activity: the Backlog card's line.
+
+const ANALYSIS_PHASE = { 'git history': 'wizard-phase-git', files: 'wizard-phase-files', Oracle: 'wizard-phase-oracle' };
+const analysisPhase = (page, words) => {
+  const id = ANALYSIS_PHASE[words];
+  if (!id) throw new Error(`unknown analysis phase "${words}": one of ${Object.keys(ANALYSIS_PHASE).join(', ')}`);
+  return wizard(page).getByTestId('wizard-analysis-phases').getByTestId(id);
+};
+
+Then("the wizard's {string} analysis phase ends {word} saying {string}", async ({ e2e }, words, state, text) => {
+  const line = analysisPhase(e2e.window, words);
+  await expect(line).toHaveAttribute('data-state', state, { timeout: ANALYSIS_TIMEOUT });
+  await expect(line).toContainText(new RegExp(escapeRe(text), 'i'));
+  if (state === 'done') await expect(line, 'a done line has its check').toContainText('✓');
+});
+
+Then("the review's project card shows the language bar led by {string}, its legend ordered by share", async ({ e2e }, language) => {
+  const languages = review(e2e.window).getByTestId('wizard-review-languages');
+  const bar = languages.getByTestId('architecture-languages-bar');
+  await expect(bar).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  const entries = languages.getByTestId('architecture-language-legend').getByTestId('architecture-language-entry');
+  await expect(entries.first()).toContainText(language);
+  const shown = (await entries.allInnerTexts()).map((text) => ({ text, share: Number(/(\d+(?:\.\d+)?)\s*%/.exec(text)?.[1]) }));
+  await expect(bar.getByTestId('architecture-language-segment'), 'one segment per language').toHaveCount(shown.length);
+  const named = shown.filter((l) => !/^\s*Other\b/.test(l.text));
+  expect(named.map((l) => l.share), 'each language gives its share').not.toContain(NaN);
+  expect(named.map((l) => l.share), 'ordered by share').toEqual(named.map((l) => l.share).sort((a, b) => b - a));
+  const other = shown.findIndex((l) => /^\s*Other\b/.test(l.text));
+  if (other >= 0) expect(other, '"Other" comes last').toBe(shown.length - 1);
+});
+
+Then("the review's Project type opens on {string}, marked as detected", async ({ e2e }, kind) => {
+  const select = review(e2e.window).getByTestId('wizard-kind-select');
+  await expect(select).toHaveValue(kind, { timeout: ANALYSIS_TIMEOUT });
+  await expect(select.getByRole('option', { name: /Detect from the files/i, includeHidden: true }), 'nothing left to detect').toHaveCount(0);
+  await expect(review(e2e.window).getByTestId('wizard-kind-detected')).toContainText(new RegExp(`Detected:\\s*${escapeRe(kind)}`, 'i'));
+});
+
+Then("the review's Backlog card ends with {string}", async ({ e2e }, text) => {
+  const line = review(e2e.window).getByTestId('wizard-review-backlog').getByTestId('wizard-review-backlog-activity');
+  await expect(line).toHaveAttribute('data-state', 'done', { timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(text);
 });

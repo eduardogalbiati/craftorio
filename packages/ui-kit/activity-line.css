@@ -1,0 +1,31 @@
+/* #781: the activity line (activity-line.js): the action in words, a shine crossing it while it runs, the animated
+   ellipsis; a ✓ with its summary when done, the reason with Retry when it failed. */
+.activity-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; color: var(--text); }
+.activity-line-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-line-summary { color: var(--muted); flex: none; }
+.activity-line-summary::before { content: "· "; }
+.activity-line-meta { margin-left: auto; padding-left: 8px; flex: none; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.activity-line-check { flex: none; color: var(--green); font-weight: 700; }
+.activity-line-retry { flex: none; margin-left: auto; }
+.activity-line[data-state="pending"], .activity-line[data-state="skipped"] { color: var(--muted); }
+.activity-line[data-state="failed"] .activity-line-text { color: var(--red); white-space: normal; }
+
+/* the text is painted by a gradient of the theme's two text colours: it reads on the dark and on the light theme */
+.activity-line[data-state="running"] .activity-line-text {
+  color: transparent;
+  background-image: linear-gradient(100deg, var(--muted) 35%, var(--text) 50%, var(--muted) 65%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: activity-line-shine 2.2s linear infinite;
+}
+.activity-line-dots { display: inline-block; flex: none; width: 1.1em; margin-left: -6px; overflow: hidden; color: var(--muted); animation: activity-line-dots 1.4s steps(3, end) infinite; }
+.activity-line-dots::after { content: "..."; }
+
+@keyframes activity-line-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes activity-line-dots { from { width: 0.3em; } to { width: 1.1em; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-line[data-state="running"] .activity-line-text { animation: none; color: var(--text); background-image: none; }
+  .activity-line-dots { animation: none; }
+}

@@ -103,7 +103,8 @@
    * result (fromBox false: a pill or ask(), not the text box),
    * placeholder, sendLabel, onUnreadChange(unread); and for a view's own parts: renderMessage(m, i, all)
    * (markup, '' to skip one, undefined for the default), roleOf(m), emptyHtml(), pendingHtml(flight),
-   * afterHtml() (after the live turn), onRender(log), workingText(), canSend() / inputEnabled() (the
+   * afterHtml() (after the live turn), onRender(log), workingText(), workingLine(time) (#781: the working line as
+   * ActivityLine's options, null for the default one; time: the elapsed m:ss), canSend() / inputEnabled() (the
    * controls' state besides busy), beforeSend(text, attachments) (false: not sent, the text stays),
    * hasDraft() (something to send besides the text), onInput(value), onPaste(event), onStop(),
    * onDone() (after a send ends), pasteImages, ids / classes ({ root, messages, foot, form, input,
@@ -180,7 +181,10 @@
       if (!working) return;
       const f = inFlight();
       const on = !!f;
-      working.innerHTML = on ? `<span class="spinner" aria-hidden="true"></span><span>${e(o.workingText ? o.workingText() : `${o.agent} is working…`)} <span class="mono">${elapsed(Date.now() - (f.since || Date.now()))}</span></span>` : '';
+      const time = on ? elapsed(Date.now() - (f.since || Date.now())) : '';
+      const line = on && root.ActivityLine ? o.workingLine?.(time) : null;
+      if (line) root.ActivityLine.paint(working, line);
+      else working.innerHTML = on ? `<span class="spinner" aria-hidden="true"></span><span>${e(o.workingText ? o.workingText() : `${o.agent} is working…`)} <span class="mono">${time}</span></span>` : '';
       working.classList.toggle('hidden', !on);
     }
     function renderLive() {
@@ -313,7 +317,7 @@
       setLiveTurn(turn) {
         const had = !!log.querySelector('[data-agent-chat-live]');
         s.live = turn || null;
-        if (had && s.live) renderLive(); else render();
+        if (had && s.live) { renderLive(); renderWorking(); } else render(); // #781: the working line says the current step
       },
       /** A message sent without the text box (a pill, a starter): what is typed stays. */
       ask: (text) => submit(text),
@@ -361,7 +365,7 @@
     return chat;
   }
 
-  const AgentChat = { create, messageHtml };
+  const AgentChat = { create, elapsed, messageHtml };
   if (typeof module === 'object' && module.exports) module.exports = AgentChat;
   if (typeof window !== 'undefined') root.AgentChat = AgentChat;
 }(typeof window !== 'undefined' ? window : globalThis));

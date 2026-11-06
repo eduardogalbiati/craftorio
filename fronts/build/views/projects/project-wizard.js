@@ -27,12 +27,9 @@
 //   wizard-clone-progress in the footer (data-status = the clone job's status, wizard-spinner while it runs,
 //   its reason and Retry when it failed), and wizard-skip; a
 //   failed job reads its reason wizard-job-error-<id> (OnboardingModel's code, full error on hover), "—" as
-//   amount and wizard-job-retry-<id> (api.retryOnboarding); #725: the suggested workflows beside them in
-//   wizard-workflows-column, OnboardingModel.workflowsColumnState: choose (wizard-workflows-choice-analyze |
-//   -manual, no rows), analyzing (wizard-workflows-rows aria-busy and inert under wizard-workflows-analyzing
-//   with wizard-workflows-spinner), failed (wizard-workflows-failed: the reason, wizard-workflows-retry and
-//   Define manually), analyzed (the profile's picks and reasons) or manual (editable, no reason, Analyze
-//   still offered)) and review (#642, spec R10): wizard-review with the project's card, wizard-review-city (Open the
+//   amount and wizard-job-retry-<id> (api.retryOnboarding); #725: the suggested workflows beside them (wizard-workflows-column,
+//   project-wizard-workflows.js); #781: activity lines say what runs (project-wizard-activity.js)) and review (#642, spec R10):
+//   wizard-review with the project's card (#781: wizard-review-languages), wizard-review-city (Open the
 //   city: Finish, then the project's City tab) / -findings / -backlog, each data-state="ready" | "pending"
 //   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
 //   | "later" (the analyses were skipped), #730: one wizard-review-finding data-finding="<index>" per report
@@ -87,7 +84,7 @@
   // review's: review { backlog, city, facts, report } (undefined: not read yet), reading, filing (the finding
   // whose issue is being filed), idea }
   let cur = null;
-  const freshReview = () => ({ review: {}, reading: new Set(), filing: null, idea: '' });
+  const freshReview = () => ({ review: {}, reading: new Set(), filing: null, idea: '', interview: null, backlogProgress: null, backlogError: null });
   let opener = null; // the element that had the focus when the wizard opened
   const names = new Map(); // projectId → the name typed in the wizard (the event carries no name)
   const states = new Map(); // projectId → the engine's last state, in arrival order
@@ -105,8 +102,8 @@
     : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
-  // #725: the suggested workflows column and a failed job's reason (project-wizard-workflows.js)
-  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id) });
+  const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
+  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), phasesHtml: activity.analysisPhases });
   const workModel = window.ProjectWizardWorkModel({ cur: () => cur }); // #633: step 3's work model section
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
@@ -455,20 +452,22 @@
     return cur.model.analyzeLater && !ACTIVE.includes(cur.onboarding?.status) ? 'later' : 'pending';
   }
 
-  // a card of the review: its head (title, then an action or the pending badge), then its body once ready
-  function reviewSection(id, title, job, read, body, pendingKey, action = '') {
-    const state = sectionState(job, read);
+  // a card of the review: its head (title, then an action or the pending badge), then its body once ready; #781: `pending`:
+  // a key, or its markup's function; `failure`: the markup of a read that failed, for a card with no job to say so
+  function reviewSection(id, title, job, read, body, pending, action = '', failure = '') {
+    const state = failure ? 'failed' : sectionState(job, read);
+    const own = state === 'pending' && typeof pending === 'function';
     const words = {
       // #725: the failed job's reason, as its row of step 3 says it
       failed: () => jobReason(jobOf(job)),
       later: () => t('onboarding.review_section_later'),
-      pending: () => t(pendingKey),
+      pending: () => t(pending),
       skipped: () => t('onboarding.review_section_skipped'),
     };
-    const badge = state === 'pending' ? `<span class="badge job-running">${esc(t('onboarding.job_status_running'))}</span>` : '';
+    const badge = state === 'pending' && !own ? `<span class="badge job-running">${esc(t('onboarding.job_status_running'))}</span>` : '';
     return `<section class="card wizard-review-section" data-testid="wizard-review-${id}" data-state="${state}">
         <header class="wizard-review-head"><h3>${esc(t(title))}</h3>${action || badge}</header>
-        ${state === 'ready' ? body() : `<p class="muted small">${esc(words[state]())}</p>`}
+        ${failure || (state === 'ready' ? body() : own ? pending() : `<p class="muted small">${esc(words[state]())}</p>`)}
       </section>`;
   }
 
@@ -484,12 +483,6 @@
     const bars = sizes.slice(0, 12).map((s, i) => `<span class="wizard-city-bar" style="height: ${Math.max(8, Math.round((s / top) * 100))}%" title="${esc(districts[i].name || districts[i].id || '')}"></span>`).join('');
     return `<div class="wizard-city-bars" aria-hidden="true">${bars}</div>
       <p class="muted small">${esc(t('onboarding.review_city', { districts: districts.length, files }))}</p>`;
-  }
-
-  function backlogBody() {
-    const issues = cur.review.backlog?.issues || [];
-    if (!issues.length) return `<p class="muted small">${esc(t('onboarding.review_backlog_empty'))}</p>`;
-    return `<ul class="wizard-review-list">${issues.map((i) => `<li class="fit-box"><span class="mono muted">#${esc(i.number)}</span> <span class="text-cut" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
   }
 
   // #730: each finding of the Oracle's report, its severity, then Create issue / Create issue and prioritize,
@@ -531,20 +524,20 @@
     if (cur === c) renderSoon();
   }
 
-  // mock-6's first card: the project, how it is worked on (what the analyses read so far) and its workflows
+  // mock-6's first card: the project, how it is worked on (what the analyses read so far; #781: the Health tab's language bar) and its workflows
   function projectCard() {
     const name = cur.model.name;
     const folder = (typeof state === 'object' && state?.projects?.find?.((p) => p.id === cur.projectId)?.folder) || '';
     const where = [cur.model.repository, folder].filter(Boolean).join(' · ');
-    const languages = [...new Set((cur.review.facts?.model?.files || []).map((f) => f.language).filter(Boolean))];
-    const chips = [platformOfRepo(cur.model.repository)?.label, languages.join(', ')].filter(Boolean);
+    const chips = [platformOfRepo(cur.model.repository)?.label].filter(Boolean);
+    const languages = cur.review.facts ? `<div class="wizard-review-languages" data-testid="wizard-review-languages">${window.ProjectHealth?.languagesHtml(cur.review.facts.model?.languages) || ''}</div>` : '';
     const how = chips.length ? `<div class="wizard-chips">${chips.map((c) => `<span class="wizard-chip">${esc(c)}</span>`).join('')}</div>`
-      : `<p class="muted small">${esc(t('onboarding.review_how_pending'))}</p>`;
+      : languages ? '' : `<p class="muted small">${esc(t('onboarding.review_how_pending'))}</p>`;
     const flows = M.suggestWorkflows(null).suggestions.map((s) => `<span class="wizard-chip accent text-cut" title="${esc(s.id)}">${esc(s.id)}</span>`).join('');
     return `<section class="card wizard-review-section wizard-review-project">
         <h3 id="project-wizard-title" class="text-cut" title="${esc(name)}">${esc(name)}</h3>
         <span class="mono muted small text-cut" title="${esc(where)}">${esc(where)}</span>
-        <h4>${esc(t('onboarding.review_how', { name }))}</h4>${how}${kindField()}
+        <h4>${esc(t('onboarding.review_how', { name }))}</h4>${how}${languages}${kindField()}
         <h4>${esc(t('onboarding.review_workflows'))}</h4><div class="wizard-chips">${flows}</div>
       </section>`;
   }
@@ -562,7 +555,7 @@
           ${reviewSection('findings', 'onboarding.review_findings_title', 'projectMap', r.report !== undefined, findingsBody, 'onboarding.review_pending_findings', jobOf('projectMap').status === 'failed' ? retryButton('projectMap') : '')}
         </div>
         <div class="wizard-review-more">
-          ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, backlogBody, 'onboarding.review_pending_backlog')}
+          ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, activity.backlogBody, activity.backlogLine, '', activity.backlogFailure())}
           <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
             <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
             <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
@@ -653,17 +646,18 @@
       // #738: the fork suggestion holds the repository step until the owner chooses
       if (cur.model.step === 'repository' && CLONED.includes(state.status) && !forkPending(state)) toAnalysis();
       if (cur.model.step === 'review') loadReview(); // an analysis done meanwhile: read what it made
+      activity.followAnalysis(); // #781
       renderSoon();
     }
   }
 
   // The review's reads, without waiting: each one once its analysis is done (the backlog at once, synced
   // when it was never read: a project just imported has no cache); a failed read counts as answered with nothing
+  // (#781: the backlog's says why, with its Retry)
   function loadReview() {
     const pid = cur.projectId;
     if (!pid) return;
-    const backlogRead = () => Promise.resolve(api.getBacklog?.(pid)).then((data) => data || api.syncBacklog?.(pid));
-    const reads = [['backlog', backlogRead, true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
+    const reads = [['backlog', () => activity.readBacklog(pid), true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
       ['facts', () => api.architectureFacts?.(pid), jobDone('projectMap')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
     for (const [key, read, due] of reads) {
       if (!due || cur.review[key] !== undefined || cur.reading.has(key)) continue;
@@ -676,6 +670,7 @@
       };
       new Promise((resolve) => resolve(read())).then(answer, () => answer(null));
     }
+    activity.followBacklog(); // #781
   }
 
   // Finish: the project's page at once (with its Next steps card), then the idea to the Inbox, in the
@@ -881,7 +876,7 @@
     const id = e.target?.id || e.target?.dataset?.testid;
     if (!cur) return;
     if (id === 'wizard-review-idea') { cur.idea = String(e.target.value || ''); return; }
-    if (e.target?.dataset?.testid === 'wizard-kind-select') { cur.kind = String(e.target.value || ''); return; } // #735
+    if (e.target?.dataset?.testid === 'wizard-kind-select') { cur.kind = String(e.target.value || ''); render(); root.querySelector('[data-testid="wizard-kind-select"]')?.focus?.(); return; } // #735; #781: "Detected" goes at once
     // #630: the owner's pick of a suggested workflow's variant (kept across renders)
     if (e.target?.dataset?.testid === 'wizard-workflow-select') { cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') }; return; }
     if (workModel.onInput(e)) { render(); return; } // #633: the work model's radios
@@ -935,7 +930,7 @@
       root.setAttribute('aria-modal', 'true');
       root.setAttribute('aria-labelledby', 'project-wizard-title');
       root.className = 'project-wizard';
-      root.addEventListener('click', (e) => { if (!resume.onClick(e)) onClick(e); }); // #741: the "already exists" notice first
+      root.addEventListener('click', (e) => { if (!resume.onClick(e) && !activity.onClick(e)) onClick(e); }); // #741: the "already exists" notice first; #781: the Backlog's Retry
       root.addEventListener('input', onInput);
       root.addEventListener('change', (e) => { onInput(e); if (cur) resume.save(); }); // #741: a pick made without a render
       root.addEventListener('keydown', onKey);
@@ -954,6 +949,7 @@
 
   function close() {
     cur = null;
+    activity.stop(); // #781
     tray.refresh(); // #724: back with what still needs attention
     // #741: the open Projects screen reads its cards again (an onboarding closed before Finish reads "not finished")
     if (state.view === 'projects') window.ProjectsView?.refresh?.().catch(() => {});

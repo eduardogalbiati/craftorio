@@ -282,9 +282,10 @@ Feature: Bring a project in with a guided wizard
   # Define manually; no workflow row before one is chosen. The footer's Continue to the review works at
   # any point of the step (the left column's "Analyze and continue" is gone). The simulated ways of working
   # analysis is kept running (an E2E hook of the simulated onboarding, see onboarding.steps.js) so the
-  # analyzing look stays on screen for its baseline (@visual: the screenshot lane).
+  # analyzing look stays on screen for its baseline (@visual: the screenshot lane). #781: the notice with its
+  # spinner became the analysis phases, one activity line each.
   @issue-725 @visual
-  Scenario: Analyzing the repository dims the suggested workflows under a loading notice, and Continue stays available
+  Scenario: Analyzing the repository dims the suggested workflows under the analysis phases, and Continue stays available
     Given the app is open while the "ways of working" analysis keeps running
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -295,7 +296,7 @@ Feature: Bring a project in with a guided wizard
     And the wizard's suggested workflows offer "Analyze the repository" and "Define manually" and no workflow yet
     And the wizard lets me continue to the review
     When I choose "Analyze the repository" in the wizard's suggested workflows
-    Then the wizard's suggested workflows are dimmed under "Analyzing analyzing-725's ways of working…" with a spinner
+    Then the wizard's suggested workflows are dimmed under the analysis phases, with no spinner
     And the wizard lets me continue to the review
     And the wizard's suggested workflows look like the baseline "onboarding-analysis-analyzing.png"
 
@@ -392,8 +393,9 @@ Feature: Bring a project in with a guided wizard
 
   # #731: the analysis's "City and architecture" job (the project map) draws the city plan, then runs the
   # Oracle. Once it is done the project's City is grouped by the plan's districts, never "No city plan yet",
-  # and "Analyze this project" only refreshes the plan. The review's "Open the city" finishes the wizard and
-  # lands on that City. The simulated plan is drawn without a model call (MULTIAGENT_SIMULATION_ONLY=1).
+  # and "Analyze again" (#782: "Analyze this project" only for a stale or moved plan) only refreshes the plan.
+  # The review's "Open the city" finishes the wizard and lands on that City. The simulated plan is drawn
+  # without a model call (MULTIAGENT_SIMULATION_ONLY=1).
   @issue-731
   Scenario: Open the city after the analysis lands on the project's City drawn from its plan, and Analyze only refreshes it
     Given the app is open
@@ -414,7 +416,7 @@ Feature: Bring a project in with a guided wizard
     And the City tab shows the project city
     And the city is drawn from its plan, with its districts
     And the City tab does not say there is no city plan yet
-    And the City tab offers "Analyze this project" only as a refresh of the city plan
+    And the City tab offers "Analyze again" only as a refresh of the city plan
 
   @issue-731 @issue-730
   Scenario: After the onboarding's analysis, the project's City tab already has its city plan
@@ -430,7 +432,7 @@ Feature: Bring a project in with a guided wizard
     And I finish the wizard
     Then the project page of "plan-731" is open
     When I open the "City" project tab
-    Then the City tab offers "Analyze this project" only as a refresh of the city plan
+    Then the City tab offers "Analyze again" only as a refresh of the city plan
     And the City tab does not say there is no city plan yet
     And the city is drawn from its plan, with its districts
 
@@ -688,3 +690,42 @@ Feature: Bring a project in with a guided wizard
     When I continue the onboarding of the project "light-633" from the Projects screen
     Then the wizard is on its "analysis" step
     And the wizard has the "Light" work model picked
+
+  # #781: the analysis says what it is doing and what it found, one activity line per phase. The sample
+  # repository has 4 commits and JavaScript files. The simulated analysis makes no model call
+  # (MULTIAGENT_SIMULATION_ONLY=1), so the Oracle's phase reads "not needed". The line of a phase while it runs
+  # (the Oracle's reading and elapsed time) needs a held turn: the unit tests cover it.
+  @issue-781
+  Scenario: Step 3 shows the analysis phases ending done with what they found, and Continue stays available
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "phases-781"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I start the analysis in the wizard
+    Then the wizard's "git history" analysis phase ends done saying "4 commits"
+    And the wizard's "files" analysis phase ends done saying "JavaScript"
+    And the wizard's "Oracle" analysis phase ends skipped saying "not needed"
+    And the wizard lets me continue to the review
+
+  # #781: the review's project card shows the languages as the Health tab does, and the Project type opens on
+  # the kind the analysis detected (the sample repository has no UI: backend). A local repository has no
+  # issues to read, so the Backlog card ends on its empty line; its "Reading issues" state cannot be held here
+  # (the backlog is not an onboarding job): the unit tests cover it.
+  @issue-781
+  Scenario: Step 4 shows the language bar, the detected project type and the Backlog card's last activity line
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "review-781"
+    And I go to the next step of the wizard
+    And I start the analysis in the wizard
+    Then the progress tray shows the project "review-781" as analyzed
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review's project card shows the language bar led by "JavaScript", its legend ordered by share
+    And the review's Project type opens on "backend", marked as detected
+    And the review's Backlog card ends with "No open issues."

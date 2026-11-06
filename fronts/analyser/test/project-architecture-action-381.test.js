@@ -98,12 +98,12 @@ test('#381 one action, "Analyze this project", with the combined estimate of the
 
 // #730 (task "Cidade"): the City keeps its "Analyze" once the project has a plan, as a refresh of the plan
 // (its title says so, as the Facts view's action did before #730) with its estimate, and a click starts the run
-test('#730 with a city plan the City still offers "Analyze this project" as a refresh, with its estimate', async () => {
+test('#730 #782 with a current city plan the City still offers "Analyze again" as a refresh, with its estimate', async () => {
   const w = await open({ plan: PLAN, estimate: { usd: 0.4, basis: 3 }, mapEstimate: { items: [{ basis: 2, costUsd: 0.25, minutes: 3 }] } });
   assert.equal(q(w.box, 'project-city-no-plan'), null, 'the city is drawn from its plan');
   const button = w.box.querySelector('[data-testid="architecture-analyze"], [data-testid="project-city-analyze"]');
-  assert.equal(button === null, false, 'an "Analyze this project" button on the City with a plan');
-  assert.match(text(button), /Analyze this project/);
+  assert.equal(button === null, false, 'an "Analyze again" button on the City with a plan');
+  assert.match(text(button), /Analyze again/);
   assert.equal(button.disabled, false);
   assert.match(String(button.getAttribute('title')), /refresh/i, 'its title says it refreshes the plan');
   assert.match(text(w.box), /≈ US\$ 0\.65/, 'its estimate, the map plus the Oracle');

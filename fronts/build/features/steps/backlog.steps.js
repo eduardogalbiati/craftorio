@@ -423,9 +423,11 @@ Then('the text field stayed enabled while the Product Owner worked', async ({ e2
   expect(busy.every((s) => s.questionEnabled)).toBe(true);
 });
 
-Then('the working line {string} with its timer showed while the Product Owner worked', async ({ e2e }, line) => {
+// #781: the working line is an activity line naming the action: "Reading N open issues", then the elapsed time
+// (its animated ellipsis may sit between them); no spinner
+Then('the working line reading the {string} with its timer showed while the Product Owner worked', async ({ e2e }, what) => {
   const w = await watched(e2e.window);
-  const re = new RegExp(`${escapeRe(line)}\\s*\\d+:\\d{2}`);
+  const re = new RegExp(`Reading \\d+ ${escapeRe(what)}\\D*\\d+:\\d{2}`);
   expect(w.states.map((s) => s.working).filter(Boolean), 'the working line and its timer').toEqual(expect.arrayContaining([expect.stringMatching(re)]));
 });
 

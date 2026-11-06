@@ -49,13 +49,7 @@ module.exports = (ctx) => {
     if (!seed) throw clientError(`Unknown analysis seed: ${seedId}`);
     return seed;
   };
-  const { toolOf } = seedRuns;
-
-  async function commitsSince(p, head) {
-    if (!head || !p.isGit) return null;
-    const n = await seedRuns.git(p.folder, ['rev-list', '--count', `${head}..HEAD`]);
-    return n != null && /^\d+$/.test(n) ? Number(n) : null;
-  }
+  const { commitsSince, toolOf } = seedRuns;
 
   async function list({ projectId }) {
     const p = projectOf(projectId);

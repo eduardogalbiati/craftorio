@@ -17,4 +17,4 @@ touch, always [ui-conventions.md](../../docs/agents/renderer/ui-conventions.md) 
   anchor })`: arrows, Home / End, Enter, Escape, outside click; `close()` unbinds. Example:
   `Menu.menuHtml([{ id: 'up', label: t('x.up') }, { divider: true }, { id: 'rm', label: t('x.rm'),
   danger: true }])`, then `Menu.bindMenu(menuEl, { anchor: button, onPick: act, onClose: hide })`.
-  The artifact menu and Discovery's `.bl-menu` move to it later.
+- **"What is happening now" is the shared activity line** (`activity-line.js`, #781): see ui-conventions.md.

@@ -7,6 +7,8 @@
 // Browser: window.PlatformGitLab; Node: module.exports.
 (function (root) {
   const OWN_HOST = 'gitlab.com';
+  const LIST_PAGES = [1, 2, 3, 4];
+  const LIST_PAGE_SIZE = 25;
   const cmd = (args) => ({ cli: 'glab', args });
   // the catalog's helper, at call time (in the browser i18n.js loads after this file)
   const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
@@ -35,6 +37,16 @@
 
     // ---- issues
     issueListCommand: (target) => cmd(['issue', 'list', '--repo', target, '--all', '--per-page', '100', '--output', 'json']),
+    // #781: the list read in steps, so a count can grow: pages of the same 100 issues issueListCommand reads
+    // (upTo: the most issues read once the step ended; adds: its answer joins the others')
+    issueListSteps: (target) => LIST_PAGES.map((page) => ({
+      ...cmd(['issue', 'list', '--repo', target, '--all', '--page', String(page), '--per-page', String(LIST_PAGE_SIZE), '--output', 'json']),
+      upTo: page * LIST_PAGE_SIZE,
+      adds: true,
+    })),
+    // how many issues the project has, in one cheap call (the "of 120" of the count)
+    issueCountCommand: ({ host, path }) => cmd(['api', ...gitlab.apiHostArgs({ host }), `projects/${encodeURIComponent(path)}/issues_statistics`]),
+    parseIssueCount: (out) => JSON.parse(out)?.statistics?.counts?.all ?? null,
     issueViewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--output', 'json']),
     issueCreateCommand: ({ target, title, labels, text }) => cmd(['issue', 'create', '--repo', target, '--title', title, '--description', text, ...(labels.length ? ['--label', labels.join(',')] : []), '--yes']),
     issueSaveCommand: ({ target, n, mode, text }) => cmd(mode === 'replace' ? ['issue', 'update', n, '--repo', target, '--description', text] : ['issue', 'note', n, '--repo', target, '--message', text]),

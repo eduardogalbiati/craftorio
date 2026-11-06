@@ -45,6 +45,14 @@
 .pc-note .pc-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .pc-note .r3d-primary { margin: 0; }
 .pc-estimate { font-weight: 650; color: var(--r3d-ink); }
+/* #782: a quiet action: a refresh nothing asks for, the legend's way to another colour.
+   Under .r3d, as .r3d .r3d-primary: `.r3d button` resets the border and the padding of a lone class */
+.r3d .pc-secondary { padding: 4px 10px; min-height: 24px; font: inherit; font-size: 12px; font-weight: 600; color: var(--r3d-ink); background: transparent; border: 1px solid var(--r3d-line); border-radius: 8px; cursor: pointer; }
+.r3d .pc-secondary:hover:not(:disabled) { border-color: var(--r3d-accent); color: var(--r3d-accent); }
+.r3d .pc-secondary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.r3d .pc-secondary:disabled { opacity: .55; cursor: default; }
+/* #782: a label born under the pointer must not take the pointer from what it names (the hover would flicker) */
+.r3d-tag[data-testid="city-label"] { pointer-events: none; }
 
 /* the legend of "Colour by" */
 .pc-legend { left: 12px; bottom: 12px; padding: 10px 14px; font-size: 12px; max-width: 320px; max-height: calc(50% - 24px); overflow: auto; }
@@ -53,6 +61,11 @@
 .pc-legend li { display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-legend li small { color: var(--r3d-muted); margin-left: auto; padding-left: 10px; font-size: 11px; }
 .pc-legend li .r3d-dot { border-radius: 3px; }
+/* #782: what the Quadrant view cannot colour, and why */
+.pc-unmeasured { display: grid; gap: 6px; justify-items: start; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--r3d-line); color: var(--r3d-ink-2); }
+.pc-unmeasured p { margin: 0; }
+.pc-install-hint { color: var(--r3d-muted); font-size: 11px; }
+.pc-install-hint code { font-family: var(--mono); user-select: all; color: var(--r3d-ink); }
 
 /* the hover card: next to the pointer, never in its way */
 .r3d-hud > .pc-hover { pointer-events: none; width: 260px; padding: 10px 12px; z-index: 3; }

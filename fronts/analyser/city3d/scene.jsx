@@ -46,6 +46,7 @@ import { Glow, LIFE_DIM, noRaycast, Pools, Props, Sky, Traffic, useDisposable } 
 import { crosswalksOf, inset, lawnsOf, PLATE_TOP, SIDEWALK_AV, SIDEWALK_TOP, STREET, ZONE_TOP } from './props.js';
 import { useStore } from './store.js';
 import { buildingOf, FLOOR_H, hashOf, WIN_PITCH } from '@multiagent/shared/city-buildings.js';
+import { labelsShown } from '@multiagent/shared/city-layout.js';
 
 const Y0 = PLATE_TOP; // the buildings stand on the district plates (props.js has the slabs' tops)
 const QUAY = 6, SHORE = 170; // the floor past the ring road, the water past the floor (the POC's quay and shore)
@@ -122,7 +123,7 @@ function Slabs({ rects, top, thick, radius, c, rough = 0.9 }) {
   return <instancedMesh key={rects.length} ref={ref} args={[res[0], res[1], rects.length]} material-color={c} receiveShadow raycast={noRaycast} />;
 }
 
-function Ground({ layout, T, level, store, uniforms }) {
+function Ground({ layout, T, labelled, store, uniforms }) {
   const b = layout.bounds, k = layout.scale || 1;
   const kindOf = useMemo(() => Object.fromEntries(layout.zones.map((z) => [z.id, z.kind])), [layout]);
   // quiet lane markings along the avenues' centre lines, and the crosswalks (#450)
@@ -195,7 +196,7 @@ function Ground({ layout, T, level, store, uniforms }) {
         onPointerMove={(e) => hover('district', district(e))(e)} onPointerOut={() => store.hover(null)} onClick={(e) => pick('district', district(e))(e)} />
       {layout.districts.map((d) => d.label && (
         <GroundLabel key={d.id} text={d.name} sub={`  ${d.files}`} strip={d.label} y={PLATE_TOP + 0.03} T={T}
-          ink={mix(T.kind(kindOf[d.zone]).ink, T.dark ? '#ffffff' : '#000000', 0.2)} visible={level >= 1} />
+          ink={mix(T.kind(kindOf[d.zone]).ink, T.dark ? '#ffffff' : '#000000', 0.2)} visible={labelled.includes(d.id)} />
       ))}
     </group>
   );
@@ -744,7 +745,7 @@ function Rig({ layout, store, T }) {
 
 /** The whole city: lights, camera, ground, buildings, landmarks, ports, markers, the halos and the arcs. */
 export function CityScene({ store }) {
-  const { layout, layoutKey, paint, tests, level, markers, theme: T, hover, pinned, pins, cityLife = true, glow = true, paused = false } = useStore(store);
+  const { layout, layoutKey, paint, tests, level, markers, theme: T, hover, pinned, fly, pins, cityLife = true, glow = true, paused = false } = useStore(store);
   const { invalidate } = useThree();
   store.invalidate = invalidate;
   // #450: the time of the water and the stars; with City life on (and motion allowed) the city lives:
@@ -787,7 +788,7 @@ export function CityScene({ store }) {
       <Lights layout={layout} T={T} life={cityLife} />
       <Rig key={layoutKey} layout={layout} store={store} T={T} />
       <Sky layout={layout} T={T} life={cityLife} motion={motion} uniforms={uniforms} />
-      <Ground layout={layout} T={T} level={level} store={store} uniforms={uniforms} />
+      <Ground layout={layout} T={T} labelled={labelsShown(layout, { hover, pinned, fly }).districts} store={store} uniforms={uniforms} />
       <Props layout={layout} T={T} level={level} life={cityLife} store={store} />
       <Pools layout={layout} T={T} life={cityLife} />
       <Traffic layout={layout} life={cityLife} motion={motion} />

@@ -92,7 +92,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
     And I open the "City" project tab
-    Then the City tab offers the "Analyze this project" button
+    Then the City tab offers the "Analyze again" button
     And the City tab does not advise refreshing the map
     And no project map run has started
 
@@ -706,3 +706,74 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the synced backlog of "billing-service" has the open issue of "Billing module changes in every commit" labelled "refactor"
     And the roadmap of "billing-service" does not plan the issue of "Billing module changes in every commit"
     And the Health finding "Discount rule duplicated in the API and the export" offers "Create issue" and "Create issue and prioritize"
+
+  # #782: a project with more than half of its files not measured has no useful Quadrant, so it opens in Churn
+  # and the legend says what is missing and why. 5 of the 6 files are Rust: 83%. With lizard on the machine the
+  # Rust files are measured, so the scenario skips itself there, as the #385 ones do. The reload makes sure the
+  # owner's choice is kept, not just still in the open window.
+  @issue-782
+  Scenario: A mostly unmeasured project opens in Churn, says what is not measured, and going back to Quadrant is kept
+    Given the complexity tool lizard is not installed on this machine
+    And the app is open
+    And the workspace has a git project "engine-782" with mostly Rust files, a city plan and a saved architecture report
+    When I open "Projects" in the sidebar
+    And I open the project "engine-782" from the Projects screen
+    And I open the "City" project tab
+    Then the City tab shows the project city
+    And the city is coloured by "Churn"
+    And the city legend says "83% not measured: Rust needs clippy or rust-code-analysis"
+    And the city legend says it opened in Churn because most files are not measured
+    And the city legend says how to get "clippy"
+    And the city offers to colour by "Quadrant"
+    When I accept the city's offer to colour by "Quadrant"
+    Then the city is coloured by "Quadrant"
+    And the city legend says "83% not measured: Rust needs clippy or rust-code-analysis"
+    And the city offers to colour by "Churn"
+    When I reload the app
+    And I open "Projects" in the sidebar
+    And I open the project "engine-782" from the Projects screen
+    And I open the "City" project tab
+    Then the City tab shows the project city
+    And the city is coloured by "Quadrant"
+
+  # #782: the city draws its labels only for what is pointed at. The window.ProjectCity.stats() of the city gives no
+  # building's position on screen, so the search flies to the building first (its label must show), then the
+  # pointer goes to the middle of the city, where the flight left it (as the #449 hover card scenario does).
+  # Leaving the city takes the label away again. Zone labels stay: they are not building or district labels.
+  @issue-782
+  Scenario: The city shows no building or district labels until a building is pointed at
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan with the landmark "The till" on "src/billing.js"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "City" project tab
+    Then the City tab shows the project city
+    And the city shows no building or district labels
+    When I search the city for "src/billing.js"
+    Then the city labels "src/billing.js" as "The till" in the district "Billing"
+    When I close the city card
+    Then pointing at the middle of the city shows the hover card of "src/billing.js"
+    And the city labels "src/billing.js" as "The till" in the district "Billing"
+    When I move the pointer off the city
+    Then the city shows no building or district labels
+
+  # #782: a plan that matches the code and its commit is current: the action is a quiet "Analyze again" with the
+  # analysis's date and commit. A commit landed since then brings back the primary action with the reason.
+  @issue-782
+  Scenario: A current plan offers "Analyze again" as secondary with its date, and a new commit brings back the primary action
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file, a city plan and a saved architecture report
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "City" project tab
+    Then the City tab offers the "Analyze again" button
+    And the City tab's analysis button is secondary
+    And the "Analyze again" button shows its cost estimate or says there is none yet
+    And the city says when "billing-service" was analyzed and at which commit
+    When a new commit lands on "billing-service"
+    And I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "City" project tab
+    Then the city says "1 commit since the last analysis" with the analysis button next to it
+    And the City tab offers the "Analyze this project" button
+    And the City tab's analysis button is primary

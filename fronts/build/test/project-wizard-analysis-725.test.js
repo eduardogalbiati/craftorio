@@ -9,10 +9,10 @@
 //   - data-testid="wizard-workflows-choice-analyze" ("Analyze the repository") and
 //     data-testid="wizard-workflows-choice-manual" ("Define manually"): the two choices before any pick; no
 //     data-testid="wizard-workflow" row is shown before a pick;
-//   - data-testid="wizard-workflows-analyzing": the overlay while the profile job runs after Analyze, its text
-//     names the project ("Analyzing <name>'s ways of working…"), with a spinner inside: an element with
-//     role="progressbar" or a class containing "spinner"; the rows are drawn under it, not interactive (each
-//     row's select disabled, or the rows / their list inert or aria-disabled="true");
+//   - data-testid="wizard-workflows-analyzing": the overlay while the profile job runs after Analyze, holding
+//     the analysis' activity lines (#781: wizard-analysis-phases, no spinner; project-wizard-phases-781.test.js);
+//     the rows are drawn under it, not interactive (each row's select disabled, or the rows / their list inert or
+//     aria-disabled="true");
 //   - once the profile job is done: the rows with the profile's picks, each reason "Why ..." (never
 //     "No project profile yet");
 //   - data-testid="wizard-workflows-failed": the profile job failed (or answered no profile): its reason, with
@@ -212,15 +212,13 @@ test('#725 the workflows column starts with two choices, Analyze the repository 
 
 // ---- 2. analyzing, then the profile's picks -----------------------------------------------------
 
-test('#725 Analyze the repository: the rows are dimmed under an overlay naming the project with a spinner', { timeout: 20000 }, async () => {
+test('#725 #781 Analyze the repository: the rows are dimmed under an overlay holding the analysis\' activity lines', { timeout: 20000 }, async () => {
   const app = await atAnalysis();
   await press(app, 'wizard-workflows-choice-analyze');
   await emit(app, PROFILING);
   const overlay = byTestId(wizardMarkup(app), 'wizard-workflows-analyzing');
   assert.equal(overlay === null, false, 'data-testid="wizard-workflows-analyzing"');
-  assert.equal(textOf(overlay).includes(NAME), true, `the overlay names the project: "${textOf(overlay)}"`);
-  const spinner = H.findEl(overlay.outer, (e) => e.attrs.role === 'progressbar' || /spinner/.test(e.attrs.class || ''));
-  assert.equal(spinner === null, false, 'a spinner (role="progressbar" or class "spinner") in the overlay');
+  assert.equal(byTestId(overlay.outer, 'wizard-analysis-phases') === null, false, 'the activity lines in the overlay');
   assertDimmed(app);
 });
 

@@ -298,7 +298,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile); #738: its mode
       // follows the fork choice (no push access: an external contribution)
       const profile = result?.profile ? withForkMode(result.profile, states.get(id)?.fork) : null;
-      change(id, {}, { [name]: { status: 'done', ...(profile ? { profile } : {}) } });
+      // #781: simulated: no model turn, the wizard's Oracle line reads "not needed" after a restart too
+      change(id, {}, { [name]: { status: 'done', ...(profile ? { profile } : {}), ...(result?.simulated ? { simulated: true } : {}) } });
       return { result };
     } catch (e) {
       // #725: the full error (the wizard's tooltip) and its short reason

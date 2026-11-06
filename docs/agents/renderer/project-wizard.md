@@ -102,9 +102,15 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    #725, `workflowsColumnState` of the model) start with two choices: Analyze the repository
    (`wizard-workflows-choice-analyze`, starts the analysis) and Define manually
    (`wizard-workflows-choice-manual`); no row before that. Analyzing dims the rows (`wizard-workflows-rows`
-   `aria-busy`, inert) under an overlay with a spinner (`wizard-workflows-analyzing`,
-   `wizard-workflows-spinner`); then the profile's picks and reasons. A failed profile shows its reason,
-   Retry (`wizard-workflows-retry`) and Define manually (`wizard-workflows-failed`). Manual shows the rows
+   `aria-busy`, inert) under the analysis' phases (`wizard-workflows-analyzing`, #781,
+   `fronts/build/views/projects/project-wizard-activity.js`): `wizard-analysis-phases` holds one activity line
+   per phase (`packages/ui-kit/activity-line.js`), `wizard-phase-git` (the commits, merges and tags found),
+   `wizard-phase-files` (the languages, the test command, the CI) and `wizard-phase-oracle` (what it reads and
+   its time as m:ss while it runs; "not needed" when git settled every field: no model call). The wizard reads
+   them from `workflows:interviewState` while the profile job runs, every second and at each
+   `onboarding:changed` (`analysisPhases` of the model maps them), and they stay, ended, over the
+   profile's picks and reasons. A failed profile shows an activity line with its reason and
+   Retry (`wizard-workflows-retry`), and Define manually (`wizard-workflows-failed`). Manual shows the rows
    editable without a reason, Analyze still offered; a running job's row has a spinner instead of its dot.
    #738: above the rows (analyzed and manual), `wizard-way-of-working`: the way of working's badge
    (Local, with "no pull request" / Remote / Fork + PR), from the fork choice when there was one, else the
@@ -116,10 +122,16 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    `wizard-spinner` while it runs) on the left, Back and Continue (`wizard-next`) on the right: always enabled,
    the analysis goes on in the background and the review shows what is pending. Nothing paid starts
    without Analyze; Continue before it skips the analysis.
-4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on, its workflows),
+4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on: #781 the Health tab's
+   language bar in `wizard-review-languages`, the project type opening on the kind the analysis found, marked
+   `wizard-kind-detected`, "Detect from the files" only while no kind is known; its workflows),
    the city (`wizard-review-city`, Open the city) and the findings (`wizard-review-findings`, #730: the
-   Oracle's report from the project map run), then the backlog and an idea for the Inbox; each section
-   `data-state="ready | pending | failed | skipped | later"`; each finding (`wizard-review-finding`) with
+   Oracle's report from the project map run), then the backlog (#781: the activity line
+   `wizard-review-backlog-activity` says from where it reads and how far, `backlog:progress`, then the summary or
+   that it is empty; the count grows because this sync, `backlog:sync` with `followed`, reads the list in steps, the adapter's `issueListSteps`: gh has
+   no offset, so it reads again with a higher limit (40, 100, 200, 300), glab reads pages, and `issueCountCommand`
+   gives the total; a sync no screen follows keeps the single read; a read that fails shows its reason with `wizard-review-backlog-retry`, and a project with no platform to read from is an
+   empty backlog) and an idea for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each finding (`wizard-review-finding`) with
    its severity and Create issue (`wizard-review-create-issue`) / Create issue and prioritize
    (`wizard-review-create-issue-prioritize`), both through `architecture:createIssue`; once filed the
    issue's link (`wizard-review-finding-issue`) replaces the buttons. `wizard-finish` never waits: the

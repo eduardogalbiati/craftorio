@@ -14,6 +14,10 @@
 // #733: workflowInterviewLast reads the last saved run (the onboarding's profile job is the same
 // interview) without running anything; workflowInterviewState is the running seed's state (seed-runs.js
 // runState) the drawer's loader polls.
+// #781: workflowInterviewState also says the interview's phases, what the wizard's activity lines read:
+// phases: { git: { status, found: { commits, merges, tags, authors } }, files: { status, found: { languages,
+// testCommand, ci } }, oracle: { status, since, reading } }; status: pending | running | done | failed | not-needed
+// (oracle only: no model turn). Kept in this engine until the next interview; absent before the first one.
 
 const fs = require('fs');
 const os = require('os');
@@ -51,8 +55,9 @@ function ciOf(folder) {
   return /pull_request|merge_request/.test(text) ? 'pr+release' : 'release';
 }
 
-// The profile of a simulated analysis: what git and the project's files tell without a model; no release style
-async function simulatedProfile(project) {
+// The profile of a simulated analysis: what git and the project's files tell without a model; no release style.
+// #781: onGit({ commits, merges, tags, authors }) once git answered, before the files are read
+async function simulatedProfile(project, onGit = null) {
   const folder = project.folder;
   const [authors, merges, commits, tags, head] = await Promise.all([
     git(folder, ['shortlog', '-sne', 'HEAD']),
@@ -64,6 +69,7 @@ async function simulatedProfile(project) {
   const nAuthors = count(authors);
   const nMerges = Number(merges) || 0;
   const shas = head ? [head] : [];
+  onGit?.({ commits: Number(commits) || 0, merges: nMerges, tags: count(tags), authors: nAuthors });
   const e2eCommand = detectE2eCommand(folder);
   return {
     // #630: the ways of working the set is composed from (mode, ci, tests, e2eCommand); who works on it
@@ -111,6 +117,14 @@ function mergeProfile(free, model) {
 module.exports = (ctx) => {
   const root = () => seedRuns.seedsRoot(ctx);
   const projectOf = (projectId) => seedRuns.projectOf(ctx, projectId);
+  const phases = new Map(); // #781: project id → its last interview's phases
+
+  // #781: a new interview's phases; one refused as busy leaves the running interview's alone
+  function startPhases(p) {
+    const at = { git: { status: 'running' }, files: { status: 'pending' }, oracle: { status: 'pending' } };
+    if (!seedRuns.runState(ctx, p, SEED_ID).running) phases.set(p.id, at);
+    return at;
+  }
 
   // the last ways-of-working run's { profile, evidence } over the free profile (`free`: already read), or null
   async function lastProfile(p, free = null) {
@@ -127,13 +141,31 @@ module.exports = (ctx) => {
     const p = projectOf(projectId);
     const seed = seeds.readSeed(ctx.ws.seeds, SEED_ID);
     if (!seed) throw clientError(`The analysis seed ${SEED_ID} is missing from the workspace.`);
-    const free = await simulatedProfile(p);
-    const ask = !simulation.simulationOnly() && Object.values(free.profile).some(open);
-    const out = await seedRuns.runSeed(ctx, { project: p, seed, mock: !ask });
-    if (out.refused) return { refused: out.refused };
-    const found = await lastProfile(p, free);
-    if (!found) throw new Error(`The ${SEED_ID} analysis answered no profile.`);
-    return { ...found, questions: compose.openQuestions(found.profile) };
+    const at = startPhases(p);
+    try {
+      const free = await simulatedProfile(p, (found) => {
+        at.git = { status: 'done', found };
+        at.files = { status: 'running' };
+      });
+      const { languages, testCommand, ci } = free.profile;
+      at.files = { status: 'done', found: { languages, testCommand, ci } };
+      const ask = !simulation.simulationOnly() && Object.values(free.profile).some(open);
+      at.oracle = { status: ask ? 'running' : 'not-needed' };
+      const out = await seedRuns.runSeed(ctx, { project: p, seed, mock: !ask });
+      if (out.refused) {
+        at.oracle = { status: 'failed' };
+        return { refused: out.refused };
+      }
+      const found = await lastProfile(p, free);
+      if (!found) throw new Error(`The ${SEED_ID} analysis answered no profile.`);
+      if (ask) at.oracle = { status: 'done' };
+      return { ...found, questions: compose.openQuestions(found.profile) };
+    } catch (e) {
+      // the phase it stopped at: the first one not ended
+      const stopped = ['git', 'files'].find((id) => at[id].status === 'running') || 'oracle';
+      at[stopped] = { status: 'failed' };
+      throw e;
+    }
   }
 
   /** #733: the last saved run → { profile, evidence, questions, simulated, date, costUsd }, or null; runs nothing. */
@@ -146,9 +178,15 @@ module.exports = (ctx) => {
     return { ...found, questions: compose.openQuestions(found.profile), date: last.at || null, costUsd: last.costUsd ?? null };
   }
 
-  /** #733: the interview in progress on the project → { running: { since, items, last } | null, error }. */
+  /** #733: the interview in progress on the project → { running: { since, items, last } | null, error }; #781: and its phases, see the header. */
   async function workflowInterviewState({ projectId }) {
-    return seedRuns.runState(ctx, projectOf(projectId), SEED_ID);
+    const p = projectOf(projectId);
+    const state = seedRuns.runState(ctx, p, SEED_ID);
+    const at = phases.get(p.id);
+    if (!at) return state;
+    const { running } = state;
+    const oracle = at.oracle.status === 'running' && running ? { status: 'running', since: running.since, reading: running.last } : at.oracle;
+    return { ...state, phases: { ...at, oracle } };
   }
 
   // a composed workflow as the Builder edits it: { mode, spec } (checked by the engine's loader)

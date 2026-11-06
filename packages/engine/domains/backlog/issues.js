@@ -58,11 +58,46 @@ function execCli(cli, args) {
   });
 }
 
+// How many issues the repository has, or null: the count is only for the screen, so it never fails the read.
+async function readIssueCount(p, parsed, exec) {
+  try { return p.parseIssueCount(await runCommand(exec, p.issueCountCommand(parsed))); } catch { return null; }
+}
+
+// #781: the raw list read in the adapter's steps, reporting { what, read, total } after each one; total is null
+// until the count answers, and never above what the steps can read. A repository smaller than the first step
+// costs one list call, as the single read does.
+async function readIssueSteps(p, parsed, exec, onProgress) {
+  const steps = p.issueListSteps(p.cliTarget(parsed), MAX_ISSUES);
+  let raw = [];
+  let total = null;
+  let reading = true;
+  const report = () => onProgress({ what: 'issues', read: raw.length, total: total === null ? null : Math.max(total, raw.length) });
+  // not awaited: the list does not wait for the count
+  readIssueCount(p, parsed, exec).then((count) => {
+    if (count === null || !reading) return;
+    total = Math.min(count, steps.at(-1).upTo);
+    report();
+  });
+  try {
+    for (const step of steps) {
+      const answer = JSON.parse((await runCommand(exec, step)) || '[]');
+      raw = step.adds ? [...raw, ...answer] : answer;
+      if (raw.length < step.upTo) break;
+      report();
+    }
+  } finally {
+    reading = false;
+  }
+  return raw;
+}
+
 /**
  * Fetches every issue (open and closed, newest first, up to MAX_ISSUES) of a repository.
- * @param {{ platform: string, repo: string, exec?: (cli: string, args: string[]) => Promise<string> }} opts
+ * #781: with onProgress the list is read in steps, for a count that grows on screen; the steps read more, so only a
+ * sync someone watches asks for them.
+ * @param {{ platform: string, repo: string, exec?: (cli: string, args: string[]) => Promise<string>, onProgress?: Function }} opts
  */
-async function fetchIssues({ platform, repo, exec = execCli }) {
+async function fetchIssues({ platform, repo, exec = execCli, onProgress }) {
   const p = adapterOf(platform);
   if (!p && PLATFORMS[platform]) throw new Error(`${PLATFORMS[platform].label} sync is not available yet. Pick GitHub or GitLab.`);
   if (!p) throw new Error(`Unknown backlog platform: ${platform}`);
@@ -71,6 +106,7 @@ async function fetchIssues({ platform, repo, exec = execCli }) {
   const owner = platformOfHost(parsed.host);
   if (owner && owner !== p.id) throw new Error(`The project's repository is on ${parsed.host}; pick ${PLATFORMS[owner].label} to sync it.`);
 
+  if (onProgress) return normalize(p, await readIssueSteps(p, parsed, exec, onProgress));
   const out = await runCommand(exec, p.issueListCommand(p.cliTarget(parsed), MAX_ISSUES));
   return normalize(p, JSON.parse(out || '[]'));
 }

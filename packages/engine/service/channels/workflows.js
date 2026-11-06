@@ -52,7 +52,7 @@ module.exports = (ctx) => [
   { channel: 'workflows:interview', method: 'workflowInterview', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowInterview({ projectId: requireId(opts?.projectId, 'project id') }) },
   // #733: the last saved interview (the onboarding's or the drawer's), read without running it, or none
   { channel: 'workflows:interviewLast', method: 'workflowInterviewLast', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: orNone(OBJECT) }, fn: (opts) => ctx.workflowInterviewLast({ projectId: requireId(opts?.projectId, 'project id') }) },
-  // #733: the running interview's state ({ running: { since, items, last } | null, error }), for the drawer's loader
+  // #733: the running interview's state ({ running: { since, items, last } | null, error }), for the drawer's loader; #781: and its phases, for the wizard
   { channel: 'workflows:interviewState', method: 'workflowInterviewState', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowInterviewState({ projectId: requireId(opts?.projectId, 'project id') }) },
   // #487: the workflow set composed from the profile and the answers; write: into the project's
   // .multiagent/ (not committed) and its workflow set, else nothing is written

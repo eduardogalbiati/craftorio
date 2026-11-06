@@ -117,21 +117,42 @@ function git(cwd, args, date) {
 const jsBody = (n) => `${['function discount(total) {', '  return total > 100 ? total * 0.9 : total;', '}'].join('\n')}\n${Array.from({ length: n }, (_, i) => `const rate${i} = ${i};`).join('\n')}\nmodule.exports = { discount };\n`;
 const pyBody = (n) => `${['def discount(total):', '    return total * 0.9 if total > 100 else total'].join('\n')}\n${Array.from({ length: n }, (_, i) => `RATE_${i} = ${i}`).join('\n')}\n`;
 
-// A git repository on main: src/billing.js and tools/export.py, three commits → its head
-function seedRepo(folder) {
+const rustBody = (n) => `${['pub fn discount(total: f64) -> f64 {', '    if total > 100.0 { total * 0.9 } else { total }', '}'].join('\n')}\n${Array.from({ length: n }, (_, i) => `pub const RATE_${i}: u32 = ${i};`).join('\n')}\n`;
+
+// writes the files and commits them on the repository's main
+function commitFiles(folder, message, date, files) {
+  for (const [rel, content] of Object.entries(files)) fs.writeFileSync(path.join(folder, rel), content);
+  git(folder, ['add', '-A']);
+  git(folder, ['commit', '-q', '-m', message], date);
+}
+
+// an empty git repository on main with the folders src/ and tools/
+function initRepo(folder) {
   fs.mkdirSync(path.join(folder, 'src'), { recursive: true });
   fs.mkdirSync(path.join(folder, 'tools'), { recursive: true });
   fs.writeFileSync(path.join(folder, '..', 'empty.gitconfig'), '');
   git(folder, ['init', '-q', '-b', 'main']);
-  const commit = (message, date, files) => {
-    for (const [rel, content] of Object.entries(files)) fs.writeFileSync(path.join(folder, rel), content);
-    git(folder, ['add', '-A']);
-    git(folder, ['commit', '-q', '-m', message], date);
-  };
-  commit('Add billing and export', '2026-09-01T10:00:00Z', { 'src/billing.js': jsBody(10), 'tools/export.py': pyBody(5) });
-  commit('Change the discount rule', '2026-09-08T10:00:00Z', { 'src/billing.js': jsBody(20), 'tools/export.py': pyBody(8) });
-  commit('Grow billing', '2026-09-15T10:00:00Z', { 'src/billing.js': jsBody(30) });
+}
+
+// A git repository on main: src/billing.js and tools/export.py, three commits → its head
+function seedRepo(folder) {
+  initRepo(folder);
+  commitFiles(folder, 'Add billing and export', '2026-09-01T10:00:00Z', { 'src/billing.js': jsBody(10), 'tools/export.py': pyBody(5) });
+  commitFiles(folder, 'Change the discount rule', '2026-09-08T10:00:00Z', { 'src/billing.js': jsBody(20), 'tools/export.py': pyBody(8) });
+  commitFiles(folder, 'Grow billing', '2026-09-15T10:00:00Z', { 'src/billing.js': jsBody(30) });
   return { commit: git(folder, ['rev-parse', 'HEAD']), date: '2026-09-15T10:00:00Z' };
+}
+
+// #782: a git repository on main with 5 Rust files and 1 JavaScript file (no test file): 5 of 6 not measured
+// without lizard → its head
+function seedRustRepo(folder) {
+  initRepo(folder);
+  const date = '2026-09-01T10:00:00Z';
+  commitFiles(folder, 'Add the engine', date, {
+    'src/billing.js': jsBody(10), 'src/lib.rs': rustBody(10), 'src/rates.rs': rustBody(20), 'src/rules.rs': rustBody(30),
+    'tools/export.rs': rustBody(5), 'tools/report.rs': rustBody(8),
+  });
+  return { commit: git(folder, ['rev-parse', 'HEAD']), date };
 }
 
 // #386: a report with findings of each severity: two high, one medium, one low
@@ -199,13 +220,13 @@ const CITY_PLAN = {
   ],
 };
 
-async function seedGitProject(e2e, name, { withReport = false, findings = null, planFolders = null, withPlan = false } = {}) {
+async function seedGitProject(e2e, name, { withReport = false, findings = null, planFolders = null, withPlan = false, seed = seedRepo, plan = CITY_PLAN } = {}) {
   const workspace = require(path.join(root, 'packages', 'engine', 'domains', 'workspace', 'workspace'));
   const projects = require(path.join(root, 'packages', 'engine', 'domains', 'project', 'projects'));
   const arch = require(path.join(root, 'packages', 'engine', 'domains', 'oracle', 'oracle-architecture'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const folder = path.join(e2e.scratch, 'repos', name);
-  const head = seedRepo(folder);
+  const head = seed(folder);
   const project = await projects.createProject(ws.projects, { name, folder, description: 'A git project (simulated data)' });
   const dir = path.join(ws.root, 'architecture', project.id);
   if (withReport) {
@@ -217,7 +238,7 @@ async function seedGitProject(e2e, name, { withReport = false, findings = null, 
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'city-plan.json'), JSON.stringify(cityPlan(name, planFolders), null, 2));
   }
-  if (withPlan) arch.writePlan(path.join(ws.root, 'architecture'), project.id, { ...CITY_PLAN, project: name }, new Date().toISOString());
+  if (withPlan) arch.writePlan(path.join(ws.root, 'architecture'), project.id, { ...plan, project: name }, new Date().toISOString());
   await e2e.window.reload();
   await e2e.window.waitForLoadState('domcontentloaded');
 }
@@ -252,6 +273,21 @@ Given('the workspace has a git project {string} with a JavaScript and a Python f
 
 Given('the workspace has a git project {string} with a JavaScript and a Python file and a city plan', async ({ e2e }, name) => {
   await seedGitProject(e2e, name, { withPlan: true });
+});
+
+// #782: the plan and a report saved at the repository's HEAD: a current plan
+Given('the workspace has a git project {string} with a JavaScript and a Python file, a city plan and a saved architecture report', async ({ e2e }, name) => {
+  await seedGitProject(e2e, name, { withPlan: true, withReport: true });
+});
+
+// #782: a landmark gets its own label on the city
+Given('the workspace has a git project {string} with a JavaScript and a Python file and a city plan with the landmark {string} on {string}', async ({ e2e }, name, label, file) => {
+  await seedGitProject(e2e, name, { withPlan: true, plan: { ...CITY_PLAN, landmarks: [{ path: file, label }] } });
+});
+
+// #782: the report's findings would name files this repository lacks: it has none
+Given('the workspace has a git project {string} with mostly Rust files, a city plan and a saved architecture report', async ({ e2e }, name) => {
+  await seedGitProject(e2e, name, { seed: seedRustRepo, withPlan: true, withReport: true, findings: [] });
 });
 
 // --- The project city (#373) ---
@@ -1324,4 +1360,112 @@ Then('the city\'s retry shows no cost estimate in US$', async ({ e2e }) => {
   await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(note).not.toContainText(/≈\s*US\$/);
   await expect(note).not.toContainText(/US\$\s*\d/);
+});
+
+// ---------- what is not measured, labels on demand, Analyze again (#782) ----------
+// Acceptance tests, written before the code. What the city exposes:
+// - project-city-colour: the "Colour by" select (values quadrant, zone, churn). It opens on churn when more
+//   than half of the files are not measured; the owner's choice is kept per project;
+// - in the legend, project-city-unmeasured: "<pct>% not measured: <Language> needs <tool>" (and why it opened in
+//   Churn: "most files"), project-city-install-hint names the tool; project-city-colour-quadrant (in Churn) and
+//   project-city-colour-churn (in Quadrant) do what the select does;
+// - window.ProjectCity.stats().labels: { districts: [id], landmarks: [path], ports: [id] }, what is labelled now
+//   (what is hovered, pinned or flown to); each landmark and port tag is data-testid="city-label";
+// - project-city-plan on a current plan: "Analyzed on <date> · <commit>" and project-city-analyze as "Analyze
+//   again", secondary (no class r3d-primary); project-city-moved after a commit: the reason and the primary
+//   "Analyze this project".
+
+const COLOUR_ACTION = { Quadrant: 'project-city-colour-quadrant', Churn: 'project-city-colour-churn' };
+const colourAction = (page, colour) => {
+  const id = COLOUR_ACTION[colour];
+  if (!id) throw new Error(`the city offers no action to colour by "${colour}": one of ${Object.keys(COLOUR_ACTION).join(', ')}`);
+  return byId(page, id);
+};
+const unmeasuredLine = (page) => cityLegend(page).getByTestId('project-city-unmeasured');
+const cityLabels = (page) => visible(tab(page).getByTestId('city-label'));
+const labelsOf = async (page) => (await cityStats(page))?.labels ?? null;
+// what the page really draws: the `.r3d button` reset takes the border and the padding from a rule that loses to it
+const expectFramed = async (button) => {
+  await expect.poll(() => button.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { border: parseFloat(style.borderTopWidth) > 0, padding: parseFloat(style.paddingTop) > 0 && parseFloat(style.paddingLeft) > 0 };
+  }), { timeout: LOAD_TIMEOUT, message: 'the border and the padding of the secondary button' }).toEqual({ border: true, padding: true });
+};
+
+Then('the city is coloured by {string}', async ({ e2e }, colour) => {
+  await expect(byId(e2e.window, 'project-city-colour')).toHaveValue(colour.toLowerCase(), { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city legend says {string}', async ({ e2e }, text) => {
+  await expect(unmeasuredLine(e2e.window)).toContainText(text, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city legend says it opened in Churn because most files are not measured', async ({ e2e }) => {
+  await expect(unmeasuredLine(e2e.window)).toContainText(/most files/i, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city legend says how to get {string}', async ({ e2e }, tool) => {
+  await expect(cityLegend(e2e.window).getByTestId('project-city-install-hint')).toContainText(tool, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city offers to colour by {string}', async ({ e2e }, colour) => {
+  const action = colourAction(e2e.window, colour);
+  await expect(action).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(action).toContainText(colour);
+  await expectFramed(action);
+});
+
+When('I accept the city\'s offer to colour by {string}', async ({ e2e }, colour) => {
+  await colourAction(e2e.window, colour).click();
+});
+
+Then('the city shows no building or district labels', async ({ e2e }) => {
+  await expect.poll(() => labelsOf(e2e.window), { timeout: LOAD_TIMEOUT, message: 'the labels of the city' }).toEqual({ districts: [], landmarks: [], ports: [] });
+  await expect(cityLabels(e2e.window)).toHaveCount(0);
+});
+
+Then('the city labels {string} as {string} in the district {string}', async ({ e2e }, file, label, district) => {
+  const id = CITY_PLAN.districts.find((d) => d.name === district)?.id;
+  if (!id) throw new Error(`no district "${district}" in the seeded plan`);
+  await expect.poll(async () => {
+    const labels = await labelsOf(e2e.window);
+    return { landmark: !!labels?.landmarks.includes(file), district: !!labels?.districts.includes(id) };
+  }, { timeout: LOAD_TIMEOUT, message: `the labels of "${file}"` }).toEqual({ landmark: true, district: true });
+  await expect(cityLabels(e2e.window).filter({ hasText: label })).toHaveCount(1, { timeout: LOAD_TIMEOUT });
+});
+
+// the window's corner, outside the city's canvas: nothing of the city stays hovered
+When('I move the pointer off the city', async ({ e2e }) => {
+  await e2e.window.mouse.move(1, 1);
+});
+
+// the button of the plan's note, primary or secondary (the primary one has the class r3d-primary, the secondary
+// one has none and keeps its own frame)
+Then('the City tab\'s analysis button is {word}', async ({ e2e }, kind) => {
+  if (!['primary', 'secondary'].includes(kind)) throw new Error(`the analysis button is primary or secondary, not "${kind}"`);
+  const button = analyzeButton(e2e.window);
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  if (kind === 'primary') await expect(button).toHaveClass(/\br3d-primary\b/);
+  else {
+    await expect(button).not.toHaveClass(/\br3d-primary\b/);
+    await expectFramed(button);
+  }
+});
+
+Then('the city says when {string} was analyzed and at which commit', async ({ e2e }, name) => {
+  const commit = git(projectOf(e2e, name).folder, ['rev-parse', 'HEAD']).slice(0, 7);
+  await expect(byId(e2e.window, 'project-city-plan')).toContainText(new RegExp(`Analyzed on .+ · ${commit}`), { timeout: LOAD_TIMEOUT });
+});
+
+// the commit lands after the saved report; the app reloads to read the project again
+When('a new commit lands on {string}', async ({ e2e }, name) => {
+  commitFiles(projectOf(e2e, name).folder, 'Grow billing again', '2026-09-22T10:00:00Z', { 'src/billing.js': jsBody(40) });
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('the city says {string} with the analysis button next to it', async ({ e2e }, reason) => {
+  const note = byId(e2e.window, 'project-city-moved');
+  await expect(note).toContainText(reason, { timeout: LOAD_TIMEOUT });
+  await expect(note.getByTestId('project-city-analyze')).toBeVisible();
 });

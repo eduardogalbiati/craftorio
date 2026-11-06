@@ -13,7 +13,7 @@ Feature: Backlog Product Owner
     Then the Product Owner answers
     And the suggested questions, "Register an issue" and Ask were disabled while the Product Owner worked
     And the text field stayed enabled while the Product Owner worked
-    And the working line "Product Owner is working…" with its timer showed while the Product Owner worked
+    And the working line reading the "open issues" with its timer showed while the Product Owner worked
     And the suggested questions, "Register an issue" and Ask are enabled again
     And the working line is gone
 
