@@ -103,7 +103,7 @@
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
-  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), phasesHtml: activity.analysisPhases });
+  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
   const workModel = window.ProjectWizardWorkModel({ cur: () => cur }); // #633: step 3's work model section
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
@@ -645,6 +645,7 @@
       cur.onboarding = state;
       // #738: the fork suggestion holds the repository step until the owner chooses
       if (cur.model.step === 'repository' && CLONED.includes(state.status) && !forkPending(state)) toAnalysis();
+      else if (CLONED.includes(state.status)) column.loadManifest(); // #790: the clone's folder may be known now
       if (cur.model.step === 'review') loadReview(); // an analysis done meanwhile: read what it made
       activity.followAnalysis(); // #781
       renderSoon();
@@ -683,6 +684,7 @@
     const running = ACTIVE.includes(cur.onboarding?.status);
     const workflows = pickedWorkflows();
     const extra = { platform: platformOfRepo(cur.model.repository)?.id || cur.provider || null, kind: cur.kind || null, workModel: workModel.picked() };
+    const defaultWorkflow = column.pickedDefault(workflows); // #790, #791, read before close()
     close();
     if (!pid) return;
     if (running) finished.add(pid);
@@ -692,7 +694,7 @@
     // the project's page opens: its reads (listProjectRuns) then see them; the page opens whether the save succeeds or fails.
     // The saved record goes into state.projects (the backlog's pickers read the set and default there), as project-workflows.js's
     // save() does. #745: the platform picked (a self-hosted host its URL does not name: the Backlog never asks again); #735: the kind
-    const patch = { workflows, defaultWorkflow: DefaultWorkflow.firstBuild(workflows) || 'feature', ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v)) };
+    const patch = { workflows, defaultWorkflow, ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v)) };
     new Promise((resolve) => resolve(api.updateProject(pid, patch)))
       .then((saved) => {
         if (typeof state === 'undefined' || !Array.isArray(state.projects)) return;
@@ -709,6 +711,7 @@
 
   function toAnalysis() {
     cur.model = { ...cur.model, step: 'analysis' };
+    column.loadManifest();
     if (cur.estimate !== undefined) return;
     const pid = cur.projectId;
     Promise.resolve(api.architectureEstimate?.(pid)).then((r) => {
@@ -864,7 +867,7 @@
     else if (act === 'finish') finish();
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
-      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, workflowsMode: undefined, ...freshReview() };
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }

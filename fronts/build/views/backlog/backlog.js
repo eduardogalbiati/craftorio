@@ -244,6 +244,7 @@
     try {
       const data = await api.syncBacklog(p.id, bl.platform);
       if (seq === bl.seq && bl.projectId === p.id) setData(data);
+      window.refreshWorkflowsAcceptance?.(); // #794: a pull may change a repository workflow
     } catch (e) {
       if (seq === bl.seq) bl.error = errMsg(e);
     } finally {
@@ -554,7 +555,7 @@
       ? `<optgroup label="Workflows">${options}</optgroup><optgroup label="Pipelines">${bl.pipelines.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
       : options;
     const files = [...bl.workflows.map((w) => w.file), ...bl.pipelines.map((p) => PIPE + p.file)];
-    // nothing remembered: the default development workflow (#195, Settings › General › Backlog; #486: the project's own first, its set first in the list)
+    // nothing remembered: the project's default workflow (#195, #486, #790: its own, then its manifest's; its set first in the list)
     sel.value = [prefill?.workflow, load(WORKFLOW_KEY), DefaultWorkflow.current().file, files[0]].find((f) => f && files.includes(f));
     // real runs by default: Simulation is opt-in (checked only where real runs are refused anyway)
     $b('#assign-mock').checked = !!state.simulationOnly;
@@ -1092,6 +1093,7 @@
             const r = await api.checkLocal(bl.projectId);
             if (r.backlog) setData(r.backlog);
             window.refreshUnpushed?.();
+            window.refreshWorkflowsAcceptance?.(); // #794
           } catch (err) { bl.error = errMsg(err); }
           render();
         },
@@ -1142,6 +1144,7 @@
       if (r.backlog) setData(r.backlog);
       else if (bl.data) bl.data.local = r.local;
       window.refreshUnpushed?.();
+      window.refreshWorkflowsAcceptance?.(); // #794: the update may move HEAD over a repository workflow
       if (r.pushed || (!r.rejected && !r.conflict && !r.local?.ahead)) { closeModal('#push-modal'); render(); return; }
       if (r.conflict) {
         // handed to a run of the local workflow (its developer resolves it, as in resolve_merge)

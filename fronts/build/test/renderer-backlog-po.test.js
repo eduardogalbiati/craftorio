@@ -22,14 +22,17 @@ function loadWorkflowSelect() {
   const draftWorkflow = /const draftWorkflow = new Map\(\); \/\/ message index.*\n/.exec(src)[0];
   const workflowForFn = /const workflowFor = \(m\) => [^\n]+;/.exec(src)[0];
   const workflowSelectFn = /function workflowSelect\(m, busy\) \{[\s\S]*?\n  \}/.exec(src)[0];
-  for (const [name, code] of Object.entries({ draftWorkflow, workflowForFn, workflowSelectFn })) {
+  // #791: the select lists the project's workflows; here no project, so every one that takes a task
+  const taskWorkflowsFn = /const taskWorkflows = [^\n]+;/.exec(src)[0];
+  const planWorkflowsFn = /const planWorkflows = [^\n]+;/.exec(src)[0];
+  for (const [name, code] of Object.entries({ draftWorkflow, workflowForFn, workflowSelectFn, taskWorkflowsFn, planWorkflowsFn })) {
     assert.ok(code, `${name} not found in backlog-po.js: the source moved`);
   }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const sandbox = { esc, state: { workflows: [], settings: { defaultWorkflow: null } } };
   vm.createContext(withI18n(sandbox));
   vm.runInContext(defaultWorkflowSrc, sandbox);
-  vm.runInContext(`${draftWorkflow}\n${workflowForFn}\n${workflowSelectFn}\nthis.helpers = { workflowSelect, workflowFor, draftWorkflow };`, sandbox);
+  vm.runInContext(`const projectRecord = () => null;\n${taskWorkflowsFn}\n${planWorkflowsFn}\n${draftWorkflow}\n${workflowForFn}\n${workflowSelectFn}\nthis.helpers = { workflowSelect, workflowFor, draftWorkflow };`, sandbox);
   return { helpers: sandbox.helpers, sandbox };
 }
 
@@ -465,7 +468,7 @@ test('workflowFor: once a workflow is picked for a draft (draftWorkflow.set, as 
   assert.equal(helpers.workflowFor(0), 'feature.yaml'); // another draft: unaffected
 });
 
-test('workflowSelect: lists the task workflows, the picked one selected, the default (the setting\'s, or the fallback) marked "(default)"', () => {
+test('workflowSelect: lists the task workflows, the picked one selected, the default (the project\'s, or the fallback) marked "(default)"', () => {
   const { helpers, sandbox } = loadWorkflowSelect();
   sandbox.state.workflows = [
     { file: 'software-development.yaml', name: 'Software development', inputs: { task: {} } },
@@ -478,10 +481,11 @@ test('workflowSelect: lists the task workflows, the picked one selected, the def
   assert.match(html, /<option value="software-development\.yaml">Software development<\/option>/);
   assert.doesNotMatch(html, /no-task\.yaml/);
 
+  // #790: an old settings.defaultWorkflow changes nothing
   sandbox.state.settings = { defaultWorkflow: 'software-development.yaml' };
   const withSetting = helpers.workflowSelect(1, '');
-  assert.match(withSetting, /<option value="software-development\.yaml" selected>Software development \(default\)<\/option>/);
-  assert.match(withSetting, /<option value="feature\.yaml">Software development \(local\)<\/option>/);
+  assert.match(withSetting, /<option value="feature\.yaml" selected>Software development \(local\) \(default\)<\/option>/);
+  assert.match(withSetting, /<option value="software-development\.yaml">Software development<\/option>/);
 });
 
 test('fileDraft (the owner\'s click): every "create" variant files action "create", not a new issue when appending or commenting; a real filing asks to confirm first', () => {

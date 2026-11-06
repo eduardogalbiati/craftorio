@@ -41,12 +41,13 @@
   const epicTitle = (id) => (window.BacklogActions?.data()?.epics || []).find((e) => e.id === id)?.title || id;
 
   // ---- splits (#124) ---------------------------------------------------------------------------------
-  // The children's workflow (#195): the default development workflow (Settings › General › Backlog)
-  // unless the owner picks another; the workflows that take a task, never a pipeline.
+  // The children's workflow (#195): the project's default development workflow (#790) unless the owner
+  // picks another; the project's workflows that take a task (#791), never a pipeline.
   const splitWorkflow = (key) => workflowOf.get(key) || DefaultWorkflow.current().file;
   function workflowSelect(key, ctx) {
     const value = splitWorkflow(key);
-    const list = DefaultWorkflow.projectFirst((state.workflows || []).filter((w) => !w.error && w.inputs?.task));
+    const project = window.BacklogActions?.project?.() || (state.projects || []).find((p) => p.id === ctx.projectId) || null;
+    const list = DefaultWorkflow.projectWorkflows((state.workflows || []).filter((w) => !w.error && w.inputs?.task), project);
     const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
     return `<select class="po-wf" data-split-wf aria-label="${t('backlog_po_proposals.workflow_of_the_children_in_the')}" title="${t('backlog_po_proposals.the_workflow_of_the_children_s')}"${off(ctx, key)}>${options.map((w) =>
       `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === DefaultWorkflow.current().file ? ' (default)' : ''}</option>`).join('')}</select>`;

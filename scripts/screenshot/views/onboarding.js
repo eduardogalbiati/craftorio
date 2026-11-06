@@ -25,6 +25,22 @@ const ANALYSIS_WAIT_MS = 90000;
 // the file:// URL of the seeded repository (seed and open run in the same process)
 let reachableRepo = null;
 
+// #790, #791: the sample repository names its default and its Fix, so the workflows column shows the
+// Default row (analysis with --click "[data-testid=wizard-workflows-choice-manual]")
+const SAMPLE_MANIFEST = `version: 1
+requires: ">=1.1"
+default: feature
+kinds:
+  fix: { name: fix, mode: remote }
+workflows:
+  - name: feature
+    category: solo
+  - name: fix
+    category: fix
+  - name: release
+    category: release
+`;
+
 // a git repository with a few source files and some history on one of them (the analyses score it)
 function sampleRepository(folder) {
   fs.mkdirSync(path.join(folder, 'src'), { recursive: true });
@@ -37,6 +53,8 @@ function sampleRepository(folder) {
   fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name: 'billing-api', private: true }, null, 2));
   fs.writeFileSync(path.join(folder, 'src', 'router.js'), router(0));
   fs.writeFileSync(path.join(folder, 'src', 'util.js'), 'const add = (a, b) => a + b;\nmodule.exports = { add };\n');
+  fs.mkdirSync(path.join(folder, '.multiagent'), { recursive: true });
+  fs.writeFileSync(path.join(folder, '.multiagent', 'project.yaml'), SAMPLE_MANIFEST);
   git(['init', '-q', '-b', 'main']);
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'First commit']);

@@ -181,9 +181,8 @@ const DEFAULT_SETTINGS = {
   backlogMaxGroup: 5,
   // the Backlog suggests a Backlog Refresh run when the last one is older than this (#161); 0 = off
   backlogRefreshHours: 24,
-  // the workflow used wherever one is not picked by hand (#195, apps/desktop/renderer/default-workflow.js):
-  // null = the local workflow when the workspace has it, else the GitHub one
-  defaultWorkflow: null,
+  // (#790: the default development workflow is each project's, packages/engine/domains/project/projects.js
+  // projectDefaultWorkflow; an old `defaultWorkflow` here is moved to the projects once, service/areas/workspace.js)
   // Live roadmap (#164, packages/engine/domains/roadmap/live-roadmap.js): the highest complexity:n a refill picks, the most stages
   // per refill, the spend over 24 h (USD, runs and refills; 0 = no cap) past which refills stop, and
   // whether the backlog is synced before the Product Owner reads it
@@ -368,6 +367,7 @@ module.exports = {
   registryStore,
   repoNameFromUrl,
   resolveWorkspace,
+  savedSettings,
   setupWorkspace,
   simulationWorkspace,
   writeSettings,

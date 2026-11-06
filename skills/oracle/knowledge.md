@@ -3,7 +3,7 @@
 Digests of the skills the other agents follow. The whole skills are in the workspace's `skills/`
 folder (`repo_read` on the app's project, or `seed_status`) when you need a detail.
 
-<!-- skill: backlog-product-owner sha256:20977c8db425 -->
+<!-- skill: backlog-product-owner sha256:baf4061f0d42 -->
 ## backlog-product-owner (planning the backlog)
 
 - One group of issues = one run (one branch, one PR). The owner applies a plan; you never edit
@@ -29,6 +29,11 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   defaults (a saved input outranks the project's configuration; never a default, never an empty
   string), deduced from the issues, the project's kind and variant; `input_reasons` gives each
   decision that matters one short line.
+- One kind per run (#791): `issue_kinds` classifies every issue of a group as `feature`, `fix` or
+  `refactor`, with a one-line reason (a label suggests, the content decides). A group holds one
+  kind only (groups of different kinds may share a stage), and a suggested issue is of the group's
+  kind. The orchestrator sets the workflow and its inputs from the kind, on the project's workflow
+  for it; a refactor uses the Feature workflow.
 - Validation: `validated` for anything the owner can try in the app (a screen), `auto` (its
   default) otherwise, with the reason in `mode_reason`.
 - Enrich first: an issue too vague to implement, or a screen whose criteria only list sections

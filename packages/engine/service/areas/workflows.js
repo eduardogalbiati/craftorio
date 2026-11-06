@@ -101,7 +101,7 @@ module.exports = (ctx) => {
     const errors = repo.errors.length ? [{ file: 'project.yaml', name: MANIFEST_FILE, origin: 'repository', projectId, error: repo.errors.join('\n'), steps: [] }] : [];
     return [...leading(repo.categories, runs), ...errors, ...repo.items.map((w) => {
       const item = describe(w.path, w.file, {
-        origin: 'repository', projectId, commit: w.commit, accepted: w.accepted, acceptedCommit: w.acceptedCommit, diff: w.diff,
+        origin: 'repository', projectId, commit: w.commit, changedCommit: w.changedCommit, accepted: w.accepted, acceptedCommit: w.acceptedCommit, diff: w.diff,
         updateAvailable: false, restorable: false, bundledVersion: null, trusted: w.accepted,
       });
       const { copy, sha } = runs[w.file];

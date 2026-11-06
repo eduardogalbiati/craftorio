@@ -32,9 +32,14 @@
 
   // The projects changed (the app started, one was created or removed): the choice stays while it exists.
   function refresh(list = state.projects) {
+    const before = current;
+    const known = projects.length > 0;
     projects = list || [];
     current = pickDefault(projects, projects.some((p) => p.id === current) ? current : state.settings?.lastProject);
     render();
+    // #794: the sidebar's count follows the project: the first list (the app's start, a screen
+    // opened before it) and a choice moved by a project created or removed
+    if (current !== before || !known) window.refreshWorkflowsAcceptance?.();
     return current;
   }
 
@@ -44,6 +49,7 @@
     current = id;
     try { localStorage.setItem(KEY, id); } catch { /* storage unavailable */ }
     render();
+    window.refreshWorkflowsAcceptance?.(); // #794: the sidebar's count follows the project
     if (redraw) showView(state.view);
   }
 

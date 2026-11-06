@@ -23,6 +23,10 @@
 .wf-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); align-items: start; }
 .wf-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; transition: border-color .15s, box-shadow .15s; }
 .wf-card.custom { border-left: 3px solid var(--accent); }
+/* #794: a repository workflow not accepted at HEAD: the block that leads the page and its cards */
+.wf-awaiting .wf-section-head { border-bottom-color: var(--orange); }
+.wf-card.awaiting-acceptance { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
+.wf-acceptance-reason { margin: 0; color: var(--orange); }
 .wf-card.linked, .wf-pipe.linked, .wf-card.hl, .wf-pipe.hl { border-color: rgba(124,156,255,.6); box-shadow: 0 0 0 2px rgba(124,156,255,.18); }
 .wf-card:focus, .wf-pipe:focus { outline: none; }
 .wf-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }

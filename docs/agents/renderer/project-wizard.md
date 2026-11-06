@@ -166,6 +166,8 @@ fails a literal visible text.
   a new workspace, driven through its own controls. analysis and review import a local git repository
   (file://, no network) and run the analyses simulated; cloning says `cloning` on the real
   `onboarding:changed` channel for the project a failed import made (a local clone ends too fast).
+  The imported repository has a manifest with `default` and `kinds` (#790, #791): `--mode analysis
+  --click "[data-testid=wizard-workflows-choice-manual]"` shows the Default row.
 - E2E: `features/onboarding.feature` (steps in `features/steps/onboarding.steps.js` and
   `onboarding-journey.steps.js`), simulated: from the empty Home to the Next steps card, and the
   no-access path with Edit the URL. `npm run test:e2e -- --grep @issue-644`.

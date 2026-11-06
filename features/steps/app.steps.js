@@ -26,7 +26,8 @@ const header = (page) => page.getByRole('banner');
 const entryName = (name) => new RegExp(`^${escapeRe(name)}(\\s+(☾\\s+)?\\d+)?$`);
 const navItem = (page, name) => sidebar(page).getByRole('button', { name: entryName(name) });
 const menuGroup = (page, name) => sidebar(page).getByRole('group', { name, exact: true });
-const groupToggle = (page, name) => menuGroup(page, name).getByRole('button', { name, exact: true });
+// a collapsed group's title may carry a count too (#794: "Workflows 1"), so the toggle matches like an entry
+const groupToggle = (page, name) => menuGroup(page, name).getByRole('button', { name: entryName(name) });
 const workflowsTabs = (page) => page.getByRole('tablist', { name: 'Workflows', exact: true });
 
 Given('the app is open', async ({ e2e }) => {
@@ -75,15 +76,6 @@ Then('the Start a workflow button is enabled', async ({ e2e }) => {
 
 When('I open the {string} settings tab', async ({ e2e }, name) => {
   await e2e.window.getByRole('button', { name, exact: true }).click();
-});
-
-When('I choose {string} as the default development workflow', async ({ e2e }, file) => {
-  // fails when the workflow is not offered
-  await e2e.window.getByTestId('settings-default-workflow').selectOption(file);
-});
-
-Then('the default development workflow is {string}', async ({ e2e }, file) => {
-  await expect(e2e.window.getByRole('combobox', { name: 'Default development workflow' })).toHaveValue(file);
 });
 
 // ---- Settings › Execution › Memory guard (#276) -------------------------------------------------------

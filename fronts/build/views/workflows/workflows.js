@@ -183,7 +183,14 @@ function renderWorkflowDefinitions() {
   // the four flows (the sections the app's CATEGORIES do not name) lead, 'other' closes
   const flows = Object.keys(WF_SECTIONS).filter((k) => k !== 'other' && !CATEGORIES[k]);
   const keys = [...flows, ...Object.keys(CATEGORIES), 'other'];
-  const workflows = pipesOnly ? [] : [...state.workflows, ...wfDefs.repository].filter((w) => wfMatches(w, q));
+  // #794: the current project's repository workflows not accepted at HEAD lead the page in one block,
+  // highlighted, each once (no project chosen in the header: every project's); the others stay in
+  // place. The rule is the sidebar count's (workflows-acceptance.js awaitsAcceptance)
+  const projectId = window.CurrentProject?.get?.() || null;
+  const awaits = (w) => !!window.awaitsAcceptance?.(w) && (!projectId || w.projectId === projectId);
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name));
+  const waiting = pipesOnly ? [] : wfDefs.repository.filter((w) => awaits(w) && wfMatches(w, q)).sort(byName);
+  const workflows = pipesOnly ? [] : [...state.workflows, ...wfDefs.repository].filter((w) => !awaits(w) && wfMatches(w, q));
   const pipelines = wfDefs.pipelines.filter((p) => pipeMatches(p, q));
   const yours = (w) => w.origin === 'custom' || w.origin === 'repository';
   const inSection = (key) => ({
@@ -194,7 +201,7 @@ function renderWorkflowDefinitions() {
   });
   const sections = Object.fromEntries(keys.map((k) => [k, inSection(k)]));
   const count = (k) => sections[k].workflows.length + sections[k].pipelines.length;
-  const pills = [['all', t('workflows.section_all'), workflows.length + pipelines.length], ...keys.filter((k) => k !== 'other' || count(k)).map((k) => [k, wfSectionName(k), count(k)])];
+  const pills = [['all', t('workflows.section_all'), waiting.length + workflows.length + pipelines.length], ...keys.filter((k) => k !== 'other' || count(k)).map((k) => [k, wfSectionName(k), count(k)])];
   if (wfDefs.section !== 'all' && !keys.includes(wfDefs.section)) wfDefs.section = 'all';
   filters.innerHTML = pills.map(([k, label, n]) => `<button class="chip ${wfDefs.section === k ? 'active' : ''}" data-section="${k}" aria-pressed="${wfDefs.section === k}">${esc(label)} <span class="muted">${n}</span></button>`).join('');
   filters.querySelectorAll('[data-section]').forEach((b) => (b.onclick = () => { wfDefs.section = b.dataset.section; renderWorkflowDefinitions(); }));
@@ -202,12 +209,22 @@ function renderWorkflowDefinitions() {
   // the four flows stay visible, empty too, unless a search narrows the list
   const always = (k) => !pipesOnly && !q && flows.includes(k);
   const shown = keys.filter((k) => (wfDefs.section === 'all' || wfDefs.section === k) && (count(k) || always(k)));
-  if (!shown.length) {
+  if (!shown.length && !waiting.length) {
     box.innerHTML = `<div class="empty-state"><b>${t(pipesOnly ? 'workflows.no_pipeline_matches' : 'workflows.no_workflow_matches')}</b><p class="muted">${t(q ? 'workflows.nothing_matches_query_in_section' : 'workflows.nothing_in_section', { query: esc(wfDefs.query.trim()), section: esc(wfDefs.section === 'all' ? t('workflows.any_section') : wfSectionName(wfDefs.section)) })}</p><button class="btn ghost sm" data-clear>${t('workflows.clear_the_filters')}</button></div>`;
     box.querySelector('[data-clear]').onclick = () => { wfDefs.section = 'all'; wfDefs.query = ''; $('#wf-search').value = ''; renderWorkflowDefinitions(); };
     return;
   }
-  box.innerHTML = pipesError + manifestErrors + shown.map((k) => {
+  // #794: what waits for the owner, before the sections; the words say it, not the orange alone
+  const awaiting = waiting.length ? `
+    <section class="wf-section wf-awaiting" data-testid="workflows-awaiting-acceptance" aria-labelledby="wf-awaiting-title">
+      <header class="wf-section-head">
+        <h2 id="wf-awaiting-title">${t('workflows.awaiting_acceptance_title')}</h2>
+        <span class="badge orange">${t('workflows.workflows_count', { count: waiting.length })}</span>
+        <span class="muted small">${t('workflows.awaiting_acceptance_hint')}</span>
+      </header>
+      <div class="wf-grid">${waiting.map(workflowCard).join('')}</div>
+    </section>` : '';
+  box.innerHTML = pipesError + manifestErrors + awaiting + shown.map((k) => {
     const s = sections[k];
     const n = (x, key) => t(key, { count: x });
     return `
@@ -260,8 +277,12 @@ function workflowCard(w) {
   const download = `<button class="btn ghost sm" data-download data-testid="workflow-download" title="${t('workflows.download_tip')}">${t('workflows.download')}</button>`;
   const actions = repo ? repositoryWorkflowActions() : workspaceWorkflowActions();
   const diff = repo ? repositoryWorkflowDiff() : '';
+  // #794: a repository workflow not accepted at HEAD is highlighted and says which commit changed it
+  // (the sidebar count's rule, workflows-acceptance.js)
+  const awaiting = !!window.awaitsAcceptance?.(w);
+  const reason = awaiting ? `<p class="small wf-acceptance-reason" data-testid="workflow-acceptance-reason">${t('workflows.awaiting_reason', { commit: esc(String(w.changedCommit || w.commit || '').slice(0, 7)) })}</p>` : '';
   return `
-    <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}" data-file="${esc(w.file)}" data-testid="${repo ? 'repository-workflow' : 'workflow-card'}"${repo ? ` data-project="${esc(w.projectId)}" data-commit="${esc(w.commit)}"` : ''} tabindex="-1">
+    <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}${awaiting ? ' awaiting-acceptance' : ''}" data-file="${esc(w.file)}" data-testid="${repo ? 'repository-workflow' : 'workflow-card'}"${repo ? ` data-project="${esc(w.projectId)}" data-commit="${esc(w.commit)}"` : ''} tabindex="-1">
       <div class="wf-card-head">
         <div class="wf-card-title">
           <h3 title="${esc(w.name)}">${esc(w.name)} ${w.version ? `<span class="muted small">v${esc(w.version)}</span>` : ''}</h3>
@@ -276,6 +297,7 @@ function workflowCard(w) {
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
       ${used ? `<p class="small wf-used"><span class="muted">${t('workflows.used_in')}</span> ${used}</p>` : ''}
       ${runsLine()}
+      ${reason}
       ${diff}
       <div class="row wf-actions">
         ${actions}
@@ -295,9 +317,10 @@ function workflowCard(w) {
   }
 
   // #485: a repository's workflow, read-only and off until accepted for its commit: no Run
+  // (#794: the state and Accept in orange while it waits)
   function repositoryWorkflowActions() {
-    return `<span class="badge ${w.accepted ? 'ok' : 'warn'}" data-testid="workflow-acceptance">${t(w.accepted ? 'workflows.accepted' : 'workflows.not_accepted')}</span>
-        ${w.accepted ? '' : `<button class="btn primary sm" data-accept data-testid="workflow-accept" title="${t('workflows.accept_tip')}">${t('workflows.accept')}</button>`}
+    return `<span class="badge ${w.accepted ? 'ok' : 'orange'}" data-testid="workflow-acceptance">${t(w.accepted ? 'workflows.accepted' : 'workflows.not_accepted')}</span>
+        ${w.accepted ? '' : `<button class="btn orange sm" data-accept data-testid="workflow-accept" title="${t('workflows.accept_tip')}">${t('workflows.accept')}</button>`}
         <span class="spacer"></span>
         ${download}
         <button class="btn ghost sm" data-clone data-testid="workflow-clone" ${w.error ? 'disabled' : ''}>${t('workflows.clone')}</button>
@@ -367,6 +390,7 @@ function wireWorkflowDefinitions(box) {
     b.disabled = true;
     try { await api.acceptWorkflow(repoOf(b)); } catch (e) { b.disabled = false; return showToast(t('workflows.accept_failed'), errMsg(e)); }
     refreshWorkflows();
+    window.refreshWorkflowsAcceptance?.(); // #794: the menu's count drops with it
   }));
   box.querySelectorAll('[data-clone]').forEach((b) => (b.onclick = async () => {
     const { projectId, file } = repoOf(b);
@@ -529,7 +553,7 @@ registerView({
           </div>
         </div>
         <div class="tabs page-tabs" role="tablist" aria-label="${t('workflows.workflows')}">
-          <button type="button" class="tab" role="tab" data-wtab="definitions">${t('workflows.definitions')}</button>
+          <button type="button" class="tab" role="tab" data-wtab="definitions">${t('workflows.definitions')} <span class="nav-badge warn acceptance-count hidden" data-testid="workflows-tab-acceptance"></span></button>
           <button type="button" class="tab" role="tab" data-wtab="runs">${t('workflows.runs')}</button>
           <button type="button" class="tab" role="tab" data-wtab="builder">${t('workflows.builder')}</button>
           <button type="button" class="tab" role="tab" data-wtab="pipelines">${t('workflows.pipelines')}</button>

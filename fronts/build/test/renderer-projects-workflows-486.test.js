@@ -103,8 +103,8 @@ test('#486 Assign dialog: the header project\'s workflows come first and its def
   assert.equal(value, 'my-flow.yaml');
 });
 
-test('#486 Assign dialog: a header project without a workflow set keeps the listed order and Settings\' default', async () => {
+test('#486 #790 Assign dialog: a header project without a workflow set keeps the listed order, an old setting changes nothing', async () => {
   const { options, value } = await assignDialog({});
   assert.deepEqual(options, ['software-development-local-hero.yaml', 'software-development.yaml', 'my-flow.yaml']);
-  assert.equal(value, 'software-development.yaml');
+  assert.equal(value, 'software-development-local-hero.yaml');
 });
