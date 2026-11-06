@@ -77,15 +77,6 @@ When('I open the {string} settings tab', async ({ e2e }, name) => {
   await e2e.window.getByRole('button', { name, exact: true }).click();
 });
 
-When('I choose {string} as the default development workflow', async ({ e2e }, file) => {
-  // fails when the workflow is not offered
-  await e2e.window.getByTestId('settings-default-workflow').selectOption(file);
-});
-
-Then('the default development workflow is {string}', async ({ e2e }, file) => {
-  await expect(e2e.window.getByRole('combobox', { name: 'Default development workflow' })).toHaveValue(file);
-});
-
 // ---- Settings › Execution › Memory guard (#276) -------------------------------------------------------
 // data-testids: memory-guard-enabled (checkbox), memory-guard-limit / memory-guard-floor (number
 // inputs), memory-guard-limit-hint ("(8.0 GB on this machine)"). A field saves on change, like the

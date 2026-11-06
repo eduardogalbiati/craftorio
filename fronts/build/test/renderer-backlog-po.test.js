@@ -478,10 +478,11 @@ test('workflowSelect: lists the task workflows, the picked one selected, the def
   assert.match(html, /<option value="software-development\.yaml">Software development<\/option>/);
   assert.doesNotMatch(html, /no-task\.yaml/);
 
+  // #790: an old settings.defaultWorkflow changes nothing
   sandbox.state.settings = { defaultWorkflow: 'software-development.yaml' };
   const withSetting = helpers.workflowSelect(1, '');
-  assert.match(withSetting, /<option value="software-development\.yaml" selected>Software development \(default\)<\/option>/);
-  assert.match(withSetting, /<option value="feature\.yaml">Software development \(local\)<\/option>/);
+  assert.match(withSetting, /<option value="feature\.yaml" selected>Software development \(local\) \(default\)<\/option>/);
+  assert.match(withSetting, /<option value="software-development\.yaml">Software development<\/option>/);
 });
 
 test('fileDraft (the owner\'s click): every "create" variant files action "create", not a new issue when appending or commenting; a real filing asks to confirm first', () => {

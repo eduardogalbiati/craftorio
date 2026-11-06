@@ -26,9 +26,8 @@
 //   data-testid="pj-wf-add-search" filters the options (by name; the list's markup drawn again, or the
 //   others marked `hidden`); clicking an option saves api.updateProject(id, { workflows: the set plus
 //   it, ... }) and its card appears;
-// - with no workflow: data-testid="pj-wf-empty" says "No workflow yet: new roadmap items use the
-//   Settings default" (i18n key projects.workflows_empty, en.json and pt-BR.json) and "+ Add a workflow"
-//   is there;
+// - with no workflow: data-testid="pj-wf-empty" says so in one line, never naming Settings (#790; i18n
+//   key projects.workflows_empty, en.json and pt-BR.json) and "+ Add a workflow" is there;
 // - #741: the Create Project dialog (and its ProjectWorkflows.showDialog) is gone: creating is the wizard only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -435,7 +434,8 @@ test('#729 Overview: a project without workflows says so in one line and offers 
   assert.deepEqual(cardIds(app), [], 'no card');
   const empty = byTestId(boxMarkup(app), 'pj-wf-empty')[0];
   assert.ok(empty, 'data-testid="pj-wf-empty"');
-  assert.equal(textOf(empty), 'No workflow yet: new roadmap items use the Settings default');
+  assert.equal(textOf(empty).startsWith('No workflow yet'), true);
+  assert.equal(textOf(empty).includes('Settings'), false, '#790: no such default any more');
   assert.equal(byTestId(boxMarkup(app), 'pj-wf-add').length, 1, '"+ Add a workflow" is there');
   await openAdd(app);
   assert.deepEqual([...options(app)].sort(), ['backlog-refresh', 'feature', 'fix', 'my-flow', 'release', 'retrospective'], 'every installed workflow is offered');
@@ -444,7 +444,8 @@ test('#729 Overview: a project without workflows says so in one line and offers 
 test('#729 the empty state\'s line is translated: projects.workflows_empty in en.json and pt-BR.json', () => {
   const en = catalog('en')['projects.workflows_empty'];
   const pt = catalog('pt-BR')['projects.workflows_empty'];
-  assert.equal(en, 'No workflow yet: new roadmap items use the Settings default');
+  assert.equal(en.startsWith('No workflow yet'), true);
+  assert.equal(en.includes('Settings'), false, '#790: no such default any more');
   assert.equal(typeof pt === 'string' && pt.trim().length > 0, true, 'a pt-BR text');
   assert.notEqual(pt, en, 'translated');
 });

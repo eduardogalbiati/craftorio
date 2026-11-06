@@ -1,10 +1,10 @@
 // #413: the fix item of a Fix the base stage runs the project's default development workflow
-// (Settings › General › Backlog, settings.defaultWorkflow, #195), not a fixed one.
+// (#790: the project's own, projects.projectDefaultWorkflow), not a fixed one.
 //
 // Seams:
 // - The area's afterStepFinished (a run's pre-existing failures) and afterBaseMerge (the base
 //   check), built from a small ctx like test/service/base-health-wiring-405.test.js, with the
-//   service's own workflow listing (ctx.listWorkflows = workflows:list) and its settings (settings:set).
+//   service's own workflow listing (ctx.listWorkflows = workflows:list) and the project (projects:update).
 // - The roadmap the fix item lands in (packages/engine/domains/roadmap/roadmap.js readRoadmap): its item's workflow.
 //
 // Assumptions:
@@ -92,27 +92,26 @@ function fixItems(ws, project) {
   return stages.filter((s) => s.name === 'Fix the base').flatMap((s) => s.items).map((i) => ({ workflow: i.workflow, mode: i.inputs?.mode }));
 }
 
-test('#413 a run\'s pre-existing failure gets a fix item that runs the default development workflow set in Settings', async (t) => {
+test('#413 a run\'s pre-existing failure gets a fix item that runs the project\'s default development workflow', async (t) => {
   const { api, ws, project, area } = await setup(t);
-  api['settings:set']({ defaultWorkflow: AI_DEV });
+  await api['projects:update']({ id: project.id, patch: { defaultWorkflow: AI_DEV } });
   assert.deepEqual(await fixItemFromRuns(area, ws, project), [{ workflow: AI_DEV, mode: 'auto' }]);
 });
 
 test('#413 the default development workflow unset: the fix item runs the fallback (the local workflow)', async (t) => {
-  const { api, ws, project, area } = await setup(t);
-  api['settings:set']({ defaultWorkflow: null });
+  const { ws, project, area } = await setup(t);
   assert.deepEqual(await fixItemFromRuns(area, ws, project), [{ workflow: LOCAL, mode: 'auto' }]);
 });
 
 test('#413 the default development workflow names a missing workflow: the fix item runs the fallback (the local workflow)', async (t) => {
   const { api, ws, project, area } = await setup(t);
-  api['settings:set']({ defaultWorkflow: 'deleted-workflow.yaml' });
+  await api['projects:update']({ id: project.id, patch: { defaultWorkflow: 'deleted-workflow.yaml' } });
   assert.deepEqual(await fixItemFromRuns(area, ws, project), [{ workflow: LOCAL, mode: 'auto' }]);
 });
 
-test('#413 a red base check after a merge gets a fix item that runs the default development workflow set in Settings', async (t) => {
+test('#413 a red base check after a merge gets a fix item that runs the project\'s default development workflow', async (t) => {
   const { api, ws, project, area } = await setup(t);
-  api['settings:set']({ defaultWorkflow: AI_DEV });
+  await api['projects:update']({ id: project.id, patch: { defaultWorkflow: AI_DEV } });
   const r = await area.afterBaseMerge({ projectId: project.id, runId: 'run-1', mock: false }, { base: 'main' });
   assert.equal(r.status, 'red');
   assert.ok(r.fixItem, 'a fix item was added');
@@ -137,13 +136,14 @@ test('#413 through the service\'s own wiring, a run\'s pre-existing failure gets
   const health = loadHealth();
   const realRecord = health.recordPreexisting;
   t.mock.method(health, 'recordPreexisting', (root, opts) => realRecord(root, { ...opts, platform: 'github', repo: 'o/r', exec: fakeExec() }));
-  api['settings:set']({ defaultWorkflow: AI_DEV });
+  await api['projects:update']({ id: project.id, patch: { defaultWorkflow: AI_DEV } });
   assert.deepEqual(await fixItemFromRuns(shared, ws, project), [{ workflow: AI_DEV, mode: 'auto' }]);
 });
 
 test('#413 onRed \'issue\' with a default workflow set: the issue is filed, no fix item', async (t) => {
   const { api, ws, project, area } = await setup(t);
-  api['settings:set']({ defaultWorkflow: AI_DEV, baseCheck: { onRed: 'issue' } });
+  await api['projects:update']({ id: project.id, patch: { defaultWorkflow: AI_DEV } });
+  api['settings:set']({ baseCheck: { onRed: 'issue' } });
   await area.afterStepFinished({ projectId: project.id, runId: 'run-1', mock: false }, stepFinished);
   const out = await area.afterStepFinished({ projectId: project.id, runId: 'run-2', mock: false }, stepFinished);
   assert.equal(out.issues.length, 1);

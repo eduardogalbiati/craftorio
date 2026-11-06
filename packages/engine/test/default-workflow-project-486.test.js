@@ -30,15 +30,14 @@ test('#486 firstBuild: the first solo, team or build workflow, null without one'
   assert.equal(DefaultWorkflow.firstBuild(undefined), null);
 });
 
-test('#486 current(): the header project\'s default wins over Settings\', not for Settings itself', () => {
+test('#486 current(): the header project\'s default wins', () => {
   const DW = renderer({ project: { id: 'p', defaultWorkflow: 'fixture-other' }, defaultWorkflow: 'software-development.yaml' });
   assert.equal(DW.current().file, 'fixture-other.yaml');
-  assert.equal(DW.current({ project: false }).file, 'software-development.yaml');
 });
 
-test('#486 current(): a project default that no longer exists falls back to Settings\'', () => {
+test('#486 #790 current(): a project default that no longer exists falls back to feature, never to the setting', () => {
   const DW = renderer({ project: { id: 'p', defaultWorkflow: 'gone' }, defaultWorkflow: 'software-development.yaml' });
-  assert.equal(DW.current().file, 'software-development.yaml');
+  assert.equal(DW.current().file, 'feature.yaml');
 });
 
 test('#486 projectFirst: the header project\'s set first, the list unchanged without one', () => {
