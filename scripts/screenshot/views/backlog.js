@@ -82,12 +82,13 @@ function demoPoConversation(ws, projectId, po = null) {
       estimateUsd: 27.4,
       estimateMissing: 1,
       groups: [
-        { name: 'Rename crash', issues: [11], workflow: 'feature.yaml', inputs: {}, reason: 'It blocks the rest.', files: ['packages/engine/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
-        { name: 'Reports and health', issues: [12, 9], workflow: 'feature.yaml', inputReasons: { e2e_tests: 'Economy: the scenarios are written now and run at release.', unit_tests: 'Economy: the suite runs once, no new tests.' }, reason: 'Both add a server route: one run avoids a merge conflict in packages/engine/server.', files: ['packages/engine/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
+        // #791: a plan of two kinds: each card's badge and reason, the summary and the groups by kind
+        { name: 'Rename crash', issues: [11], kind: 'fix', kindReason: 'Label `bug`: the current behaviour is wrong.', workflow: 'fix.yaml', inputs: { mode: 'remote' }, reason: 'It blocks the rest.', files: ['packages/engine/domains/workspace/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
+        { name: 'Reports and health', issues: [12, 9], kind: 'feature', kindReason: 'No bug or refactor label: new or changed behaviour.', workflow: 'feature.yaml', inputReasons: { e2e_tests: 'Economy: the scenarios are written now and run at release.', unit_tests: 'Economy: the suite runs once, no new tests.' }, reason: 'Both add a server route: one run avoids a merge conflict in packages/engine/server.', files: ['packages/engine/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
           inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
           costEstimate: { usd: 15.8, perPoint: 3.16, complexity: 5, runs: 12, estimated: false, basis: 'Median cost per step and complexity point of the last 12 successful runs of software-development-local-hero.yaml, × complexity 5 (test ×0.35, evidence ×0.5, developer_screenshots off).' },
           cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] } },
-        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'feature.yaml', inputs: { validation: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['packages/ui-kit/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
+        { name: 'Scrollbars and docs', issues: [10, 8], kind: 'fix', kindReason: 'The scrollbars and the docs are wrong today.', workflow: 'fix.yaml', inputs: { mode: 'remote' }, reason: 'Two small fixes the owner can check in the app.', files: ['packages/ui-kit/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
       ],
       conflicts: [], enrich: [],
       // #124: the big issue split along its two areas; #138: #15 placed in an epic, a new one for the UI fixes
