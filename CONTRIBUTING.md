@@ -52,7 +52,7 @@ Team review, where the maintainer takes over.
 
 1. Add your clone as a project in the app.
 2. On the Workflows screen, accept `ai-development-remote-hero`. Accept it again whenever the file changes.
-3. Choose it when you start a run, or make it the project's default.
+3. Plan it from the Backlog or the Roadmap, or make it the project's default. The Start drawer lists the workspace's workflows only.
 
 Avoid `feature` and `fix` in Local mode here: they merge into your local `main`, GitHub refuses the
 push, and the run still ends with your work only on your machine.

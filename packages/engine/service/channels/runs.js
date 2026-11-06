@@ -69,7 +69,7 @@ function withProjectDefaults(ctx, { file, inputs, projectId }) {
   let wf = null;
   try {
     project = projects.readProject(ctx.ws.projects, projectId);
-    wf = loadWorkflow(ctx.workflowPath(file).file);
+    wf = loadWorkflow(ctx.projectWorkflowFile(projectId, file));
   } catch { return inputs; }
   if (!project?.folder || !wf?.inputs) return inputs;
   const typed = Object.fromEntries(Object.entries(inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
