@@ -86,6 +86,13 @@ In this app:
   renderer file fails `test/bare-controls-383.test.js` (`scripts/bare-controls.js`, run it with
   `node scripts/bare-controls.js`); the files that had some when it landed are its `BASELINE`, whose
   counts may only go down. Use `Select.markup` and `DateRange.fields` instead.
+- **The shared menu and activity line**: the artifact menu and Discovery's `.bl-menu` move to the
+  shared menu (`menu.js`, #748) later. "What is happening now" is the activity line
+  (`activity-line.js`, look in `activity-line.css`, #781), never a screen's spinner and text:
+  `ActivityLine.html({ state, text, summary, meta, reason, retry, testid })`, state `pending |
+  running | done | failed | skipped`: a shine crosses the running text and its ellipsis animates (no
+  "…" in the text), done is a ✓ with the summary, failed the reason with `retry: { label, attrs }`.
+  `ActivityLine.paint(el, opts)` redraws in place and leaves the shine running when only `meta` moved.
 - **What leads**: titles (issue, run, project) are the headline; workflow files, ids and run ids
   are small badges or links with the full value in `title`. Long titles ellipsize.
 - **Edits**: several fields → an Edit form with Save / Cancel; one obvious choice (a mode) → a

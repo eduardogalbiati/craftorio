@@ -14,9 +14,15 @@
 // of today's plan keeps only the plan's own problems (schema, unknown zone, duplicate id); the files and
 // districts the base commit lacks arrived after that release, so one muted line "At <from>, N files and
 // M districts of today's plan did not exist yet" lists them behind a closed <details>.
+// #782, the unmeasured code in the Colour by legend: unmeasuredHtml({ model, colour, auto }) → how much has no
+// measure, what each language needs, why it opened in Churn (`auto`), project-city-colour-churn / -quadrant and
+// project-city-install-hint (a command to copy, never run here); '' outside Quadrant and Churn or with all measured.
+// openingColour(projectId, model) → { colour, colourAuto }: the owner's pick, remembered per project by
+// saveColour(projectId, colour), wins over CityLayout.defaultColourBy (Churn when most of the code has no measure).
 // Uses app.js globals at call time: esc. Browser: window.ProjectCityNotes.
 (() => {
   const STALE_COVERAGE = 0.9; // under this share of matched files, the plan is older than the code
+  const COLOUR_STORE = 'cityColour'; // #782: { projectId: the colour the owner picked }
   const pct = (x) => `${Math.round(x * 100)}%`;
   const note = (testid, cls, body) => `<div class="r3d-card pc-note${cls ? ` ${cls}` : ''}" data-testid="${testid}">${body}</div>`;
 
@@ -113,8 +119,40 @@
     return `${problems.length ? problemsNote(problems) : ''}${later}`;
   }
 
+  // #782: the owner's colour per project; a browser without storage only forgets it
+  function savedColours() {
+    try { return JSON.parse(localStorage.getItem(COLOUR_STORE) || '{}') || {}; } catch { return {}; }
+  }
+  function saveColour(projectId, colour) {
+    try { localStorage.setItem(COLOUR_STORE, JSON.stringify({ ...savedColours(), [projectId]: colour })); } catch { /* kept until the view closes */ }
+  }
+
+  /** #782: the colour a city opens in, see the header. */
+  function openingColour(projectId, model) {
+    const picked = savedColours()[projectId];
+    return CityLayout.COLOUR_BY.includes(picked) ? { colour: picked, colourAuto: false } : { colour: CityLayout.defaultColourBy(model), colourAuto: true };
+  }
+
+  /** #782: why the Quadrant view is grey and the way to a colour that works, see the header. */
+  function unmeasuredHtml({ model, colour, auto = false }) {
+    if (!['quadrant', 'churn'].includes(colour)) return '';
+    const { unmeasured, share, languages } = CityLayout.measuredShare(model);
+    if (!unmeasured) return '';
+    const tooled = languages.filter((l) => l.tool);
+    const said = tooled.map((l) => t('project_city.not_measured_language', { pct: Math.round(l.share * 100), language: l.language, tool: l.tool })).join(' · ');
+    const to = colour === 'churn' ? 'quadrant' : 'churn';
+    const why = auto && colour === 'churn' ? `<p>${esc(t('project_city.churn_because'))}</p>` : '';
+    const tools = [...new Set(tooled.map((l) => l.tool))].join(', ');
+    const hint = tools ? `<p class="pc-install-hint" data-testid="project-city-install-hint">${esc(t('project_city.install_hint', { tools }))} <code>${esc(window.ArchitectureModel?.LIZARD_INSTALL || '')}</code></p>` : '';
+    return `<div class="pc-unmeasured" data-testid="project-city-unmeasured"><p>${esc(said || t('project_city.not_measured_total', { pct: Math.round(share * 100) }))}</p>${why}
+      <button type="button" class="pc-secondary" data-pc-colour-to="${to}" data-testid="project-city-colour-${to}">${esc(t(`project_city.colour_by_${to}`))}</button>${hint}</div>`;
+  }
+
   window.ProjectCityNotes = {
     html,
+    openingColour,
     releaseHtml,
+    saveColour,
+    unmeasuredHtml,
   };
 })();

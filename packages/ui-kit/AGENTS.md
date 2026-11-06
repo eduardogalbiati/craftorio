@@ -17,9 +17,4 @@ touch, always [ui-conventions.md](../../docs/agents/renderer/ui-conventions.md) 
   anchor })`: arrows, Home / End, Enter, Escape, outside click; `close()` unbinds. Example:
   `Menu.menuHtml([{ id: 'up', label: t('x.up') }, { divider: true }, { id: 'rm', label: t('x.rm'),
   danger: true }])`, then `Menu.bindMenu(menuEl, { anchor: button, onPick: act, onClose: hide })`.
-  The artifact menu and Discovery's `.bl-menu` move to it later.
-- **"What is happening now" is the shared activity line** (`activity-line.js`, look in `activity-line.css`,
-  #781), never a screen's spinner and text. `ActivityLine.html({ state, text, summary, meta, reason, retry,
-  testid })`, state `pending | running | done | failed | skipped`: a shine crosses the running text and its
-  ellipsis animates (no "…" in the text), done is a ✓ with the summary, failed the reason with `retry: { label,
-  attrs }`. `ActivityLine.paint(el, opts)` redraws in place and leaves the shine running when only `meta` moved.
+- **"What is happening now" is the shared activity line** (`activity-line.js`, #781): see ui-conventions.md.

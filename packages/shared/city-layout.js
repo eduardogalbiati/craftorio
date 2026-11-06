@@ -35,7 +35,8 @@
 // - The overlay API the city epic's modules build on: applyOverlay(layout, { highlight { path:
 //   colour }, markers [path] }) greys every building not highlighted and puts each marker on its
 //   building's roof; flyTarget(layout, name) is the point to fly to for a file, a district or a zone
-//   (null when unknown); findTargets(layout, query) feeds the search.
+//   (null when unknown); findTargets(layout, query) feeds the search; mergeOverlays(layers) merges the
+//   named layers, in order, into the one { highlight, markers } applyOverlay takes.
 // - neighbours(layout, path) / districtNeighbours(layout, id): what a file or a district requires
 //   and what requires it (the hover's arcs), from the model's edges.
 // Browser: window.CityLayout; Node: module.exports.
@@ -533,6 +534,17 @@
     return { ...layout, buildings, markers: out };
   }
 
+  /** The overlay's layers merged in their order (later ones win): { highlight, markers }. */
+  function mergeOverlays(layers) {
+    const highlight = {};
+    const markers = [];
+    for (const l of layers) {
+      Object.assign(highlight, l.highlight || {});
+      markers.push(...(l.markers || []));
+    }
+    return { highlight, markers };
+  }
+
   /** Where the camera flies for a file, a district or a zone (by id or name): { kind, id, x, y, z, distance } or null. */
   function flyTarget(layout, name) {
     const b = layout.buildings.find((x) => x.path === name);
@@ -604,6 +616,7 @@
     ledgesOf,
     MAX_BUILDINGS,
     measuredShare,
+    mergeOverlays,
     neighbours,
     perLineOf,
     SIDEWALK,
