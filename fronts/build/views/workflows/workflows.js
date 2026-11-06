@@ -184,9 +184,10 @@ function renderWorkflowDefinitions() {
   const flows = Object.keys(WF_SECTIONS).filter((k) => k !== 'other' && !CATEGORIES[k]);
   const keys = [...flows, ...Object.keys(CATEGORIES), 'other'];
   // #794: the current project's repository workflows not accepted at HEAD lead the page in one block,
-  // highlighted, each once (no project chosen in the header: every project's); the others stay in place
+  // highlighted, each once (no project chosen in the header: every project's); the others stay in
+  // place. The rule is the sidebar count's (workflows-acceptance.js awaitsAcceptance)
   const projectId = window.CurrentProject?.get?.() || null;
-  const awaits = (w) => w.origin === 'repository' && w.accepted === false && (!projectId || w.projectId === projectId);
+  const awaits = (w) => !!window.awaitsAcceptance?.(w) && (!projectId || w.projectId === projectId);
   const byName = (a, b) => String(a.name).localeCompare(String(b.name));
   const waiting = pipesOnly ? [] : wfDefs.repository.filter((w) => awaits(w) && wfMatches(w, q)).sort(byName);
   const workflows = pipesOnly ? [] : [...state.workflows, ...wfDefs.repository].filter((w) => !awaits(w) && wfMatches(w, q));
@@ -277,7 +278,8 @@ function workflowCard(w) {
   const actions = repo ? repositoryWorkflowActions() : workspaceWorkflowActions();
   const diff = repo ? repositoryWorkflowDiff() : '';
   // #794: a repository workflow not accepted at HEAD is highlighted and says which commit changed it
-  const awaiting = repo && w.accepted === false;
+  // (the sidebar count's rule, workflows-acceptance.js)
+  const awaiting = !!window.awaitsAcceptance?.(w);
   const reason = awaiting ? `<p class="small wf-acceptance-reason" data-testid="workflow-acceptance-reason">${t('workflows.awaiting_reason', { commit: esc(String(w.changedCommit || w.commit || '').slice(0, 7)) })}</p>` : '';
   return `
     <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}${awaiting ? ' awaiting-acceptance' : ''}" data-file="${esc(w.file)}" data-testid="${repo ? 'repository-workflow' : 'workflow-card'}"${repo ? ` data-project="${esc(w.projectId)}" data-commit="${esc(w.commit)}"` : ''} tabindex="-1">
@@ -551,7 +553,7 @@ registerView({
           </div>
         </div>
         <div class="tabs page-tabs" role="tablist" aria-label="${t('workflows.workflows')}">
-          <button type="button" class="tab" role="tab" data-wtab="definitions">${t('workflows.definitions')}<span class="nav-badge warn acceptance-count hidden" data-testid="workflows-tab-acceptance"></span></button>
+          <button type="button" class="tab" role="tab" data-wtab="definitions">${t('workflows.definitions')} <span class="nav-badge warn acceptance-count hidden" data-testid="workflows-tab-acceptance"></span></button>
           <button type="button" class="tab" role="tab" data-wtab="runs">${t('workflows.runs')}</button>
           <button type="button" class="tab" role="tab" data-wtab="builder">${t('workflows.builder')}</button>
           <button type="button" class="tab" role="tab" data-wtab="pipelines">${t('workflows.pipelines')}</button>

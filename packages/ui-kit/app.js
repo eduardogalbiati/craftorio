@@ -251,8 +251,7 @@ async function init() {
   $('#sim-only-badge').classList.toggle('hidden', !state.simulationOnly);
   applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
-  window.CurrentProject.refresh();
-  refreshWorkflowsAcceptance(); // #794: the current project is known now
+  window.CurrentProject.refresh(); // #794: reads the workflows waiting for acceptance too
   renderWorkspacePaths();
   await loadActiveRuns();
   initCodeBanner();
@@ -388,8 +387,8 @@ function initNotifications() {
   // gates answered or requested while the window was in the background, or while the browser UI
   // was disconnected (its events are lost)
   window.addEventListener('focus', () => loadActiveRuns());
-  // #794: a pull made outside the app may have changed a repository workflow
-  window.addEventListener('focus', () => refreshWorkflowsAcceptance());
+  // #794: a pull made outside the app may have changed a repository workflow (once per 5 s)
+  window.addEventListener('focus', () => refreshWorkflowsAcceptanceOnFocus());
   api.onReconnect?.(() => loadActiveRuns());
   // the browser client's pushed channel down: "Disconnected, reconnecting…" until it is back (#603;
   // nothing before the first connection, so the page's start does not flash it)
