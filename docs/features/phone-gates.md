@@ -29,6 +29,11 @@ fallback. Reload an open page after changing the language. Gate messages, button
 notes keep their original text. The pairing code and note fields have labels, status changes are
 announced to screen readers, and the page supports keyboard navigation and narrow phone screens.
 
+The gate starts with its short summary, recommendation and the action needed from you. **Full
+details** keeps the complete message available without putting a long report above the choices.
+The confirmation repeats this context and its evidence links. When your choice differs from the
+recommendation, it says so beside the confirmation; the decision is still yours.
+
 If the connection fails while reading the list, **Try again** reads it again without removing the
 pairing. A pairing that is no longer valid asks for a new code; an expired or invalid gate link
 offers the list so you can open a fresh link. An answered gate says it is no longer waiting.

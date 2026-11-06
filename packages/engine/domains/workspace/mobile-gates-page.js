@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const I18n = require('@multiagent/shared/i18n');
 const { continueText } = require('../session/session-cache');
 const { displayName } = require('@multiagent/shared/display-name');
+const { firstSentences } = require('../../engine/gate-summary');
 const { phoneGatesClient } = require('./mobile-gates-client');
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -22,7 +23,7 @@ main{max-width:640px;margin:0 auto;padding:16px;overflow-wrap:anywhere}h1{font-s
 a.primary,button.primary{background:#1d4ed8;border-color:#1d4ed8;color:#fff}.help{display:block;font-size:14px;color:#c3cad6;margin-top:4px}
 .error{color:#fca5a5}label{display:block;margin-bottom:8px}input{width:100%;min-height:44px;padding:12px;border-radius:8px;border:1px solid #3a4150;background:#11151c;color:#e6e6e6;font:inherit}
 button:disabled{opacity:.6}a:focus-visible,button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px solid #a9c9ff;outline-offset:3px}
-[hidden]{display:none!important}ul{padding-left:20px}#msg{margin:16px 0}#msg:empty{margin:0}p{margin:12px 0}`;
+.full-message{white-space:pre-wrap;font:inherit}summary{min-height:44px;padding:12px 0;cursor:pointer}summary:focus-visible{outline:3px solid #a9c9ff}.decision-warning{border-left:3px solid #f5a524;padding:12px;background:#11151c}[hidden]{display:none!important}ul{padding-left:20px}#msg{margin:16px 0}#msg:empty{margin:0}p{margin:12px 0}`;
 
 function translator(language) {
   const lang = I18n.resolveLanguage(language);
@@ -77,22 +78,26 @@ function briefHtml(brief, t) {
 function gatePage({ run, gate }, token, chosen, language, choices) {
   const { t } = translator(language);
   const brief = gate.brief || {};
-  const head = `<div class="muted">${esc(run.title || run.workflow || run.runId)} · ${esc(gate.step_id || '')}</div><h1>${esc(gate.message || t('approval'))}</h1>`;
+  const head = `<div class="muted">${esc(run.title || run.workflow || run.runId)} · ${esc(gate.step_id || '')}</div><h1>${esc(brief.headline || firstSentences(gate.message) || t('approval'))}</h1>`;
   const self = `/gates/${encodeURIComponent(run.runId)}/${encodeURIComponent(gate.approval_id)}?t=${encodeURIComponent(token)}`;
-  if (chosen) return confirmationPage({ head, self, token, chosen, language });
-  const what = brief.headline ? `<p>${esc(brief.headline)}</p>` : '';
+
   const rec = briefHtml(brief, t);
   const evidence = (brief.evidence || []).filter((x) => x && /^https:\/\//.test(x.url || ''));
   const links = evidence.length ? `<ul>${evidence.map((x) => `<li><a href="${esc(x.url)}" rel="noreferrer">${esc(x.label || x.url)}</a></li>`).join('')}</ul>` : '';
+  const details = gate.message ? `<details><summary>${esc(t('details'))}</summary><div class="full-message">${esc(gate.message)}</div></details>` : '';
+  const context = rec + links + details;
+  if (chosen) return confirmationPage({ head, context, recommendation: brief.recommendation, self, token, chosen, language });
   const turns = Array.isArray(run.nextTurns) ? `<p class="muted">${esc(continueText(run.nextTurns, (a) => displayName(a, run.agent_names), (key) => t(`turn_${key}`)))}</p>` : '';
   const buttons = choices.map((c) => `<a class="btn" href="${esc(`${self}&answer=${encodeURIComponent(c.id)}`)}">${esc(c.label || c.id)}${c.help ? `<span class="help">${esc(c.help)}</span>` : ''}</a>`).join('');
-  return page(gate.message || t('title'), `<div class="card">${head}${what}${rec}${links}${turns}<div class="btns">${buttons}</div></div><p><a class="btn" href="/">${esc(t('all'))}</a></p>`, language);
+  return page(run.title || t('title'), `<div class="card">${head}${context}${turns}<div class="btns">${buttons}</div></div><p><a class="btn" href="/">${esc(t('all'))}</a></p>`, language);
 }
 
-function confirmationPage({ head, self, token, chosen, language }) {
+function confirmationPage({ head, context, recommendation, self, token, chosen, language }) {
   const { t } = translator(language);
   const post = self.split('?')[0] + '/answer';
-  return page(t('confirm_title'), `<div class="card">${head}<p>${esc(t('chosen', { choice: chosen.label || chosen.id }))}</p>${chosen.help ? `<p class="rec">${esc(chosen.help)}</p>` : ''}
+  const against = recommendation?.answer && recommendation.answer !== chosen.id;
+  const warning = against ? `<p class="decision-warning" role="note">${esc(t('against_recommendation', { recommended: recommendation.label || recommendation.answer, chosen: chosen.label || chosen.id }))}</p>` : '';
+  return page(t('confirm_title'), `<div class="card">${head}${context}${warning}<p>${esc(t('chosen', { choice: chosen.label || chosen.id }))}</p>${chosen.help ? `<p class="rec">${esc(chosen.help)}</p>` : ''}
     <form id="confirm" data-post="${esc(post)}" data-t="${esc(token)}" data-answer="${esc(chosen.id)}">
       <p><label for="fb">${esc(t(chosen.feedback_required ? 'note_required' : 'note_optional'))}</label><input id="fb" maxlength="2000" ${chosen.feedback_required ? 'required' : ''}></p>
       <button id="answer-submit" class="primary" type="submit">${esc(t('confirm', { choice: chosen.label || chosen.id }))}</button></form>

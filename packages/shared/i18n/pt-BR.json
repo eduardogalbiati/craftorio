@@ -3593,6 +3593,7 @@
   "platform.github.epic_help": "GitHub: uma issue com o rótulo epic, cujas sub-issues são seus membros",
   "platform.gitlab.epic_help": "GitLab: um epic de grupo, ou uma issue com o rótulo epic cujos membros têm epic::<name>",
 
+  "phone_page.against_recommendation": "A recomendação é {recommended}. Você está escolhendo {chosen}. Confirme apenas se essa for sua decisão.",
   "phone_page.all": "Todos os gates abertos",
   "phone_page.answer_invalid": "A resposta foi recusada. Verifique a observação obrigatória e confirme novamente.",
   "phone_page.answer_unknown": "Não foi possível confirmar o resultado. Sua resposta pode ter sido recebida. Verifique o estado do gate antes de escolher e confirmar novamente.",
@@ -3605,6 +3606,7 @@
   "phone_page.code": "Código de pareamento",
   "phone_page.confirm": "Confirmar: {choice}",
   "phone_page.confirm_title": "Confirme sua resposta",
+  "phone_page.details": "Detalhes completos",
   "phone_page.empty": "Nenhum gate está aguardando você.",
   "phone_page.ended": "Este gate não está mais aguardando resposta.",
   "phone_page.ended_help": "Ele já foi respondido ou sua execução terminou. Abrir esta página não enviou uma resposta.",

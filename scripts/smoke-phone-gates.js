@@ -72,6 +72,10 @@ async function scenarios(win, fixture, out) {
   await win.loadURL(await js('document.querySelector("#gates a").href'));
   assert.equal(fixture.state.answers.length, 0, 'opening a gate sends no answer');
   await capture('08-gate-details-pt-BR');
+  await win.loadURL(await js(`document.querySelector('.btns a[href*="answer=approve"]').href`));
+  assert.equal(await js('!!document.querySelector(".decision-warning")'), true);
+  await capture('08-confirmation-against-recommendation');
+  await win.loadURL(fixture.link());
   await win.loadURL(await js(`document.querySelector('.btns a[href*="answer=redo"]').href`));
   await capture('08-confirmation-pt-BR');
   await js(`window.originalFetch=window.fetch;window.fetch=async(...args)=>{await window.originalFetch(...args);throw new Error('simulated lost response')};document.getElementById('fb').value='Please verify the narrow-screen captures.';document.getElementById('confirm').requestSubmit()`);

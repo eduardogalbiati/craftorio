@@ -221,3 +221,26 @@ test('blocked storage is reported before any list read or answer request', async
     if (confirmation) assert.equal(b.get('answer-submit').disabled, false);
   }
 });
+
+test('long gate reports stay in collapsed details with a short headline and document title', () => {
+  const full = 'The check needs review.\n' + 'Full report detail.\n'.repeat(200);
+  const gate = { ...GATE, message: full, brief: { headline: 'Review one failed check.' } };
+  const html = gatePage({ run: RUN, gate }, 't', null, 'en', GATE.choices).html;
+  const dom = createDom(); dom.loadBody(html);
+  assert.equal(dom.document.querySelector('h1').textContent, gate.brief.headline);
+  assert.ok(dom.document.querySelector('details').textContent.includes(full));
+  assert.equal(dom.document.querySelector('details').hasAttribute('open'), false);
+  assert.match(html, /<title>Mobile release<\/title>/);
+});
+
+test('confirmation retains brief and evidence and highlights a contrary choice without another dialog', () => {
+  const { gateBrief } = require('../../engine/gate-summary');
+  const choices = [...GATE.choices, { id: 'stop', label: 'Stop now' }];
+  const brief = { ...gateBrief({ summary: 'The check failed.', recommend: 'stop: Do not ship.', answers: choices }),
+    evidence: [{ label: 'Failing check', url: 'https://example.test/check' }] };
+  const gate = { ...GATE, brief };
+  const html = gatePage({ run: RUN, gate }, 't', choices[0], 'en', choices).html;
+  for (const text of ['The check failed.', 'Do not ship.', 'https://example.test/check', 'The recommendation is Stop now. You are choosing Ship it.']) assert.ok(html.includes(text));
+  assert.match(html, /id="confirm"/);
+  assert.ok(!gatePage({ run: RUN, gate }, 't', choices[1], 'en', choices).html.includes('class="decision-warning"'));
+});
