@@ -471,7 +471,7 @@
       const allDone = a.groups.every((g) => applied(groupState(g)));
       const allTitle = allDone ? 'Every group is already in the roadmap or assigned' : 'Every group as a planned stage (by its stage number) at the end of the roadmap';
       // #791: the runs summed up and grouped by kind
-      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.proposed_runs')}</div>${window.BacklogPoKinds.planHtml(a.groups, (g, n) => groupHtml(g, m, n))}
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.proposed_runs')}</div>${window.BacklogPoKinds.planHtml(a.groups, (g, n) => groupHtml(g, m, n), (g, n) => window.BacklogPoKinds.shown(g, po.edits[`${m}:${n}`]))}
         <div class="row"><button class="btn sm ghost" type="button" data-po-act="roadmap-all" data-msg="${m}" title="${allTitle}"${allDone ? ' disabled' : ''}>${t('backlog_po.add_all_to_the_roadmap')}</button>
         ${po.notes[`${m}:all`] ? `<span class="small ${po.notes[`${m}:all`].error ? 'error' : 'muted'}">${esc(po.notes[`${m}:all`].text)}</span>` : ''}</div></div>`);
     }

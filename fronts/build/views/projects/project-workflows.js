@@ -26,11 +26,18 @@ window.ProjectWorkflows = (() => {
   const nameOf = (w) => bare(w.file) || w.name;
 
   // api.listWorkflows(), read again at each opening of the dialog or the page (a workflow saved in
-  // the Builder since then is listed): { list: the cards' and the dialog's, all: every usable one (#791) }
-  async function installed() {
+  // the Builder since then is listed): { list: the cards' and the dialog's, all: every usable one (#791) }.
+  // The repository's own are asked apart (repositoryOnly, as the Workflows screen does): `list` keeps the
+  // workspace's categories, and a file both have is one option of `all`, the repository's
+  async function installed(projectId) {
     try {
-      const all = (await api.listWorkflows()).filter((w) => !w.error);
-      return { list: all.filter(listed), all };
+      const [own, repository] = await Promise.all([
+        api.listWorkflows(),
+        projectId ? api.listWorkflows({ projectId, repositoryOnly: true }).catch(() => []) : [],
+      ]);
+      const usable = own.filter((w) => !w.error);
+      const all = [...new Map([...usable, ...repository.filter((w) => !w.error && w.file)].map((w) => [w.file, w])).values()];
+      return { list: usable.filter(listed), all };
     } catch { return { list: [], all: [] }; }
   }
 
@@ -175,7 +182,7 @@ window.ProjectWorkflows = (() => {
     if (!p || !box) return;
     const seq = ++pageSeq;
     const [{ list, all }, manifest] = await Promise.all([
-      installed(),
+      installed(p.id),
       p.folder ? api.projectManifest({ folder: p.folder }).catch(() => null) : null,
     ]);
     if (seq !== pageSeq) return;
@@ -188,7 +195,7 @@ window.ProjectWorkflows = (() => {
   async function openAdd() {
     if (!page) return;
     adding = { query: '', focus: true };
-    const { list, all } = await installed();
+    const { list, all } = await installed(page.p.id);
     if (!page || !adding) return;
     page = { ...page, list, all };
     draw();

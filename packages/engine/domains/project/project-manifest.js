@@ -8,10 +8,11 @@
 // loadRepositoryWorkflow; the listing and the acceptance are packages/engine/service/areas/workflows.js's.
 // #790: an optional `default: <name>`, the project's default development workflow (a clone takes it);
 // #791: an optional `kinds` map, the workflow and inputs of each kind of work (`feature: { name }`,
-// `fix: { name: fix, mode: remote }`: every key but `name` is an input). Both must name one of the
-// manifest's `workflows`: another name is an error naming it, and that value is ignored (`default`
-// null, the kind left out), as the other manifest problems are. Any error voids the whole manifest:
-// no workflows, so no default and no kinds either.
+// `fix: { name: fix, mode: remote }`: every key but `name` is an input; only `feature` and `fix`, a
+// refactor uses the feature entry). Both must name one of the manifest's `workflows`, an entry with a
+// `file` named after that file: another name is an error naming it, and that value is ignored
+// (`default` null, the kind left out), as the other manifest problems are. Any error voids the whole
+// manifest: no workflows, so no default and no kinds either.
 
 const fs = require('fs');
 const path = require('path');
@@ -84,35 +85,54 @@ function requiresProblem(appVersion, range) {
   return ok ? null : `requires app version ${range}, this app is ${appVersion}.`;
 }
 
-// #791: the kinds a manifest may map (packages/shared/default-workflow.js KINDS; refactor uses the Feature entry)
-const { KINDS } = require('@multiagent/shared/default-workflow');
+// #791: the kinds a manifest may map (packages/shared/default-workflow.js KIND_ENTRIES; a refactor uses the Feature entry)
+const { KIND_ENTRIES, label } = require('@multiagent/shared/default-workflow');
 const EMPTY = () => ({ version: null, requires: null, workflows: [], default: null, kinds: {}, errors: [] });
 
-// #790: the manifest's `default`, one of its workflows (`seen`), else null with the error
-function parseDefault(doc, seen, errors) {
+// #790, #791: the file of a listed workflow whose file has another name than the entry, or null: the
+// listing and the default's resolution go by the file's name, so a default or a kind naming that entry
+// would fall back to another workflow without a word
+function otherFile(name, list) {
+  const file = list.find((w) => w.name === name)?.file;
+  return file && label(path.posix.basename(file)) !== label(name) ? file : null;
+}
+const otherFileError = (what, name, file) => `${MANIFEST_FILE}: ${what} names "${name}", whose file is ${file}: name the entry after its file.`;
+
+// #790: the manifest's `default`, one of its workflows (`list`), else null with the error
+function parseDefault(doc, list, errors) {
   const name = str(doc.default);
   if (name == null) return null;
-  if (seen.has(name)) return name;
-  errors.push(`${MANIFEST_FILE}: default "${name}" is not one of the manifest's workflows.`);
+  if (!list.some((w) => w.name === name)) {
+    errors.push(`${MANIFEST_FILE}: default "${name}" is not one of the manifest's workflows.`);
+    return null;
+  }
+  const file = otherFile(name, list);
+  if (!file) return name;
+  errors.push(otherFileError('default', name, file));
   return null;
 }
 
-// #791: the manifest's `kinds` → { <kind>: { name, inputs } }, an entry naming an unknown workflow left out with its error
-function parseKinds(doc, seen, errors) {
+// #791: the manifest's `kinds` → { <kind>: { name, inputs } }, an entry it cannot use left out with its error
+function parseKinds(doc, list, errors) {
   const out = {};
   const kinds = doc.kinds;
   if (kinds == null) return out;
   if (typeof kinds !== 'object' || Array.isArray(kinds)) {
-    errors.push(`${MANIFEST_FILE}: kinds must be a mapping of ${KINDS.join(' / ')} to { name, <inputs> }.`);
+    errors.push(`${MANIFEST_FILE}: kinds must be a mapping of ${KIND_ENTRIES.join(' / ')} to { name, <inputs> }.`);
     return out;
   }
-  for (const kind of KINDS) {
+  for (const key of Object.keys(kinds).filter((k) => !KIND_ENTRIES.includes(k))) {
+    errors.push(`${MANIFEST_FILE}: kinds.${key} is not a kind of the map (${KIND_ENTRIES.join(' / ')}; a refactor uses the feature entry).`);
+  }
+  for (const kind of KIND_ENTRIES) {
     const v = kinds[kind];
     if (v == null) continue;
     const given = typeof v === 'string' ? { name: v } : v;
     const name = given && typeof given === 'object' && !Array.isArray(given) ? str(given.name) : null;
     if (!name) { errors.push(`${MANIFEST_FILE}: kinds.${kind} needs a name (one of the manifest's workflows).`); continue; }
-    if (!seen.has(name)) { errors.push(`${MANIFEST_FILE}: kinds.${kind} names "${name}", not one of the manifest's workflows.`); continue; }
+    if (!list.some((w) => w.name === name)) { errors.push(`${MANIFEST_FILE}: kinds.${kind} names "${name}", not one of the manifest's workflows.`); continue; }
+    const file = otherFile(name, list);
+    if (file) { errors.push(otherFileError(`kinds.${kind}`, name, file)); continue; }
     const { name: _n, ...inputs } = given;
     out[kind] = { name, inputs };
   }
@@ -156,8 +176,8 @@ function parseManifest(text, { appVersion } = {}) {
   }
   // #790, #791: the default and the kinds, each checked against the names above; a wrong name drops
   // that value and counts as a manifest error like any other
-  out.default = parseDefault(doc, seen, out.errors);
-  out.kinds = parseKinds(doc, seen, out.errors);
+  out.default = parseDefault(doc, list, out.errors);
+  out.kinds = parseKinds(doc, list, out.errors);
   return out.errors.length ? { ...out, workflows: [], default: null, kinds: {} } : { ...out, workflows: list };
 }
 

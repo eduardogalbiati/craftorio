@@ -41,8 +41,9 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   else an unauthenticated raw read; never clones. No manifest: `null`; a repository nothing can read:
   `{ workflows: [], pending: true }` ("will be read after cloning"). The project record keeps the checked
   `workflows: [{ name, origin, category }]`, `defaultWorkflow` (#790: the manifest's `default`, else the
-  first solo or team one) and `workflowKinds` (#791: the manifest's `kinds` map, `{ feature | fix | refactor:
-  { name, inputs } }`); `projectDefaultWorkflow(p)` resolves the project's `defaultWorkflow`, then the
+  first solo or team one) and `workflowKinds` (#791: the manifest's `kinds` map, `{ feature | fix:
+  { name, inputs } }`; another key is a manifest error, a refactor uses the Feature entry; a `default`
+  or a kind naming an entry whose `file` has another name is an error too); `projectDefaultWorkflow(p)` resolves the project's `defaultWorkflow`, then the
   manifest's `default`, then the first build workflow, then `feature`, for the roadmap, the Product Owner,
   the chain, the Oracle and Fix the base (no global setting); `workflowForKind(p, kind)` gives the
   workflow and inputs of a Feature or a Fix (the project's map, the manifest's, the wizard's picks).

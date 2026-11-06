@@ -46,8 +46,9 @@
     edit.kind = kind;
     if (kind === 'other') { edit.workflow = edit.workflow || g.workflow; edit.kindInputs = null; return; }
     const entry = DefaultWorkflow.kindEntry(project, project?.manifest, kind);
-    edit.workflow = DefaultWorkflow.installedFile(entry.name, workflows.map((w) => w.file)) || `${entry.name}.yaml`;
-    edit.kindInputs = { ...entry.inputs };
+    const { file, inputs } = DefaultWorkflow.kindTarget(entry, workflows.map((w) => w.file));
+    edit.workflow = file || `${entry.name}.yaml`;
+    edit.kindInputs = inputs;
   }
 
   /** A workflow picked in Outro: that item's choice, Outro pressed. */
@@ -61,15 +62,15 @@
     else edit.kind = 'other';
   }
 
-  // the plan's groups by kind, KINDS order, the ones without a kind last ("other"); [] when none has a kind
-  function byKind(groups) {
+  // the plan's groups by the kind each shows, KINDS order, the ones without a kind last ("other"); [] when none has a kind
+  function byKind(groups, kindOf) {
     if (!groups.some((g) => g.kind)) return [];
-    return [...DefaultWorkflow.KINDS, 'other'].map((kind) => ({ kind, items: groups.map((g, n) => ({ g, n })).filter(({ g }) => (g.kind || 'other') === kind) })).filter((x) => x.items.length);
+    return [...DefaultWorkflow.KINDS, 'other'].map((kind) => ({ kind, items: groups.map((g, n) => ({ g, n })).filter(({ g, n }) => (kindOf(g, n) || 'other') === kind) })).filter((x) => x.items.length);
   }
 
-  /** The plan's runs: the summary and the cards grouped by kind. card(g, n): a recommendation's markup. */
-  function planHtml(groups, card) {
-    const kinds = byKind(groups);
+  /** The plan's runs: the summary and the cards grouped by kind. card(g, n): a recommendation's markup; kindOf(g, n): the kind it shows, the owner's choice included. */
+  function planHtml(groups, card, kindOf = (g) => g.kind) {
+    const kinds = byKind(groups, kindOf);
     if (!kinds.length) return groups.map(card).join('');
     const summary = kinds.map(({ kind, items }) => esc(t(`po.kind.count_${kind}`, { count: items.length }))).join(' · ');
     return `<div class="small muted po-kind-summary" data-testid="po-kind-summary">${summary}</div>${kinds.map(({ kind, items }) => `<div class="po-kind-group" data-testid="po-kind-group-${esc(kind)}">${items.map(({ g, n }) => card(g, n)).join('')}</div>`).join('')}`;

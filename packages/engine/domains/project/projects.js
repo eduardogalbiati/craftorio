@@ -30,7 +30,7 @@ const { cleanConfig } = require('../local/local-preview');
 // #486: without a given default, the first checked development (solo, team or build) workflow;
 // #790 / #791: the default's order and the kinds' (shared with the screens)
 const {
-  KINDS,
+  KIND_ENTRIES,
   firstBuild,
   kindEntry,
   projectDefault,
@@ -330,7 +330,7 @@ function cleanWorkflows(list) {
 function cleanWorkflowKinds(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const out = {};
-  for (const kind of KINDS) {
+  for (const kind of KIND_ENTRIES) {
     const e = v[kind];
     const name = cleanWorkflowName(typeof e === 'string' ? e : e?.name);
     if (!name) continue;

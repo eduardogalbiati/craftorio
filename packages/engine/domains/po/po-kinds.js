@@ -45,9 +45,6 @@ function kindOf(issue, given = []) {
 
 const entryOf = (kind, workflowKinds) => workflowKinds?.[DefaultWorkflow.entryKind(kind)] || null;
 
-// a kind's workflow among the installed files
-const kindFile = (kind, { files, workflowKinds }) => DefaultWorkflow.installedFile(entryOf(kind, workflowKinds)?.name, files);
-
 // the issues that could join a kind's group: open, not in the model's group, of the same kind, once each
 function suggestedOf(g, kind, nums, plan) {
   const { attached, byNumber, isOpen } = plan;
@@ -72,10 +69,10 @@ function simulatedField(g, part, { keep, mock }) {
 // the workflow of a kind's group and its inputs: the kind's only when the group runs on the kind's workflow
 function workflowOf(g, kind, plan) {
   const { chosen, chosenInputs, fallback, files, inputsOf, runDefaults, workflowKinds } = plan;
-  const own = kindFile(kind, plan);
+  const { file: own, inputs: ownInputs } = DefaultWorkflow.kindTarget(entryOf(kind, workflowKinds), files);
   const file = chosen || own || (files.includes(g.workflow) ? g.workflow : fallback);
   const given = g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {};
-  const fromKind = file && own === file ? entryOf(kind, workflowKinds)?.inputs : null;
+  const fromKind = file && own === file ? ownInputs : null;
   return { workflow: file, inputs: poChosen.groupInputs({ ...given, ...fromKind }, chosenInputs, inputsOf(file), runDefaults) };
 }
 

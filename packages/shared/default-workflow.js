@@ -20,7 +20,9 @@
 //   project's way of working: the picks' mode, a fork, a repository (remote), else local);
 //   entryKind(kind): the kind whose entry serves it (a refactor uses the Feature entry);
 //   modeOfVariant(variant) / modeOfPicks(workflows): the local | remote | fork a wizard pick names
-//   (also project-run-defaults.js); installedFile(name, files): a workflow name's file;
+//   (also project-run-defaults.js); installedFile(name, files): a workflow name's file, an old name's
+//   through its alias; kindTarget(entry, files) → { file, inputs }: what a kind's entry runs;
+//   KIND_ENTRIES (feature, fix): the kinds with an entry of their own, the map's keys;
 //   projectWorkflows(list, project, kinds): the workflows the Product Owner is offered: of `list`
 //   those that take a task and are not Plan & Design, in the project's set or named by its kinds or
 //   default; nothing of the project's known: every one of them.
@@ -126,7 +128,9 @@
   const modeOfPicks = (picks) => (picks || []).map((w) => modeOfVariant(w?.variant)).find(Boolean) || null;
   /** #791: the kind whose entry serves `kind`: a refactor uses the Feature entry. */
   const entryKind = (kind) => (kind === 'refactor' ? 'feature' : kind);
-  const entry = (name, inputs) => ({ name: label(name), inputs: { ...(inputs || {}) } });
+  // #791: the kinds with an entry of their own: the only keys of a project's or a manifest's map
+  const KIND_ENTRIES = Object.freeze(KINDS.filter((kind) => entryKind(kind) === kind));
+  const entry =(name, inputs) => ({ name: label(name), inputs: { ...(inputs || {}) } });
 
   /** #791: the project's workflow of `kind` → { name, inputs } (the order in the header); `manifest`: { default, kinds } or null. */
   function kindEntry(project, manifest, kind) {
@@ -146,12 +150,20 @@
   }
 
   const fileName = (file) => String(file || '').replace(/^.*[\\/]/, '');
-  /** #791: the installed file of a workflow's name among `files`: `<name>.yaml`, else a repository copy of that name, else null. */
+  /** #791: the installed file of a workflow's name among `files`: `<name>.yaml`, else a repository copy of that name, else the file an old name means (ALIASES), else null. */
   function installedFile(name, files) {
     const own = label(name);
     if (!own) return null;
     const list = (files || []).map(String);
-    return list.find((f) => f === `${own}.yaml`) || list.find((f) => label(fileName(f)) === own) || null;
+    const alias = aliasOf(own)?.file;
+    return list.find((f) => f === `${own}.yaml`) || list.find((f) => label(fileName(f)) === own) || (alias && list.includes(alias) ? alias : null);
+  }
+
+  /** #791: what a kind's entry ({ name, inputs }) runs among `files` → { file, inputs }: an old name reached through its alias adds the alias's inputs under the entry's; a copy of that very name (a repository's) runs as it is. */
+  function kindTarget(given, files) {
+    const file = installedFile(given?.name, files);
+    const aliased = file && label(fileName(file)) !== label(given.name);
+    return { file, inputs: { ...(aliased ? aliasInputs(aliasOf(given.name), given.inputs) : given?.inputs) } };
   }
 
   const planning = (w) => PLANNING.includes(w?.category) || PLANNING.includes(w?.metadata?.category);
@@ -207,6 +219,7 @@
     aliasOf,
     ALIASES,
     BUILD,
+    KIND_ENTRIES,
     KINDS,
     LOCAL,
     REMOTE,
@@ -216,6 +229,7 @@
     firstBuild,
     installedFile,
     kindEntry,
+    kindTarget,
     label,
     mergeOf,
     modeOfPicks,
