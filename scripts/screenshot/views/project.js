@@ -25,6 +25,9 @@
 // #376: --mode city-release is that city at release 1.1.1 in grey with release 1.1.2 in colour ("Show
 // on the map" of a release: a new file, changes on the ramp, a removed guide, a renamed script, the
 // header with the two-tag picker and the issue filter).
+// #782: --mode city-unmeasured is a mostly Rust city (18 of 22 files, with no complexity tool the app can
+// run): it opens in Churn with the legend of what is not measured and why, and the plan is current
+// ("Analyze again" is secondary). With lizard on the machine the files are measured and it stays in Quadrant.
 // #382: --mode city-large is the City view at a real scale: the project is this repository itself
 // (the checkout the screenshot runs from, about 1,400 drawn files) with the proof of concept's city
 // plan (poc/project-map/plans/multiagent-orchestrator.city-plan.json), the one the POC's overview
@@ -67,7 +70,7 @@ const ARCH_COMMITS = [
 
 const finding = (kind, title, files, severity, evidence, refactor) => ({ kind, title, files, severity, evidence, refactor });
 // #730: the City tab's demo-city modes; the legacy --tab architecture / refactor open City or Health
-const CITY_MODES = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage'];
+const CITY_MODES = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage', 'city-unmeasured'];
 const CITY_TAB_MODES = [...CITY_MODES, 'analyzing', 'city-large', 'city-no-folder', 'error', 'map-refresh', 'no-folder'];
 function tabOf(args) {
   if (args.tab === 'architecture') return CITY_TAB_MODES.includes(args.mode) ? 'city' : 'health';
@@ -162,6 +165,30 @@ const CITY_PLAN = {
   ],
   landmarks: [{ path: 'src/billing.js', label: 'Billing rules' }],
   ports: [{ id: 'payments', name: 'Payments API', via: ['src/api.js', 'src/billing.js'] }],
+};
+
+// #782: the two-language repository grown in Rust: most of its files have no measured complexity
+const rustFile = (n) => `pub fn discount(total: f64) -> f64 {\n    if total > 100.0 { total * 0.9 } else { total }\n}\n${Array.from({ length: n }, (_, i) => `pub const RATE_${i}: u32 = ${i};`).join('\n')}\n`;
+const RUST_FOLDERS = { 'crates/store/src': 7, 'crates/cli/src': 5, 'crates/providers/src': 6 };
+const UNMEASURED_COMMITS = [
+  ...ARCH_COMMITS,
+  ['2026-09-22', 'Move the engine to Rust', Object.fromEntries(Object.entries(RUST_FOLDERS).flatMap(([dir, n]) => Array.from({ length: n }, (_, i) => [`${dir}/part_${i}.rs`, rustFile(4 + ((i * 7) % 11))])))],
+  ['2026-09-29', 'Tune the store', { 'crates/store/src/part_0.rs': rustFile(30), 'crates/cli/src/part_1.rs': rustFile(24) }],
+  ['2026-10-06', 'Tune the store again', { 'crates/store/src/part_0.rs': rustFile(40) }],
+];
+const UNMEASURED_PLAN = {
+  version: 1, project: 'demo-app', summary: 'The Rust engine, its command line and the billing it replaced.',
+  zones: [
+    { id: 'core', name: 'Core', kind: 'industrial', purpose: 'The store and the providers.' },
+    { id: 'tooling', name: 'Tooling', kind: 'workshop', purpose: 'The command line and the export.' },
+    { id: 'legacy', name: 'Billing', kind: 'commercial', purpose: 'What is still JavaScript.' },
+  ],
+  districts: [
+    { id: 'store', name: 'Store', zone: 'core', include: ['crates/store/**'] },
+    { id: 'providers', name: 'Providers', zone: 'core', include: ['crates/providers/**'] },
+    { id: 'cli', name: 'Command line', zone: 'tooling', include: ['crates/cli/**', 'tools/**'] },
+    { id: 'billing', name: 'Billing', zone: 'legacy', include: ['src/**', 'README.md'] },
+  ],
 };
 
 // #374: two runs in progress on the city (architecture:agents' answer, simulated data): a developer
@@ -299,13 +326,14 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   }
   // #730: the City tab with no --mode draws the demo city
   const city = CITY_MODES.includes(args.mode) || (args.tab === 'city' && !args.mode);
-  const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
+  const unmeasured = args.mode === 'city-unmeasured';
+  const commits = args.mode === 'empty' ? [] : unmeasured ? UNMEASURED_COMMITS : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
   if (args.mode === 'city-release') demoReleaseCity(project.folder);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
-  if (city) require('@multiagent/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
+  if (city) require('@multiagent/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, unmeasured ? UNMEASURED_PLAN : CITY_PLAN, '2026-10-01T09:00:00.000Z');
   if (head && args.mode?.startsWith('seeds')) {
     const first = execFileSync('git', ['-C', project.folder, 'rev-list', '--max-parents=0', 'HEAD'], { encoding: 'utf8' }).trim().split('\n')[0];
     demoSeeds(ws, project, first);
@@ -458,7 +486,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
   open,
   run: true,
   seed,
