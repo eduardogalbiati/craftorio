@@ -52,9 +52,10 @@ module.exports = (ctx) => {
 
   /**
    * The repository workflows of a project at its HEAD.
-   * @returns {{ errors: string[], items: Array<{ file, entry, commit, accepted, acceptedCommit, path, diff }>, categories: object }}
-   *   file: the workflow file's basename (what workflows:accept and run:start take); categories: the
-   *   category the manifest gives a workflow it names without a file ({ <name>: category })
+   * @returns {{ errors: string[], items: Array<{ file, entry, commit, changedCommit, accepted, acceptedCommit, path, diff }>, categories: object }}
+   *   file: the workflow file's basename (what workflows:accept and run:start take); changedCommit: the
+   *   last commit that changed the file, null once accepted (#794: the screen's reason to accept); categories:
+   *   the category the manifest gives a workflow it names without a file ({ <name>: category })
    */
   function repositoryWorkflows(projectId) {
     const project = projectId ? projectOf(projectId) : null;
@@ -74,7 +75,8 @@ module.exports = (ctx) => {
       const ok = !!prev && prev.blob === blob;
       // what changed since the commit the owner accepted last
       const diff = prev && !ok ? (gitOut(project.folder, ['diff', prev.commit, head, '--', rel]) || '').slice(0, MAX_DIFF) : '';
-      items.push({ file, entry, commit: head, accepted: ok, acceptedCommit: prev?.commit || null, path: materialize(project, head, rel), diff });
+      const changedCommit = ok ? null : gitOut(project.folder, ['log', '-1', '--format=%H', head, '--', rel]) || head;
+      items.push({ file, entry, commit: head, changedCommit, accepted: ok, acceptedCommit: prev?.commit || null, path: materialize(project, head, rel), diff });
     }
     return { errors: [], items, categories };
   }

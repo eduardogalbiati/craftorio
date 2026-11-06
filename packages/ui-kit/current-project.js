@@ -44,6 +44,7 @@
     current = id;
     try { localStorage.setItem(KEY, id); } catch { /* storage unavailable */ }
     render();
+    window.refreshWorkflowsAcceptance?.(); // #794: the sidebar's count follows the project
     if (redraw) showView(state.view);
   }
 

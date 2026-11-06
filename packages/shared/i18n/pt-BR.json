@@ -533,6 +533,7 @@
   "app.supervisor_on_step": "◆ Supervisor em \"{step}\": {action}",
   "app.supervisor_on_step_of_run": "◆ Supervisor em \"{step}\" ({run}): {action}",
   "app.the_run_ended_status_the_document": "A execução terminou {status}: o documento não foi aceito.",
+  "app.workflows_waiting_acceptance": { "one": "{count} workflow para aceitar: {names}", "other": "{count} workflows para aceitar: {names}" },
 
   "arena.accept": "Aceitar",
   "arena.add_a_model": "Adicionar modelo",
@@ -5709,6 +5710,9 @@
   "workflows.approval_gate": "+ Gate de aprovação",
   "workflows.artifacts": "Artefatos",
   "workflows.ask_the_supervisor_about_workflows_and": "Pergunte ao Supervisor sobre workflows e execuções: o chat dele abre ao lado",
+  "workflows.awaiting_acceptance_hint": "Uma execução deles é recusada até você aceitar cada um para o commit atual.",
+  "workflows.awaiting_acceptance_title": "Aguardando sua aceitação",
+  "workflows.awaiting_reason": "O arquivo mudou no commit {commit}: revise e aceite",
   "workflows.builder": "Construtor",
   "workflows.builder_import_an_agent_agents_menu": "Construtor: importar um agente (menu Agentes) para uma mesa -->",
   "workflows.builder_the_skills_of_a_desk": "Construtor: as skills de uma mesa -->",

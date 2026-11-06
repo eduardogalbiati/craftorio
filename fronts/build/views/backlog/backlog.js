@@ -244,6 +244,7 @@
     try {
       const data = await api.syncBacklog(p.id, bl.platform);
       if (seq === bl.seq && bl.projectId === p.id) setData(data);
+      window.refreshWorkflowsAcceptance?.(); // #794: a pull may change a repository workflow
     } catch (e) {
       if (seq === bl.seq) bl.error = errMsg(e);
     } finally {
@@ -1092,6 +1093,7 @@
             const r = await api.checkLocal(bl.projectId);
             if (r.backlog) setData(r.backlog);
             window.refreshUnpushed?.();
+            window.refreshWorkflowsAcceptance?.(); // #794
           } catch (err) { bl.error = errMsg(err); }
           render();
         },
@@ -1142,6 +1144,7 @@
       if (r.backlog) setData(r.backlog);
       else if (bl.data) bl.data.local = r.local;
       window.refreshUnpushed?.();
+      window.refreshWorkflowsAcceptance?.(); // #794: the update may move HEAD over a repository workflow
       if (r.pushed || (!r.rejected && !r.conflict && !r.local?.ahead)) { closeModal('#push-modal'); render(); return; }
       if (r.conflict) {
         // handed to a run of the local workflow (its developer resolves it, as in resolve_merge)

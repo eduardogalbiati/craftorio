@@ -193,6 +193,7 @@ async function init() {
     showView(b.dataset.view);
   });
   refreshUnpushed();
+  refreshWorkflowsAcceptance();
 
   initStartDrawer();
   document.addEventListener('keydown', (e) => {
@@ -251,6 +252,7 @@ async function init() {
   applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
   window.CurrentProject.refresh();
+  refreshWorkflowsAcceptance(); // #794: the current project is known now
   renderWorkspacePaths();
   await loadActiveRuns();
   initCodeBanner();
@@ -386,6 +388,8 @@ function initNotifications() {
   // gates answered or requested while the window was in the background, or while the browser UI
   // was disconnected (its events are lost)
   window.addEventListener('focus', () => loadActiveRuns());
+  // #794: a pull made outside the app may have changed a repository workflow
+  window.addEventListener('focus', () => refreshWorkflowsAcceptance());
   api.onReconnect?.(() => loadActiveRuns());
   // the browser client's pushed channel down: "Disconnected, reconnecting…" until it is back (#603;
   // nothing before the first connection, so the page's start does not flash it)
@@ -458,6 +462,8 @@ async function refreshUnpushed() {
   badge.title = list.map((x) => t('app.commits_not_pushed_on', { name: x.name, count: x.ahead, base: x.base })).join('\n');
 }
 window.refreshUnpushed = refreshUnpushed;
+// #794: the count of repository workflows waiting for acceptance lives in workflows-acceptance.js
+const refreshWorkflowsAcceptance = () => window.refreshWorkflowsAcceptance?.();
 
 // What adds a file to a run's artifacts (handoff notes, the decision log, saved documents,
 // screenshots of the evidence step): its panels reload.
@@ -838,6 +844,9 @@ const finishedPause = (ev) => (ev.status === 'paused' && ev.paused ? { state: 'p
 
 // A live engine event (window.api): its run's view (reduceEvent), then its side effects.
 function onEvent(ev) {
+  // #794: a live merge may have changed a repository workflow, whether or not its run is known here yet
+  // (a run being hydrated holds its events back: no effects for them)
+  if (ev.type === 'worktree.merged') setTimeout(refreshWorkflowsAcceptance, 1500);
   const applied = reduceEvent(ev, true);
   if (applied) runEventEffects(applied.v, ev, applied.effects);
 }
