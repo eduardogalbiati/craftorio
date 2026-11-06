@@ -13,7 +13,7 @@ const { checkAttachments, storeAttachments } = require('../providers');
 const { resolveSkill } = require('../../domains/agents/skills');
 const { displayName } = require('@multiagent/shared/display-name');
 const DefaultWorkflow = require('@multiagent/shared/default-workflow');
-const { render } = require('./templates');
+const { inputsRead, render } = require('./templates');
 const { MACHINE_STEP_TYPES, toBoolean } = require('./load');
 
 // #630: a workflow with `validation` (feature) reads an old `mode: auto | validated` as it
@@ -83,7 +83,7 @@ const methods = {
 
   // The input images a prompt template gets: those of every input it uses ({{ inputs.<name> }}).
   stepAttachments(template) {
-    const used = new Set([...String(template || '').matchAll(/\binputs\.([A-Za-z0-9_]+)/g)].map((m) => m[1]));
+    const used = new Set(inputsRead(template));
     return Object.entries(this.attachments).filter(([k]) => used.has(k)).flatMap(([, files]) => files);
   },
 

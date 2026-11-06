@@ -16,9 +16,12 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   accepted at HEAD is refused when the new run starts, naming it.
 - **No step given** (#799): a paused run continues where it paused; any other run that did not end well
   resumes at the step it stopped at (`resumeSpec`'s `stoppedAt`: the failed step, else the last one
-  started), refused like a chosen step when a decided gate is before it. A run that ended well starts
-  at the first step. Starting over stays possible by choosing the first step.
-- **Inputs** (#799): `inputs` holds the ones that change, over those the run recorded. The new run's
+  started; an error its `on_error` route took on is past, so the step routed to counts), refused like
+  a chosen step when a decided gate is before it. A run that ended well starts at the first step.
+  Starting over stays possible by choosing the first step.
+- **Inputs** (#799): `inputs` holds the ones that change, over those the run recorded. Only
+  `developer_model` and `developer_effort` may change (`RESUME_INPUTS`): an input like `validation`
+  decides whether a run meets a human gate. The new run's
   `workflow.started` records them and a notice says what changed; the run resumed from is only read. A
   value the workflow does not offer is refused as at a start. A recorded agent override (the run's
   choice or a fallback) gives way to the input that decides that field; a fallback's provider goes

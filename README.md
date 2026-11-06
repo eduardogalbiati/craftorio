@@ -562,7 +562,8 @@ and the file's path.
   - `runs:resume` `{ runId, step }` resumes a run as the Resume dialog does; `runs:resumeOptions`
     `{ runId }` lists the steps it offers. A resume that would go past a gate the previous run decided
     gets the dialog's refusal. A real (non-mock) `runs:resume` costs the owner's money, like
-    `roadmap:start`; it is refused under `MULTIAGENT_SIMULATION_ONLY`.
+    `roadmap:start`; it is refused under `MULTIAGENT_SIMULATION_ONLY`. `inputs` is refused (#799): only
+    the owner changes a run's inputs, in the dialog.
   - `workflows:restore` puts a workspace copy back to its bundled default, the old copy to the trash.
     Through this channel it is refused, naming the steps, when the copy has a `human_approval` step its
     default lacks (the app's Restore button still restores it).

@@ -90,9 +90,9 @@ function resumeInputFields(o) {
     const def = o.inputDefs[key];
     const ran = o.inputs?.[key];
     const values = ran == null || def.enum.some((v) => String(v) === String(ran)) ? def.enum : [ran, ...def.enum];
-    const options = values.map((v) => `<option value="${esc(v)}"${String(v) === String(ran) ? ' selected' : ''}>${esc(WorkflowInputs.optionLabel(def, v))}</option>`).join('');
+    const options = values.map((v) => [v, WorkflowInputs.optionLabel(def, v)]);
     return `<div class="field"><label for="resume-input-${esc(key)}">${esc(WorkflowInputs.label(key, def))}</label>
-      <select id="resume-input-${esc(key)}" data-testid="resume-input-${esc(key)}">${options}</select></div>`;
+      ${window.Select.markup(`id="resume-input-${esc(key)}" data-testid="resume-input-${esc(key)}"`, options, ran)}</div>`;
   });
   return fields.length ? `<div class="resume-inputs">${fields.join('')}</div>` : '';
 }

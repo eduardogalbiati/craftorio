@@ -37,14 +37,14 @@ steps:
 `;
 
 // the area over a seeded run folder; `started`: what it asked startWorkflowRun for
-function seeded(t, events) {
+function seeded(t, events, { flow = FLOW, start = {} } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-799-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const file = path.join(root, 'flow.yaml');
-  fs.writeFileSync(file, FLOW);
+  fs.writeFileSync(file, flow);
   const runDir = path.join(root, 'run-799');
   fs.mkdirSync(runDir);
-  const all = [{ type: 'workflow.started', file: 'flow.yaml', inputs: { developer_model: 'a' } }, ...events];
+  const all = [{ type: 'workflow.started', file: 'flow.yaml', inputs: { developer_model: 'a' }, ...start }, ...events];
   fs.writeFileSync(path.join(runDir, 'events.jsonl'), `${all.map((e) => JSON.stringify(e)).join('\n')}\n`);
   const started = [];
   const area = resumeArea({
@@ -99,6 +99,23 @@ test('#799 a resume with no inputs hands on what the run recorded and says nothi
   area.resumeRun({ runId: 'run-799' });
   assert.deepEqual(started[0].agentOverrides, { developer: { provider: 'codex', model: 'gpt' } });
   assert.equal(started[0].notices, undefined);
+});
+
+// an effort override left blank: the agent ran on the provider's default
+const blankEffort = {
+  flow: FLOW.replace('developer: { provider: claude,', 'developer: { provider: claude, effort: "{{ inputs.developer_effort }}",'),
+  start: { agent_overrides: { developer: { effort: '' } } },
+};
+
+test('#799 a blank effort override reads as the input\'s default, never as an empty value', (t) => {
+  const { area } = seeded(t, fellBack.slice(3), blankEffort);
+  assert.equal(area.resumeOptions({ runId: 'run-799' }).inputs.developer_effort, 'default');
+});
+
+test('#799 the notice over a blank effort override names the value it had', (t) => {
+  const { area, started } = seeded(t, fellBack.slice(3), blankEffort);
+  area.resumeRun({ runId: 'run-799', inputs: { developer_effort: 'high' } });
+  assert.deepEqual(started[0].notices, [{ level: 'info', message: 'Inputs changed on this resume: developer_effort: default → high.' }]);
 });
 
 test('#799 the new run is told what changed', (t) => {

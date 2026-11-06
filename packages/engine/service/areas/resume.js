@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
+const { inputsRead } = require('../../engine/run/templates');
 const { isAnyQuotaError } = require('../../engine/providers');
 const { displayName } = require('@multiagent/shared/display-name');
 const runs = require('../../domains/run/runs');
@@ -22,14 +23,15 @@ const RESUME_INPUTS = [
 const offeredInputs = (wf) => Object.keys(wf.inputs || {}).filter((k) => RESUME_INPUTS.includes(k));
 
 // #799: whether a workflow's agent setting (its model, its effort) reads one of these inputs
-const readsInput = (value, names) => (String(value ?? '').match(/\binputs\.\w+/g) || []).some((x) => names.includes(x.slice('inputs.'.length)));
+const readsInput = (value, names) => inputsRead(value).some((x) => names.includes(x));
 
 // #799: the value an input stood for in the run: an agent override (the run's choice, or a fallback
-// it took) is applied over the inputs, so the agent ran on the override's value, not the input's
+// it took) is applied over the inputs, so the agent ran on the override's value, not the input's.
+// A blank override (effort: '') is the provider's default, which the inputs call `default`.
 function inputInEffect(spec, wf, key) {
   for (const [agent, override] of Object.entries(spec.agentOverrides || {})) {
     const setting = ['model', 'effort'].find((s) => override[s] != null && readsInput(wf.agents?.[agent]?.[s], [key]));
-    if (setting) return override[setting];
+    if (setting) return override[setting] || 'default';
   }
   return spec.inputs[key] ?? wf.inputs?.[key]?.default;
 }

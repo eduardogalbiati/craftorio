@@ -224,8 +224,12 @@ function testsPlan(defs, given, resolved) {
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 
+// The names of the inputs a template reads ({{ inputs.<name> }})
+const inputsRead = (template) => [...String(template ?? '').matchAll(/\binputs\.([A-Za-z0-9_]+)/g)].map((m) => m[1]);
+
 module.exports = {
   evalExpr,
+  inputsRead,
   render,
   SHELL_SAFE_FILTERS,
   testsPlan,
