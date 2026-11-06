@@ -995,7 +995,10 @@ test('backlog.css (#193): a long reason, note, error and input badge wrap or are
 
 // ---- #195: a workflow that pushes while the default development workflow merges locally -----------
 
-test('html: an item whose workflow pushes (remote) while the default is local gets the push badge, naming the default in its tooltip', () => {
+// #792: every item that merges or opens a PR has the ending badge; #195's explanation is its title
+const endingBadge = (html) => html.match(/<[^>]*data-testid="roadmap-item-ending"[^>]*>/)?.[0] || '';
+
+test('html: an item whose workflow pushes (remote) while the default is local gets the PR ending badge, naming the default in its tooltip', () => {
   const { BacklogRoadmap, sandbox } = loadRoadmap({ listWorkflows: async () => [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }] });
   sandbox.state.settings = { defaultWorkflow: null };
   sandbox.state.workflows = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
@@ -1004,12 +1007,12 @@ test('html: an item whose workflow pushes (remote) while the default is local ge
   BacklogRoadmap.html(data, () => {}, SHOW_ALL); // kicks off loadWorkflows (the module's own cache)
   return settle().then(() => {
     const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-    assert.match(html, /class="badge rm-wf rm-wf-push"/);
-    assert.match(html, /merges locally/);
+    assert.match(endingBadge(html), /data-ending="pr"/);
+    assert.match(endingBadge(html), /merges locally/);
   });
 });
 
-test('html: an item already on the default (local) workflow gets no push badge', () => {
+test('html: an item already on the default (local) workflow gets the local ending badge, without #195\'s explanation', () => {
   const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'feature.yaml', name: 'Software development (local)', merge: 'local' }];
   const { BacklogRoadmap, sandbox } = loadRoadmap({ listWorkflows: async () => list });
   sandbox.state.settings = { defaultWorkflow: null };
@@ -1019,7 +1022,8 @@ test('html: an item already on the default (local) workflow gets no push badge',
   BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   return settle().then(() => {
     const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-    assert.doesNotMatch(html, /rm-wf-push/);
+    assert.match(endingBadge(html), /data-ending="local"/);
+    assert.doesNotMatch(endingBadge(html), /default/i);
   });
 });
 
