@@ -50,12 +50,16 @@ Read when running from source; the packaged app ignores the ones marked "source 
 `ai-development-remote-hero` workflow: it pushes the run's branch, opens a pull request and stops at
 Team review, where the maintainer takes over.
 
-1. Add your clone as a project in the app.
+1. Add your clone as a project in the app. The repository's manifest (`.multiagent/project.yaml`)
+   names `ai-development-remote-hero` as the project's default workflow and as the workflow of a
+   Feature: the import sets both, nothing to configure by hand.
 2. On the Workflows screen, accept `ai-development-remote-hero`. Accept it again whenever the file changes.
-3. Plan it from the Backlog or the Roadmap, or make it the project's default. The Start drawer lists the workspace's workflows only.
+3. Plan it from the Backlog or the Roadmap. The Start drawer lists the workspace's workflows only.
 
-Avoid `feature` and `fix` in Local mode here: they merge into your local `main`, GitHub refuses the
-push, and the run still ends with your work only on your machine.
+A bug fix lands here through the manifest's Fix workflow: `fix` in Remote mode, which pushes a
+branch and opens a pull request for the maintainer. Avoid `feature` and `fix` in Local mode here:
+they merge into your local `main`, GitHub refuses the push, and the run still ends with your work
+only on your machine.
 
 ## Checks
 

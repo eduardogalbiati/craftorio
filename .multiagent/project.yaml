@@ -2,8 +2,14 @@
 # A bundled workflow by name; the repository's own copy by file (under .multiagent/workflows/), which
 # the owner accepts per commit on the Workflows screen. The owner's per-agent model choices stay in
 # the workspace (workflows/<name>.yaml there), never here.
+# #790 `default`: the project's default development workflow (a clone takes it). #791 `kinds`: the
+# workflow of each kind of issue; `fix` in Remote mode because `main` is protected (a pull request).
 version: 1
 requires: ">=1.1"
+default: ai-development-remote-hero
+kinds:
+  feature: { name: ai-development-remote-hero }
+  fix: { name: fix, mode: remote }
 workflows:
   - name: backlog-refresh
     category: intake

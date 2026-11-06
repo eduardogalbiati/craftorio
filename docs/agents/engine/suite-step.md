@@ -64,8 +64,8 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   none while the roadmap plans that issue already, nor for an issue a live run works on, #527; the
   item is marked `source: 'base-health'`, and the dispatcher skips it with a log line instead of
   pausing the roadmap when its issue "already has a live run"). The fix item runs the project's default
-  development workflow (Settings › General › Backlog `defaultWorkflow`, #195, through
-  `DefaultWorkflow.resolve`, #413; unset or missing, its fallback, the local workflow). A red or failed check notifies the owner.
+  development workflow (`projects.projectDefaultWorkflow(p)`, #413, #790: the project's own, then its
+  manifest's `default`, then its first build workflow, then `feature`; no global setting). A red or failed check notifies the owner.
   It never pushes, never answers a gate and never changes a running item. The Roadmap bar shows
   "N known failures on the base" (`backlog:get` `baseFailures`). The
   suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch

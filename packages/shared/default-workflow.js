@@ -1,15 +1,33 @@
 // The default development workflow (#195): the one used wherever a workflow is not picked by hand
 // (the Product Owner's plans and its heuristic plan, Split + roadmap, Create + roadmap, the Assign
-// dialog with nothing remembered). Settings › General › Backlog saves it in the workspace
-// (settings.defaultWorkflow); unset, or naming a workflow that no longer exists, it falls back to the
-// local workflow when the workspace has it (no push, no PR, no CI minutes), else the GitHub one.
-// - resolve(setting, files): { file, missing } (missing: the saved file that no longer exists);
+// dialog with nothing remembered). #790: it comes from the project, never from a global setting:
+// projectDefault(project, manifestDefault) is the one order everywhere (the project's own
+// `defaultWorkflow`, the repository manifest's `default`, the first build workflow of the project's
+// set, `feature`); the engine's projects.projectDefaultWorkflow reads the manifest for it.
+// - resolve(given, files): { file, missing } (missing: the given file that no longer exists; the
+//   fallback is the local workflow when `files` has it, else the first);
 // - mergeOf(wf): how a workflow's work lands: 'local' (merged into the local base, no push),
 //   'remote' (pushed: a branch and a PR/MR) or 'none' (no worktree, or it never merges);
-// - current(): the renderer's default from state.settings and state.workflows (app.js globals);
-//   #486: the header project's own defaultWorkflow (state.projects) wins over Settings';
+// - current(): the renderer's default: the header project's (state.projects) through projectDefault,
+//   among state.workflows (app.js globals);
 // - firstBuild(set): a project's default without a given one (#486, packages/engine/domains/project/projects.js and the Overview);
 // - projectFirst(list): the pickers' workflows with the header project's set first (#486).
+// - #791 KINDS (feature, fix, refactor: the kinds of work the Product Owner tells apart) and
+//   kindEntry(project, manifest, kind) → { name, inputs }: the project's workflow of a kind, the rule
+//   the engine's projects.workflowForKind and the screens share (the project's own `workflowKinds`
+//   entry; for Feature its `defaultWorkflow`; the manifest's `kinds`; for Feature the manifest's
+//   `default`; the wizard's pick of that name with its variant's mode; last `feature` / `fix` in the
+//   project's way of working: the picks' mode, a fork, a repository (remote), else local);
+//   entryKind(kind): the kind whose entry serves it (a refactor uses the Feature entry);
+//   modeOfVariant(variant) / modeOfPicks(workflows): the local | remote | fork a wizard pick names
+//   (also project-run-defaults.js); installedFile(name, files): a workflow name's file, an old name's
+//   through its alias; kindTarget(entry, files) → { file, inputs }: what a kind's entry runs;
+//   KIND_ENTRIES (feature, fix): the kinds with an entry of their own, the map's keys;
+//   projectWorkflows(list, project, kinds): the workflows the Product Owner is offered: of `list`
+//   those that take a task and are not Plan & Design, in the project's set or named by its kinds or
+//   default; nothing of the project's known: every one of them.
+// - On the screens a project's manifest is the record's `manifest` ({ default, kinds }, added by
+//   projects:list, projects.withManifest): the same order as the engine's.
 // - #630: ALIASES / aliasOf(file): the old bundled names (software-development, the local heroes,
 //   multi-model-review, e2e-release) now mean feature.yaml or release.yaml with the inputs of the old
 //   variant; a saved setting, manifest or roadmap naming one still runs (workflows.js resolveWorkflow);
@@ -91,6 +109,78 @@
   /** #486: a project's default without a given one: the first development workflow of its set ([{ name, category }]). */
   const firstBuild = (workflows) => (workflows || []).find((w) => BUILD.includes(w?.category))?.name || null;
 
+  /** #790: a project's default workflow, a name without .yaml (the one order, see the header); `manifestDefault`: the manifest's `default`. */
+  function projectDefault(project, manifestDefault = null) {
+    return label(project?.defaultWorkflow) || label(manifestDefault) || firstBuild(project?.workflows) || 'feature';
+  }
+
+  // #791: the kinds of work (one per run) and the workflow a project gives each one
+  const KINDS = Object.freeze([
+    'feature',
+    'fix',
+    'refactor',
+  ]);
+  // the Workflows screen's Plan & Design section: never a development default
+  const PLANNING = ['plan'];
+  /** The mode of a wizard variant (local-code, remote-e2e, fork-code, #738), or null. */
+  const modeOfVariant = (v) => (String(v || '').match(/^(local|remote|fork)\b/) || [])[1] || null;
+  /** The mode the wizard picked for a project's workflows ([{ variant }]): the first variant that names one, or null. */
+  const modeOfPicks = (picks) => (picks || []).map((w) => modeOfVariant(w?.variant)).find(Boolean) || null;
+  /** #791: the kind whose entry serves `kind`: a refactor uses the Feature entry. */
+  const entryKind = (kind) => (kind === 'refactor' ? 'feature' : kind);
+  // #791: the kinds with an entry of their own: the only keys of a project's or a manifest's map
+  const KIND_ENTRIES = Object.freeze(KINDS.filter((kind) => entryKind(kind) === kind));
+  const entry =(name, inputs) => ({ name: label(name), inputs: { ...(inputs || {}) } });
+
+  /** #791: the project's workflow of `kind` → { name, inputs } (the order in the header); `manifest`: { default, kinds } or null. */
+  function kindEntry(project, manifest, kind) {
+    const k = entryKind(kind);
+    const own = project?.workflowKinds?.[k];
+    if (label(own?.name)) return entry(own.name, own.inputs);
+    const picks = project?.workflows || [];
+    const pickOf = (name) => picks.find((w) => label(w?.name) === name) || null;
+    const withPick = (name) => { const mode = modeOfVariant(pickOf(name)?.variant); return entry(name, mode ? { mode } : {}); };
+    if (k === 'feature' && label(project?.defaultWorkflow)) return withPick(label(project.defaultWorkflow));
+    const declared = manifest?.kinds?.[k];
+    if (label(declared?.name)) return entry(declared.name, declared.inputs);
+    if (k === 'feature' && label(manifest?.default)) return entry(manifest.default, {});
+    if (pickOf(k)) return withPick(k);
+    const mode = modeOfPicks(picks) || (project?.fork?.url ? 'fork' : project?.repo ? 'remote' : 'local');
+    return entry(k, { mode });
+  }
+
+  const fileName = (file) => String(file || '').replace(/^.*[\\/]/, '');
+  /** #791: the installed file of a workflow's name among `files`: `<name>.yaml`, else a repository copy of that name, else the file an old name means (ALIASES), else null. */
+  function installedFile(name, files) {
+    const own = label(name);
+    if (!own) return null;
+    const list = (files || []).map(String);
+    const alias = aliasOf(own)?.file;
+    return list.find((f) => f === `${own}.yaml`) || list.find((f) => label(fileName(f)) === own) || (alias && list.includes(alias) ? alias : null);
+  }
+
+  /** #791: what a kind's entry ({ name, inputs }) runs among `files` → { file, inputs }: an old name reached through its alias adds the alias's inputs under the entry's; a copy of that very name (a repository's) runs as it is. */
+  function kindTarget(given, files) {
+    const file = installedFile(given?.name, files);
+    const aliased = file && label(fileName(file)) !== label(given.name);
+    return { file, inputs: { ...(aliased ? aliasInputs(aliasOf(given.name), given.inputs) : given?.inputs) } };
+  }
+
+  const planning = (w) => PLANNING.includes(w?.category) || PLANNING.includes(w?.metadata?.category);
+  /** #791: the workflows the Product Owner is offered (see the header); `kinds`: the project's resolved kinds, by default its record's over its manifest's. */
+  function projectWorkflows(list, project, kinds = { ...project?.manifest?.kinds, ...project?.workflowKinds }) {
+    const usable = (list || []).filter((w) => !w.error && w.inputs?.task && !planning(w));
+    const names = new Set([
+      ...(project?.workflows || []).map((w) => label(w?.name)),
+      ...Object.values(kinds || {}).map((e) => label(e?.name)),
+      label(project?.defaultWorkflow),
+      label(project?.manifest?.default),
+    ].filter(Boolean).flatMap((n) => [n, label(aliasOf(n)?.file)].filter(Boolean)));
+    if (!names.size) return usable;
+    const own = usable.filter((w) => names.has(label(fileName(w.file))));
+    return own.length ? own : usable;
+  }
+
   // #486: the header's project record (window.CurrentProject, state.projects), null in Node
   function headerProject(g) {
     const id = root.CurrentProject?.get?.();
@@ -98,14 +188,16 @@
   }
 
   // The renderer's default: the workflows listed by api.listWorkflows (state.workflows, no pipelines).
-  // #486: the header project's defaultWorkflow first (project: false for Settings' own default).
-  function current({ project = true } = {}) {
+  // #486, #790: the header project's default (projectDefault, with its manifest's: the `manifest` that
+  // projects:list adds to the record), else `feature`; never a setting.
+  function current() {
     const g = typeof state !== 'undefined' ? state : {};
     const list = (g.workflows || []).filter((w) => !w.error);
     const files = list.map((w) => w.file);
-    const named = project && headerProject(g)?.defaultWorkflow ? `${label(headerProject(g).defaultWorkflow)}.yaml` : null;
-    const own = named && !files.includes(named) ? aliasOf(named)?.file || named : named;
-    const out = own && files.includes(own) ? { file: own, missing: null } : resolve(g.settings?.defaultWorkflow, files);
+    const project = headerProject(g);
+    const named = `${projectDefault(project, project?.manifest?.default)}.yaml`;
+    const own = !files.includes(named) ? aliasOf(named)?.file || named : named;
+    const out = resolve(own, files);
     const wf = list.find((w) => w.file === out.file);
     return { ...out, name: wf?.name || out.file, merge: wf?.merge || null };
   }
@@ -127,16 +219,26 @@
     aliasOf,
     ALIASES,
     BUILD,
+    KIND_ENTRIES,
+    KINDS,
     LOCAL,
     REMOTE,
     VALIDATION,
     current,
+    entryKind,
     firstBuild,
+    installedFile,
+    kindEntry,
+    kindTarget,
     label,
     mergeOf,
+    modeOfPicks,
+    modeOfVariant,
     namesOf,
     oldValidation,
+    projectDefault,
     projectFirst,
+    projectWorkflows,
     resolve,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

@@ -1,19 +1,6 @@
 Feature: Settings
   Settings save as soon as a choice is made, and the choice survives a reload.
 
-  # #759: since #630 software-development.yaml is only an alias of feature.yaml, so the select offers
-  # feature.yaml (the bundled catalog) and never the old name
-  @issue-222 @issue-195 @issue-759 @smoke
-  Scenario: Settings saves the default development workflow
-    Given the app is open
-    When I open "Settings" in the sidebar
-    And I open the "General" settings tab
-    And I choose "feature.yaml" as the default development workflow
-    And I reload the app
-    And I open "Settings" in the sidebar
-    And I open the "General" settings tab
-    Then the default development workflow is "feature.yaml"
-
   # Assumes Settings gets a "Phone gates" tab holding the phone gates section (#226)
   @issue-226
   Scenario: Settings shows a pairing code and a QR code for the phone gates page, with the setup steps

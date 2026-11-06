@@ -1,18 +1,21 @@
 // Service area: the open workspace ({ root, runs, repos, projects, skills, workflows, worktrees,
 // settings }, see packages/engine/domains/workspace/workspace.js). Opening one seeds the bundled skills, workflows, pipelines and
-// analysis seeds (#360), opens its index, moves a leftover Backlog queue into the roadmap once (#446)
-// and lets started roadmaps continue. `ctx.ws` is read at call
-// time: it changes with the workspace.
+// analysis seeds (#360), opens its index, moves a leftover Backlog queue into the roadmap once (#446),
+// moves an old global default workflow to the projects once (#790) and lets started roadmaps continue.
+// `ctx.ws` is read at call time: it changes with the workspace.
 
 const fs = require('fs');
 const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
 const pipelines = require('../../domains/workflow/pipelines');
+const { readManifest } = require('../../domains/project/project-manifest');
+const projects = require('../../domains/project/projects');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const seeds = require('../../domains/seed/seeds');
 const skills = require('../../domains/agents/skills');
 const { storeFor } = require('../../domains/workspace/store');
 const workflows = require('../../domains/workflow/workflows');
+const workspace = require('../../domains/workspace/workspace');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('../common');
 
 module.exports = (ctx) => {
@@ -56,6 +59,9 @@ module.exports = (ctx) => {
         onMoved: (id) => store?.dropLeftoverQueue(id),
       });
     } catch (e) { console.error('backlog queues:', e); }
+    // #790: the global default workflow became each project's: a project with no default of its own
+    // and no manifest default takes the old setting's value, once; the key leaves settings.json
+    try { migrateDefaultWorkflow(); } catch (e) { console.error('default workflow migration:', e); }
     // after an app update's restart (#279, areas/app-update.js): the roadmaps it paused run again,
     // before the dispatch below starts their stage
     ctx.appUpdateAfterRestart();
@@ -65,6 +71,22 @@ module.exports = (ctx) => {
     setTimeout(() => ctx.recoverLiveRuns(recovering)
       .then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e)), 0);
     return ws;
+  }
+
+  // #790: settings.json's old `defaultWorkflow` (the only place that may still read it, with
+  // workspace.js) → the projects without a default of their own, unless their manifest declares one;
+  // then settings.json is written without the key (writeSettings drops what DEFAULT_SETTINGS lacks)
+  function migrateDefaultWorkflow() {
+    const saved = workspace.savedSettings(ws);
+    if (!saved || !('defaultWorkflow' in saved)) return;
+    const legacy = String(saved.defaultWorkflow ?? '').trim().replace(/\.ya?ml$/i, '');
+    if (legacy) {
+      for (const p of projects.listProjects(ws.projects)) {
+        if (p.error || p.defaultWorkflow || (p.folder && readManifest(p.folder).default)) continue;
+        projects.updateProject(ws.projects, p.id, { defaultWorkflow: legacy });
+      }
+    }
+    workspace.writeSettings(ws, {});
   }
 
   // Workflows are read from the workspace; the bundled copy is a fallback for runs whose workflow

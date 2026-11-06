@@ -49,7 +49,10 @@ const runs = require('../../domains/run/runs');
 const simulation = require('../../engine/simulation');
 const supervisor = require('../../domains/supervisor/supervisor');
 const usage = require('../../domains/usage/usage');
-const { runDefaultsNow } = require('../seed-runs');
+const {
+  productOwnerWorkflows,
+  runDefaultsNow,
+} = require('../seed-runs');
 const workspace = require('../../domains/workspace/workspace');
 const { createBridge, mcpCommand } = require('../../domains/supervisor/supervisor-bridge');
 const { createWake } = require('../../domains/oracle/oracle-wake');
@@ -358,8 +361,7 @@ module.exports = (ctx) => {
       backlogDir: ctx.ws.backlog, projectId: id, runsDir: ctx.ws.runs, question, data,
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
       runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
-      workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
-      defaultWorkflow: projects.projectDefaultWorkflow(p, settings.defaultWorkflow), // #195; #486: the project's own first
+      ...productOwnerWorkflows(ctx, p), // #790, #791: the project's workflows, its default and its kinds
       folder: p.folder, agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
       budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),

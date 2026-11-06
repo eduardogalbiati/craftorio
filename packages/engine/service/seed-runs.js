@@ -7,9 +7,12 @@
 // state lives per service context (a WeakMap on ctx), read at call time.
 // runDefaultsOf (#735): a project's run defaults over its last ways-of-working profile, for the run
 // dialog's hints, the Backlog's queue and the Roadmap.
+// productOwnerWorkflows (#790, #791): what the Product Owner may plan on for a project (the channel
+// po:ask, the chains, the live roadmap and the Oracle give it the same).
 
 const { execFile, exec: execShell } = require('child_process');
 const path = require('path');
+const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const agents = require('../domains/agents/agents');
 const oracleSeeds = require('../domains/oracle/oracle-seeds');
 const projects = require('../domains/project/projects');
@@ -137,10 +140,42 @@ function runDefaultsNow(ctx, project) {
   return runDefaults.runDefaultsWith({ project, profile: runDefaults.savedProfile(seedsRoot(ctx), project.id) });
 }
 
+/**
+ * #790, #791: the usable workflows of a project: the workspace's and its repository's (#485), each file
+ * once, as the Backlog lists them. A default or a kind may name a workflow only the repository declares:
+ * without the project's listing DefaultWorkflow.resolve would fall back to feature.yaml.
+ */
+function projectListing(ctx, project) {
+  const list = ctx.listWorkflows?.(project?.id ? { projectId: project.id } : {}) || [];
+  return [...new Map(list.filter((w) => !w.error).map((w) => [w.file, w])).values()];
+}
+
+/**
+ * #790, #791: the Product Owner's workflow options for a project: only the project's workflows
+ * (DefaultWorkflow.projectWorkflows of projectListing), its default (projectDefaultWorkflow, the
+ * project order, never a setting) and the workflow and inputs of a Feature and a Fix
+ * (projects.workflowForKind, already resolved: the manifest is read here, not by the Product Owner).
+ * `chosen`: a workflow the owner picked (#235, the question's or the last recorded one): it stays on
+ * the list even outside the project's, the owner's choice is never dropped.
+ */
+function productOwnerWorkflows(ctx, project, chosen = null) {
+  const workflowKinds = project ? { feature: projects.workflowForKind(project, 'feature'), fix: projects.workflowForKind(project, 'fix') } : null;
+  const all = projectListing(ctx, project);
+  const own = DefaultWorkflow.projectWorkflows(all, project, workflowKinds);
+  const picked = own.some((w) => w.file === chosen) ? null : all.find((w) => w.file === chosen && w.inputs?.task);
+  return {
+    workflows: picked ? [...own, picked] : own,
+    defaultWorkflow: projects.projectDefaultWorkflow(project),
+    workflowKinds,
+  };
+}
+
 module.exports = {
   commitGone,
   commitsSince,
   git,
+  productOwnerWorkflows,
+  projectListing,
   projectOf,
   runDefaultsNow,
   runDefaultsOf,

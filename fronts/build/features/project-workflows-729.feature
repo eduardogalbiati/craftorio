@@ -4,7 +4,7 @@ Feature: A project's workflows, as cards on its Overview
   "Default" badge on the project's default, and the actions "Make default" and "Remove"), instead of
   every installed workflow as a checkbox. "+ Add a workflow" opens a dialog with the installed
   workflows not on the project yet, by category, with a search; picking one adds its card.
-  A project with no workflow says new roadmap items use the Settings default.
+  A project with no workflow says so and offers to add one (#790: no default in Settings any more).
   The demo project "demo-app" (features/support/app.js) starts with no workflow of its own.
 
   # The block's baseline (features/__screenshots__, created on purpose with
@@ -44,11 +44,11 @@ Feature: A project's workflows, as cards on its Overview
     Then the project's Workflows block shows exactly the cards "feature", "fix" and "refactor"
 
   @issue-729
-  Scenario: A project with no workflow says new items use the Settings default and offers to add one
+  Scenario: A project with no workflow says so and offers to add one
     Given the app is open
     And the demo project has no workflow
     When I open "Projects" in the sidebar
     And I open the project "demo-app" from the Projects screen
-    Then the project's Workflows block says "No workflow yet: new roadmap items use the Settings default"
+    Then the project's Workflows block says "No workflow yet"
     And the project's Workflows block shows no workflow card
     And the project's Workflows block offers "+ Add a workflow"

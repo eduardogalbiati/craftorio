@@ -18,8 +18,8 @@
 //     `defaultWorkflow` (a workflow name; `.yaml` tolerated); the project record keeps both. Without
 //     a `defaultWorkflow`, the default is the first checked workflow whose category is solo or team.
 //     Created without workflows, the record is as today (no workflow set, no default).
-//   The project's defaultWorkflow replaces Settings' default for that project's new items: the
-//     Product Owner's roadmap.add (po:request) and its simulated plan (po:ask).
+//   The project's defaultWorkflow decides that project's new items: the Product Owner's roadmap.add
+//     (po:request) and its simulated plan (po:ask). #790: without one, `feature`, never a setting.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -334,15 +334,13 @@ test('#729 projects:update keeps each workflow\'s variant and CI pick, and drops
 
 const OTHER_WORKFLOW = (issueWorkflow) => issueWorkflow.replace('name: fixture-issue', 'name: fixture-other');
 
-// Two projects on one synced backlog each: `own` with defaultWorkflow fixture-other, `plain` without
-// one; Settings' default is fixture-issue.yaml.
+// Two projects on one synced backlog each: `own` with defaultWorkflow fixture-other, `plain` without one.
 async function twoProjects(t) {
   const { makeService, ISSUE_WORKFLOW } = require('./service/helpers');
   const { service: svc, api } = makeService(t);
   const ws = svc.workspace();
   fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
   fs.writeFileSync(path.join(ws.workflows, 'fixture-other.yaml'), OTHER_WORKFLOW(ISSUE_WORKFLOW));
-  await api['settings:set']({ defaultWorkflow: 'fixture-issue.yaml' });
   const issue = (number) => ({ number, title: `Issue ${number}`, state: 'open', url: `https://github.com/o/r/issues/${number}`, body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } });
   fs.mkdirSync(ws.backlog, { recursive: true });
   const make = async (name, extra) => {
@@ -357,12 +355,12 @@ async function twoProjects(t) {
 
 const itemWorkflows = (roadmap) => (roadmap?.stages || []).flatMap((s) => (s.items || []).map((x) => x.workflow));
 
-test('#486 the Product Owner\'s roadmap.add puts a new item on the project\'s default, not Settings\' default', async (t) => {
+test('#486 the Product Owner\'s roadmap.add puts a new item on the project\'s default', async (t) => {
   const { api, own, plain } = await twoProjects(t);
   const add = (p) => api['po:request']({ projectId: p.id, kind: 'roadmap.add', params: { issues: [1] }, reason: 'ready', from: 'oracle', ref: `r-${p.id}`, mock: true });
   const plainOut = await add(plain);
   assert.equal(plainOut.ok, true, JSON.stringify(plainOut));
-  assert.deepEqual(itemWorkflows(await api['roadmap:get']({ projectId: plain.id })), ['fixture-issue.yaml'], 'a project without a default keeps Settings\' default');
+  assert.deepEqual(itemWorkflows(await api['roadmap:get']({ projectId: plain.id })), ['feature.yaml'], 'a project without a default takes feature');
   const ownOut = await add(own);
   assert.equal(ownOut.ok, true, JSON.stringify(ownOut));
   assert.deepEqual(itemWorkflows(await api['roadmap:get']({ projectId: own.id })), ['fixture-other.yaml']);
@@ -374,7 +372,7 @@ test('#486 the Product Owner\'s simulated plan puts its groups on the project\'s
   const groupsOf = (out) => (out?.message?.answer?.groups || []).map((g) => g.workflow);
   const plainGroups = groupsOf(await ask(plain));
   assert.ok(plainGroups.length, 'the simulated plan has groups');
-  assert.deepEqual([...new Set(plainGroups)], ['fixture-issue.yaml'], 'without a project default: Settings\' default');
+  assert.deepEqual([...new Set(plainGroups)], ['feature.yaml'], 'without a project default: feature');
   const ownGroups = groupsOf(await ask(own));
   assert.ok(ownGroups.length, 'the simulated plan has groups');
   assert.deepEqual([...new Set(ownGroups)], ['fixture-other.yaml']);

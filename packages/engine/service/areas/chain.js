@@ -24,7 +24,10 @@ const projects = require('../../domains/project/projects');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
 const usage = require('../../domains/usage/usage');
-const { runDefaultsNow } = require('../seed-runs');
+const {
+  productOwnerWorkflows,
+  runDefaultsNow,
+} = require('../seed-runs');
 const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
 
@@ -187,8 +190,7 @@ module.exports = (ctx) => {
       data,
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === p.id),
       runs: runs.runsForProject(runs.listRuns(ws.runs), p),
-      workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
-      defaultWorkflow: projects.projectDefaultWorkflow(p, settings.defaultWorkflow), // #195; #486: the project's own first
+      ...productOwnerWorkflows(ctx, p), // #790, #791: the project's workflows, its default and its kinds
       folder: p.folder,
       agent: agents.readAgent(ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ws.skills, ctx.BUNDLED_SKILLS_DIR],

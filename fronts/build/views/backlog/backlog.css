@@ -27,6 +27,20 @@
 .po-group .po-list li { overflow-wrap: anywhere; }
 /* #216: the proposal card in sections: the workflow and its pills, Why / Mode / Files / Estimate / Cost, the warnings */
 .po-wf, .po-cost { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+/* #791: a recommendation's kind: a coloured badge with an icon and the kind's name (never colour alone), the
+   plan's summary by kind, its groups by kind, and the Feature | Fix | Outro control (the shared .seg) */
+.po-kind-badge { display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-weight: 600; border-color: transparent; }
+.po-kind-badge[data-kind="feature"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel)); }
+.po-kind-badge[data-kind="fix"] { color: var(--orange); background: color-mix(in srgb, var(--orange) 16%, var(--panel)); }
+.po-kind-badge[data-kind="refactor"] { color: var(--purple); background: color-mix(in srgb, var(--purple) 16%, var(--panel)); }
+.po-kind-badge[data-kind="other"] { color: var(--muted); background: color-mix(in srgb, var(--muted) 16%, var(--panel)); }
+.po-kind-icon { font-size: 12px; line-height: 1; }
+.po-kind-summary { font-weight: 600; }
+.po-kind-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.po-kind-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.po-kind-other { display: inline-flex; min-width: 0; flex: 1; }
+.po-kind-other[hidden] { display: none; }
+.po-kind-other select { max-width: 320px; min-width: 0; }
 /* #785: a recommendation's decisions: three titled groups of label / value lines, the form when editing */
 .po-decisions { display: grid; gap: 6px; min-width: 0; }
 .po-decision-group { display: grid; gap: 2px; min-width: 0; }

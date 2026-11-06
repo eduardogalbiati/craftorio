@@ -4,8 +4,13 @@
 // (the same place git URLs given as repo_path go); one without a repository gets an empty
 // <workspace>/projects/<id>/.
 // #486: a project keeps its workflow set (`workflows: [{ name, origin, category? }]`) and its
-// `defaultWorkflow` (a name, used instead of Settings' default for its new items); projectManifest
-// reads a repository's `.multiagent/project.yaml` before the project is created.
+// `defaultWorkflow` (a name); projectManifest reads a repository's `.multiagent/project.yaml` before
+// the project is created. #790: the default comes from the project and its manifest only
+// (projectDefaultWorkflow: the one order of packages/shared/default-workflow.js projectDefault, the
+// clone taking the manifest's `default`); #791: `workflowKinds` ({ feature?, fix?: { name, inputs } },
+// the clone saving the manifest's `kinds`) and workflowForKind(project, kind), the workflow and
+// inputs of a Feature or a Fix (DefaultWorkflow.kindEntry's order, the manifest read here);
+// withManifest(project): the record the screens get, with its manifest's `default` and `kinds`.
 // #639: the clone is a background job: a project has a `status` (`cloning | ready | failed`, none = ready),
 // `cloneError` the reason of a failed clone; a `cloning` record no job of this process runs (the app closed
 // during the clone) reads `failed`; retryClone clones a failed one again; checkAccess runs `git ls-remote`.
@@ -22,8 +27,15 @@ const { execGit, repoNameFromUrl } = require('../workspace/workspace');
 const { insideFolder } = require('../machine/platform-paths');
 const { childEnv, PLATFORM_CLIS } = require('../../engine/child-env');
 const { cleanConfig } = require('../local/local-preview');
-// #486: without a given default, the first checked development (solo, team or build) workflow
-const { firstBuild } = require('@multiagent/shared/default-workflow');
+// #486: without a given default, the first checked development (solo, team or build) workflow;
+// #790 / #791: the default's order and the kinds' (shared with the screens)
+const {
+  KIND_ENTRIES,
+  firstBuild,
+  kindEntry,
+  projectDefault,
+} = require('@multiagent/shared/default-workflow');
+const { readManifest } = require('./project-manifest');
 // #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery);
 // #633: the work models a project may keep
 const {
@@ -57,7 +69,8 @@ function patchMeta(dir, id, patch) {
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
 }
 
-// #639: the clone job: ends the record in ready (with the clone's manifest when no workflow was checked) or failed
+// #639: the clone job: ends the record in ready (with the clone's manifest when no workflow was checked) or failed.
+// #790: the manifest's `default` is the project's default (a given one wins); #791: its `kinds` map is saved too.
 function startClone(dir, id, { git, defaultWorkflow = null }) {
   const key = jobKey(dir, id);
   const job = (async () => {
@@ -66,8 +79,11 @@ function startClone(dir, id, { git, defaultWorkflow = null }) {
       await git(['clone', p.repo, p.folder], path.dirname(p.folder));
       const patch = { status: 'ready', cloneError: null };
       if (!cleanWorkflows(p.workflows).length) {
-        const workflows = cleanWorkflows((await projectManifest({ folder: p.folder }))?.workflows?.map((w) => ({ ...w, origin: 'manifest' })));
-        if (workflows.length) Object.assign(patch, { workflows, defaultWorkflow: cleanWorkflowName(defaultWorkflow) || firstBuild(workflows) });
+        const manifest = await projectManifest({ folder: p.folder });
+        const workflows = cleanWorkflows(manifest?.workflows?.map((w) => ({ ...w, origin: 'manifest' })));
+        if (workflows.length) Object.assign(patch, { workflows, defaultWorkflow: cleanWorkflowName(defaultWorkflow) || manifest.default || firstBuild(workflows) });
+        const workflowKinds = cleanWorkflowKinds(manifest?.kinds);
+        if (workflowKinds && !cleanWorkflowKinds(p.workflowKinds)) patch.workflowKinds = workflowKinds;
       }
       patchMeta(dir, id, patch);
     } catch (e) {
@@ -145,11 +161,13 @@ async function createProject(dir, data, { git = execGit, reposDir = null, cloneE
   // #486: the workflows checked in Create Project's Workflows block, and the project's default;
   // none checked for a repository being cloned (its manifest could not be read before): the clone job reads it
   const workflows = cleanWorkflows(data.workflows);
-  const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuild(workflows) : null;
+  const defaultWorkflow = cleanWorkflowName(data.defaultWorkflow) || (workflows.length ? firstBuild(workflows) : null);
+  // #791: the workflow of each kind, given (the wizard's or a caller's) or the manifest's at the clone
+  const workflowKinds = cleanWorkflowKinds(data.workflowKinds);
   // #745: the platform the wizard picked for a host its URL does not name; #735: the confirmed kind
   const platform = cleanPlatform(data.platform);
   const kind = cleanKind(data.kind);
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...(platform ? { platform } : {}), ...(kind ? { kind } : {}), ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(platform ? { platform } : {}), ...(kind ? { kind } : {}), ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), ...(workflowKinds ? { workflowKinds } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   if (project.status === 'cloning') startClone(dir, id, { git, defaultWorkflow: data.defaultWorkflow });
   return readProject(dir, id);
@@ -206,9 +224,7 @@ function updateProject(dir, id, patch) {
   if (patch.localPreviewConfirmed !== undefined) next.localPreviewConfirmed = patch.localPreviewConfirmed ? String(patch.localPreviewConfirmed) : null;
   // #485: the repository workflows the owner accepted, { <file>: { commit, blob } } (a changed file asks again)
   if (patch.acceptedWorkflows !== undefined) next.acceptedWorkflows = { ...(patch.acceptedWorkflows || {}) };
-  // #486: the project's workflow set ({ name, origin, category? }) and its default for new items
-  if (patch.workflows !== undefined) next.workflows = cleanWorkflows(patch.workflows);
-  if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
+  patchWorkflows(next, patch);
   // #360: each analysis seed's deterministic tool, { <seed id>: command }, run instead of the Oracle
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
   // #745: the project's git platform (github / gitlab) for a self-hosted host; null: read from the URL
@@ -225,6 +241,20 @@ function updateProject(dir, id, patch) {
   if (patch.folder !== undefined) moveFolder(next, cur, patch.folder, jobs.has(jobKey(dir, id)));
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);
+}
+
+// updateProject's workflows. #486: the project's set ({ name, origin, category? }) and its default for new
+// items; #791: the workflow and inputs of each kind of work ({ feature?, fix?: { name, inputs } }); null or
+// empty: none of its own. The Feature entry is the default workflow: whoever saves a new default (the
+// Overview's Make default and Remove, the wizard's Finish) moves a saved Feature entry to it, its inputs kept
+function patchWorkflows(next, patch) {
+  const before = next.defaultWorkflow;
+  if (patch.workflows !== undefined) next.workflows = cleanWorkflows(patch.workflows);
+  if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
+  if (patch.workflowKinds !== undefined) next.workflowKinds = cleanWorkflowKinds(patch.workflowKinds);
+  else if (next.workflowKinds?.feature && next.defaultWorkflow && next.defaultWorkflow !== before) {
+    next.workflowKinds = { ...next.workflowKinds, feature: { ...next.workflowKinds.feature, name: next.defaultWorkflow } };
+  }
 }
 
 // updateProject's folder change: the old folder joins previousFolders; #639: a project whose clone failed,
@@ -296,10 +326,48 @@ function cleanWorkflows(list) {
   return out;
 }
 
-/** #486: the workflow file a project's new items use (`<name>.yaml`), else `fallback` (Settings' default). */
-function projectDefaultWorkflow(project, fallback = null) {
-  const name = cleanWorkflowName(project?.defaultWorkflow);
-  return name ? `${name}.yaml` : fallback;
+// #791: { <kind>: { name, inputs } } with only the known kinds, each a workflow name and a plain object of inputs; null when empty
+function cleanWorkflowKinds(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out = {};
+  for (const kind of KIND_ENTRIES) {
+    const e = v[kind];
+    const name = cleanWorkflowName(typeof e === 'string' ? e : e?.name);
+    if (!name) continue;
+    const inputs = e?.inputs && typeof e.inputs === 'object' && !Array.isArray(e.inputs) ? e.inputs : {};
+    out[kind] = { name, inputs: JSON.parse(JSON.stringify(inputs)) };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+// #790: the repository's manifest of a project's folder (no folder, or none there: nothing declared)
+const manifestOf = (project) => (project?.folder ? readManifest(project.folder) : null);
+
+/**
+ * #486, #790: the workflow file a project's new items use (`<name>.yaml`), always a value: the project's
+ * `defaultWorkflow`, its manifest's `default`, the first build workflow of its set, `feature.yaml`
+ * (DefaultWorkflow.projectDefault). Never a setting: a second argument is ignored.
+ */
+function projectDefaultWorkflow(project) {
+  return `${projectDefault(project, manifestOf(project)?.default)}.yaml`;
+}
+
+/**
+ * #791: the project's workflow of a kind of work (`feature` | `fix` | `refactor`, the last one the
+ * Feature entry) → { name, inputs }: the record's `workflowKinds`, the manifest's `kinds`, the
+ * wizard's picks, last `feature` / `fix` in the project's way of working (DefaultWorkflow.kindEntry).
+ */
+function workflowForKind(project, kind) {
+  return kindEntry(project, manifestOf(project), kind);
+}
+
+/**
+ * #790, #791: a project's record for the screens, which read no file: with `manifest` ({ default, kinds })
+ * when its repository declares either, so DefaultWorkflow.current and kindEntry follow the engine's order.
+ */
+function withManifest(project) {
+  const m = manifestOf(project);
+  return m?.default || Object.keys(m?.kinds || {}).length ? { ...project, manifest: { default: m.default, kinds: m.kinds } } : project;
 }
 
 const AFTER_CLONE = 'The repository could not be read without credentials: its workflows manifest will be read after cloning.';
@@ -309,14 +377,15 @@ const AFTER_CLONE = 'The repository could not be read without credentials: its w
  * project exists: from a local folder, or from a remote repository through its provider's contents
  * API (gh api / glab api), else an unauthenticated raw read for a public one. Never clones.
  * @param {{ url?: string, folder?: string }} target
- * @returns {Promise<{ workflows: object[], errors?: string[], pending?: true, message?: string }|null>}
- *   null: no manifest; errors: the manifest's own (invalid YAML, an unknown category), shown by the block
+ * @returns {Promise<{ workflows: object[], default: string|null, kinds: object, errors?: string[], pending?: true, message?: string }|null>}
+ *   null: no manifest; errors: the manifest's own (invalid YAML, an unknown category), shown by the block;
+ *   #790 / #791: `default` and `kinds` as the manifest declares them (what the wizard and the project page read)
  */
 async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) {
   const { MANIFEST_FILE, parseManifest } = require('./project-manifest');
   const entries = (text) => {
-    const { workflows, errors } = parseManifest(text);
-    return { workflows, ...(errors.length ? { errors } : {}) };
+    const { workflows, default: def, kinds, errors } = parseManifest(text);
+    return { workflows, default: def, kinds, ...(errors.length ? { errors } : {}) };
   };
   if (target?.folder) {
     const file = path.join(String(target.folder), ...MANIFEST_FILE.split('/'));
@@ -343,7 +412,7 @@ async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) 
     const res = typeof fetch === 'function' ? await fetch(raw) : null;
     if (res?.ok) return entries(await res.text());
   } catch { /* offline: read after cloning */ }
-  return { workflows: [], pending: true, message: AFTER_CLONE };
+  return { workflows: [], default: null, kinds: {}, pending: true, message: AFTER_CLONE };
 }
 
 // gh api's contents JSON ({ content: base64 }) or a raw file's text
@@ -403,4 +472,6 @@ module.exports = {
   retryClone,
   slugify,
   updateProject,
+  withManifest,
+  workflowForKind,
 };

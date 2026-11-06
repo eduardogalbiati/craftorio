@@ -1,6 +1,6 @@
 /* global api */
-// Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
-// (#195, default-workflow.js), voice input, the workspace index and
+// Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults
+// (#790: the default development workflow is each project's, not a setting), voice input, the workspace index and
 // its Rebuild index, packages/engine/domains/workspace/store.js), Agents & CLIs (installed CLIs and
 // their sign-in on the engine's machine, #740: settings-clis.js, also window.Settings.open's deep link), Execution (where the engine runs (settings-engine.js), developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
@@ -82,7 +82,6 @@ async function renderSettings() {
   platform.value = state.settings.backlogPlatform || window.Platforms.DEFAULT_PLATFORM;
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   state.workflows = await api.listWorkflows();
-  renderDefaultWorkflow();
   $('#set-backlog-refresh').value = String(state.settings.backlogRefreshHours ?? 24);
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
@@ -101,20 +100,6 @@ async function renderSettings() {
   renderIndexStatus();
   renderDepsCache();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
-}
-
-// Settings › General › Backlog › Default development workflow (#195, settings.defaultWorkflow): the
-// workflows that take a task (no pipelines), the resolved default selected (DefaultWorkflow); a saved
-// workflow that was deleted or renamed falls back, and the note says so.
-function renderDefaultWorkflow() {
-  const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
-  const cur = DefaultWorkflow.current({ project: false });
-  const sel = $('#set-default-workflow');
-  sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name || w.file)} (${esc(w.file)}${w.merge === 'local' ? t('settings.backlog.local_merge') : w.merge === 'remote' ? t('settings.backlog.remote_merge') : ''})</option>`).join('');
-  sel.value = cur.file;
-  const note = $('#set-default-wf-note');
-  note.textContent = cur.missing ? t('settings.backlog.workflow_missing', { missing: cur.missing, file: cur.file }) : '';
-  note.classList.toggle('hidden', !cur.missing);
 }
 
 // Settings › Agents & CLIs › Fallbacks and Limits per model (#262): settings.providers.<p>.fallbacks
@@ -633,7 +618,6 @@ registerView({
     };
     $('#set-time-zone').onchange = async (e) => { state.settings = await api.setSettings({ timeZone: e.target.value }); renderTimeZone(); TimeZone.notify(); };
     $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
-    $('#set-default-workflow').onchange = async (e) => { state.settings = await api.setSettings({ defaultWorkflow: e.target.value || null }); renderDefaultWorkflow(); };
     $('#set-backlog-refresh').onchange = async (e) => { state.settings = await api.setSettings({ backlogRefreshHours: Number(e.target.value) || 0 }); };
     $('#set-backlog-group').onchange = async (e) => {
       const n = Math.floor(Number(e.target.value));
