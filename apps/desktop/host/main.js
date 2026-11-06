@@ -129,7 +129,7 @@ let win = null;
 // reads the stored session as soon as it is created (reading it too early lost the session and
 // asked for a new sign-in at every start).
 const devEnv = app.isPackaged ? {} : process.env;
-const authOff = devEnv.MULTIAGENT_AUTH === 'off';
+const authOff = !authConfig.enabled || devEnv.MULTIAGENT_AUTH === 'off';
 let auth = null;
 async function createAccount() {
   // the async check: the sync isEncryptionAvailable is deprecated on Electron 45 (#578); read once,
@@ -142,8 +142,8 @@ async function createAccount() {
     url: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_URL || authConfig.url,
     key: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_KEY || authConfig.publishableKey,
     providers: authConfig.providers,
-    // development builds without a Supabase project run without sign-in; the packaged app never does
-    required: app.isPackaged || (!!(authConfig.url || devEnv.MULTIAGENT_SUPABASE_URL) && !authOff),
+    // development builds without a Supabase project run without sign-in; with sign-in on, the packaged app never does
+    required: !authOff && (app.isPackaged || !!(authConfig.url || devEnv.MULTIAGENT_SUPABASE_URL)),
     storage: fileStorage(path.join(app.getPath('userData'), 'account.bin'), {
       encrypt: (s) => (encrypted ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8')),
       decrypt: (b) => (encrypted ? safeStorage.decryptString(b) : b.toString('utf8')),
