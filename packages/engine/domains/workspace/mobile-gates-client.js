@@ -1,11 +1,13 @@
 // Phone gates' inline browser client. Serialized by mobile-gates-page.js under a CSP nonce;
 // no app API or external scripts. Reads can be retried, but a lost answer is never replayed.
-function phoneGatesClient(text) {
+function phoneGatesClient(text, state, progress) {
+  const gateProgress = progress(text, state);
   const key = 'multiagent-phone-token';
   const byId = (id) => document.getElementById(id);
   const msg = byId('msg');
   const retry = byId('retry');
   let busy = false;
+  let lastRead = null;
 
   function status(name, error = false, focus = false) {
     msg.setAttribute('role', error ? 'alert' : 'status');
@@ -34,38 +36,53 @@ function phoneGatesClient(text) {
   function showPair(reason) {
     byId('pairing').hidden = false;
     byId('gates').replaceChildren();
+    byId('list-updated').textContent = '';
+    lastRead = null;
     retry.hidden = true;
     status(reason || 'unpaired', !!reason);
   }
 
-  function card(gate) {
-    const item = document.createElement('article');
-    item.className = 'card';
-    const title = document.createElement('h2');
-    title.textContent = gate.title || gate.runId;
-    const step = document.createElement('p');
-    step.className = 'muted';
-    step.textContent = gate.stepId;
-    const summary = document.createElement('p');
-    summary.textContent = gate.headline || gate.message;
-    const link = document.createElement('a');
+  function card(gate, existing) {
+    const item = existing || document.createElement('article');
+    if (!existing) {
+      item.className = 'card';
+      item.dataset.key = JSON.stringify([gate.runId, gate.approvalId]);
+      for (const tag of ['h2', 'p', 'p', 'a']) item.append(document.createElement(tag));
+    }
+    item.querySelector('h2').textContent = gate.title || gate.runId;
+    const paragraphs = item.querySelectorAll('p');
+    const since = Date.parse(gate.requestedAt);
+    const minutes = Math.max(0, Math.floor((gate.serverNow - since) / 60000));
+    const waiting = Number.isFinite(minutes) ? text.waiting_minutes.replace('{minutes}', String(minutes)) : text.waiting_unknown;
+    paragraphs[0].className = 'muted queue-meta';
+    paragraphs[0].textContent = [gate.projectId || text.project_unknown,
+      ...(gate.issues || []).map((i) => '#' + i.number), gate.stepId, waiting].filter(Boolean).join(' · ');
+    paragraphs[1].textContent = gate.headline || gate.message;
+    const link = item.querySelector('a');
     link.className = 'btn primary';
     link.textContent = text.open;
     link.href = gate.url;
-    item.append(title, step, summary, link);
     return item;
   }
 
-  async function load(focus = false) {
-    if (busy) return;
+  function paintCards(gates) {
+    const out = byId('gates');
+    const existing = [...out.querySelectorAll('article')];
+    const next = gates.map((g) => card(g, existing.find((item) => item.dataset.key === JSON.stringify([g.runId, g.approvalId]))));
+    // Reuse existing nodes so focus is not lost when a read refreshes a signed link.
+    for (const item of existing) if (!next.includes(item)) item.remove();
+    for (const item of next) if (!out.contains(item)) out.append(item);
+  }
+
+  async function load(focus = false, automatic = false) {
+    if (busy || (automatic && document.hidden)) return;
     busy = true;
     retry.disabled = true;
     try {
       const tk = token();
       if (!tk) { showPair(); return; }
       byId('pairing').hidden = true;
-      byId('gates').replaceChildren();
-      status('loading');
+      if (!automatic) status('loading');
       const r = await request('/gates.json', { headers: { Authorization: 'Bearer ' + tk } });
       if (r.status === 401) {
         localStorage.removeItem(key);
@@ -73,12 +90,15 @@ function phoneGatesClient(text) {
         return;
       }
       if (!r.ok || !Array.isArray(r.data.gates)) throw new Error('Unreadable gates');
-      byId('gates').replaceChildren(...r.data.gates.map(card));
+      paintCards(r.data.gates);
+      lastRead = new Date().toLocaleTimeString(document.documentElement.lang || 'en', { hour: '2-digit', minute: '2-digit' });
+      byId('list-updated').textContent = text.updated.replace('{time}', lastRead);
       status(r.data.gates.length ? 'list_ready' : 'empty', false, focus);
       retry.textContent = text.refresh;
       retry.hidden = false;
     } catch (error) {
-      status(error.storage ? 'storage_unavailable' : 'list_failed', true, focus);
+      if (lastRead) byId('list-updated').textContent = text.stale.replace('{time}', lastRead);
+      status(error?.storage ? 'storage_unavailable' : 'list_failed', true, focus);
       retry.textContent = text.retry;
       retry.hidden = false;
     } finally {
@@ -132,6 +152,7 @@ function phoneGatesClient(text) {
     form.onsubmit = async (event) => {
       event.preventDefault();
       if (busy || locked) return;
+      if (gateProgress.expired()) { status('link_expired', true, true); return; }
       busy = true;
       button.disabled = true;
       status('sending');
@@ -149,11 +170,13 @@ function phoneGatesClient(text) {
             body: JSON.stringify({ t: d.t, answer: d.answer, confirm: true, feedback: byId('fb').value || undefined }),
           });
           if (r.ok && r.data.ok === true) {
+            gateProgress.finish();
             form.remove();
             status('answered', false, true);
             return;
           }
           result = answerRefused(r.status);
+          if (r.status === 409) gateProgress.finish();
           correctable = r.status === 400;
         }
       } catch {
@@ -173,6 +196,9 @@ function phoneGatesClient(text) {
   }
 
   if (byId('confirm')) { bindConfirmation(); return; }
+  if (!byId('pf')) return;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(false, true); });
+  globalThis.addEventListener?.('online', () => load(false, true));
   retry.onclick = () => load(true);
   byId('pf').onsubmit = (event) => {
     event.preventDefault();

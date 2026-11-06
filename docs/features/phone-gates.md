@@ -42,3 +42,17 @@ If the connection fails after you confirm an answer, its result may be unknown: 
 already have received it. **Check gate status** only reads the gate; it never resends the answer.
 If the gate is still open, choose and confirm again yourself. If it has ended, the page says so
 without claiming which answer ended it. There is no offline queue or automatic retry of answers.
+
+The list identifies each gate's project, issues and wait time. It refreshes when you return to the
+visible tab or the connection comes back. A failed read keeps the last list visible and marks it
+outdated; refreshing never sends an answer or changes the field you are editing.
+
+The confirmation accepts a multiline note with a character count. Its draft is scoped to that gate
+in this browser tab and expires after 24 hours. Going back or reloading restores only the note, never
+a chosen answer. A confirmed answer or an ended gate removes its draft. If the browser blocks draft
+storage, the field still works and the page asks you to keep a copy before leaving.
+
+An open gate shows its signed link's remaining lifetime using the server's time. When it expires,
+confirmation is disabled and the page offers the list for a fresh link; the note stays in the tab.
+The server still checks the signature and expiration on every answer. Keeping the page open does
+not renew its authorization.

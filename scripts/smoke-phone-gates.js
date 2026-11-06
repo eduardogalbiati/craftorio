@@ -24,7 +24,7 @@ async function runChecks(win) {
   const layout = await win.webContents.executeJavaScript(`({
     width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
     meaningful: !!document.querySelector('[data-testid="phone-gates-page"] h1')?.textContent,
-    labels: [...document.querySelectorAll('input')].every(x => !!document.querySelector('label[for="'+x.id+'"]')),
+    labels: [...document.querySelectorAll('input,textarea')].every(x => !!document.querySelector('label[for="'+x.id+'"]')),
     targets: [...document.querySelectorAll('button:not(:disabled),a.btn')].filter(x=>x.getClientRects().length).every(x=>{const b=x.getBoundingClientRect();return b.width>=44&&b.height>=44})
   })`);
   assert.ok(layout.scrollWidth <= layout.width, 'no page overflow');
@@ -78,6 +78,18 @@ async function scenarios(win, fixture, out) {
   await win.loadURL(fixture.link());
   await win.loadURL(await js(`document.querySelector('.btns a[href*="answer=redo"]').href`));
   await capture('08-confirmation-pt-BR');
+  await js(`document.getElementById('fb').value=${JSON.stringify("Please verify the narrow-screen captures.\nKeep the full report available.")};document.getElementById('fb').dispatchEvent(new Event('input',{bubbles:true}))`);
+  await win.loadURL(fixture.link());
+  await win.loadURL(await js(`document.querySelector('.btns a[href*="answer=redo"]').href`));
+  assert.equal(await js('document.getElementById("fb").value.includes("Keep the full report")'), true);
+  await js('document.getElementById("fb").focus()');
+  await capture('08-draft-restored');
+  await js('window.actualNow=Date.now;Date.now=()=>window.actualNow()+31*60000;undefined');
+  await waitFor(win, '!document.getElementById("fresh-link").hidden');
+  assert.equal(await js('document.getElementById("answer-submit").disabled'), true);
+  assert.equal(fixture.state.answers.length, 0);
+  await capture('08-link-expired-with-note');
+  await win.loadURL(fixture.link() + '&answer=redo');
   await js(`window.originalFetch=window.fetch;window.fetch=async(...args)=>{await window.originalFetch(...args);throw new Error('simulated lost response')};document.getElementById('fb').value='Please verify the narrow-screen captures.';document.getElementById('confirm').requestSubmit()`);
   await waitFor(win, '!document.getElementById("recover").hidden');
   assert.equal(await js('document.activeElement.id'), 'msg');
