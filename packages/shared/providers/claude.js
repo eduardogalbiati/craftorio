@@ -224,8 +224,9 @@
     subagentsNote: `subagents: ${SUBAGENT_TOOLS.join('/')} tool offered`,
     parse,
     seedTotal,
-    // #262: "Claude AI usage limit reached|<epoch>", "5-hour limit reached ∙ resets 3pm", "You've hit your limit"
-    quotaPattern: /\blimit reached\b|you['’]ve hit your limit/i,
+    // #262: "Claude AI usage limit reached|<epoch>", "5-hour limit reached ∙ resets 3pm", "You've hit your limit";
+    // #799: "You've hit your weekly limit"
+    quotaPattern: /\blimit reached\b|you['’]ve hit your (?:\w+ )?limit/i,
     usageLimitMessage: 'Claude AI usage limit reached|1760227200',
     // #312: when the limit resets (epoch ms), read from its message, or null: "…|<epoch s>", or
     // "resets 3pm" (the next 15:00, local)

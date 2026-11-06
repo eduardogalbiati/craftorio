@@ -4389,6 +4389,7 @@
   "resume_dialog.runs_again": "Executa de novo:",
   "resume_dialog.simulated": "Simulada",
   "resume_dialog.starting": "Iniciando…",
+  "resume_dialog.the_providers_limit_has_to_have_reset": "). O limite do provedor conta fora da execução: retome depois que ele for renovado.",
   "resume_dialog.the_resumed_run_counts_its_limits": "). A execução retomada conta seus limites do zero: o limite só se aplica de novo quando a nova execução o atingir.",
   "resume_dialog.the_run_is_still_active_it": "A execução ainda está ativa: pode ser retomada quando terminar.",
   "resume_dialog.the_run_stopped_at_its_limit": "A execução parou no seu limite (",

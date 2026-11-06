@@ -6,13 +6,28 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   in `WorkflowRun`): the previous steps' outputs and visits, the agents' provider sessions and handoff
   notes, and the run's worktree/branch (a removed worktree: a new one from the base). `fromStep` must
   exist in the current version of the workflow; the instruction becomes that step's note.
-- Service: `resumeRun({ runId, step, instruction, mock })` on the `runs:resume` channel
-  (`supervisor:resume` is an alias for older clients). No LLM call: the owner's **Resume from step…**
-  dialog and the supervisor's recommendations both use it. `mock: true` resumes as a simulation; a
-  simulated run always resumes as one; simulation-only refuses a real resume. An active run is refused.
+- Service: `resumeRun({ runId, step, instruction, mock, inputs })` on the `runs:resume` channel
+  (`supervisor:resume` is an alias for older clients, without `confirmGate` and `inputs`). No LLM call:
+  the owner's **Resume from step…** dialog and the supervisor's recommendations both use it.
+  `mock: true` resumes as a simulation; a simulated run always resumes as one; simulation-only refuses
+  a real resume. An active run is refused.
+- **The workflow** (#799) is found as a new run finds it (`ctx.projectWorkflowFile`): a run of a
+  workflow only the repository declares resumes with no workspace copy, on the version at HEAD. One not
+  accepted at HEAD is refused when the new run starts, naming it.
+- **No step given** (#799): a paused run continues where it paused; any other run that did not end well
+  resumes at the step it stopped at (`resumeSpec`'s `stoppedAt`: the failed step, else the last one
+  started), refused like a chosen step when a decided gate is before it. A run that ended well starts
+  at the first step. Starting over stays possible by choosing the first step.
+- **Inputs** (#799): `inputs` holds the ones that change, over those the run recorded. The new run's
+  `workflow.started` records them and a notice says what changed; the run resumed from is only read. A
+  value the workflow does not offer is refused as at a start. A recorded agent override (the run's
+  choice or a fallback) gives way to the input that decides that field; a fallback's provider goes
+  with its model, and the agent's conversation too: it starts from its handoff note.
 - `runs:resumeOptions({ runId })` feeds the dialog: the steps in order (visits, `blockedBy`), where the
   run stopped, the failed step, the suggested step, the worktree (and whether it still exists), the
-  agents with sessions/handoffs.
+  agents with sessions/handoffs, `limit` (the run's own, or a provider's with `providerLimit: true`, #799:
+  read from the message the run failed with), `turns` (what each agent's next turn re-reads, #320), and
+  `inputs` / `inputDefs` (`developer_model` and `developer_effort` when the workflow declares them).
 - **A paused run** (#368, status `paused`): `runs:resume` without a step continues where it paused
   (summary.json `paused.step`): every step it visited is seeded from its summary (`resume.paused`:
   seedResume seeds the resumed step's finished visits too), so no finished turn runs again and the

@@ -255,6 +255,8 @@ function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, prev
 
 // The run's workflow file (runs record its basename). workflowsDir: a folder or a list of folders
 // searched in order (workspace first, then the bundled defaults). Throws if it is gone.
+// Not projectWorkflowFile (#799): a domain has no service ctx, and a workflow only the repository
+// declares only leaves the steps out of the report.
 function readRunWorkflow(workflowsDir, file) {
   const name = path.basename(file || '');
   const dirs = [].concat(workflowsDir || '');
@@ -326,6 +328,7 @@ function analysisMarkdown(a, { question, model } = {}) {
  * What a new run needs to resume a previous one from `fromStep`: the previous steps' outputs and
  * visits, the agents' provider conversations (so persistent agents keep their context) and their
  * latest handoff notes (handoff sessions, and agents with no conversation to resume, start from them).
+ * stoppedAt (#799): the step a resume with no step goes on from (stoppedStep).
  */
 function resumeSpec(runDir, fromStep) {
   const events = readEvents(runDir);
@@ -358,8 +361,23 @@ function resumeSpec(runDir, fromStep) {
   // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
   return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null,
     // runs recorded before groups have a single `issue`
-    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, sessionAccounts, cliTotals, handoffs, worktree,
+    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, stoppedAt: stoppedStep(events), steps, sessions, sessionAccounts, cliTotals, handoffs, worktree,
     childRuns: [...childRuns.values()], agentOverrides: Object.keys(agentOverrides).length ? agentOverrides : null };
+}
+
+// #799: where a run stopped: a failed run's step that reported the error with nothing finished after
+// it, else the last step started; null for a run that ended well or never reached a step
+function stoppedStep(events) {
+  let lastStarted = null;
+  let failedAt = null;
+  let status = null;
+  for (const ev of events) {
+    if (ev.type === 'step.started') lastStarted = ev.step_id;
+    if (ev.type === 'step.finished') failedAt = ev.error ? ev.step_id : null;
+    if (ev.type === 'workflow.finished') ({ status } = ev);
+  }
+  if (status === 'success') return null;
+  return (status === 'failed' && failedAt) || lastStarted;
 }
 
 // #312: the account (its name, null for none) of the conversation resumeSpec keeps for an agent: a

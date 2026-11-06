@@ -4389,6 +4389,7 @@
   "resume_dialog.runs_again": "Runs again:",
   "resume_dialog.simulated": "Simulated",
   "resume_dialog.starting": "Starting…",
+  "resume_dialog.the_providers_limit_has_to_have_reset": "). The provider's limit counts outside the run: resume once it has reset.",
   "resume_dialog.the_resumed_run_counts_its_limits": "). The resumed run counts its limits from zero: the limit applies again only once the new run reaches it.",
   "resume_dialog.the_run_is_still_active_it": "The run is still active: it can be resumed once it ends.",
   "resume_dialog.the_run_stopped_at_its_limit": "The run stopped at its limit (",

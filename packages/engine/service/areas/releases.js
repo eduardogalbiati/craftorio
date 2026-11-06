@@ -278,7 +278,7 @@ module.exports = (ctx) => {
     const project = projects.readProject(ws.projects, idOf(projectId));
     const going = [...ctx.active.values()].find((r) => r.projectId === project.id && isReleaseRun(r));
     if (going) throw new Error(`A release run of ${project.name} is in progress (${going.runId}): answer its Ship gate, or stop it first.`);
-    const wf = loadWorkflow(ctx.workflowPath(RELEASE_WORKFLOW).file);
+    const wf = loadWorkflow(ctx.projectWorkflowFile(project.id, RELEASE_WORKFLOW));
     const line = waitingLine(project.id);
     const name = String(version || '').trim() || line?.name || '';
     const started = await ctx.startWorkflowRun({ file: RELEASE_WORKFLOW, inputs: releaseInputs(wf, project, name), mock: !!simulated, projectId: project.id });

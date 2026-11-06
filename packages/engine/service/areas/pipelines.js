@@ -14,30 +14,32 @@ const runs = require('../../domains/run/runs');
 
 module.exports = (ctx) => {
   const dir = () => ctx.ws.pipelines;
-  const workflowOf = (file) => loadWorkflow(ctx.workflowPath(file).file);
+  // #799: a stage's workflow, as a run of that project finds it. No project (the Workflows screen's
+  // list, the Start drawer's estimate: a pipeline belongs to the workspace): the workspace's only.
+  const workflowOf = (projectId) => (file) => loadWorkflow(ctx.projectWorkflowFile(projectId, file));
 
   // A pipeline file of the workspace, parsed and checked (throws with the reason).
-  function readPipeline(file) {
+  function readPipeline(file, projectId = null) {
     let name = path.basename(String(file || ''));
     if (!pipelines.isPipelineFile(name)) throw new Error(`Not a pipeline file: ${name}`);
     // #648: a renamed bundled pipeline still answers to its old name when the old file is gone
     if (!fs.existsSync(path.join(dir(), name)) && pipelines.pipelineAliasOf(name)) name = pipelines.pipelineAliasOf(name);
     const full = path.join(dir(), name);
     if (!fs.existsSync(full)) throw new Error(`Pipeline not found: ${name}`);
-    return pipelines.loadPipelineText(fs.readFileSync(full, 'utf8'), name, workflowOf);
+    return pipelines.loadPipelineText(fs.readFileSync(full, 'utf8'), name, workflowOf(projectId));
   }
 
   // <workspace>/pipelines/*.yaml, each { file, origin, restorable, name, description, category,
   // stages: [{ workflow, target, map: { input: output }, inputs, on }] }; a file that fails to load
   // (or maps an output its previous workflow doesn't declare) comes back with its error.
-  function listPipelines() {
+  function listPipelines(projectId = null) {
     if (!fs.existsSync(dir())) return [];
     const status = pipelines.pipelineStatus(pipelines.BUNDLED_PIPELINES_DIR, dir());
     return fs.readdirSync(dir()).filter(pipelines.isPipelineFile).sort().map((file) => {
       const st = status[file] || { origin: 'custom', updateAvailable: false, restorable: false };
       const origin = { origin: st.origin, updateAvailable: st.updateAvailable, restorable: st.restorable };
       try {
-        return { ...readPipeline(file), ...origin };
+        return { ...readPipeline(file, projectId), ...origin };
       } catch (e) {
         return { file, ...origin, name: file, error: e.message, stages: [] };
       }
@@ -50,7 +52,7 @@ module.exports = (ctx) => {
    * @returns {{ runId, runDir, pipelineId }} the pipeline run's id is its first run's
    */
   async function runPipeline({ file, inputs, mock, projectId }) {
-    const p = readPipeline(file);
+    const p = readPipeline(file, projectId);
     const first = p.stages[0];
     const started = await ctx.startWorkflowRun({
       file: first.workflow, inputs: { ...first.inputs, ...(inputs || {}) }, mock: !!mock, projectId: projectId || undefined,
@@ -61,15 +63,15 @@ module.exports = (ctx) => {
   }
 
   /** What the Backlog's Assign queues for a pipeline: its first workflow, fixed inputs and chain. */
-  function pipelineAssign(file) {
-    const p = readPipeline(file);
+  function pipelineAssign(file, projectId = null) {
+    const p = readPipeline(file, projectId);
     const first = p.stages[0];
     return { workflow: first.workflow, inputs: { ...first.inputs }, then: pipelines.pipelineThen(p) };
   }
 
   /** A pipeline's workflows with a rough cost from past runs (an estimate, chain-model estimateCost). */
-  function pipelineEstimate({ file }) {
-    const p = readPipeline(file);
+  function pipelineEstimate({ file, projectId = null }) {
+    const p = readPipeline(file, projectId);
     const est = chain.estimateCost(pipelines.pipelineWorkflows(p), runs.listRuns(ctx.ws.runs));
     return { ...est, text: chain.estimateText(est), productOwner: p.stages.some((s) => s.target === 'product_owner') };
   }
@@ -82,7 +84,7 @@ module.exports = (ctx) => {
   function pipelineRun({ id }) {
     const key = String(id || '');
     if (!key) throw new Error('Say which pipeline run.');
-    const live = ctx.activeRuns().map((r) => ({ runId: r.runId, status: r.waiting ? 'waiting' : r.status, workflow: r.workflow, file: r.file, chain: r.chain }));
+    const live = ctx.activeRuns().map((r) => ({ runId: r.runId, status: r.waiting ? 'waiting' : r.status, workflow: r.workflow, file: r.file, projectId: r.projectId, chain: r.chain }));
     const members = [];
     const seen = new Set();
     for (const r of [...live, ...runs.listRuns(ctx.ws.runs)]) {
@@ -90,12 +92,12 @@ module.exports = (ctx) => {
       const p = chain.pipelineOf(r.chain, r.runId);
       if (!p || (p.id || r.runId) !== key) continue;
       seen.add(r.runId);
-      members.push({ runId: r.runId, status: r.status, workflow: r.workflow, file: r.file, pipeline: p, chain: r.chain });
+      members.push({ runId: r.runId, status: r.status, workflow: r.workflow, file: r.file, projectId: r.projectId, pipeline: p, chain: r.chain });
     }
     if (!members.length) throw new Error(`Pipeline run not found: ${key}`);
     const ref = members[0].pipeline;
     let def = null;
-    try { def = readPipeline(ref.file); } catch { /* changed or deleted since: the runs' own record */ }
+    try { def = readPipeline(ref.file, members[0].projectId); } catch { /* changed or deleted since: the runs' own record */ }
     const count = Math.max(def?.stages.length || 0, ref.stages, ...members.map((m) => m.pipeline.stage + 1));
     const stages = def?.stages || Array.from({ length: count }, (_, i) => ({ workflow: members.find((m) => m.pipeline.stage === i)?.file || null, target: 'workflow', map: {}, inputs: {} }));
     const byStage = Array.from({ length: count }, (_, i) => members.filter((m) => m.pipeline.stage === i).pop() || null);
@@ -117,10 +119,11 @@ module.exports = (ctx) => {
     if (!c?.then) throw new Error('This run has no chain to save: add one with "When it finishes" first.');
     const live = ctx.liveRun(runId);
     const runDir = live ? null : ctx.runFolder(runId);
-    const file = live ? path.basename(live.file) : runs.readRun(path.dirname(runDir), path.basename(runDir))?.file;
+    const info = live || runs.readRun(path.dirname(runDir), path.basename(runDir));
+    const file = info?.file && path.basename(info.file);
     if (!file) throw new Error(`The workflow of run ${runId} is not known.`);
     const p = pipelines.fromChain({ file, then: c.then }, { name, description, category });
-    pipelines.validatePipeline(pipelines.parsePipeline(p, p.file), workflowOf);
+    pipelines.validatePipeline(pipelines.parsePipeline(p, p.file), workflowOf(info.projectId));
     fs.mkdirSync(dir(), { recursive: true });
     const dest = path.join(dir(), p.file);
     if (fs.existsSync(dest)) throw new Error(`A pipeline file named ${p.file} already exists: pick another name.`);

@@ -608,6 +608,8 @@ module.exports = (ctx) => {
   }
 
   // Provider config of a run's workflow: the live one, or the workflow file named in its events.
+  // Not projectWorkflowFile (#799): the run lists call this per row and that one runs git; a workflow
+  // only the repository declares only leaves its provider config out of the row.
   function runWorkflow(runId, file) {
     const live = active.get(runId);
     if (live) return live.wf;

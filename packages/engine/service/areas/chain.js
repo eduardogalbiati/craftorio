@@ -105,7 +105,7 @@ module.exports = (ctx) => {
   // saved pipeline's stage (#135) hands the rest of the pipeline to the run it starts, with the
   // pipeline run's id (its first run's) stamped on it.
   async function startNext(prev, then) {
-    const wf = loadWorkflow(ctx.workflowPath(then.workflow).file);
+    const wf = loadWorkflow(ctx.projectWorkflowFile(prev.projectId, then.workflow));
     const inputs = chain.nextInputs(then, prev, wf.inputs);
     const issues = wf.inputs?.issues || wf.inputs?.issue ? backlog.recordedIssues(chain.producedIssues(prev.outputs)) : [];
     const stamped = chain.withPipelineId(then, then.pipeline?.id || prev.pipelineId || prev.runId);
@@ -226,7 +226,7 @@ module.exports = (ctx) => {
     const info = runs.readRun(path.dirname(dir), path.basename(dir));
     if (!info || !info.finishedAt) throw new Error(`Run ${runId} has not finished: its chain goes on by itself when it does.`);
     let outputDefs = {};
-    try { outputDefs = loadWorkflow(ctx.workflowPath(info.file).file).outputs || {}; } catch { /* the workflow is gone: no merge rule */ }
+    try { outputDefs = loadWorkflow(ctx.projectWorkflowFile(info.projectId, info.file)).outputs || {}; } catch { /* the workflow is gone: no merge rule */ }
     return {
       info,
       prev: previous({
