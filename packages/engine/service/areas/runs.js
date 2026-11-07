@@ -542,6 +542,7 @@ module.exports = (ctx) => {
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
       prCardChanged(ctx, run, ev);
+      if (ev.type === 'pr.fix') replyPrFix(run, ev);
       if (ev.type === 'workflow.started' || ev.type === 'run.recovered') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
       if (ev.type === 'workflow.finished' && onFinished) {
@@ -675,11 +676,17 @@ module.exports = (ctx) => {
     return removed;
   };
 
-  const { closeRunPr, mergeRunPr } = prActions(ctx, liveRun, active);
+  const {
+    askRunPrFix,
+    closeRunPr,
+    mergeRunPr,
+    replyPrFix,
+  } = prActions(ctx, liveRun, active);
 
   return {
     active,
     activeRuns,
+    askRunPrFix,
     cleanupRunWorktrees,
     closeRunPr,
     isRunning,
@@ -784,13 +791,37 @@ function prActions(ctx, liveRun, active) {
     return { closed: !!r.closed, ...(r.error ? { error: r.error } : {}) };
   }
 
-  return { closeRunPr, mergeRunPr };
+  // #811: "Ask for a fix" from the card: the requests the owner picked among the card's (only trusted authors'
+  // are sent, as quoted data: run-pr.js buildFixRequest) and their note; nothing to send → the run gets nothing
+  async function askRunPrFix({ runId, ids = [], note = '' } = {}) {
+    const { run, at } = target(runId);
+    const requests = at.card?.requests || [];
+    const r = runPr.buildFixRequest({ requests, ids: ids || [], note: note || '', round: (run.prFixRounds || 0) + 1 });
+    if (!r.ok) return { queued: false, refused: r.refused, error: r.error };
+    const rights = await prRights(ctx, run, at.url);
+    const sent = new Set(r.sent.map(String));
+    const out = await run.prFixFromApp({ prompt: r.prompt, ids: r.sent, note: String(note || '').trim(), by: rights.login, requests: requests.filter((q) => sent.has(String(q.id))) });
+    return { ...out, refused: r.refused };
+  }
+
+  // #811: a fix round that pushed a commit: the run replies on each thread it fixed (never resolving it)
+  function replyPrFix(run, ev) {
+    if (ev.type !== 'pr.fix' || ev.status !== 'fixed' || !ev.url || !(ev.requests || []).some((q) => q.thread)) return;
+    if (run.mock && !ctx.host?.runPrCommand) return; // a simulated run reaches no platform
+    runPr.replyToFixed({ url: ev.url }, { requests: ev.requests, commit: ev.commit || '', run: runner(run) })
+      .then((r) => {
+        for (const e of r.errors) run.emitEvent?.('log', { level: 'warn', step_id: ev.step_id, message: `Could not reply on the pull request's thread ${e.id}: ${e.error}` });
+      })
+      .catch((e) => console.error('PR reply:', e.message));
+  }
+
+  return { askRunPrFix, closeRunPr, mergeRunPr, replyPrFix };
 }
 const parseTargetId = (url) => parseTarget(url)?.id ?? null;
 
 // #809: a monitor read of a roadmap item's run changes its card on the Roadmap: the Backlog reloads it
 // (#810: and a merge tried from the app, its message on the card)
 function prCardChanged(ctx, run, ev) {
-  if (!['pr.monitor', 'pr.merge'].includes(ev.type) || !run.projectId) return;
+  if (!['pr.fix', 'pr.merge', 'pr.monitor'].includes(ev.type) || !run.projectId) return;
   ctx.events?.emit('backlog:changed', { projectId: run.projectId, file: 'roadmap', watching: !!ctx.backlogWatching?.() });
 }

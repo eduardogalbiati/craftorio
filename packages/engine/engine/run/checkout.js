@@ -61,7 +61,9 @@ const methods = {
   // origin/<base>; `worktree_dir` in the templates points to it. A resumed run reuses the previous
   // run's folder (recreated from its branch if it was deleted), so resumed CLI sessions keep their cwd.
   // Not a git repository, or no worktreesDir (simulation): worktree_dir = the repository folder.
-  async setupWorktree() {
+  // #811 `again`: the run's own worktree was removed while it waited in its PR monitor: recreated in its folder,
+  // on its branch, before a fix from the pull request
+  async setupWorktree({ again = null } = {}) {
     const cfg = this.wf.orchestrator?.worktree;
     if (!cfg) return;
     const { repo, base, remote, fork } = worktreeTarget(cfg, this.ctx);
@@ -76,7 +78,7 @@ const methods = {
       return;
     }
     // #607: a recovered run continues in its own worktree (same id, same folder and branch)
-    const prev = this.resume?.worktree || this.recovered?.worktree;
+    const prev = this.resume?.worktree || this.recovered?.worktree || again;
     const dir = prev?.dir || path.join(this.worktreesDir, this.runId);
     const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log, remote, fork, parentBranch });
     if (!info) {

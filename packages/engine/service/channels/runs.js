@@ -293,6 +293,18 @@ module.exports = (ctx) => [
       return ctx.closeRunPr(opts);
     },
   },
+  // #811: ask the developer for a fix from the PR monitor's card: the requests the owner picked (ids of the card's
+  // requests; only trusted authors' are sent) and a note → { queued, round?, error?, refused? }
+  {
+    channel: 'runs:askFix',
+    method: 'askRunPrFix',
+    params: ['runId', 'ids', 'note'],
+    schema: { params: args({ runId: RUN_ID, ids: listOf(text(200)), note: nullable(text(4000)) }, ['runId']), result: OBJECT },
+    fn: (opts) => {
+      liveRunOf(ctx, opts, 'ask a fix for its pull request');
+      return ctx.askRunPrFix(opts);
+    },
+  },
   // title: empty (or none) goes back to the default title
   {
     channel: 'runs:setTitle',

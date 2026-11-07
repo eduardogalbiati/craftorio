@@ -34,7 +34,9 @@ test('#809 pr-pipeline fragment: pr_monitor is a step with no agent and no promp
 
 test('#809 pr-pipeline fragment: the monitor never touches the PR (no action, merge, precheck or ship) and a closed PR ends the run failed', () => {
   const ts = fragmentSteps().pr_monitor?.transitions || [];
-  const touching = ts.filter((t) => t.action || t.merge || t.precheck || t.ship || t.delegate).length;
+  // #811: the one delegation allowed is the owner's "Ask for a fix" (output.fix), which comes back to the monitor
+  const ownersFix = (t) => t.delegate && t.when === 'output.fix' && t.goto === 'pr_monitor';
+  const touching = ts.filter((t) => t.action || t.merge || t.precheck || t.ship || (t.delegate && !ownersFix(t))).length;
   const failed = ts.some((t) => t.goto === 'end' && t.status === 'failed');
   assert.deepEqual([ts.length > 0, touching, failed], [true, 0, true]);
 });

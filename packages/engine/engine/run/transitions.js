@@ -15,6 +15,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { sleep } = require('../providers');
 const { parseTarget } = require('../probes');
+const { MAX_FIX_ROUNDS } = require('../../domains/run/run-pr');
 const mergeQueue = require('../merge-queue');
 const { restackOnBase, restackOnParent } = require('../worktree');
 const { evalExpr, render } = require('./templates');
@@ -130,6 +131,8 @@ const methods = {
         const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate`, attachments: this.stepAttachments(t.delegate.prompt) })
           .finally(() => this.stopWorktreeProcesses(`${step.id} delegation to ${t.delegate.agent}`));
         delegated = { agent: t.delegate.agent, text: res.text };
+        // #811: what a fix from the PR monitor spent and answered (runPrFix)
+        this.lastDelegation = { ...delegated, usage: res.usage || null };
       }
       if (delegated) st.blocked = null; // another agent acted: the next check is a fresh start
       if (target === step.id && isLooping(step)) target = await this.loopWait(step, output, { probed: !!extra.probe });
@@ -296,6 +299,99 @@ const methods = {
     else this.prMonitorWakeAsked = true;
   },
 
+  // #811: "Ask for a fix" from the card (service/areas/runs.js askRunPrFix, which builds `prompt` with run-pr.js
+  // buildFixRequest from the trusted requests the owner picked): only while the monitor waits and no fix runs.
+  // Emits `pr.fix` { status: 'requested', round, ids, note, requests, by } and wakes the monitor, whose next poll
+  // runs it (runPrFix). Past MAX_FIX_ROUNDS each round asks the owner first (a gate; not allowed: no turn).
+  // → { queued, round?, limit?, error? }
+  prFixFromApp({ prompt = '', ids = [], note = '', by = null, requests = [] } = {}) {
+    const target = this.prMonitorTarget();
+    if (!target) return { queued: false, error: 'the run is not waiting in its PR monitor' };
+    if (this.prFix || this.prFixAsking) return { queued: false, error: 'a fix is already running' };
+    if (!String(prompt).trim()) return { queued: false, error: 'nothing to send' };
+    const round = (this.prFixRounds || 0) + 1;
+    const ask = { prompt: String(prompt), ids: Array.isArray(ids) ? ids.map(String) : [], note: String(note || ''), by, requests: Array.isArray(requests) ? requests : [] };
+    if (round <= MAX_FIX_ROUNDS) return this.queuePrFix(target, round, ask);
+    this.prFixAsking = true;
+    const done = (/** @type {any} */ a) => {
+      this.prFixAsking = false;
+      const now = this.prMonitorTarget();
+      if (a?.answer === 'allow' && now) this.queuePrFix(now, round, ask);
+      else this.emitEvent('log', { level: 'info', step_id: target.stepId, message: `Fix round ${round} was not sent: the run took ${MAX_FIX_ROUNDS} fix rounds and the owner did not allow another.` });
+    };
+    Promise.resolve(this.requestApproval({
+      id: `${target.stepId}:fix_limit`, raw: true,
+      message: `This run already took ${MAX_FIX_ROUNDS} fix rounds from its pull request (the limit is ${MAX_FIX_ROUNDS}).\n\nSend fix round ${round} to the developer anyway, or keep waiting for the merge without more fixes?`,
+      choices: [{ id: 'allow', label: `Send fix round ${round}` }, { id: 'stop', label: 'No more fixes' }],
+    })).then(done, () => { this.prFixAsking = false; });
+    return { queued: false, limit: true, round, error: `the limit of ${MAX_FIX_ROUNDS} fix rounds is reached: the run asks you first` };
+  },
+
+  // #811: a fix round the next poll runs (prFixFromApp)
+  queuePrFix(target, round, { prompt, ids, note, by, requests }) {
+    this.prFixRounds = round;
+    // what was sent, for the card's round line and the replies (the comments' text stays on the card)
+    const sent = requests.map(({ id, kind, author, file, line, url, thread }) => ({ id, kind, author, file, line, url, ...(thread ? { thread } : {}) }));
+    this.prFix = { round, prompt, ids, note, by, requests: sent, head: target.card?.head || null, phase: 'requested' };
+    this.emitEvent('pr.fix', { step_id: target.stepId, url: target.url, round, status: 'requested', ids, note, requests: sent, by });
+    if (this.prMonitorWake) this.prMonitorWake.abort();
+    else this.prMonitorWakeAsked = true;
+    return { queued: true, round };
+  },
+
+  // #811: the developer works on the fix: the pr_monitor transition that delegates to it and comes back
+  // (`when: output.fix`, fragments/pr-pipeline.yaml), in the run's worktree (recreated on its branch when it was
+  // removed while the run waited). No merge, close or other fix meanwhile (prMonitor is unset: a run slot too).
+  // The next read compares the PR's head (prFixOutcome). → the step to go to: 'pr_monitor' (never 'end')
+  async runPrFix(step, st, target, t0) {
+    const fix = this.prFix;
+    fix.phase = 'sent';
+    fix.head = this.prMonitorCard?.head ?? fix.head ?? null;
+    this.prMonitor = null;
+    this.lastDelegation = null;
+    try {
+      const wt = this.worktree;
+      if (wt?.dir && !fs.existsSync(wt.dir)) {
+        this.emitEvent('log', { level: 'info', step_id: step.id, message: `worktree: ${wt.dir} was removed while the run waited: recreating it on its branch for fix round ${fix.round}` });
+        await this.setupWorktree({ again: { dir: wt.dir, branch: wt.ref || wt.branch || this.ctx.steps?.develop?.output?.branch || null } });
+      }
+      const output = { state: this.prMonitorCard?.state || 'open', url: target, fix: true, fix_round: fix.round, fix_prompt: fix.prompt };
+      st.output = output;
+      const next = await this.finishStep(step, st, output, { ...this.ctx, output }, t0);
+      if (!this.lastDelegation) throw new Error(`the ${step.id} step has no transition that sends a fix to the developer`);
+      fix.report = String(this.lastDelegation.text || '');
+      fix.tokens = tokensOf(this.lastDelegation.usage);
+      return next && next !== 'end' ? next : step.id;
+    } catch (e) {
+      if (this.abort.signal.aborted) throw e;
+      fix.report = `the fix could not run: ${String(e?.message || e).split('\n')[0]}`;
+      return step.id;
+    } finally {
+      this.prMonitor = step.id;
+    }
+  },
+
+  // #811: the first read after a fix: the PR's head moved → fixed (its commit, the tokens); else failed, and a gate
+  // says why (the developer's report). A simulated run pushes nothing: its fix is fixed when the turn answered.
+  async prFixOutcome(step, r, base) {
+    const fix = this.prFix;
+    this.prFix = null;
+    const moved = !!r.head && r.head !== fix.head;
+    const ev = { step_id: step.id, url: base.url, round: fix.round, ids: fix.ids, note: fix.note, requests: fix.requests, ...(fix.tokens ? { tokens: fix.tokens } : {}) };
+    if (moved || (this.machine.simulated && !/^the fix could not run/.test(fix.report || ''))) {
+      this.emitEvent('pr.fix', { ...ev, status: 'fixed', commit: r.head || null });
+      return;
+    }
+    const reason = `no new commit on the pull request${fix.report ? `: ${fix.report}` : ''}`;
+    this.emitEvent('pr.fix', { ...ev, status: 'failed', reason });
+    this.setStatus(this.orchestrator, 'active');
+    await this.requestApproval({
+      id: `${step.id}:fix_failed`, raw: true,
+      message: `Fix round ${fix.round} did not push a new commit to ${base.url}.\n\nThe developer said: ${fix.report || '(nothing)'}\n\nThe run goes back to waiting for the merge; ask for another fix from the card, or fix it by hand.`,
+      choices: [{ id: 'monitor', label: 'Back to the PR monitor' }],
+    });
+  },
+
   // #810: the last merge's and close's messages from the app that did not land, as a pr.monitor event's fields
   prActionErrors() {
     return { ...(this.prMergeError ? { merge_error: this.prMergeError } : {}), ...(this.prCloseError ? { close_error: this.prCloseError } : {}) };
@@ -316,6 +412,8 @@ const methods = {
     this.prMonitorUrl = target; // #810: what a merge or close from the app acts on
     this.sayPrMonitorWorktreeKept(step);
     const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork', ...this.prActionErrors() };
+    // #811: a fix the owner asked for runs before the next read (which then tells whether it pushed)
+    if (target && this.prFix?.phase === 'requested') return this.runPrFix(step, st, target, t0);
     let r;
     try {
       if (!target) throw new Error('no pull/merge request URL yet');
@@ -329,8 +427,9 @@ const methods = {
     this.prMonitorError = null;
     const card = { ...(this.prMonitorCard || {}), state: r.state, detail: r.detail || r.state, checked_at: new Date().toISOString() };
     // #810: merge_options, the merge choices of the card (the service's probe adds them: run-pr.js mergeOptions)
-    for (const k of ['ci', 'review', 'conflicts', 'comments', 'result', 'merge_options']) if (r[k]) card[k] = r[k];
-    if (r.state === 'merged' || r.state === 'closed') delete card.merge_options;
+    // #811: head (the PR's head commit) and requests (what the PR asks for, the card's "Ask for a fix")
+    for (const k of ['ci', 'review', 'conflicts', 'comments', 'result', 'merge_options', 'head', 'requests']) if (r[k]) card[k] = r[k];
+    if (r.state === 'merged' || r.state === 'closed') { delete card.merge_options; delete card.requests; }
     const seen = monitorSeen(r);
     const changed = seen !== this.prMonitorSeen;
     if (changed) this.prMonitorChangedAt = Date.now();
@@ -340,6 +439,7 @@ const methods = {
     }
     this.prMonitorSeen = seen;
     this.prMonitorCard = card;
+    if (this.prFix?.phase === 'sent') await this.prFixOutcome(step, r, base);
     if (r.state !== 'merged' && r.state !== 'closed') return null;
     return this.endPrMonitor(step, st, r, card, target, t0);
   },
@@ -747,21 +847,27 @@ function prMonitorIntervalMs(sinceChangeMs) {
 }
 
 // #809: a read's fingerprint (pollPrMonitor): a change of it is a change of the card
-const monitorSeen = (r) => JSON.stringify([r.state, r.ci, r.review, r.conflicts, r.comments, r.result]);
+// (#811: with the head commit and the requests, what the card's "Ask for a fix" lists)
+const monitorSeen = (r) => JSON.stringify([r.state, r.ci, r.review, r.conflicts, r.comments, r.result, r.head || null, (r.requests || []).map((q) => [q.id, q.trusted])]);
+
+// #811: a turn's tokens (its usage: input + output), 0 when unknown
+const tokensOf = (usage) => (Number(usage?.input_tokens) || 0) + (Number(usage?.output_tokens) || 0);
 
 // #809: what a run recovered in its PR monitor (resume.js seedRecovery) knows before its first read, from
 // its log's `pr.monitor` events: it waits in the monitor (no run slot, areas/runs.js slotProblem), its last
 // card, and when the card last changed (the slower pace after a day survives a restart)
 function prMonitorSeed(events, stepId) {
-  /** @type {{ prMonitor: string, prMonitorCard: object | null, prMonitorSeen: string | undefined, prMonitorChangedAt: number | undefined }} */
-  const seed = { prMonitor: stepId, prMonitorCard: null, prMonitorSeen: undefined, prMonitorChangedAt: undefined };
+  /** @type {{ prMonitor: string, prMonitorCard: object | null, prMonitorSeen: string | undefined, prMonitorChangedAt: number | undefined, prFixRounds: number }} */
+  const seed = { prMonitor: stepId, prMonitorCard: null, prMonitorSeen: undefined, prMonitorChangedAt: undefined, prFixRounds: 0 };
   for (const ev of events || []) {
+    // #811: the fix rounds taken count towards the limit after a restart
+    if (ev.type === 'pr.fix' && ev.step_id === stepId) seed.prFixRounds = Math.max(seed.prFixRounds, Number(ev.round) || 0);
     if (ev.type !== 'pr.monitor' || ev.step_id !== stepId || ev.error) continue;
     const seen = monitorSeen(ev);
     if (seen !== seed.prMonitorSeen) seed.prMonitorChangedAt = Date.parse(ev.ts) || undefined;
     seed.prMonitorSeen = seen;
-    const { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result, merge_options: mergeOptions } = ev;
-    seed.prMonitorCard = { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result, ...(mergeOptions ? { merge_options: mergeOptions } : {}) };
+    const { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result, merge_options: mergeOptions, head, requests } = ev;
+    seed.prMonitorCard = { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result, ...(mergeOptions ? { merge_options: mergeOptions } : {}), ...(head ? { head } : {}), ...(requests ? { requests } : {}) };
   }
   return seed;
 }

@@ -2,7 +2,8 @@
 # from software-development's ci and ci_failed: the CI pusher pushes the run's branch and opens the
 # PR/MR, the engine waits on its checks (`wait: pr_checks`) and calls the agent only when one failed;
 # a fix goes to the developer (delegate). pr_monitor (#809) hands the green PR/MR to the team, who merge it on
-# the platform, and ends the run on that merge. #630: pr_open instead of ci when the project's CI does not run on pull requests (the
+# the platform, and ends the run on that merge; #811 a fix the owner asks for from its card goes to the developer and
+# comes back to it. #630: pr_open instead of ci when the project's CI does not run on pull requests (the
 # composed set's ci none or release): it opens the PR/MR with no wait. A step `{ id, fragment: pr-pipeline }`
 # gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js,
 # expandFragments). Reads the inputs base_branch and issue and the steps develop, ci and pr_open.
@@ -243,12 +244,30 @@ steps:
   # #809 the team reviews and merges on the platform: the engine watches the PR/MR with no agent and no
   # Approve (transitions.js runPrMonitor, run-pr.js fetchPrMonitor) and shows its CI, review, conflicts,
   # comments and what blocks the merge. A merge ends the run well, a close without merge ends it failed.
-  # It never touches the PR/MR: stopping the run leaves it as it is. In Fork + PR it is upstream's PR.
+  # It never touches the PR/MR by itself: stopping the run leaves it as it is. In Fork + PR it is upstream's PR.
+  # #811: the card lists what the PR asks for; the owner's "Ask for a fix" (and only that click) makes the
+  # monitor's output a fix (output.fix, output.fix_prompt: the trusted requests quoted, the owner's note): the
+  # developer fixes it on the run's branch and the run comes back here (transitions.js runPrFix, prFixOutcome).
   pr_monitor:
     type: pr_monitor
     display: Waiting for the merge
     target: "{% if steps.ci.output %}{{ steps.ci.output.pr_url }}{% else %}{{ steps.pr_open.output.pr_url }}{% endif %}"
     transitions:
+      - when: "output.fix"
+        delegate:
+          agent: developer
+          prompt: |
+            The pull/merge request {{ output.url }} is waiting for its merge, and the owner asks you for a fix.
+
+            {{ output.fix_prompt }}
+
+            Work on the run's branch `{{ steps.develop.output.branch }}` (if the worktree is not on it:
+            `git fetch origin {{ steps.develop.output.branch }}` and check it out). Make the change asked for, check it
+            with a focused test (only the tests that cover it, never the whole suite), commit, then push the branch
+            {% if inputs.mode == 'fork' %}to `origin` (`git push origin HEAD:{{ steps.develop.output.branch }}`): Fork + PR, `origin` is the owner's fork that holds the branch; never push to `upstream`.{% else %}(`git push origin HEAD:{{ steps.develop.output.branch }}`).{% endif %}
+            Do not reply on the pull request, nor resolve its threads: the run replies with your commit.
+            Report the commit hash; if you could not fix it, say why and push nothing.
+        goto: pr_monitor
       - when: "output.state == 'merged'"
         goto: end
       - when: "output.state == 'closed'"
