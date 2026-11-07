@@ -1,11 +1,11 @@
 {
   "test/slow/engine-software-development.slow.test.js": [
-    "feature.yaml (remote): a CI code failure goes to the developer, then ci again → pr_review",
+    "feature.yaml (remote): a CI code failure goes to the developer, then ci again → pr_monitor",
     "feature.yaml (remote): CI code failures stop at the ci_failed gate after 5 fix rounds",
     "feature.yaml (remote): a CI infra failure goes to the ci_failed gate; approving checks CI again",
     "feature.yaml (remote): an infra build failure skips the fix rounds; \"retry\" builds again",
     "feature.yaml (remote): a code build failure still goes to the developer first",
-    "feature.yaml (remote): rejecting the team review ends the run as failed at pr_review; nothing was merged, so merged_commit is empty",
+    "feature.yaml (remote): a PR closed without merging ends the run as failed at pr_monitor; nothing was merged, so merged_commit is empty",
     "feature.yaml (remote): merged_commit comes from run.local_merge, so a remote run that ends green records none",
     "feature.yaml (remote): a run for several issues records them, and its commits close each one",
     "feature.yaml (remote): an issue of the group that cannot be done stops at the owner\\'s gate",
