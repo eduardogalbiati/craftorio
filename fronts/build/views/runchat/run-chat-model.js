@@ -384,17 +384,7 @@
     'pr.fix'(ev) {
       const card = this.prCard;
       if (!card) return;
-      card.fixes = card.fixes || [];
-      const round = Number(ev.round) || card.fixes.length + 1;
-      let f = card.fixes.find((x) => x.round === round);
-      if (!f) card.fixes.push(f = { round, status: null, commit: null, tokens: null, reason: null, agent: 'developer', ids: [], note: '', sent: [] });
-      f.status = ev.status || f.status;
-      if (ev.commit) f.commit = String(ev.commit);
-      if (ev.tokens != null) f.tokens = Number(ev.tokens) || 0;
-      if (ev.reason) f.reason = String(ev.reason);
-      if (Array.isArray(ev.ids)) f.ids = ev.ids.map(String);
-      if (ev.note != null) f.note = String(ev.note || '');
-      if (Array.isArray(ev.requests)) f.sent = PrCard.requests(ev.requests).map((r) => r.text);
+      card.fixes = PrCard.foldFix(card.fixes || [], ev);
       card.fixLimit = PrCard.fixLimit(card.fixes);
       card.buttons = PrCard.buttons(card.mergeOptions, { fork: card.fork, state: card.state, requests: card.requests, fixes: card.fixes });
       this.touch(card);

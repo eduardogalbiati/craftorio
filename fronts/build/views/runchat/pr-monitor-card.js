@@ -63,7 +63,7 @@
       const tokens = f.status !== 'requested' && f.tokens ? `<span class="small muted" data-testid="pr-fix-tokens">${esc(root.PrCard.tokensText(f.tokens))}</span>` : '';
       const commit = f.commit ? `<span class="mono small">${esc(String(f.commit).slice(0, 7))}</span>` : '';
       const why = f.status === 'failed' ? `<div class="small warn-text" data-testid="pr-fix-error" role="status">${esc(t('pr_card.fix_failed', { reason: f.reason || '?' }))}</div>` : '';
-      return `<li class="pr-fix-round" data-testid="pr-fix-round"><div class="pr-request-head"><b>${esc(t('pr_card.fix_round', { round: f.round, max: root.PrCard.FIX_ROUNDS }))}</b>${status}${commit}${tokens}</div>${sent}${why}</li>`;
+      return `<li class="pr-fix-round" data-testid="pr-fix-round"><div class="pr-request-head"><b>${esc(t('pr_card.fix_round', { round: f.round, max: root.PrCard.FIX_ROUNDS }))}</b> ${status} ${commit} ${tokens}</div>${sent}${why}</li>`;
     }).join('');
     const roundsHtml = rounds ? `<ol class="pr-fix-rounds">${rounds}</ol>` : '';
     const limit = card.fixLimit ? `<div class="small muted" data-testid="pr-fix-limit">${esc(card.fixLimit)}</div>` : '';
@@ -111,15 +111,20 @@
     const ev = v?.prMonitor || null;
     const merge = v?.prMerge || null;
     box.classList.toggle('hidden', !ev);
-    const key = ev ? `${ev.seq || ''}:${ev.ts || ''}:${ev.checked_at || ''}:${ev.error || ''}:${merge?.ts || ''}:${v?.run?.status || ''}` : '';
+    const fixEvents = v?.prFixes || [];
+    const key = ev ? `${ev.seq || ''}:${ev.ts || ''}:${ev.checked_at || ''}:${ev.error || ''}:${merge?.ts || ''}:${v?.run?.status || ''}:${fixEvents.length}` : '';
     if (box.dataset.key === key) return;
     box.dataset.key = key;
     const merged = !!merge?.merged;
     const state = merged ? 'merged' : ev?.state;
     const ended = root.PrCard.ended(state);
+    // #811: the PR's requests from the last read and the fix rounds (app.js keeps the `pr.fix` events as v.prFixes)
+    const requests = root.PrCard.requests(ev?.requests);
+    const fixes = fixEvents.reduce((list, f) => root.PrCard.foldFix(list, f), []);
     box.innerHTML = ev ? html({
       url: ev.url, number: ev.number, state, lines: root.PrCard.lines(ev, { fork: !!ev.fork }), checkedAt: ev.checked_at, error: ev.error,
-      buttons: root.PrCard.buttons(ev.merge_options, { fork: !!ev.fork, state }), blocked: merged ? '' : root.PrCard.blocked(ev),
+      requests, fixes, fixLimit: root.PrCard.fixLimit(fixes),
+      buttons: root.PrCard.buttons(ev.merge_options, { fork: !!ev.fork, state, requests, fixes }), blocked: merged ? '' : root.PrCard.blocked(ev),
       mergeError: ended ? null : ev.merge_error || (merge ? merge.error || t('pr_card.merge_refused') : null),
       closeError: ended ? null : ev.close_error || null,
       // the buttons act on a live run only (a run stopped or ended in the monitor has nothing to wake)

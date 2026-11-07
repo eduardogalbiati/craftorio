@@ -106,6 +106,24 @@
     text: requestText(r), mark: r.trusted ? '' : t('pr_card.untrusted'),
   }));
 
+  // #811: one `pr.fix` event (transitions.js queuePrFix / prFixOutcome) into the card's rounds, in place: one round
+  // per `round` (requested → fixed with its commit, or failed with why), its tokens; the run chat's card
+  // (run-chat-model.js) and the Run screen's Details (pr-monitor-card.js renderRun) fold them the same way
+  function foldFix(fixes, ev) {
+    const list = Array.isArray(fixes) ? fixes : [];
+    const round = Number(ev?.round) || list.length + 1;
+    let f = list.find((x) => x.round === round);
+    if (!f) list.push(f = { round, status: null, commit: null, tokens: null, reason: null, agent: 'developer', ids: [], note: '', sent: [] });
+    f.status = ev.status || f.status;
+    if (ev.commit) f.commit = String(ev.commit);
+    if (ev.tokens != null) f.tokens = Number(ev.tokens) || 0;
+    if (ev.reason) f.reason = String(ev.reason);
+    if (Array.isArray(ev.ids)) f.ids = ev.ids.map(String);
+    if (ev.note != null) f.note = String(ev.note || '');
+    if (Array.isArray(ev.requests)) f.sent = requests(ev.requests).map((r) => r.text);
+    return list;
+  }
+
   const fmtK = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0));
   const tokensText = (n) => t('pr_card.fix_tokens', { tokens: fmtK(Number(n) || 0) });
 
@@ -139,6 +157,7 @@
     ended,
     fixLimit,
     fmtK,
+    foldFix,
     lineHtml,
     lines,
     requestText,
