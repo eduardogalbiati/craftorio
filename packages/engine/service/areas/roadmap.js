@@ -272,24 +272,34 @@ module.exports = (ctx) => {
   }
 
   // #395: whether a run is a parked item's (the roadmap moved on past it): while it waits at its gate
-  // it holds no run slot (areas/runs.js slotProblem), so the next stage can start
+  // it holds no run slot (areas/runs.js slotProblem), so the next stage can start.
+  // #807: so does the run of an item the roadmap went past at its PR's review gate: Move on of the
+  // merge-wait notice skips it (a skipped item keeps a live run only there), Stack stacks the next stage on it
   function parkedRun(runId, projectId) {
     if (!ctx.ws || !runId || !projectId) return false;
     try {
       const r = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
-      return r.stages.some((s) => s.items.some((x) => x.runId === runId && x.status === 'parked'));
+      const items = r.stages.flatMap((s) => s.items);
+      const stackedOn = new Set(items.map((x) => x.stacksOn).filter(Boolean));
+      return items.some((x) => x.runId === runId && (['parked', 'skipped'].includes(x.status) || stackedOn.has(x.id)));
     } catch { return false; }
   }
 
-  // #738: a parent item's run for dependencyBase → { branch (develop's output), merged, prNumber, prUrl } or null
+  // #738: a parent item's run for dependencyBase → { branch (develop's output), merged, prNumber, prUrl } or null.
+  // #807 (#389: no events.jsonl parsed per item and per read): the PR from the run's index row, the
+  // branch read from its events once and kept by run id (a run's branch never changes once known)
+  const parentBranches = new Map();
   function parentRun(runId) {
     const r = runId ? findRun(runId) : null;
     if (!r?.runDir) return null;
-    let events = [];
-    try { events = runs.runEvents(r.runDir); } catch { /* no events: no branch */ }
-    const branch = events.filter((e) => e.type === 'step.finished' && typeof e.output?.branch === 'string' && e.output.branch.trim()).at(-1)?.output.branch.trim() || null;
-    const pr = runPr.prOfEvents(events);
-    return { branch, merged: !!roadmapRun(runId)?.merged, prNumber: pr?.number || null, prUrl: pr?.url || null };
+    if (!parentBranches.has(runId)) {
+      let events = [];
+      try { events = runs.runEvents(r.runDir); } catch { /* no events: no branch */ }
+      const branch = events.filter((e) => e.type === 'step.finished' && typeof e.output?.branch === 'string' && e.output.branch.trim()).at(-1)?.output.branch.trim() || null;
+      if (branch) parentBranches.set(runId, branch);
+      else return { branch: null, merged: !!roadmapRun(runId)?.merged, prNumber: r.pr?.number || null, prUrl: r.pr?.url || null };
+    }
+    return { branch: parentBranches.get(runId), merged: !!roadmapRun(runId)?.merged, prNumber: r.pr?.number || null, prUrl: r.pr?.url || null };
   }
 
   // #738 split implementations in a Fork + PR run: a dependent item starts from its parent's branch on
@@ -314,6 +324,16 @@ module.exports = (ctx) => {
     const base = roadmaps.stackBase(roadmap, item.id, { runOf: parentRun });
     if (!base?.branch || base.parentMerged) return {};
     return { parent_branch: base.branch, ...(base.prUrl && wf.inputs?.parent_pr ? { parent_pr: base.prUrl } : {}) };
+  }
+
+  // #807: an item's effective run mode, as its start resolves it (its inputs, the workflow's default, the
+  // project's runDefaults): Stack is refused in Fork + PR mode also when the item's inputs do not say it
+  function itemMode(projectId, item) {
+    try {
+      const project = projects.readProject(ctx.ws.projects, path.basename(String(projectId)));
+      const wf = loadWorkflow(ctx.projectWorkflowFile(project.id, item.workflow));
+      return String(backlog.runInputs(item, wf, project.folder, seedRuns.runDefaultsNow(ctx, project)).mode || '');
+    } catch { return String(item?.inputs?.mode || ''); }
   }
 
   function neverMerges(file, projectId) {
@@ -549,6 +569,7 @@ module.exports = (ctx) => {
     checkWaitingPrs,
     dispatchRoadmaps,
     gateRun,
+    itemMode,
     parkItem,
     parkStage,
     parkedRun,

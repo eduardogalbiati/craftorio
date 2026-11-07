@@ -265,7 +265,7 @@
   };
   const lockedReason = (status, fallback) => t(LOCKED[status] || fallback);
 
-  function itemActions(r, item) {
+  function itemActions(r, item, options = {}) {
     if (!item) {
       const none = no(t('roadmap.no_item_given'));
       return { edit: none, move: none, park: none, retry: none, skip: none, stack: none };
@@ -282,7 +282,7 @@
     const park = atGate(item) ? yes() : no(t(item.status === 'parked' ? LOCKED.parked
       : item.status === 'running' ? 'roadmap.item_in_turn' : 'roadmap.item_not_at_gate'));
     // #797: its run succeeded, nothing to retry; the owner may still go on without the merge
-    return { edit: locked, move: locked, park, retry: fix, skip: item.status === 'waiting_merge' ? yes() : fix, stack: stackAction(r, item) };
+    return { edit: locked, move: locked, park, retry: fix, skip: item.status === 'waiting_merge' ? yes() : fix, stack: stackAction(r, item, options) };
   }
 
   /** #807: an item of any stage, by id. */
@@ -299,37 +299,50 @@
     }
     return Math.max(depth, 1);
   }
-  // #807: Stack only on an item whose run waits for its PR's merge, outside Fork + PR, under the depth limit
-  function stackAction(r, item) {
+  /** #807: the index of the stage after stage `s`, -1 when there is none or a release entry is between them (Stack's next stage). */
+  function nextStage(r, s) {
+    const list = stagesOf(r);
+    return s >= 0 && s + 1 < list.length && !isRelease(list[s + 1]) ? s + 1 : -1;
+  }
+  // #807: an item's effective run mode: `modeOf(item)` (the workflow's default and the project's runDefaults
+  // resolved by the caller), else what its inputs say
+  const itemMode = (item, modeOf) => String((modeOf ? modeOf(item) : null) || item?.inputs?.mode || '');
+  // #807: Stack only on an item whose run waits for its PR's merge, outside Fork + PR, under the depth limit,
+  // with a next stage right after it (a release entry between them: refused)
+  function stackAction(r, item, { modeOf = null } = {}) {
     if (item.status !== 'waiting_merge' || !item.pr) return no(t('roadmap.stack_not_waiting'));
-    if (item.inputs?.mode === 'fork') return no(t('roadmap.stack_fork'));
+    if (itemMode(item, modeOf) === 'fork') return no(t('roadmap.stack_fork'));
     if (stackDepth(r, item.id) >= MAX_STACK_DEPTH) return no(t('roadmap.stack_depth_limit', { max: MAX_STACK_DEPTH }));
+    const at = stagesOf(r).findIndex((s) => !isRelease(s) && itemsOf(s).some((x) => x.id === item.id));
+    if (at >= 0 && at + 1 < stagesOf(r).length && nextStage(r, at) < 0) return no(t('roadmap.stack_release_between'));
     return yes();
   }
   /**
    * #807: the notice under stage `s` when one of its items waits for its PR's merge (none in Local mode):
    * { itemId, pr: { number, url }, moveOn, stack, overlap }; overlap: the sorted files the next stage's
-   * items expect to change that this stage's items do too (filesOf(item), default item.files).
+   * items expect to change that this stage's items do too (filesOf(item), default item.files; the view
+   * passes CityImpact.expectedFiles). modeOf(item): the effective mode (itemMode).
    */
-  function mergeWait(r, s, { filesOf = (x) => x.files || [] } = {}) {
+  function mergeWait(r, s, { filesOf = (x) => x.files || [], modeOf = null } = {}) {
     const list = stagesOf(r);
     const stage = list[s];
     if (!stage || isRelease(stage)) return null;
     const item = itemsOf(stage).find((x) => x.status === 'waiting_merge' && x.pr);
-    if (!item || item.inputs?.mode === 'local') return null;
-    const next = list.slice(s + 1).find((x) => !isRelease(x));
+    if (!item || itemMode(item, modeOf) === 'local') return null;
+    const next = list[nextStage(r, s)];
     const mine = new Set(itemsOf(stage).flatMap((x) => filesOf(x) || []));
     const overlap = [...new Set(itemsOf(next).flatMap((x) => filesOf(x) || []))].filter((f) => mine.has(f)).sort();
-    const acts = itemActions(r, item);
+    const acts = itemActions(r, item, { modeOf });
     return { itemId: item.id, pr: { number: item.pr.number, url: item.pr.url }, moveOn: acts.skip, stack: acts.stack, overlap };
   }
 
   /**
    * Which owner actions apply to the roadmap, a stage of it and an item of that stage, each
    * { allowed, reason } (the reason says why when it is refused). See the header for the actions.
+   * `options.modeOf(item)`: the item's effective run mode (#807 Stack, itemMode).
    */
-  function allowedActions(roadmap, stage = null, item = null) {
-    return { ...roadmapActions(roadmap, stage), ...stageActions(roadmap, stage), ...itemActions(roadmap, item) };
+  function allowedActions(roadmap, stage = null, item = null, options = {}) {
+    return { ...roadmapActions(roadmap, stage), ...stageActions(roadmap, stage), ...itemActions(roadmap, item, options) };
   }
 
   /** Every run of an item: its earlier ones (`runs`), then the one that holds its status (`runId`). */
@@ -559,6 +572,7 @@
     moveRelease,
     moveStage,
     nextAfterSkip,
+    nextStage,
     pageOf,
     pauseChoices,
     pausingAfterStage,

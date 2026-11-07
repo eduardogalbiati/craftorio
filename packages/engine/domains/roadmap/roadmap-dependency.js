@@ -14,8 +14,35 @@ const { isRelease } = require('@multiagent/shared/roadmap-model');
  * @returns {{ dependsOn?: string }}
  */
 function dependsOnField(raw, old) {
-  const dependsOn = String(raw.dependsOn ?? old?.dependsOn ?? '').trim();
-  return dependsOn ? { dependsOn } : {};
+  return parentField('dependsOn', raw, old);
+}
+
+/**
+ * A cleaned item's parent field (`dependsOn` #738, `stacksOn` #807): the raw one, else the stored one; '' removes it.
+ * @param {'dependsOn' | 'stacksOn'} field
+ * @param {any} raw
+ * @param {any} old
+ * @returns {Record<string, string>}
+ */
+function parentField(field, raw, old) {
+  const id = String(raw[field] ?? old?.[field] ?? '').trim();
+  return id ? { [field]: id } : {};
+}
+
+/**
+ * The parent of an item by its `field` (`dependsOn` #738, `stacksOn` #807) and that parent's run
+ * → { parentId, run } (run: runOf(parent.runId), or null), or null for an item without that parent.
+ * @param {Roadmap} roadmap
+ * @param {string} itemId
+ * @param {'dependsOn' | 'stacksOn'} field
+ * @param {(runId: string) => any} runOf
+ */
+function parentOfItem(roadmap, itemId, field, runOf) {
+  const items = roadmap.stages.flatMap((s) => s.items || []);
+  const item = items.find((x) => x.id === itemId);
+  if (!item?.[field]) return null;
+  const parent = items.find((x) => x.id === item[field]);
+  return { parentId: item[field], run: parent?.runId ? runOf(parent.runId) : null };
 }
 
 /**
@@ -66,14 +93,12 @@ function forgetGoneParents(stages, previousIds) {
  * @param {{ runOf: (runId: string) => any, policy?: string }} options runOf(runId) → { branch, merged, prNumber, prUrl? } | null
  */
 function dependencyBase(roadmap, itemId, { runOf, policy = 'wait-and-rebase' }) {
-  const items = roadmap.stages.flatMap((s) => s.items);
-  const item = items.find((x) => x.id === itemId);
-  if (!item?.dependsOn) return null;
-  const parent = items.find((x) => x.id === item.dependsOn);
-  const run = parent?.runId ? runOf(parent.runId) : null;
+  const found = parentOfItem(roadmap, itemId, 'dependsOn', runOf);
+  if (!found) return null;
+  const { parentId, run } = found;
   const how = policy === 'depends-on' ? 'depends-on' : 'wait-and-rebase';
   return {
-    parentId: item.dependsOn,
+    parentId,
     branch: run?.branch || null,
     parentMerged: !!run?.merged,
     policy: how,
@@ -87,4 +112,6 @@ module.exports = {
   dependencyBase,
   dependsOnField,
   forgetGoneParents,
+  parentField,
+  parentOfItem,
 };

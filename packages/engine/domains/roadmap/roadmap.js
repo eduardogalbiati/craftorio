@@ -618,13 +618,14 @@ function setLive(dir, projectId, on, { by = 'owner', now = new Date() } = {}) {
 // park (#395, "Move on"): the item's run waits at a human gate (`runOf(runId).waiting`, as advance's
 // env, with the gate's name in `gate`): the item is parked (finished for its stage) and the run is
 // left as it is, still waiting at the same gate for the owner.
-function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date(), keepPaused = false } = {}) {
+// #807 stack: `modeOf(item)` gives the item's effective run mode (Fork + PR refuses it)
+function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date(), keepPaused = false, modeOf = null } = {}) {
   if (!['park', 'retry', 'skip', 'stack'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
   return updateRoadmap(dir, projectId, (r) => {
     const item = findItem(r, itemId);
     if (!item) throw new Error('This roadmap item no longer exists.');
     if (action === 'park') return parkItems(r, new Set([itemId]), gateOf(item, runOf), now);
-    if (action === 'stack') return stackOn(r, itemId, runOf); // #807
+    if (action === 'stack') return stackOn(r, itemId, runOf, { modeOf }); // #807
     // #807: Move on past an item waiting for its PR's merge, also while its run waits at the PR's review gate
     const waitsMerge = action === 'skip' && !!runOf && findItem(withStatus(r, runOf), itemId)?.status === 'waiting_merge';
     if (!waitsMerge && runIsAlive(item, alive)) {

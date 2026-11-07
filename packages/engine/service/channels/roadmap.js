@@ -314,7 +314,8 @@ module.exports = (ctx) => {
         const runOf = (runId) => ctx.gateRun?.(runId) || null;
         if (action === 'stack') {
           const before = stagesOf(id);
-          roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), 'stack', { runOf });
+          const modeOf = ctx.itemMode ? (x) => ctx.itemMode(id, x) : null;
+          roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), 'stack', { runOf, modeOf });
           await ctx.dispatchRoadmaps();
           const pr = item?.runId ? runOf(item.runId)?.pr : null;
           return withEdit(projectId, edited(id, before, `Stacked the next stage on ${pr?.number ? `#${pr.number}` : 'the waiting stage'}`));
