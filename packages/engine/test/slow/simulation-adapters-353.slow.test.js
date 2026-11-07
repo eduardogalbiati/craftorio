@@ -16,6 +16,8 @@
 // (test/simulated-run-events-353.js), so a new test id no longer turns this test red.
 // #723: the baseline was recorded on Windows with Node v24.19.0; paths under a replaced folder now
 // use '/' and this process's Node version reads <node-version>, so it holds on any machine.
+// #809 replaced feature.yaml's pr_review gate with the pr_monitor step (pending, waiting, ready,
+// merged): re-recorded (#723), two runs gave 447 events.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
