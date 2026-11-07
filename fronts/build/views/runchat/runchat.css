@@ -98,5 +98,7 @@
 .pr-monitor-label { color: var(--muted); }
 .pr-monitor-value { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-monitor-error { color: var(--amber); margin: 0; }
+/* #810: Merge / Merge ignoring protection / Close under the card's lines */
+.pr-monitor-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .rm-pr-card { padding: 6px 8px; gap: 4px; margin-top: 6px; }
 .rm-pr-card .pr-monitor-line { grid-template-columns: 76px minmax(0, 1fr); font-size: 11px; }

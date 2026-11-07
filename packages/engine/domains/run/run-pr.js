@@ -138,7 +138,7 @@ async function ghMonitor(pr, t, reader) {
       : decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
   const conflicts = { status: pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY' ? 'base' : 'none' };
   const [owner, name] = t.repo.split('/');
-  const threads = await reader('gh', ['api', 'graphql', ...github.apiHostArgs({ host: t.host }), '-f', `query=${THREADS_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `n=${t.id}`])
+  const threads = await reader(github.cli, ['api', 'graphql', ...github.apiHostArgs({ host: t.host }), '-f', `query=${THREADS_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `n=${t.id}`])
     .then((r) => r?.data?.repository?.pullRequest?.reviewThreads?.nodes, () => null);
   // no thread list (a token without the scope, a reader standing in for gh): the PR's comments
   const unanswered = Array.isArray(threads) ? threads.filter((n) => !n.isResolved).length : (pr.comments || []).length;
