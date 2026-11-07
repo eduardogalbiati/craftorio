@@ -259,6 +259,12 @@ const methods = {
       lost_turns: r.lostTurns.map((t) => ({ session_id: t.session_id, step_id: t.step_id, turn: t.turn })),
     });
     for (const lost of r.lostTurns) this.recordLostTurn(lost);
+    // #811: a fix round the restart cut (prMonitorSeed) ends failed, so the card offers "Ask for a fix" again
+    const cut = this.prFixInterrupted;
+    if (cut) {
+      this.prFixInterrupted = null;
+      this.emitEvent('pr.fix', { step_id: r.nextStep, ...cut, status: 'failed', reason: 'the app restarted during the fix' });
+    }
   },
 
   // #607: a turn the crash cut, recorded as a stopped attempt with what its stream reported (#233,

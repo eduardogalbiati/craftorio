@@ -9,12 +9,13 @@
 
 const fs = require('fs');
 
-// #811: the fix rounds a run takes from its pull request before each next one asks the owner
-// (domains/run/run-pr.js re-exports it for the card's request text)
-const MAX_FIX_ROUNDS = 5;
+// #811: the fix rounds a run takes from its pull request before each next one asks the owner: the card's
+// (packages/shared/pr-card.js FIX_ROUNDS, one value for the UI and the engine; domains/run/run-pr.js re-exports it)
+const { FIX_ROUNDS: MAX_FIX_ROUNDS } = require('@multiagent/shared/pr-card');
 
-// #811: a turn's tokens (its usage: input + output), 0 when unknown
-const tokensOf = (usage) => (Number(usage?.input_tokens) || 0) + (Number(usage?.output_tokens) || 0);
+// #811: a turn's tokens (input + output), 0 when unknown: the engine's usage ({ input, output }, providers.js)
+// or a provider's raw one ({ input_tokens, output_tokens })
+const tokensOf = (usage) => (Number(usage?.input ?? usage?.input_tokens) || 0) + (Number(usage?.output ?? usage?.output_tokens) || 0);
 
 const prFixMethods = {
   // #811: "Ask for a fix" from the card (service/areas/runs.js askRunPrFix, which builds `prompt` with run-pr.js

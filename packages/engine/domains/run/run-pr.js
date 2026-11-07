@@ -139,7 +139,6 @@ function trustCache(read) {
   };
 }
 const GH_WRITE = ['admin', 'maintain', 'write'];
-const GL_DEVELOPER = 30;
 
 // GitHub: the checks, the review decision with its latest reviews, the unresolved review threads
 async function ghMonitor(pr, t, reader, url) {
@@ -230,7 +229,7 @@ async function glMonitor(mr, t, reader, url) {
   const conflicts = { status: mr.has_conflicts || mr.detailed_merge_status === 'conflict' ? 'base' : 'none' };
   const open = (discussions || []).filter((d) => (d.notes || []).some((n) => n.resolvable && !n.resolved));
   const unanswered = open.length;
-  const trusted = trustCache((id) => api(`members/all/${id}`).then((m) => Number(m?.access_level) >= GL_DEVELOPER));
+  const trusted = trustCache((id) => api(`members/all/${id}`).then((m) => Number(m?.access_level) >= gitlab.WRITE_LEVEL));
   // #811: the unresolved discussions (their first note), the reviewers asking for changes, the failed jobs
   const page = mr.web_url || url;
   const requests = await withTrust([

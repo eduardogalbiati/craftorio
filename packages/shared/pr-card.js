@@ -11,6 +11,7 @@
 //   protection and Close, what blocks the merge, a failed merge's message.
 // - requests(list), fixLimit(fixes), tokensText(n), FIX_ROUNDS (#811): the PR's requests on the card (only a
 //   trusted one is selectable), Ask for a fix (a button of buttons()), the limit of fix rounds and their tokens.
+// - fmtK(n) (#811): a token count, 1.2k past a thousand (the shared copy; older views keep their own for now).
 // Browser: window.PrCard; Node: module.exports.
 (function (root) {
   const tr = () => (typeof module === 'object' && module.exports ? require('./i18n').t : root.I18n?.t || root.t);
@@ -82,8 +83,8 @@
     ].filter(Boolean);
   }
 
-  // #811: the fix rounds a run takes before it asks the owner (the engine's run-pr.js MAX_FIX_ROUNDS: the
-  // renderer cannot load the engine)
+  // #811: the fix rounds a run takes before it asks the owner: the one value, the engine's MAX_FIX_ROUNDS too
+  // (engine/run/pr-fix.js requires it from here)
   const FIX_ROUNDS = 5;
   const roundsTaken = (fixes) => (Array.isArray(fixes) ? fixes.reduce((n, f) => Math.max(n, Number(f?.round) || 0), 0) : 0);
   const canAskFix = (asks, fixes) => Array.isArray(asks) && asks.length > 0
@@ -137,6 +138,7 @@
     buttons,
     ended,
     fixLimit,
+    fmtK,
     lineHtml,
     lines,
     requestText,

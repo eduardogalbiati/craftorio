@@ -124,13 +124,15 @@
     // a project is named by its full path (subgroups kept)
     subgroups: true,
     repoInfoCommand: (path) => cmd(['api', `projects/${encodeURIComponent(path)}`]),
-    // `glab api projects/<path>` → Developer (30) or more in the project or its group
+    // the access level that may push: Developer (30) or more (parsePush; #811 run-pr.js, a comment's author)
+    WRITE_LEVEL: 30,
+    // `glab api projects/<path>` → WRITE_LEVEL or more in the project or its group
     // (permissions.project_access / group_access); undefined when the answer has no permissions
     parsePush: (info) => {
       const perms = info?.permissions;
       if (!perms || typeof perms !== 'object') return undefined;
       const levels = [perms.project_access, perms.group_access].map((a) => Number(a?.access_level) || 0);
-      return Math.max(...levels) >= 30;
+      return Math.max(...levels) >= gitlab.WRITE_LEVEL;
     },
     // #810: whether the account may merge from the app (unknown: yes, the platform refuses otherwise); never a
     // bypass (requestMergeCommand has no admin form)

@@ -772,11 +772,15 @@ const monitorSeen = (r) => JSON.stringify([r.state, r.ci, r.review, r.conflicts,
 // its log's `pr.monitor` events: it waits in the monitor (no run slot, areas/runs.js slotProblem), its last
 // card, and when the card last changed (the slower pace after a day survives a restart)
 function prMonitorSeed(events, stepId) {
-  /** @type {{ prMonitor: string, prMonitorCard: object | null, prMonitorSeen: string | undefined, prMonitorChangedAt: number | undefined, prFixRounds: number }} */
-  const seed = { prMonitor: stepId, prMonitorCard: null, prMonitorSeen: undefined, prMonitorChangedAt: undefined, prFixRounds: 0 };
+  /** @type {{ prMonitor: string, prMonitorCard: object | null, prMonitorSeen: string | undefined, prMonitorChangedAt: number | undefined, prFixRounds: number, prFixInterrupted: object | null }} */
+  const seed = { prMonitor: stepId, prMonitorCard: null, prMonitorSeen: undefined, prMonitorChangedAt: undefined, prFixRounds: 0, prFixInterrupted: null };
   for (const ev of events || []) {
-    // #811: the fix rounds taken count towards the limit after a restart
-    if (ev.type === 'pr.fix' && ev.step_id === stepId) seed.prFixRounds = Math.max(seed.prFixRounds, Number(ev.round) || 0);
+    // #811: the fix rounds taken count towards the limit after a restart; a round the restart cut (its last
+    // `pr.fix` still `requested`) is told failed at the start (resume.js startRecovered), or the card keeps it running
+    if (ev.type === 'pr.fix' && ev.step_id === stepId && (Number(ev.round) || 0) >= seed.prFixRounds) {
+      seed.prFixRounds = Number(ev.round) || 0;
+      seed.prFixInterrupted = ev.status === 'requested' ? { url: ev.url, round: seed.prFixRounds, ids: ev.ids, note: ev.note, requests: ev.requests } : null;
+    }
     if (ev.type !== 'pr.monitor' || ev.step_id !== stepId || ev.error) continue;
     const seen = monitorSeen(ev);
     if (seen !== seed.prMonitorSeen) seed.prMonitorChangedAt = Date.parse(ev.ts) || undefined;
