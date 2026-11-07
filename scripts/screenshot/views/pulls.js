@@ -15,14 +15,14 @@ const review = (login, state) => ({ author: { login }, state });
 
 // gh pr list --json's entries: [number, title, author, head, base, fields]
 const DEMO_PULLS = [
-  [41, 'Survive a renamed workspace folder', 'eduardo', 'fix/workspace-rename', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', reviewDecision: 'APPROVED', latestReviews: [review('ana', 'APPROVED')], statusCheckRollup: [ok('unit'), ok('e2e')] }],
-  [39, 'Export the run report as Markdown', 'eduardo', 'feat/run-report-md', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviewDecision: 'CHANGES_REQUESTED', latestReviews: [review('ana', 'CHANGES_REQUESTED')], statusCheckRollup: [ok('unit'), ok('e2e')] }],
-  [37, 'Document the workflow YAML', 'eduardo', 'docs/workflow-yaml', 'main', { mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY', reviewDecision: '', latestReviews: [], statusCheckRollup: [ok('unit')] }],
-  [44, 'Roadmap stages: the data model', 'eduardo', 'stack/roadmap-model', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'UNSTABLE', reviewDecision: '', latestReviews: [], statusCheckRollup: [ok('unit'), running('e2e')] }],
-  [45, 'Roadmap stages: the screen', 'eduardo', 'stack/roadmap-screen', 'stack/roadmap-model', { mergeable: 'MERGEABLE', mergeStateStatus: 'UNSTABLE', reviewDecision: '', latestReviews: [], statusCheckRollup: [running('unit')] }],
-  [42, 'Keep the computer awake while a run works', 'eduardo', 'feat/keep-awake', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviewDecision: 'REVIEW_REQUIRED', latestReviews: [], statusCheckRollup: [ok('unit'), ok('e2e')] }],
+  [41, 'Survive a renamed workspace folder', 'developer', 'fix/workspace-rename', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', reviewDecision: 'APPROVED', latestReviews: [review('ana', 'APPROVED')], statusCheckRollup: [ok('unit'), ok('e2e')] }],
+  [39, 'Export the run report as Markdown', 'developer', 'feat/run-report-md', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviewDecision: 'CHANGES_REQUESTED', latestReviews: [review('ana', 'CHANGES_REQUESTED')], statusCheckRollup: [ok('unit'), ok('e2e')] }],
+  [37, 'Document the workflow YAML', 'developer', 'docs/workflow-yaml', 'main', { mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY', reviewDecision: '', latestReviews: [], statusCheckRollup: [ok('unit')] }],
+  [44, 'Roadmap stages: the data model', 'developer', 'stack/roadmap-model', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'UNSTABLE', reviewDecision: '', latestReviews: [], statusCheckRollup: [ok('unit'), running('e2e')] }],
+  [45, 'Roadmap stages: the screen', 'developer', 'stack/roadmap-screen', 'stack/roadmap-model', { mergeable: 'MERGEABLE', mergeStateStatus: 'UNSTABLE', reviewDecision: '', latestReviews: [], statusCheckRollup: [running('unit')] }],
+  [42, 'Keep the computer awake while a run works', 'developer', 'feat/keep-awake', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviewDecision: 'REVIEW_REQUIRED', latestReviews: [], statusCheckRollup: [ok('unit'), ok('e2e')] }],
   [2, 'Bump electron from 38.1.0 to 38.2.1', 'app/dependabot', 'dependabot/npm_and_yarn/electron-38.2.1', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', reviewDecision: '', latestReviews: [], statusCheckRollup: [ok('unit'), ok('e2e')] }],
-  [192, 'Try a second layout for the settings screen with the provider accounts grouped by machine and a search box', 'eduardo', 'spike/settings-layout', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviewDecision: 'REVIEW_REQUIRED', latestReviews: [], statusCheckRollup: [] }],
+  [192, 'Try a second layout for the settings screen with the provider accounts grouped by machine and a search box', 'developer', 'spike/settings-layout', 'main', { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviewDecision: 'REVIEW_REQUIRED', latestReviews: [], statusCheckRollup: [] }],
 ].map(([number, title, login, headRefName, baseRefName, rest]) => ({ number, title, url: pr(number), author: { login }, isDraft: false, headRefName, baseRefName, state: 'OPEN', ...rest }));
 const WITH_RUN = [41, 39, 37, 44, 45, 42];
 
