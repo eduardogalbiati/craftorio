@@ -126,13 +126,23 @@ Given('the app is open with these pull requests open on the platform:', async ({
   writePulls(e2e, pulls);
   rows.forEach((row, i) => { if (/^yes$/i.test(String(row.run || '').trim())) writeRunOf(e2e, pulls[i], i); });
   e2e.pulls = pulls;
+  await reloadWithPulls(e2e);
 });
 
 Given('the app is open with no pull request open on the platform', async ({ e2e }) => {
   await e2e.open({ env: { MULTIAGENT_E2E_PR_FILE: PR_FILE } });
   writePulls(e2e, []);
   e2e.pulls = [];
+  await reloadWithPulls(e2e);
 });
+
+// The scratch folder exists only once the app is open, so the PR file and the runs are written after the launch;
+// the page is reloaded so its first read (the menu's count, at boot) already sees them, instead of waiting for the
+// next timed read minutes later (as app.steps.js addProject)
+async function reloadWithPulls(e2e) {
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+}
 
 // ---- the menu's entry --------------------------------------------------------------------------------
 
