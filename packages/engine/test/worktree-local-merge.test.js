@@ -9,7 +9,7 @@ const path = require('path');
 const { prepareWorktree, removeWorktree, mergeLocally, canonicalPath } = require('../engine/worktree');
 const { commit, fixture, git, logger } = require('./worktree-helpers');
 
-test('prepareWorktree remote: false starts from the local base, with unpushed commits, and fetches nothing', async (t) => {
+test('prepareWorktree remote: false starts from the local base, with unpushed commits, even when origin moved', async (t) => {
   const f = fixture(t);
   const local = commit(f.repo, 'local.txt', 'only here\n', 'local, never pushed');
   // someone pushes to origin: a remote worktree would start there, a local one must not
