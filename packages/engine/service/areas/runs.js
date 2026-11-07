@@ -415,11 +415,12 @@ module.exports = (ctx) => {
       const low = parent ? '' : await memoryHold();
       if (low) throw new Error(low);
     }
-    const slot = { mock: !!mock, projectId: forcedProject, parentRunId: parent?.run_id || null };
+    // #809: a run recovered in its PR monitor (areas/recover.js) needs no slot: it never waits for one
+    const slot = { mock: !!mock, projectId: forcedProject, parentRunId: parent?.run_id || null, prMonitor: !!recover?.prMonitor };
     // a child waits for its slot (waitForSlot reserves it); any other run fails when none is free
     if (parent) await waitForSlot(slot, signal, onSlotWait);
     else {
-      const busy = slotProblem(slot);
+      const busy = slot.prMonitor ? '' : slotProblem(slot);
       if (busy) throw new Error(busy);
       reserved.add(slot);
     }
@@ -443,7 +444,7 @@ module.exports = (ctx) => {
           await waitForSlot(slot, signal, onSlotWait);
         }
       } else {
-        const busyProject = slotProblem(slot, slot);
+        const busyProject = slot.prMonitor ? '' : slotProblem(slot, slot);
         if (busyProject) throw new Error(busyProject);
       }
       // budgets that count usage outside the orchestrator need the CLIs' own logs

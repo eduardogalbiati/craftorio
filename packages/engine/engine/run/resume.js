@@ -19,6 +19,7 @@
 const { checkAttachments, emptyUsage, seedClaudeTotal } = require('../providers');
 const { attemptSummary, noteToolCall } = require('./turns');
 const { GATE } = require('./field-rules');
+const { prMonitorSeed } = require('./transitions');
 
 // #368: what ends a run that pauses (the step loop, a gate left unanswered, children that paused):
 // status `paused`, not an error (WorkflowRun#endOfError)
@@ -244,6 +245,9 @@ const methods = {
     Object.assign(this, { seq: state.seq, nSession: state.nSession, nApproval: state.nApproval, prevStepId: state.lastFinished });
     this.attachments = events.find((e) => e.type === 'workflow.started')?.attachments || {};
     this.recovered = { nextStep: state.nextStep, lostTurns: state.lostTurns, startedAt: state.startedAt, worktree: recover.worktree || null, from: state.seq };
+    // #809: recovered in its PR monitor: it holds no run slot from the start (another recovered run may
+    // start before its first read), with its last card and when it last changed
+    if (this.wf.steps.find((s) => s.id === state.nextStep)?.type === 'pr_monitor') Object.assign(this, prMonitorSeed(events, state.nextStep));
   },
 
   // #607: the start of a recovered run: `run.recovered` (never a second workflow.started: the run is

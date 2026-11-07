@@ -3714,6 +3714,7 @@
   "pr_card.checked_at": "lido às {time}",
   "pr_card.ci": "CI",
   "pr_card.ci.failed": "falhou ({jobs})",
+  "pr_card.ci.manual": "aguarda um job manual",
   "pr_card.ci.none": "não roda em pull requests",
   "pr_card.ci.passed": "passou",
   "pr_card.ci.running": "rodando",
@@ -3733,6 +3734,8 @@
   "pr_card.review.none": "nenhuma revisão exigida",
   "pr_card.review.required": "faltam aprovações",
   "pr_card.title": "Aguardando o merge",
+  "pr_card.title_closed": "Fechado sem merge",
+  "pr_card.title_merged": "Merge feito",
   "pr_card.waits_for_maintainers": "Aguarda os mantenedores",
 
   "project.city": "Cidade",

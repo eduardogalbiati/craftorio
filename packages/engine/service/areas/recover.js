@@ -58,8 +58,15 @@ module.exports = (ctx) => {
     return claimed;
   }
 
+  // #809: the run died waiting in its PR monitor (its next step is the `type: pr_monitor` step it started)
+  function inPrMonitor(events) {
+    const next = runStateFromEvents(events).nextStep;
+    return !!next && events.some((e) => e.type === 'step.started' && e.step_id === next && e.step_type === 'pr_monitor');
+  }
+
   // Starts the claimed runs, one after the other; one that cannot start (a busy slot, low memory, the
   // budget, its workflow gone) gives its owner.json back, stays interrupted and is reported at once.
+  // A run in its PR monitor needs no slot (#809): it continues even when the other runs fill them.
   async function recoverLiveRuns(claimed) {
     for (const c of claimed || []) {
       const { spec, started } = c;
@@ -67,7 +74,7 @@ module.exports = (ctx) => {
         await ctx.startWorkflowRun({
           file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId, issues: spec.issues, agentOverrides: spec.agentOverrides,
           then: started.then || null, from: started.from || null,
-          recover: { runId: c.runId, events: c.events, worktree: spec.worktree, personas: spec.personas, owner: c.owner },
+          recover: { runId: c.runId, events: c.events, worktree: spec.worktree, personas: spec.personas, owner: c.owner, prMonitor: inPrMonitor(c.events) },
         });
       } catch (e) {
         c.owner.release();

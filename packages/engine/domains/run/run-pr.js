@@ -106,7 +106,7 @@ async function fetchPrState(pr, { reader = readJson } = {}) {
 
 // ---- the PR monitor's card (#809) -----------------------------------------------------------------
 // What the pr_monitor step shows of a PR/MR, read with no LLM: { state (as fetchPrState), detail,
-// ci: { status: passed | failed | running | none (no CI on PRs), failed: [jobs] },
+// ci: { status: passed | failed | running | manual (GitLab: waits for a manual job) | none (no CI on PRs), failed: [jobs] },
 // review: { status: approved | changes_requested | required (approvals missing) | none, by: [logins] },
 // conflicts: { status: none | base }, comments: { unanswered }, result: { ready, blockers: [what blocks the merge] } }.
 // A merged or closed PR/MR is only its state. A failed read rejects: the monitor keeps its last card.
@@ -132,7 +132,8 @@ async function ghMonitor(pr, t, reader) {
   const ci = { status: !checks.length ? 'none' : failed.length ? 'failed' : checks.some((c) => c.bucket === 'pending') ? 'running' : 'passed', failed };
   const by = (state) => (pr.latestReviews || []).filter((r) => r.state === state).map((r) => r.author?.login).filter(Boolean);
   const decision = String(pr.reviewDecision || '').toUpperCase();
-  const review = decision === 'CHANGES_REQUESTED' ? { status: 'changes_requested', by: by('CHANGES_REQUESTED') }
+  // a branch rule that requires no review leaves reviewDecision empty: a latest review asking for changes still blocks
+  const review = decision === 'CHANGES_REQUESTED' || (decision !== 'APPROVED' && by('CHANGES_REQUESTED').length) ? { status: 'changes_requested', by: by('CHANGES_REQUESTED') }
     : decision === 'REVIEW_REQUIRED' ? { status: 'required', by: [] }
       : decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
   const conflicts = { status: pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY' ? 'base' : 'none' };
@@ -151,11 +152,13 @@ async function glMonitor(mr, t, reader) {
   const pipeline = mr.head_pipeline || mr.pipeline || null;
   const ps = String(pipeline?.status || '').toLowerCase();
   const [approvals, reviewers, discussions, jobs] = await Promise.all([
-    mrApi('approvals'), mrApi('reviewers'), mrApi('discussions'),
+    // 100 discussions a page (GitLab's default is 20: the unanswered count would stop there)
+    mrApi('approvals'), mrApi('reviewers'), mrApi('discussions?per_page=100'),
     GL_FAILED.includes(ps) && pipeline?.id ? api(`pipelines/${pipeline.id}/jobs`) : [],
   ]);
   const failed = (jobs || []).filter((j) => GL_FAILED.includes(String(j.status || '').toLowerCase())).map((j) => j.name);
-  const ci = { status: !pipeline ? 'none' : GL_FAILED.includes(ps) ? 'failed' : ['success', 'skipped'].includes(ps) ? 'passed' : 'running', failed };
+  // a pipeline waiting for a manual (or scheduled) job never finishes by itself: someone has to act
+  const ci = { status: !pipeline ? 'none' : GL_FAILED.includes(ps) ? 'failed' : ['success', 'skipped'].includes(ps) ? 'passed' : ['manual', 'scheduled'].includes(ps) ? 'manual' : 'running', failed };
   const changesBy = (reviewers || []).filter((r) => r.state === 'requested_changes').map((r) => r.user?.username).filter(Boolean);
   const approvedBy = (approvals?.approved_by || []).map((a) => a.user?.username).filter(Boolean);
   const review = changesBy.length ? { status: 'changes_requested', by: changesBy }
@@ -172,6 +175,7 @@ function monitorResult(shown, { ci, review, conflicts, comments }) {
   if (shown.state === 'draft') blockers.push('draft');
   if (ci.status === 'failed') blockers.push(`CI failed${ci.failed.length ? ` (${ci.failed.join(', ')})` : ''}`);
   if (ci.status === 'running') blockers.push('CI running');
+  if (ci.status === 'manual') blockers.push('CI waits for a manual job');
   if (review.status === 'changes_requested') blockers.push(`changes requested${review.by.length ? ` by ${review.by.join(', ')}` : ''}`);
   if (review.status === 'required') blockers.push('approvals missing');
   if (conflicts.status === 'base') blockers.push('conflict with the base');

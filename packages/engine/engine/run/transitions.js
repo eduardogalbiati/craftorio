@@ -259,17 +259,23 @@ const methods = {
   // read again). Each read that changes the card emits `pr.monitor` (else one every 10 minutes); a read
   // that fails keeps the last card (its state and checked_at) with the error and never ends the run.
   // `prMonitor` (the step's id while it waits): the service counts no run slot for it and shows its
-  // roadmap item waiting for the merge. Nothing is kept in `st`: a restarted run reads the PR/MR afresh.
+  // roadmap item waiting for the merge. Nothing is kept in `st`: a restarted run reads the PR/MR afresh
+  // (prMonitorSeed gives it its last card). The read needs no worktree (gh/glab read the URL); the
+  // worktree stays until the run ends, and the run says why once.
   async pollPrMonitor(step, st, t0 = Date.now()) {
     if (this.abort.signal.aborted) throw new Error('Cancelled');
     const target = (step.target ? render(step.target, this.ctx).trim() : '')
       || this.ctx.steps?.ci?.output?.pr_url || this.ctx.steps?.pr_open?.output?.pr_url || '';
     this.prMonitor = step.id;
+    if (this.worktree?.dir && !this.prMonitorKeptSaid) {
+      this.prMonitorKeptSaid = true;
+      this.emitEvent('log', { level: 'info', step_id: step.id, message: `worktree: ${this.worktree.dir} is kept while the run waits for the merge, unused (no agent, no run slot): the end of the run removes it, deleting its branch once merged, or keeps the work on its branch if the pull/merge request closes.` });
+    }
     const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork' };
     let r;
     try {
       if (!target) throw new Error('no pull/merge request URL yet');
-      r = await this.probe({ probe: 'pr_monitor', target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id });
+      r = await this.probe({ probe: 'pr_monitor', target, signal: this.abort.signal, stepId: step.id });
     } catch (e) {
       if (this.abort.signal.aborted) throw new Error('Cancelled');
       this.prMonitorError = e.message;
@@ -279,7 +285,7 @@ const methods = {
     this.prMonitorError = null;
     const card = { ...(this.prMonitorCard || {}), state: r.state, detail: r.detail || r.state, checked_at: new Date().toISOString() };
     for (const k of ['ci', 'review', 'conflicts', 'comments', 'result']) if (r[k]) card[k] = r[k];
-    const seen = JSON.stringify([r.state, r.ci, r.review, r.conflicts, r.comments, r.result]);
+    const seen = monitorSeen(r);
     const changed = seen !== this.prMonitorSeen;
     if (changed) this.prMonitorChangedAt = Date.now();
     if (changed || Date.now() - (this.prMonitorEmittedAt || 0) >= 10 * 60e3) {
@@ -680,8 +686,28 @@ function prMonitorIntervalMs(sinceChangeMs) {
   return sinceChangeMs > 24 * 36e5 ? 5 * 60e3 : 60e3;
 }
 
+// #809: a read's fingerprint (pollPrMonitor): a change of it is a change of the card
+const monitorSeen = (r) => JSON.stringify([r.state, r.ci, r.review, r.conflicts, r.comments, r.result]);
+
+// #809: what a run recovered in its PR monitor (resume.js seedRecovery) knows before its first read, from
+// its log's `pr.monitor` events: it waits in the monitor (no run slot, areas/runs.js slotProblem), its last
+// card, and when the card last changed (the slower pace after a day survives a restart)
+function prMonitorSeed(events, stepId) {
+  const seed = { prMonitor: stepId, prMonitorCard: null, prMonitorSeen: undefined, prMonitorChangedAt: undefined };
+  for (const ev of events || []) {
+    if (ev.type !== 'pr.monitor' || ev.step_id !== stepId || ev.error) continue;
+    const seen = monitorSeen(ev);
+    if (seen !== seed.prMonitorSeen) seed.prMonitorChangedAt = Date.parse(ev.ts) || undefined;
+    seed.prMonitorSeen = seen;
+    const { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result } = ev;
+    seed.prMonitorCard = { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result };
+  }
+  return seed;
+}
+
 module.exports = {
   goalLoopInstructions,
   methods,
   prMonitorIntervalMs,
+  prMonitorSeed,
 };

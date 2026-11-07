@@ -3714,6 +3714,7 @@
   "pr_card.checked_at": "read at {time}",
   "pr_card.ci": "CI",
   "pr_card.ci.failed": "failed ({jobs})",
+  "pr_card.ci.manual": "waits for a manual job",
   "pr_card.ci.none": "does not run on pull requests",
   "pr_card.ci.passed": "passed",
   "pr_card.ci.running": "running",
@@ -3733,6 +3734,8 @@
   "pr_card.review.none": "no review required",
   "pr_card.review.required": "approvals missing",
   "pr_card.title": "Waiting for the merge",
+  "pr_card.title_closed": "Closed without merging",
+  "pr_card.title_merged": "Merged",
   "pr_card.waits_for_maintainers": "Waits for the maintainers",
 
   "project.city": "City",

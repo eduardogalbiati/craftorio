@@ -6,7 +6,6 @@
 // Test ids: roadmap-item-pr-card, pr-card-line (data-line ci | review | conflicts | comments | result).
 // Uses app.js globals (esc, t), PrCard and TimeZone.
 (() => {
-  const TONE_PILL = { ok: 'pill-success', bad: 'pill-failed', wait: 'pill-running', idle: 'pill-idle' };
   const timeOf = (iso) => (iso && window.TimeZone ? TimeZone.formatTime(iso, TimeZone.current()) : iso || '');
 
   function html(x) {
@@ -15,7 +14,7 @@
     if (!lines.length) return '';
     const at = pr.checkedAt ? t('pr_card.checked_at', { time: timeOf(pr.checkedAt) }) : '';
     const error = pr.error ? `<div class="small warn-text" role="status">${esc(t('pr_card.read_failed', { error: pr.error, time: timeOf(pr.checkedAt) || '—' }))}</div>` : '';
-    const rows = lines.map((l) => `<div class="pr-monitor-line" data-testid="pr-card-line" data-line="${esc(l.key)}"><span class="pr-monitor-label">${esc(l.label)}</span><span class="pill ${TONE_PILL[l.tone] || 'pill-idle'} pr-monitor-value" title="${esc(l.text)}">${esc(l.text)}</span></div>`).join('');
+    const rows = lines.map((l) => PrCard.lineHtml(l, 'pr-card-line')).join('');
     return `<div class="pr-monitor rm-pr-card small" data-testid="roadmap-item-pr-card" title="${esc(at)}">${rows}${error}</div>`;
   }
 
