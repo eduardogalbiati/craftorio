@@ -6,7 +6,8 @@
 //   POST /api/<channel>   Authorization: Bearer <token>, body { "arg": ... }  ->  as packages/engine/server/index.js
 // Only the channels of packages/engine/control/allowlist.js are answered (others: 403 naming the channel); no
 // argument may cross a human gate (confirmGate), and GUARDS refuse what would remove one (#399:
-// workflows:restore of a copy with a gate its default lacks). Every call is appended to control/calls.jsonl.
+// workflows:restore of a copy with a gate its default lacks; #799: runs:resume with changed inputs).
+// Every call is appended to control/calls.jsonl.
 // The calls go to the running app's own service: actions dispatch as from the screen, and no second
 // engine opens the workspace (#112). Two reads for the client (#342), with the token, not logged:
 //   GET /api/version    ->  { version }: CONTROL_VERSION, the client refuses another one (exit 3)
@@ -36,8 +37,10 @@ const {
 const SUMMARY_CHARS = 200;
 
 // Refusals only outside sessions get, per channel (#399): the reason, or null to go on.
+// runs:resume (#799) keeps the inputs the owner gave the run, as supervisor:resume does.
 // workflows:restore never removes a human gate the owner added to a workspace copy.
 const GUARDS = {
+  'runs:resume': (service, arg) => (arg?.inputs == null ? null : 'inputs is refused: outside sessions never change a run\'s inputs. Change them in the app\'s Resume from step dialog.'),
   'workflows:restore': (service, file) => {
     const ws = service.workspace();
     const gates = ws ? addedGates(BUNDLED_WORKFLOWS_DIR, ws.workflows, file) : [];

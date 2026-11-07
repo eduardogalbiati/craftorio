@@ -30,7 +30,7 @@ async function setup(t) {
     events,
     liveRun: () => null,
     listPipelines: () => [],
-    workflowPath: (file) => ({ file: path.join(ROOT, 'workflows', path.basename(file)) }),
+    projectWorkflowFile: (_projectId, file) => path.join(ROOT, 'workflows', path.basename(file)),
     startWorkflowRun: async () => ({ runId: `run-${++n}` }),
   };
   const area = load()(ctx);

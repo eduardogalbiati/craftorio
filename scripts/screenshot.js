@@ -7,7 +7,7 @@
 //
 //   --view <name>      a seed module of scripts/screenshot/views/ (#249): dashboard, sessions, projects, project, backlog, roadmap, artifacts, workflows, agents,
 //                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena, inbox,
-//                      discovery, run-chat, run, home-empty, setup, onboarding
+//                      discovery, run-chat, run, resume, home-empty, setup, onboarding
 //                      (default dashboard, the menu's Home (#255: the flow strip, "What needs you" and
 //                      "Today" on demo data; its Analytics tab: --view analytics; home-empty: Home in a
 //                      new workspace, no project and no run: how to start; onboarding (#644): the new-project

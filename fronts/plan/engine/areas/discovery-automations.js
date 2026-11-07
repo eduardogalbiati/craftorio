@@ -60,10 +60,10 @@ module.exports = (ctx) => {
   const takeDocument = (t, projectId, outputs) => { t.document = documentText(projectId, outputs?.document) || t.document; };
 
   // what the automation runs: a pipeline's name comes from its file (the board's copy may be older)
-  function describe(auto) {
+  function describe(auto, projectId) {
     if (auto.check) return { kind: 'check', file: null, name: auto.name || 'Clarity check' };
     if (auto.pipeline) {
-      const p = ctx.listPipelines().find((x) => x.file === auto.pipeline);
+      const p = ctx.listPipelines(projectId).find((x) => x.file === auto.pipeline);
       return { kind: 'pipeline', file: auto.pipeline, name: p?.name || auto.name || auto.pipeline, error: p ? p.error || null : `Pipeline not found: ${auto.pipeline}` };
     }
     return { kind: 'workflow', file: auto.workflow || null, name: auto.name || auto.workflow || 'Workflow' };
@@ -71,11 +71,11 @@ module.exports = (ctx) => {
 
   // A rough cost before it runs: from past real runs of its workflows (null without any); a
   // simulation costs nothing, the clarity check calls no model.
-  function estimateOf(auto) {
+  function estimateOf(auto, projectId) {
     if (auto.check) return { costUsd: 0, items: [], complete: true, text: 'No model call: the clarity rubric scores the card.' };
     if (simulation.simulationOnly()) return { costUsd: 0, items: [], complete: true, simulated: true, text: 'Simulated run: the mock provider costs nothing.' };
     try {
-      if (auto.pipeline) return ctx.pipelineEstimate({ file: auto.pipeline });
+      if (auto.pipeline) return ctx.pipelineEstimate({ file: auto.pipeline, projectId });
       const est = chainModel.estimateCost([auto.workflow], runs.listRuns(ctx.ws.runs));
       return { ...est, text: chainModel.estimateText(est) };
     } catch (e) {
@@ -84,9 +84,9 @@ module.exports = (ctx) => {
   }
 
   // The proposal a move into an 'ask' column answers with: what would run, on which column, its estimate.
-  function proposal(column, auto) {
-    const what = describe(auto);
-    return { status: 'proposed', column, mode: auto.mode, kind: what.kind, file: what.file, name: what.name, error: what.error || null, estimate: estimateOf(auto) };
+  function proposal(projectId, column, auto) {
+    const what = describe(auto, projectId);
+    return { status: 'proposed', column, mode: auto.mode, kind: what.kind, file: what.file, name: what.name, error: what.error || null, estimate: estimateOf(auto, projectId) };
   }
 
   /**
@@ -102,13 +102,13 @@ module.exports = (ctx) => {
     if (auto.mode !== 'on') {
       // a clarity check with nothing to ask (a clear card, or no open point left) is not offered
       if (auto.check && !discovery.grillHasQuestion(dir(), projectId, card.id)) return card;
-      return { ...card, automation: proposal(card.column, auto) };
+      return { ...card, automation: proposal(projectId, card.column, auto) };
     }
     try {
       const started = await startDiscoveryAutomation({ projectId, cardId: card.id, column: card.column });
       return { ...discovery.readCard(dir(), projectId, card.id), automation: { status: started.runId ? 'running' : 'done', column: card.column, ...started } };
     } catch (e) {
-      return { ...card, automation: { status: 'failed', column: card.column, name: describe(auto).name, error: e.message } };
+      return { ...card, automation: { status: 'failed', column: card.column, name: describe(auto, projectId).name, error: e.message } };
     }
   }
 
@@ -142,7 +142,7 @@ module.exports = (ctx) => {
     }
     const auto = col.on_enter;
     if (!auto || auto.mode === 'off') throw new Error(`${col.title} has no automation on.`);
-    const what = describe(auto);
+    const what = describe(auto, projectId);
     if (what.error) throw new Error(what.error);
     if (what.kind === 'check') {
       // Grill me: the question waits for the person in the card's thread; nothing is decided here
@@ -151,8 +151,8 @@ module.exports = (ctx) => {
     }
     const inputs = discovery.renderAutomationInputs(dir(), projectId, cardId, auto.inputs || {});
     const project = projects.readProject(ctx.ws.projects, path.basename(String(projectId)));
-    const first = what.kind === 'pipeline' ? ctx.pipelineAssign(what.file).workflow : what.file;
-    const wf = loadWorkflow(ctx.workflowPath(first).file);
+    const first = what.kind === 'pipeline' ? ctx.pipelineAssign(what.file, projectId).workflow : what.file;
+    const wf = loadWorkflow(ctx.projectWorkflowFile(projectId, first));
     // the project folder is the agents' context when the workflow takes one
     if (wf.inputs?.project_path && inputs.project_path === undefined && project?.folder) inputs.project_path = project.folder;
     const mock = simulation.simulationOnly();

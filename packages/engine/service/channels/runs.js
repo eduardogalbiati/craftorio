@@ -231,12 +231,13 @@ module.exports = (ctx) => [
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers;
   // confirmGate: the decided gate the owner approves again in the dialog (#112)
   // images: pictures pasted into the instruction (#130), given to the first resumed agent step
+  // inputs: the inputs that change for the new run, over the ones the run recorded (#799)
   {
     channel: 'runs:resume',
     method: 'resumeRun',
-    params: ['runId', 'step', 'instruction', 'mock', 'confirmGate', 'images'],
+    params: ['runId', 'step', 'instruction', 'mock', 'confirmGate', 'images', 'inputs'],
     schema: {
-      params: args({ runId: RUN_ID, step: nullable(STEP_ID), instruction: nullable(STRING), mock: FLAG, confirmGate: ANY, images: nullable(IMAGES) }, ['runId']),
+      params: args({ runId: RUN_ID, step: nullable(STEP_ID), instruction: nullable(STRING), mock: FLAG, confirmGate: ANY, images: nullable(IMAGES), inputs: nullable(OBJECT) }, ['runId']),
       result: STARTED,
     },
     fn: (opts) => ctx.resumeRun(opts),

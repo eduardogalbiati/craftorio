@@ -68,12 +68,45 @@ function resumeEffects(o, stepId) {
 }
 
 // A run stopped by a limit (#288: the context limit's gate, the cost or time limits): the resumed run
-// is a new run, so its limits count from zero (its own turns' context, cost and time).
+// is a new run, so its limits count from zero (its own turns' context, cost and time). A provider's
+// limit (#799) does not start over with the run: it has to have reset. Then what each agent's next
+// turn re-reads (#320), the cost of waiting past the prompt cache.
 function resumeLimitNote(o) {
-  return o.limit ? `<div class="muted small" data-testid="resume-limit-note">${t('resume_dialog.the_run_stopped_at_its_limit')}<span class="mono">${esc(o.limit)}</span>${t('resume_dialog.the_resumed_run_counts_its_limits')}</div>` : '';
+  if (!o.limit) return '';
+  const after = o.providerLimit ? t('resume_dialog.the_providers_limit_has_to_have_reset') : t('resume_dialog.the_resumed_run_counts_its_limits');
+  const turns = o.turns?.length ? ` ${esc(SessionCache.continueText(o.turns, (agent) => resumeStepName(null, agent)))}.` : '';
+  return `<div class="muted small" data-testid="resume-limit-note">${t('resume_dialog.the_run_stopped_at_its_limit')}<span class="mono">${esc(o.limit)}</span>${after}${turns}</div>`;
 }
 
-// opts.step: the step to preselect (#288: where an interrupted run stopped), over the suggested one;
+// The inputs the owner may change for the new run (#799: the developer's model and effort), at the
+// values the run's agents ran on; the service says which, each with the workflow's own definition.
+// An override may have run outside the input's list, and a run may have no value at all (no default,
+// none recorded): that value, or Not set, leads the select and stays unless the owner picks another
+// (only a value that differs from what ran goes to the new run).
+const resumeInputKeys = (o) => Object.keys(o.inputDefs || {}).filter((key) => o.inputDefs[key].enum?.length);
+const resumeInputSelect = (key) => $(`[data-testid="resume-input-${key}"]`);
+const resumeInputRan = (o, key) => String(o.inputs?.[key] ?? '');
+
+function resumeInputFields(o) {
+  const fields = resumeInputKeys(o).map((key) => {
+    const def = o.inputDefs[key];
+    const ran = resumeInputRan(o, key);
+    const options = def.enum.map((v) => [v, WorkflowInputs.optionLabel(def, v)]);
+    if (!def.enum.some((v) => String(v) === ran)) options.unshift([ran, ran ? WorkflowInputs.optionLabel(def, ran) : t('resume_dialog.not_set')]);
+    return `<div class="field"><label for="resume-input-${esc(key)}">${esc(WorkflowInputs.label(key, def))}</label>
+      ${window.Select.markup(`id="resume-input-${esc(key)}" data-testid="resume-input-${esc(key)}"`, options, ran)}</div>`;
+  });
+  return fields.length ? `<div class="resume-inputs">${fields.join('')}</div>` : '';
+}
+
+// What the owner changed, or null: the run's other inputs stay as it recorded them
+function resumeInputChanges(o) {
+  const changed = resumeInputKeys(o).filter((key) => resumeInputSelect(key).value !== resumeInputRan(o, key));
+  return changed.length ? Object.fromEntries(changed.map((key) => [key, resumeInputSelect(key).value])) : null;
+}
+
+// opts.step: the step to preselect (#288: where an interrupted run stopped), over the suggested one
+// (#799: the step the run stopped at, never the first one by default);
 // opts.note: one line on why this dialog opened (the kept-work Resume that needs a gate approved)
 async function openResumeDialog(runId, opts = {}) {
   const body = $('#resume-body');
@@ -94,6 +127,7 @@ async function openResumeDialog(runId, opts = {}) {
   const allowed = (id) => o.steps.some((s) => s.id === id && (!s.blockedBy || s.confirm?.ok));
   const pre = opts.step && allowed(opts.step) ? opts.step : o.suggested;
   body.innerHTML = `${opts.note ? `<p class="small" data-testid="resume-note">${esc(opts.note)}</p>` : ''}${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), pre)}
+    ${resumeInputFields(o)}
     ${resumeLimitNote(o)}
     <div id="resume-gate" class="field"></div>
     <div id="resume-effects" class="resume-effects small"></div>`;
@@ -121,7 +155,8 @@ async function openResumeDialog(runId, opts = {}) {
       const confirmGate = gateBox()?.checked ? gateBox().dataset.gate : undefined;
       // images pasted into the instruction (#130), for the first resumed step
       const images = await PasteImage.collect($('#resume-ins'));
-      const { runId } = await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box), confirmGate, ...(images.length ? [images] : []));
+      const inputs = resumeInputChanges(o);
+      const { runId } = await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box), confirmGate, ...(images.length || inputs ? [images.length ? images : undefined] : []), ...(inputs ? [inputs] : []));
       closeModal('#resume-modal');
       showRun(runId, { running: true });
     } catch (e) {

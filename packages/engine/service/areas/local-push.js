@@ -77,7 +77,7 @@ module.exports = (ctx) => {
     if (status.error) throw new Error(status.error);
     if (!status.behind) throw new Error(`The local ${status.base} already has every commit of origin/${status.base}: push it.`);
     const file = last ? path.basename(last.file) : DefaultWorkflow.LOCAL;
-    const wf = loadWorkflow(ctx.workflowPath(file).file);
+    const wf = loadWorkflow(ctx.projectWorkflowFile(project.id, file));
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the conflict.`);
     const inputs = { task: localPush.conflictTask({ ...status, files: (files || []).map(String) }) };
     for (const [k, def] of Object.entries(wf.inputs)) {

@@ -102,13 +102,13 @@ module.exports = (ctx) => {
     // (never with the owner's gate confirmation, #112: automation does not cross a human gate)
     {
       channel: 'supervisor:resume',
-      // runs:resume's options (confirmGate is dropped)
+      // runs:resume's options (confirmGate is dropped, and inputs, #799: the owner changes them)
       schema: {
         params: args({ runId: RUN_ID, step: nullable(STEP_ID), instruction: nullable(STRING), mock: FLAG, confirmGate: ANY, images: nullable(IMAGES) }, ['runId']),
         result: STARTED,
       },
       fn: (arg) => {
-        const { confirmGate: _owner, ...opts } = requireObject(arg, 'options');
+        const { confirmGate: _owner, inputs: _ownerInputs, ...opts } = requireObject(arg, 'options');
         // #368: only the owner resumes a paused run (runs:resume)
         ctx.refusePausedResume(requireId(opts.runId, 'runId'));
         return ctx.resumeRun(opts);

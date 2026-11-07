@@ -835,6 +835,9 @@ function isQuotaError(type, message) {
   return QUOTA_COMMON.test(text) || !!registry.byType(type)?.quotaPattern?.test(text);
 }
 
+// #799: the same for a message whose CLI is not known (a finished run's error names no provider)
+const isAnyQuotaError = (message) => registry.list().some((a) => isQuotaError(a.type, message));
+
 // #312: when a CLI's usage limit resets (epoch ms), read from its message by its adapter, or null.
 // now: epoch ms or a Date, when the message was read (a clock time is its next occurrence)
 function quotaResetAt(type, message, now = Date.now()) {
@@ -860,6 +863,7 @@ module.exports = {
   gitConfigEnv,
   homebrewInstalled,
   imageInput,
+  isAnyQuotaError,
   isImagePath,
   isPermissionDenial,
   isQuotaError,

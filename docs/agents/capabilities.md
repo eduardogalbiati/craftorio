@@ -304,7 +304,7 @@ and starts nothing. With Settings › Execution › "Allow outside sessions to c
 app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`); `node scripts/ctl.js
 <channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `packages/engine/control/allowlist.js`,
 and each call is logged in `control/calls.jsonl`. The allowlist never holds a channel that answers,
-skips or bypasses a human gate, nor `settings:set`; `confirmGate` is refused on any channel
-(`packages/engine/control/index.js`, docs/features/control-channel.md). The file is written with mode 0600, but
+skips or bypasses a human gate, nor `settings:set`; `confirmGate` is refused on any channel and
+`inputs` on `runs:resume` (`packages/engine/control/index.js`, docs/features/control-channel.md). The file is written with mode 0600, but
 the workflow's agents run as the same OS user and can read it: the allowlist is what limits that
 token (SEC-25, SECURITY.md's threat model).

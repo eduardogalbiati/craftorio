@@ -9,7 +9,8 @@
 // - roadmap:pause-stage (#368) only pauses; Resume is roadmap:start. roadmap:park-stage (#395) parks
 //   the stage's items at their gates, which keep waiting unanswered, as roadmap:item's `park`.
 // - runs:resume without confirmGate: areas/resume.js refuses a resume that would go past a gate the
-//   previous run decided, and confirmGate is refused on every channel (GATE_ARGS).
+//   previous run decided, and confirmGate is refused on every channel (GATE_ARGS). Without inputs
+//   too (#799, GUARDS['runs:resume'] in packages/engine/control/index.js): only the owner changes them.
 // - workflows:restore: refused through this channel when the workspace copy has a human gate its
 //   bundled default lacks (GUARDS['workflows:restore'] in packages/engine/control/index.js); the app's Restore button is not.
 // - runs:resumeOptions, notifications:list, gates:interrupted, nightwatch:state, nightwatch:report

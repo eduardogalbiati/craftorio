@@ -253,6 +253,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .resume-card .field select { width: 100%; }
 .resume-effects { display: grid; gap: 4px; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); }
 .resume-effects b { color: var(--text); }
+.resume-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 
 /* ---------- cards (projects / skills) ---------- */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }

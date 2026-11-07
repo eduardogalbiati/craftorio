@@ -120,7 +120,7 @@ module.exports = (ctx) => {
   // `batches` (a chain's produced issues, chain-model queueBatches): [{ numbers, group }], one item each.
   async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null, agentOverrides = null, runNow = false, batches = null }) {
     if (pipeline) {
-      const first = ctx.pipelineAssign(pipeline);
+      const first = ctx.pipelineAssign(pipeline, projectId);
       ({ workflow, then } = first);
       inputs = { ...first.inputs, ...(inputs || {}) };
     }
