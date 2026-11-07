@@ -1679,13 +1679,11 @@
     // a station of the pipeline (#282) opens the run there; the ring (#194): a click pins its summary open (hover shows it too)
     { selector: '[data-rm-chip]', run: (c, el) => openRunAt(el) },
     { selector: '[data-rm-ring]', run: ({ ctx }, el) => { const id = el.closest('[data-rm-progress]').dataset.rmProgress; ringOpen = ringOpen === id ? null : id; ctx.render(); } },
-    // a link to an item of the roadmap (the paused roadmap's "Show the item" is the page alert's since #270 and calls showItem
-    // itself; a `data-rm-goto` element inside the Roadmap still works)
+    // a link to an item of the roadmap inside the Roadmap (the paused roadmap's "Show the item" is the page alert's since #270)
     { selector: '[data-rm-goto]', run: (c, el) => showItem(el.dataset.rmGoto) },
     { selector: '[data-rm-release-run]', run: (c, el) => window.showRun(el.dataset.rmReleaseRun) }, // #260: a cut line's release run (#291: the release block's Open run)
     { selector: '[data-rm-open-releases]', run: () => showView('releases') }, // #291: a shipped release on the Releases screen
-    // #807: the merge notice's Move on / Stack
-    { selector: '[data-rm-merge-wait]', run: ({ ctx, r }, el) => itemAction(ctx, el.dataset.item, el.dataset.rmMergeWait, r) },
+    { selector: '[data-rm-merge-wait]', run: ({ ctx, r }, el) => itemAction(ctx, el.dataset.item, el.dataset.rmMergeWait, r) }, // #807: the merge notice's Move on / Stack
     // #288: an item's ended run, resumed from a step (Resume from step…, resume-dialog.js)
     { selector: '[data-rm-resume]', run: (c, el) => { if (typeof openResumeDialog === 'function') openResumeDialog(el.dataset.rmResume); } },
   ];

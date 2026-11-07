@@ -5,8 +5,16 @@
 // (stackedStage, read by advance). Refused, with the model's reason (RoadmapModel.allowedActions stack): an
 // item that does not wait for a merge, Fork + PR mode (#738 keeps its wait and rebase; the effective mode,
 // `modeOf`), a stack of MAX_STACK_DEPTH PRs, a release entry before the next stage. roadmap.js re-exports stackBase.
-const { allowedActions, isFinished, isRelease, nextStage } = require('@multiagent/shared/roadmap-model');
-const { parentField, parentOfItem } = require('./roadmap-dependency');
+const {
+  allowedActions,
+  isFinished,
+  isRelease,
+  nextStage,
+} = require('@multiagent/shared/roadmap-model');
+const {
+  parentField,
+  parentOfItem,
+} = require('./roadmap-dependency');
 const { withStatus } = require('./roadmap-status');
 
 /** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
