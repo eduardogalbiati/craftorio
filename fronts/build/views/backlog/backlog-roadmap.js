@@ -645,7 +645,7 @@
         ${reasonHtml(x)}
         ${x.error ? `<div class="small rm-error ${x.status === 'failed' || refused ? 'error' : 'muted'}">${esc(x.error)}${refused
     ? `<div class="rm-error-hint muted">${t('backlog_roadmap.retry_starts_it_again_when_an')}</div>` : ''}</div>` : ''}
-        ${x.pr?.state === 'unknown' ? `<div class="small muted rm-error" data-testid="roadmap-item-merge-wait">${esc(x.pr.detail)}</div>` : ''}
+        ${x.pr?.state === 'unknown' ? `<div class="small muted rm-error" data-testid="roadmap-item-merge-wait">${esc(x.pr.detail)}</div>` : ''}${window.RoadmapMergeWait?.stackedHtml(x) ?? ''}
         ${open ? formHtml(x) : ''}
       </div>`;
   }
@@ -736,7 +736,7 @@
           <span class="spacer"></span><button type="button" class="btn sm ghost" data-rm-map-stage="${s}" data-testid="show-stage-on-map" title="${t('backlog_roadmap.colour_each_item_of_this_stage')}">${t('backlog_roadmap.show_the_stage_on_the_map')}</button>
           ${stageMenuHtml(stage, s, count, r, done)}
         </div>
-        ${pause}${note}
+        ${pause}${note}${window.RoadmapMergeWait?.html(r, s) ?? ''}
         <div class="rm-items">${cards}</div>
       </section>`;
   }
@@ -1683,7 +1683,7 @@
     // itself; a `data-rm-goto` element inside the Roadmap still works)
     { selector: '[data-rm-goto]', run: (c, el) => showItem(el.dataset.rmGoto) },
     { selector: '[data-rm-release-run]', run: (c, el) => window.showRun(el.dataset.rmReleaseRun) }, // #260: a cut line's release run (#291: the release block's Open run)
-    { selector: '[data-rm-open-releases]', run: () => showView('releases') }, // #291: a shipped release on the Releases screen
+    { selector: '[data-rm-open-releases]', run: () => showView('releases') }, { selector: '[data-rm-merge-wait]', run: ({ ctx, r }, el) => itemAction(ctx, el.dataset.item, el.dataset.rmMergeWait, r) }, // #291: a shipped release on the Releases screen; #807: the merge notice's Move on / Stack
     // #288: an item's ended run, resumed from a step (Resume from step…, resume-dialog.js)
     { selector: '[data-rm-resume]', run: (c, el) => { if (typeof openResumeDialog === 'function') openResumeDialog(el.dataset.rmResume); } },
   ];

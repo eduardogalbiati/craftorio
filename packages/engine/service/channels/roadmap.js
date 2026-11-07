@@ -310,7 +310,16 @@ module.exports = (ctx) => {
             if (kept) return { ...current(projectId), confirm: kept.text, kept, runId: kept.runId };
           } else ctx.allowKeptWork(id, item.id);
         }
-        roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), String(action), { alive: ctx.runAlive, keepPaused: !!keepPaused });
+        // #807: Stack, and Move on (skip) past an item that waits for its PR's merge, read the item's run (gateRun)
+        const runOf = (runId) => ctx.gateRun?.(runId) || null;
+        if (action === 'stack') {
+          const before = stagesOf(id);
+          roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), 'stack', { runOf });
+          await ctx.dispatchRoadmaps();
+          const pr = item?.runId ? runOf(item.runId)?.pr : null;
+          return withEdit(projectId, edited(id, before, `Stacked the next stage on ${pr?.number ? `#${pr.number}` : 'the waiting stage'}`));
+        }
+        roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), String(action), { alive: ctx.runAlive, keepPaused: !!keepPaused, runOf });
         await ctx.dispatchRoadmaps();
         return current(projectId);
       },

@@ -65,8 +65,8 @@ inputs:
     label: "Parent branch"
     type: string
     default: ""
-    show_if: "mode == 'fork'"
-    description: "Fork + PR: the branch on your fork this run starts from (the earlier item of a split implementation). Empty: the fork's default branch, synced with the original."
+    show_if: "mode != 'local'"
+    description: "Fork + PR: the branch on your fork this run starts from (the earlier item of a split implementation). Remote (#807, a stacked roadmap stage): the previous stage's branch, also the pull request's base. Empty: the default branch."
   depends_on:
     label: "Depends on"
     type: string
@@ -77,8 +77,8 @@ inputs:
     label: "Parent pull request"
     type: string
     default: ""
-    show_if: "mode == 'fork'"
-    description: "Fork + PR: the URL of the earlier pull request to wait for. The pull request opens once it merged upstream, rebased onto the synced default branch."
+    show_if: "mode != 'local'"
+    description: "Fork + PR: the URL of the earlier pull request to wait for. The pull request opens once it merged upstream, rebased onto the synced default branch. Remote (#807, stacked): the pull request this one builds on; it opens at once and moves to the default branch when that one merges."
   hotfix:
     label: "Hotfix"
     type: boolean

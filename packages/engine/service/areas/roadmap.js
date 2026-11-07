@@ -13,6 +13,8 @@
 // A local base behind origin (#805, areas/local-push.js): a person's Start asks about the next items
 // (baseQuestion) unless the project states `runDefaults.base_behind`; a dispatch never asks: it applies the
 // person's choice, else the project's, else goes on from the base as it is (localBaseNotices).
+// Stack (#807): a run at its PR's review gate waits for that merge (mergeGateOf); a stacked item starts
+// from its parent's branch (stackInputs) and its card names it (`stackedOn`).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -100,7 +102,10 @@ module.exports = (ctx) => {
           const run = x.runId ? runView(x) : null;
           const waiting = x.status === 'running' && (byId.get(x.runId)?.waiting || run?.waiting);
           const earlier = runHistory(x);
-          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}) };
+          // #807: the branch and PR a stacked item builds on, for its card (none once the parent merged)
+          const stack = x.stacksOn && !RoadmapModel.isFinished(x) ? roadmaps.stackBase(roadmap, x.id, { runOf: parentRun }) : null;
+          const stackedOn = stack?.branch && !stack.parentMerged ? { stackedOn: { branch: stack.branch, prNumber: stack.prNumber, prUrl: stack.prUrl } } : {};
+          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn };
         }),
       })),
     }, list, { issues: known, prices });
@@ -174,10 +179,11 @@ module.exports = (ctx) => {
   // the cache last read (never read here: this runs on every draw), merged or `prClosed` as it says.
   function roadmapRun(runId, find = findRun) {
     const live = runId && ctx.active.get(runId);
-    if (live) return { status: 'running', waiting: live.approvals.size > 0 };
+    if (live) return { status: 'running', waiting: live.approvals.size > 0, ...mergeGateOf(runId, find, live) };
     // its index row when current (#389: no events.jsonl parsed per item and per read)
     const r = runId ? find(runId) : null;
     if (!r) return null;
+    if (['pending', 'running'].includes(r.status)) return { status: r.status, error: r.error, merged: false, ...mergeGateOf(runId, find, null, r) };
     const merged = r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file, r.projectId));
     if (merged || r.status !== 'success' || !r.pr) return { status: r.status, error: r.error, merged };
     const pr = endedRunPr(r);
@@ -190,6 +196,17 @@ module.exports = (ctx) => {
     return pr.url ? ctx.withPrState(pr, r.mock) : { ...pr, state: 'unknown', detail: 'could not read the PR: the project has no repository to find it on', checkedAt: null };
   }
   const projectOf = (projectId) => { try { return projects.readProject(ctx.ws.projects, projectId); } catch { return null; } };
+
+  // #807: a run that waits at its PR's review gate (pr_review: live, or another app's run read from disk)
+  // waits for that merge → { atMergeGate, pr } (the item is waiting_merge); a PR seen merged or closed: {}
+  function mergeGateOf(runId, find, live, row = null) {
+    const atGate = live ? (live.pendingGates?.() || []).some((g) => g.step_id === 'pr_review')
+      : row?.progress?.at(-1)?.status === 'waiting' && row.progress.at(-1).step === 'pr_review';
+    const r = atGate ? row || find(runId) : null;
+    if (!r?.pr) return {};
+    const pr = endedRunPr(r);
+    return runPr.prEnded(pr.state) ? {} : { atMergeGate: true, pr };
+  }
 
   // #797: reads the PRs a project's items wait for (`maxAgeMs`: 0 reads them again, else the cache's 5
   // minutes keep it from polling) → the PRs read. A failed read comes back `unknown`, never an error.
@@ -290,6 +307,15 @@ module.exports = (ctx) => {
     };
   }
 
+  // #807 Stack: an item stacked on a stage that waits for its merge starts from that stage's branch and opens
+  // its PR against it (inputs.parent_branch / parent_pr); a parent merged meanwhile is part of the base already
+  function stackInputs(roadmap, item, inputs, wf) {
+    if (!item.stacksOn || inputs.mode === 'fork' || inputs.mode === 'local' || !wf.inputs?.parent_branch) return {};
+    const base = roadmaps.stackBase(roadmap, item.id, { runOf: parentRun });
+    if (!base?.branch || base.parentMerged) return {};
+    return { parent_branch: base.branch, ...(base.prUrl && wf.inputs?.parent_pr ? { parent_pr: base.prUrl } : {}) };
+  }
+
   function neverMerges(file, projectId) {
     if (!file) return false;
     try { return loadWorkflow(ctx.projectWorkflowFile(projectId, file)).metadata?.merges === false; } catch { return false; }
@@ -354,7 +380,7 @@ module.exports = (ctx) => {
         const inputs = backlog.runInputs(run, wf, project.folder, seedRuns.runDefaultsNow(ctx, project));
         const baseNotices = await localBaseNotices({ file: item.workflow, inputs, project, mock: mockOf(item) }, basesChecked);
         const started = await ctx.startWorkflowRun({
-          file: item.workflow, inputs: { ...inputs, ...dependencyInputs(roadmap, item, inputs, wf, project) }, mock: mockOf(item),
+          file: item.workflow, inputs: { ...inputs, ...dependencyInputs(roadmap, item, inputs, wf, project), ...stackInputs(roadmap, item, inputs, wf) }, mock: mockOf(item),
           projectId, issues: backlog.recordedIssues(open), notices: [...warnings.map((message) => ({ level: 'warn', message })), ...baseNotices],
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
           then: item.then || null,
@@ -522,6 +548,7 @@ module.exports = (ctx) => {
     allowKeptWork,
     checkWaitingPrs,
     dispatchRoadmaps,
+    gateRun,
     parkItem,
     parkStage,
     parkedRun,

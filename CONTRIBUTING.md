@@ -130,6 +130,17 @@ Most of this project is written by its own workflows: agents implement issues on
 reviewer checks them, and the maintainer merges. [`AGENTS.md`](AGENTS.md) is the agents' context
 (Codex and Grok read it, `CLAUDE.md` imports it for Claude Code); keep it short and accurate when you change how the project works.
 
+### Stacked pull requests
+
+When a roadmap stage waits for its pull request's merge, the Roadmap may stack the next stage on it
+(#807, Remote mode only, at most 3 pull requests): the next pull request starts from the previous
+one's branch and targets it, so its diff shows only its own work. Review and merge a stack **from
+the bottom up**: merge the lowest pull request (the one on `main`) first, with a merge commit or a
+squash; the run of the one above rebases onto `main` without the merged commits and moves its base
+to `main`, then review it in turn. A pull request closed without merging stops the runs stacked on
+it, which ask whether to rebase onto `main` or stop. Never merge an upper pull request into its
+parent's branch: merge each one into `main` in order.
+
 ## Licence
 
 By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
