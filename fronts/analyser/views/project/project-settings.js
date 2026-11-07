@@ -31,7 +31,7 @@
   // #805: a fixed list, a short control
   const baseBehind = (saved) => `<div class="field">
       <label for="ps-base-behind">${esc(t('project.settings_base_behind'))}</label>
-      <select id="ps-base-behind" data-testid="project-base-behind">${[['', 'ask'], ['continue', 'continue'], ['update', 'update']].map(([value, key]) => `<option value="${value}"${value === (saved || '') ? ' selected' : ''}>${esc(t(`project.settings_base_behind_${key}`))}</option>`).join('')}</select>
+      ${window.Select.markup('id="ps-base-behind" data-testid="project-base-behind"', ['', 'continue', 'update'].map((value) => [value, t(`project.settings_base_behind_${value || 'ask'}`)]), saved || '')}
       <div class="hint">${esc(t('project.settings_base_behind_hint'))}</div>
     </div>`;
 
