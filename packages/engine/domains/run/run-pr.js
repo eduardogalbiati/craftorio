@@ -456,6 +456,104 @@ function prCache({ reader, ttlMs = 5 * 60 * 1000, now = Date.now } = {}) {
   };
 }
 
+// ---- the PRs / MRs screen (#812) ------------------------------------------------------------------
+// Every open PR/MR of a project, the ones a run opened and the ones no run did, read with the adapter's
+// pullListCommand / parsePulls (no LLM), grouped by what it needs: needYou (ready, conflict, changes requested),
+// waiting (CI running, someone else's review) and others (Dependabot, no run). A stack (#807: a PR whose base is
+// another listed PR's head) stays together, bottom first, in its bottom PR's group; only the bottom one merges.
+const PULL_LIMIT = 100;
+const DEPENDABOT = /dependabot/i;
+const emptyGroups = () => ({ needYou: [], waiting: [], others: [] });
+const urlKey = (url) => String(url || '').trim().replace(/\/+$/, '').toLowerCase();
+
+// #812: one PR's group by itself
+function pullGroup(pull) {
+  if (!pull.runId || DEPENDABOT.test(String(pull.author || ''))) return 'others';
+  if (['conflict', 'ready'].includes(pull.state) || pull.review?.status === 'changes_requested') return 'needYou';
+  return 'waiting';
+}
+
+// #812: the list's stacks → [[pull, …]], each bottom first (a PR alone is a stack of one), in the list's order
+function stacksOf(pulls) {
+  const byHead = new Map(pulls.filter((p) => p.head).map((p) => [p.head, p]));
+  const parentOf = (p) => (p.base && p.base !== p.head ? byHead.get(p.base) || null : null);
+  const bottomOf = (p) => {
+    const seen = new Set([p]);
+    let at = p;
+    for (let up = parentOf(at); up && !seen.has(up); up = parentOf(at)) { seen.add(up); at = up; }
+    return at;
+  };
+  const above = new Map(); // a PR → the PRs stacked right on it, in the list's order
+  for (const p of pulls) {
+    const parent = parentOf(p);
+    if (parent && bottomOf(p) !== p) above.set(parent, [...(above.get(parent) || []), p]);
+  }
+  const stacks = [];
+  const placed = new Set();
+  for (const p of pulls) {
+    const bottom = bottomOf(p);
+    if (placed.has(bottom)) continue;
+    const stack = [];
+    const walk = (x) => { if (placed.has(x)) return; placed.add(x); stack.push(x); (above.get(x) || []).forEach(walk); };
+    walk(bottom);
+    stacks.push(stack);
+  }
+  return stacks;
+}
+
+// #812: a listed PR's choices → mergeOptions (#810) with the account's rights; Merge (and the bypass) only on a stack's
+// bottom PR; askFix: the run's card offers Ask for a fix, so a PR with no run never does (fork: a project on a fork,
+// #738, never merges from here)
+function pullOptions(pull, { canMerge = true, canBypass = false, fork = false } = {}) {
+  const o = mergeOptions(pull, { canMerge, canBypass, fork });
+  const above = Number(pull?.stack?.position) > 1;
+  return { ...o, ...(above ? { merge: false, bypass: false, ignores: [] } : {}), askFix: !!pull?.runId };
+}
+
+// #812: parsePulls' entries (with runId) → { needYou, waiting, others }, each entry with stack, result and mergeOptions
+function groupPullRequests(pulls, rights = {}) {
+  const groups = emptyGroups();
+  for (const stack of stacksOf((Array.isArray(pulls) ? pulls : []).filter(Boolean))) {
+    const into = groups[pullGroup(stack[0])];
+    stack.forEach((p, i) => {
+      const entry = { ...p, stack: stack.length > 1 ? { position: i + 1, size: stack.length } : null };
+      entry.result = p.result || monitorResult(p, p);
+      entry.mergeOptions = pullOptions(entry, rights);
+      into.push(entry);
+    });
+  }
+  return groups;
+}
+
+// #812: the open PRs of each project → [{ projectId, platform, error, reason (no_remote | no_cli), groups }], in
+// the projects' order; never rejects (a project whose read fails has its error, the others their lists).
+// `runs` ([{ id | runId, pr: { url } }], newest first) name the run of a PR; `reader` and `hasCli` replace the CLI (tests, UI checks).
+async function listPulls(projects, { reader = readJson, runs = [], hasCli = (cli) => !!resolveCommand(cli) } = {}) {
+  const runOf = new Map();
+  for (const r of Array.isArray(runs) ? runs : []) {
+    const key = urlKey(r?.pr?.url);
+    // runs.js listRuns' entries name their id runId
+    if (key && !runOf.has(key)) runOf.set(key, r.id ?? r.runId);
+  }
+  return Promise.all((Array.isArray(projects) ? projects : []).map(async (project) => {
+    const out = { projectId: project?.id ?? null, platform: null, error: null, reason: null, groups: emptyGroups() };
+    try {
+      // a project on a fork (#738): its PRs live on the upstream
+      const at = parseRepoUrl(project?.fork?.upstream || project?.repo);
+      const p = at ? projectPlatform(project) : null;
+      if (!p) return { ...out, reason: 'no_remote' };
+      out.platform = p.id;
+      if (!hasCli(p.cli)) return { ...out, reason: 'no_cli' };
+      const c = p.pullListCommand(p.cliTarget(at), PULL_LIMIT);
+      const pulls = p.parsePulls(await reader(c.cli, c.args)).map((x) => ({ ...x, runId: runOf.get(urlKey(x.url)) || null }));
+      const rights = pulls.length ? await readMergeRights({ url: pulls[0].url }, { reader }) : {};
+      return { ...out, groups: groupPullRequests(pulls, { ...rights, fork: !!project?.fork?.upstream }) };
+    } catch (e) {
+      return { ...out, error: String(e?.message || e) };
+    }
+  }));
+}
+
 // ---- the run's title ---------------------------------------------------------------------------
 function readMeta(runDir) {
   try { return JSON.parse(fs.readFileSync(path.join(runDir, 'meta.json'), 'utf8')) || {}; } catch { return {}; }
@@ -490,6 +588,8 @@ module.exports = {
   fetchPrState,
   ghPrDisplay,
   glMrDisplay,
+  groupPullRequests,
+  listPulls,
   MAX_FIX_ROUNDS,
   mergeOptions,
   mergePr,
@@ -499,6 +599,7 @@ module.exports = {
   prOfEvents,
   prOfOutput,
   prOnProject,
+  pullOptions,
   readLogin,
   readMergeRights,
   readMeta,

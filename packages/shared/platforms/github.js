@@ -14,6 +14,10 @@
   const OWN_HOST = 'github.com';
   const ISSUE_FIELDS = 'number,title,state,labels,url,author,assignees,body,createdAt,updatedAt';
   const REQUEST_FIELDS = 'number,title,url,isDraft,body';
+  // #812: the PRs screen's list, the fields of a PR card (run-pr.js fetchPrMonitor's) and of a stack (the branches)
+  const PULL_FIELDS = 'number,title,url,author,isDraft,headRefName,baseRefName,state,mergeable,mergeStateStatus,reviewDecision,latestReviews,statusCheckRollup';
+  const GH_FAILED = ['FAILURE', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR'];
+  const GH_PASSED = ['SUCCESS', 'NEUTRAL', 'SKIPPED'];
   const CLOSING_FIELD = 'closingIssuesReferences';
   const TYPED_EPICS = '.[] | select(((.type.name // "") | ascii_downcase) == "epic") | .number';
   const LIST_STEPS = [40, 100, 200];
@@ -21,6 +25,37 @@
   const cmd = (args) => ({ cli: 'gh', args });
   // the catalog's helper, at call time (in the browser i18n.js loads after this file)
   const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
+
+  // #812: one check of statusCheckRollup → pass | fail | pending (the engine's probes.js ghCheckBucket rule: shared
+  // cannot require the engine, so the list keeps its own copy of it, kept in step)
+  function checkBucket(c) {
+    const bucket = (s) => (GH_FAILED.includes(s) ? 'fail' : GH_PASSED.includes(s) ? 'pass' : 'pending');
+    if (c?.__typename === 'StatusContext' || (c?.state && !c?.status)) return bucket(String(c.state || '').toUpperCase());
+    if (String(c?.status || '').toUpperCase() !== 'COMPLETED') return 'pending';
+    return bucket(String(c.conclusion || '').toUpperCase());
+  }
+
+  // #812: one `gh pr list --json` entry → a PR card's entry (run-pr.js ghPrDisplay's state, ghMonitor's ci / review /
+  // conflicts, read from the list's fields only)
+  function parsePull(p) {
+    const buckets = (p.statusCheckRollup || []).map(checkBucket);
+    const failed = (p.statusCheckRollup || []).filter((c, i) => buckets[i] === 'fail').map((c) => c.name || c.context || '?');
+    const ci = { status: !buckets.length ? 'none' : failed.length ? 'failed' : buckets.includes('pending') ? 'running' : 'passed', failed };
+    const by = (s) => (p.latestReviews || []).filter((r) => r.state === s).map((r) => r.author?.login).filter(Boolean);
+    const decision = String(p.reviewDecision || '').toUpperCase();
+    const review = decision === 'CHANGES_REQUESTED' || (decision !== 'APPROVED' && by('CHANGES_REQUESTED').length) ? { status: 'changes_requested', by: by('CHANGES_REQUESTED') }
+      : decision === 'REVIEW_REQUIRED' ? { status: 'required', by: [] }
+        : decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
+    const conflict = p.mergeable === 'CONFLICTING' || p.mergeStateStatus === 'DIRTY';
+    const s = String(p.state || 'OPEN').toUpperCase();
+    const state = s === 'MERGED' ? 'merged' : s === 'CLOSED' ? 'closed' : p.isDraft ? 'draft' : conflict ? 'conflict'
+      : ci.status === 'failed' ? 'failing' : ci.status === 'running' ? 'pending'
+        : p.mergeable === 'MERGEABLE' && String(p.mergeStateStatus || '').toUpperCase() === 'CLEAN' ? 'ready' : 'open';
+    return {
+      number: p.number, title: p.title || '', url: p.url, author: p.author?.login || null, draft: !!p.isDraft,
+      head: p.headRefName || null, base: p.baseRefName || null, state, ci, review, conflicts: { status: conflict ? 'base' : 'none' },
+    };
+  }
 
   const github = {
     id: 'github',
@@ -97,6 +132,10 @@
     requestMergeCommand: (t, { admin = false, deleteBranch = false } = {}) => cmd(['pr', 'merge', String(t.id), '--repo', `${t.host}/${t.repo}`, '--merge', ...(admin ? ['--admin'] : []), ...(deleteBranch ? ['--delete-branch'] : [])]),
     requestCloseCommand: (t) => cmd(['pr', 'close', String(t.id), '--repo', `${t.host}/${t.repo}`]),
     runViewCommand: (t) => cmd(['run', 'view', String(t.id), '--repo', `${t.host}/${t.repo}`, '--json', 'status,conclusion,url,name']),
+    // #812: the open PRs of a repository (the PRs screen), each with what its card shows
+    pullListCommand: (target, limit) => cmd(['pr', 'list', '--repo', target, '--state', 'open', '--limit', String(limit), '--json', PULL_FIELDS]),
+    // #812: the list's parsed JSON → [{ number, title, url, author, draft, head, base, state, ci, review, conflicts }], [] when not a list
+    parsePulls: (json) => (Array.isArray(json) ? json.filter((p) => p && p.number != null).map(parsePull) : []),
 
     // ---- epics (api: { path, hostArgs }, packages/engine/domains/backlog/epics.js apiTarget)
     typedEpicsCommand: (api) => cmd(['api', ...api.hostArgs, '--paginate', `repos/${api.path}/issues?state=all&per_page=100`, '--jq', TYPED_EPICS]),

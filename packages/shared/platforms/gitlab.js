@@ -12,6 +12,29 @@
   const cmd = (args) => ({ cli: 'glab', args });
   // the catalog's helper, at call time (in the browser i18n.js loads after this file)
   const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
+  // #812: the pipeline states (the engine's probes.js GL_PENDING / GL_FAILED: shared cannot require the engine)
+  const GL_PENDING = ['created', 'waiting_for_resource', 'preparing', 'pending', 'running', 'scheduled', 'waiting_for_callback'];
+  const GL_FAILED = ['failed', 'canceled', 'canceling'];
+
+  // #812: one `glab mr list --output json` entry → a PR card's entry (run-pr.js glMrDisplay's state; the review from
+  // detailed_merge_status, the list has no approvals)
+  function parsePull(m) {
+    const pipeline = m.head_pipeline || m.pipeline || null;
+    const ps = String(pipeline?.status || '').toLowerCase();
+    const ci = { status: !ps ? 'none' : GL_FAILED.includes(ps) ? 'failed' : ['success', 'skipped'].includes(ps) ? 'passed' : ['manual', 'scheduled'].includes(ps) ? 'manual' : 'running', failed: [] };
+    const ms = m.detailed_merge_status || m.merge_status || '';
+    const review = { status: ms === 'requested_changes' ? 'changes_requested' : ms === 'not_approved' ? 'required' : 'none', by: [] };
+    const conflict = !!m.has_conflicts || ms === 'conflict';
+    const s = String(m.state || 'opened').toLowerCase();
+    const draft = !!(m.draft || m.work_in_progress);
+    const state = s === 'merged' ? 'merged' : s === 'closed' ? 'closed' : draft ? 'draft' : conflict ? 'conflict'
+      : ci.status === 'failed' ? 'failing' : GL_PENDING.includes(ps) ? 'pending'
+        : ['passed', 'none'].includes(ci.status) && ['mergeable', 'can_be_merged'].includes(ms) ? 'ready' : 'open';
+    return {
+      number: m.iid, title: m.title || '', url: m.web_url, author: m.author?.username || null, draft,
+      head: m.source_branch || null, base: m.target_branch || null, state, ci, review, conflicts: { status: conflict ? 'base' : 'none' },
+    };
+  }
 
   const gitlab = {
     id: 'gitlab',
@@ -90,6 +113,10 @@
       : cmd(['mr', 'merge', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--yes', ...(deleteBranch ? ['--remove-source-branch'] : [])])),
     requestCloseCommand: (t) => cmd(['mr', 'close', String(t.id), '--repo', `https://${t.host}/${t.repo}`]),
     runViewCommand: (t) => cmd(['api', `projects/${encodeURIComponent(t.repo)}/pipelines/${t.id}`, '--hostname', t.host]),
+    // #812: the open MRs of a project (the MRs screen; open is glab's default)
+    pullListCommand: (target, limit) => cmd(['mr', 'list', '--repo', target, '--per-page', String(limit), '--output', 'json']),
+    // #812: the list's parsed JSON → [{ number, title, url, author, draft, head, base, state, ci, review, conflicts }], [] when not a list
+    parsePulls: (json) => (Array.isArray(json) ? json.filter((m) => m && m.iid != null).map(parsePull) : []),
 
     // ---- epics (api: { path, hostArgs }, packages/engine/domains/backlog/epics.js apiTarget)
     groupEpicCreateCommand: (api, groupId, title, body) => cmd(['api', ...api.hostArgs, '--method', 'POST', `groups/${groupId}/epics`, '-f', `title=${title}`, '-f', `description=${body}`]),
