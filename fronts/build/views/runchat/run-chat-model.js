@@ -356,7 +356,11 @@
       // #810: Merge / Merge ignoring protection / Close from the read's merge_options, and what blocks the merge
       // (a failed read keeps the last choices, as it keeps the last lines)
       card.mergeOptions = ev.merge_options || (ev.error ? card.mergeOptions : null) || null;
-      card.buttons = PrCard.buttons(card.mergeOptions, { fork: card.fork, state: card.state });
+      // #811: what the PR asks for (a failed read keeps the last list), the fix rounds asked from the card
+      if (Array.isArray(ev.requests) || !ev.error) card.requests = PrCard.requests(ev.requests);
+      card.fixes = card.fixes || [];
+      card.fixLimit = PrCard.fixLimit(card.fixes);
+      card.buttons = PrCard.buttons(card.mergeOptions, { fork: card.fork, state: card.state, requests: card.requests, fixes: card.fixes });
       card.blocked = ev.merge_options ? PrCard.blocked(ev) : PrCard.ended(card.state) ? '' : card.blocked || '';
       // the engine repeats a failed merge's (merge_error) or close's (close_error) message on each read until the next try
       const ended = PrCard.ended(card.state);
@@ -372,6 +376,27 @@
       if (!card) return;
       if (ev.merged) Object.assign(card, { state: 'merged', buttons: [], blocked: '', mergeError: null });
       else card.mergeError = String(ev.error || '') || t('pr_card.merge_refused');
+      this.touch(card);
+    },
+
+    // #811: a fix asked from the card (transitions.js queuePrFix / prFixOutcome): one round per `round`, updated in
+    // place (requested → fixed with its commit, or failed with why), its tokens; no second ask while one runs
+    'pr.fix'(ev) {
+      const card = this.prCard;
+      if (!card) return;
+      card.fixes = card.fixes || [];
+      const round = Number(ev.round) || card.fixes.length + 1;
+      let f = card.fixes.find((x) => x.round === round);
+      if (!f) card.fixes.push(f = { round, status: null, commit: null, tokens: null, reason: null, agent: 'developer', ids: [], note: '', sent: [] });
+      f.status = ev.status || f.status;
+      if (ev.commit) f.commit = String(ev.commit);
+      if (ev.tokens != null) f.tokens = Number(ev.tokens) || 0;
+      if (ev.reason) f.reason = String(ev.reason);
+      if (Array.isArray(ev.ids)) f.ids = ev.ids.map(String);
+      if (ev.note != null) f.note = String(ev.note || '');
+      if (Array.isArray(ev.requests)) f.sent = PrCard.requests(ev.requests).map((r) => r.text);
+      card.fixLimit = PrCard.fixLimit(card.fixes);
+      card.buttons = PrCard.buttons(card.mergeOptions, { fork: card.fork, state: card.state, requests: card.requests, fixes: card.fixes });
       this.touch(card);
     },
 

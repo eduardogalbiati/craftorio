@@ -71,11 +71,19 @@ if (process.env.MULTIAGENT_E2E_PR_FILE) {
   const engine = path.join(__dirname, '..', '..', 'packages', 'engine');
   const answers = path.resolve(path.dirname(process.env.MULTIAGENT_WORKSPACE), process.env.MULTIAGENT_E2E_PR_FILE);
   const readAnswer = () => JSON.parse(fs.readFileSync(answers, 'utf8'));
+  let threadsOf = null; // #811: the PR number the review threads were last read for
   // #810: the repository's permissions (bypass only with the file's viewerCanBypass) and the signed-in account
   const readPrJson = async (_cmd, args = []) => {
     const answer = readAnswer();
     if (answer.fail) throw new Error(answer.fail);
     if (args[0] === 'api' && args.includes('user')) return { login: 'e2e-owner' };
+    // #811: the review threads' query (the file's reviewThreads) and each author's access (e2ePermissions, read when absent)
+    // (the PR file has no number: the reply records the one the threads were last read for, `-F n=<number>`)
+    const asked = args[0] === 'api' && args[1] === 'graphql' && args.map((a) => /^n=(\d+)$/.exec(a)).find(Boolean);
+    if (asked) threadsOf = Number(asked[1]);
+    if (args[0] === 'api' && args[1] === 'graphql' && args.some((a) => /reviewThreads/.test(a))) return { data: { repository: { pullRequest: { reviewThreads: { nodes: answer.reviewThreads || [] } } } } };
+    const access = args[0] === 'api' && args.map((a) => /^repos\/[^/]+\/[^/]+\/collaborators\/([^/]+)\/permission$/.exec(a)).find(Boolean);
+    if (access) return { permission: answer.e2ePermissions?.[access[1]] || 'read' };
     if (args[0] === 'api' && args.some((a) => /^repos\/[^/]+\/[^/]+$/.test(a))) return { permissions: { push: true, admin: answer.viewerCanBypass === true } };
     return answer;
   };
@@ -86,7 +94,21 @@ if (process.env.MULTIAGENT_E2E_PR_FILE) {
     fs.writeFileSync(tmp, JSON.stringify(answer));
     fs.renameSync(tmp, answers);
   };
+  // #811: a reply on a review thread (run-pr.js replyToFixed: `gh api graphql … -f thread=<id>`), recorded and added
+  // to the thread in the file, the thread left unresolved (resolving it is the reviewer's)
+  const replyOnThread = (args) => {
+    const thread = args.map((a) => /^thread=(.+)$/.exec(a)).find(Boolean)?.[1];
+    const body = args.map((a) => /^body=([\s\S]*)$/.exec(a)).find(Boolean)?.[1] || '';
+    const answer = readAnswer();
+    global.multiagentE2E.prActions.push({ action: 'reply', number: Number(answer.number) || threadsOf, thread });
+    const reviewThreads = (answer.reviewThreads || []).map((t) => (t.id !== thread ? t : {
+      ...t, comments: { nodes: [...(t.comments?.nodes || []), { id: `${thread}_reply`, author: { login: 'e2e-owner' }, body, createdAt: new Date().toISOString() }] },
+    }));
+    writeAnswer({ ...answer, reviewThreads });
+    return { exit_code: 0, output: '{}' };
+  };
   const runPrCommand = async (_cmd, args = []) => {
+    if (args[0] === 'api' && args[1] === 'graphql' && args.some((a) => /^thread=/.test(a))) return replyOnThread(args);
     const action = args[1];
     const number = Number(args[2]);
     global.multiagentE2E.prActions.push(action === 'merge'

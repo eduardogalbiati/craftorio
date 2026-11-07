@@ -9,6 +9,8 @@
 // - title(state) → the card's title: waiting for the merge, merged or closed without merging.
 // - buttons(mergeOptions, { fork, state }), blocked(pr), actionsHtml(...) (#810): Merge, Merge ignoring
 //   protection and Close, what blocks the merge, a failed merge's message.
+// - requests(list), fixLimit(fixes), tokensText(n), FIX_ROUNDS (#811): the PR's requests on the card (only a
+//   trusted one is selectable), Ask for a fix (a button of buttons()), the limit of fix rounds and their tokens.
 // Browser: window.PrCard; Node: module.exports.
 (function (root) {
   const tr = () => (typeof module === 'object' && module.exports ? require('./i18n').t : root.I18n?.t || root.t);
@@ -67,15 +69,44 @@
   // whether a PR's state is its last (run-pr.js prEnded's rule, for the renderer)
   const ended = (state) => ['merged', 'closed'].includes(state);
   const blockerText = (codes) => (Array.isArray(codes) ? codes.map((c) => t(`pr_card.blocked.${c}`)).join(', ') : '');
-  function buttons(o, { fork = false, state = null } = {}) {
+  // #811: and Ask for a fix (ask_fix) while the card has requests, no fix round runs and fewer than FIX_ROUNDS
+  // were taken (`fixes`: the card's rounds, fixRounds)
+  function buttons(o, { fork = false, state = null, requests: asks = [], fixes = [] } = {}) {
     if (!o || ended(state)) return [];
     const what = blockerText(o.ignores);
     return [
       o.merge && !fork ? { id: 'merge', label: t('pr_card.merge'), confirm: null } : null,
       o.bypass && !fork ? { id: 'merge_admin', label: t('pr_card.merge_admin', { what }), confirm: t('pr_card.merge_admin_confirm', { what }) } : null,
       o.close ? { id: 'close', label: t('pr_card.close'), confirm: t('pr_card.close_confirm') } : null,
+      canAskFix(asks, fixes) ? { id: 'ask_fix', label: t('pr_card.ask_fix'), confirm: null } : null,
     ].filter(Boolean);
   }
+
+  // #811: the fix rounds a run takes before it asks the owner (the engine's run-pr.js MAX_FIX_ROUNDS: the
+  // renderer cannot load the engine)
+  const FIX_ROUNDS = 5;
+  const roundsTaken = (fixes) => (Array.isArray(fixes) ? fixes.reduce((n, f) => Math.max(n, Number(f?.round) || 0), 0) : 0);
+  const canAskFix = (asks, fixes) => Array.isArray(asks) && asks.length > 0
+    && !(fixes || []).some((f) => f?.status === 'requested') && roundsTaken(fixes) < FIX_ROUNDS;
+  // the limit's text once FIX_ROUNDS rounds were taken, '' before
+  const fixLimit = (fixes) => (roundsTaken(fixes) >= FIX_ROUNDS ? t('pr_card.fix_limit', { max: FIX_ROUNDS }) : '');
+
+  // #811: one request's line: its author and file:line (a failed CI: its job), never its body
+  const where = (r) => (r?.file ? `${r.file}${r.line != null ? `:${r.line}` : ''}` : '');
+  const requestText = (r) => (r?.kind === 'ci_failed'
+    ? `${t('pr_card.ci')}: ${String(r.body || '?')}`
+    : [r?.author ? `@${r.author}` : '', where(r)].filter(Boolean).join(' · '));
+
+  // #811: the engine's requests (run-pr.js fetchPrMonitor) → the card's: only a trusted one can be selected; an
+  // untrusted one carries its mark (pr_card.untrusted)
+  const requests = (list) => (Array.isArray(list) ? list : []).filter((r) => r && r.id != null).map((r) => ({
+    id: String(r.id), kind: r.kind || 'comment', author: r.author || null, file: r.file || null, line: r.line ?? null,
+    url: r.url || '', body: String(r.body || ''), trusted: !!r.trusted, selectable: !!r.trusted,
+    text: requestText(r), mark: r.trusted ? '' : t('pr_card.untrusted'),
+  }));
+
+  const fmtK = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0));
+  const tokensText = (n) => t('pr_card.fix_tokens', { tokens: fmtK(Number(n) || 0) });
 
   // what blocks the merge: the same codes as the buttons (merge_options.blockers, the event's; mergeOptions on
   // the Roadmap's item), '' when nothing does or the PR ended
@@ -89,7 +120,8 @@
   // the Roadmap's); a click is handled by pr-monitor-card.js (data-pr-action, data-run, data-confirm). No buttons
   // without the run they act on (a past run's card)
   function actionsHtml({ buttons: list = [], blocked: why = '', mergeError = null, closeError = null } = {}, { runId = '' } = {}) {
-    const row = (runId ? list || [] : []).map((b) => `<button type="button" class="btn sm ${b.id === 'merge' ? 'primary' : 'ghost'}" data-testid="${TESTIDS[b.id]}" data-pr-action="${esc(b.id)}" data-run="${esc(runId)}"${b.confirm ? ` data-confirm="${esc(b.confirm)}"` : ''} title="${esc(b.confirm || b.label)}">${esc(b.label)}</button>`).join('');
+    // #811: Ask for a fix sits with the requests it sends (pr-monitor-card.js fixHtml), not in this row
+    const row = (runId ? list || [] : []).filter((b) => b.id !== 'ask_fix').map((b) => `<button type="button" class="btn sm ${b.id === 'merge' ? 'primary' : 'ghost'}" data-testid="${TESTIDS[b.id]}" data-pr-action="${esc(b.id)}" data-run="${esc(runId)}"${b.confirm ? ` data-confirm="${esc(b.confirm)}"` : ''} title="${esc(b.confirm || b.label)}">${esc(b.label)}</button>`).join('');
     const blockedLine = why ? `<div class="small muted" data-testid="pr-merge-blocked">${esc(t('pr_card.merge_blocked', { what: why }))}</div>` : '';
     const error = (mergeError ? `<div class="small warn-text" data-testid="pr-merge-error" role="status">${esc(t('pr_card.merge_failed', { error: mergeError }))}</div>` : '')
       + (closeError ? `<div class="small warn-text" data-testid="pr-close-error" role="status">${esc(t('pr_card.close_failed', { error: closeError }))}</div>` : '');
@@ -97,15 +129,20 @@
   }
 
   const api = {
+    FIX_ROUNDS,
     KEYS,
     TONE_PILL,
     actionsHtml,
     blocked,
     buttons,
     ended,
+    fixLimit,
     lineHtml,
     lines,
+    requestText,
+    requests,
     title,
+    tokensText,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PrCard = api;

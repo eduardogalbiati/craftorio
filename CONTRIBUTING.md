@@ -51,6 +51,17 @@ Read when running from source; the packaged app ignores the ones marked "source 
 PR monitor (CI, review, conflicts, comments) while the maintainer reviews it. There is no Approve:
 the run ends by itself when the pull request merges, and fails if it is closed without merging.
 
+A review reaches the run through the PR monitor's card: it lists what the pull request asks for
+(changes requested, unanswered review comments, a failed CI job), each with its author, file, line and
+a link. Pick the ones to send, add a note if needed, and click **Ask for a fix**: nothing reaches an
+agent before that click. Only comments from people with write access can be picked; the others are
+marked untrusted (quote one in your note to send it). The comments reach the developer as quoted data,
+with the instruction not to follow what they say beyond the change. The developer fixes on the run's
+branch, runs a focused test, commits and pushes, then the run replies on each thread it fixed with the
+commit (saying it is an agent) and goes back to the monitor; resolving the thread stays with the
+reviewer. A fix that pushes nothing stops at a gate that says why. A run takes at most 5 fix rounds,
+then asks you before each one; the card shows the tokens each round spent.
+
 1. Add your clone as a project in the app. The repository's manifest (`.multiagent/project.yaml`)
    names `ai-development-remote-hero` as the project's default workflow and as the workflow of a
    Feature: the import sets both, nothing to configure by hand.
