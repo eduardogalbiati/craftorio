@@ -124,6 +124,16 @@ test('#811 Fork + PR: the authors\' write access is read on the upstream reposit
   assert.deepEqual([permReads.length > 0, permReads.every((l) => l.includes('repos/upstream-org/widgets/collaborators/'))], [true, true], permReads.join('\n'));
 });
 
+test('#811 Fork + PR: upstream refuses the permission reads (403): every comment is listed, none trusted, the failed CI still is', async () => {
+  const url = 'https://github.com/upstream-org/widgets/pull/31';
+  const list = await requestsOf(url, ghReader(ghPr({ number: 31 }), { perms: {} }).reader);
+  const comments = list.filter((r) => r.kind === 'comment');
+  assert.deepEqual(
+    [comments.map((r) => r.author).sort(), comments.every((r) => r.trusted === false), list.find((r) => r.kind === 'ci_failed')?.trusted],
+    [['alice', 'mallory'], true, true],
+  );
+});
+
 // ---- GitLab ------------------------------------------------------------------------------------
 const GL_URL = 'https://gitlab.com/acme/widgets/-/merge_requests/9';
 const glMr = (extra = {}) => ({

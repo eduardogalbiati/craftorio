@@ -18,3 +18,33 @@ test('#811 prMonitorSeed: a round that ended (fixed or failed) is not interrupte
   assert.strictEqual(prMonitorSeed([fix(1, 'requested'), fix(1, 'failed')], 'pr_monitor').prFixInterrupted, null);
   assert.strictEqual(prMonitorSeed([], 'pr_monitor').prFixInterrupted, null);
 });
+
+// resume.js startRecovered on a recovered run in its PR monitor (no turn the crash cut)
+function recoveredRun(prFixInterrupted) {
+  const { methods } = require('../../engine/run/resume');
+  const events = [];
+  const run = {
+    ...methods,
+    wf: { steps: [{ id: 'pr_monitor', type: 'pr_monitor' }], agents: {} },
+    recovered: { nextStep: 'pr_monitor', lostTurns: [], from: 7 },
+    prFixInterrupted,
+    emitEvent: (type, data) => events.push({ type, ...data }),
+  };
+  return { run, events };
+}
+
+test('#811 startRecovered: a fix round the restart cut ends failed with its reason, and is told once', () => {
+  const cut = { url: 'https://github.com/o/r/pull/1', round: 2, ids: ['c1'], note: 'n', requests: [] };
+  const { run, events } = recoveredRun(cut);
+  run.startRecovered();
+  const fixes = events.filter((e) => e.type === 'pr.fix');
+  assert.deepStrictEqual(fixes.map((e) => [e.step_id, e.url, e.round, e.status, e.reason]), [['pr_monitor', 'https://github.com/o/r/pull/1', 2, 'failed', 'the app restarted during the fix']]);
+  assert.strictEqual(run.prFixInterrupted, null);
+  assert.strictEqual(events.some((e) => e.type === 'run.recovered'), true);
+});
+
+test('#811 startRecovered: no round cut, no pr.fix event', () => {
+  const { run, events } = recoveredRun(null);
+  run.startRecovered();
+  assert.strictEqual(events.filter((e) => e.type === 'pr.fix').length, 0);
+});
