@@ -304,17 +304,17 @@
     const list = stagesOf(r);
     return s >= 0 && s + 1 < list.length && !isRelease(list[s + 1]) ? s + 1 : -1;
   }
-  // #807: an item's effective run mode: `modeOf(item)` (the workflow's default and the project's runDefaults
-  // resolved by the caller), else what its inputs say
-  const itemMode = (item, modeOf) => String((modeOf ? modeOf(item) : null) || item?.inputs?.mode || '');
+  // #807: an item's effective run mode: the service's `effectiveMode` (roadmapView: its inputs, the workflow's
+  // default and the project's runDefaults), else `modeOf(item)` (the caller's), else what its inputs say
+  const itemMode = (item, modeOf) => String(item?.effectiveMode || (modeOf ? modeOf(item) : null) || item?.inputs?.mode || '');
   // #807: Stack only on an item whose run waits for its PR's merge, outside Fork + PR, under the depth limit,
-  // with a next stage right after it (a release entry between them: refused)
+  // with a next stage right after it (the last stage, or a release entry between them: refused)
   function stackAction(r, item, { modeOf = null } = {}) {
     if (item.status !== 'waiting_merge' || !item.pr) return no(t('roadmap.stack_not_waiting'));
     if (itemMode(item, modeOf) === 'fork') return no(t('roadmap.stack_fork'));
     if (stackDepth(r, item.id) >= MAX_STACK_DEPTH) return no(t('roadmap.stack_depth_limit', { max: MAX_STACK_DEPTH }));
     const at = stagesOf(r).findIndex((s) => !isRelease(s) && itemsOf(s).some((x) => x.id === item.id));
-    if (at >= 0 && at + 1 < stagesOf(r).length && nextStage(r, at) < 0) return no(t('roadmap.stack_release_between'));
+    if (at >= 0 && nextStage(r, at) < 0) return no(t(at + 1 < stagesOf(r).length ? 'roadmap.stack_release_between' : 'roadmap.stack_no_next_stage'));
     return yes();
   }
   /**

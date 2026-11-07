@@ -4441,6 +4441,7 @@
   "roadmap.running_pause_or_stop": "The roadmap is running: pause or stop it first",
   "roadmap.stack_depth_limit": "A stack holds at most {max} pull requests: merge the bottom one first.",
   "roadmap.stack_fork": "Fork + PR mode does not stack: its PR opens once the PR before it merges (#738).",
+  "roadmap.stack_no_next_stage": "This is the last stage: add a stage after it to stack on it.",
   "roadmap.stack_not_waiting": "Its run does not wait for the merge of a PR: nothing to stack on.",
   "roadmap.stack_release_between": "A release comes before the next stage: it waits for this merge, so nothing stacks across it.",
   "roadmap.stage_already_disabled": "This stage is already disabled.",

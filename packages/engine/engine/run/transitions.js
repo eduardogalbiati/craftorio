@@ -216,8 +216,12 @@ const methods = {
   // #807: a stacked run whose parent is still open never ends its wait step (ci, stack_follow): its PR
   // targets the parent's branch, so its own checks or merge are not the end of the work. It keeps
   // following the parent (restack, merge, close), outside the /loop's max_duration, as pollParent does.
+  // `stackHold` (the step's id while it holds, else null): the service reads it as a wait for this run's
+  // own merge (areas/roadmap.js mergeGateOf, the next stage may stack on it) that holds no run slot (parkedRun).
   holdForStackParent(step, st, action, r) {
-    if (action !== 'output' || !this.stackedRun() || !this.parentToWaitFor(step.wait, st)) return action;
+    const hold = action === 'output' && this.stackedRun() && !!this.parentToWaitFor(step.wait, st);
+    this.stackHold = hold ? step.id : null;
+    if (!hold) return action;
     st.loopStartedAt = Date.now();
     r.detail = `${r.detail || 'passed'}; following the parent PR/MR until it merges`;
     return 'poll';
@@ -228,6 +232,7 @@ const methods = {
     const news = st.restacked;
     st.restacked = null;
     if (!news || action === 'output') return action;
+    this.stackHold = null; // an agent turn pushes the rebased branch: it holds its slot again
     r.detail = `${news}; ${r.detail || state}`;
     return 'agent';
   },
@@ -312,6 +317,7 @@ const methods = {
   async followStackParent(step, st, parent, stats) {
     const r = await this.probeOrError(step, stats, { probe: 'pr_checks', target: parent }, 'the parent PR/MR could not be read');
     const ended = ['merged', 'closed'].includes(r.state);
+    if (ended) this.stackHold = null; // the run works (or asks) again: it waits for its own merge no more
     st.probePolls = (st.probePolls || 0) + 1;
     this.emitEvent('step.probe', {
       step_id: step.id, probe: 'parent', target: parent, state: r.state, detail: r.detail || r.state, action: ended ? (r.state === 'merged' ? 'agent' : 'gate') : 'follow', iteration: st.iteration, polls: st.probePolls,
@@ -351,6 +357,7 @@ const methods = {
       const moved = await restackOnParent({ repo: wt.repo, dir: wt.workDir || wt.dir, parentBranch, log });
       if (moved.moved) st.restacked = `the parent branch ${parentBranch} got new commits: the engine rebased the branch onto ${moved.base} (now at ${moved.commit.slice(0, 8)}); push it (\`git push --force-with-lease origin HEAD\`)`;
     } catch (e) {
+      this.stackHold = null;
       const why = String(e?.message || e).split('\n')[0];
       const { answer } = await this.requestApproval({
         id: `${step.id}:restack_conflict`, raw: true,

@@ -105,7 +105,9 @@ module.exports = (ctx) => {
           // #807: the branch and PR a stacked item builds on, for its card (none once the parent merged)
           const stack = x.stacksOn && !RoadmapModel.isFinished(x) ? roadmaps.stackBase(roadmap, x.id, { runOf: parentRun }) : null;
           const stackedOn = stack?.branch && !stack.parentMerged ? { stackedOn: { branch: stack.branch, prNumber: stack.prNumber, prUrl: stack.prUrl } } : {};
-          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn };
+          // #807: the effective run mode of an item waiting for its merge (the project's runDefaults too), for its notice
+          const mode = x.status === 'waiting_merge' ? { effectiveMode: itemMode(projectId, x) } : {};
+          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn, ...mode };
         }),
       })),
     }, list, { issues: known, prices });
@@ -198,9 +200,11 @@ module.exports = (ctx) => {
   const projectOf = (projectId) => { try { return projects.readProject(ctx.ws.projects, projectId); } catch { return null; } };
 
   // #807: a run that waits at its PR's review gate (pr_review: live, or another app's run read from disk)
-  // waits for that merge → { atMergeGate, pr } (the item is waiting_merge); a PR seen merged or closed: {}
+  // waits for that merge → { atMergeGate, pr } (the item is waiting_merge); a PR seen merged or closed: {}.
+  // A live stacked run whose checks passed and that follows its parent's PR until it merges (stackHold,
+  // transitions.js holdForStackParent) waits for its own PR's merge too: the next stage may stack on it
   function mergeGateOf(runId, find, live, row = null) {
-    const atGate = live ? (live.pendingGates?.() || []).some((g) => g.step_id === 'pr_review')
+    const atGate = live ? !!live.stackHold || (live.pendingGates?.() || []).some((g) => g.step_id === 'pr_review')
       : row?.progress?.at(-1)?.status === 'waiting' && row.progress.at(-1).step === 'pr_review';
     const r = atGate ? row || find(runId) : null;
     if (!r?.pr) return {};
@@ -274,9 +278,11 @@ module.exports = (ctx) => {
   // #395: whether a run is a parked item's (the roadmap moved on past it): while it waits at its gate
   // it holds no run slot (areas/runs.js slotProblem), so the next stage can start.
   // #807: so does the run of an item the roadmap went past at its PR's review gate: Move on of the
-  // merge-wait notice skips it (a skipped item keeps a live run only there), Stack stacks the next stage on it
+  // merge-wait notice skips it (a skipped item keeps a live run only there), Stack stacks the next stage on it.
+  // A stacked run that only follows its parent's PR (stackHold) holds none either: it may wait for days
   function parkedRun(runId, projectId) {
     if (!ctx.ws || !runId || !projectId) return false;
+    if (ctx.active.get(runId)?.stackHold) return true;
     try {
       const r = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
       const items = r.stages.flatMap((s) => s.items);

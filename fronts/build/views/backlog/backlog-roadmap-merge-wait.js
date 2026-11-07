@@ -12,7 +12,9 @@
   function filesOf(x, byNumber, refs) {
     if (!window.CityImpact || !byNumber || !refs) return x.files || [];
     const body = refs(x).map((i) => byNumber.get(i.number)?.body || '').join('\n\n');
-    return [...new Set([...(x.files || []), ...CityImpact.expectedFiles({ body }).files.map((f) => f.path)])];
+    // no repository listing here: a cited path the repository lacks comes back in newFiles, so both count
+    const e = CityImpact.expectedFiles({ body });
+    return [...new Set([...(x.files || []), ...[...e.files, ...e.newFiles].map((f) => f.path)])];
   }
 
   function html(r, s, { byNumber = null, refs = null, modeOf = null } = {}) {
@@ -24,7 +26,7 @@
     const hint = t('backlog_roadmap.merge_wait.move_on_hint', { base: item.inputs?.base_branch || 'main', pr });
     const button = (action, label, tip) => `<button class="btn sm ghost" type="button" data-rm-merge-wait="${action}" data-item="${esc(w.itemId)}" data-testid="roadmap-merge-wait-${action === 'skip' ? 'move-on' : 'stack'}" title="${esc(tip)}">${esc(label)}</button>`;
     const moveOn = w.moveOn.allowed ? button('skip', t('backlog_roadmap.merge_wait.move_on'), hint) : '';
-    const fork = String((modeOf ? modeOf(item) : null) || item.inputs?.mode || '') === 'fork';
+    const fork = String(item.effectiveMode || (modeOf ? modeOf(item) : null) || item.inputs?.mode || '') === 'fork';
     // refused: the depth limit as a badge; another reason (a release before the next stage) on a disabled Stack's hover
     const deep = w.stack.reason === t('roadmap.stack_depth_limit', { max: RoadmapModel.MAX_STACK_DEPTH });
     const stack = fork ? '' : w.stack.allowed ? button('stack', t('backlog_roadmap.merge_wait.stack'), t('backlog_roadmap.merge_wait.stack_hint', { pr }))

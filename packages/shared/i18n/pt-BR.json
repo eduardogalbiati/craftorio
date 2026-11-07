@@ -4441,6 +4441,7 @@
   "roadmap.running_pause_or_stop": "O roadmap está em execução: pause-o ou pare-o primeiro",
   "roadmap.stack_depth_limit": "Uma pilha tem no máximo {max} pull requests: faça o merge do de baixo primeiro.",
   "roadmap.stack_fork": "O modo Fork + PR não empilha: o PR abre depois do merge do PR anterior (#738).",
+  "roadmap.stack_no_next_stage": "Esta é a última etapa: adicione uma etapa depois dela para empilhar nela.",
   "roadmap.stack_not_waiting": "Sua execução não aguarda o merge de um PR: não há em que empilhar.",
   "roadmap.stack_release_between": "Uma release vem antes da próxima etapa: ela espera este merge, então nada empilha por cima dela.",
   "roadmap.stage_already_disabled": "Esta etapa já está desativada.",
