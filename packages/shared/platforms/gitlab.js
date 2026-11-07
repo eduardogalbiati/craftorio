@@ -12,13 +12,17 @@
   const cmd = (args) => ({ cli: 'glab', args });
   // the catalog's helper, at call time (in the browser i18n.js loads after this file)
   const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
-  // #812: the pipeline states (the engine's probes.js GL_PENDING / GL_FAILED: shared cannot require the engine)
+  // The pipeline states. The one copy (#812): the engine's probes.js and run-pr.js use them too.
   const GL_PENDING = ['created', 'waiting_for_resource', 'preparing', 'pending', 'running', 'scheduled', 'waiting_for_callback'];
   const GL_FAILED = ['failed', 'canceled', 'canceling'];
 
-  // #812: one `glab mr list --output json` entry → a PR card's entry (run-pr.js glMrDisplay's state; the review from
-  // detailed_merge_status, the list has no approvals)
-  // #812: the list entry's CI line from its pipeline's status
+  // An MR's JSON (`glab mr view` / `glab mr list --output json`) → its card's lines, one rule for the run's PR monitor
+  // (run-pr.js glMonitor / glMrDisplay) and the MRs screen's list (#812).
+  // The pipeline's status, lower case ('' when it has none)
+  const pullPipeline = (m) => String((m.head_pipeline || m.pipeline || null)?.status || '').toLowerCase();
+
+  // The CI line from the pipeline's status: none, failed, passed, manual (a manual or scheduled job never finishes by
+  // itself: someone has to act) or running. `failed` (the failed jobs) is the monitor's to fill.
   function pullCi(ps) {
     if (!ps) return { status: 'none', failed: [] };
     if (GL_FAILED.includes(ps)) return { status: 'failed', failed: [] };
@@ -26,25 +30,32 @@
     return { status: ['manual', 'scheduled'].includes(ps) ? 'manual' : 'running', failed: [] };
   }
 
-  // #812: the list entry's state (run-pr.js glMrDisplay's words)
-  function pullState(m, { ci, ps, ms, conflict, draft }) {
+  // Whether the MR conflicts with its target branch
+  const pullConflict = (m) => !!m.has_conflicts || m.detailed_merge_status === 'conflict';
+
+  // The state the lists show (run-pr.js PR_STATES): merged | closed | draft | conflict | failing | pending | ready | open.
+  // The merge status: detailed_merge_status (GitLab 15.6+), merge_status before it.
+  function pullState(m) {
     const s = String(m.state || 'opened').toLowerCase();
     if (s === 'merged' || s === 'closed') return s;
-    if (draft) return 'draft';
-    if (conflict) return 'conflict';
+    if (m.draft || m.work_in_progress) return 'draft';
+    if (pullConflict(m)) return 'conflict';
+    const ps = pullPipeline(m);
+    const ci = pullCi(ps);
     if (ci.status === 'failed') return 'failing';
     if (GL_PENDING.includes(ps)) return 'pending';
-    return ['passed', 'none'].includes(ci.status) && ['mergeable', 'can_be_merged'].includes(ms) ? 'ready' : 'open';
+    return ['passed', 'none'].includes(ci.status) && ['mergeable', 'can_be_merged'].includes(m.detailed_merge_status || m.merge_status) ? 'ready' : 'open';
   }
 
+  // #812: one `glab mr list --output json` entry → a PR card's entry; the review from detailed_merge_status (the list
+  // has no approvals)
   function parsePull(m) {
-    const ps = String((m.head_pipeline || m.pipeline || null)?.status || '').toLowerCase();
-    const ci = pullCi(ps);
+    const ci = pullCi(pullPipeline(m));
     const ms = m.detailed_merge_status || m.merge_status || '';
     const review = { status: ms === 'requested_changes' ? 'changes_requested' : ms === 'not_approved' ? 'required' : 'none', by: [] };
-    const conflict = !!m.has_conflicts || ms === 'conflict';
+    const conflict = pullConflict(m);
     const draft = !!(m.draft || m.work_in_progress);
-    const state = pullState(m, { ci, ps, ms, conflict, draft });
+    const state = pullState(m);
     return {
       number: m.iid, title: m.title || '', url: m.web_url, author: m.author?.username || null, draft,
       head: m.source_branch || null, base: m.target_branch || null, state, ci, review, conflicts: { status: conflict ? 'base' : 'none' },
@@ -63,6 +74,13 @@
     readsLabels: false,
     closeReason: null,
     actionsQuota: false,
+    // the pipeline states and an MR's card lines (#812: one copy, used by the engine's probes.js and run-pr.js)
+    GL_FAILED,
+    GL_PENDING,
+    pullCi,
+    pullConflict,
+    pullPipeline,
+    pullState,
 
     // ---- a repository ({ host, path }: packages/engine/domains/backlog/issues.js parseRepoUrl)
     cliTarget: ({ host, path }) => (host === OWN_HOST ? path : `https://${host}/${path}`),

@@ -12,8 +12,6 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  GL_FAILED,
-  ghCheckBucket,
   ghPrState,
   glMrState,
   parseTarget,
@@ -49,35 +47,31 @@ function prOfEvents(events) {
 // ---- the PR state ----------------------------------------------------------------------------
 const PR_STATES = ['closed', 'conflict', 'draft', 'failing', 'merged', 'open', 'pending', 'ready', 'unknown'];
 
+// The state is the adapter's pullState (#812: the PRs screen's list reads it by the same rule); the detail, the
+// probes' words (ghPrState / glMrState).
 // `gh pr view --json state,isDraft,mergeable,mergeStateStatus,statusCheckRollup` → { state, detail }
 function ghPrDisplay(pr) {
   const s = ghPrState(pr);
+  const state = github.pullState(pr);
   // #797: a merged PR's commit is what its roadmap item keeps
-  if (s.state === 'merged') return { state: s.state, detail: s.detail, ...(pr.mergeCommit?.oid ? { mergedCommit: pr.mergeCommit.oid } : {}) };
-  if (s.state === 'closed') return { state: s.state, detail: s.detail };
-  if (pr.isDraft) return { state: 'draft', detail: 'draft PR' };
-  if (s.state === 'conflict') return { state: 'conflict', detail: s.detail };
-  if (s.state === 'failed') return { state: 'failing', detail: s.detail };
-  if (s.state === 'pending') return { state: 'pending', detail: s.detail };
-  if (pr.mergeable === 'MERGEABLE' && String(pr.mergeStateStatus || '').toUpperCase() === 'CLEAN') return { state: 'ready', detail: `ready to merge (${s.detail})` };
-  return { state: 'open', detail: `open, ${s.detail}${pr.mergeStateStatus ? ` (${String(pr.mergeStateStatus).toLowerCase()})` : ''}` };
+  if (state === 'merged') return { state, detail: s.detail, ...(pr.mergeCommit?.oid ? { mergedCommit: pr.mergeCommit.oid } : {}) };
+  if (state === 'draft') return { state, detail: 'draft PR' };
+  if (state === 'ready') return { state, detail: `ready to merge (${s.detail})` };
+  if (state === 'open') return { state, detail: `open, ${s.detail}${pr.mergeStateStatus ? ` (${String(pr.mergeStateStatus).toLowerCase()})` : ''}` };
+  return { state, detail: s.detail };
 }
 
 // `glab mr view <iid> --output json` → { state, detail }
 function glMrDisplay(mr) {
   const s = glMrState(mr);
+  const state = gitlab.pullState(mr);
   // #797: a squashed MR has no merge commit of its own: its squash commit is what landed
   const commit = mr.merge_commit_sha || mr.squash_commit_sha;
-  if (s.state === 'merged') return { state: s.state, detail: s.detail, ...(commit ? { mergedCommit: commit } : {}) };
-  if (s.state === 'closed') return { state: s.state, detail: s.detail };
-  if (mr.draft || mr.work_in_progress) return { state: 'draft', detail: 'draft MR' };
-  if (s.state === 'conflict') return { state: 'conflict', detail: s.detail };
-  if (s.state === 'failed') return { state: 'failing', detail: s.detail };
-  if (s.state === 'pending') return { state: 'pending', detail: s.detail };
-  // detailed_merge_status (GitLab 15.6+), merge_status before it
-  const ms = mr.detailed_merge_status || mr.merge_status;
-  if (['passed', 'none'].includes(s.state) && ['mergeable', 'can_be_merged'].includes(ms)) return { state: 'ready', detail: `ready to merge (${s.detail})` };
-  return { state: 'open', detail: `open, ${s.detail}` };
+  if (state === 'merged') return { state, detail: s.detail, ...(commit ? { mergedCommit: commit } : {}) };
+  if (state === 'draft') return { state, detail: 'draft MR' };
+  if (state === 'ready') return { state, detail: `ready to merge (${s.detail})` };
+  if (state === 'open') return { state, detail: `open, ${s.detail}` };
+  return { state, detail: s.detail };
 }
 
 // gh pr view's --json fields (glab mr view returns its whole JSON)
@@ -142,16 +136,11 @@ const GH_WRITE = ['admin', 'maintain', 'write'];
 
 // GitHub: the checks, the review decision with its latest reviews, the unresolved review threads
 async function ghMonitor(pr, t, reader, url) {
-  const checks = (pr.statusCheckRollup || []).map((c) => ({ name: c.name || c.context || '?', bucket: ghCheckBucket(c), url: c.detailsUrl || c.targetUrl || null }));
-  const failed = checks.filter((c) => c.bucket === 'fail').map((c) => c.name);
-  const ci = { status: !checks.length ? 'none' : failed.length ? 'failed' : checks.some((c) => c.bucket === 'pending') ? 'running' : 'passed', failed };
-  const by = (state) => (pr.latestReviews || []).filter((r) => r.state === state).map((r) => r.author?.login).filter(Boolean);
-  const decision = String(pr.reviewDecision || '').toUpperCase();
-  // a branch rule that requires no review leaves reviewDecision empty: a latest review asking for changes still blocks
-  const review = decision === 'CHANGES_REQUESTED' || (decision !== 'APPROVED' && by('CHANGES_REQUESTED').length) ? { status: 'changes_requested', by: by('CHANGES_REQUESTED') }
-    : decision === 'REVIEW_REQUIRED' ? { status: 'required', by: [] }
-      : decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
-  const conflicts = { status: pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY' ? 'base' : 'none' };
+  // the CI, review and conflict lines: the adapter's rule (#812: the PRs screen's list reads them the same way)
+  const checks = (pr.statusCheckRollup || []).map((c) => ({ name: c.name || c.context || '?', bucket: github.checkBucket(c), url: c.detailsUrl || c.targetUrl || null }));
+  const ci = github.pullCi(pr);
+  const review = github.pullReview(pr);
+  const conflicts = { status: github.pullConflict(pr) ? 'base' : 'none' };
   const [owner, name] = t.repo.split('/');
   const threads = await reader(github.cli, ['api', 'graphql', ...github.apiHostArgs({ host: t.host }), '-f', `query=${THREADS_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `n=${t.id}`])
     .then((r) => r?.data?.repository?.pullRequest?.reviewThreads?.nodes, () => null);
@@ -211,22 +200,21 @@ async function glMonitor(mr, t, reader, url) {
   const api = (route) => reader('glab', ['api', `projects/${mr.project_id}/${route}`, ...gitlab.apiHostArgs({ host: t.host })]);
   const mrApi = (what) => api(`merge_requests/${mr.iid ?? t.id}/${what}`);
   const pipeline = mr.head_pipeline || mr.pipeline || null;
-  const ps = String(pipeline?.status || '').toLowerCase();
+  const ps = gitlab.pullPipeline(mr);
   const [approvals, reviewers, discussions, jobs] = await Promise.all([
     // 100 discussions a page (GitLab's default is 20: the unanswered count would stop there)
     mrApi('approvals'), mrApi('reviewers'), mrApi('discussions?per_page=100'),
-    GL_FAILED.includes(ps) && pipeline?.id ? api(`pipelines/${pipeline.id}/jobs`) : [],
+    gitlab.GL_FAILED.includes(ps) && pipeline?.id ? api(`pipelines/${pipeline.id}/jobs`) : [],
   ]);
-  const failedJobs = (jobs || []).filter((j) => GL_FAILED.includes(String(j.status || '').toLowerCase()));
-  const failed = failedJobs.map((j) => j.name);
-  // a pipeline waiting for a manual (or scheduled) job never finishes by itself: someone has to act
-  const ci = { status: !pipeline ? 'none' : GL_FAILED.includes(ps) ? 'failed' : ['success', 'skipped'].includes(ps) ? 'passed' : ['manual', 'scheduled'].includes(ps) ? 'manual' : 'running', failed };
+  const failedJobs = (jobs || []).filter((j) => gitlab.GL_FAILED.includes(String(j.status || '').toLowerCase()));
+  // the CI and conflict lines: the adapter's rule (#812: the MRs screen's list reads them the same way)
+  const ci = { ...gitlab.pullCi(ps), failed: failedJobs.map((j) => j.name) };
   const changesBy = (reviewers || []).filter((r) => r.state === 'requested_changes').map((r) => r.user?.username).filter(Boolean);
   const approvedBy = (approvals?.approved_by || []).map((a) => a.user?.username).filter(Boolean);
   const review = changesBy.length ? { status: 'changes_requested', by: changesBy }
     : approvals?.approvals_left > 0 || approvals?.approved === false ? { status: 'required', by: [] }
       : approvedBy.length ? { status: 'approved', by: approvedBy } : { status: 'none', by: [] };
-  const conflicts = { status: mr.has_conflicts || mr.detailed_merge_status === 'conflict' ? 'base' : 'none' };
+  const conflicts = { status: gitlab.pullConflict(mr) ? 'base' : 'none' };
   const open = (discussions || []).filter((d) => (d.notes || []).some((n) => n.resolvable && !n.resolved));
   const unanswered = open.length;
   const trusted = trustCache((id) => api(`members/all/${id}`).then((m) => Number(m?.access_level) >= gitlab.WRITE_LEVEL));

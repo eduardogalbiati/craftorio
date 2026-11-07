@@ -52,7 +52,11 @@ module.exports = (ctx) => {
       return { merged: false, blockers: o.blockers || [], error: above ? 'stacked: merge the pull requests below it first' : `blocked: ${(o.blockers || []).join(', ') || 'not mergeable'}` };
     }
     const rights = await runPr.readMergeRights({ url }, { reader: reader() });
-    const r = await runPr.mergePr({ url }, { admin: !!admin, ...rights, reader: reader(), run: runner });
+    // the project's setting, as from a run (areas/runs.js mergeRunPr), except when a listed PR is stacked on this one
+    // (#807: its base is this branch, deleting it would close that PR)
+    const stackedOn = Number(entry.stack?.size) > Number(entry.stack?.position);
+    const deleteBranch = projectList(projectId)[0]?.deleteBranchAfterMerge === true && !stackedOn;
+    const r = await runPr.mergePr({ url }, { admin: !!admin, ...rights, deleteBranch, reader: reader(), run: runner });
     return { merged: !!r.merged, ...(r.commit ? { commit: r.commit } : {}), ...(r.error ? { error: r.error } : {}), ...(r.blockers ? { blockers: r.blockers } : {}) };
   }
 

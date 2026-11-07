@@ -178,6 +178,9 @@
         <div id="pulls-body" class="pulls-body"><p class="muted small">${t('pulls.loading')}</p></div>
       </section>`,
     mount() {
+      // a language change repaints the menu with nav.pulls ("PRs", view-registry.js relabelNav): MRs and the count
+      // come back right after it (I18n.notify runs once the menu is relabelled)
+      window.I18n?.onChange?.(() => paintMenu(needYouCount(pv.answer)));
       $('#pulls-refresh').addEventListener('click', () => read());
       $('#pulls-body').addEventListener('click', (e) => {
         const action = e.target.closest('[data-pull-action]');

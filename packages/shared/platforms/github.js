@@ -26,8 +26,8 @@
   // the catalog's helper, at call time (in the browser i18n.js loads after this file)
   const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
 
-  // #812: one check of statusCheckRollup → pass | fail | pending (the engine's probes.js ghCheckBucket rule: shared
-  // cannot require the engine, so the list keeps its own copy of it, kept in step)
+  // One check of statusCheckRollup → pass | fail | pending: statusCheckRollup mixes check runs (status + conclusion)
+  // and commit statuses (state). The one copy of the rule (#812): the engine's probes.js and run-pr.js use it too.
   function checkBucket(c) {
     const bucket = (s) => (GH_FAILED.includes(s) ? 'fail' : GH_PASSED.includes(s) ? 'pass' : 'pending');
     if (c?.__typename === 'StatusContext' || (c?.state && !c?.status)) return bucket(String(c.state || '').toUpperCase());
@@ -35,16 +35,17 @@
     return bucket(String(c.conclusion || '').toUpperCase());
   }
 
-  // #812: one `gh pr list --json` entry → a PR card's entry (run-pr.js ghPrDisplay's state, ghMonitor's ci / review /
-  // conflicts, read from the list's fields only)
-  // #812: the list entry's CI line (ghMonitor's): none, failed (its jobs), running or passed
+  // A PR's JSON (`gh pr view` / `gh pr list --json`) → its card's lines, one rule for the run's PR monitor (run-pr.js
+  // ghMonitor / ghPrDisplay) and the PRs screen's list (#812).
+  // The CI line: none, failed (its checks), running or passed
   function pullCi(p) {
     const buckets = (p.statusCheckRollup || []).map(checkBucket);
     const failed = (p.statusCheckRollup || []).filter((c, i) => buckets[i] === 'fail').map((c) => c.name || c.context || '?');
     return { status: !buckets.length ? 'none' : failed.length ? 'failed' : buckets.includes('pending') ? 'running' : 'passed', failed };
   }
 
-  // #812: the list entry's review line (ghMonitor's): changes requested (by whom), required, approved or none
+  // The review line: changes requested (by whom), required, approved or none. A branch rule that requires no review
+  // leaves reviewDecision empty: a latest review asking for changes still blocks.
   function pullReview(p) {
     const by = (s) => (p.latestReviews || []).filter((r) => r.state === s).map((r) => r.author?.login).filter(Boolean);
     const decision = String(p.reviewDecision || '').toUpperCase();
@@ -53,8 +54,11 @@
     return decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
   }
 
-  // #812: the list entry's state (run-pr.js ghPrDisplay's words)
-  function pullState(p, ci, conflict) {
+  // Whether the PR conflicts with its base
+  const pullConflict = (p) => p.mergeable === 'CONFLICTING' || p.mergeStateStatus === 'DIRTY';
+
+  // The state the lists show (run-pr.js PR_STATES): merged | closed | draft | conflict | failing | pending | ready | open
+  function pullState(p, ci = pullCi(p), conflict = pullConflict(p)) {
     const s = String(p.state || 'OPEN').toUpperCase();
     if (s === 'MERGED' || s === 'CLOSED') return s.toLowerCase();
     if (p.isDraft) return 'draft';
@@ -64,10 +68,11 @@
     return p.mergeable === 'MERGEABLE' && String(p.mergeStateStatus || '').toUpperCase() === 'CLEAN' ? 'ready' : 'open';
   }
 
+  // #812: one `gh pr list --json` entry → a PR card's entry, read from the list's fields only
   function parsePull(p) {
     const ci = pullCi(p);
     const review = pullReview(p);
-    const conflict = p.mergeable === 'CONFLICTING' || p.mergeStateStatus === 'DIRTY';
+    const conflict = pullConflict(p);
     const state = pullState(p, ci, conflict);
     return {
       number: p.number, title: p.title || '', url: p.url, author: p.author?.login || null, draft: !!p.isDraft,
@@ -89,6 +94,14 @@
     closeReason: 'not planned',
     // GitHub Actions minutes can run out (packages/engine/engine/probes.js withQuota)
     actionsQuota: true,
+    // the check conclusions and a PR's card lines (#812: one copy, used by the engine's probes.js and run-pr.js)
+    GH_FAILED,
+    GH_PASSED,
+    checkBucket,
+    pullCi,
+    pullConflict,
+    pullReview,
+    pullState,
 
     // ---- a repository ({ host, path }: packages/engine/domains/backlog/issues.js parseRepoUrl)
     cliTarget: ({ host, path }) => (host === OWN_HOST ? path : `${host}/${path}`),

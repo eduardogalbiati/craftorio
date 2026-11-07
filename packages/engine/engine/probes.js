@@ -39,19 +39,9 @@ function parseTarget(url) {
 }
 
 // ---- GitHub ------------------------------------------------------------------------------------
-const GH_FAILED = ['FAILURE', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR'];
-const GH_PASSED = ['SUCCESS', 'NEUTRAL', 'SKIPPED'];
-
-// statusCheckRollup mixes check runs (status + conclusion) and commit statuses (state)
-function ghCheckBucket(c) {
-  if (c.__typename === 'StatusContext' || (c.state && !c.status)) {
-    const s = String(c.state || '').toUpperCase();
-    return GH_FAILED.includes(s) ? 'fail' : GH_PASSED.includes(s) ? 'pass' : 'pending';
-  }
-  if (String(c.status || '').toUpperCase() !== 'COMPLETED') return 'pending';
-  const k = String(c.conclusion || '').toUpperCase();
-  return GH_FAILED.includes(k) ? 'fail' : GH_PASSED.includes(k) ? 'pass' : 'pending';
-}
+// the conclusions and the check rule live in the adapter (#812: one copy, the PRs screen's list uses them too)
+const { GH_PASSED } = github;
+const ghCheckBucket = github.checkBucket;
 
 const checkName = (c) => c.name || c.context || '?';
 const countBuckets = (buckets) => buckets.reduce((a, b) => ({ ...a, [b]: (a[b] || 0) + 1 }), {});
@@ -104,8 +94,8 @@ function ghRunState(run) {
 }
 
 // ---- GitLab ------------------------------------------------------------------------------------
-const GL_PENDING = ['created', 'waiting_for_resource', 'preparing', 'pending', 'running', 'scheduled', 'waiting_for_callback'];
-const GL_FAILED = ['failed', 'canceled', 'canceling'];
+// the pipeline states live in the adapter (#812: one copy, the MRs screen's list uses them too)
+const { GL_FAILED, GL_PENDING } = gitlab;
 
 // `glab mr view <iid> --output json`
 function glMrState(mr) {
