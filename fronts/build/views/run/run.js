@@ -133,6 +133,7 @@ function renderRunScreen() {
   renderPauseBanner();
   renderChainBanner();
   renderRunGates();
+  window.PrMonitorCard?.renderRun(selectedView()); // #809: the PR monitor's card, while the run waits for its merge
   renderRunSummary();
   renderSteps();
   renderSessions();
@@ -936,6 +937,7 @@ registerView({
         <div id="run-pause-banner" class="run-pause-banner hidden" aria-live="polite"></div>
         <div id="run-chain" class="chain-banner hidden" aria-live="polite" data-testid="run-chain-banner"></div>
         <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
+        <div id="run-pr-monitor" class="run-pr-monitor hidden" aria-live="polite"></div>
         <div class="run-layout">
           <aside class="panel config" data-testid="run-side-column">
             <section>

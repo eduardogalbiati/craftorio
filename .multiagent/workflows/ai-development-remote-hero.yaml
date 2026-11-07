@@ -5,7 +5,7 @@
 # What differs from the local hero:
 #   - the worktree starts at the fetched origin/<base> (orchestrator.worktree.remote: true);
 #   - once verified, the run goes to pr_open (the CI pusher pushes the branch and opens the pull
-#     request) and pr_review (fragments/pr-pipeline.yaml), not to a local merge. This repository's CI
+#     request) and pr_monitor (fragments/pr-pipeline.yaml), not to a local merge. This repository's CI
 #     does not run on pull requests, so nothing waits for it;
 #   - the agents' and the gates' texts say so. resolve_merge and merge_blocked stay, unreachable:
 #     the review, test and verify steps refer to them.
@@ -644,7 +644,7 @@ groups:
   - name: Validate
     steps: [test, suite, e2e, heal, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Open PR
-    steps: [pr_open, stack_follow, pr_review, resolve_merge, merge_blocked]
+    steps: [pr_open, stack_follow, pr_monitor, resolve_merge, merge_blocked]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -2470,7 +2470,7 @@ steps:
   - id: stack_follow
     fragment: pr-pipeline
     agent: ci_pusher
-  - id: pr_review
+  - id: pr_monitor
     fragment: pr-pipeline
 
 # -----------------------------------------------------------------------------

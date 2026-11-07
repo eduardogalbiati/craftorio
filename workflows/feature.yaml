@@ -720,7 +720,7 @@ groups:
   - name: Validate
     steps: [test, suite, e2e, heal, check_failed, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Merge
-    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_review]
+    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_monitor]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -2533,7 +2533,7 @@ steps:
     agent: ci_pusher
   - id: ci_failed
     fragment: pr-pipeline
-  - id: pr_review
+  - id: pr_monitor
     fragment: pr-pipeline
 
 outputs:

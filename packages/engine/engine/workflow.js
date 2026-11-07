@@ -565,6 +565,8 @@ class WorkflowRun extends EventEmitter {
     // a loop that ran out and sent the run here (finishStep handles the targets that are not gates)
     const exhausted = this.exhausted?.target === step.id ? this.exhausted : null;
     this.exhausted = null;
+    // #809: the PR monitor waits for the PR/MR's merge or close, with no agent (run/transitions.js)
+    if (step.type === 'pr_monitor') return this.runPrMonitor(step, st, t0);
     let output, scope;
     if (GATE.includes(step.type)) {
       // `kind: escalation`, or any gate an exhausted loop leads to: the supervisor on call tries to

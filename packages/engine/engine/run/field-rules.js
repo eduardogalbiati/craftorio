@@ -56,6 +56,7 @@
     'check',
     'human_approval',
     'human_edit',
+    'pr_monitor',
     'project_map',
     'refactor_proposals',
     'release_version',
@@ -97,7 +98,7 @@
 
   // Where a step field applies: every step type, a list of types, or every type except some
   const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-  const NO_AGENT_TYPES = ['check', 'project_map', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
+  const NO_AGENT_TYPES = ['check', 'pr_monitor', 'project_map', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
   // The protected gates: only the person ends them; human_edit (#647) also takes the person's edit
   // requests, each a turn of its named agent, while it waits
   const GATE = ['human_approval', 'human_edit'];
@@ -167,6 +168,8 @@
     text('version', ['release_version']),
     text('dir', ['release_version']),
     text('branch', ['release_version']),
+    // `type: pr_monitor` (#809): the PR/MR the run waits to see merged (a template; empty: the ci or pr_open step's pr_url)
+    text('target', ['pr_monitor']),
     // `type: project_map` (#372): the project map's machine steps, `from` the step whose output they read
     entry('steps[].action', ['project_map'], 'one of', `action must be one of ${PROJECT_MAP_ACTIONS.join(', ')}, on a project_map step.`, { values: PROJECT_MAP_ACTIONS, required: true, elsewhere: 'skip' }),
     // `type: refactor_proposals` (#378): the Refactor proposals workflow's machine steps, `from` as above

@@ -1,8 +1,8 @@
 # The pull-request half of a composed development workflow (#487, packages/engine/domains/workflow/workflow-compose.js), adapted
 # from software-development's ci and ci_failed: the CI pusher pushes the run's branch and opens the
 # PR/MR, the engine waits on its checks (`wait: pr_checks`) and calls the agent only when one failed;
-# a fix goes to the developer (delegate). pr_review hands the green PR/MR to the team, who merge it on
-# the platform. #630: pr_open instead of ci when the project's CI does not run on pull requests (the
+# a fix goes to the developer (delegate). pr_monitor (#809) hands the green PR/MR to the team, who merge it on
+# the platform, and ends the run on that merge. #630: pr_open instead of ci when the project's CI does not run on pull requests (the
 # composed set's ci none or release): it opens the PR/MR with no wait. A step `{ id, fragment: pr-pipeline }`
 # gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js,
 # expandFragments). Reads the inputs base_branch and issue and the steps develop, ci and pr_open.
@@ -12,7 +12,7 @@
 # rebase) ci's wait.parent makes the engine wait for that PR to merge before the PR opens, rebased.
 # #807 Stack (Remote mode, inputs.parent_branch set by the roadmap): the PR opens at once against the previous
 # stage's branch, naming its PR (inputs.parent_pr); wait.parent then follows it (transitions.js followStackParent)
-# in ci, or in stack_follow after pr_open, until the parent merges: only then does the run reach pr_review.
+# in ci, or in stack_follow after pr_open, until the parent merges: only then does the run reach pr_monitor.
 
 steps:
   ci:
@@ -91,7 +91,7 @@ steps:
       - when: "output.ci_status == 'success' and inputs.parent_branch and inputs.mode != 'fork' and not steps.ci.parentMerged"
         goto: ci
       - when: "output.ci_status == 'success'"
-        goto: pr_review
+        goto: pr_monitor
       - when: "output.ci_status == 'pending'"
         goto: ci
       - when: "output.ci_status == 'failed' and output.failure_class == 'infra'"
@@ -182,22 +182,22 @@ steps:
             focused test, commit, then `git push --force-with-lease`, and report the commit hash.
         goto: pr_open
         max_visits: 3
-        on_exhausted: pr_review
+        on_exhausted: pr_monitor
       - when: "inputs.parent_branch and inputs.mode != 'fork'"
         goto: stack_follow
       - when: "true"
-        goto: pr_review
+        goto: pr_monitor
 
   # #807 a stacked run of a project whose CI does not run on pull requests (after pr_open): the engine
   # follows the parent PR/MR here (wait.parent, transitions.js followStackParent): it rebases the branch
   # onto the parent's new commits, onto the base once the parent merges (the agent then moves the PR/MR's
-  # base), and a parent closed without merge opens a gate. The run reaches pr_review once the parent merged.
+  # base), and a parent closed without merge opens a gate. The run reaches pr_monitor once the parent merged.
   stack_follow:
     display: Stacked pull request
     goal:
       description: "PR/MR {{ steps.pr_open.output.pr_url }} targets {{ inputs.base_branch }} once {{ inputs.parent_pr }} merged"
       until: "not output.conflict"
-      on_exhausted: pr_review
+      on_exhausted: pr_monitor
     loop:
       interval: 1m
       max_duration: 1h
@@ -234,24 +234,23 @@ steps:
             commit, then `git push --force-with-lease`, and report the commit hash.
         goto: stack_follow
         max_visits: 3
-        on_exhausted: pr_review
+        on_exhausted: pr_monitor
       - when: "not steps.stack_follow.parentMerged"
         goto: stack_follow
       - when: "true"
-        goto: pr_review
+        goto: pr_monitor
 
-  # the team merges on the platform: the run ends once the PR/MR is green (or, with no CI on pull
-  # requests, open) and handed over
-  pr_review:
-    type: human_approval
-    display: Team review
-    message: |
-      {% set pr = steps.ci.output or steps.pr_open.output %}
-      PR/MR #{{ pr.pr_number }} ({{ pr.pr_url }}) is {% if steps.ci.output %}green{% elif pr.conflict %}open, still conflicting with the base: {{ pr.detail }}{% else %}open (the project's CI does not run on pull requests){% endif %}.
-      The team reviews and merges it on the platform. Approve to end the run; reject to stop it as failed.
+  # #809 the team reviews and merges on the platform: the engine watches the PR/MR with no agent and no
+  # Approve (transitions.js runPrMonitor, run-pr.js fetchPrMonitor) and shows its CI, review, conflicts,
+  # comments and what blocks the merge. A merge ends the run well, a close without merge ends it failed.
+  # It never touches the PR/MR: stopping the run leaves it as it is. In Fork + PR it is upstream's PR.
+  pr_monitor:
+    type: pr_monitor
+    display: Waiting for the merge
+    target: "{% if steps.ci.output %}{{ steps.ci.output.pr_url }}{% else %}{{ steps.pr_open.output.pr_url }}{% endif %}"
     transitions:
-      - when: "approved"
+      - when: "output.state == 'merged'"
         goto: end
-      - when: "rejected"
+      - when: "output.state == 'closed'"
         goto: end
         status: failed

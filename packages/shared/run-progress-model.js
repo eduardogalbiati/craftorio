@@ -228,7 +228,7 @@
   }
   // #792: a group's name is the workflow's to choose: the group of these steps lands the work under
   // any name (merge_blocked is no sign: write-doc holds it in its Review)
-  const LANDING_STEPS = new Set(['pr_open', 'pr_review', 'resolve_merge']);
+  const LANDING_STEPS = new Set(['pr_monitor', 'pr_open', 'pr_review', 'resolve_merge']);
   const landsWork = (st) => st.grouped && (st.name === MERGE || st.name === OPEN_PR || st.steps.some((id) => LANDING_STEPS.has(id)));
   // #792: the group where the work lands, as the workflows name it and as a run ending in a PR draws it
   // (the data stays in English; the screens translate it: run_list.open_pr)

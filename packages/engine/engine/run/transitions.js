@@ -237,6 +237,68 @@ const methods = {
     return 'agent';
   },
 
+  // #809 `type: pr_monitor`: the run waits for its PR/MR's merge with no agent, no gate and no action (it
+  // never touches the PR/MR: Stop only aborts the wait). Reads it every prMonitorIntervalMs until a read
+  // says merged (the step's transitions: end, success) or closed (end, failed).
+  async runPrMonitor(step, st, t0) {
+    for (;;) {
+      const next = await this.pollPrMonitor(step, st, t0);
+      if (next) return next;
+      // simulation: at most 3s, scaled like the mock's delays (as loopWait)
+      const pace = prMonitorIntervalMs(Date.now() - (this.prMonitorChangedAt || Date.now()));
+      const interval = Math.min(pace, this.machine.simulated ? 3000 * +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1) : Infinity);
+      if (interval !== this.prMonitorWait) this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
+      this.prMonitorWait = interval;
+      this.setStatus(this.orchestrator, 'waiting');
+      await sleep(interval, this.abort.signal);
+      this.setStatus(this.orchestrator, 'active');
+    }
+  },
+
+  // #809: ONE read of the monitor's PR/MR → the next step once it merged or closed, else null (wait and
+  // read again). Each read that changes the card emits `pr.monitor` (else one every 10 minutes); a read
+  // that fails keeps the last card (its state and checked_at) with the error and never ends the run.
+  // `prMonitor` (the step's id while it waits): the service counts no run slot for it and shows its
+  // roadmap item waiting for the merge. Nothing is kept in `st`: a restarted run reads the PR/MR afresh.
+  async pollPrMonitor(step, st, t0 = Date.now()) {
+    if (this.abort.signal.aborted) throw new Error('Cancelled');
+    const target = (step.target ? render(step.target, this.ctx).trim() : '')
+      || this.ctx.steps?.ci?.output?.pr_url || this.ctx.steps?.pr_open?.output?.pr_url || '';
+    this.prMonitor = step.id;
+    const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork' };
+    let r;
+    try {
+      if (!target) throw new Error('no pull/merge request URL yet');
+      r = await this.probe({ probe: 'pr_monitor', target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id });
+    } catch (e) {
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      this.prMonitorError = e.message;
+      this.emitEvent('pr.monitor', { ...base, ...(this.prMonitorCard || {}), error: e.message });
+      return null;
+    }
+    this.prMonitorError = null;
+    const card = { ...(this.prMonitorCard || {}), state: r.state, detail: r.detail || r.state, checked_at: new Date().toISOString() };
+    for (const k of ['ci', 'review', 'conflicts', 'comments', 'result']) if (r[k]) card[k] = r[k];
+    const seen = JSON.stringify([r.state, r.ci, r.review, r.conflicts, r.comments, r.result]);
+    const changed = seen !== this.prMonitorSeen;
+    if (changed) this.prMonitorChangedAt = Date.now();
+    if (changed || Date.now() - (this.prMonitorEmittedAt || 0) >= 10 * 60e3) {
+      this.emitEvent('pr.monitor', { ...base, ...card });
+      this.prMonitorEmittedAt = Date.now();
+    }
+    this.prMonitorSeen = seen;
+    this.prMonitorCard = card;
+    if (r.state !== 'merged' && r.state !== 'closed') return null;
+    this.prMonitor = null;
+    const closed = r.state === 'closed';
+    if (closed) this.emitEvent('log', { level: 'warn', step_id: step.id, message: `The pull/merge request ${target} was closed without merging.` });
+    const output = { state: r.state, detail: card.detail, url: target };
+    st.output = output;
+    const next = await this.finishStep(step, st, output, { ...this.ctx, output }, t0);
+    if (closed && this.endStatus?.status === 'failed') this.endStatus.message = `The pull/merge request ${target} was closed without merging.`;
+    return next;
+  },
+
   // A probe call of pollStep / pollParent; a check that cannot run (or `missing`: why it cannot start)
   // becomes the `error` state, "<what> (<reason>)", so the agent is called instead.
   async probeOrError(step, stats, args, what, missing) {
@@ -612,7 +674,14 @@ ${r.stderr || r.stdout}`.slice(0, 1500));
   },
 };
 
+// #809: how often the PR monitor reads its PR/MR: about once a minute, every 5 minutes once nothing
+// changed for a day (a PR waiting for days is not read 1440 times a day)
+function prMonitorIntervalMs(sinceChangeMs) {
+  return sinceChangeMs > 24 * 36e5 ? 5 * 60e3 : 60e3;
+}
+
 module.exports = {
   goalLoopInstructions,
   methods,
+  prMonitorIntervalMs,
 };

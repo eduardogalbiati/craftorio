@@ -11,6 +11,7 @@
 //   pr_mergeable  passed (open, no conflict, checks green or none) | conflict | failed | pending
 //                 | blocked (branch protection: a required review or check) | behind | merged | closed:
 //                 the check right before a merge (`check:` on a gate, `precheck:` on a transition)
+//   pr_monitor    (#809, the `pr_monitor` step, not a `wait.probe`) the PR/MR's card: run-pr.js fetchPrMonitor
 // The engine decides what each state means (poll again, finish the step, or call the agent).
 
 const {
@@ -169,6 +170,8 @@ async function withQuota(result, t, quota) {
 // { probe, target, cwd, signal, quota? } → { state, detail, fingerprint? }. Throws when the target is
 // not a URL this probe can read or the CLI fails; the engine then calls the agent, as without `wait`.
 async function runProbe({ probe, target, cwd, signal, quota }) {
+  // #809 the PR monitor's read (no `wait.probe`: the pr_monitor step's own); required here, run-pr.js requires this file
+  if (probe === 'pr_monitor') return require('../domains/run/run-pr').fetchPrMonitor({ url: target }, { reader: (cmd, args) => run(cmd, args, { cwd, signal }) });
   if (!PROBES.includes(probe)) throw new Error(`unknown probe "${probe}"`);
   const t = parseTarget(target);
   const wantsPr = probe !== 'workflow_run';
@@ -193,8 +196,11 @@ const REQUEST_PROBES = {
 };
 
 module.exports = {
+  ghCheckBucket,
   ghPrState,
   ghRunState,
+  GL_FAILED,
+  GL_PENDING,
   glMrState,
   glPipelineState,
   mergeableState,

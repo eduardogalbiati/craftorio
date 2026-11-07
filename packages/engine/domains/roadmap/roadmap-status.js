@@ -4,7 +4,8 @@
 // A run that succeeded with a PR a person merges on the platform (#797): `run.pr` is that PR, and the
 // item waits for its merge (`waiting_merge`, derived, never stored) until the service's read says it
 // merged (`run.merged`, the item is done with `run.mergedCommit`) or closed (`run.prClosed`, it failed).
-// #807: so does a run still waiting at its PR's review gate (pr_review), `waiting` kept for Move on (#395).
+// #807: so does a run still waiting at its PR's review gate (pr_review), `waiting` kept for Move on (#395);
+// #809: and a run in its PR monitor (pr_monitor), its PR with the monitor's card.
 
 const fs = require('fs');
 const path = require('path');

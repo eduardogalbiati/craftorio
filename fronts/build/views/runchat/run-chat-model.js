@@ -49,6 +49,7 @@
     return { prose: prose.trim(), json, decisions };
   }
 
+  const PrCard = typeof module === 'object' && module.exports ? require('@multiagent/shared/pr-card.js') : root.PrCard;
   const displayName = typeof module === 'object' && module.exports ? require('@multiagent/shared/display-name.js').displayName : root.displayName;
   // what the run chat shows about a session's agent (the hover card): recorded in the events,
   // so a replayed run shows what was actually used
@@ -76,6 +77,7 @@
       this.gates = new Map(); // approval id → gate item
       this.sides = new Map(); // agent → 'left' | 'right', given when it first speaks
       this.touched = [];
+      this.prCard = null; // #809: the PR monitor's card item
     }
 
     // Each agent gets a side the first time it speaks, alternating left, right, left… in order
@@ -339,6 +341,19 @@
     },
     'local_preview.stopped'(ev) {
       this.system(ev, ev.exit_code && !ev.reason ? 'warn' : 'plain', `Local preview stopped${ev.reason ? ` (${ev.reason})` : ev.exit_code != null ? ` (exit ${ev.exit_code})` : ''}`);
+    },
+
+    // #809: the PR monitor's card, one item per run updated in place by each read; a failed read keeps
+    // the last lines and read time and says why (packages/shared/pr-card.js gives the texts)
+    'pr.monitor'(ev) {
+      const card = this.prCard || (this.prCard = this.add({ kind: 'pr_card', ts: ev.ts, lines: [], checkedAt: null }));
+      const lines = PrCard.lines(ev, { fork: !!ev.fork });
+      Object.assign(card, {
+        stepId: baseStep(ev.step_id), url: ev.url || card.url || '', number: ev.number ?? card.number ?? null,
+        state: ev.state || card.state || null, fork: !!ev.fork, error: ev.error || null,
+        checkedAt: ev.checked_at || card.checkedAt, lines: lines.length ? lines : card.lines,
+      });
+      this.touch(card);
     },
 
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },

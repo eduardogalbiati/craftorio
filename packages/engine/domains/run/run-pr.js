@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ghPrState, glMrState, parseTarget } = require('../../engine/probes');
+const { GL_FAILED, ghCheckBucket, ghPrState, glMrState, parseTarget } = require('../../engine/probes');
 const { resolveCommand } = require('../../engine/providers');
 const { execShim } = require('../machine/shell');
 const github = require('@multiagent/shared/platforms/github');
@@ -98,6 +98,82 @@ async function fetchPrState(pr, { reader = readJson } = {}) {
   return DISPLAY[p.id](await reader(c.cli, c.args));
 }
 
+// ---- the PR monitor's card (#809) -----------------------------------------------------------------
+// What the pr_monitor step shows of a PR/MR, read with no LLM: { state (as fetchPrState), detail,
+// ci: { status: passed | failed | running | none (no CI on PRs), failed: [jobs] },
+// review: { status: approved | changes_requested | required (approvals missing) | none, by: [logins] },
+// conflicts: { status: none | base }, comments: { unanswered }, result: { ready, blockers: [what blocks the merge] } }.
+// A merged or closed PR/MR is only its state. A failed read rejects: the monitor keeps its last card.
+const MONITOR_FIELDS = `${REQUEST_FIELDS},reviewDecision,latestReviews,comments,reviews,headRefOid`;
+const THREADS_QUERY = 'query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}';
+
+async function fetchPrMonitor(pr, { reader = readJson } = {}) {
+  const t = parseTarget(pr?.url);
+  if (!t || t.kind !== 'pr') throw new Error(`${JSON.stringify(String(pr?.url ?? ''))} is not a pull/merge request URL`);
+  const p = resolvePlatform(t.platform);
+  const c = p.requestViewCommand(t, MONITOR_FIELDS);
+  const raw = await reader(c.cli, c.args);
+  const shown = DISPLAY[p.id](raw);
+  if (prEnded(shown.state)) return { state: shown.state, detail: shown.detail };
+  const card = await (p.id === gitlab.id ? glMonitor(raw, t, reader) : ghMonitor(raw, t, reader));
+  return { state: shown.state, detail: shown.detail, ...card, result: monitorResult(shown, card) };
+}
+
+// GitHub: the checks, the review decision with its latest reviews, the unresolved review threads
+async function ghMonitor(pr, t, reader) {
+  const checks = (pr.statusCheckRollup || []).map((c) => ({ name: c.name || c.context || '?', bucket: ghCheckBucket(c) }));
+  const failed = checks.filter((c) => c.bucket === 'fail').map((c) => c.name);
+  const ci = { status: !checks.length ? 'none' : failed.length ? 'failed' : checks.some((c) => c.bucket === 'pending') ? 'running' : 'passed', failed };
+  const by = (state) => (pr.latestReviews || []).filter((r) => r.state === state).map((r) => r.author?.login).filter(Boolean);
+  const decision = String(pr.reviewDecision || '').toUpperCase();
+  const review = decision === 'CHANGES_REQUESTED' ? { status: 'changes_requested', by: by('CHANGES_REQUESTED') }
+    : decision === 'REVIEW_REQUIRED' ? { status: 'required', by: [] }
+      : decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
+  const conflicts = { status: pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY' ? 'base' : 'none' };
+  const [owner, name] = t.repo.split('/');
+  const threads = await reader('gh', ['api', 'graphql', ...github.apiHostArgs({ host: t.host }), '-f', `query=${THREADS_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `n=${t.id}`])
+    .then((r) => r?.data?.repository?.pullRequest?.reviewThreads?.nodes, () => null);
+  // no thread list (a token without the scope, a reader standing in for gh): the PR's comments
+  const unanswered = Array.isArray(threads) ? threads.filter((n) => !n.isResolved).length : (pr.comments || []).length;
+  return { ci, review, conflicts, comments: { unanswered } };
+}
+
+// GitLab: the head pipeline (its failed jobs), approvals and reviewers, the unresolved discussions
+async function glMonitor(mr, t, reader) {
+  const api = (route) => reader('glab', ['api', `projects/${mr.project_id}/${route}`, ...gitlab.apiHostArgs({ host: t.host })]);
+  const mrApi = (what) => api(`merge_requests/${mr.iid ?? t.id}/${what}`);
+  const pipeline = mr.head_pipeline || mr.pipeline || null;
+  const ps = String(pipeline?.status || '').toLowerCase();
+  const [approvals, reviewers, discussions, jobs] = await Promise.all([
+    mrApi('approvals'), mrApi('reviewers'), mrApi('discussions'),
+    GL_FAILED.includes(ps) && pipeline?.id ? api(`pipelines/${pipeline.id}/jobs`) : [],
+  ]);
+  const failed = (jobs || []).filter((j) => GL_FAILED.includes(String(j.status || '').toLowerCase())).map((j) => j.name);
+  const ci = { status: !pipeline ? 'none' : GL_FAILED.includes(ps) ? 'failed' : ['success', 'skipped'].includes(ps) ? 'passed' : 'running', failed };
+  const changesBy = (reviewers || []).filter((r) => r.state === 'requested_changes').map((r) => r.user?.username).filter(Boolean);
+  const approvedBy = (approvals?.approved_by || []).map((a) => a.user?.username).filter(Boolean);
+  const review = changesBy.length ? { status: 'changes_requested', by: changesBy }
+    : approvals?.approvals_left > 0 || approvals?.approved === false ? { status: 'required', by: [] }
+      : approvedBy.length ? { status: 'approved', by: approvedBy } : { status: 'none', by: [] };
+  const conflicts = { status: mr.has_conflicts || mr.detailed_merge_status === 'conflict' ? 'base' : 'none' };
+  const unanswered = (discussions || []).filter((d) => (d.notes || []).some((n) => n.resolvable && !n.resolved)).length;
+  return { ci, review, conflicts, comments: { unanswered } };
+}
+
+// What blocks the merge (English, the engine's words) → { ready, blockers }
+function monitorResult(shown, { ci, review, conflicts, comments }) {
+  const blockers = [];
+  if (shown.state === 'draft') blockers.push('draft');
+  if (ci.status === 'failed') blockers.push(`CI failed${ci.failed.length ? ` (${ci.failed.join(', ')})` : ''}`);
+  if (ci.status === 'running') blockers.push('CI running');
+  if (review.status === 'changes_requested') blockers.push(`changes requested${review.by.length ? ` by ${review.by.join(', ')}` : ''}`);
+  if (review.status === 'required') blockers.push('approvals missing');
+  if (conflicts.status === 'base') blockers.push('conflict with the base');
+  if (comments.unanswered) blockers.push(`${comments.unanswered} unanswered comment${comments.unanswered > 1 ? 's' : ''}`);
+  if (!blockers.length && shown.state !== 'ready') blockers.push(shown.detail);
+  return { ready: !blockers.length, blockers };
+}
+
 // #797: a PR a run's output names by its number only → with its URL, on the project's upstream when it
 // works on a fork (#738: the PR lives there), else on its repository; as it was when neither is known
 function prOnProject(pr, project) {
@@ -169,6 +245,7 @@ function defaultTitle({ issues, task }) {
 
 module.exports = {
   defaultTitle,
+  fetchPrMonitor,
   fetchPrState,
   ghPrDisplay,
   glMrDisplay,

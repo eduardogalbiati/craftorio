@@ -44,7 +44,20 @@ const MOCK_PROBES = {
   // the check right before a merge (`check:` / `precheck:`): mergeable; a conflict is simulated with
   // mockSequences.probes: { '<step>:check': [...], '<step>:precheck': [...] }
   pr_mergeable: ['passed'],
+  // #809 the PR monitor: CI still running, then ready to merge, then merged by the (simulated) team
+  pr_monitor: ['pending', 'ready', 'merged'],
 };
+// #809: the card of a simulated PR monitor read (run-pr.js fetchPrMonitor's shape)
+function simulatedMonitor(state) {
+  const running = state === 'pending';
+  return {
+    ci: { status: running ? 'running' : 'passed', failed: [] },
+    review: { status: running ? 'required' : 'approved', by: running ? [] : ['reviewer'] },
+    conflicts: { status: 'none' },
+    comments: { unanswered: 0 },
+    result: { ready: state === 'ready', blockers: running ? ['CI running', 'approvals missing'] : [] },
+  };
+}
 
 // The affected tests of a simulated change (scope: affected, run-tests `affected`)
 const SIMULATED_FILES = ['test/simulated.test.js', 'test/simulated-other.test.js'];
@@ -135,7 +148,7 @@ function simulated({ sequences = null } = {}) {
       const seq = sequences?.probes?.[stepId] || MOCK_PROBES[probe];
       const n = (probeCalls[stepId] = (probeCalls[stepId] || 0) + 1);
       const state = seq[Math.min(n - 1, seq.length - 1)];
-      return Promise.resolve({ state, detail: `(simulated) ${probe}: ${state}` });
+      return Promise.resolve({ state, detail: `(simulated) ${probe}: ${state}`, ...(probe === 'pr_monitor' ? simulatedMonitor(state) : {}) });
     },
     // nothing runs: the log says so and the result is `mockResult` (mockSequences.suite)
     runSuite: (opts) => suiteStep.runSuite({ ...opts, mock: true }),

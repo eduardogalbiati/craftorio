@@ -1,7 +1,7 @@
 # =============================================================================
 # Workflow: Fix (#630, spec R8)
 #   reproduce ─► develop ─► code_review ─► suite ─► verify_change ─┬─ Local:  merge: local ─► push_main ─► end
-#                                                                  └─ Remote: ci (PR + CI) ─► pr_review ─► end
+#                                                                  └─ Remote: ci (PR + CI) ─► pr_monitor ─► end
 #   - reproduce (the developer): one command that shows the bug for the reported reason, a failing
 #     regression test when it can; no production code yet (fragments/fix-pipeline.yaml).
 #   - develop: the fix of the root cause, with the regression test that failed before it.
@@ -279,7 +279,7 @@ steps:
     agent: ci_pusher
   - id: ci_failed
     fragment: pr-pipeline
-  - id: pr_review
+  - id: pr_monitor
     fragment: pr-pipeline
 
 groups:
@@ -290,7 +290,7 @@ groups:
   - name: Validate
     steps: [suite, verify_change, validate, verify_failed]
   - name: Merge
-    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_review]
+    steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_monitor]
 
 outputs:
   branch:

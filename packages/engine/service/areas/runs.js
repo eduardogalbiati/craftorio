@@ -242,7 +242,8 @@ module.exports = (ctx) => {
     const lends = (r) => !!r.runId && (ancestors.has(r.runId) || all.some((x) => parentOf(x) === r.runId));
     // #395: a parked roadmap item's run waiting at its gate holds no slot (the roadmap moved on past it)
     const parked = (r) => r.approvals?.size > 0 && !!ctx.parkedRun?.(r.runId, r.projectId);
-    const taken = all.filter((r) => (c.countSimulations || !r.mock) && !lends(r) && !parked(r));
+    // #809: nor does a run waiting in its PR monitor (no agent: it may wait days for a person's merge)
+    const taken = all.filter((r) => (c.countSimulations || !r.mock) && !lends(r) && !parked(r) && !r.prMonitor);
     if (taken.length >= c.max) {
       return c.enabled ? `${taken.length} of ${c.max} runs in progress: wait for one to finish, or raise the limit in Settings › Execution.` : 'A workflow is already running.';
     }
@@ -490,6 +491,8 @@ module.exports = (ctx) => {
         architectureOracle: () => ({ oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
         // #378: the Refactor proposals workflow ranks with the Refactor tab's Product Owner (channels/refactor.js)
         refactorPriorityOptions: (projectId) => ctx.refactorPriorityOptions?.(projectId) || null,
+        // #809: host.readPrJson stands in for gh/glab (as for the run's PR, run-meta.js): the PR monitor reads through it
+        ...(ctx.host?.readPrJson ? { probe: (a) => (a.probe === 'pr_monitor' ? runPr.fetchPrMonitor({ url: a.target }, { reader: ctx.host.readPrJson }) : run.machine.probe(a)) } : {}),
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
@@ -534,6 +537,8 @@ module.exports = (ctx) => {
       } catch (e) { console.error('base health:', e.message); }
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
+      // #809: the roadmap item's PR card follows the monitor's reads
+      if (ev.type === 'pr.monitor' && run.projectId) events.emit('backlog:changed', { projectId: run.projectId, file: 'roadmap', watching: !!ctx.backlogWatching?.() });
       if (ev.type === 'workflow.started' || ev.type === 'run.recovered') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
       if (ev.type === 'workflow.finished' && onFinished) {

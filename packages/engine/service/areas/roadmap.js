@@ -202,15 +202,22 @@ module.exports = (ctx) => {
   // #807: a run that waits at its PR's review gate (pr_review: live, or another app's run read from disk)
   // waits for that merge → { atMergeGate, pr } (the item is waiting_merge); a PR seen merged or closed: {}.
   // A live stacked run whose checks passed and that follows its parent's PR until it merges (stackHold,
-  // transitions.js holdForStackParent) waits for its own PR's merge too: the next stage may stack on it
+  // transitions.js holdForStackParent) waits for its own PR's merge too: the next stage may stack on it.
+  // #809: so does a run in its PR monitor (pr_monitor, live: `prMonitor`), with the monitor's last card
+  // (ci, review, conflicts, comments, result, error) on its PR; pr_review stays for the runs before it
   function mergeGateOf(runId, find, live, row = null) {
-    const atGate = live ? !!live.stackHold || (live.pendingGates?.() || []).some((g) => g.step_id === 'pr_review')
-      : row?.progress?.at(-1)?.status === 'waiting' && row.progress.at(-1).step === 'pr_review';
+    const last = row?.progress?.at(-1);
+    const atGate = live ? !!live.stackHold || !!live.prMonitor || (live.pendingGates?.() || []).some((g) => g.step_id === 'pr_review')
+      : last?.step === 'pr_monitor' || (last?.status === 'waiting' && last.step === 'pr_review');
     const r = atGate ? row || find(runId) : null;
     if (!r?.pr) return {};
     const pr = endedRunPr(r);
-    return runPr.prEnded(pr.state) ? {} : { atMergeGate: true, pr };
+    if (runPr.prEnded(pr.state)) return {};
+    const card = live?.prMonitorCard;
+    return { atMergeGate: true, pr: card ? { ...pr, ...monitorCardOf(card, live.prMonitorError) } : pr };
   }
+  // #809: the engine's card (pr.monitor's fields) on a roadmap item's PR, with why its last read failed
+  const monitorCardOf = (c, error) => ({ ci: c.ci, review: c.review, conflicts: c.conflicts, comments: c.comments, result: c.result, checkedAt: c.checked_at || null, error: error || null });
 
   // #797: reads the PRs a project's items wait for (`maxAgeMs`: 0 reads them again, else the cache's 5
   // minutes keep it from polling) → the PRs read. A failed read comes back `unknown`, never an error.
@@ -279,10 +286,12 @@ module.exports = (ctx) => {
   // it holds no run slot (areas/runs.js slotProblem), so the next stage can start.
   // #807: so does the run of an item the roadmap went past at its PR's review gate: Move on of the
   // merge-wait notice skips it (a skipped item keeps a live run only there), Stack stacks the next stage on it.
-  // A stacked run that only follows its parent's PR (stackHold) holds none either: it may wait for days
+  // A stacked run that only follows its parent's PR (stackHold) holds none either: it may wait for days,
+  // nor does a run in its PR monitor (#809, prMonitor: no agent, it waits for a person's merge)
   function parkedRun(runId, projectId) {
     if (!ctx.ws || !runId || !projectId) return false;
-    if (ctx.active.get(runId)?.stackHold) return true;
+    const live = ctx.active.get(runId);
+    if (live?.stackHold || live?.prMonitor) return true;
     try {
       const r = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
       const items = r.stages.flatMap((s) => s.items);
