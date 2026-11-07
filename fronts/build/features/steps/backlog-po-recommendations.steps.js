@@ -139,6 +139,6 @@ Then('the item editor shows {string} for {string}, marked {string}', async ({ e2
   await expect(control).toBeAttached({ timeout: LOAD_TIMEOUT });
   const box = await control.evaluate((el) => el.tagName === 'INPUT' && el.type === 'text');
   if (box) await expect(control).toHaveValue(value);
-  else await expect(form.getByRole('radiogroup', { name }).getByRole('radio', { checked: true }).or(control.locator('option:checked'))).toHaveText(value);
+  else await expect(form.getByRole('radiogroup', { name, exact: true }).getByRole('radio', { checked: true }).or(control.locator('option:checked'))).toHaveText(value);
   await expect(form.getByTestId(`workflow-input-source-${key}`)).toHaveText(source);
 });

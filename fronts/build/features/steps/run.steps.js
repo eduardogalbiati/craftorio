@@ -23,16 +23,16 @@ When('I open the Start panel', async ({ e2e }) => {
 });
 
 When('I pick {string} for {string}', async ({ e2e }, option, field) => {
-  await e2e.window.getByRole('radiogroup', { name: field }).getByRole('radio', { name: option, exact: true }).click();
+  await e2e.window.getByRole('radiogroup', { name: field, exact: true }).getByRole('radio', { name: option, exact: true }).click();
 });
 
 Then('{string} offers {string}, {string} and {string}', async ({ e2e }, field, a, b, c) => {
-  const group = e2e.window.getByRole('radiogroup', { name: field });
+  const group = e2e.window.getByRole('radiogroup', { name: field, exact: true });
   for (const name of [a, b, c]) await expect(group.getByRole('radio', { name, exact: true })).toBeVisible();
 });
 
 Then('{string} is selected for {string}', async ({ e2e }, option, field) => {
-  await expect(e2e.window.getByRole('radiogroup', { name: field }).getByRole('radio', { name: option, exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(e2e.window.getByRole('radiogroup', { name: field, exact: true }).getByRole('radio', { name: option, exact: true })).toHaveAttribute('aria-checked', 'true');
 });
 
 When('I start a simulated run with the task {string}', async ({ e2e }, task) => {

@@ -216,6 +216,55 @@ test('affectedTests: the merge-base is the comparison point when the base moved 
   assert.deepEqual(sel.files, ['test/other.test.js']);
 });
 
+// #703: a run deletes a test file on purpose. The runner must not get it, and the output must not list
+// it; a deleted source still leads to the tests that used it. The deletions are committed on a branch,
+// as in a run.
+function branchThatDeletes(t, files, deleted, changes = {}) {
+  const dir = repo(t, files);
+  git(dir, 'checkout', '-q', '-b', 'work');
+  for (const file of deleted) fs.rmSync(path.join(dir, file));
+  write(dir, changes);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'delete');
+  return dir;
+}
+
+test('#703 affectedTests: a branch that deletes test/x.test.js and changes src/a.js selects the tests of src/a.js, and the output does not list the deleted file', (t) => {
+  const dir = branchThatDeletes(t, {
+    ...project,
+    'src/a.js': 'exports.a = 1;\n',
+    'test/a.test.js': "require('../src/a');\n",
+    'test/x.test.js': "require('../src/a');\n",
+  }, ['test/x.test.js'], { 'src/a.js': 'exports.a = 2;\n' });
+  const sel = affectedTests({ root: dir, base: 'main' });
+  assert.equal(sel.mode, 'affected');
+  assert.deepEqual(sel.files, ['test/a.test.js']);
+  assert.deepEqual(sel.reasons, { 'test/a.test.js': 'imports src/a.js' });
+  assert.deepEqual(selectionLines(sel), ['1 test file(s) reach the 2 changed file(s)', '- test/a.test.js: imports src/a.js']);
+});
+
+test('#703 affectedTests: a branch that deletes src/b.js still selects the test that imported it', (t) => {
+  const dir = branchThatDeletes(t, {
+    ...project,
+    'src/b.js': 'exports.b = 1;\n',
+    'test/b.test.js': "require('../src/b');\n",
+  }, ['src/b.js']);
+  const sel = affectedTests({ root: dir, base: 'main' });
+  assert.deepEqual(sel.files, ['test/b.test.js']);
+  assert.equal(sel.reasons['test/b.test.js'], 'imports src/b.js');
+});
+
+test('#703 affectedTests: a branch that deletes a file no code imports still selects the test that names it', (t) => {
+  const dir = branchThatDeletes(t, {
+    ...project,
+    'workflows/flow.yaml': 'name: flow\n',
+    'test/flow.test.js': "const file = path.join(root, 'workflows', 'flow.yaml');\n",
+  }, ['workflows/flow.yaml']);
+  const sel = affectedTests({ root: dir, base: 'main' });
+  assert.deepEqual(sel.files, ['test/flow.test.js']);
+  assert.equal(sel.reasons['test/flow.test.js'], 'names workflows/flow.yaml');
+});
+
 test('isTest and selectionLines: the test-file names and the lines a step prints', () => {
   assert.equal(isTest('test/a.test.js'), true);
   assert.equal(isTest('src/a.test.helper.js'), false);

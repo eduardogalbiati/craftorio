@@ -161,7 +161,7 @@ Feature: Backlog Product Owner
   # ("E2E tests", "Fork + PR") are the workflow's own, the same in both languages. The project is the
   # issue's: kind backend, variant fork-code, a Cargo.toml (test command "cargo test"), one open issue,
   # so the simulated plan has one recommendation.
-  @issue-785
+  @issue-785 @issue-806
   Scenario: A backend fork project's plan goes to the roadmap with the project's values, marked "do projeto"
     Given the app is open
     And the workspace has a backend fork project "ai-memory" whose backlog has the open issue "Expor as métricas do cache"
@@ -203,7 +203,7 @@ Feature: Backlog Product Owner
       | Quais issues são grandes demais para um run? |
       | Organizar as issues abertas em épicos        |
 
-  @issue-785
+  @issue-785 @issue-806
   Scenario: A recommendation shows its decisions grouped, and Editar changes E2E tests before it goes on the roadmap, saving only that value
     Given the app is open
     And the workspace has a backend fork project "ai-memory" whose backlog has the open issue "Expor as métricas do cache"
