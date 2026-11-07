@@ -18,7 +18,9 @@
 //   before the launch), a run's PR is read from that JSON file on each call, at the service's
 //   host.readPrJson: gh's answer, or { fail: message } for a read that fails. Sync then reaches the
 //   real backlog:sync, with only its read of the platform's issues replaced by the cached ones, and
-//   global.multiagentE2E.backlogSyncs counts the syncs answered (#797).
+//   global.multiagentE2E.backlogSyncs counts the syncs answered (#797). A file of several pull requests
+//   ({ pulls: [...] }, #812's PRs screen) answers `gh pr list` with its open ones and `gh pr view <n>` with
+//   that one; a merge or close changes only the pull request it names.
 
 const fs = require('fs');
 const path = require('path');
@@ -85,8 +87,15 @@ if (process.env.MULTIAGENT_E2E_PR_FILE) {
     const access = args[0] === 'api' && args.map((a) => /^repos\/[^/]+\/[^/]+\/collaborators\/([^/]+)\/permission$/.exec(a)).find(Boolean);
     if (access) return { permission: answer.e2ePermissions?.[access[1]] || 'read' };
     if (args[0] === 'api' && args.some((a) => /^repos\/[^/]+\/[^/]+$/.test(a))) return { permissions: { push: true, admin: answer.viewerCanBypass === true } };
+    // #812: a file of several pull requests ({ pulls: [...] }): `gh pr list` answers the open ones, `gh pr view <n|url>` that one
+    if (Array.isArray(answer.pulls)) {
+      if (args[0] === 'pr' && args[1] === 'list') return answer.pulls.filter((p) => p.state === 'OPEN');
+      if (args[0] === 'pr' && args[1] === 'view') return answer.pulls.find((p) => p.number === pullNumber(args[2])) || {};
+    }
     return answer;
   };
+  // #812: a PR named by its number or its URL (…/pull/<n>)
+  const pullNumber = (ref) => Number((/(\d+)\/?$/.exec(String(ref || '')) || [])[1]);
   // #810: a merge or close from the app, recorded in prActions; a merge rewrites the PR file to MERGED unless it
   // has `merge_fail` (then the platform refuses it with that message), a close to CLOSED
   const writeAnswer = (answer) => {
@@ -110,12 +119,18 @@ if (process.env.MULTIAGENT_E2E_PR_FILE) {
   const runPrCommand = async (_cmd, args = []) => {
     if (args[0] === 'api' && args[1] === 'graphql' && args.some((a) => /^thread=/.test(a))) return replyOnThread(args);
     const action = args[1];
-    const number = Number(args[2]);
+    const number = pullNumber(args[2]);
     global.multiagentE2E.prActions.push(action === 'merge'
       ? { action, number, method: args.includes('--squash') ? 'squash' : args.includes('--rebase') ? 'rebase' : 'merge', admin: args.includes('--admin') }
       : { action, number });
     const answer = readAnswer();
     if (action === 'merge' && answer.merge_fail) return { exit_code: 1, output: answer.merge_fail };
+    // #812: in a file of several pull requests, only the one named changes state
+    if (Array.isArray(answer.pulls)) {
+      const state = action === 'merge' ? { state: 'MERGED', mergeStateStatus: 'UNKNOWN', mergeCommit: { oid: 'e2e812merge0commit' } } : action === 'close' ? { state: 'CLOSED' } : null;
+      if (state) writeAnswer({ ...answer, pulls: answer.pulls.map((p) => (p.number === number ? { ...p, ...state } : p)) });
+      return { exit_code: 0, output: '' };
+    }
     if (action === 'merge') writeAnswer({ ...answer, state: 'MERGED', mergeStateStatus: 'UNKNOWN', mergeCommit: { oid: 'e2e810merge0commit' } });
     else if (action === 'close') writeAnswer({ ...answer, state: 'CLOSED' });
     return { exit_code: 0, output: '' };
