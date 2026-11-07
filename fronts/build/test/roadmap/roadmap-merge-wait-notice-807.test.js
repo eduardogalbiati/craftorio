@@ -84,6 +84,26 @@ test('#807 the notice names the files both stages change; none in common, no war
   assert.equal(any(apart, 'roadmap-merge-wait-overlap'), null);
 });
 
+// the backlog's issues have bodies, the items no `files`: the expected files are the paths the bodies cite
+// (CityImpact.expectedFiles, no repository listing on the Roadmap: a cited path comes back as a new file)
+const withBodies = (d, bodies) => ({ ...d, issues: Object.entries(bodies).map(([n, body]) => ({ ...H.ref(Number(n), `Issue ${n}`), body })) });
+
+test('#807 the overlap counts the paths the issues\' bodies cite, without the repository\'s file list', async () => {
+  const s = await open(withBodies(TWO(), {
+    1: 'Change `src/auth/session.js` and `src/auth/login-form.js`.',
+    2: 'Touch `src/auth/session.js` for the logout.',
+  }));
+  const warning = inStage(s, 0, 'roadmap-merge-wait-overlap');
+  assert.ok(warning, 'the overlap is named');
+  const said = `${textOf(warning)} ${warning.getAttribute('title') || ''}`;
+  assert.deepEqual([/src\/auth\/session\.js/.test(said), /login-form/.test(said)], [true, false]);
+});
+
+test('#807 bodies citing different paths: no overlap warning', async () => {
+  const s = await open(withBodies(TWO(), { 1: 'Change `src/auth/login-form.js`.', 2: 'Change `src/auth/logout-button.js`.' }));
+  assert.equal(any(s, 'roadmap-merge-wait-overlap'), null);
+});
+
 test('#807 Fork + PR mode: the notice offers Move on, never Stack', async () => {
   const s = await open(TWO({ inputs: { mode: 'fork' } }, { inputs: { mode: 'fork' } }));
   assert.deepEqual([!!inStage(s, 0, 'roadmap-merge-wait-move-on'), !!any(s, 'roadmap-merge-wait-stack')], [true, false]);

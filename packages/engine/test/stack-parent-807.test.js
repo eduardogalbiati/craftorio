@@ -98,6 +98,54 @@ test('#807 parent closed without merge: the stacked run does not go on, a gate o
   assert.deepEqual([ids.includes('rebase_onto_base'), ids.includes('stop'), run.probeStats.ci?.agent_calls ?? 0], [true, true, 0]);
 });
 
+// stackHold (the service reads it as a wait for the run's own merge, areas/roadmap.js mergeGateOf / parkedRun):
+// the step's id while a stacked run whose own checks passed keeps following its open parent, else null
+const passedStep = { ...step, wait: { ...step.wait, output: { ci_status: 'green' } } };
+const pollPassed = (run, st) => run.pollStep(passedStep, st, Date.now()).catch((e) => e);
+const PASSED = { state: 'passed', detail: 'all checks passed' };
+
+test('#807 stackHold: a stacked run whose checks passed holds for its open parent (the step\'s id), without an agent turn', async () => {
+  const { run } = fakeRun({ parent: { state: 'pending', detail: 'open' }, own: PASSED });
+  const next = await pollPassed(run, turn());
+  assert.deepEqual([run.stackHold, next, run.probeStats.ci?.agent_calls ?? 0], ['ci', 'ci', 0]);
+});
+
+test('#807 stackHold: cleared when the parent merges (the agent moves the PR\'s base)', async () => {
+  const { run } = fakeRun({ parent: { state: 'merged', detail: 'merged' }, own: PASSED });
+  run.stackHold = 'ci';
+  await pollPassed(run, turn());
+  assert.equal(run.stackHold, null);
+});
+
+test('#807 stackHold: cleared when the parent is closed without merge (the run asks at a gate)', async () => {
+  const { run, asked } = fakeRun({ parent: { state: 'closed', detail: 'closed' }, own: PASSED });
+  run.stackHold = 'ci';
+  await pollPassed(run, turn());
+  assert.deepEqual([run.stackHold, asked.length], [null, 1]);
+});
+
+test('#807 stackHold: cleared when the restack onto the parent\'s new commits conflicts', async (t) => {
+  const { f, wt } = stacked(t);
+  commit(f.other, 'd.txt', 'the parent wrote d too\n', 'the parent, conflicting');
+  git(f.other, 'push', '-q', 'origin', 'parent-1');
+  const { run, asked } = fakeRun({ parent: { state: 'pending', detail: 'open' }, own: PASSED, wt });
+  run.stackHold = 'ci';
+  await pollPassed(run, turn());
+  assert.deepEqual([run.stackHold, asked.length], [null, 1]);
+});
+
+test('#807 stackHold: cleared after a restack onto the parent\'s new commits (an agent turn pushes the branch)', async (t) => {
+  const { f, wt } = stacked(t);
+  commit(f.other, 'q.txt', 'q\n', 'the parent, after review');
+  git(f.other, 'push', '-q', 'origin', 'parent-1');
+  const { run, asked } = fakeRun({ parent: { state: 'pending', detail: 'open' }, own: PASSED, wt });
+  run.stackHold = 'ci';
+  const st = turn();
+  const next = await pollPassed(run, st);
+  assert.deepEqual([run.stackHold, next, asked.length], [null, null, 0]);
+  assert.match(String(st.probeNews?.detail), /rebased/);
+});
+
 test('#807 Fork + PR unchanged (#738): a closed parent calls the agent, no gate', async () => {
   const { run, asked } = fakeRun({ parent: { state: 'closed', detail: 'closed' }, inputs: { mode: 'fork' } });
   const st = turn();
