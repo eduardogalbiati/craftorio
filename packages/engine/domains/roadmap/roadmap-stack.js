@@ -78,7 +78,7 @@ function stackBase(roadmap, itemId, { runOf }) {
 
 module.exports = {
   stackBase,
-  stackOn,
   stackedStage,
+  stackOn,
   stacksOnField,
 };

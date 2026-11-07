@@ -736,7 +736,7 @@
           <span class="spacer"></span><button type="button" class="btn sm ghost" data-rm-map-stage="${s}" data-testid="show-stage-on-map" title="${t('backlog_roadmap.colour_each_item_of_this_stage')}">${t('backlog_roadmap.show_the_stage_on_the_map')}</button>
           ${stageMenuHtml(stage, s, count, r, done)}
         </div>
-        ${pause}${note}${window.RoadmapMergeWait?.html(r, s) ?? ''}
+        ${pause}${note}${[window.RoadmapMergeWait?.html(r, s)].join('')}
         <div class="rm-items">${cards}</div>
       </section>`;
   }

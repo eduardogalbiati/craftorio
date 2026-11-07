@@ -155,11 +155,8 @@ const methods = {
     const w = step.wait;
     if (st.delegate_result || st.supervisorNote || !st.output || st.output.error) return null;
     const stats = (this.probeStats[step.id] ??= { polls: 0, agent_calls: 0, completed: 0, errors: 0 });
-    const parent = this.parentToWaitFor(w, st);
-    if (parent && !this.stackedRun()) return this.pollParent(step, st, parent, stats);
-    // #807: a stacked run follows its parent, then its own PR is checked (undefined: go on to the probe)
-    const stacked = parent ? await this.followStackParent(step, st, parent, stats) : undefined;
-    if (stacked !== undefined) return stacked;
+    const early = await this.parentStep(step, st, stats);
+    if (early !== undefined) return early;
     const target = render(w.target, { ...this.ctx, output: st.output }).trim();
     const r = await this.probeOrError(step, stats, { probe: w.probe, target, quota: this.actionsQuota }, 'the check could not run', target ? '' : `${w.probe}: no target yet (${w.target} is empty)`);
     const state = this.comparedWithLastTurn(w, st, r);
@@ -181,9 +178,7 @@ const methods = {
     // CI cannot run at all (the Actions quota ran out): no agent turn or fix round helps
     else if (state === 'quota_exhausted' && w.infra_output) output = finishWith('infra_output');
     if (output) action = 'output';
-    // #807: the engine rebased the stacked branch onto its parent's new commits: the agent pushes it
-    if (st.restacked && action !== 'output') { action = 'agent'; r.detail = `${st.restacked}; ${r.detail || state}`; }
-    st.restacked = null;
+    action = this.afterRestack(st, action, r, state);
     if (state === 'none' && action === 'agent') r.detail = `${r.detail}, ${grace} after your last turn`;
     st.probePolls = (st.probePolls || 0) + 1;
     this.emitEvent('step.probe', {
@@ -207,6 +202,24 @@ const methods = {
     stats.agent_calls++;
     st.probeNews = { detail: r.detail || state, polls: st.probePolls };
     return null;
+  },
+
+  // #738 / #807: what pollStep does before its own probe when the step waits for a parent PR/MR
+  // (wait.parent): a split implementation waits for it; a stacked run follows it. undefined: go on to the probe.
+  async parentStep(step, st, stats) {
+    const parent = this.parentToWaitFor(step.wait, st);
+    if (!parent) return undefined;
+    if (!this.stackedRun()) return this.pollParent(step, st, parent, stats);
+    return this.followStackParent(step, st, parent, stats);
+  },
+
+  // #807: the engine rebased the stacked branch onto its parent's new commits: the agent pushes it
+  afterRestack(st, action, r, state) {
+    const news = st.restacked;
+    st.restacked = null;
+    if (!news || action === 'output') return action;
+    r.detail = `${news}; ${r.detail || state}`;
+    return 'agent';
   },
 
   // A probe call of pollStep / pollParent; a check that cannot run (or `missing`: why it cannot start)
