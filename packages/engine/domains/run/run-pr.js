@@ -11,7 +11,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const { GL_FAILED, ghCheckBucket, ghPrState, glMrState, parseTarget } = require('../../engine/probes');
+const {
+  GL_FAILED,
+  ghCheckBucket,
+  ghPrState,
+  glMrState,
+  parseTarget,
+} = require('../../engine/probes');
 const { resolveCommand } = require('../../engine/providers');
 const { execShim } = require('../machine/shell');
 const github = require('@multiagent/shared/platforms/github');

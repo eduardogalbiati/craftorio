@@ -123,7 +123,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'fronts/build/views/run/run.js:renderChainBanner': 53,
   'fronts/build/views/run/run.js:renderRunSummary': 29,
   'fronts/build/views/runchat/runchat.js:gateHtml': 38,
-  'fronts/build/views/runchat/runchat.js:itemHtml': 30,
   'fronts/build/views/workflows/builder.js:renderPanel': 41,
   'fronts/build/views/workflows/workflows.js:workflowCard': 34,
   'packages/ui-kit/workflow-inputs.js:applyHints': 27,

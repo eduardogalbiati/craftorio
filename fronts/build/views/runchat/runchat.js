@@ -188,17 +188,20 @@
     ? ` <span class="pill pill-warn" data-testid="runchat-tested" title="${t('runchat.the_run_reached_the_build_without')}">${t('runchat.not_tested_green')}</span>` : '');
 
   const SUP_WHAT = { retry:'Asked for a new attempt.', fix_output: 'Fixed the answer so the run can continue.', ask_human: 'Needs you: see the gate below.', fail: 'Could not recover this step.' };
+  // the run's first message: its workflow, task, inputs, the run it resumes and its issues
+  function startHtml(it) {
+    const issue = it.issues.length ? `${it.issues.length > 1 ? 'Issues' : 'Issue'} ${it.issues.map((i) => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> ${esc(i.title || '')}`).join(' · ')}` : '';
+    const inputs = Object.entries(it.inputs).filter(([k, v]) => k !== 'task' && v !== '' && v != null);
+    return `<div data-item="${it.id}" class="rc-start"><div class="duo-msg user"><div class="duo-bubble">
+      <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? `<span class="badge p-mock">${t('runchat.simulated')}</span>` : ''}<span class="time">${clock(it.ts)}</span></div>
+      ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : `<p class="muted small">${t('runchat.no_task')}</p>`}
+      ${inputs.length ? `<details class="rc-more"><summary>${t('runchat.inputs')}</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
+      </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>${t('runchat.resumed_from_run_id_at', { run_id: esc(it.resumedFrom.run_id) })} <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
+  }
+
   function itemHtml(it) {
     switch (it.kind) {
-      case 'start': {
-        const issue = it.issues.length ? `${it.issues.length > 1 ? 'Issues' : 'Issue'} ${it.issues.map((i) => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> ${esc(i.title || '')}`).join(' · ')}` : '';
-        const inputs = Object.entries(it.inputs).filter(([k, v]) => k !== 'task' && v !== '' && v != null);
-        return `<div data-item="${it.id}" class="rc-start"><div class="duo-msg user"><div class="duo-bubble">
-          <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? `<span class="badge p-mock">${t('runchat.simulated')}</span>` : ''}<span class="time">${clock(it.ts)}</span></div>
-          ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : `<p class="muted small">${t('runchat.no_task')}</p>`}
-          ${inputs.length ? `<details class="rc-more"><summary>${t('runchat.inputs')}</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
-          </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>${t('runchat.resumed_from_run_id_at', { run_id: esc(it.resumedFrom.run_id) })} <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
-      }
+      case 'start': return startHtml(it);
       case 'turn': return turnHtml(it);
       case 'fallback': return fallbackHtml(it);
       case 'group': return groupHtml(it);

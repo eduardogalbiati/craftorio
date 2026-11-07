@@ -694,3 +694,20 @@ module.exports = (ctx) => {
     watchStrayProcesses,
   };
 };
+
+// #809: the WorkflowRun `probe` option. A `pr_monitor` read is run-pr.js fetchPrMonitor (gh/glab, no LLM,
+// the card's CI, review, conflicts, comments and result), through host.readPrJson when the host gives one
+// (tests, UI checks); a simulated run without it, and every other probe, stay the machine's.
+function prMonitorProbe(ctx, getRun) {
+  return (a) => {
+    const reader = ctx.host?.readPrJson;
+    if (a.probe !== 'pr_monitor' || (getRun()?.mock && !reader)) return getRun().machine.probe(a);
+    return runPr.fetchPrMonitor({ url: a.target }, reader ? { reader } : {});
+  };
+}
+
+// #809: a monitor read of a roadmap item's run changes its card on the Roadmap: the Backlog reloads it
+function prCardChanged(ctx, run, ev) {
+  if (ev.type !== 'pr.monitor' || !run.projectId) return;
+  ctx.events?.emit('backlog:changed', { projectId: run.projectId, file: 'roadmap', watching: !!ctx.backlogWatching?.() });
+}
