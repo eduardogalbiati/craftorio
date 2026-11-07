@@ -250,9 +250,40 @@ const methods = {
       if (interval !== this.prMonitorWait) this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
       this.prMonitorWait = interval;
       this.setStatus(this.orchestrator, 'waiting');
-      await sleep(interval, this.abort.signal);
+      // #810: a merge or close from the app wakes the wait (prActedFromApp): the next read sees it at once
+      const wake = (this.prMonitorWake = new AbortController());
+      await sleep(interval, AbortSignal.any([this.abort.signal, wake.signal])).catch((e) => {
+        if (this.abort.signal.aborted || !wake.signal.aborted) throw e;
+      });
+      this.prMonitorWake = null;
       this.setStatus(this.orchestrator, 'active');
     }
+  },
+
+  // #810: what a merge or close from the app acts on while the monitor waits → { stepId, url, card } or null
+  prMonitorTarget() {
+    return this.prMonitor && this.prMonitorUrl ? { stepId: this.prMonitor, url: this.prMonitorUrl, card: this.prMonitorCard || null } : null;
+  },
+
+  // #810: a merge or close tried from the app (service/areas/runs.js mergeRunPr / closeRunPr). A merge gives
+  // `pr.merge` { merged, commit | error, admin, by }; one that did not land keeps the card and the run as they
+  // were and shows the platform's message on the card (merge_error) until the next try. A close that landed
+  // ends the run as failed, saying who closed it (endPrMonitor). Either wakes the monitor to read the PR/MR.
+  prActedFromApp({ action, admin = false, by = null, merged = false, closed = false, commit = null, error = null }) {
+    const target = this.prMonitorTarget();
+    if (!target) return;
+    const base = { step_id: target.stepId, url: target.url, number: parseTarget(target.url)?.id ?? null, by };
+    if (action === 'merge') {
+      this.emitEvent('pr.merge', { ...base, admin: !!admin, merged: !!merged, ...(merged ? (commit ? { commit } : {}) : { error: String(error || 'the merge failed') }) });
+      this.prMergeError = merged ? null : String(error || 'the merge failed');
+    } else if (closed) {
+      this.prClosedBy = by || 'the app';
+      this.emitEvent('log', { level: 'warn', step_id: target.stepId, message: `The pull/merge request ${target.url} was closed from the app${by ? ` by ${by}` : ''}.` });
+    } else {
+      this.prMergeError = `could not close: ${error || 'the close failed'}`;
+    }
+    if (this.prMergeError && !merged && !closed) this.emitEvent('pr.monitor', { ...base, fork: this.ctx.inputs?.mode === 'fork', ...(target.card || {}), merge_error: this.prMergeError });
+    this.prMonitorWake?.abort();
   },
 
   // #809: ONE read of the monitor's PR/MR → the next step once it merged or closed, else null (wait and
@@ -267,8 +298,9 @@ const methods = {
     const target = (step.target ? render(step.target, this.ctx).trim() : '')
       || this.ctx.steps?.ci?.output?.pr_url || this.ctx.steps?.pr_open?.output?.pr_url || '';
     this.prMonitor = step.id;
+    this.prMonitorUrl = target; // #810: what a merge or close from the app acts on
     this.sayPrMonitorWorktreeKept(step);
-    const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork' };
+    const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork', ...(this.prMergeError ? { merge_error: this.prMergeError } : {}) };
     let r;
     try {
       if (!target) throw new Error('no pull/merge request URL yet');
@@ -281,7 +313,9 @@ const methods = {
     }
     this.prMonitorError = null;
     const card = { ...(this.prMonitorCard || {}), state: r.state, detail: r.detail || r.state, checked_at: new Date().toISOString() };
-    for (const k of ['ci', 'review', 'conflicts', 'comments', 'result']) if (r[k]) card[k] = r[k];
+    // #810: merge_options, the merge choices of the card (the service's probe adds them: run-pr.js mergeOptions)
+    for (const k of ['ci', 'review', 'conflicts', 'comments', 'result', 'merge_options']) if (r[k]) card[k] = r[k];
+    if (r.state === 'merged' || r.state === 'closed') delete card.merge_options;
     const seen = monitorSeen(r);
     const changed = seen !== this.prMonitorSeen;
     if (changed) this.prMonitorChangedAt = Date.now();
@@ -306,11 +340,13 @@ const methods = {
   async endPrMonitor(step, st, r, card, target, t0) {
     this.prMonitor = null;
     const closed = r.state === 'closed';
-    if (closed) this.emitEvent('log', { level: 'warn', step_id: step.id, message: `The pull/merge request ${target} was closed without merging.` });
-    const output = { state: r.state, detail: card.detail, url: target };
+    // #810: closed from the app says who closed it
+    const said = `The pull/merge request ${target} was closed without merging${this.prClosedBy ? `: closed from the app (${this.prClosedBy})` : ''}.`;
+    if (closed) this.emitEvent('log', { level: 'warn', step_id: step.id, message: said });
+    const output = { state: r.state, detail: card.detail, url: target, ...(closed && this.prClosedBy ? { closed_by: this.prClosedBy } : {}) };
     st.output = output;
     const next = await this.finishStep(step, st, output, { ...this.ctx, output }, t0);
-    if (closed && this.endStatus?.status === 'failed') this.endStatus.message = `The pull/merge request ${target} was closed without merging.`;
+    if (closed && this.endStatus?.status === 'failed') this.endStatus.message = said;
     return next;
   },
 
@@ -709,8 +745,8 @@ function prMonitorSeed(events, stepId) {
     const seen = monitorSeen(ev);
     if (seen !== seed.prMonitorSeen) seed.prMonitorChangedAt = Date.parse(ev.ts) || undefined;
     seed.prMonitorSeen = seen;
-    const { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result } = ev;
-    seed.prMonitorCard = { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result };
+    const { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result, merge_options: mergeOptions } = ev;
+    seed.prMonitorCard = { state, detail, checked_at: checkedAt, ci, review, conflicts, comments, result, ...(mergeOptions ? { merge_options: mergeOptions } : {}) };
   }
   return seed;
 }

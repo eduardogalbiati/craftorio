@@ -92,6 +92,12 @@
     })),
     // t: parseTargetUrl's { host, repo, id }; fields: gh's --json list
     requestViewCommand: (t, fields) => cmd(['pr', 'view', String(t.id), '--repo', `${t.host}/${t.repo}`, '--json', fields]),
+    // #810: the merge from the app is always a merge commit (never --squash / --rebase / --auto); admin ignores
+    // the branch protection (the account's permission is checked before), deleteBranch the project's setting
+    requestMergeCommand: (t, { admin = false, deleteBranch = false } = {}) => cmd(['pr', 'merge', String(t.id), '--repo', `${t.host}/${t.repo}`, '--merge', ...(admin ? ['--admin'] : []), ...(deleteBranch ? ['--delete-branch'] : [])]),
+    requestCloseCommand: (t) => cmd(['pr', 'close', String(t.id), '--repo', `${t.host}/${t.repo}`]),
+    // #810 / #807: a stacked PR moved onto the base before its parent's branch is deleted
+    requestRetargetCommand: (t, base) => cmd(['pr', 'edit', String(t.id), '--repo', `${t.host}/${t.repo}`, '--base', base]),
     runViewCommand: (t) => cmd(['run', 'view', String(t.id), '--repo', `${t.host}/${t.repo}`, '--json', 'status,conclusion,url,name']),
 
     // ---- epics (api: { path, hostArgs }, packages/engine/domains/backlog/epics.js apiTarget)
@@ -138,6 +144,9 @@
     repoInfoCommand: (path) => cmd(['api', `repos/${path}`]),
     // `gh api repos/<path>` → permissions.push (true / false), undefined when the answer has none
     parsePush: (info) => info?.permissions?.push,
+    // #810: whether the account may merge from the app (unknown: yes, the platform refuses otherwise) and
+    // bypass the branch protection (`--admin`: a repository admin)
+    parseMergeRights: (info) => ({ canMerge: info?.permissions?.push !== false, canBypass: info?.permissions?.admin === true }),
     userCommand: () => cmd(['api', 'user']),
     parseUser: (info) => info?.login,
     // the repository info is a fork of the repository `name` (owner/repo)

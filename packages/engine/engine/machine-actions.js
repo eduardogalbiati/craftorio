@@ -21,6 +21,8 @@ const {
 } = require('./worktree');
 const { childEnv, PLATFORM_CLIS } = require('./child-env');
 const { runProbe } = require('./probes');
+const { resolveCommand } = require('./providers');
+const { execShim } = require('../domains/machine/shell');
 const { captureScreenshots } = require('./screenshot-step');
 const { capturePreview } = require('./preview-capture');
 const suiteStep = require('./suite-step');
@@ -86,6 +88,15 @@ function real() {
       });
     }),
     probe: (args) => runProbe(args),
+    // #810: a merge or close from the app (an adapter's requestMergeCommand / requestCloseCommand { cli, args },
+    // no shell) → { exit_code, output }; the platform tokens pass, as for runAction
+    prCommand: ({ cli, args }) => new Promise((resolve) => {
+      const { file } = resolveCommand(cli) || {};
+      if (!file) return resolve({ skipped: false, exit_code: 127, output: `${cli} is not installed` });
+      execShim(file, args, { timeout: 120000, windowsHide: true, env: childEnv(process.env, { platforms: PLATFORM_CLIS }) }, (err, stdout, stderr) => {
+        resolve({ skipped: false, exit_code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, output: `${stdout}${stderr}`.trim().slice(-4000) });
+      });
+    }),
     runSuite: (opts) => suiteStep.runSuite({ ...opts, mock: false }),
     redCheck: (output, files, { mockResult } = {}) => suiteStep.redCheck(output, files, { mock: false, mockResult }),
     relatedTests: (opts) => relatedTests(opts),
@@ -127,6 +138,7 @@ function real() {
 function simulated({ sequences = null } = {}) {
   const probeCalls = {}; // step -> probes answered
   const transitionCalls = {}; // step -> transition actions/merges run (sequences.action_errors)
+  let acted = null; // #810: the simulated PR merged or closed from the app
   return {
     simulated: true,
     // no git runs: an empty answer, whatever the folder
@@ -143,8 +155,14 @@ function simulated({ sequences = null } = {}) {
       }
     },
     runAction: () => Promise.resolve({ skipped: true, output: '[mock] action not executed' }),
+    // #810: nothing reaches the platform; the simulated PR monitor then reads the PR merged or closed
+    prCommand({ args }) {
+      acted = args?.[1] === 'close' ? 'closed' : 'merged';
+      return Promise.resolve({ skipped: true, exit_code: 0, output: `[mock] ${(args || []).slice(0, 2).join(' ')} not executed` });
+    },
     probe({ probe, stepId, baseline }) {
       if (baseline) return Promise.resolve({});
+      if (probe === 'pr_monitor' && acted) return Promise.resolve({ state: acted, detail: `(simulated) ${probe}: ${acted} from the app` });
       const seq = sequences?.probes?.[stepId] || MOCK_PROBES[probe];
       const n = (probeCalls[stepId] = (probeCalls[stepId] || 0) + 1);
       const state = seq[Math.min(n - 1, seq.length - 1)];

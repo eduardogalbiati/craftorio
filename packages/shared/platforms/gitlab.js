@@ -84,6 +84,13 @@
     })),
     // t: parseTargetUrl's { host, repo, id }
     requestViewCommand: (t) => cmd(['mr', 'view', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--output', 'json']),
+    // #810: the merge from the app is a merge commit (no --squash / --rebase); GitLab has no merge that ignores
+    // the approval rules (admin → null)
+    requestMergeCommand: (t, { admin = false, deleteBranch = false } = {}) => (admin ? null
+      : cmd(['mr', 'merge', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--yes', ...(deleteBranch ? ['--remove-source-branch'] : [])])),
+    requestCloseCommand: (t) => cmd(['mr', 'close', String(t.id), '--repo', `https://${t.host}/${t.repo}`]),
+    // #810 / #807: a stacked MR moved onto the base before its parent's branch is deleted
+    requestRetargetCommand: (t, base) => cmd(['mr', 'update', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--target-branch', base]),
     runViewCommand: (t) => cmd(['api', `projects/${encodeURIComponent(t.repo)}/pipelines/${t.id}`, '--hostname', t.host]),
 
     // ---- epics (api: { path, hostArgs }, packages/engine/domains/backlog/epics.js apiTarget)
@@ -127,6 +134,9 @@
       const levels = [perms.project_access, perms.group_access].map((a) => Number(a?.access_level) || 0);
       return Math.max(...levels) >= 30;
     },
+    // #810: whether the account may merge from the app (unknown: yes, the platform refuses otherwise); never a
+    // bypass (requestMergeCommand has no admin form)
+    parseMergeRights: (info) => ({ canMerge: gitlab.parsePush(info) !== false, canBypass: false }),
     userCommand: () => cmd(['api', 'user']),
     parseUser: (info) => info?.username,
     // the project info is a fork of the project `name` (its full path)

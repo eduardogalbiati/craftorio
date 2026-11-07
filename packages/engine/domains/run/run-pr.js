@@ -184,6 +184,103 @@ function monitorResult(shown, { ci, review, conflicts, comments }) {
   return { ready: !blockers.length, blockers };
 }
 
+// ---- the merge from the app (#810) ----------------------------------------------------------------
+// What blocks the merge as codes, in monitorResult's order (draft, ci_failed, ci_running, ci_manual,
+// changes_requested, approvals_missing, conflict; protection: open with none of them, a branch rule blocks it).
+// Unanswered comments do not block by themselves: the platform's state says when a rule makes them block.
+const BYPASSABLE = ['approvals_missing', 'protection'];
+function mergeBlockers(card) {
+  const b = [];
+  const { ci = {}, review = {}, conflicts = {} } = card || {};
+  if (card?.state === 'draft') b.push('draft');
+  if (ci.status === 'failed' || card?.state === 'failing') b.push('ci_failed');
+  if (ci.status === 'running' || (card?.state === 'pending' && ci.status !== 'failed')) b.push('ci_running');
+  if (ci.status === 'manual') b.push('ci_manual');
+  if (review.status === 'changes_requested') b.push('changes_requested');
+  if (review.status === 'required') b.push('approvals_missing');
+  if (conflicts.status === 'base' || card?.state === 'conflict') b.push('conflict');
+  if (!b.length && card?.state !== 'ready') b.push(card?.state === 'open' ? 'protection' : 'unknown');
+  return [...new Set(b)];
+}
+
+// A PR card (fetchPrMonitor's) and the account's permissions → the choices the card offers:
+// { merge, bypass ("merge ignoring protection": only approvals / a protection rule block it), close, blockers, ignores }.
+// Fork + PR (#738) never merges from here: the upstream's maintainers do.
+function mergeOptions(card, { canMerge = true, canBypass = false, fork = false } = {}) {
+  const open = !!card && !prEnded(card.state) && card.state !== 'unknown';
+  const blockers = open ? mergeBlockers(card) : [];
+  const merge = open && card.state === 'ready' && !blockers.length && canMerge && !fork;
+  const bypass = open && !merge && blockers.length > 0 && blockers.every((c) => BYPASSABLE.includes(c)) && !!canBypass && canMerge && !fork;
+  return { merge, bypass, close: open && canMerge && !fork, blockers, ignores: bypass ? blockers : [] };
+}
+
+// Merges a PR from the app: reads it again right before (what the card showed may be old), refuses unless
+// mergeOptions allows it (`bypass` when admin), runs the adapter's merge command through `run(cli, args)` →
+// { exit_code, output }, then reads the merge commit. → { merged, commit?, error?, blockers? }; never rejects.
+async function mergePr(pr, { admin = false, canMerge = true, canBypass = false, fork = false, deleteBranch = false, reader = readJson, run } = {}) {
+  const t = parseTarget(pr?.url);
+  if (!t || t.kind !== 'pr') return { merged: false, error: 'not a pull/merge request URL' };
+  const p = resolvePlatform(t.platform);
+  let card;
+  try { card = await fetchPrMonitor(pr, { reader }); } catch (e) { return { merged: false, error: `could not read the pull request: ${e.message}` }; }
+  if (card.state === 'merged') return { merged: true, ...(await mergedCommitOf(p, t, reader)) };
+  const o = mergeOptions(card, { canMerge, canBypass, fork });
+  if (!(admin ? o.bypass : o.merge)) return { merged: false, blockers: o.blockers, error: o.blockers.length ? `blocked: ${o.blockers.join(', ')}` : 'the pull request cannot be merged from the app' };
+  const c = p.requestMergeCommand(t, { admin, deleteBranch });
+  if (!c) return { merged: false, blockers: o.blockers, error: `${p.label} has no merge that ignores the protection` };
+  let r;
+  try { r = await run(c.cli, c.args); } catch (e) { return { merged: false, error: e.message }; }
+  if (Number(r?.exit_code) !== 0) return { merged: false, error: String(r?.output || `${c.cli} exited with ${r?.exit_code}`).trim().slice(0, 1000) };
+  return { merged: true, ...(await mergedCommitOf(p, t, reader)) };
+}
+
+// the merge commit of a merged PR → { commit } ({} when it cannot be read)
+async function mergedCommitOf(p, t, reader) {
+  const c = p.requestViewCommand(t, REQUEST_FIELDS);
+  const shown = await reader(c.cli, c.args).then((raw) => DISPLAY[p.id](raw), () => ({}));
+  return shown.mergedCommit ? { commit: shown.mergedCommit } : {};
+}
+
+// The account's rights on a PR's repository (#810, the adapter's repoInfoCommand / parseMergeRights) →
+// { canMerge, canBypass }; a read that fails gives { canMerge: true, canBypass: false } (the platform refuses a
+// merge the account may not make, and never a bypass without knowing it is allowed)
+async function readMergeRights(pr, { reader = readJson } = {}) {
+  const t = parseTarget(pr?.url);
+  if (!t || t.kind !== 'pr') return { canMerge: false, canBypass: false };
+  const p = resolvePlatform(t.platform);
+  const c = p.repoInfoCommand(t.repo);
+  const info = await reader(c.cli, [...c.args, ...p.apiHostArgs({ host: t.host })]).catch(() => null);
+  return p.parseMergeRights(info);
+}
+
+// The signed-in account's login on a PR's platform (who merged or closed from the app), null when unread
+async function readLogin(pr, { reader = readJson } = {}) {
+  const t = parseTarget(pr?.url);
+  if (!t || t.kind !== 'pr') return null;
+  const p = resolvePlatform(t.platform);
+  const c = p.userCommand();
+  const login = p.parseUser(await reader(c.cli, [...c.args, ...p.apiHostArgs({ host: t.host })]).catch(() => null));
+  return typeof login === 'string' && login ? login : null;
+}
+
+// #807: a stacked PR moved onto `base` (before its parent's branch is deleted) → true once moved
+async function retargetPr(pr, base, { run } = {}) {
+  const t = parseTarget(pr?.url);
+  if (!t || t.kind !== 'pr' || !base) return false;
+  const c = resolvePlatform(t.platform).requestRetargetCommand(t, base);
+  return Promise.resolve().then(() => run(c.cli, c.args)).then((r) => Number(r?.exit_code) === 0, () => false);
+}
+
+// Closes a PR without merging (#810) → { closed, error? }; never rejects.
+async function closePr(pr, { run } = {}) {
+  const t = parseTarget(pr?.url);
+  if (!t || t.kind !== 'pr') return { closed: false, error: 'not a pull/merge request URL' };
+  const c = resolvePlatform(t.platform).requestCloseCommand(t);
+  let r;
+  try { r = await run(c.cli, c.args); } catch (e) { return { closed: false, error: e.message }; }
+  return Number(r?.exit_code) === 0 ? { closed: true } : { closed: false, error: String(r?.output || `${c.cli} exited with ${r?.exit_code}`).trim().slice(0, 1000) };
+}
+
 // #797: a PR a run's output names by its number only → with its URL, on the project's upstream when it
 // works on a fork (#738: the PR lives there), else on its repository; as it was when neither is known
 function prOnProject(pr, project) {
@@ -254,18 +351,24 @@ function defaultTitle({ issues, task }) {
 }
 
 module.exports = {
+  closePr,
   defaultTitle,
   fetchPrMonitor,
   fetchPrState,
   ghPrDisplay,
   glMrDisplay,
+  mergeOptions,
+  mergePr,
   PR_STATES,
   prCache,
   prEnded,
   prOfEvents,
   prOfOutput,
   prOnProject,
+  readLogin,
+  readMergeRights,
   readMeta,
+  retargetPr,
   withRead,
   writeTitle,
 };

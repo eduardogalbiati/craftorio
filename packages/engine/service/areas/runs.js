@@ -15,6 +15,7 @@ const {
 const { loadRepositoryWorkflow } = require('../../engine/run/load');
 const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
+const { parseTarget } = require('../../engine/probes');
 const simulation = require('../../engine/simulation');
 const {
   cleanupWorktrees,
@@ -671,15 +672,19 @@ module.exports = (ctx) => {
     return removed;
   };
 
+  const { closeRunPr, mergeRunPr } = prActions(ctx, liveRun, active);
+
   return {
     active,
     activeRuns,
     cleanupRunWorktrees,
+    closeRunPr,
     isRunning,
     keepInterruptedMarks,
     liveRun,
     liveRunForIssues,
     memoryHold,
+    mergeRunPr,
     notifyInterruptedRun,
     passedGates,
     prepareRestart,
@@ -699,16 +704,96 @@ module.exports = (ctx) => {
 // #809: the WorkflowRun `probe` option. A `pr_monitor` read is run-pr.js fetchPrMonitor (gh/glab, no LLM,
 // the card's CI, review, conflicts, comments and result), through host.readPrJson when the host gives one
 // (tests, UI checks); a simulated run without it, and every other probe, stay the machine's.
+// #810: each read also gives the card's merge choices (run-pr.js mergeOptions), with the account's rights read
+// once per run (a simulated run without the host's reader: it may merge, never bypass).
 function prMonitorProbe(ctx, getRun) {
-  return (a) => {
+  return async (a) => {
     const reader = ctx.host?.readPrJson;
-    if (a.probe !== 'pr_monitor' || (getRun()?.mock && !reader)) return getRun().machine.probe(a);
-    return runPr.fetchPrMonitor({ url: a.target }, reader ? { reader } : {});
+    const run = getRun();
+    const simulated = run?.mock && !reader;
+    if (a.probe !== 'pr_monitor') return run.machine.probe(a);
+    const card = simulated ? await run.machine.probe(a) : await runPr.fetchPrMonitor({ url: a.target }, reader ? { reader } : {});
+    const rights = await prRights(ctx, run, a.target);
+    return { ...card, merge_options: runPr.mergeOptions(card, { ...rights, fork: run.ctx?.inputs?.mode === 'fork' }) };
   };
 }
 
+// #810: the account's rights on a run's PR, read once per run ({ canMerge, canBypass, login })
+function prRights(ctx, run, url) {
+  const reader = ctx.host?.readPrJson;
+  if (run?.mock && !reader) return Promise.resolve({ canMerge: true, canBypass: false, login: null });
+  if (!run.prRights || run.prRights.url !== url) {
+    const opts = reader ? { reader } : {};
+    run.prRights = { url, read: Promise.all([runPr.readMergeRights({ url }, opts), runPr.readLogin({ url }, opts)]).then(([r, login]) => ({ ...r, login })) };
+  }
+  return run.prRights.read;
+}
+
+// #810: Merge (admin: ignoring the protection) and Close from the PR monitor's card, on a live run waiting in
+// it. The platform's command goes through host.runPrCommand when the host gives one (tests, UI checks), else
+// the run's machine (a simulated run reaches no platform). mergePr reads the PR again first and refuses what
+// the card should not have offered; the run records the outcome (WorkflowRun.prActedFromApp).
+function prActions(ctx, liveRun, active) {
+  const target = (runId) => {
+    const run = liveRun(runId);
+    if (!run) throw new Error(`Run ${runId} is not running in this app window.`);
+    const at = run.prMonitorTarget?.();
+    if (!at) throw new Error(`Run ${run.runId} is not waiting for its pull/merge request's merge.`);
+    return { run, at };
+  };
+  const runner = (run) => (cli, args) => (ctx.host?.runPrCommand ? ctx.host.runPrCommand(cli, args) : run.machine.prCommand({ cli, args }));
+  const projectOf = (run) => (run.projectId && ctx.ws ? projects.listProjects(ctx.ws.projects).find((p) => p.id === run.projectId) : null);
+
+  // #807: the live runs stacked on this PR move onto the base first; a branch is deleted only once they all moved
+  async function retargetStacked(run, url) {
+    const n = String(parseTargetId(url) ?? '');
+    const stacked = [...active.values()].filter((r) => r !== run && [url, n].includes(String(r.ctx?.inputs?.parent_pr ?? '').trim()));
+    let moved = true;
+    for (const child of stacked) {
+      const own = child.prMonitorUrl || child.ctx?.steps?.ci?.output?.pr_url || child.ctx?.steps?.pr_open?.output?.pr_url;
+      const base = child.ctx?.inputs?.base_branch || run.ctx?.inputs?.base_branch || 'main';
+      moved = (own ? await runPr.retargetPr({ url: own }, base, { run: runner(run) }) : false) && moved;
+    }
+    return moved;
+  }
+
+  async function mergeRunPr({ runId, admin = false } = {}) {
+    const { run, at } = target(runId);
+    const rights = await prRights(ctx, run, at.url);
+    const fork = run.ctx?.inputs?.mode === 'fork';
+    const simulated = run.mock && !ctx.host?.readPrJson;
+    const wantsDelete = projectOf(run)?.deleteBranchAfterMerge === true;
+    const deleteBranch = wantsDelete && !simulated && await retargetStacked(run, at.url);
+    const r = simulated ? await simulatedMerge(run, at, { admin: !!admin, fork })
+      : await runPr.mergePr({ url: at.url }, { admin: !!admin, ...rights, fork, deleteBranch, reader: ctx.host?.readPrJson || undefined, run: runner(run) });
+    run.prActedFromApp({ action: 'merge', admin: !!admin, by: rights.login, merged: r.merged, commit: r.commit, error: r.error });
+    return { merged: !!r.merged, ...(r.commit ? { commit: r.commit } : {}), ...(r.error ? { error: r.error } : {}), ...(r.blockers ? { blockers: r.blockers } : {}) };
+  }
+
+  // a simulated run without the host's reader: the card's last choices decide, the machine merges nothing
+  async function simulatedMerge(run, at, { admin, fork }) {
+    const o = at.card?.merge_options || runPr.mergeOptions(at.card, { fork });
+    if (!(admin ? o.bypass : o.merge)) return { merged: false, blockers: o.blockers || [], error: `blocked: ${(o.blockers || []).join(', ') || 'not mergeable'}` };
+    await run.machine.prCommand({ cli: 'simulated', args: ['pr', 'merge'] });
+    return { merged: true };
+  }
+
+  async function closeRunPr({ runId } = {}) {
+    const { run, at } = target(runId);
+    if (run.ctx?.inputs?.mode === 'fork') throw new Error('Fork + PR: the upstream\'s maintainers close the pull request.');
+    const rights = await prRights(ctx, run, at.url);
+    const r = await runPr.closePr({ url: at.url }, { run: runner(run) });
+    run.prActedFromApp({ action: 'close', by: rights.login, closed: r.closed, error: r.error });
+    return { closed: !!r.closed, ...(r.error ? { error: r.error } : {}) };
+  }
+
+  return { closeRunPr, mergeRunPr };
+}
+const parseTargetId = (url) => parseTarget(url)?.id ?? null;
+
 // #809: a monitor read of a roadmap item's run changes its card on the Roadmap: the Backlog reloads it
+// (#810: and a merge tried from the app, its message on the card)
 function prCardChanged(ctx, run, ev) {
-  if (ev.type !== 'pr.monitor' || !run.projectId) return;
+  if (!['pr.monitor', 'pr.merge'].includes(ev.type) || !run.projectId) return;
   ctx.events?.emit('backlog:changed', { projectId: run.projectId, file: 'roadmap', watching: !!ctx.backlogWatching?.() });
 }

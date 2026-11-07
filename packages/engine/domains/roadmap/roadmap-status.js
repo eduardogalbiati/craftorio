@@ -58,14 +58,17 @@ function withStatus(roadmap, runOf) {
   };
 }
 
-/** Whether a run's events show a PR/MR merged by its action (`gh pr merge` / `glab mr merge`, exit 0). */
+/** Whether a run's events show a PR/MR merged by its action (`gh pr merge` / `glab mr merge`, exit 0), or by a
+ * merge from the app that landed (#810: `pr.merge` merged; one that did not land never counts). */
 function mergedPullRequest(runDir) {
   let text;
   try { text = fs.readFileSync(path.join(runDir, 'events.jsonl'), 'utf8'); } catch { return false; }
   return text.split('\n').some((l) => {
-    if (!l.includes('"action.executed"')) return false;
+    const fromApp = l.includes('"pr.merge"');
+    if (!fromApp && !l.includes('"action.executed"')) return false;
     try {
       const ev = JSON.parse(l);
+      if (ev.type === 'pr.merge') return ev.merged === true;
       return ev.exit_code === 0 && !ev.skipped && /\b(gh\s+pr|glab\s+mr)\s+merge\b/.test(ev.command || '');
     } catch { return false; }
   });
