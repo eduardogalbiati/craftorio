@@ -240,6 +240,10 @@ module.exports = {
   'projects:remove': { setup: project, arg: ({ projectId }) => projectId, invalid: { arg: '..' } },
   'projects:runs': { setup: project, arg: ({ projectId }) => ({ id: projectId }), invalid: { arg: { id: 42 } } },
   'projects:update': { setup: project, arg: ({ projectId }) => ({ id: projectId, patch: { name: 'A renamed contract project' } }), invalid: { arg: { id: 42 } } },
+  // #812: the contract project has no remote, so its list is empty or says why, and no URL is one of its open PRs
+  'pulls:close': { setup: project, arg: ({ projectId }) => ({ projectId, url: 'https://github.com/o/r/pull/1' }), status: 400, invalid: BAD_PROJECT },
+  'pulls:list': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'pulls:merge': { setup: project, arg: ({ projectId }) => ({ projectId, url: 'https://github.com/o/r/pull/1' }), status: 400, invalid: BAD_PROJECT },
   // #357: an owner proposal, the cadence (off by default), a ranking of no proposal (simulated); the
   // proposal channels refuse an unknown proposal (dismiss, file and addToRoadmap write nothing then)
   'refactor:add': { setup: project, arg: ({ projectId }) => ({ projectId, target: 'src/a.js', improvement: 'Split a', evidence: 'Every fix touches it' }), invalid: BAD_PROJECT },
