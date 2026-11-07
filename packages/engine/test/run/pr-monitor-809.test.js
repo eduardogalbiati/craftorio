@@ -152,6 +152,17 @@ test('#809 stopping the monitor leaves the PR as it is: no action, merge or clos
   assert.equal(typeof run.pollPrMonitor, 'function');
 });
 
+test('#809 Stop while the monitor waits between reads ends the wait as cancelled and leaves the PR as it is', async () => {
+  const { run, step, seen } = fakeRun({ reads: [OPEN, OPEN] });
+  Object.assign(run, { machine: { ...run.machine, simulated: false }, orchestrator: {}, setStatus: () => {}, sayPrMonitorWorktreeKept: run.sayPrMonitorWorktreeKept || (() => {}) });
+  // Stop (WorkflowRun.stop aborts the run) once the first read is done and the monitor sleeps
+  const probe = run.probe;
+  run.probe = async (args) => { const r = await probe(args); setTimeout(() => run.abort.abort(), 20); return r; };
+  const r = await run.runPrMonitor(step, {}, Date.now()).then((n) => `next:${n}`, (e) => `error:${e.message}`);
+  const touched = seen.actions.filter((c) => /\b(close|merge)\b/.test(String(c))).length;
+  assert.deepEqual([r, seen.probes.length, seen.actions.length, touched, seen.agents, seen.gates], ['error:Cancelled', 1, 0, 0, 0, 0]);
+});
+
 test('#809 polling: about once a minute while the PR changes, slower once nothing changed for a day', () => {
   const { prMonitorIntervalMs } = transitions();
   const at = (h) => prMonitorIntervalMs(h * 3600e3);
