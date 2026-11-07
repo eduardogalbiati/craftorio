@@ -21,12 +21,14 @@ Feature: Runs and gates
     Then a gate card waits for my approval
     And the gate card shows its summary and its buttons
 
+  # A radio group is found by its exact name (#806). The demo project sets E2E tests in its run
+  # defaults, and the field's note is part of the label: its name is "E2E tests from the project".
   @issue-203
   Scenario: The Start panel offers the test options as pills
     Given the app is open
     When I open the Start panel
     Then "Unit tests" offers "Write and run", "Run existing" and "Off"
-    And "E2E tests" offers "Off", "Write" and "Write and run"
+    And "E2E tests from the project" offers "Off", "Write" and "Write and run"
     When I pick "Run existing" for "Unit tests"
     Then "Run existing" is selected for "Unit tests"
 
@@ -35,7 +37,7 @@ Feature: Runs and gates
     Given the app is open
     When I open the Start panel
     And I pick "Run existing" for "Unit tests"
-    And I pick "Off" for "E2E tests"
+    And I pick "Off" for "E2E tests from the project"
     And I start a simulated run with the task "Add a /health endpoint"
     Then the run shows the pill "Unit tests: Run existing"
     And the run shows the pill "E2E tests: Off"

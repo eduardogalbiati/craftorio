@@ -14,7 +14,7 @@ Feature: Local preview confirmation
     Given the app is open
     And the demo project's repository declares a local preview with the install "npm ci", the command "npm run dev" and the env "PORT=4173, NODE_OPTIONS=--require ./hook.js"
     When I open the Start panel
-    And I pick "Validated" for "Mode"
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I click Run App on the gate card
@@ -29,7 +29,7 @@ Feature: Local preview confirmation
     Given the app is open
     And the demo project's repository declares a local preview with the install "npm ci", the command "npm run dev" and the env "PORT=4173"
     When I open the Start panel
-    And I pick "Validated" for "Mode"
+    And I pick "Validated" for "Validation"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I click Run App on the gate card
