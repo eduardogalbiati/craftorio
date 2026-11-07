@@ -55,7 +55,7 @@
     "engine: processes left in the worktree are stopped after each agent step and before the worktree is removed",
     "engine: processes left in the worktree are also stopped after a delegation",
     "engine: without worktreesDir (simulation) or outside git, worktree_dir is the repository folder",
-    "prepareWorktree remote: false starts from the local base, with unpushed commits, and fetches nothing",
+    "prepareWorktree remote: false starts from the local base, with unpushed commits, even when origin moved",
     "mergeLocally: fast-forwards the checked-out local base; the merged branch is deleted with the worktree",
     "mergeLocally: rebases onto a base that moved (another local merge), then fast-forwards",
     "mergeLocally: a conflict aborts the rebase, leaves the branch and the base untouched, and names the files",
