@@ -30,6 +30,9 @@ const {
 // `more` parked (#395, --roadmap parked): the item waiting at the developer's gate is parked.
 // `more` merge (#797, --roadmap merge): the failed item's run ended well, its PR waits for a person's
 // merge (nothing stands in for gh here, so the card also says why the made-up PR could not be read).
+// #807: under its stage the merge-wait notice (Move on, Stack), with the expected files it shares with
+// the next stage (MERGE_FILES).
+const MERGE_FILES = ['packages/engine/server/routes.js', 'packages/engine/server/report.js'];
 function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   const states = more === 'states';
   const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
@@ -56,7 +59,8 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   // rings) and a start refused for kept work that paused the roadmap (#196: Retry / Skip)
   // #391 (--roadmap pausing): no "Tonight" stage; the roadmap runs (simulated) and pauses after stage 2
   const pausing = more === 'pausing';
-  const tonight = live === 'off' && !pausing ? demoRoadmapRuns(ws, projectId, { fixRound: states, prOpen: more === 'merge' }) : null;
+  const merge = more === 'merge';
+  const tonight = live === 'off' && !pausing ? demoRoadmapRuns(ws, projectId, { fixRound: states, prOpen: merge }) : null;
   const refused = 'Could not start #14: #14 already has work from a cancelled run, 20260119-221000-demo0014 (3 commits on its branch). Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.';
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
@@ -72,7 +76,8 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
           // #395 (--roadmap parked): the roadmap moved on past it, its run still waits at the gate
           ...(more === 'parked' ? { status: 'parked', parked: { at: at(2, 40), gate: 'Developer check' } } : {}),
         }),
-        item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.prOpen || tonight.failed, runs: [tonight.prOpen || tonight.failed] }),
+        // #807 (--roadmap merge): its expected files overlap the next stage's, so the merge-wait notice says so
+        item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.prOpen || tonight.failed, runs: [tonight.prOpen || tonight.failed], ...(merge ? { files: MERGE_FILES } : {}) }),
         item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
         // #215: done, real cost and time against the estimate (folded under the stage's "+2 done" chip, #267)
         item('item-9', 'software-development-local-hero.yaml', [9], { status: 'done', runId: tonight.better, runs: [tonight.better] }),
@@ -82,6 +87,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
         // #193: a reason of 500+ characters ends with "…" at the card's edge, whole when opened
         reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in packages/engine/server. Split from #136, whose tasks were spread over two stages: the report export needs the formatter that the health endpoint introduces, and both register their routes in packages/engine/server/routes.js, which every parallel run of this area edits; running them apart would conflict there and in the formatter tests. The health endpoint is small (complexity 3) and the export reuses its formatter, so together they stay under the group size of five issues per run and take one review instead of two.',
         modeReason: 'Auto: server code with no screen to try.',
+        ...(merge ? { files: [MERGE_FILES[0], 'packages/engine/server/health.js'] } : {}),
         origin: new Date(Date.UTC(2026, 0, 20, 10, 1, 50)).toISOString(), // the demo Product Owner's plan answer
         inputs: { language: 'js', mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off', ...(tonight ? { base_branch: 'release/2026-01-reports-and-health-with-a-very-long-branch-name-for-the-roadmap-card' } : {}) },
         cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] },
