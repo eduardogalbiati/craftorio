@@ -19,6 +19,7 @@ const {
   parseTarget,
 } = require('../../engine/probes');
 const { resolveCommand } = require('../../engine/providers');
+const { MAX_FIX_ROUNDS } = require('../../engine/run/pr-fix');
 const { execShim } = require('../machine/shell');
 const github = require('@multiagent/shared/platforms/github');
 const gitlab = require('@multiagent/shared/platforms/gitlab');
@@ -166,27 +167,39 @@ async function ghMonitor(pr, t, reader, url) {
 async function ghRequests(pr, t, reader, url, { threads, checks }) {
   const trusted = trustCache((login) => reader(github.cli, ['api', `repos/${t.repo}/collaborators/${login}/permission`, ...github.apiHostArgs({ host: t.host })])
     .then((r) => GH_WRITE.includes(String(r?.permission || '').toLowerCase())));
+  const list = [...ghThreadRequests(threads, url), ...ghReviewRequests(pr, url), ...failedCheckRequests(checks, url)];
+  return withTrust(list, (r) => trusted(r.login));
+}
+
+// the unresolved review threads, each by its first comment
+function ghThreadRequests(threads, url) {
   const list = [];
   for (const n of Array.isArray(threads) ? threads : []) {
     const first = n?.comments?.nodes?.[0];
     if (n?.isResolved || !first || !n.id) continue;
     list.push({ id: String(n.id), kind: 'comment', author: first.author?.login || null, file: n.path || null, line: n.line ?? null, url: first.url || url, body: String(first.body || ''), thread: String(n.id), login: first.author?.login || null });
   }
+  return list;
+}
+
+// the reviews asking for changes: each author's last one, while their latest review still asks
+function ghReviewRequests(pr, url) {
   const latest = new Map((pr.latestReviews || []).map((r) => [r.author?.login, r.state]));
   const asking = new Map();
   for (const r of pr.reviews || []) {
     const login = r?.author?.login;
     if (r?.state !== 'CHANGES_REQUESTED' || !login || (latest.has(login) && latest.get(login) !== 'CHANGES_REQUESTED')) continue;
-    asking.set(login, r); // the author's last review asking for changes
+    asking.set(login, r);
   }
-  for (const [login, r] of asking) {
-    const link = r.url || (r.databaseId ? `${url}#pullrequestreview-${r.databaseId}` : url);
-    list.push({ id: `review:${r.id || `${login}:${r.submittedAt || ''}`}`, kind: 'changes_requested', author: login, file: null, line: null, url: link, body: String(r.body || ''), login });
-  }
-  for (const c of checks.filter((x) => x.bucket === 'fail')) {
-    list.push({ id: `check:${c.name}`, kind: 'ci_failed', author: null, file: null, line: null, url: c.url || url, body: c.name, trusted: true });
-  }
-  return withTrust(list, (r) => trusted(r.login));
+  return [...asking].map(([login, r]) => ({
+    id: `review:${r.id || `${login}:${r.submittedAt || ''}`}`, kind: 'changes_requested', author: login, file: null, line: null,
+    url: r.url || (r.databaseId ? `${url}#pullrequestreview-${r.databaseId}` : url), body: String(r.body || ''), login,
+  }));
+}
+
+// the failed checks (trusted: the CI's own)
+function failedCheckRequests(checks, url) {
+  return checks.filter((x) => x.bucket === 'fail').map((c) => ({ id: `check:${c.name}`, kind: 'ci_failed', author: null, file: null, line: null, url: c.url || url, body: c.name, trusted: true }));
 }
 
 // requests with `trusted` (CI keeps its own), without the key the access was read by
@@ -342,8 +355,7 @@ async function closePr(pr, { run } = {}) {
 }
 
 // ---- a fix asked from the PR monitor (#811) ---------------------------------------------------------
-// The fix rounds a run may take before it asks the owner (transitions.js prFixFromApp)
-const MAX_FIX_ROUNDS = 5;
+// MAX_FIX_ROUNDS (the rounds a run may take before it asks the owner) is the engine's: engine/run/pr-fix.js
 const KIND_WORDS = { changes_requested: 'Changes requested', comment: 'Review comment', ci_failed: 'CI job failed' };
 
 // The owner's pick on the card → the developer's request. Comments are untrusted input: only requests whose

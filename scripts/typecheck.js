@@ -28,6 +28,7 @@ const CHECKED = [
   'packages/engine/engine/run/load.js',
   'packages/engine/engine/run/machine-steps.js',
   'packages/engine/engine/run/outputs.js',
+  'packages/engine/engine/run/pr-fix.js',
   'packages/engine/engine/run/project-map-steps.js',
   'packages/engine/engine/run/refactor-proposals-steps.js',
   'packages/engine/engine/run/resume.js',

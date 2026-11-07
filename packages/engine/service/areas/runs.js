@@ -542,7 +542,7 @@ module.exports = (ctx) => {
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
       prCardChanged(ctx, run, ev);
-      if (ev.type === 'pr.fix') replyPrFix(run, ev);
+      replyPrFix(run, ev); // #811: a fixed round answers its threads
       if (ev.type === 'workflow.started' || ev.type === 'run.recovered') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
       if (ev.type === 'workflow.finished' && onFinished) {
