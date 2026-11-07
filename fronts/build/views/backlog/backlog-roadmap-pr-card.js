@@ -17,9 +17,9 @@
     const error = pr.error ? `<div class="small warn-text" role="status">${esc(t('pr_card.read_failed', { error: pr.error, time: timeOf(pr.checkedAt) || '—' }))}</div>` : '';
     const rows = lines.map((l) => PrCard.lineHtml(l, 'pr-card-line')).join('');
     // #810: Merge / Merge ignoring protection / Close (pr-monitor-card.js handles the click), what blocks the
-    // merge and the last failed merge's message
+    // merge and the last failed merge's or close's message
     const fork = x.effectiveMode === 'fork' || x.inputs?.mode === 'fork' || !!pr.fork;
-    const actions = PrCard.actionsHtml({ buttons: PrCard.buttons(pr.mergeOptions, { fork, state: pr.state }), blocked: PrCard.blocked(pr), mergeError: pr.mergeError || null }, { runId: x.runId || '' });
+    const actions = PrCard.actionsHtml({ buttons: PrCard.buttons(pr.mergeOptions, { fork, state: pr.state }), blocked: PrCard.blocked(pr), mergeError: pr.mergeError || null, closeError: pr.closeError || null }, { runId: x.runId || '' });
     return `<div class="pr-monitor rm-pr-card small" data-testid="roadmap-item-pr-card" title="${esc(at)}">${rows}${error}${actions}</div>`;
   }
 

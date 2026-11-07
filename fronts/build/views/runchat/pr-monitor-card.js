@@ -36,16 +36,19 @@
     const ev = v?.prMonitor || null;
     const merge = v?.prMerge || null;
     box.classList.toggle('hidden', !ev);
-    const key = ev ? `${ev.seq || ''}:${ev.ts || ''}:${ev.checked_at || ''}:${ev.error || ''}:${merge?.ts || ''}` : '';
+    const key = ev ? `${ev.seq || ''}:${ev.ts || ''}:${ev.checked_at || ''}:${ev.error || ''}:${merge?.ts || ''}:${v?.run?.status || ''}` : '';
     if (box.dataset.key === key) return;
     box.dataset.key = key;
     const merged = !!merge?.merged;
     const state = merged ? 'merged' : ev?.state;
+    const ended = root.PrCard.ended(state);
     box.innerHTML = ev ? html({
       url: ev.url, number: ev.number, state, lines: root.PrCard.lines(ev, { fork: !!ev.fork }), checkedAt: ev.checked_at, error: ev.error,
       buttons: root.PrCard.buttons(ev.merge_options, { fork: !!ev.fork, state }), blocked: merged ? '' : root.PrCard.blocked(ev),
-      mergeError: merged || ['merged', 'closed'].includes(state) ? null : ev.merge_error || (merge ? merge.error || t('pr_card.merge_refused') : null),
-    }, { runId: v?.run?.id || '' }) : '';
+      mergeError: ended ? null : ev.merge_error || (merge ? merge.error || t('pr_card.merge_refused') : null),
+      closeError: ended ? null : ev.close_error || null,
+      // the buttons act on a live run only (a run stopped or ended in the monitor has nothing to wake)
+    }, { runId: v?.run?.status === 'running' ? v.run.id : '' }) : '';
   }
 
   // #810: a click on Merge / Merge ignoring protection / Close (data-pr-action, data-run): asks first when the

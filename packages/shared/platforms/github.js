@@ -96,8 +96,6 @@
     // the branch protection (the account's permission is checked before), deleteBranch the project's setting
     requestMergeCommand: (t, { admin = false, deleteBranch = false } = {}) => cmd(['pr', 'merge', String(t.id), '--repo', `${t.host}/${t.repo}`, '--merge', ...(admin ? ['--admin'] : []), ...(deleteBranch ? ['--delete-branch'] : [])]),
     requestCloseCommand: (t) => cmd(['pr', 'close', String(t.id), '--repo', `${t.host}/${t.repo}`]),
-    // #810 / #807: a stacked PR moved onto the base before its parent's branch is deleted
-    requestRetargetCommand: (t, base) => cmd(['pr', 'edit', String(t.id), '--repo', `${t.host}/${t.repo}`, '--base', base]),
     runViewCommand: (t) => cmd(['run', 'view', String(t.id), '--repo', `${t.host}/${t.repo}`, '--json', 'status,conclusion,url,name']),
 
     // ---- epics (api: { path, hostArgs }, packages/engine/domains/backlog/epics.js apiTarget)

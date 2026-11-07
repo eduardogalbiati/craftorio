@@ -3712,6 +3712,7 @@
   "po.unit_tests_write_and_run": "write and run",
 
   "pr_card.action_failed": "The pull request's action failed",
+  "pr_card.actions": "Pull request actions",
   "pr_card.blocked.approvals_missing": "approvals missing",
   "pr_card.blocked.changes_requested": "changes requested",
   "pr_card.blocked.ci_failed": "CI failed",
@@ -4301,6 +4302,8 @@
 
   "projects.continue_onboarding": "Continue",
   "projects.create_a_project_that_points_to": "Create a project that points to a local folder or a git repository.",
+  "projects.delete_branch_after_merge": "Delete the branch after a merge from the app",
+  "projects.delete_branch_after_merge_hint": "A merge from the pull request's card also deletes its branch. A branch another running run is stacked on stays.",
   "projects.description": "Description",
   "projects.each_project_points_to_a_local": "Each project points to a local folder and, optionally, a git repository. Stored in",
   "projects.edit": "Edit",

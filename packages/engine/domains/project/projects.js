@@ -218,6 +218,8 @@ function updateProject(dir, id, patch) {
   if (patch.ignoreInstallScripts !== undefined) next.ignoreInstallScripts = !!patch.ignoreInstallScripts;
   // #554: the repository's copy of a workflow runs even when the workspace holds the owner's edited copy
   if (patch.preferRepositoryWorkflows !== undefined) next.preferRepositoryWorkflows = !!patch.preferRepositoryWorkflows;
+  // #810: a merge from the app (the PR monitor's card) deletes the merged branch
+  if (patch.deleteBranchAfterMerge !== undefined) next.deleteBranchAfterMerge = !!patch.deleteBranchAfterMerge;
   // how to run a run's worktree from a gate (Run locally); overrides the workflow's orchestrator.local_preview
   if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
   // the fingerprint of the declared run command the owner confirmed (#115): a changed one asks again

@@ -203,7 +203,8 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   `dispatchRoadmaps` (packages/engine/domains/roadmap/roadmap.js `advance`) runs a started roadmap stage by stage,
   after every `workflow.finished` and when a workspace opens. An item is done when
   its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
-  and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`
+  and exit 0 (`mergedPullRequest`), a `pr.merge` event with `merged: true` (a merge from the app, #810; one
+  that did not land never counts), or `mock`. A workflow that never merges declares `metadata.merges: false`
   (backlog-refresh, #161): its item is done when its run succeeds (service `roadmapRun` reads the run's
   workflow file). A run whose PR a person merges waits for it in the `pr_monitor` step (#809, no agent, no
   Approve): run/transitions.js `runPrMonitor` reads the PR about once a minute (`prMonitorIntervalMs`,
@@ -211,7 +212,19 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   comments, result) and ends the run on `merged` (success) or `closed` (failed, "closed without
   merging"). A failed read keeps the last card and never ends the run; the step keeps no state, so a
   resumed run reads again and picks up a merge made meanwhile. The run holds no slot while it waits
-  (`slotProblem` skips `run.prMonitor`); Stop only aborts the wait, the PR stays as it is. Runs
+  (`slotProblem` skips `run.prMonitor`); Stop only aborts the wait, the PR stays as it is.
+  #810: each `pr.monitor` also carries `merge_options` (run-pr.js `mergeOptions`: `merge`, `bypass`,
+  `close`, `blockers` as codes, `ignores`), from which the card shows Merge, Merge ignoring protection
+  (only approvals or a protection rule block it and the account may bypass; never on GitLab, never in
+  Fork + PR) and Close, and what blocks the merge (the Result line's words come from the same codes:
+  unanswered comments alone never block). The channels `runs:mergePr` / `runs:closePr` (service
+  areas/runs.js `prActions`) act on a live run in its monitor: `mergePr` reads the PR again and refuses what
+  the options no longer allow, merges with a merge commit (`--delete-branch` / `--remove-source-branch` when
+  the project's `deleteBranchAfterMerge` is on and no live run is stacked on the PR, #807), and
+  `prActedFromApp` emits `pr.merge` { merged, commit | error, by }; a failed merge or close stays on the
+  card (`merge_error` / `close_error` on the next `pr.monitor` events) and leaves the run waiting. Either
+  wakes the monitor at once (`prMonitorWake`, or `prMonitorWakeAsked` during a read); a close that
+  landed ends the run as failed with `closed_by`. Runs
   recorded with the old `pr_review` gate (#797) still wait at it: see `roadmap-pauses.md`. Any other end pauses the roadmap (`pausedBy`); a resumed run
   (`resume.runId` = the item's run) takes the item's place (`adoptResumed`).
   The stage a dispatch runs is `currentStage`: the first **enabled** stage with an item not done or

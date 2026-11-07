@@ -747,26 +747,20 @@ function prActions(ctx, liveRun, active) {
   const runner = (run) => (cli, args) => (ctx.host?.runPrCommand ? ctx.host.runPrCommand(cli, args) : run.machine.prCommand({ cli, args }));
   const projectOf = (run) => (run.projectId && ctx.ws ? projects.listProjects(ctx.ws.projects).find((p) => p.id === run.projectId) : null);
 
-  // #807: the live runs stacked on this PR move onto the base first; a branch is deleted only once they all moved
-  async function retargetStacked(run, url) {
+  // #807: a live run stacked on this PR (its parent_pr) moves its own PR onto the base after the merge
+  // (transitions.js holdForStackParent): the parent's branch stays until then, or its PR would close
+  const hasStacked = (run, url) => {
     const n = String(parseTargetId(url) ?? '');
-    const stacked = [...active.values()].filter((r) => r !== run && [url, n].includes(String(r.ctx?.inputs?.parent_pr ?? '').trim()));
-    let moved = true;
-    for (const child of stacked) {
-      const own = child.prMonitorUrl || child.ctx?.steps?.ci?.output?.pr_url || child.ctx?.steps?.pr_open?.output?.pr_url;
-      const base = child.ctx?.inputs?.base_branch || run.ctx?.inputs?.base_branch || 'main';
-      moved = (own ? await runPr.retargetPr({ url: own }, base, { run: runner(run) }) : false) && moved;
-    }
-    return moved;
-  }
+    return [...active.values()].some((r) => r !== run && [url, n].includes(String(r.ctx?.inputs?.parent_pr ?? '').trim()));
+  };
 
   async function mergeRunPr({ runId, admin = false } = {}) {
     const { run, at } = target(runId);
     const rights = await prRights(ctx, run, at.url);
     const fork = run.ctx?.inputs?.mode === 'fork';
     const simulated = run.mock && !ctx.host?.readPrJson;
-    const wantsDelete = projectOf(run)?.deleteBranchAfterMerge === true;
-    const deleteBranch = wantsDelete && !simulated && await retargetStacked(run, at.url);
+    // the project's setting (project settings: "Delete the branch after a merge from the app")
+    const deleteBranch = projectOf(run)?.deleteBranchAfterMerge === true && !simulated && !hasStacked(run, at.url);
     const r = simulated ? await simulatedMerge(run, at, { admin: !!admin, fork })
       : await runPr.mergePr({ url: at.url }, { admin: !!admin, ...rights, fork, deleteBranch, reader: ctx.host?.readPrJson || undefined, run: runner(run) });
     run.prActedFromApp({ action: 'merge', admin: !!admin, by: rights.login, merged: r.merged, commit: r.commit, error: r.error });
@@ -783,7 +777,7 @@ function prActions(ctx, liveRun, active) {
 
   async function closeRunPr({ runId } = {}) {
     const { run, at } = target(runId);
-    if (run.ctx?.inputs?.mode === 'fork') throw new Error('Fork + PR: the upstream\'s maintainers close the pull request.');
+    if (run.ctx?.inputs?.mode === 'fork') throw clientError('Fork + PR: the upstream\'s maintainers close the pull request.');
     const rights = await prRights(ctx, run, at.url);
     const r = await runPr.closePr({ url: at.url }, { run: runner(run) });
     run.prActedFromApp({ action: 'close', by: rights.login, closed: r.closed, error: r.error });

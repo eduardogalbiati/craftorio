@@ -89,8 +89,6 @@
     requestMergeCommand: (t, { admin = false, deleteBranch = false } = {}) => (admin ? null
       : cmd(['mr', 'merge', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--yes', ...(deleteBranch ? ['--remove-source-branch'] : [])])),
     requestCloseCommand: (t) => cmd(['mr', 'close', String(t.id), '--repo', `https://${t.host}/${t.repo}`]),
-    // #810 / #807: a stacked MR moved onto the base before its parent's branch is deleted
-    requestRetargetCommand: (t, base) => cmd(['mr', 'update', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--target-branch', base]),
     runViewCommand: (t) => cmd(['api', `projects/${encodeURIComponent(t.repo)}/pipelines/${t.id}`, '--hostname', t.host]),
 
     // ---- epics (api: { path, hostArgs }, packages/engine/domains/backlog/epics.js apiTarget)

@@ -60,6 +60,7 @@
         </div>
         ${check('ps-ignore-scripts', 'project-ignore-scripts', t('projects.install_without_scripts'), t('projects.install_without_scripts_hint'), p.ignoreInstallScripts)}
         ${check('ps-prefer-repo-workflows', 'project-prefer-repository-workflows', t('projects.prefer_repository_workflows'), t('projects.prefer_repository_workflows_hint'), p.preferRepositoryWorkflows)}
+        ${check('ps-delete-branch', 'project-delete-branch-after-merge', t('projects.delete_branch_after_merge'), t('projects.delete_branch_after_merge_hint'), p.deleteBranchAfterMerge)}
         <p id="ps-error" class="error small" role="alert"></p>
         <div class="modal-actions">
           <button type="button" id="ps-cancel" class="btn ghost" data-testid="project-settings-cancel">${esc(t('common.cancel'))}</button>
@@ -102,6 +103,7 @@
       localPreview: { cwd: kept.cwd, env: kept.env, install: val('#ps-lp-install'), command, url: val('#ps-lp-url') },
       ignoreInstallScripts: !!$('#ps-ignore-scripts')?.checked,
       preferRepositoryWorkflows: !!$('#ps-prefer-repo-workflows')?.checked,
+      deleteBranchAfterMerge: !!$('#ps-delete-branch')?.checked,
       runDefaults: { ...(p.runDefaults || {}), base_branch: base || null, base_behind: val('#ps-base-behind') || null },
     };
     $('#ps-error').textContent = '';
@@ -128,7 +130,7 @@
 
   // the fields the form shows: the page redraws on run events, the form only when these change
   const signature = (p) => JSON.stringify([p.name, p.description, p.repo, p.folder, p.localPreview, p.runDefaults?.base_branch, p.runDefaults?.base_behind,
-    !!p.ignoreInstallScripts, !!p.preferRepositoryWorkflows]);
+    !!p.ignoreInstallScripts, !!p.preferRepositoryWorkflows, !!p.deleteBranchAfterMerge]);
 
   function show(p, box, { open = false, force = false } = {}) {
     if (!p || !box) return;

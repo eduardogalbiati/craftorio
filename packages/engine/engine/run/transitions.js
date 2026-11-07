@@ -250,8 +250,11 @@ const methods = {
       if (interval !== this.prMonitorWait) this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
       this.prMonitorWait = interval;
       this.setStatus(this.orchestrator, 'waiting');
-      // #810: a merge or close from the app wakes the wait (prActedFromApp): the next read sees it at once
+      // #810: a merge or close from the app wakes the wait (prActedFromApp): the next read sees it at once; one
+      // asked during a read (no wait to abort yet: prMonitorWakeAsked) skips the next wait
       const wake = (this.prMonitorWake = new AbortController());
+      if (this.prMonitorWakeAsked) wake.abort();
+      this.prMonitorWakeAsked = false;
       await sleep(interval, AbortSignal.any([this.abort.signal, wake.signal])).catch((e) => {
         if (this.abort.signal.aborted || !wake.signal.aborted) throw e;
       });
@@ -267,23 +270,35 @@ const methods = {
 
   // #810: a merge or close tried from the app (service/areas/runs.js mergeRunPr / closeRunPr). A merge gives
   // `pr.merge` { merged, commit | error, admin, by }; one that did not land keeps the card and the run as they
-  // were and shows the platform's message on the card (merge_error) until the next try. A close that landed
-  // ends the run as failed, saying who closed it (endPrMonitor). Either wakes the monitor to read the PR/MR.
+  // were and shows the platform's message on the card (merge_error; a close that failed: close_error) until the
+  // next try. A close that landed ends the run as failed, saying who closed it (endPrMonitor). Either wakes the
+  // monitor to read the PR/MR (during a read: right after it, prMonitorWakeAsked).
   prActedFromApp({ action, admin = false, by = null, merged = false, closed = false, commit = null, error = null }) {
     const target = this.prMonitorTarget();
     if (!target) return;
     const base = { step_id: target.stepId, url: target.url, number: parseTarget(target.url)?.id ?? null, by };
+    let failed = false;
     if (action === 'merge') {
       this.emitEvent('pr.merge', { ...base, admin: !!admin, merged: !!merged, ...(merged ? (commit ? { commit } : {}) : { error: String(error || 'the merge failed') }) });
       this.prMergeError = merged ? null : String(error || 'the merge failed');
+      this.prCloseError = null;
+      failed = !merged;
     } else if (closed) {
       this.prClosedBy = by || 'the app';
+      this.prCloseError = null;
       this.emitEvent('log', { level: 'warn', step_id: target.stepId, message: `The pull/merge request ${target.url} was closed from the app${by ? ` by ${by}` : ''}.` });
     } else {
-      this.prMergeError = `could not close: ${error || 'the close failed'}`;
+      this.prCloseError = String(error || 'the close failed');
+      failed = true;
     }
-    if (this.prMergeError && !merged && !closed) this.emitEvent('pr.monitor', { ...base, fork: this.ctx.inputs?.mode === 'fork', ...(target.card || {}), merge_error: this.prMergeError });
-    this.prMonitorWake?.abort();
+    if (failed) this.emitEvent('pr.monitor', { ...base, fork: this.ctx.inputs?.mode === 'fork', ...(target.card || {}), ...this.prActionErrors() });
+    if (this.prMonitorWake) this.prMonitorWake.abort();
+    else this.prMonitorWakeAsked = true;
+  },
+
+  // #810: the last merge's and close's messages from the app that did not land, as a pr.monitor event's fields
+  prActionErrors() {
+    return { ...(this.prMergeError ? { merge_error: this.prMergeError } : {}), ...(this.prCloseError ? { close_error: this.prCloseError } : {}) };
   },
 
   // #809: ONE read of the monitor's PR/MR → the next step once it merged or closed, else null (wait and
@@ -300,7 +315,7 @@ const methods = {
     this.prMonitor = step.id;
     this.prMonitorUrl = target; // #810: what a merge or close from the app acts on
     this.sayPrMonitorWorktreeKept(step);
-    const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork', ...(this.prMergeError ? { merge_error: this.prMergeError } : {}) };
+    const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork', ...this.prActionErrors() };
     let r;
     try {
       if (!target) throw new Error('no pull/merge request URL yet');

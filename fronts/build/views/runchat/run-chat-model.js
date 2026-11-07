@@ -357,9 +357,11 @@
       // (a failed read keeps the last choices, as it keeps the last lines)
       card.mergeOptions = ev.merge_options || (ev.error ? card.mergeOptions : null) || null;
       card.buttons = PrCard.buttons(card.mergeOptions, { fork: card.fork, state: card.state });
-      card.blocked = ev.result ? PrCard.blocked(ev) : card.blocked || '';
-      // the engine repeats a failed merge's message (merge_error) on each read until the next try
-      card.mergeError = ['merged', 'closed'].includes(card.state) ? null : ev.merge_error || card.mergeError || null;
+      card.blocked = ev.merge_options ? PrCard.blocked(ev) : PrCard.ended(card.state) ? '' : card.blocked || '';
+      // the engine repeats a failed merge's (merge_error) or close's (close_error) message on each read until the next try
+      const ended = PrCard.ended(card.state);
+      card.mergeError = ended ? null : ev.merge_error || card.mergeError || null;
+      card.closeError = ended ? null : ev.close_error || null;
       this.touch(card);
     },
 

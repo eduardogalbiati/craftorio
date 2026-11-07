@@ -64,10 +64,11 @@
   // Merge (a merge commit, no question), Merge ignoring protection (names what it ignores, asks first), Close
   // (asks first): [{ id: merge | merge_admin | close, label, confirm }]. None once the PR ended, and in Fork + PR
   // never a merge (the upstream's maintainers merge).
-  const ENDED = ['merged', 'closed'];
+  // whether a PR's state is its last (run-pr.js prEnded's rule, for the renderer)
+  const ended = (state) => ['merged', 'closed'].includes(state);
   const blockerText = (codes) => (Array.isArray(codes) ? codes.map((c) => t(`pr_card.blocked.${c}`)).join(', ') : '');
   function buttons(o, { fork = false, state = null } = {}) {
-    if (!o || ENDED.includes(state)) return [];
+    if (!o || ended(state)) return [];
     const what = blockerText(o.ignores);
     return [
       o.merge && !fork ? { id: 'merge', label: t('pr_card.merge'), confirm: null } : null,
@@ -76,18 +77,23 @@
     ].filter(Boolean);
   }
 
-  // what blocks the merge, in the engine's words (the Result's blockers), '' when nothing does or the PR ended
-  const blocked = (pr) => (pr?.result && !pr.result.ready && !ENDED.includes(pr.state) ? names(pr.result.blockers) : '');
+  // what blocks the merge: the same codes as the buttons (merge_options.blockers, the event's; mergeOptions on
+  // the Roadmap's item), '' when nothing does or the PR ended
+  const blocked = (pr) => {
+    const o = pr?.merge_options || pr?.mergeOptions;
+    return o && !ended(pr.state) ? blockerText(o.blockers) : '';
+  };
 
   const TESTIDS = { merge: 'pr-merge', merge_admin: 'pr-merge-admin', close: 'pr-close' };
   // the buttons' row, what blocks the merge and the last failed merge's message (one HTML for the run's card and
   // the Roadmap's); a click is handled by pr-monitor-card.js (data-pr-action, data-run, data-confirm). No buttons
   // without the run they act on (a past run's card)
-  function actionsHtml({ buttons: list = [], blocked: why = '', mergeError = null } = {}, { runId = '' } = {}) {
+  function actionsHtml({ buttons: list = [], blocked: why = '', mergeError = null, closeError = null } = {}, { runId = '' } = {}) {
     const row = (runId ? list || [] : []).map((b) => `<button type="button" class="btn sm ${b.id === 'merge' ? 'primary' : 'ghost'}" data-testid="${TESTIDS[b.id]}" data-pr-action="${esc(b.id)}" data-run="${esc(runId)}"${b.confirm ? ` data-confirm="${esc(b.confirm)}"` : ''} title="${esc(b.confirm || b.label)}">${esc(b.label)}</button>`).join('');
     const blockedLine = why ? `<div class="small muted" data-testid="pr-merge-blocked">${esc(t('pr_card.merge_blocked', { what: why }))}</div>` : '';
-    const error = mergeError ? `<div class="small warn-text" data-testid="pr-merge-error" role="status">${esc(t('pr_card.merge_failed', { error: mergeError }))}</div>` : '';
-    return blockedLine + error + (row ? `<div class="pr-monitor-actions" role="group">${row}</div>` : '');
+    const error = (mergeError ? `<div class="small warn-text" data-testid="pr-merge-error" role="status">${esc(t('pr_card.merge_failed', { error: mergeError }))}</div>` : '')
+      + (closeError ? `<div class="small warn-text" data-testid="pr-close-error" role="status">${esc(t('pr_card.close_failed', { error: closeError }))}</div>` : '');
+    return blockedLine + error + (row ? `<div class="pr-monitor-actions" role="group" aria-label="${esc(t('pr_card.actions'))}">${row}</div>` : '');
   }
 
   const api = {
@@ -96,6 +102,7 @@
     actionsHtml,
     blocked,
     buttons,
+    ended,
     lineHtml,
     lines,
     title,

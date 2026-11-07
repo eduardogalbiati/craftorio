@@ -3712,6 +3712,7 @@
   "po.unit_tests_write_and_run": "escrever e rodar",
 
   "pr_card.action_failed": "A ação no pull request falhou",
+  "pr_card.actions": "Ações do pull request",
   "pr_card.blocked.approvals_missing": "faltam aprovações",
   "pr_card.blocked.changes_requested": "mudanças pedidas",
   "pr_card.blocked.ci_failed": "CI falhou",
@@ -4301,6 +4302,8 @@
 
   "projects.continue_onboarding": "Continuar",
   "projects.create_a_project_that_points_to": "Crie um projeto que aponte para uma pasta local ou um repositório git.",
+  "projects.delete_branch_after_merge": "Apagar o branch após um merge pelo app",
+  "projects.delete_branch_after_merge_hint": "Um merge pelo card do pull request também apaga o branch dele. Um branch em que outra run em andamento está empilhada fica.",
   "projects.description": "Descrição",
   "projects.each_project_points_to_a_local": "Cada projeto aponta para uma pasta local e, opcionalmente, um repositório git. Armazenado em",
   "projects.edit": "Editar",

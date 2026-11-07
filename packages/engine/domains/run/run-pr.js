@@ -169,18 +169,22 @@ async function glMonitor(mr, t, reader) {
   return { ci, review, conflicts, comments: { unanswered } };
 }
 
-// What blocks the merge (English, the engine's words) → { ready, blockers }
-function monitorResult(shown, { ci, review, conflicts, comments }) {
-  const blockers = [];
-  if (shown.state === 'draft') blockers.push('draft');
-  if (ci.status === 'failed') blockers.push(`CI failed${ci.failed.length ? ` (${ci.failed.join(', ')})` : ''}`);
-  if (ci.status === 'running') blockers.push('CI running');
-  if (ci.status === 'manual') blockers.push('CI waits for a manual job');
-  if (review.status === 'changes_requested') blockers.push(`changes requested${review.by.length ? ` by ${review.by.join(', ')}` : ''}`);
-  if (review.status === 'required') blockers.push('approvals missing');
-  if (conflicts.status === 'base') blockers.push('conflict with the base');
-  if (comments.unanswered) blockers.push(`${comments.unanswered} unanswered comment${comments.unanswered > 1 ? 's' : ''}`);
-  if (!blockers.length && shown.state !== 'ready') blockers.push(shown.detail);
+// What blocks the merge (English, the engine's words) → { ready, blockers }: mergeBlockers' codes (#810: the
+// card's Merge and its Result line follow one rule), each with its details (the failed jobs, who asked for changes)
+const BLOCKER_WORDS = {
+  draft: () => 'draft',
+  ci_failed: ({ ci }) => `CI failed${ci.failed?.length ? ` (${ci.failed.join(', ')})` : ''}`,
+  ci_running: () => 'CI running',
+  ci_manual: () => 'CI waits for a manual job',
+  changes_requested: ({ review }) => `changes requested${review.by?.length ? ` by ${review.by.join(', ')}` : ''}`,
+  approvals_missing: () => 'approvals missing',
+  conflict: () => 'conflict with the base',
+  protection: () => 'a branch protection rule',
+  unknown: (card) => card.detail || 'an unknown state',
+};
+function monitorResult(shown, { ci, review, conflicts }) {
+  const card = { state: shown.state, detail: shown.detail, ci, review, conflicts };
+  const blockers = mergeBlockers(card).map((code) => BLOCKER_WORDS[code](card));
   return { ready: !blockers.length, blockers };
 }
 
@@ -261,14 +265,6 @@ async function readLogin(pr, { reader = readJson } = {}) {
   const c = p.userCommand();
   const login = p.parseUser(await reader(c.cli, [...c.args, ...p.apiHostArgs({ host: t.host })]).catch(() => null));
   return typeof login === 'string' && login ? login : null;
-}
-
-// #807: a stacked PR moved onto `base` (before its parent's branch is deleted) → true once moved
-async function retargetPr(pr, base, { run } = {}) {
-  const t = parseTarget(pr?.url);
-  if (!t || t.kind !== 'pr' || !base) return false;
-  const c = resolvePlatform(t.platform).requestRetargetCommand(t, base);
-  return Promise.resolve().then(() => run(c.cli, c.args)).then((r) => Number(r?.exit_code) === 0, () => false);
 }
 
 // Closes a PR without merging (#810) → { closed, error? }; never rejects.
@@ -368,7 +364,6 @@ module.exports = {
   readLogin,
   readMergeRights,
   readMeta,
-  retargetPr,
   withRead,
   writeTitle,
 };
