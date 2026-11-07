@@ -14,6 +14,9 @@
 // and periodically) does the same for runs that ended in an earlier app session.
 // Before each suite and E2E round of a local workflow (#403, syncWithBase), the branch is rebased onto
 // the local base when the base moved, so a fix that landed there meanwhile reaches the run.
+// A local run starts from the local base, never moved by the start itself (#805): checkLocalBase fetches
+// origin/<base> and compares the two, prepareWorktree logs what it found, and fastForwardBase is the
+// person's "update the base first" (fast-forward only).
 
 const fs = require('fs');
 const path = require('path');
@@ -130,7 +133,7 @@ function checkBase(base) {
  */
 async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
   // local workflows (orchestrator.worktree.remote: false) start from the local branch: it may
-  // hold local merges that were never pushed, and nothing is fetched
+  // hold local merges that were never pushed (#805: checkLocalBase compares it with origin first)
   if (base && !remote) {
     if (await refExists(repo, `refs/heads/${base}`)) return base;
     log('warn', `worktree: local branch "${base}" not found, starting from the repository's HEAD`);
@@ -150,6 +153,64 @@ async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
     log('warn', `worktree: base "${base}" not found, starting from the repository's HEAD`);
   }
   return 'HEAD';
+}
+
+const commitCount = (n) => `${n} commit${n === 1 ? '' : 's'}`;
+
+/**
+ * #805: how the local <base> stands against origin/<base>, fetched first; the base never moves here.
+ * @returns {Promise<object|null>} { base, state, ahead, behind, canUpdate, reason? } with state equal | ahead |
+ *   behind | diverged | no-remote | fetch-failed (`reason`: git's line); canUpdate: only a base that is just
+ *   behind can fast-forward. null: nothing to compare (not a repository, no such local branch).
+ */
+async function checkLocalBase({ repo, base }) {
+  const root = await repoRoot(repo);
+  if (!root || !base || !validBranchName(base) || !(await refExists(root, `refs/heads/${base}`))) return null;
+  const unknown = { base, ahead: 0, behind: 0, canUpdate: false };
+  if (!(await tryGit(['remote', 'get-url', 'origin'], root))) return { ...unknown, state: 'no-remote' };
+  try {
+    await git(['fetch', '--end-of-options', 'origin', base], root, { timeout: FETCH_TIMEOUT_MS, auth: true });
+  } catch (e) {
+    return { ...unknown, state: 'fetch-failed', reason: e.message.split('\n')[0] };
+  }
+  const counts = await tryGit(['rev-list', '--left-right', '--count', `refs/heads/${base}...refs/remotes/origin/${base}`], root);
+  if (!counts) return { ...unknown, state: 'fetch-failed', reason: `origin/${base} is not tracked here` };
+  const [ahead, behind] = counts.split(/\s+/).map(Number);
+  const state = ahead && behind ? 'diverged' : behind ? 'behind' : ahead ? 'ahead' : 'equal';
+  return { base, state, ahead, behind, canUpdate: state === 'behind' };
+}
+
+/** #805: what a check found, in one sentence, for the run's log and the question of a start; null with nothing to say. */
+function baseCheckMessage(check) {
+  const { base, state, ahead, behind, reason } = check || {};
+  if (state === 'behind') return `the local ${base} is ${commitCount(behind)} behind origin/${base}: a run from it does not have them`;
+  if (state === 'diverged') return `the local ${base} has diverged from origin/${base}: ${commitCount(ahead)} ahead and ${commitCount(behind)} behind origin/${base}. It was not moved: resolve it with Update and push on the Backlog`;
+  if (state === 'fetch-failed') return `could not fetch origin/${base}, going on from the local ${base} (${reason})`;
+  return null;
+}
+
+/**
+ * #805: the local <base> fast-forwarded to the origin/<base> already fetched, as mergeLocally moves it: with
+ * `merge --ff-only` where it is checked out (never over uncommitted changes to tracked files), else by moving
+ * the ref (compare-and-swap). A base with commits of its own is left alone.
+ * @returns {Promise<{ moved: boolean, commit?: string, reason?: string }>}
+ */
+async function fastForwardBase({ repo, base }) {
+  const root = await repoRoot(repo);
+  const local = `refs/heads/${base}`;
+  const tracked = `refs/remotes/origin/${base}`;
+  if (!root || !(await refExists(root, local)) || !(await refExists(root, tracked))) return { moved: false, reason: `origin/${base} is not known here` };
+  if (!(await git(['merge-base', '--is-ancestor', local, tracked], root).then(() => true, () => false))) return { moved: false, reason: `the local ${base} has commits that are not in origin/${base}` };
+  const checkout = (await listWorktrees(root)).find((w) => w.branch === base);
+  if (checkout && await tryGit(['status', '--porcelain', '--untracked-files=no'], checkout.dir)) return { moved: false, reason: `${checkout.dir} has uncommitted changes on ${base}` };
+  const commit = await git(['rev-parse', tracked], root);
+  try {
+    if (checkout) await git(['merge', '--ff-only', '-q', tracked], checkout.dir);
+    else await git(['update-ref', local, commit, await git(['rev-parse', local], root)], root);
+  } catch (e) {
+    return { moved: false, reason: e.message.split('\n')[0] };
+  }
+  return { moved: true, commit };
 }
 
 /**
@@ -230,14 +291,17 @@ async function restackOnBase({ repo, dir, base, parentBranch, log = () => {} }) 
  * @param {string} o.dir     worktree folder, e.g. <workspace>/worktrees/<run_id>
  * @param {string} [o.branch] resume: the previous run's branch, used if the folder has to be recreated
  * @param {Function} [o.log] (level, message)
- * @param {boolean} [o.remote] false: start from the local base, without fetching origin
+ * @param {boolean} [o.remote] false: start from the local base, as it is (#805: origin/<base> is fetched only
+ *   to say how far behind it is)
  * @param {boolean} [o.fork] #738 Fork + PR: sync the fork's <base> with upstream's first (syncForkBase) and
  *   start from upstream/<base>
  * @param {string} [o.parentBranch] #738 fork mode: a dependent item starts from origin/<parentBranch>
- * @returns {Promise<object|null>} { dir, workDir, repo, base, remote, fork, ref, commit, reused, recreated } or
- *   null when `repo` is not a git repository (the caller then works in the repository folder).
+ * @param {boolean} [o.compareBase] #805 false: a local worktree skips checkLocalBase (the run's base checkout)
+ * @returns {Promise<object|null>} { dir, workDir, repo, base, remote, fork, ref, commit, reused, recreated,
+ *   baseCheck (#805: a new local worktree's checkLocalBase) } or null when `repo` is not a git repository (the
+ *   caller then works in the repository folder).
  */
-async function prepareWorktree({ repo, base, dir, branch = null, log = () => {}, remote = true, fork = false, parentBranch = null }) {
+async function prepareWorktree({ repo, base, dir, branch = null, log = () => {}, remote = true, fork = false, parentBranch = null, compareBase = true }) {
   checkBase(base);
   const root = await repoRoot(repo);
   if (!root) return null;
@@ -263,6 +327,11 @@ async function prepareWorktree({ repo, base, dir, branch = null, log = () => {},
       info.ref = branch;
       info.recreated = true;
     } else {
+      if (compareBase && !remote && !fork && base && !branch) {
+        info.baseCheck = await checkLocalBase({ repo: root, base });
+        const said = baseCheckMessage(info.baseCheck);
+        if (said) log('warn', `worktree: ${said}`);
+      }
       info.ref = fork ? await forkBaseRef(root, base, parentBranch, log) : await baseRef(root, base, log, { remote });
       await git(['worktree', 'add', '--detach', dir, info.ref], root);
       info.recreated = !!branch;
@@ -379,7 +448,7 @@ async function restoreWork(dir) {
  * @returns {Promise<object|null>} as prepareWorktree; null when `repo` is not a git repository
  */
 async function prepareBaseWorktree({ repo, base, dir, log = () => {}, remote = true }) {
-  const info = await prepareWorktree({ repo, base, dir, log, remote });
+  const info = await prepareWorktree({ repo, base, dir, log, remote, compareBase: false });
   if (info?.reused) {
     info.ref = await baseRef(info.repo, base, log, { remote });
     await git(['checkout', '--detach', '--force', info.ref], info.dir);
@@ -694,6 +763,9 @@ function removeEndedRunFolders({ worktreesDir, runsDir, scratchDays, log }) {
 module.exports = {
   prepareWorktree, removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath,
   git, identityArgs, FETCH_TIMEOUT_MS,
+  baseCheckMessage,
+  checkLocalBase,
+  fastForwardBase,
   isUnder,
   prepareBaseWorktree,
   removeRunTmp,

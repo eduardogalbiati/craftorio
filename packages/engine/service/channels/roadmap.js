@@ -20,6 +20,7 @@ const {
   ANY,
   args,
   BACKLOG,
+  BASE_CHOICE,
   FLAG,
   listOf,
   nullable,
@@ -165,13 +166,15 @@ module.exports = (ctx) => {
       },
     },
     // simulated: every item runs as a simulation (mock runs), whatever its own setting; stage: a
-    // stage id, to run only that stage (#141: the roadmap pauses when it is done)
+    // stage id, to run only that stage (#141: the roadmap pauses when it is done).
+    // #805 baseChoice: with a local base behind origin or diverged and no decision of the project's, the
+    // answer is the question { confirm, baseCheck } and the roadmap stays as it was until this says what to do
     {
       channel: 'roadmap:start',
       method: 'startRoadmap',
-      params: ['projectId', 'simulated', 'stage'],
-      schema: { params: args({ projectId: PROJECT_ID, simulated: FLAG, stage: nullable(STRING) }, ['projectId']), result: nullable(OBJECT) },
-      fn: ({ projectId, simulated, stage }) => ctx.startRoadmap({ projectId, simulated: !!simulated, stage: stage || null }),
+      params: ['projectId', 'simulated', 'stage', 'baseChoice'],
+      schema: { params: args({ projectId: PROJECT_ID, simulated: FLAG, stage: nullable(STRING), baseChoice: BASE_CHOICE }, ['projectId']), result: nullable(OBJECT) },
+      fn: ({ projectId, simulated, stage, baseChoice }) => ctx.startRoadmap({ projectId, simulated: !!simulated, stage: stage || null, baseChoice: baseChoice || null, ask: true }),
     },
     // pause: nothing new starts (runs in progress go on); stop: back to a plan. #391 after: 'stage'
     // lets the current stage finish (its items still start), then pauses with "Stage N done"; 'now'

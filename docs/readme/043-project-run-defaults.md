@@ -37,6 +37,7 @@ Where each input of feature, fix and release gets its project value:
 | `language` | every language detected from the project's files, comma-separated (#785) |
 | `parent_branch` | set by the Roadmap for an item that `dependsOn` an earlier one (#738): its branch on the fork |
 | `base_branch` | the repository's default branch |
+| `base_behind` | no workflow input: what a roadmap does when its local base is behind origin (#805). `update` fast-forwards it first, `continue` goes on from it; empty asks at Start and goes on when nobody is there. Project settings |
 | `test_command` (release: `unit_command`) | the profile's test command, else discovery (`package.json`, `go.mod`, `Cargo.toml` → `cargo test`, …) |
 | `check_command` | the profile's check command, else the project's check discovery |
 | `e2e_tests` (release: `e2e_suite`) | `off` for a backend, a unit-only profile or no E2E suite found |

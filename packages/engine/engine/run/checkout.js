@@ -41,6 +41,20 @@ function depsLine(which, r) {
   return `dependencies (${which}, ${r.lockfile}): ${what}${links}${r.seconds != null ? ` in ${r.seconds.toFixed(1)} s` : ''}`;
 }
 
+// orchestrator.worktree with the run's values (`ctx`: at least { inputs }) → { repo, base, remote, fork }; also
+// what says a run is local before it starts (#805, service/areas/local-push.js localRunTarget)
+function worktreeTarget(cfg, ctx) {
+  return {
+    repo: render(cfg.repo, ctx).trim(),
+    base: render(cfg.base, ctx).trim() || null,
+    // remote: false = a local workflow: start from the local base and merge back into it;
+    // #630: a template too (feature/fix: "{{ inputs.mode == 'remote' }}", the fetched origin/<base> in Remote mode)
+    remote: cfg.remote !== false && render(String(cfg.remote ?? ''), ctx).trim().toLowerCase() !== 'false',
+    // #738 Fork + PR (a template too: "{{ inputs.mode == 'fork' }}"): the fork's base is synced with upstream's first
+    fork: cfg.fork === true || render(String(cfg.fork ?? ''), ctx).trim().toLowerCase() === 'true',
+  };
+}
+
 const methods = {
   // ---- git worktree per run (orchestrator.worktree: { repo, base }) ------------------------
   // The run works in its own checkout, <worktreesDir>/<run_id>, detached at the freshly fetched
@@ -50,14 +64,8 @@ const methods = {
   async setupWorktree() {
     const cfg = this.wf.orchestrator?.worktree;
     if (!cfg) return;
-    const repo = render(cfg.repo, this.ctx).trim();
-    const base = render(cfg.base, this.ctx).trim() || null;
-    // remote: false = a local workflow: start from the local base (no fetch) and merge back into it;
-    // #630: a template too (feature/fix: "{{ inputs.mode == 'remote' }}", the fetched origin/<base> in Remote mode)
-    const remote = cfg.remote !== false && render(String(cfg.remote ?? ''), this.ctx).trim().toLowerCase() !== 'false';
-    // #738 Fork + PR (a template too: "{{ inputs.mode == 'fork' }}"): the fork's base is synced with upstream's
-    // first; a dependent roadmap item (inputs.parent_branch) starts from its parent's branch on the fork
-    const fork = cfg.fork === true || render(String(cfg.fork ?? ''), this.ctx).trim().toLowerCase() === 'true';
+    const { repo, base, remote, fork } = worktreeTarget(cfg, this.ctx);
+    // #738: a dependent roadmap item (inputs.parent_branch) starts from its parent's branch on the fork
     const parentBranch = fork ? String(this.ctx.inputs?.parent_branch ?? '').trim() || undefined : undefined;
     this.ctx.worktree_dir = repo;
     const log = (level, message) => this.emitEvent('log', { level, message });
@@ -357,4 +365,5 @@ const methods = {
 
 module.exports = {
   methods,
+  worktreeTarget,
 };

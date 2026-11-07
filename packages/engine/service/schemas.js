@@ -56,7 +56,10 @@ const IMAGES = listOf(oneOf(STRING, shape({ path: STRING, name: STRING }, ['path
 const STARTED = shape({ runId: RUN_ID, runDir: STRING }, ['runId']);
 // a started run, or #170's kept-work question { confirm, kept, runId } instead of starting (an ended
 // run kept commits for those issues)
-const STARTED_OR_KEPT = described(shape({ runId: RUN_ID, runDir: STRING, confirm: STRING, kept: OBJECT }), 'A started run { runId, runDir }, or the kept-work question { confirm, kept, runId }.');
+// or #805's question { confirm, baseCheck } (a local run's base is behind origin or diverged)
+const STARTED_OR_KEPT = described(shape({ runId: RUN_ID, runDir: STRING, confirm: STRING, kept: OBJECT, baseCheck: OBJECT }), 'A started run { runId, runDir }, the kept-work question { confirm, kept, runId }, or the base question { confirm, baseCheck }.');
+// #805: what a person chose for a local base behind origin
+const BASE_CHOICE = nullable({ type: 'string', enum: ['continue', 'update'], description: 'update: fast-forward the local base first; continue: go on from it as it is. None: a base behind origin or diverged is asked about.' });
 // The Backlog of a project (backlog/<project>.json with each issue's runs and its roadmap), null
 // before the first sync
 const BACKLOG = described({ type: ['object', 'null'] }, 'The Backlog: issues with their runs, the queue, the roadmap (null before the first sync).');
@@ -72,6 +75,7 @@ module.exports = {
   ANY,
   args,
   BACKLOG,
+  BASE_CHOICE,
   BOOL,
   CARD_ID,
   described,

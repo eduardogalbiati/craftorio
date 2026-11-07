@@ -16,6 +16,7 @@ const {
 const {
   ANY,
   args,
+  BASE_CHOICE,
   BOOL,
   FLAG,
   GATE_ID,
@@ -62,7 +63,8 @@ function answeredBefore(ctx, runId, id) {
 
 // #735: the dialog's inputs over the project's run defaults (resolveRunInputs: typed > project), the
 // workflow's own defaults left to the engine; the inputs unchanged without a project or a workflow.
-// Synchronous (runDefaultsNow): run:start reserves its run before it returns (prepareRestart).
+// Synchronous (runDefaultsNow): run:start reserves its run before it returns (prepareRestart); #805: only a
+// local run looks at its base first, and a restart meanwhile loses a start, never a run.
 function withProjectDefaults(ctx, { file, inputs, projectId }) {
   if (!projectId) return inputs;
   let project = null;
@@ -97,6 +99,7 @@ module.exports = (ctx) => [
         then: ANY,
         agentOverrides: nullable(OBJECT),
         workspace: FLAG,
+        baseChoice: BASE_CHOICE,
       }),
       result: STARTED_OR_KEPT,
     },
@@ -110,15 +113,20 @@ module.exports = (ctx) => [
     // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun).
     // #735: an input the dialog left empty takes the project's run default (an empty ui_folders of a
     // backend project included) before the workflow's own (withProjectDefaults).
+    // #805 baseChoice: a local run whose base is behind origin or diverged answers the question
+    // { confirm, baseCheck } and starts nothing until it says 'update' or 'continue' (areas/local-push.js).
     fn: (payload) => {
-      const { file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides, workspace } = requireObject(payload, 'run options');
+      const { file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides, workspace, baseChoice } = requireObject(payload, 'run options');
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.text, kept, runId: kept.runId };
       const resolved = withProjectDefaults(ctx, { file, inputs, projectId });
-      return ctx.startWorkflowRun({ file, inputs: resolved, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace });
+      const start = (notices) => ctx.startWorkflowRun({ file, inputs: resolved, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace, notices });
+      const target = ctx.localRunTarget({ file, inputs: resolved, projectId: projectId || null, workspaceWorkflow: !!workspace });
+      if (!target) return start([]);
+      return ctx.prepareLocalBase({ target, choice: baseChoice || null, ask: true, mock: !!mock }).then((base) => (base.confirm ? base : start(base.notices)));
     },
   },
   // runId: the run to stop (without it, the only run in progress)

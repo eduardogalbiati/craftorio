@@ -38,8 +38,9 @@ const { resolveRunInputs, withAliases } = require('@multiagent/shared/run-inputs
 const MODES = PROFILE.mode;
 const WAYS_OF_WORKING = 'ways-of-working';
 
-// what the project page may override (`project.runDefaults`)
-const OVERRIDABLE = ['base_branch', 'check_command', 'e2e_command', 'e2e_tests', 'mode', 'screenshots', 'steps_folders', 'test_command', 'ui_folders'];
+// what the project page may override (`project.runDefaults`); #805 base_behind is no run input: what a
+// roadmap does when a local base is behind origin (service/areas/roadmap.js)
+const OVERRIDABLE = ['base_behind', 'base_branch', 'check_command', 'e2e_command', 'e2e_tests', 'mode', 'screenshots', 'steps_folders', 'test_command', 'ui_folders'];
 
 const WEB_DEPS = ['@angular/core', '@sveltejs/kit', 'next', 'nuxt', 'preact', 'react', 'react-dom', 'solid-js', 'svelte', 'vue'];
 const SERVER_DEPS = ['@hapi/hapi', '@nestjs/core', 'express', 'fastify', 'hono', 'koa', 'next', 'nuxt'];

@@ -122,7 +122,8 @@
       // images pasted into the prompt and the goal (#130), for the steps that read those inputs
       const pasted = { prompt: await PasteImage.collect($d('#duo-prompt')), goal: await PasteImage.collect($d('#duo-goal')) };
       const attachments = Object.fromEntries(Object.entries(pasted).filter(([, list]) => list.length));
-      const payload = { file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...forIssue, ...(Object.keys(attachments).length ? { attachments } : {}) };
+      // #805 baseChoice: this screen does not ask about a local base behind origin: the run's log says it
+      const payload = { file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, baseChoice: 'continue', ...forIssue, ...(Object.keys(attachments).length ? { attachments } : {}) };
       let out = await api.startRun(payload);
       // an ended run of this issue kept commits in its worktree (#112, #170): resume it, or start from scratch
       if (out?.kept) {

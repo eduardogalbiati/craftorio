@@ -7,8 +7,9 @@ order: 116
 control this app*, off by default). A terminal or another agent on this computer (a Claude Code
 session working as Oracle or Product Owner on the workspace) drives the running app through the
 same channels its screens use, instead of editing workspace files: an action takes effect at once
-(a `roadmap:start` dispatches like the Roadmap screen's button) and an edit merges with an open
-form on the screen (#287). When the switch is on, the app listens on `127.0.0.1` only, on a free
+(a `roadmap:start` dispatches like the Roadmap screen's button; with a local base behind origin it
+answers `{ confirm, baseCheck }` until `baseChoice` says `update` or `continue`, #805) and an edit
+merges with an open form on the screen (#287). When the switch is on, the app listens on `127.0.0.1` only, on a free
 port, and writes `<workspace>/control/endpoint.json` (`{ "url", "token" }`, a new token on every
 start); off, or the app quitting, closes the port and deletes the file. The setting shows the port
 and the file's path.

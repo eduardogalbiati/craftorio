@@ -995,8 +995,9 @@
       </div>`;
   }
 
-  // The switch: on asks to start a roadmap that is not running (live works on a running roadmap)
-  // and says what a real refill costs; off goes at once.
+  // #805: a Start, unless a local base behind origin makes it a question (backlog-roadmap-base.js) → whether it started
+  const started = async (ctx, simulated, scope, live = false) => { const out = await api.startRoadmap(ctx.projectId, simulated, scope); if (window.RoadmapBaseNotice?.asked(ctx, out, { simulated, scope, live })) return false; ctx.setData(out); return true; };
+  // The switch: on asks to start a roadmap that is not running (live works on a running roadmap), says what a real refill costs; off goes at once.
   async function setLive(ctx, r, on) {
     try {
       if (on) {
@@ -1004,7 +1005,7 @@
         const cost = simulated ? 'Simulated: the Product Owner answers without a model call.' : 'Each refill is a Product Owner answer and real runs: they cost money (Settings › Live roadmap caps the daily spend).';
         if (r.state !== 'running') {
           if (!await confirmDialog(t('backlog_roadmap.start_the_roadmap_and_go_live'), t('backlog_roadmap.only_a_running_roadmap_can_go', { cost }), t('backlog_roadmap.start_and_go_live'))) return;
-          ctx.setData(await api.startRoadmap(ctx.projectId, simulated, null));
+          if (!await started(ctx, simulated, null, true)) return;
         } else if (!simulated && !await confirmDialog(t('backlog_roadmap.go_live'), t('backlog_roadmap.when_the_last_stage_ends_the_2', { cost }), t('backlog_roadmap.go_live'))) return;
       }
       ctx.setData(await api.setRoadmapLive(ctx.projectId, on));
@@ -1055,7 +1056,7 @@
       ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${t('backlog_roadmap.only_stage_n', { value: scoped + 1 })}${r.simulated ? t('backlog_roadmap.simulated_2') : ''}</span>`
       : r.simulated ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '');
     const prs = RoadmapModel.mergeWaits(r); // #797: what the next stage waits for
-    const failures = (prs ? `<div class="small muted rm-head-line" data-testid="roadmap-merge-wait">${esc(t('backlog_roadmap.merge_wait', { prs }))}</div>` : '') + (data?.baseFailures?.length ? `<details class="small rm-base-failures rm-head-line" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : '');
+    const failures = (window.RoadmapBaseNotice?.html(data) ?? '') + (prs ? `<div class="small muted rm-head-line" data-testid="roadmap-merge-wait">${esc(t('backlog_roadmap.merge_wait', { prs }))}</div>` : '') + (data?.baseFailures?.length ? `<details class="small rm-base-failures rm-head-line" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : '');
     const menuItems = MENU.filter((m) => m.show(r, acts));
     const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="${t('backlog_roadmap.roadmap_actions')}" title="${t('backlog_roadmap.more_actions')}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? Menu.menuHtml(menuItems.map((m) => ({ id: m.id, iconHtml: MI[m.id], checked: m.checked?.(r), label: t(m.label), title: t(m.title), attrs: `data-rm="${m.id}"` })), { className: 'rm-menu', testid: 'roadmap-menu', label: t('backlog_roadmap.roadmap_actions') }) : ''}</span>`;
     // band 1: on the right only the controls, always in this order: Start / Resume (primary) or Pause (amber), Stop (red), ⋮
@@ -1424,10 +1425,9 @@
     const earlier = r.stages.slice(0, s).map((x, n) => (RoadmapModel.isOpen(x) ? n : -1)).filter((n) => n >= 0);
     if (earlier.length && !await confirmDialog(t('backlog_roadmap.run_stage_value_out_of_order', { value: s + 1 }), t('backlog_roadmap.earlier_stages_not_done', { count: earlier.length, stages: stagesText(earlier) }), t('backlog_roadmap.run_this_stage'))) return;
     if (!await checkPushes(ctx, r, stage.id)) return;
-    const simulated = simulating(r);
-    const real = !simulated && stage.items.some((x) => !x.mock && editable(x));
+    const simulated = simulating(r), real = !simulated && stage.items.some((x) => !x.mock && editable(x));
     if (real && !await confirmDialog(t('backlog_roadmap.run_stage_value', { value: s + 1 }), t('backlog_roadmap.its_items_run_as_real_runs'), t('backlog_roadmap.run'))) return;
-    ctx.setData(await api.startRoadmap(ctx.projectId, simulated, stage.id));
+    await started(ctx, simulated, stage.id);
   }
 
   // #194, #282: a station of an item's pipeline opens its run with that group open (the Run screen's steps).
@@ -1690,8 +1690,7 @@
   ];
   async function startClicked({ ctx, r }) {
     const simulated = simulating(r);
-    // Resume on a stage run on its own (#141) goes on with that stage only
-    // (a finished scope is not sent: #237); #243: a Resume's confirm says Resume
+    // Resume on a stage run on its own (#141) goes on with that stage only (a finished scope is not sent: #237); #243: a Resume's confirm says Resume
     const at = r.state === 'paused' ? scopedStage(r) : -1;
     const scope = at >= 0 ? r.stages[at].id : null;
     if (!await checkPushes(ctx, r, scope)) return 'handled';
@@ -1703,7 +1702,7 @@
         ? [`Resume stage ${at + 1}`, `Runs in progress keep going; the next planned items of stage ${at + 1} start as real runs (${cost} The roadmap pauses again when that stage is done.`, 'Resume']
         : ['Resume the roadmap', `Runs in progress keep going; the next planned items start as real runs (${cost}`, 'Resume'];
     if (real && !await confirmDialog(title, body, label)) return 'handled';
-    ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
+    await started(ctx, simulated, scope);
   }
   // #206: the budget cap paused it; real runs start again (they cost money)
   async function budgetClicked({ ctx, act }) {
@@ -1850,6 +1849,7 @@
   }
   const EDITS = [
     { acts: ['start'], run: startClicked },
+    { acts: ['base-update', 'base-continue'], run: ({ ctx, act }) => window.RoadmapBaseNotice.choose(ctx, act === 'base-update' ? 'update' : 'continue') }, // #805
     { selector: '[data-rm-run-stage]', run: async ({ ctx, r, stages, target }) => { await runStage(ctx, r, locate(stages, target).s); } },
     { selector: '[data-rm-pause-stage], [data-rm-stop-stage]', run: async ({ ctx, stages, target }) => { await pauseStage(ctx, stages, target, !!target.closest('[data-rm-stop-stage]')); } },
     { selector: '[data-rm-remove-stage]', run: removeStageClicked },

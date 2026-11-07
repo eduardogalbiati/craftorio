@@ -10,6 +10,9 @@
 // gate's step name, also for a run interrupted there) and dispatch; nothing answers the gate.
 // A PR a person merges (#797): an item waits for it (`roadmapRun`). Its state is read on a dispatch, a
 // sync (fresh, syncWaitingPrs) and when the Roadmap opens (checkWaitingPrs), never on a draw or a poll.
+// A local base behind origin (#805, areas/local-push.js): a person's Start asks about the next items
+// (baseQuestion) unless the project states `runDefaults.base_behind`; a dispatch never asks: it applies the
+// person's choice, else the project's, else goes on from the base as it is (localBaseNotices).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -35,6 +38,8 @@ module.exports = (ctx) => {
   // (#112): their next start goes ahead; kept in memory, so after a restart the start asks again
   const keptWorkAllowed = new Set();
   const allowKeptWork = (projectId, itemId) => keptWorkAllowed.add(`${projectId}:${itemId}`);
+  // #805: projectId → the choice of a person's Start, for the dispatch that follows it; kept in memory
+  const baseChoices = new Map();
 
   // A project's roadmap for the screen: item statuses derived from their runs (#112), each running
   // item with `waiting` (at a human gate), and each item with a run its progress (#194, `run`: the
@@ -320,6 +325,7 @@ module.exports = (ctx) => {
     // a cut line (#260): the release run starts and everything after the line waits for it; a line
     // whose release shipped meanwhile lets the next stage start in the same dispatch
     if (release && await ctx.roadmapRelease(projectId, roadmap, release)) roadmapAgain = true;
+    const basesChecked = new Map(); // #805: a stage's items on one base fetch once
     for (const item of start) {
       // a slot may have been taken by the previous start
       if (ctx.slotProblem({ mock: mockOf(item), projectId })) break;
@@ -346,9 +352,10 @@ module.exports = (ctx) => {
         }
         const run = { ...item, ...open[0], ...(open.length > 1 ? { issues: open } : { issues: undefined }) };
         const inputs = backlog.runInputs(run, wf, project.folder, seedRuns.runDefaultsNow(ctx, project));
+        const baseNotices = await localBaseNotices({ file: item.workflow, inputs, project, mock: mockOf(item) }, basesChecked);
         const started = await ctx.startWorkflowRun({
           file: item.workflow, inputs: { ...inputs, ...dependencyInputs(roadmap, item, inputs, wf, project) }, mock: mockOf(item),
-          projectId, issues: backlog.recordedIssues(open), notices: warnings.map((message) => ({ level: 'warn', message })),
+          projectId, issues: backlog.recordedIssues(open), notices: [...warnings.map((message) => ({ level: 'warn', message })), ...baseNotices],
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
           then: item.then || null,
           agentOverrides: item.agentOverrides || null,
@@ -368,6 +375,40 @@ module.exports = (ctx) => {
         break;
       }
     }
+    if (basesChecked.size) baseChoices.delete(projectId);
+  }
+
+  // #805: what an item's run logs about its local base, with nobody to ask: the choice of the Start that
+  // led here, else the project's decision, else it goes on from the base as it is
+  async function localBaseNotices({ file, inputs, project, mock }, checked) {
+    const target = ctx.localRunTarget({ file, inputs, projectId: project.id });
+    if (!target) return [];
+    const key = `${target.repo}|${target.base}|${mock}`;
+    const choice = baseChoices.get(project.id) ?? project.runDefaults?.base_behind ?? 'continue';
+    if (!checked.has(key)) checked.set(key, ctx.prepareLocalBase({ target, choice, mock }));
+    return (await checked.get(key)).notices;
+  }
+
+  // #805: the question of a person's Start ({ confirm, baseCheck }) about the local bases of the items it would
+  // start now, or null: the project states its decision, or no base is behind. Nothing moves, nothing starts.
+  async function baseQuestion(id, r, { simulated, stage }) {
+    const project = projectOf(id);
+    if (!project || project.runDefaults?.base_behind) return null;
+    const { start } = roadmaps.advance({ ...r, state: 'running', pausedBy: null, error: null, scope: stage ? { stage } : null }, { runOf: roadmapRun });
+    const targets = new Map();
+    for (const item of start) {
+      let target = null;
+      try {
+        const wf = loadWorkflow(ctx.projectWorkflowFile(id, item.workflow));
+        target = ctx.localRunTarget({ file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder, seedRuns.runDefaultsNow(ctx, project)), projectId: id });
+      } catch { /* the item's start reports it */ }
+      if (target) targets.set(`${target.repo}|${target.base}`, target);
+    }
+    for (const target of targets.values()) {
+      const answer = await ctx.prepareLocalBase({ target, ask: true, mock: simulated });
+      if (answer.confirm) return answer;
+    }
+    return null;
   }
 
   // The owner's notice of a roadmap step that paused or finished the roadmap
@@ -396,7 +437,9 @@ module.exports = (ctx) => {
 
   // Start: a roadmap with real items is refused in simulation-only mode (automated checks), like assignments.
   // `stage` (a stage id): run only that stage (#141); only its items count as real then.
-  async function startRoadmap({ projectId, simulated = false, stage = null }) {
+  // #805 `ask`: a person is there (roadmap:start), so a base behind answers the question and nothing starts;
+  // `baseChoice`: their answer, for this start's dispatch.
+  async function startRoadmap({ projectId, simulated = false, stage = null, baseChoice = null, ask = false }) {
     const { ws } = ctx;
     const id = path.basename(String(projectId));
     const r = roadmaps.readRoadmap(ws.backlog, id);
@@ -405,6 +448,10 @@ module.exports = (ctx) => {
     if (!simulated && RoadmapModel.unfinishedItems({ stages }).some((x) => !x.mock)) {
       simulation.refuseReal('real runs from a roadmap');
     }
+    const question = ask && !baseChoice ? await baseQuestion(id, r, { simulated: !!simulated, stage }) : null;
+    if (question) return question;
+    if (baseChoice) baseChoices.set(id, baseChoice);
+    else baseChoices.delete(id);
     // #368: the paused runs first, where they paused (each takes its item's place, adoptResumed), then the new items
     await resumePausedItems(id, stages, !!simulated);
     roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated, stage: stage ? String(stage) : null });

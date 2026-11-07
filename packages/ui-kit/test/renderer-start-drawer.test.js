@@ -74,7 +74,8 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     // PasteImage module is stubbed below (sandbox.PasteImage), only the wiring is loaded.
     pasteFields: /const pasteFields = [^\n]+;/,
     pastedImages: /async function pastedImages\(\) \{[\s\S]*?\n\}/,
-    startRun: /async function startRun\(\{ keepOpen = false \} = \{\}\) \{[\s\S]*?\n\}/,
+    sendStart: /async function sendStart\(\{[^)]*\}\) \{[\s\S]*?\n\}/,
+    startRun: /async function startRun\(\{ keepOpen = false, baseChoice = null \} = \{\}\) \{[\s\S]*?\n\}/,
     selectWorkflow: /function selectWorkflow\(file\) \{[\s\S]*?\n\}/,
     // "When it finishes" (#134): selectWorkflow and startRun both call drawerChain(), the drawer's
     // ChainPicker; out of scope here (see sandbox.ChainPicker below), only its wiring is loaded.

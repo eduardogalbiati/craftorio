@@ -3,7 +3,8 @@
 // (data-testid="project-settings", a framed disclosure, closed unless asked: a card's Edit opens it,
 // openProject with { settings: true }). Its fields are what the old New / Edit project dialog had and what the
 // new-project wizard set: name, description, repository, folder (… picks one, api.pickFolder), base branch (the
-// project's run default base_branch, #735: empty follows the repository's default branch), Local preview
+// project's run default base_branch, #735: empty follows the repository's default branch), what a roadmap does
+// when its local base is behind origin (#805, the run default base_behind: empty asks at Start), Local preview
 // (install / command / URL, with the command detected in the folder, #115: api.suggestLocalPreview, "Use it"),
 // "Install without scripts" (#472, data-testid="project-ignore-scripts") and "Prefer the repository's workflows"
 // (#554, data-testid="project-prefer-repository-workflows"). The workflows (project-workflows.js) and the
@@ -27,6 +28,13 @@
       <div class="hint">${esc(hint)}</div>
     </div>`;
 
+  // #805: a fixed list, a short control
+  const baseBehind = (saved) => `<div class="field">
+      <label for="ps-base-behind">${esc(t('project.settings_base_behind'))}</label>
+      <select id="ps-base-behind" data-testid="project-base-behind">${[['', 'ask'], ['continue', 'continue'], ['update', 'update']].map(([value, key]) => `<option value="${value}"${value === (saved || '') ? ' selected' : ''}>${esc(t(`project.settings_base_behind_${key}`))}</option>`).join('')}</select>
+      <div class="hint">${esc(t('project.settings_base_behind_hint'))}</div>
+    </div>`;
+
   function markup(p, open) {
     const lp = p.localPreview || {};
     return `<details class="pr-settings panel" data-testid="project-settings"${open ? ' open' : ''}>
@@ -38,6 +46,7 @@
           ${field('ps-repo', t('projects.git_repository'), p.repo, { optional: true, placeholder: t('projects.https_github_com_owner_repo_git') })}
           ${field('ps-folder', t('projects.folder_2'), p.folder, { row: `<button type="button" id="ps-pick" class="btn sm" aria-label="${esc(t('project.settings_pick_folder'))}">…</button>` })}
           ${field('ps-base', t('project.settings_base_branch'), p.runDefaults?.base_branch, { optional: true, hint: t('project.settings_base_branch_hint') })}
+          ${baseBehind(p.runDefaults?.base_behind)}
         </div>
         <div class="field">
           <label for="ps-lp-command">${esc(t('projects.local_preview'))} <span class="muted">${esc(t('projects.optional'))}</span></label>
@@ -93,7 +102,7 @@
       localPreview: { cwd: kept.cwd, env: kept.env, install: val('#ps-lp-install'), command, url: val('#ps-lp-url') },
       ignoreInstallScripts: !!$('#ps-ignore-scripts')?.checked,
       preferRepositoryWorkflows: !!$('#ps-prefer-repo-workflows')?.checked,
-      runDefaults: { ...(p.runDefaults || {}), base_branch: base || null },
+      runDefaults: { ...(p.runDefaults || {}), base_branch: base || null, base_behind: val('#ps-base-behind') || null },
     };
     $('#ps-error').textContent = '';
     if (!patch.name) { $('#ps-error').textContent = t('project.settings_name_required'); return; }
@@ -118,7 +127,7 @@
   }
 
   // the fields the form shows: the page redraws on run events, the form only when these change
-  const signature = (p) => JSON.stringify([p.name, p.description, p.repo, p.folder, p.localPreview, p.runDefaults?.base_branch,
+  const signature = (p) => JSON.stringify([p.name, p.description, p.repo, p.folder, p.localPreview, p.runDefaults?.base_branch, p.runDefaults?.base_behind,
     !!p.ignoreInstallScripts, !!p.preferRepositoryWorkflows]);
 
   function show(p, box, { open = false, force = false } = {}) {

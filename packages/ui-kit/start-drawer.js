@@ -306,9 +306,33 @@ function applyProjectHints() {
   if (state.wf && projectId) WorkflowInputs.applyHints($('#drawer'), state.wf.inputs, projectId);
 }
 
+// #805: nothing started: a local run's base is behind origin or diverged, and the person chooses here. Each choice
+// starts again with the same form; a diverged base has no update (never moved: the Backlog's Update and push).
+function showBaseNotice({ base, behind, canUpdate, state: where }, keepOpen) {
+  const text = t(where === 'diverged' ? 'start_drawer.base_diverged' : 'start_drawer.base_behind', { count: behind, base });
+  const info = $('#start-info');
+  info.innerHTML = `<div role="status" data-testid="start-base-notice"><p class="warn-text">${esc(text)}</p><div class="row">${canUpdate ? `<button type="button" class="btn sm primary" data-testid="start-base-update">${esc(t('start_drawer.base_update'))}</button>` : ''}<button type="button" class="btn sm ghost" data-testid="start-base-continue">${esc(t('start_drawer.base_continue'))}</button></div></div>`;
+  const choice = (id, baseChoice) => {
+    const button = info.querySelector(`[data-testid="${id}"]`);
+    if (button) button.onclick = () => startRun({ keepOpen, baseChoice });
+  };
+  choice('start-base-update', 'update');
+  choice('start-base-continue', 'continue');
+}
+
+// What Start sends: the chosen pipeline, or the run with the panel's images, agents and base choice
+async function sendStart({ wf, inputs, mock, project, baseChoice }) {
+  const attachments = await pastedImages();
+  // #262: this run's provider / model / effort per agent (only what differs from the workflow)
+  const agentOverrides = window.AgentOverrides?.read($('#wf-agents')) || {};
+  if (state.pipeline) return api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null);
+  return api.startRun({ file: wf.file, workspace: true, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}), ...(Object.keys(agentOverrides).length ? { agentOverrides } : {}), ...(baseChoice ? { baseChoice } : {}) });
+}
+
 // `keepOpen` (Start and create another): the drawer stays open on the same workflow, project and
 // parameters, with the main field cleared, and the shown run does not change.
-async function startRun({ keepOpen = false } = {}) {
+// #805 `baseChoice`: the answer to the notice below, for a local run whose base is behind origin.
+async function startRun({ keepOpen = false, baseChoice = null } = {}) {
   $('#start-error').textContent = '';
   $('#start-info').textContent = '';
   const wf = state.wf;
@@ -328,12 +352,9 @@ async function startRun({ keepOpen = false } = {}) {
   setStartDisabled(true);
   try {
     const mock = wantsSimulation($('#mock-toggle'));
-    const attachments = await pastedImages();
-    // #262: this run's provider / model / effort per agent (only what differs from the workflow)
-    const agentOverrides = window.AgentOverrides?.read($('#wf-agents')) || {};
-    const { runId } = state.pipeline
-      ? await api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null)
-      : await api.startRun({ file: wf.file, workspace: true, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}), ...(Object.keys(agentOverrides).length ? { agentOverrides } : {}) });
+    const out = await sendStart({ wf, inputs, mock, project, baseChoice });
+    if (out?.confirm && out.baseCheck) return showBaseNotice(out.baseCheck, keepOpen);
+    const { runId } = out;
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;

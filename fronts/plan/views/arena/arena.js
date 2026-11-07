@@ -140,7 +140,8 @@
       starting = true; // the run's first events may arrive before startRun resolves
       // images pasted into the request (#130): the run's `attachments`, not the text input of that name
       const images = await PasteImage.collect($a('#arena-task'));
-      const { runId } = await api.startRun({ file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...(images.length ? { attachments: { task: images } } : {}) });
+      // #805 baseChoice: this screen does not ask about a local base behind origin: the run's log says it
+      const { runId } = await api.startRun({ file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, baseChoice: 'continue', ...(images.length ? { attachments: { task: images } } : {}) });
       PasteImage.clear($a('#arena-task'));
       bindLive(runId);
       // started for a Discovery card: its final document goes back to the card when the run finishes

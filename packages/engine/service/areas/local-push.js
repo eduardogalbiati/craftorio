@@ -2,10 +2,15 @@
 // base a project's local runs merge into, what it has that origin has not (cached for the Backlog
 // and the sidebar badge), Push / Update and push, the status after a run's `merge: local`, and a
 // push conflict handed to a run of the local workflow. A push records a release candidate (#489).
+// A local run's start (#805): localRunTarget says a run is local, prepareLocalBase compares its base with
+// origin (engine/worktree.js checkLocalBase) and asks, or applies the choice: 'update' fast-forwards, 'continue'
+// goes on from the base as it is; a diverged base is never moved. run:start and the Roadmap call them.
 
 const path = require('path');
 const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
+const { worktreeTarget } = require('../../engine/run/checkout');
+const { baseCheckMessage, checkLocalBase, fastForwardBase } = require('../../engine/worktree');
 const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
 const localPush = require('../../domains/local/local-push');
@@ -107,8 +112,44 @@ module.exports = (ctx) => {
       .map(({ projectId, name, local }) => ({ projectId, name, base: local.base, ahead: local.ahead, issues: local.issues }));
   }
 
+  // #805: { repo, base } of a run that would start from its local base, or null: a remote or fork run, a
+  // workflow without a worktree, one that cannot be read (the start reports that). Synchronous, so a run
+  // that is not local still reserves its slot before run:start returns. The inputs as the run gets them:
+  // an old workflow name's, then the workflow's defaults (setup.js resolveInputs).
+  function localRunTarget({ file, inputs, projectId = null, workspaceWorkflow = false }) {
+    let found = null; // none: a workflow only the repository declares
+    try { found = ctx.workflowPath(file); } catch { /* projectWorkflowFile finds it */ }
+    try {
+      const wf = loadWorkflow(workspaceWorkflow ? found.file : ctx.projectWorkflowFile(projectId, file));
+      const cfg = wf.orchestrator?.worktree;
+      if (!cfg) return null;
+      const given = DefaultWorkflow.aliasInputs(found, inputs) || {};
+      const values = Object.fromEntries(Object.entries(wf.inputs || {}).map(([k, def]) => [k, given[k] === undefined || given[k] === '' ? def.default : given[k]]));
+      const { repo, base, remote, fork } = worktreeTarget(cfg, { inputs: values });
+      return !remote && !fork && repo && base ? { repo, base } : null;
+    } catch { return null; }
+  }
+
+  // #805: the base of a local run before it starts → { confirm, baseCheck } (the person's question: `ask`, no
+  // `choice`, a base behind or diverged; nothing changed) or { notices } for the run's log. A real run's own
+  // worktree logs what it finds (prepareWorktree); a simulated one has none, so its warning comes from here.
+  async function prepareLocalBase({ target, choice = null, ask = false, mock = false }) {
+    const check = await checkLocalBase(target);
+    const said = baseCheckMessage(check);
+    if (!said) return { notices: [] };
+    const warned = mock ? [{ level: 'warn', message: `base: ${said}` }] : [];
+    if (check.state === 'fetch-failed') return { notices: warned };
+    if (!choice && ask) return { confirm: said, baseCheck: check };
+    if (choice !== 'update' || !check.canUpdate) return { notices: warned };
+    const { moved, commit, reason } = await fastForwardBase(target);
+    if (moved) return { notices: [{ level: 'info', message: `base: ${target.base} fast-forwarded to origin/${target.base} (${commit.slice(0, 8)})` }] };
+    return { notices: [{ level: 'warn', message: `base: could not fast-forward ${target.base}: ${reason}` }, ...warned] };
+  }
+
   return {
     afterLocalMerge,
+    localRunTarget,
+    prepareLocalBase,
     pushProject,
     refreshLocal,
     resolvePushConflict,

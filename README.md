@@ -542,8 +542,9 @@ change instead of failing "the whole suite".
 control this app*, off by default). A terminal or another agent on this computer (a Claude Code
 session working as Oracle or Product Owner on the workspace) drives the running app through the
 same channels its screens use, instead of editing workspace files: an action takes effect at once
-(a `roadmap:start` dispatches like the Roadmap screen's button) and an edit merges with an open
-form on the screen (#287). When the switch is on, the app listens on `127.0.0.1` only, on a free
+(a `roadmap:start` dispatches like the Roadmap screen's button; with a local base behind origin it
+answers `{ confirm, baseCheck }` until `baseChoice` says `update` or `continue`, #805) and an edit
+merges with an open form on the screen (#287). When the switch is on, the app listens on `127.0.0.1` only, on a free
 port, and writes `<workspace>/control/endpoint.json` (`{ "url", "token" }`, a new token on every
 start); off, or the app quitting, closes the port and deletes the file. The setting shows the port
 and the file's path.
@@ -1229,6 +1230,7 @@ Where each input of feature, fix and release gets its project value:
 | `language` | every language detected from the project's files, comma-separated (#785) |
 | `parent_branch` | set by the Roadmap for an item that `dependsOn` an earlier one (#738): its branch on the fork |
 | `base_branch` | the repository's default branch |
+| `base_behind` | no workflow input: what a roadmap does when its local base is behind origin (#805). `update` fast-forwards it first, `continue` goes on from it; empty asks at Start and goes on when nobody is there. Project settings |
 | `test_command` (release: `unit_command`) | the profile's test command, else discovery (`package.json`, `go.mod`, `Cargo.toml` → `cargo test`, …) |
 | `check_command` | the profile's check command, else the project's check discovery |
 | `e2e_tests` (release: `e2e_suite`) | `off` for a backend, a unit-only profile or no E2E suite found |
