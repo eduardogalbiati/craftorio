@@ -234,7 +234,8 @@ test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on F
   const fable = make({ developer_model: 'claude-fable-5-1' });
   assert.equal(fable.wf.agents.developer.model, 'claude-fable-5-1');
   assert.equal(fable.turnTimeout(dev(fable)), 90 * 60e3);
-  assert.equal(fable.wf.agents.reviewer.model, 'claude-opus-5-5', 'the reviewer keeps its own model');
+  assert.equal(opus.wf.agents.reviewer.model, 'claude-fable-5-1', 'the reviewer runs on Fable 5.1 (owner 2026-11-07)');
+  assert.equal(fable.wf.agents.reviewer.model, 'claude-fable-5-1', 'the reviewer keeps its own model');
   assert.equal(loadWorkflow(WORKFLOW).orchestrator.limits.max_total_cost_usd, 120);
 });
 

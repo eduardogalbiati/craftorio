@@ -269,7 +269,7 @@ inputs:
     enum: [claude-opus-5-5, claude-fable-5-1]
     default: claude-opus-5-5
     options: { claude-opus-5-5: "Opus 5.5", claude-fable-5-1: "Fable 5.1" }
-    description: "The model of the developer agent. Fable 5.1 is the most capable (about 2.5x the price per token of Opus 5.5, and slower turns: the turn timeout is 3x). The reviewer and the test writer keep their own models."
+    description: "The model of the developer agent. Fable 5.1 is the most capable (about 2.5x the price per token of Opus 5.5, and slower turns: the turn timeout is 3x). The reviewer (Fable 5.1) and the test writer keep their own models."
   # #286: the developer's reasoning effort per run; `default` passes no --effort (the CLI's own
   # default for the model, the behaviour before #286); xhigh doubles the turn timeout
   developer_effort:
@@ -533,8 +533,9 @@ agents:
   reviewer:
     color: "#A06BFF" # #224: its role's colour in the run chat and the runs list
     provider: claude
-    # owner 2026-10-03: Opus 5.5 (Sonnet 5.5 cost $1.64/M tokens in real runs vs Opus 5.5 $0.61/M)
-    model: claude-opus-5-5
+    # owner 2026-10-03: Opus 5.5 (Sonnet 5.5 cost $1.64/M tokens in real runs vs Opus 5.5 $0.61/M);
+    # owner 2026-11-07: Fable 5.1 for every run (its turns get 3x the timeout from `models`)
+    model: claude-fable-5-1
     effort: high
     session: persistent
     capabilities: { tools: [read, bash:git], web: false }

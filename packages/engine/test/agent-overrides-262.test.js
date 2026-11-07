@@ -141,7 +141,7 @@ test('#262 the run cost limit follows the model: a model\'s max_total_cost_usd l
   assert.equal(fable.finished.status, 'success', fable.finished.error);
 });
 
-test('#262 ai-development-local-hero: the developer\'s model comes from an override (Fable 5.1) with a longer turn timeout; the reviewer keeps Opus 5.5', (t) => {
+test('#262 ai-development-local-hero: the developer\'s model comes from an override (Fable 5.1) with a longer turn timeout; the reviewer keeps its own model (Fable 5.1)', (t) => {
   const { WorkflowRun } = require('../engine/workflow');
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'overrides-262-hero-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
@@ -152,6 +152,6 @@ test('#262 ai-development-local-hero: the developer\'s model comes from an overr
   assert.equal(devTimeout(opus), 30 * 60e3);
   const fable = make({ developer: { model: 'claude-fable-5-1' } });
   assert.equal(fable.wf.agents.developer.model, 'claude-fable-5-1');
-  assert.equal(fable.wf.agents.reviewer.model, 'claude-opus-5-5');
+  assert.equal(fable.wf.agents.reviewer.model, 'claude-fable-5-1');
   assert.ok(devTimeout(fable) > 30 * 60e3, `a Fable 5.1 developer gets more than 30m per turn, got ${devTimeout(fable) / 60e3}m`);
 });
