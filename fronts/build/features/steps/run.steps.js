@@ -22,8 +22,16 @@ When('I open the Start panel', async ({ e2e }) => {
   await openStartPanel(e2e);
 });
 
+// A short enum (workflow-inputs.js MAX_PILLS/MAX_PILL_LABEL) is a radiogroup of pills; a longer one
+// (e.g. Mode's "Remote (pull request)") is a <select>: both are "the field named {field}".
 When('I pick {string} for {string}', async ({ e2e }, option, field) => {
-  await e2e.window.getByRole('radiogroup', { name: field, exact: true }).getByRole('radio', { name: option, exact: true }).click();
+  const page = e2e.window;
+  const group = page.getByRole('radiogroup', { name: field, exact: true });
+  if (await group.count()) {
+    await group.getByRole('radio', { name: option, exact: true }).click();
+  } else {
+    await page.getByRole('combobox', { name: field, exact: true }).selectOption({ label: option });
+  }
 });
 
 Then('{string} offers {string}, {string} and {string}', async ({ e2e }, field, a, b, c) => {
