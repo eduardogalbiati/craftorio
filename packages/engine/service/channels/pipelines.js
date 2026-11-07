@@ -5,7 +5,9 @@
 const { requireId } = require('../common');
 const {
   args,
+  BASE_CHOICE,
   BOOL,
+  described,
   FLAG,
   nullable,
   OBJECT,
@@ -19,16 +21,16 @@ const {
 } = require('../schemas');
 
 module.exports = (ctx) => [
-  // inputs: the first stage's (over its fixed ones) → { runId, runDir, pipelineId }
+  // inputs: the first stage's (over its fixed ones) → { runId, runDir, pipelineId }; #805 baseChoice: as run:start's
   {
     channel: 'pipelines:run',
     method: 'runPipeline',
-    params: ['file', 'inputs', 'mock', 'projectId'],
+    params: ['file', 'inputs', 'mock', 'projectId', 'baseChoice'],
     schema: {
-      params: args({ file: PIPELINE_FILE, inputs: nullable(OBJECT), mock: FLAG, projectId: orNone(PROJECT_ID) }, ['file']),
-      result: shape({ runId: RUN_ID, runDir: STRING, pipelineId: RUN_ID }, ['runId']),
+      params: args({ file: PIPELINE_FILE, inputs: nullable(OBJECT), mock: FLAG, projectId: orNone(PROJECT_ID), baseChoice: BASE_CHOICE }, ['file']),
+      result: described(shape({ runId: RUN_ID, runDir: STRING, pipelineId: RUN_ID, confirm: STRING, baseCheck: OBJECT }), 'The started pipeline, or the base question { confirm, baseCheck } (#805, nothing started).'),
     },
-    fn: (opts) => ctx.runPipeline({ ...opts, file: requireId(opts.file, 'pipeline file') }),
+    fn: (opts) => ctx.runPipeline({ ...opts, file: requireId(opts.file, 'pipeline file'), ask: true }),
   },
   // → { items, costUsd, complete, text, productOwner } (an estimate from past runs)
   { channel: 'pipelines:estimate', method: 'pipelineEstimate', params: ['file'], schema: { params: args({ file: PIPELINE_FILE }, ['file']), result: OBJECT }, fn: (opts) => ctx.pipelineEstimate({ ...opts, file: requireId(opts.file, 'pipeline file') }) },

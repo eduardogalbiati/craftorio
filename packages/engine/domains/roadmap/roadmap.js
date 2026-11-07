@@ -892,6 +892,11 @@ function waiveBudget(dir, projectId, key) {
   });
 }
 
+// #805: the items a Start of `stage` (none: the whole roadmap) would start now, nothing written
+function itemsToStart(r, { stage = null, runOf }) {
+  return advance({ ...r, state: 'running', pausedBy: null, error: null, scope: stage ? { stage } : null }, { runOf }).start;
+}
+
 // An item whose issues were all found closed right before its start (#168: read again from the platform).
 function skipClosed(dir, projectId, itemId) {
   return skipItem(dir, projectId, itemId, 'Every issue is closed.');
@@ -931,6 +936,7 @@ module.exports = {
   insertFrontStage,
   issueStages,
   itemAction,
+  itemsToStart,
   markStarted,
   mergedPullRequest,
   moveLeftoverQueues,

@@ -14,9 +14,10 @@
 // and periodically) does the same for runs that ended in an earlier app session.
 // Before each suite and E2E round of a local workflow (#403, syncWithBase), the branch is rebased onto
 // the local base when the base moved, so a fix that landed there meanwhile reaches the run.
-// A local run starts from the local base, never moved by the start itself (#805): checkLocalBase fetches
-// origin/<base> and compares the two, prepareWorktree logs what it found, and fastForwardBase is the
-// person's "update the base first" (fast-forward only).
+// A local run starts from the local base, never moved by the start itself (#805): checkLocalBase says how it
+// stands against origin/<base> (compareWithOrigin, the fetch and the counts the Backlog's localStatus reads too),
+// prepareWorktree logs what it found, and fastForwardBase is the person's "update the base first" and
+// syncForkBase's move (fast-forward only).
 
 const fs = require('fs');
 const path = require('path');
@@ -158,24 +159,38 @@ async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
 const commitCount = (n) => `${n} commit${n === 1 ? '' : 's'}`;
 
 /**
+ * The commits the local <base> and origin/<base> do not share, origin/<base> fetched first: a run's start
+ * (checkLocalBase) and the Backlog's local push status (domains/local/local-push.js localStatus) read the same.
+ * A failed fetch does not stop the comparison: the counts are then those of the last fetch.
+ * @param {{ root: string, base: string, fetch?: boolean }} o fetch: false reads the last fetch (no network)
+ * @returns {Promise<{ ahead: number, behind: number, compared: boolean, fetchError: string|null }>} compared:
+ *   false when one of the two refs is missing (ahead and behind are 0 then)
+ */
+async function compareWithOrigin({ root, base, fetch = true }) {
+  let fetchError = null;
+  if (fetch) {
+    await git(['fetch', '--end-of-options', 'origin', base], root, { timeout: FETCH_TIMEOUT_MS, auth: true })
+      .catch((e) => { fetchError = e.message.split('\n')[0]; });
+  }
+  // asked twice before it counts as missing: a git process can die without a word on a busy machine
+  const query = ['rev-list', '--left-right', '--count', `refs/heads/${base}...refs/remotes/origin/${base}`];
+  const counts = (await tryGit(query, root)) || (await tryGit(query, root));
+  const [ahead, behind] = counts ? counts.split(/\s+/).map(Number) : [0, 0];
+  return { ahead, behind, compared: !!counts, fetchError };
+}
+
+/**
  * #805: how the local <base> stands against origin/<base>, fetched first; the base never moves here.
  * @returns {Promise<object|null>} { base, state, ahead, behind, canUpdate, reason? } with state equal | ahead |
- *   behind | diverged | no-remote | fetch-failed (`reason`: git's line); canUpdate: only a base that is just
- *   behind can fast-forward. null: nothing to compare (not a repository, no such local branch).
+ *   behind | diverged | no-remote | fetch-failed (`reason`: git's line; the counts: the last fetch's); canUpdate:
+ *   only a base that is just behind can fast-forward. null: nothing to compare (not a repository, no such local branch).
  */
 async function checkLocalBase({ repo, base }) {
   const root = await repoRoot(repo);
   if (!root || !base || !validBranchName(base) || !(await refExists(root, `refs/heads/${base}`))) return null;
-  const unknown = { base, ahead: 0, behind: 0, canUpdate: false };
-  if (!(await tryGit(['remote', 'get-url', 'origin'], root))) return { ...unknown, state: 'no-remote' };
-  try {
-    await git(['fetch', '--end-of-options', 'origin', base], root, { timeout: FETCH_TIMEOUT_MS, auth: true });
-  } catch (e) {
-    return { ...unknown, state: 'fetch-failed', reason: e.message.split('\n')[0] };
-  }
-  const counts = await tryGit(['rev-list', '--left-right', '--count', `refs/heads/${base}...refs/remotes/origin/${base}`], root);
-  if (!counts) return { ...unknown, state: 'fetch-failed', reason: `origin/${base} is not tracked here` };
-  const [ahead, behind] = counts.split(/\s+/).map(Number);
+  if (!(await tryGit(['remote', 'get-url', 'origin'], root))) return { base, ahead: 0, behind: 0, canUpdate: false, state: 'no-remote' };
+  const { ahead, behind, compared, fetchError } = await compareWithOrigin({ root, base });
+  if (fetchError || !compared) return { base, ahead, behind, canUpdate: false, state: 'fetch-failed', reason: fetchError || `origin/${base} is not tracked here` };
   const state = ahead && behind ? 'diverged' : behind ? 'behind' : ahead ? 'ahead' : 'equal';
   return { base, state, ahead, behind, canUpdate: state === 'behind' };
 }
@@ -190,23 +205,26 @@ function baseCheckMessage(check) {
 }
 
 /**
- * #805: the local <base> fast-forwarded to the origin/<base> already fetched, as mergeLocally moves it: with
- * `merge --ff-only` where it is checked out (never over uncommitted changes to tracked files), else by moving
- * the ref (compare-and-swap). A base with commits of its own is left alone.
+ * The local <base> fast-forwarded to `target`, already fetched (#805: origin/<base>; #738: upstream/<base>), as
+ * mergeLocally moves it: with `merge --ff-only` where it is checked out (never over uncommitted changes to
+ * tracked files), else by moving the ref. A base with commits of its own is left alone. The commit checked is the
+ * one the compare-and-swap expects: a merge that moves the base meanwhile makes it fail, and loses nothing.
  * @returns {Promise<{ moved: boolean, commit?: string, reason?: string }>}
  */
-async function fastForwardBase({ repo, base }) {
+async function fastForwardBase({ repo, base, target = `refs/remotes/origin/${base}` }) {
   const root = await repoRoot(repo);
   const local = `refs/heads/${base}`;
-  const tracked = `refs/remotes/origin/${base}`;
-  if (!root || !(await refExists(root, local)) || !(await refExists(root, tracked))) return { moved: false, reason: `origin/${base} is not known here` };
-  if (!(await git(['merge-base', '--is-ancestor', local, tracked], root).then(() => true, () => false))) return { moved: false, reason: `the local ${base} has commits that are not in origin/${base}` };
+  const name = target.replace(/^refs\/remotes\//, '');
+  const commitOf = (ref) => (root ? tryGit(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], root) : null);
+  const old = await commitOf(local);
+  const commit = await commitOf(target);
+  if (!old || !commit) return { moved: false, reason: `${name} is not known here` };
+  if (!(await git(['merge-base', '--is-ancestor', old, commit], root).then(() => true, () => false))) return { moved: false, reason: `the local ${base} has commits that are not in ${name}` };
   const checkout = (await listWorktrees(root)).find((w) => w.branch === base);
   if (checkout && await tryGit(['status', '--porcelain', '--untracked-files=no'], checkout.dir)) return { moved: false, reason: `${checkout.dir} has uncommitted changes on ${base}` };
-  const commit = await git(['rev-parse', tracked], root);
   try {
-    if (checkout) await git(['merge', '--ff-only', '-q', tracked], checkout.dir);
-    else await git(['update-ref', local, commit, await git(['rev-parse', local], root)], root);
+    if (checkout) await git(['merge', '--ff-only', '-q', commit], checkout.dir);
+    else await git(['update-ref', local, commit, old], root);
   } catch (e) {
     return { moved: false, reason: e.message.split('\n')[0] };
   }
@@ -216,8 +234,8 @@ async function fastForwardBase({ repo, base }) {
 /**
  * #738 Fork + PR: the fork's default branch follows the original. Fetches `upstream` <base> and `origin`
  * (the fork: its branches, a dependent item's parent among them), fast-forwards the local <base> to
- * upstream/<base> (merge --ff-only where it is checked out and clean, else the ref moves; a local <base>
- * with commits of its own is left alone) and pushes upstream/<base> to origin's <base>. Never pushes to
+ * upstream/<base> (fastForwardBase; a local <base> it cannot move is left alone, with a warning) and pushes
+ * upstream/<base> to origin's <base>. Never pushes to
  * upstream; a fetch or a push that fails only warns. → 'upstream/<base>', or null when it is not there.
  */
 async function syncForkBase(root, base, log = () => {}) {
@@ -229,17 +247,12 @@ async function syncForkBase(root, base, log = () => {}) {
     log('warn', `worktree (fork): upstream/${base} not found; is the original repository the "upstream" remote?`);
     return null;
   }
-  const local = `refs/heads/${base}`;
   const tip = await git(['rev-parse', upstream], root);
-  if (!(await refExists(root, local))) {
+  if (!(await refExists(root, `refs/heads/${base}`))) {
     await tryGit(['branch', '--end-of-options', base, upstream], root);
-  } else if (await git(['merge-base', '--is-ancestor', local, upstream], root).then(() => true, () => false)) {
-    const checkout = (await listWorktrees(root)).find((w) => w.branch === base);
-    if (!checkout) await tryGit(['update-ref', local, tip, await git(['rev-parse', local], root)], root);
-    else if (await tryGit(['status', '--porcelain', '--untracked-files=no'], checkout.dir)) log('warn', `worktree (fork): ${checkout.dir} has uncommitted changes on ${base}; the local ${base} was not fast-forwarded`);
-    else await git(['merge', '--ff-only', '-q', upstream], checkout.dir).catch((e) => warn(`could not fast-forward ${base}`, e));
   } else {
-    log('warn', `worktree (fork): the local ${base} has commits that are not in upstream/${base}; it was left as it is`);
+    const { moved, reason } = await fastForwardBase({ repo: root, base, target: upstream });
+    if (!moved) log('warn', `worktree (fork): ${reason}; the local ${base} was left as it is`);
   }
   // the fork's default branch only ever carries the original's commits: a fast-forward push, never forced
   await git(['push', '--end-of-options', 'origin', `${upstream}:refs/heads/${base}`], root, { timeout: FETCH_TIMEOUT_MS, auth: true })
@@ -765,6 +778,7 @@ module.exports = {
   git, identityArgs, FETCH_TIMEOUT_MS,
   baseCheckMessage,
   checkLocalBase,
+  compareWithOrigin,
   fastForwardBase,
   isUnder,
   prepareBaseWorktree,

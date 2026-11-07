@@ -306,10 +306,21 @@ function applyProjectHints() {
   if (state.wf && projectId) WorkflowInputs.applyHints($('#drawer'), state.wf.inputs, projectId);
 }
 
+// #805: what run:start's baseCheck says, in the interface's language
+function baseNoticeText({ base, behind, state: where }) {
+  return t(where === 'diverged' ? 'start_drawer.base_diverged' : 'start_drawer.base_behind', { count: behind, base });
+}
+
+// #805: for the screens that do not ask (Docs, Write & Review, AI Arena): the run went on from such a base
+function baseStartedToast(check) {
+  showToast(t('start_drawer.base_started'), baseNoticeText(check));
+}
+
 // #805: nothing started: a local run's base is behind origin or diverged, and the person chooses here. Each choice
 // starts again with the same form; a diverged base has no update (never moved: the Backlog's Update and push).
-function showBaseNotice({ base, behind, canUpdate, state: where }, keepOpen) {
-  const text = t(where === 'diverged' ? 'start_drawer.base_diverged' : 'start_drawer.base_behind', { count: behind, base });
+function showBaseNotice(check, keepOpen) {
+  const { canUpdate } = check;
+  const text = baseNoticeText(check);
   const info = $('#start-info');
   info.innerHTML = `<div role="status" data-testid="start-base-notice"><p class="warn-text">${esc(text)}</p><div class="row">${canUpdate ? `<button type="button" class="btn sm primary" data-testid="start-base-update">${esc(t('start_drawer.base_update'))}</button>` : ''}<button type="button" class="btn sm ghost" data-testid="start-base-continue">${esc(t('start_drawer.base_continue'))}</button></div></div>`;
   const choice = (id, baseChoice) => {
@@ -325,7 +336,7 @@ async function sendStart({ wf, inputs, mock, project, baseChoice }) {
   const attachments = await pastedImages();
   // #262: this run's provider / model / effort per agent (only what differs from the workflow)
   const agentOverrides = window.AgentOverrides?.read($('#wf-agents')) || {};
-  if (state.pipeline) return api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null);
+  if (state.pipeline) return api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null, ...(baseChoice ? [baseChoice] : []));
   return api.startRun({ file: wf.file, workspace: true, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}), ...(Object.keys(agentOverrides).length ? { agentOverrides } : {}), ...(baseChoice ? { baseChoice } : {}) });
 }
 

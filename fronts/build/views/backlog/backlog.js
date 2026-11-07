@@ -667,6 +667,8 @@
       save(`${INPUTS_KEY}${bl.projectId}.${workflow}`, JSON.stringify(inputs || {}));
       bl.selected.clear();
       closeModal('#assign-modal');
+      // #805: the stage is planned, its Start waits for the base notice on the Roadmap
+      if (data?.baseCheck) window.RoadmapBaseNotice.asked(roadmapCtx(), data, { simulated: false, scope: data.stage, live: false });
       showRoadmap(data);
     } catch (err) {
       $b('#assign-error').textContent = errMsg(err);

@@ -179,10 +179,12 @@
     // the run starts from and merges into the project's default branch (main, master, develop…)
     const hints = await api.projectInputHints?.(projectId).catch(() => null);
     if (hints?.defaultBranch) inputs.base_branch = hints.defaultBranch; // an issue's run records it (run.issues)
-    // #805 baseChoice: this screen does not ask about a local base behind origin: the run's log says it
+    // #805 baseChoice: this screen does not ask about a local base behind origin: a toast and the run's log say it
     const payload = { file: FILE, inputs, mock: !!state.simulationOnly, projectId, baseChoice: 'continue', ...(issue ? { issues: [issue] } : {}) };
     const out = await api.startRun(payload); // an ended run of the issue kept commits (#112, #170): from scratch or nothing (null)
-    return !out?.kept ? out : (await keptWorkDialog(out.kept) === 'scratch' ? api.startRun({ ...payload, confirmed: true }) : null);
+    const run = !out?.kept ? out : (await keptWorkDialog(out.kept) === 'scratch' ? await api.startRun({ ...payload, confirmed: true }) : null);
+    if (run?.baseCheck) baseStartedToast(run.baseCheck);
+    return run;
   }
 
   async function startWriter() {

@@ -384,9 +384,24 @@ module.exports = (ctx) => {
     const target = ctx.localRunTarget({ file, inputs, projectId: project.id });
     if (!target) return [];
     const key = `${target.repo}|${target.base}|${mock}`;
-    const choice = baseChoices.get(project.id) ?? project.runDefaults?.base_behind ?? 'continue';
-    if (!checked.has(key)) checked.set(key, ctx.prepareLocalBase({ target, choice, mock }));
+    const chosen = baseChoices.get(project.id);
+    const choice = chosen?.choice ?? project.runDefaults?.base_behind ?? 'continue';
+    if (!checked.has(key)) checked.set(key, chosen?.updated?.get(`${target.repo}|${target.base}`) ?? ctx.prepareLocalBase({ target, choice, mock }));
     return (await checked.get(key)).notices;
+  }
+
+  // #805: the local bases of the items a person's Start would start now, by repository and base
+  function startBases(project, r, stage) {
+    const targets = new Map();
+    for (const item of roadmaps.itemsToStart(r, { stage, runOf: roadmapRun })) {
+      let target = null;
+      try {
+        const wf = loadWorkflow(ctx.projectWorkflowFile(project.id, item.workflow));
+        target = ctx.localRunTarget({ file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder, seedRuns.runDefaultsNow(ctx, project)), projectId: project.id });
+      } catch { /* the item's start reports it */ }
+      if (target) targets.set(`${target.repo}|${target.base}`, target);
+    }
+    return targets;
   }
 
   // #805: the question of a person's Start ({ confirm, baseCheck }) about the local bases of the items it would
@@ -394,21 +409,21 @@ module.exports = (ctx) => {
   async function baseQuestion(id, r, { simulated, stage }) {
     const project = projectOf(id);
     if (!project || project.runDefaults?.base_behind) return null;
-    const { start } = roadmaps.advance({ ...r, state: 'running', pausedBy: null, error: null, scope: stage ? { stage } : null }, { runOf: roadmapRun });
-    const targets = new Map();
-    for (const item of start) {
-      let target = null;
-      try {
-        const wf = loadWorkflow(ctx.projectWorkflowFile(id, item.workflow));
-        target = ctx.localRunTarget({ file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder, seedRuns.runDefaultsNow(ctx, project)), projectId: id });
-      } catch { /* the item's start reports it */ }
-      if (target) targets.set(`${target.repo}|${target.base}`, target);
-    }
-    for (const target of targets.values()) {
+    for (const target of startBases(project, r, stage).values()) {
       const answer = await ctx.prepareLocalBase({ target, ask: true, mock: simulated });
       if (answer.confirm) return answer;
     }
     return null;
+  }
+
+  // #805: a person's "Update the base first", before anything starts: a refusal is their screen's error
+  // (prepareLocalBase throws). → what each base's first run logs (localBaseNotices)
+  async function updateBases(id, r, { simulated, stage }) {
+    const project = projectOf(id);
+    const updated = new Map();
+    if (!project) return updated;
+    for (const [key, target] of startBases(project, r, stage)) updated.set(key, await ctx.prepareLocalBase({ target, choice: 'update', ask: true, mock: simulated }));
+    return updated;
   }
 
   // The owner's notice of a roadmap step that paused or finished the roadmap
@@ -450,7 +465,8 @@ module.exports = (ctx) => {
     }
     const question = ask && !baseChoice ? await baseQuestion(id, r, { simulated: !!simulated, stage }) : null;
     if (question) return question;
-    if (baseChoice) baseChoices.set(id, baseChoice);
+    const updated = ask && baseChoice === 'update' ? await updateBases(id, r, { simulated: !!simulated, stage }) : null;
+    if (baseChoice) baseChoices.set(id, { choice: baseChoice, updated });
     else baseChoices.delete(id);
     // #368: the paused runs first, where they paused (each takes its item's place, adoptResumed), then the new items
     await resumePausedItems(id, stages, !!simulated);

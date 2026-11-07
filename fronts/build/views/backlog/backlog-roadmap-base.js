@@ -1,7 +1,9 @@
 // Backlog › Roadmap: a Start answered by the local base question (#805, roadmap:start's { confirm, baseCheck }),
-// used by backlog-roadmap.js. asked: keeps the Start that was asked about (its mode, scope and "go live") and answers
-// whether it was a question; html: the notice in the header's activity band, with the base's state from baseCheck
-// (the engine's `confirm` is English) and its choices; choose: the same Start again with the choice, the notice gone.
+// used by backlog-roadmap.js and by Assign's Run now (backlog.js). started: the Start itself, → whether it started;
+// asked: keeps the Start that was asked about (its mode, scope and "go live") and answers whether it was a question;
+// html: the notice in the header's activity band, with the base's state from baseCheck (the engine's `confirm` is
+// English) and its choices; choose: the same Start again with the choice, the notice gone (back when that Start is
+// refused, so the person can go on from the base as it is).
 // A diverged base has no update: it is never moved, the notice points to the Backlog's Update and push.
 // Uses app.js globals (api, esc, t).
 (() => {
@@ -10,6 +12,13 @@
   function asked(ctx, answer, start) {
     question = answer?.confirm && answer.baseCheck ? { ...start, projectId: ctx.projectId, baseCheck: answer.baseCheck } : null;
     return !!question;
+  }
+
+  async function started(ctx, simulated, scope, live = false) {
+    const out = await api.startRoadmap(ctx.projectId, simulated, scope);
+    if (asked(ctx, out, { simulated, scope, live })) return false;
+    ctx.setData(out);
+    return true;
   }
 
   function html(data) {
@@ -22,9 +31,15 @@
 
   async function choose(ctx, choice) {
     if (!question) return;
-    const { simulated, scope, live } = question;
+    const waiting = question;
+    const { simulated, scope, live } = waiting;
     question = null;
-    ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope, choice));
+    try {
+      ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope, choice));
+    } catch (err) {
+      question = waiting;
+      throw err;
+    }
     if (live) ctx.setData(await api.setRoadmapLive(ctx.projectId, true));
   }
 
@@ -32,5 +47,6 @@
     asked,
     choose,
     html,
+    started,
   };
 })();

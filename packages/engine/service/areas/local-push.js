@@ -4,13 +4,15 @@
 // push conflict handed to a run of the local workflow. A push records a release candidate (#489).
 // A local run's start (#805): localRunTarget says a run is local, prepareLocalBase compares its base with
 // origin (engine/worktree.js checkLocalBase) and asks, or applies the choice: 'update' fast-forwards, 'continue'
-// goes on from the base as it is; a diverged base is never moved. run:start and the Roadmap call them.
+// goes on from the base as it is; a diverged base is never moved. run:start, pipelines:run and the Roadmap call them.
 
 const path = require('path');
 const DefaultWorkflow = require('@multiagent/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
 const { worktreeTarget } = require('../../engine/run/checkout');
+const { inputValues } = require('../../engine/run/setup');
 const { baseCheckMessage, checkLocalBase, fastForwardBase } = require('../../engine/worktree');
+const { clientError } = require('../common');
 const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
 const localPush = require('../../domains/local/local-push');
@@ -115,7 +117,7 @@ module.exports = (ctx) => {
   // #805: { repo, base } of a run that would start from its local base, or null: a remote or fork run, a
   // workflow without a worktree, one that cannot be read (the start reports that). Synchronous, so a run
   // that is not local still reserves its slot before run:start returns. The inputs as the run gets them:
-  // an old workflow name's, then the workflow's defaults (setup.js resolveInputs).
+  // an old workflow name's, then setup.js inputValues (an input's old name, the workflow's defaults).
   function localRunTarget({ file, inputs, projectId = null, workspaceWorkflow = false }) {
     let found = null; // none: a workflow only the repository declares
     try { found = ctx.workflowPath(file); } catch { /* projectWorkflowFile finds it */ }
@@ -123,16 +125,17 @@ module.exports = (ctx) => {
       const wf = loadWorkflow(workspaceWorkflow ? found.file : ctx.projectWorkflowFile(projectId, file));
       const cfg = wf.orchestrator?.worktree;
       if (!cfg) return null;
-      const given = DefaultWorkflow.aliasInputs(found, inputs) || {};
-      const values = Object.fromEntries(Object.entries(wf.inputs || {}).map(([k, def]) => [k, given[k] === undefined || given[k] === '' ? def.default : given[k]]));
+      const values = inputValues(wf.inputs || {}, DefaultWorkflow.aliasInputs(found, inputs) || {});
       const { repo, base, remote, fork } = worktreeTarget(cfg, { inputs: values });
       return !remote && !fork && repo && base ? { repo, base } : null;
     } catch { return null; }
   }
 
   // #805: the base of a local run before it starts → { confirm, baseCheck } (the person's question: `ask`, no
-  // `choice`, a base behind or diverged; nothing changed) or { notices } for the run's log. A real run's own
-  // worktree logs what it finds (prepareWorktree); a simulated one has none, so its warning comes from here.
+  // `choice`, a base behind or diverged; nothing changed) or { notices, baseCheck? } for the run's log (baseCheck:
+  // it goes on from a base behind or diverged). A real run's own worktree logs what it finds (prepareWorktree); a
+  // simulated one has none, so its warning comes from here. With `ask` a person chose 'update': a refusal is an
+  // error for their screen and nothing starts; with nobody there it is a warning and the run goes on.
   async function prepareLocalBase({ target, choice = null, ask = false, mock = false }) {
     const check = await checkLocalBase(target);
     const said = baseCheckMessage(check);
@@ -140,10 +143,11 @@ module.exports = (ctx) => {
     const warned = mock ? [{ level: 'warn', message: `base: ${said}` }] : [];
     if (check.state === 'fetch-failed') return { notices: warned };
     if (!choice && ask) return { confirm: said, baseCheck: check };
-    if (choice !== 'update' || !check.canUpdate) return { notices: warned };
+    if (choice !== 'update' || !check.canUpdate) return { notices: warned, baseCheck: check };
     const { moved, commit, reason } = await fastForwardBase(target);
     if (moved) return { notices: [{ level: 'info', message: `base: ${target.base} fast-forwarded to origin/${target.base} (${commit.slice(0, 8)})` }] };
-    return { notices: [{ level: 'warn', message: `base: could not fast-forward ${target.base}: ${reason}` }, ...warned] };
+    if (ask) throw clientError(`Could not update the local ${target.base}: ${reason}. Nothing was started.`);
+    return { notices: [{ level: 'warn', message: `base: could not fast-forward ${target.base}: ${reason}` }, ...warned], baseCheck: check };
   }
 
   return {

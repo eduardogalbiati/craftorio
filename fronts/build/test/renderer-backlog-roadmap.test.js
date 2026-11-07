@@ -96,6 +96,7 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, choiceDialo
   vm.runInContext(roadmapModelSrc, sandbox); // the real RoadmapModel (#349): the view's rules
   vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
   vm.runInContext(menuSrc, sandbox); // the shared menu (#748) the stage menu is built with
+  vm.runInContext(fs.readFileSync(pageFileOf('views/backlog/backlog-roadmap-base.js'), 'utf8'), sandbox); // a Start and the base question (#805)
   vm.runInContext(src, sandbox);
   return {
     BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls, liveCalls, showRunCalls, sandbox,

@@ -49,15 +49,21 @@ module.exports = (ctx) => {
   /**
    * Starts a pipeline: its first stage's workflow with the owner's inputs over the stage's fixed ones,
    * the rest of the pipeline as the run's chain. Every gate still waits for the owner.
+   * #805 `ask`: a person is there (pipelines:run), so a first stage's local base behind origin answers the
+   * question { confirm, baseCheck } and nothing starts until `baseChoice` says what to do, as run:start.
    * @returns {{ runId, runDir, pipelineId }} the pipeline run's id is its first run's
    */
-  async function runPipeline({ file, inputs, mock, projectId }) {
+  async function runPipeline({ file, inputs, mock, projectId, baseChoice = null, ask = false }) {
     const p = readPipeline(file, projectId);
     const first = p.stages[0];
+    const given = { ...first.inputs, ...(inputs || {}) };
+    const target = ask ? ctx.localRunTarget({ file: first.workflow, inputs: given, projectId: projectId || null }) : null;
+    const base = target ? await ctx.prepareLocalBase({ target, choice: baseChoice, ask: true, mock: !!mock }) : { notices: [] };
+    if (base.confirm) return base;
     const started = await ctx.startWorkflowRun({
-      file: first.workflow, inputs: { ...first.inputs, ...(inputs || {}) }, mock: !!mock, projectId: projectId || undefined,
+      file: first.workflow, inputs: given, mock: !!mock, projectId: projectId || undefined,
       then: pipelines.pipelineThen(p),
-      notices: [{ level: 'info', message: `Stage 1 of ${p.stages.length} of pipeline "${p.name}" (${p.file}).` }],
+      notices: [{ level: 'info', message: `Stage 1 of ${p.stages.length} of pipeline "${p.name}" (${p.file}).` }, ...base.notices],
     });
     return { ...started, pipelineId: started.runId };
   }

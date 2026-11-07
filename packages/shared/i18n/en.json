@@ -5439,6 +5439,7 @@
   "start_drawer.base_behind": { "one": "{base} is {count} commit behind origin/{base}: a run from it does not have it.", "other": "{base} is {count} commits behind origin/{base}: a run from it does not have them." },
   "start_drawer.base_continue": "Go on from the local base",
   "start_drawer.base_diverged": { "one": "{base} has diverged: {count} commit behind origin/{base}, with commits of its own. It was not moved: resolve it with Update and push on the Backlog.", "other": "{base} has diverged: {count} commits behind origin/{base}, with commits of its own. It was not moved: resolve it with Update and push on the Backlog." },
+  "start_drawer.base_started": "Started from the local base",
   "start_drawer.base_update": "Update the base first",
   "start_drawer.describe_what_needs_to_be_done": "Describe what needs to be done…",
   "start_drawer.error_error": "Error: {error}",

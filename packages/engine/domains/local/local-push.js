@@ -13,6 +13,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
+  compareWithOrigin,
   FETCH_TIMEOUT_MS,
   git,
   identityArgs,
@@ -29,7 +30,6 @@ const refExists = async (repo, ref) => {
   const args = ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`];
   return !!((await tryGit(args, repo)) || (await tryGit(args, repo)));
 };
-const firstLine = (s) => String(s || '').split('\n').find((l) => l.trim()) || '';
 
 // The repository's default branch: origin/HEAD, else the branch checked out, else main.
 async function defaultBase(repo) {
@@ -51,23 +51,19 @@ async function localStatus({ repo, base = null, fetch = true }) {
   const root = await repoRoot(repo);
   if (!root) throw new Error(`${repo || '(no folder)'} is not a git repository.`);
   base = base || await defaultBase(root);
-  const out = { repo: root, base, ahead: 0, behind: 0, commits: [], issues: [], fetchError: null, error: null, checkedAt: new Date().toISOString() };
-  if (fetch) {
-    await git(['fetch', 'origin', base], root, { timeout: FETCH_TIMEOUT_MS, auth: true })
-      .catch((e) => { out.fetchError = firstLine(e.message); });
-  }
+  const { ahead, behind, compared, fetchError } = await compareWithOrigin({ root, base, fetch });
+  const out = { repo: root, base, ahead: 0, behind: 0, commits: [], issues: [], fetchError, error: null, checkedAt: new Date().toISOString() };
   if (!(await refExists(root, `refs/heads/${base}`))) return { ...out, error: `The local branch ${base} does not exist.` };
   if (!(await refExists(root, `refs/remotes/origin/${base}`))) return { ...out, error: `origin/${base} not found: nothing to compare the local ${base} with.` };
+  if (!compared) return { ...out, error: `Could not compare the local ${base} with origin/${base}.` };
   const range = `refs/remotes/origin/${base}..refs/heads/${base}`;
   const log = await git(['log', '--format=%H%x1f%s%x1f%B%x1e', range], root);
   out.commits = log.split('\x1e').map((c) => c.trim()).filter(Boolean).map((c) => {
     const [sha, subject, message] = c.split('\x1f');
     return { sha, subject, issues: closedIssues(message) };
   });
-  out.ahead = out.commits.length;
   out.issues = [...new Set(out.commits.flatMap((c) => c.issues))].sort((a, b) => a - b);
-  out.behind = Number(await git(['rev-list', '--count', `refs/heads/${base}..refs/remotes/origin/${base}`], root)) || 0;
-  return out;
+  return { ...out, ahead, behind };
 }
 
 const REJECTED = /\[rejected\]|\[remote rejected\]|non-fast-forward|fetch first|stale info/i;

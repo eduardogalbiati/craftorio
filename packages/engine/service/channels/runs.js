@@ -114,7 +114,8 @@ module.exports = (ctx) => [
     // #735: an input the dialog left empty takes the project's run default (an empty ui_folders of a
     // backend project included) before the workflow's own (withProjectDefaults).
     // #805 baseChoice: a local run whose base is behind origin or diverged answers the question
-    // { confirm, baseCheck } and starts nothing until it says 'update' or 'continue' (areas/local-push.js).
+    // { confirm, baseCheck } and starts nothing until it says 'update' or 'continue' (areas/local-push.js); a run
+    // that went on from such a base answers its baseCheck too, for the screens that do not ask.
     fn: (payload) => {
       const { file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides, workspace, baseChoice } = requireObject(payload, 'run options');
       const list = Array.isArray(issues) && issues.length
@@ -126,7 +127,11 @@ module.exports = (ctx) => [
       const start = (notices) => ctx.startWorkflowRun({ file, inputs: resolved, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace, notices });
       const target = ctx.localRunTarget({ file, inputs: resolved, projectId: projectId || null, workspaceWorkflow: !!workspace });
       if (!target) return start([]);
-      return ctx.prepareLocalBase({ target, choice: baseChoice || null, ask: true, mock: !!mock }).then((base) => (base.confirm ? base : start(base.notices)));
+      return ctx.prepareLocalBase({ target, choice: baseChoice || null, ask: true, mock: !!mock }).then(async (base) => {
+        if (base.confirm) return base;
+        const started = await start(base.notices);
+        return base.baseCheck ? { ...started, baseCheck: base.baseCheck } : started;
+      });
     },
   },
   // runId: the run to stop (without it, the only run in progress)

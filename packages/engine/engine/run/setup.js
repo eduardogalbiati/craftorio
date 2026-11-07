@@ -31,15 +31,24 @@ function checkRequiredUnless(inputs, out) {
   }
 }
 
+// Each input's value as the run gets it, before its checks: what was given, else its default. Also what says
+// a run is local before it starts (#805, service/areas/local-push.js localRunTarget).
+function inputValues(inputs, raw) {
+  const given = oldValidation(inputs, raw);
+  return Object.fromEntries(Object.entries(inputs).map(([k, def]) => {
+    let v = given[k];
+    // #631: `was: <old name>`, the input's name before a rename (an old run's or a saved pipeline's inputs)
+    if ((v === undefined || v === '') && def.was) v = given[def.was];
+    return [k, v === undefined || v === '' ? def.default : v];
+  }));
+}
+
 const methods = {
   resolveInputs(raw) {
     const out = {};
-    const given = oldValidation(this.wf.inputs || {}, raw);
+    const values = inputValues(this.wf.inputs || {}, raw);
     for (const [k, def] of Object.entries(this.wf.inputs || {})) {
-      let v = given[k];
-      // #631: `was: <old name>`, the input's name before a rename (an old run's or a saved pipeline's inputs)
-      if ((v === undefined || v === '') && def.was) v = given[def.was];
-      if (v === undefined || v === '') v = def.default;
+      let v = values[k];
       if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
       // a yes/no: a boolean, or its text from a form, the CLI or inputs saved before it was one ("true"/"false")
       if (def.type === 'boolean' && v !== undefined) v = toBoolean(k, v);
@@ -224,5 +233,6 @@ const methods = {
 };
 
 module.exports = {
+  inputValues,
   methods,
 };

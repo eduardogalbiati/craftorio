@@ -162,7 +162,9 @@ module.exports = (ctx) => {
     { channel: 'backlog:watching', method: 'backlogWatching', schema: { result: BOOL }, fn: () => ctx.backlogWatching() },
     // Assign a workflow to issues (#446): they are planned in the roadmap as a new last stage; with
     // `runNow` that stage starts on its own (#141). When an ended run kept work for them, the answer is
-    // the kept-work question { confirm, kept, runId } (nothing planned) until `confirmed` (#170).
+    // the kept-work question { confirm, kept, runId } (nothing planned) until `confirmed` (#170). #805: with
+    // `runNow` and a local base behind origin, the Backlog with the question { confirm, baseCheck, stage }: the
+    // stage is planned and roadmap:start with that stage and a baseChoice starts it.
     {
       channel: 'backlog:assign',
       method: 'assignWorkflow',
@@ -184,14 +186,14 @@ module.exports = (ctx) => {
           agentOverrides: nullable(OBJECT),
           runNow: FLAG,
         }, ['projectId']),
-        result: described(BACKLOG, 'The Backlog with the issues planned in a new last roadmap stage, or the kept-work question { confirm, kept, runId } (nothing planned).'),
+        result: described(BACKLOG, 'The Backlog with the issues planned in a new last roadmap stage (with the base question { confirm, baseCheck, stage } when Run now waits for it), or the kept-work question { confirm, kept, runId } (nothing planned).'),
       },
       fn: ({ confirmed, batches: _internal, ...opts }) => {
         if (opts.numbers != null && !Array.isArray(opts.numbers)) throw clientError('Invalid issue numbers: expected a list.');
         if (opts.pipeline != null && opts.pipeline !== '') requireId(opts.pipeline, 'pipeline file');
         const kept = confirmed ? null : ctx.keptWorkForIssues(opts.numbers);
         if (kept) return { confirm: kept.text, kept, runId: kept.runId };
-        return ctx.assignWorkflow({ ...opts, allowKeptWork: !!confirmed });
+        return ctx.assignWorkflow({ ...opts, allowKeptWork: !!confirmed, ask: true });
       },
     },
     // Save to issue (#103): a Write & Review run started from an issue saves its accepted document

@@ -163,7 +163,7 @@ defaults:
 orchestrator:
   provider: claude
   model: claude-sonnet-5
-  # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: no fetch);
+  # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: origin/<base> is fetched only to compare);
   # dependencies linked from the shared cache (#198)
   worktree:
     repo: "{{ inputs.repo_path }}"

@@ -116,9 +116,10 @@ module.exports = (ctx) => {
   // kept-work question with Start from scratch (#170). then: what happens with each run's result when
   // it finishes (#134, chain-model normalizeThen). pipeline: a saved pipeline's file (#135): its first
   // workflow (with its fixed inputs under the owner's) receives the issues and the rest of the
-  // pipeline is each run's then. runNow: the new stage starts on its own (#141's "Run this stage").
+  // pipeline is each run's then. runNow: the new stage starts on its own (#141's "Run this stage"); #805 `ask`: a
+  // person is there (backlog:assign), so a local base behind origin is asked about, as roadmap:start does.
   // `batches` (a chain's produced issues, chain-model queueBatches): [{ numbers, group }], one item each.
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null, agentOverrides = null, runNow = false, batches = null }) {
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null, agentOverrides = null, runNow = false, batches = null, ask = false }) {
     if (pipeline) {
       const first = ctx.pipelineAssign(pipeline, projectId);
       ({ workflow, then } = first);
@@ -160,8 +161,10 @@ module.exports = (ctx) => {
     // every issue is in an item already running or finished (propose keeps those): say so, as the PO's add does
     if (!added) throw clientError(`${dropped.map((n) => `#${n}`).join(', ')} ${dropped.length > 1 ? 'are' : 'is'} already planned in the roadmap: nothing was added.`);
     if (allowKeptWork) for (const x of added.items) ctx.allowKeptWork(project.id, x.id);
-    if (runNow) return ctx.startRoadmap({ projectId: project.id, simulated: false, stage: added.id });
-    return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
+    const answer = runNow ? await ctx.startRoadmap({ projectId: project.id, simulated: false, stage: added.id, ask }) : null;
+    // #805: the stage is planned; its Start waits for the person's answer on the Roadmap (`stage`: the one to start)
+    if (answer?.confirm) return { ...withIssueRuns(backlog.readBacklog(ws.backlog, project.id)), ...answer, stage: added.id };
+    return runNow ? answer : withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
   }
 
   // Issue tracker (#81) and epics (#138): the created issues join the existing epic the analyzer

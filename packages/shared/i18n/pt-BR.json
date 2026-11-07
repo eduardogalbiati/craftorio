@@ -5439,6 +5439,7 @@
   "start_drawer.base_behind": { "one": "{base} está {count} commit atrás de origin/{base}: uma execução a partir dela não tem esse commit.", "other": "{base} está {count} commits atrás de origin/{base}: uma execução a partir dela não tem esses commits." },
   "start_drawer.base_continue": "Seguir da base local",
   "start_drawer.base_diverged": { "one": "{base} divergiu: {count} commit atrás de origin/{base}, com commits próprios. Ela não foi movida: resolva com Atualizar e enviar no Backlog.", "other": "{base} divergiu: {count} commits atrás de origin/{base}, com commits próprios. Ela não foi movida: resolva com Atualizar e enviar no Backlog." },
+  "start_drawer.base_started": "Iniciada a partir da base local",
   "start_drawer.base_update": "Atualizar a base antes",
   "start_drawer.describe_what_needs_to_be_done": "Descreva o que precisa ser feito…",
   "start_drawer.error_error": "Erro: {error}",

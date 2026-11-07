@@ -51,7 +51,7 @@
 #
 # The software-development pipeline without GitHub/GitLab and without a merge approval: no
 # push, no PR/MR, no CI, no preview, no deploy. Each run works in its own git worktree, started
-# from the LOCAL <base> branch (orchestrator.worktree.remote: false: nothing is fetched, so a run
+# from the LOCAL <base> branch (orchestrator.worktree.remote: false: origin/<base> is fetched only to compare, so a run
 # sees the local merges of earlier runs that were never pushed). Once verified, the engine merges
 # the run's branch into the local <base> automatically (`merge: local`): rebased onto it first
 # when it moved, fast-forward only (linear history), never pushed.
