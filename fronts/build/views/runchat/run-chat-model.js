@@ -353,6 +353,23 @@
         state: ev.state || card.state || null, fork: !!ev.fork, error: ev.error || null,
         checkedAt: ev.checked_at || card.checkedAt, lines: lines.length ? lines : card.lines,
       });
+      // #810: Merge / Merge ignoring protection / Close from the read's merge_options, and what blocks the merge
+      // (a failed read keeps the last choices, as it keeps the last lines)
+      card.mergeOptions = ev.merge_options || (ev.error ? card.mergeOptions : null) || null;
+      card.buttons = PrCard.buttons(card.mergeOptions, { fork: card.fork, state: card.state });
+      card.blocked = ev.result ? PrCard.blocked(ev) : card.blocked || '';
+      // the engine repeats a failed merge's message (merge_error) on each read until the next try
+      card.mergeError = ['merged', 'closed'].includes(card.state) ? null : ev.merge_error || card.mergeError || null;
+      this.touch(card);
+    },
+
+    // #810: a merge tried from the card: landed → merged, no buttons; refused → the platform's message, the
+    // card's state and buttons as they were (it never reads as merged)
+    'pr.merge'(ev) {
+      const card = this.prCard;
+      if (!card) return;
+      if (ev.merged) Object.assign(card, { state: 'merged', buttons: [], blocked: '', mergeError: null });
+      else card.mergeError = String(ev.error || '') || t('pr_card.merge_refused');
       this.touch(card);
     },
 

@@ -207,7 +207,7 @@
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       // #809: the PR monitor's card (pr-monitor-card.js), updated in place by each read
-      case 'pr_card': return window.PrMonitorCard.html(it, { item: it.id });
+      case 'pr_card': return window.PrMonitorCard.html(it, { item: it.id, runId: chat.live ? chat.runId : '' }); // #810: its buttons act on a live run only
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
       case 'fail': return `<div class="rc-sys error" data-testid="run-chat-fail" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} ${t('runchat.failed_2')} ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">

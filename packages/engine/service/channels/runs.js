@@ -270,6 +270,29 @@ module.exports = (ctx) => [
     schema: { params: args({ runId: RUN_ID }, ['runId']), result: nullable(OBJECT) },
     fn: (opts) => ctx.runPrState(opts),
   },
+  // #810: merge a live run's PR from its PR monitor card (a merge commit; admin: "merge ignoring protection",
+  // only with that permission): read again first, refused when blocked → { merged, commit?, error?, blockers? }
+  {
+    channel: 'runs:mergePr',
+    method: 'mergeRunPr',
+    params: ['runId', 'admin'],
+    schema: { params: args({ runId: RUN_ID, admin: FLAG }, ['runId']), result: OBJECT },
+    fn: (opts) => {
+      liveRunOf(ctx, opts, 'merge its pull request');
+      return ctx.mergeRunPr(opts);
+    },
+  },
+  // #810: close a live run's PR without merging (after the card's confirmation): the run ends failed → { closed, error? }
+  {
+    channel: 'runs:closePr',
+    method: 'closeRunPr',
+    params: ['runId'],
+    schema: { params: args({ runId: RUN_ID }, ['runId']), result: OBJECT },
+    fn: (opts) => {
+      liveRunOf(ctx, opts, 'close its pull request');
+      return ctx.closeRunPr(opts);
+    },
+  },
   // title: empty (or none) goes back to the default title
   {
     channel: 'runs:setTitle',

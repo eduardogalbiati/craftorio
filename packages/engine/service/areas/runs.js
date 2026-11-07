@@ -42,7 +42,10 @@ const runPr = require('../../domains/run/run-pr');
 const notifier = require('../../domains/workspace/notifications');
 const nightLimits = require('../../domains/night/night-limits');
 const machineProfile = require('../../domains/machine/machine-profile');
-const { num } = require('../common');
+const {
+  clientError,
+  num,
+} = require('../common');
 
 // how often a child run waiting for a slot of Settings › Execution checks again (#175)
 const SLOT_POLL_MS = 1000;
@@ -736,9 +739,9 @@ function prRights(ctx, run, url) {
 function prActions(ctx, liveRun, active) {
   const target = (runId) => {
     const run = liveRun(runId);
-    if (!run) throw new Error(`Run ${runId} is not running in this app window.`);
+    if (!run) throw clientError(`Run ${runId} is not running in this app window.`);
     const at = run.prMonitorTarget?.();
-    if (!at) throw new Error(`Run ${run.runId} is not waiting for its pull/merge request's merge.`);
+    if (!at) throw clientError(`Run ${run.runId} is not waiting for its pull/merge request's merge.`);
     return { run, at };
   };
   const runner = (run) => (cli, args) => (ctx.host?.runPrCommand ? ctx.host.runPrCommand(cli, args) : run.machine.prCommand({ cli, args }));

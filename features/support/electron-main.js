@@ -70,20 +70,43 @@ require.cache[baseHealthArea].exports = (ctx) => {
 if (process.env.MULTIAGENT_E2E_PR_FILE) {
   const engine = path.join(__dirname, '..', '..', 'packages', 'engine');
   const answers = path.resolve(path.dirname(process.env.MULTIAGENT_WORKSPACE), process.env.MULTIAGENT_E2E_PR_FILE);
-  const readPrJson = async () => {
-    const answer = JSON.parse(fs.readFileSync(answers, 'utf8'));
+  const readAnswer = () => JSON.parse(fs.readFileSync(answers, 'utf8'));
+  // #810: the repository's permissions (bypass only with the file's viewerCanBypass) and the signed-in account
+  const readPrJson = async (_cmd, args = []) => {
+    const answer = readAnswer();
     if (answer.fail) throw new Error(answer.fail);
+    if (args[0] === 'api' && args.includes('user')) return { login: 'e2e-owner' };
+    if (args[0] === 'api' && args.some((a) => /^repos\/[^/]+\/[^/]+$/.test(a))) return { permissions: { push: true, admin: answer.viewerCanBypass === true } };
     return answer;
+  };
+  // #810: a merge or close from the app, recorded in prActions; a merge rewrites the PR file to MERGED unless it
+  // has `merge_fail` (then the platform refuses it with that message), a close to CLOSED
+  const writeAnswer = (answer) => {
+    const tmp = `${answers}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(answer));
+    fs.renameSync(tmp, answers);
+  };
+  const runPrCommand = async (_cmd, args = []) => {
+    const action = args[1];
+    const number = Number(args[2]);
+    global.multiagentE2E.prActions.push(action === 'merge'
+      ? { action, number, method: args.includes('--squash') ? 'squash' : args.includes('--rebase') ? 'rebase' : 'merge', admin: args.includes('--admin') }
+      : { action, number });
+    const answer = readAnswer();
+    if (action === 'merge' && answer.merge_fail) return { exit_code: 1, output: answer.merge_fail };
+    if (action === 'merge') writeAnswer({ ...answer, state: 'MERGED', mergeStateStatus: 'UNKNOWN', mergeCommit: { oid: 'e2e810merge0commit' } });
+    else if (action === 'close') writeAnswer({ ...answer, state: 'CLOSED' });
+    return { exit_code: 0, output: '' };
   };
   const serviceFile = require.resolve(path.join(engine, 'service'));
   const service = require(serviceFile);
   require.cache[serviceFile].exports = {
     ...service,
-    createService: (options) => service.createService({ ...options, host: Object.assign(options.host, { readPrJson }) }),
+    createService: (options) => service.createService({ ...options, host: Object.assign(options.host, { readPrJson, runPrCommand }) }),
   };
   const backlog = require(path.join(engine, 'domains', 'backlog', 'backlog'));
   backlog.syncBacklog = async ({ dir, project }) => backlog.readBacklog(dir, project.id);
-  global.multiagentE2E = { ...(global.multiagentE2E || {}), backlogSyncs: 0 };
+  global.multiagentE2E = { ...(global.multiagentE2E || {}), backlogSyncs: 0, prActions: [] };
   const simulated = ipcMain.handle;
   ipcMain.handle = (channel, fn) => {
     if (channel !== 'backlog:sync') return simulated(channel, fn);

@@ -216,10 +216,16 @@ module.exports = (ctx) => {
     // a run this app does not run (another app's, read from disk): its last pr.monitor event (runs.js prMonitor)
     const card = live ? live.prMonitorCard : r.prMonitor;
     const error = live ? live.prMonitorError : r.prMonitor?.error;
-    return { atMergeGate: true, pr: card ? { ...pr, ...monitorCardOf(card, error) } : pr };
+    // #810: the last merge from the app that did not land (live: the run's; from disk: the last read's merge_error)
+    const mergeError = live ? live.prMergeError : r.prMonitor?.merge_error;
+    return { atMergeGate: true, pr: card ? { ...pr, ...monitorCardOf(card, error, mergeError) } : pr };
   }
-  // #809: the engine's card (pr.monitor's fields) on a roadmap item's PR, with why its last read failed
-  const monitorCardOf = (c, error) => ({ ci: c.ci, review: c.review, conflicts: c.conflicts, comments: c.comments, result: c.result, checkedAt: c.checked_at || null, error: error || null });
+  // #809: the engine's card (pr.monitor's fields) on a roadmap item's PR, with why its last read failed;
+  // #810: with its merge choices (Merge, Merge ignoring protection, Close) and a failed merge's message
+  const monitorCardOf = (c, error, mergeError) => ({
+    ci: c.ci, review: c.review, conflicts: c.conflicts, comments: c.comments, result: c.result, checkedAt: c.checked_at || null, error: error || null,
+    mergeOptions: c.merge_options || null, ...(mergeError ? { mergeError } : {}),
+  });
 
   // #797: reads the PRs a project's items wait for (`maxAgeMs`: 0 reads them again, else the cache's 5
   // minutes keep it from polling) → the PRs read. A failed read comes back `unknown`, never an error.

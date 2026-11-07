@@ -680,6 +680,7 @@ const RUN_EVENT_REDUCERS = {
   },
   'action.executed': (v, ev) => orch(ev, `$ ${ev.command} ${ev.skipped ? '(not executed — simulation)' : `→ exit ${ev.exit_code}`}`),
   'pr.monitor': (v, ev) => { v.prMonitor = ev; }, // #809: the PR monitor's last read (pr-monitor-card.js)
+  'pr.merge': (v, ev) => { v.prMerge = ev; }, // #810: the last merge tried from the card (pr-monitor-card.js)
   'local_preview.started': (v, ev) => {
     v.preview = { status: 'running', approval: ev.approval_id, url: ev.url || null, command: ev.command };
     orch(ev, `local preview started at ${ev.step_id}: ${ev.command} in ${ev.dir}`);
