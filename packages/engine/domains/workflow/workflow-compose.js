@@ -227,7 +227,12 @@ const FORK_INPUTS = {
   depends_on: { label: 'Depends on', type: 'string', default: '', description: 'The earlier pull request this one depends on (e.g. #12), written in the pull request\'s body.' },
   parent_pr: { label: 'Parent pull request', type: 'string', default: '', description: 'The URL of the earlier pull request to wait for: the pull request opens once it merged upstream, rebased onto the synced default branch.' },
 };
-const modeInputs = (s) => (s.mode === 'fork' ? FORK_INPUTS : {});
+// #807 Stack: a Remote set takes the branch and the PR of the roadmap stage it stacks on (the roadmap sets them)
+const STACK_INPUTS = {
+  parent_branch: { label: 'Parent branch', type: 'string', default: '', description: 'The branch of the previous roadmap stage this run stacks on: the run starts from it and its pull request targets it. Empty: the base branch.' },
+  parent_pr: { label: 'Parent pull request', type: 'string', default: '', description: 'The URL of the pull request this one builds on: the run follows its new commits and, once it merged, moves its pull request\'s base to the base branch.' },
+};
+const modeInputs = (s) => (s.mode === 'fork' ? FORK_INPUTS : s.mode === 'local' ? {} : STACK_INPUTS);
 const withE2e = (s) => s.tests === 'unit+e2e' && !!s.e2eCommand;
 
 // the project's E2E command as a step, after the unit suite (#630: tests unit+e2e)

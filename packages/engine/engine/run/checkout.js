@@ -65,8 +65,9 @@ const methods = {
     const cfg = this.wf.orchestrator?.worktree;
     if (!cfg) return;
     const { repo, base, remote, fork } = worktreeTarget(cfg, this.ctx);
-    // #738: a dependent roadmap item (inputs.parent_branch) starts from its parent's branch on the fork
-    const parentBranch = fork ? String(this.ctx.inputs?.parent_branch ?? '').trim() || undefined : undefined;
+    // #738: a dependent roadmap item (inputs.parent_branch) starts from its parent's branch on the fork;
+    // #807: a stacked one (Remote mode) from its parent's branch on origin
+    const parentBranch = fork || remote ? String(this.ctx.inputs?.parent_branch ?? '').trim() || undefined : undefined;
     this.ctx.worktree_dir = repo;
     const log = (level, message) => this.emitEvent('log', { level, message });
     if (!this.worktreesDir) {

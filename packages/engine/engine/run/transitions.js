@@ -16,7 +16,7 @@ const { execFileSync } = require('child_process');
 const { sleep } = require('../providers');
 const { parseTarget } = require('../probes');
 const mergeQueue = require('../merge-queue');
-const { restackOnBase } = require('../worktree');
+const { restackOnBase, restackOnParent } = require('../worktree');
 const { evalExpr, render } = require('./templates');
 const { isLooping, loopConfig, parseDuration } = require('./load');
 const { decisionKey, validateSchema } = require('./outputs');
@@ -156,7 +156,10 @@ const methods = {
     if (st.delegate_result || st.supervisorNote || !st.output || st.output.error) return null;
     const stats = (this.probeStats[step.id] ??= { polls: 0, agent_calls: 0, completed: 0, errors: 0 });
     const parent = this.parentToWaitFor(w, st);
-    if (parent) return this.pollParent(step, st, parent, stats);
+    if (parent && !this.stackedRun()) return this.pollParent(step, st, parent, stats);
+    // #807: a stacked run follows its parent, then its own PR is checked (undefined: go on to the probe)
+    const stacked = parent ? await this.followStackParent(step, st, parent, stats) : undefined;
+    if (stacked !== undefined) return stacked;
     const target = render(w.target, { ...this.ctx, output: st.output }).trim();
     const r = await this.probeOrError(step, stats, { probe: w.probe, target, quota: this.actionsQuota }, 'the check could not run', target ? '' : `${w.probe}: no target yet (${w.target} is empty)`);
     const state = this.comparedWithLastTurn(w, st, r);
@@ -178,6 +181,9 @@ const methods = {
     // CI cannot run at all (the Actions quota ran out): no agent turn or fix round helps
     else if (state === 'quota_exhausted' && w.infra_output) output = finishWith('infra_output');
     if (output) action = 'output';
+    // #807: the engine rebased the stacked branch onto its parent's new commits: the agent pushes it
+    if (st.restacked && action !== 'output') { action = 'agent'; r.detail = `${st.restacked}; ${r.detail || state}`; }
+    st.restacked = null;
     if (state === 'none' && action === 'agent') r.detail = `${r.detail}, ${grace} after your last turn`;
     st.probePolls = (st.probePolls || 0) + 1;
     this.emitEvent('step.probe', {
@@ -262,11 +268,85 @@ const methods = {
     if (!wt?.dir) return `the parent PR/MR ${parent} merged: rebase the branch onto the synced base, ${then}`;
     const log = (level, message) => this.emitEvent('log', { level, step_id: step.id, message });
     try {
-      const r = await restackOnBase({ repo: wt.repo, dir: wt.workDir || wt.dir, base: this.ctx.inputs?.base_branch || wt.base, parentBranch: this.ctx.inputs?.parent_branch, log });
+      const r = await restackOnBase({ repo: wt.repo, dir: wt.workDir || wt.dir, base: this.ctx.inputs?.base_branch || wt.base, parentBranch: this.ctx.inputs?.parent_branch, fork: true, log });
       return `the parent PR/MR ${parent} merged: the engine rebased the branch onto ${r.base} (now at ${r.commit.slice(0, 8)}); ${then}`;
     } catch (e) {
       return `the parent PR/MR ${parent} merged, but the engine could not rebase the branch (${String(e?.message || e).split('\n')[0]}): rebase it onto the synced base yourself, then ${then}`;
     }
+  },
+
+  // #807 a stacked run (a roadmap item stacked on the stage before: inputs.parent_branch outside Fork + PR):
+  // its PR targets the parent's branch, so it never waits for the parent's merge to open it
+  stackedRun() {
+    const inputs = this.ctx.inputs || {};
+    return !!String(inputs.parent_branch ?? '').trim() && inputs.mode !== 'fork';
+  },
+
+  // #807 wait.parent of a stacked run, before its own probe: parent open (or unreadable) → the branch is
+  // rebased onto the parent's new commits (st.restacked: the agent pushes it), undefined; a conflict →
+  // a gate (continue by hand, or stop). Parent merged → rebased onto origin/<base> and the agent moves
+  // its PR's base there (null). Parent closed without merge → a gate: rebase onto the base, or stop.
+  async followStackParent(step, st, parent, stats) {
+    const r = await this.probeOrError(step, stats, { probe: 'pr_checks', target: parent }, 'the parent PR/MR could not be read');
+    const ended = ['merged', 'closed'].includes(r.state);
+    st.probePolls = (st.probePolls || 0) + 1;
+    this.emitEvent('step.probe', {
+      step_id: step.id, probe: 'parent', target: parent, state: r.state, detail: r.detail || r.state, action: ended ? (r.state === 'merged' ? 'agent' : 'gate') : 'follow', iteration: st.iteration, polls: st.probePolls,
+    });
+    const inputs = this.ctx.inputs || {};
+    const base = inputs.base_branch || this.worktree?.base || 'main';
+    const parentBranch = String(inputs.parent_branch).trim();
+    const wt = this.worktree;
+    const log = (level, message) => this.emitEvent('log', { level, step_id: step.id, message });
+    const own = String(st.output?.pr_url || st.output?.pr_number || '').trim();
+    const retarget = `move its PR/MR's base to ${base} (\`gh pr edit ${own || '<its PR>'} --base ${base}\`, \`glab mr update ${own || '<its MR>'} --target-branch ${base}\`) and push the branch (\`git push --force-with-lease origin HEAD\`)`;
+    const onBase = async (why) => {
+      st.parentMerged = true;
+      stats.agent_calls++;
+      let done = `rebase the branch onto origin/${base} yourself (only the commits after origin/${parentBranch})`;
+      if (wt?.dir) {
+        try {
+          const moved = await restackOnBase({ repo: wt.repo, dir: wt.workDir || wt.dir, base, parentBranch, fork: false, log });
+          done = `the engine rebased the branch onto ${moved.base} (now at ${moved.commit.slice(0, 8)})`;
+        } catch (e) { done = `the engine could not rebase the branch (${String(e?.message || e).split('\n')[0]}): ${done}`; }
+      }
+      st.probeNews = { detail: `${why}: ${done}; ${retarget}`, polls: st.probePolls };
+      return null;
+    };
+    if (r.state === 'merged') return onBase(`the parent PR/MR ${parent} merged into ${base}`);
+    if (r.state === 'closed') {
+      const { answer } = await this.requestApproval({
+        id: `${step.id}:parent_closed`, raw: true,
+        message: `The parent PR/MR ${parent} was closed without merging: this stacked run does not go on on its branch (${parentBranch}).\n\nRebase onto ${base} (its PR/MR then targets ${base}), or stop the run (its branch keeps the work).`,
+        choices: [{ id: 'rebase_onto_base', label: `Rebase onto ${base}` }, { id: 'stop', label: 'Stop the run' }],
+      });
+      if (answer === 'rebase_onto_base') return onBase(`the parent PR/MR ${parent} was closed and you chose to rebase onto ${base}`);
+      return this.stopStacked('the parent PR/MR was closed');
+    }
+    if (!wt?.dir) return undefined;
+    try {
+      const moved = await restackOnParent({ repo: wt.repo, dir: wt.workDir || wt.dir, parentBranch, log });
+      if (moved.moved) st.restacked = `the parent branch ${parentBranch} got new commits: the engine rebased the branch onto ${moved.base} (now at ${moved.commit.slice(0, 8)}); push it (\`git push --force-with-lease origin HEAD\`)`;
+    } catch (e) {
+      const why = String(e?.message || e).split('\n')[0];
+      const { answer } = await this.requestApproval({
+        id: `${step.id}:restack_conflict`, raw: true,
+        message: `This stacked run could not rebase its branch onto the new commits of ${parentBranch} (${parent}): ${why}\n\nContinue to let the agent rebase it by hand, or stop the run (its branch keeps the work).`,
+        choices: [{ id: 'continue', label: 'Continue (the agent rebases)' }, { id: 'stop', label: 'Stop the run' }],
+      });
+      if (answer !== 'continue') return this.stopStacked('its branch could not be rebased onto its parent');
+      stats.agent_calls++;
+      st.probeNews = { detail: `the engine could not rebase the branch onto origin/${parentBranch} (${why}): rebase it yourself, resolve the conflicts and push it`, polls: st.probePolls };
+      return null;
+    }
+    return undefined;
+  },
+
+  // #807: a stacked run stopped at its gate: cancelled, its branch keeps the work (as costs.js contextGate)
+  stopStacked(why) {
+    this.emitEvent('log', { level: 'info', message: `stack: stopped (${why})` });
+    this.stop?.();
+    throw new Error('Cancelled');
   },
 
   // After an agent turn of a `wait:` step: the grace period for "no check yet" starts again, and

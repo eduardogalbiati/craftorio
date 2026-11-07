@@ -4,6 +4,7 @@
 // A run that succeeded with a PR a person merges on the platform (#797): `run.pr` is that PR, and the
 // item waits for its merge (`waiting_merge`, derived, never stored) until the service's read says it
 // merged (`run.merged`, the item is done with `run.mergedCommit`) or closed (`run.prClosed`, it failed).
+// #807: so does a run still waiting at its PR's review gate (pr_review), `waiting` kept for Move on (#395).
 
 const fs = require('fs');
 const path = require('path');
@@ -39,6 +40,8 @@ function itemStatus(item, runOf) {
   if (!item.runId) return item.error ? { status: 'failed', error: item.error } : { status: 'planned', error: null };
   const run = runOf(item.runId);
   if (!run) return { status: 'failed', error: `Run ${item.runId} no longer exists.` };
+  // #807: a run waiting at its PR's review gate (`atMergeGate`, the service's roadmapRun) waits for that merge too
+  if (['pending', 'running'].includes(run.status) && run.atMergeGate && run.pr) return { status: 'waiting_merge', error: null, pr: run.pr, waiting: true };
   if (['pending', 'running'].includes(run.status)) return { status: 'running', error: null, ...(run.waiting ? { waiting: true } : {}) };
   if (run.status === 'paused') return { status: 'paused', error: null };
   if (run.status === 'success' && run.merged) return { status: 'done', error: null, ...mergedOf(run) };

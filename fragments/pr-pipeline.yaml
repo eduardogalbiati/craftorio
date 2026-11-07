@@ -10,6 +10,8 @@
 # original (`upstream`), never a push to upstream; the PR follows CONTRIBUTING.md and the PR template,
 # with `Depends on <inputs.depends_on>` for a dependent roadmap item. With inputs.parent_pr (wait and
 # rebase) ci's wait.parent makes the engine wait for that PR to merge before the PR opens, rebased.
+# #807 Stack (Remote mode, inputs.parent_branch set by the roadmap): the PR opens at once against the previous
+# stage's branch, naming its PR (inputs.parent_pr); wait.parent then follows it (transitions.js followStackParent).
 
 steps:
   ci:
@@ -55,11 +57,20 @@ steps:
          line `Depends on {{ inputs.depends_on }}`{% endif %}. Follow the repository's CONTRIBUTING.md (or
          .github/CONTRIBUTING.md): its commit format and required checks; fill the sections of its pull
          request template (.github/pull_request_template.md or PULL_REQUEST_TEMPLATE) when it has one.
+      {% else %}{% if inputs.parent_branch %}Stacked (#807): this branch builds on the pull request {{ inputs.parent_pr }} of the previous
+      roadmap stage (its branch `{{ inputs.parent_branch }}`): its PR/MR targets that branch, not `{{ inputs.base_branch }}`.
+      1. Push the branch to the remote.
+      2. Make sure a PR/MR to the parent's branch is open (reuse it if it exists; else
+         `gh pr create --base {{ inputs.parent_branch }} --head {{ steps.develop.output.branch }}`, on GitLab
+         `glab mr create --target-branch {{ inputs.parent_branch }}`, with a short title and this summary:
+         {{ steps.develop.output.summary }}), its body saying `Builds on {{ inputs.parent_pr }}`{% if inputs.issue %} and
+         closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}. Once the parent merges, the
+         orchestrator rebases the branch onto `{{ inputs.base_branch }}` and tells you to move the PR/MR's base there.
       {% else %}1. Push the branch to the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
          title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
-      {% endif %}3. Check its mergeability first: a conflict with the base never starts CI, answer ci_status:
+      {% endif %}{% endif %}3. Check its mergeability first: a conflict with the base never starts CI, answer ci_status:
          failed with a failure_log saying so.
       4. Check its CI: running or not started → pending; a failure → failed with failure_log (job,
          step, error, probable cause); everything passed → success; CI that cannot run for account
@@ -133,11 +144,20 @@ steps:
          line `Depends on {{ inputs.depends_on }}`{% endif %}. Follow the repository's CONTRIBUTING.md (or
          .github/CONTRIBUTING.md): its commit format and required checks; fill the sections of its pull
          request template (.github/pull_request_template.md or PULL_REQUEST_TEMPLATE) when it has one.
+      {% else %}{% if inputs.parent_branch %}Stacked (#807): this branch builds on the pull request {{ inputs.parent_pr }} of the previous
+      roadmap stage (its branch `{{ inputs.parent_branch }}`): its PR/MR targets that branch, not `{{ inputs.base_branch }}`.
+      1. Push the branch to the remote.
+      2. Make sure a PR/MR to the parent's branch is open (reuse it if it exists; else
+         `gh pr create --base {{ inputs.parent_branch }} --head {{ steps.develop.output.branch }}`, on GitLab
+         `glab mr create --target-branch {{ inputs.parent_branch }}`, with a short title and this summary:
+         {{ steps.develop.output.summary }}), its body saying `Builds on {{ inputs.parent_pr }}`{% if inputs.issue %} and
+         closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}. Once the parent merges, the
+         orchestrator rebases the branch onto `{{ inputs.base_branch }}` and tells you to move the PR/MR's base there.
       {% else %}1. Push the branch to the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
          title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
-      {% endif %}3. Check its mergeability: a conflict with the base → conflict: true with what conflicts in
+      {% endif %}{% endif %}3. Check its mergeability: a conflict with the base → conflict: true with what conflicts in
          `detail`. The project's CI does not run on pull requests: do not wait for checks.
       pr_number is the PR number (GitHub) or the MR iid (GitLab).
     output_schema:

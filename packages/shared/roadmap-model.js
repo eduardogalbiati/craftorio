@@ -15,6 +15,8 @@
 //   park                         the item's "Move on" (#395): its run waits at a human gate, the roadmap goes on
 //   parkStage                    the stage's "Move on from this stage" (#395): parks its items at a gate, skips the planned
 //   removeStage                  the stage's "Remove from roadmap" (#748): never while one of its items runs or waits at a gate
+//   stack                        the item that waits for its PR's merge (#807): the next stage starts from its branch
+//                                (never in Fork + PR mode, at most MAX_STACK_DEPTH PRs); mergeWait is the stage's notice
 // nextAfterSkip (#804): what a skip of the item that paused the roadmap would start.
 // The Roadmap view's rules: releaseView (Planned: the latest release only, #425), the date ranges (SINCE, inRange) and its pages (pageOf).
 // Any load order: read only when a screen draws.
@@ -34,13 +36,16 @@
   const FINISHED = new Set(['done', 'parked', 'skipped']);
   // an item whose run still changes (#491): its live run is in the light backlog:state
   const LIVE_ITEM_STATES = new Set(['parked', 'running']);
-  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'park', 'parkStage', 'pause', 'pauseStage', 'removeStage', 'resume', 'retry', 'skip', 'start', 'stop'];
+  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'park', 'parkStage', 'pause', 'pauseStage', 'removeStage', 'resume', 'retry', 'skip', 'stack', 'start', 'stop'];
+  // #807: a stack (items starting from the branch of the one before, `stacksOn`) holds at most this many PRs
+  const MAX_STACK_DEPTH = 3;
 
   // #395: a parked item (`parked`: { at, gate }) whose gate was answered later and whose run then
   // failed is finished too: the roadmap moved past it, so it never holds its stage or pauses the roadmap
   const isFinished = (item) => !!item && (FINISHED.has(item.status) || (item.status === 'failed' && !!item.parked));
   /** #395: an item whose run waits at a human gate (live: running and waiting; interrupted by a closed app: its run waits). */
-  const atGate = (item) => !!item && ((item.status === 'running' && !!item.waiting) || (item.status === 'failed' && !!item.runId && !!item.run?.atGate));
+  // #807: an item waiting for its PR's merge at the PR's review gate (`waiting`) is at a gate too
+  const atGate = (item) => !!item && ((['running', 'waiting_merge'].includes(item.status) && !!item.waiting) || (item.status === 'failed' && !!item.runId && !!item.run?.atGate));
   const stagesOf = (roadmap) => (roadmap && Array.isArray(roadmap.stages) ? roadmap.stages : []);
   const itemsOf = (stage) => (stage && Array.isArray(stage.items) ? stage.items : []);
   /**
@@ -263,7 +268,7 @@
   function itemActions(r, item) {
     if (!item) {
       const none = no(t('roadmap.no_item_given'));
-      return { edit: none, move: none, park: none, retry: none, skip: none };
+      return { edit: none, move: none, park: none, retry: none, skip: none, stack: none };
     }
     // only planned or failed items change: a running, done or skipped item keeps what its run used
     const editable = item.status === 'planned' || item.status === 'failed';
@@ -277,7 +282,46 @@
     const park = atGate(item) ? yes() : no(t(item.status === 'parked' ? LOCKED.parked
       : item.status === 'running' ? 'roadmap.item_in_turn' : 'roadmap.item_not_at_gate'));
     // #797: its run succeeded, nothing to retry; the owner may still go on without the merge
-    return { edit: locked, move: locked, park, retry: fix, skip: item.status === 'waiting_merge' ? yes() : fix };
+    return { edit: locked, move: locked, park, retry: fix, skip: item.status === 'waiting_merge' ? yes() : fix, stack: stackAction(r, item) };
+  }
+
+  /** #807: an item of any stage, by id. */
+  const findItem = (r, id) => stagesOf(r).flatMap(itemsOf).find((x) => x.id === id) || null;
+  /** #807: how many PRs the stack ending at that item holds: 1, and 1 more per `stacksOn` below it. */
+  function stackDepth(r, itemId) {
+    const seen = new Set();
+    let x = findItem(r, itemId);
+    let depth = 0;
+    while (x && !seen.has(x.id)) {
+      seen.add(x.id);
+      depth += 1;
+      x = x.stacksOn ? findItem(r, x.stacksOn) : null;
+    }
+    return Math.max(depth, 1);
+  }
+  // #807: Stack only on an item whose run waits for its PR's merge, outside Fork + PR, under the depth limit
+  function stackAction(r, item) {
+    if (item.status !== 'waiting_merge' || !item.pr) return no(t('roadmap.stack_not_waiting'));
+    if (item.inputs?.mode === 'fork') return no(t('roadmap.stack_fork'));
+    if (stackDepth(r, item.id) >= MAX_STACK_DEPTH) return no(t('roadmap.stack_depth_limit', { max: MAX_STACK_DEPTH }));
+    return yes();
+  }
+  /**
+   * #807: the notice under stage `s` when one of its items waits for its PR's merge (none in Local mode):
+   * { itemId, pr: { number, url }, moveOn, stack, overlap }; overlap: the sorted files the next stage's
+   * items expect to change that this stage's items do too (filesOf(item), default item.files).
+   */
+  function mergeWait(r, s, { filesOf = (x) => x.files || [] } = {}) {
+    const list = stagesOf(r);
+    const stage = list[s];
+    if (!stage || isRelease(stage)) return null;
+    const item = itemsOf(stage).find((x) => x.status === 'waiting_merge' && x.pr);
+    if (!item || item.inputs?.mode === 'local') return null;
+    const next = list.slice(s + 1).find((x) => !isRelease(x));
+    const mine = new Set(itemsOf(stage).flatMap((x) => filesOf(x) || []));
+    const overlap = [...new Set(itemsOf(next).flatMap((x) => filesOf(x) || []))].filter((f) => mine.has(f)).sort();
+    const acts = itemActions(r, item);
+    return { itemId: item.id, pr: { number: item.pr.number, url: item.pr.url }, moveOn: acts.skip, stack: acts.stack, overlap };
   }
 
   /**
@@ -488,6 +532,7 @@
     FINISHED,
     ITEM_STATES,
     LIVE_ITEM_STATES,
+    MAX_STACK_DEPTH,
     SINCE,
     STATES,
     allowedActions,
@@ -508,6 +553,7 @@
     isRelease,
     itemIssues,
     itemRuns,
+    mergeWait,
     mergeWaits,
     moveIssue,
     moveRelease,
@@ -523,6 +569,7 @@
     releaseView,
     runningStage,
     scopedStage,
+    stackDepth,
     stageActualUsd,
     stageCount,
     stageNumber,

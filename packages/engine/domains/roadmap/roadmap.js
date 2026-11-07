@@ -51,6 +51,7 @@
 // the owner's to answer. Answered later, the item takes the run's outcome (done, or failed without
 // pausing the roadmap). A later stage's runs start without the parked change. A stage put before the
 // running one waits for it (#697, `waitsFor`): nothing of it starts until that stage is finished.
+// Stack (#807, roadmap-stack.js): the next stage starts from the branch of an item that waits for its PR's merge.
 // Main stays green (#405, packages/engine/domains/project/base-health.js): a red test on the base puts a fix item in a new stage before the current one (`insertFrontStage`).
 // The waiting refactor stage (#435): a disabled stage marked `waiting` (Send to Refactor's items,
 // fronts/analyser/engine/channels/refactor.js) stays last: `propose` adds its stages before it, and so does
@@ -86,6 +87,12 @@ const {
   dependsOnField,
   forgetGoneParents,
 } = require('./roadmap-dependency');
+const {
+  stackBase,
+  stackOn,
+  stackedStage,
+  stacksOnField,
+} = require('./roadmap-stack');
 const {
   mergedPullRequest,
   withStatus,
@@ -285,7 +292,7 @@ function cleanItem(raw, known, previous) {
     inputs: Object.fromEntries(Object.entries(raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}).filter(([, v]) => typeof v !== 'string' || v.trim())), mock: !!raw.mock, // #785: never a blank input
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(source ? { source } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
     // #738: the earlier item this one builds on (a split implementation, roadmap-dependency.js)
-    ...(agentOverrides ? { agentOverrides } : {}), ...dependsOnField(raw, old),
+    ...(agentOverrides ? { agentOverrides } : {}), ...dependsOnField(raw, old), ...stacksOnField(raw, old), // #807: the item it stacks on
     ...issues[0], issues,
     ...runState(state),
   };
@@ -612,12 +619,15 @@ function setLive(dir, projectId, on, { by = 'owner', now = new Date() } = {}) {
 // env, with the gate's name in `gate`): the item is parked (finished for its stage) and the run is
 // left as it is, still waiting at the same gate for the owner.
 function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date(), keepPaused = false } = {}) {
-  if (!['park', 'retry', 'skip'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
+  if (!['park', 'retry', 'skip', 'stack'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
   return updateRoadmap(dir, projectId, (r) => {
     const item = findItem(r, itemId);
     if (!item) throw new Error('This roadmap item no longer exists.');
     if (action === 'park') return parkItems(r, new Set([itemId]), gateOf(item, runOf), now);
-    if (runIsAlive(item, alive)) {
+    if (action === 'stack') return stackOn(r, itemId, runOf); // #807
+    // #807: Move on past an item waiting for its PR's merge, also while its run waits at the PR's review gate
+    const waitsMerge = action === 'skip' && !!runOf && findItem(withStatus(r, runOf), itemId)?.status === 'waiting_merge';
+    if (!waitsMerge && runIsAlive(item, alive)) {
       throw new Error(action === 'retry' && item.runId ? `Run ${item.runId} is still running.` : 'Its run is in progress: stop the run first.');
     }
     const status = action === 'retry' ? 'planned' : 'skipped';
@@ -860,7 +870,10 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true, 
     const line = pendingRelease(r, at);
     if (line) return { roadmap: r, start: [], release: { id: line.id, name: line.name } };
     if (at < 0) return r.live ? { roadmap: r, start: [], refill: true } : { roadmap: finished, start: [] };
-    const step = stageStep(r, waitsFor(r) >= 0 ? waitsFor(r) : at, { closed, canStart, now }); // #697: a stage put before the running one waits: only that one moves on
+    let s = waitsFor(r) >= 0 ? waitsFor(r) : at; // #697: a stage put before the running one waits: only that one moves on
+    let step = stageStep(r, s, { closed, canStart, now });
+    // #807: a stage left waiting for merges lets the stage stacked on it go on
+    while (step && !step.start.length && step.roadmap === r && (s = stackedStage(r, s)) >= 0) step = stageStep(r, s, { closed, canStart, now }) || step;
     if (step) return step;
   }
 }
@@ -958,6 +971,7 @@ module.exports = {
   setState,
   skipClosed,
   skipItem,
+  stackBase,
   stagePauseLine,
   takeRelease,
   testsLater,

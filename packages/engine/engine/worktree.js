@@ -271,29 +271,73 @@ async function forkBaseRef(root, base, parentBranch, log) {
   return synced || baseRef(root, base, log, { remote: true });
 }
 
-/**
- * #738 "wait and rebase": once a dependent item's parent merged upstream, the run's branch (its commits
- * after origin/<parentBranch>) is rebased onto the synced upstream/<base>; the branch keeps its name. A
- * conflict aborts the rebase and throws, leaving the branch as it was. Nothing is pushed to upstream.
- * @returns {Promise<{ base: string, commit: string }>} the ref rebased onto and the new HEAD
- */
-async function restackOnBase({ repo, dir, base, parentBranch, log = () => {} }) {
-  checkBase(base);
-  const root = await repoRoot(repo);
-  if (!root) throw new Error(`restack: ${repo} is not a git repository.`);
-  const onto = await syncForkBase(root, base, log);
-  if (!onto) throw new Error(`restack: upstream/${base} was not found.`);
-  const parent = parentBranch && validBranchName(parentBranch) && await refExists(root, `refs/remotes/origin/${parentBranch}`) ? `origin/${parentBranch}` : null;
+// #807: the start point of a stacked Remote run: origin/<parentBranch> (the previous stage's branch), fetched;
+// a missing one warns and starts from the base (baseRef)
+async function stackRef(root, base, parentBranch, log) {
+  if (validBranchName(parentBranch)) {
+    await git(['fetch', '--end-of-options', 'origin', parentBranch], root, { timeout: FETCH_TIMEOUT_MS, auth: true })
+      .catch((e) => log('warn', `worktree: could not fetch origin/${parentBranch} (${e.message.split('\n')[0]})`));
+    if (await refExists(root, `refs/remotes/origin/${parentBranch}`)) return `origin/${parentBranch}`;
+  }
+  log('warn', `worktree: the parent branch "${parentBranch}" is not on origin; starting from the base`);
+  return baseRef(root, base, log, { remote: true });
+}
+
+// a rebase of the run's branch (`args` after `rebase`); a conflict aborts it and throws, the branch left as it was
+async function rebaseOrAbort(root, dir, args, onto) {
   try {
-    await git([...(await identityArgs(root)), 'rebase', ...(parent ? ['--onto', onto, parent] : [onto])], dir);
+    await git([...(await identityArgs(root)), 'rebase', ...args], dir);
   } catch (e) {
     const files = String(await tryGit(['diff', '--name-only', '--diff-filter=U'], dir) || '').split('\n').filter(Boolean);
     if (await rebaseInProgress(dir)) await tryGit(['rebase', '--abort'], dir);
     throw new Error(`restack: the branch conflicts with ${onto}${files.length ? ` in ${files.join(', ')}` : ''}; it was left as it was (${String(e.message).split('\n')[0]}).`);
   }
-  const commit = await git(['rev-parse', 'HEAD'], dir);
+  return git(['rev-parse', 'HEAD'], dir);
+}
+
+/**
+ * #738 "wait and rebase": once a dependent item's parent merged upstream, the run's branch (its commits
+ * after origin/<parentBranch>) is rebased onto the synced upstream/<base>; the branch keeps its name. A
+ * conflict aborts the rebase and throws, leaving the branch as it was. Nothing is pushed to upstream.
+ * #807 `fork: false` (a stacked Remote run whose parent merged, by a merge commit or a squash): onto the
+ * fetched origin/<base>, the parent's commits never repeated (only those after origin/<parentBranch>).
+ * @returns {Promise<{ base: string, commit: string }>} the ref rebased onto and the new HEAD
+ */
+async function restackOnBase({ repo, dir, base, parentBranch, fork = true, log = () => {} }) {
+  checkBase(base);
+  const root = await repoRoot(repo);
+  if (!root) throw new Error(`restack: ${repo} is not a git repository.`);
+  let onto;
+  if (fork) {
+    onto = await syncForkBase(root, base, log);
+    if (!onto) throw new Error(`restack: upstream/${base} was not found.`);
+  } else {
+    await git(['fetch', '--end-of-options', 'origin', base], root, { timeout: FETCH_TIMEOUT_MS, auth: true })
+      .catch((e) => log('warn', `restack: could not fetch origin/${base} (${e.message.split('\n')[0]})`));
+    if (!await refExists(root, `refs/remotes/origin/${base}`)) throw new Error(`restack: origin/${base} was not found.`);
+    onto = `origin/${base}`;
+  }
+  const parent = parentBranch && validBranchName(parentBranch) && await refExists(root, `refs/remotes/origin/${parentBranch}`) ? `origin/${parentBranch}` : null;
+  const commit = await rebaseOrAbort(root, dir, parent ? ['--onto', onto, parent] : [onto], onto);
   log('info', `restack: rebased onto ${onto}${parent ? ` (the commits after ${parent})` : ''}, now at ${commit.slice(0, 8)}`);
   return { base: onto, commit };
+}
+
+/**
+ * #807: a stacked run follows its parent's branch: fetched, and the run's branch rebased onto its new
+ * commits (origin/<parentBranch>); the branch keeps its name. A conflict aborts the rebase and throws.
+ * @returns {Promise<{ base: string, commit: string, moved: boolean }>} the ref rebased onto, the new HEAD, whether it changed
+ */
+async function restackOnParent({ repo, dir, parentBranch, log = () => {} }) {
+  if (!validBranchName(parentBranch)) throw new Error(`restack: "${parentBranch}" is not a valid branch name.`);
+  const root = await repoRoot(repo);
+  if (!root) throw new Error(`restack: ${repo} is not a git repository.`);
+  await git(['fetch', '--end-of-options', 'origin', parentBranch], root, { timeout: FETCH_TIMEOUT_MS, auth: true });
+  const onto = `origin/${parentBranch}`;
+  const before = await git(['rev-parse', 'HEAD'], dir);
+  const commit = await rebaseOrAbort(root, dir, [onto], onto);
+  if (commit !== before) log('info', `restack: rebased onto ${onto}, now at ${commit.slice(0, 8)}`);
+  return { base: onto, commit, moved: commit !== before };
 }
 
 /**
@@ -308,7 +352,8 @@ async function restackOnBase({ repo, dir, base, parentBranch, log = () => {} }) 
  *   to say how far behind it is)
  * @param {boolean} [o.fork] #738 Fork + PR: sync the fork's <base> with upstream's first (syncForkBase) and
  *   start from upstream/<base>
- * @param {string} [o.parentBranch] #738 fork mode: a dependent item starts from origin/<parentBranch>
+ * @param {string} [o.parentBranch] #738 fork mode: a dependent item starts from origin/<parentBranch>; #807 Remote
+ *   mode too: a stacked item
  * @param {boolean} [o.compareBase] #805 false: a local worktree skips checkLocalBase (the run's base checkout)
  * @returns {Promise<object|null>} { dir, workDir, repo, base, remote, fork, ref, commit, reused, recreated,
  *   baseCheck (#805: a new local worktree's checkLocalBase) } or null when `repo` is not a git repository (the
@@ -345,7 +390,8 @@ async function prepareWorktree({ repo, base, dir, branch = null, log = () => {},
         const said = baseCheckMessage(info.baseCheck);
         if (said) log('warn', `worktree: ${said}`);
       }
-      info.ref = fork ? await forkBaseRef(root, base, parentBranch, log) : await baseRef(root, base, log, { remote });
+      info.ref = fork ? await forkBaseRef(root, base, parentBranch, log)
+        : remote && parentBranch ? await stackRef(root, base, parentBranch, log) : await baseRef(root, base, log, { remote });
       await git(['worktree', 'add', '--detach', dir, info.ref], root);
       info.recreated = !!branch;
     }
@@ -785,6 +831,7 @@ module.exports = {
   removeRunTmp,
   removeScratch,
   restackOnBase,
+  restackOnParent,
   restoreWork,
   retireWorktree,
   syncForkBase,
