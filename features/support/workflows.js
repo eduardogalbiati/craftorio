@@ -21,9 +21,10 @@ const TEST_BACKFILL = {
   title: 'Test backfill',
 };
 
-// feature.yaml's inputs: mode local | remote, validation auto | validated
+// feature.yaml's inputs: mode local | remote | fork, validation auto | validated
 const LOCAL = { mode: 'local' };
 const REMOTE = { mode: 'remote' };
+const FORK = { mode: 'fork' };
 const VALIDATED = { validation: 'validated' };
 
 // the workflow file of a name, a display title or a file: "feature", "Feature", "feature.yaml",
@@ -35,6 +36,7 @@ function fileOf(name) {
 
 module.exports = {
   FEATURE,
+  FORK,
   LOCAL,
   REMOTE,
   TEST_BACKFILL,
