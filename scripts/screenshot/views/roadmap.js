@@ -30,6 +30,7 @@ const {
 // `more` parked (#395, --roadmap parked): the item waiting at the developer's gate is parked.
 // `more` merge (#797, --roadmap merge): the failed item's run ended well, its PR waits for a person's
 // merge (nothing stands in for gh here, so the card also says why the made-up PR could not be read).
+// #809: one more item (#8) whose run, another app's, waits in its PR monitor: the monitor's card.
 // #807: under its stage the merge-wait notice (Move on, Stack), with the expected files it shares with
 // the next stage (MERGE_FILES).
 const MERGE_FILES = ['packages/engine/server/routes.js', 'packages/engine/server/report.js'];
@@ -78,6 +79,8 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
         }),
         // #807 (--roadmap merge): its expected files overlap the next stage's, so the merge-wait notice says so
         item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.prOpen || tonight.failed, runs: [tonight.prOpen || tonight.failed], ...(merge ? { files: MERGE_FILES } : {}) }),
+        // #809 (--roadmap merge): its run waits in the PR monitor, the card shows the monitor's last read
+        ...(tonight.prMonitor ? [item('item-11', 'software-development-local-hero.yaml', [8], { runId: tonight.prMonitor, runs: [tonight.prMonitor] })] : []),
         item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
         // #215: done, real cost and time against the estimate (folded under the stage's "+2 done" chip, #267)
         item('item-9', 'software-development-local-hero.yaml', [9], { status: 'done', runId: tonight.better, runs: [tonight.better] }),
@@ -254,7 +257,28 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false, prOpen = false } = {
     });
     return runId;
   };
-  return { running, resumed, waiting, failed, better, worse, prOpen: prOpen ? openPr() : null };
+  // #809 (--roadmap merge): a run of another app (studio-pc) in its PR monitor, with the monitor's last
+  // card: a failed job, changes requested, a conflict with the base and 2 unanswered comments
+  const monitorPr = () => {
+    const runId = `${stamp(70)}-224000-run00117`;
+    const start = now - 70 * min;
+    const steps = PATH.map(([s, m]) => [s, Math.round(m * 0.6)]);
+    const { lines, end } = events(start, steps, null);
+    const url = `${DEMO_REPO}/pull/117`;
+    write(runId, [
+      ...lines,
+      ev(end, 'step.started', { step_id: 'pr_open', step_type: 'action' }),
+      ev(end, 'step.finished', { step_id: 'pr_open', output: { pr_url: url, pr_number: 117 } }),
+      ev(end, 'step.started', { step_id: 'pr_monitor', step_type: 'pr_monitor' }),
+      ev(now - 2 * min, 'pr.monitor', {
+        step_id: 'pr_monitor', url, number: 117, fork: false, state: 'failing', detail: 'failing', checked_at: new Date(now - 2 * min).toISOString(),
+        ci: { status: 'failed', failed: ['unit-tests'] }, review: { status: 'changes_requested', by: ['ana'] }, conflicts: { status: 'base' }, comments: { unanswered: 2 },
+        result: { ready: false, blockers: ['CI failed', 'changes requested', 'conflict with the base', '2 unanswered comments'] },
+      }),
+    ], null, true);
+    return runId;
+  };
+  return { running, resumed, waiting, failed, better, worse, prOpen: prOpen ? openPr() : null, prMonitor: prOpen ? monitorPr() : null };
 }
 
 // #320: a run stopped at its Developer check gate (`-cch00320`, no summary: read from its events)

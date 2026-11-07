@@ -213,8 +213,10 @@ module.exports = (ctx) => {
     if (!r?.pr) return {};
     const pr = endedRunPr(r);
     if (runPr.prEnded(pr.state)) return {};
-    const card = live?.prMonitorCard;
-    return { atMergeGate: true, pr: card ? { ...pr, ...monitorCardOf(card, live.prMonitorError) } : pr };
+    // a run this app does not run (another app's, read from disk): its last pr.monitor event (runs.js prMonitor)
+    const card = live ? live.prMonitorCard : r.prMonitor;
+    const error = live ? live.prMonitorError : r.prMonitor?.error;
+    return { atMergeGate: true, pr: card ? { ...pr, ...monitorCardOf(card, error) } : pr };
   }
   // #809: the engine's card (pr.monitor's fields) on a roadmap item's PR, with why its last read failed
   const monitorCardOf = (c, error) => ({ ci: c.ci, review: c.review, conflicts: c.conflicts, comments: c.comments, result: c.result, checkedAt: c.checked_at || null, error: error || null });

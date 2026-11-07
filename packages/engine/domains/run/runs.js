@@ -61,7 +61,7 @@ function chainOf(dir, summary, started) {
 const derived = new Map(); // events.jsonl path → { key, sessions, progress, localMerge, recovery, pr }
 function fromEvents(file) {
   let st;
-  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null, recovery: null, pr: null, childRuns: [] }; }
+  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null, recovery: null, pr: null, childRuns: [], prMonitor: null }; }
   const key = `${st.mtimeMs}:${st.size}`;
   const hit = derived.get(file);
   if (hit?.key === key) return hit;
@@ -83,7 +83,9 @@ function fromEvents(file) {
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
   // the error of its end (#389: a listing reads a failed run's events once while they do not change)
   const error = events.findLast((e) => e.type === 'workflow.finished')?.error || null;
-  const out = { key, sessions: sessionsOfEvents(upgraded), progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()], error };
+  // #809: the PR monitor's last card (pr.monitor), for a run in its monitor that this app does not run
+  const prMonitor = events.findLast((e) => e.type === 'pr.monitor') || null;
+  const out = { key, sessions: sessionsOfEvents(upgraded), progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()], error, prMonitor };
   derived.set(file, out);
   return out;
 }
@@ -152,6 +154,14 @@ function liveStatus(dir) {
   const owner = readOwner(dir);
   if (!ownerAlive(owner)) return { status: 'interrupted', elsewhere: null };
   return { status: 'running', elsewhere: owner.pid === process.pid ? null : { pid: owner.pid, host: owner.host } };
+}
+
+// What only a run without an end has (null both once it finished): prMonitor, the PR monitor's last
+// card (#809, null: never read); runningElsewhere, the { pid, host } of another live app process
+// that runs it (#112).
+function unfinishedOf(dir, summary) {
+  if (summary) return { prMonitor: null, runningElsewhere: null };
+  return { prMonitor: fromEvents(path.join(dir, 'events.jsonl')).prMonitor, runningElsewhere: liveStatus(dir).elsewhere };
 }
 
 /** One run folder → RunInfo base (sessions as engine snapshots), or null if it is not a run. */
@@ -235,8 +245,7 @@ function readRun(runsDir, runId) {
     childrenCostUsd: summary?.children_cost_usd ?? (childRuns || []).reduce((a, c) => a + (+c.cost_usd || 0), 0),
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
-    // a run without an end that another live app process runs (#112): { pid, host }, else null
-    runningElsewhere: summary ? null : liveStatus(dir).elsewhere,
+    ...unfinishedOf(dir, summary),
     inputs,
     runDir: dir,
     sessions,
