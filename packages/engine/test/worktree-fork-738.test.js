@@ -95,6 +95,29 @@ test('#738 fork mode never pushes to upstream', async (t) => {
   assert.equal(head(f.upstream), f.fresh);
 });
 
+test('#805 fork mode: a dirty checkout of main is left as it is, with a warning, and the fork still syncs', async (t) => {
+  const f = forkFixture(t);
+  guardUpstream(f);
+  fs.writeFileSync(path.join(f.repo, 'a.txt'), 'my edit\n');
+  const { lines, log } = logger();
+  const onto = await worktree().syncForkBase(f.repo, 'main', log);
+  assert.equal(onto, 'upstream/main');
+  assert.equal(lines.filter((l) => /^warn: worktree \(fork\): .*uncommitted changes on main; the local main was left as it is/.test(l)).length, 1, lines.join('\n'));
+  assert.equal(git(f.repo, 'rev-parse', 'refs/heads/main'), f.first);
+  assert.equal(fs.readFileSync(path.join(f.repo, 'a.txt'), 'utf8'), 'my edit\n');
+  assert.equal(head(f.fork), f.fresh);
+});
+
+test('#805 fork mode: a local main with commits of its own is left as it is, with a warning', async (t) => {
+  const f = forkFixture(t);
+  guardUpstream(f);
+  const own = commit(f.repo, 'local.txt', 'only here\n');
+  const { lines, log } = logger();
+  await worktree().syncForkBase(f.repo, 'main', log);
+  assert.equal(lines.filter((l) => /^warn: worktree \(fork\): .*commits that are not in upstream\/main; the local main was left as it is/.test(l)).length, 1, lines.join('\n'));
+  assert.equal(git(f.repo, 'rev-parse', 'refs/heads/main'), own);
+});
+
 test('#738 a dependent item\'s run starts from its parent\'s branch on the fork', async (t) => {
   const f = forkFixture(t);
   const parent = parentOnFork(f);

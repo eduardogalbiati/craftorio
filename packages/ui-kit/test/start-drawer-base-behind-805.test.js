@@ -85,3 +85,40 @@ test('#805 a diverged base: the notice says it was not moved and names the Backl
   assert.equal(hasTestId(info(app), 'start-base-update'), false);
   assert.equal(hasTestId(info(app), 'start-base-continue'), true);
 });
+
+// The panel open on a saved pipeline whose first stage is the fixture workflow, Start clicked once and answered by
+// `answer`; later starts begin a run
+async function pipelineAnswered(answer) {
+  const answers = [answer];
+  const app = loadApp({
+    api: {
+      getSettings: async () => ({ setupDone: true }),
+      setSettings: async (s) => ({ setupDone: true, ...s }),
+      listWorkflows: async () => [WORKFLOW],
+      listProjects: async () => [PROJECT],
+      listPipelines: async () => [{ file: 'pipe.yaml', name: 'Pipe', stages: [{ workflow: FILE }] }],
+      runPipeline: async () => answers.shift() ?? { runId: 'r-805' },
+    },
+  });
+  await app.boot();
+  await app.run('openDrawer({ pipeline: \'pipe.yaml\', project: \'p1\' })');
+  await app.settle(10);
+  await app.click('#btn-start');
+  await app.settle(10);
+  return app;
+}
+
+for (const choice of ['update', 'continue']) {
+  test(`#805 a pipeline's start answered by a question: the notice's ${choice} runs the pipeline again with the choice`, async () => {
+    const app = await pipelineAnswered(behind());
+    const plainCalls = () => JSON.parse(JSON.stringify(app.callsTo('runPipeline')));
+    assert.equal(plainCalls().length, 1, 'Start reached api.runPipeline');
+    assert.equal(plainCalls()[0].length, 4, 'the first start carries no choice');
+    assert.equal(panelOpen(app), true);
+    assert.match(plainText(info(app)), /\b16 commits behind origin\/main/);
+    await clickChoice(app, `start-base-${choice}`);
+    const [first, second] = plainCalls();
+    assert.deepEqual(second, [...first, choice]);
+    assert.equal(panelOpen(app), false);
+  });
+}

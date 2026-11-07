@@ -136,6 +136,34 @@ test('#805 fastForwardBase moves to any target, and a base checked out nowhere m
   assert.deepEqual(unknown, { moved: false, reason: 'upstream/dev is not known here' });
 });
 
+// The race, through the git on the PATH (a shell script, so not on Windows): main moves to `commitId` just before the
+// first `git update-ref` runs. No hook can do it: reference-transaction fires once the ref is locked and its old value checked.
+function moveBeforeUpdateRef(t, f, commitId) {
+  const real = path.join(git(f.repo, '--exec-path'), 'git');
+  const bin = path.join(f.tmp, 'bin');
+  const mark = path.join(f.tmp, 'moved-meanwhile');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'git'), `#!/bin/sh\nif [ "$1" = update-ref ] && [ ! -e "${mark}" ]; then\n  : > "${mark}"\n  "${real}" update-ref refs/heads/main ${commitId}\nfi\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const before = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${before}`;
+  t.after(() => { process.env.PATH = before; });
+  return mark;
+}
+
+test('#805 fastForwardBase: a base that moves after it was read keeps its commits, the compare-and-swap fails', { skip: process.platform === 'win32' }, async (t) => {
+  const f = fixture(t);
+  originMoves(f);
+  await checkLocalBase({ repo: f.repo, base: 'main' });
+  git(f.repo, 'switch', '-q', '-c', 'elsewhere'); // main checked out nowhere: the ref is moved
+  const merged = commit(f.repo, 'merged.txt', 'a merge that landed meanwhile\n');
+  const mark = moveBeforeUpdateRef(t, f, merged);
+  const out = await fastForwardBase({ repo: f.repo, base: 'main' });
+  assert.equal(fs.existsSync(mark), true, 'main moved during the update');
+  assert.equal(out.moved, false);
+  assert.match(out.reason, /update-ref/);
+  assert.equal(git(f.repo, 'rev-parse', 'main'), merged, 'the commit that landed meanwhile stays');
+});
+
 test('#805 an input\'s old name counts in a local run\'s target, as it does for the run', async (t) => {
   const { service, api } = makeService(t);
   const file = 'fixture-target-was-805.yaml';
