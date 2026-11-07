@@ -644,7 +644,7 @@ groups:
   - name: Validate
     steps: [test, suite, e2e, heal, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Open PR
-    steps: [pr_open, pr_review, resolve_merge, merge_blocked]
+    steps: [pr_open, stack_follow, pr_review, resolve_merge, merge_blocked]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -2464,6 +2464,10 @@ steps:
   # ============================ PULL REQUEST =================================
   # the pull request and the maintainer's merge (fragments/pr-pipeline.yaml); no CI to wait for
   - id: pr_open
+    fragment: pr-pipeline
+    agent: ci_pusher
+  # #807 a stacked run follows its parent pull request here until it merges
+  - id: stack_follow
     fragment: pr-pipeline
     agent: ci_pusher
   - id: pr_review

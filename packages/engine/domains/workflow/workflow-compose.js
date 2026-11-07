@@ -273,7 +273,8 @@ function changeSteps(s, review) {
       ? [{ id: 'resolve_merge', fragment: 'local-merge-pipeline', agent: 'developer' }, { id: 'merge_blocked', fragment: 'local-merge-pipeline' }, { id: 'push_main', fragment: 'local-merge-pipeline' }]
       : prCi
         ? [{ id: 'ci', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'ci_failed', fragment: 'pr-pipeline' }, { id: 'pr_review', fragment: 'pr-pipeline' }]
-        : [{ id: 'pr_open', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'pr_review', fragment: 'pr-pipeline' }]),
+        // #807 stack_follow: a stacked run follows its parent PR/MR there until it merges
+        : [{ id: 'pr_open', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'stack_follow', fragment: 'pr-pipeline', agent: 'ci_pusher' }, { id: 'pr_review', fragment: 'pr-pipeline' }]),
   ];
 }
 

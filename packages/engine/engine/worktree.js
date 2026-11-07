@@ -325,16 +325,22 @@ async function restackOnBase({ repo, dir, base, parentBranch, fork = true, log =
 
 /**
  * #807: a stacked run follows its parent's branch: fetched, and the run's branch rebased onto its new
- * commits (origin/<parentBranch>); the branch keeps its name. A conflict aborts the rebase and throws.
+ * commits (origin/<parentBranch>); the branch keeps its name. A conflict aborts the rebase and throws;
+ * a fetch that fails (the network) is no conflict: logged, nothing moves, the next poll tries again.
  * @returns {Promise<{ base: string, commit: string, moved: boolean }>} the ref rebased onto, the new HEAD, whether it changed
  */
 async function restackOnParent({ repo, dir, parentBranch, log = () => {} }) {
   if (!validBranchName(parentBranch)) throw new Error(`restack: "${parentBranch}" is not a valid branch name.`);
   const root = await repoRoot(repo);
   if (!root) throw new Error(`restack: ${repo} is not a git repository.`);
-  await git(['fetch', '--end-of-options', 'origin', parentBranch], root, { timeout: FETCH_TIMEOUT_MS, auth: true });
   const onto = `origin/${parentBranch}`;
   const before = await git(['rev-parse', 'HEAD'], dir);
+  try {
+    await git(['fetch', '--end-of-options', 'origin', parentBranch], root, { timeout: FETCH_TIMEOUT_MS, auth: true });
+  } catch (e) {
+    log('warn', `restack: could not fetch ${onto} (${String(e?.message || e).split('\n')[0]}); trying again on the next check`);
+    return { base: onto, commit: before, moved: false };
+  }
   const commit = await rebaseOrAbort(root, dir, [onto], onto);
   if (commit !== before) log('info', `restack: rebased onto ${onto}, now at ${commit.slice(0, 8)}`);
   return { base: onto, commit, moved: commit !== before };

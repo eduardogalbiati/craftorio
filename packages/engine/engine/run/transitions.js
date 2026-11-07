@@ -178,7 +178,7 @@ const methods = {
     // CI cannot run at all (the Actions quota ran out): no agent turn or fix round helps
     else if (state === 'quota_exhausted' && w.infra_output) output = finishWith('infra_output');
     if (output) action = 'output';
-    action = this.afterRestack(st, action, r, state);
+    action = this.afterRestack(st, this.holdForStackParent(step, st, action, r), r, state);
     if (state === 'none' && action === 'agent') r.detail = `${r.detail}, ${grace} after your last turn`;
     st.probePolls = (st.probePolls || 0) + 1;
     this.emitEvent('step.probe', {
@@ -211,6 +211,16 @@ const methods = {
     if (!parent) return undefined;
     if (!this.stackedRun()) return this.pollParent(step, st, parent, stats);
     return this.followStackParent(step, st, parent, stats);
+  },
+
+  // #807: a stacked run whose parent is still open never ends its wait step (ci, stack_follow): its PR
+  // targets the parent's branch, so its own checks or merge are not the end of the work. It keeps
+  // following the parent (restack, merge, close), outside the /loop's max_duration, as pollParent does.
+  holdForStackParent(step, st, action, r) {
+    if (action !== 'output' || !this.stackedRun() || !this.parentToWaitFor(step.wait, st)) return action;
+    st.loopStartedAt = Date.now();
+    r.detail = `${r.detail || 'passed'}; following the parent PR/MR until it merges`;
+    return 'poll';
   },
 
   // #807: the engine rebased the stacked branch onto its parent's new commits: the agent pushes it

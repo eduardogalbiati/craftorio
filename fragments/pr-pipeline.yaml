@@ -11,7 +11,8 @@
 # with `Depends on <inputs.depends_on>` for a dependent roadmap item. With inputs.parent_pr (wait and
 # rebase) ci's wait.parent makes the engine wait for that PR to merge before the PR opens, rebased.
 # #807 Stack (Remote mode, inputs.parent_branch set by the roadmap): the PR opens at once against the previous
-# stage's branch, naming its PR (inputs.parent_pr); wait.parent then follows it (transitions.js followStackParent).
+# stage's branch, naming its PR (inputs.parent_pr); wait.parent then follows it (transitions.js followStackParent)
+# in ci, or in stack_follow after pr_open, until the parent merges: only then does the run reach pr_review.
 
 steps:
   ci:
@@ -86,6 +87,9 @@ steps:
         failure_log:   { type: string }
         failure_class: { type: string, enum: [code, infra, unknown] }
     transitions:
+      # #807 a stacked run keeps following its parent until it merges (transitions.js holdForStackParent)
+      - when: "output.ci_status == 'success' and inputs.parent_branch and inputs.mode != 'fork' and not steps.ci.parentMerged"
+        goto: ci
       - when: "output.ci_status == 'success'"
         goto: pr_review
       - when: "output.ci_status == 'pending'"
@@ -179,6 +183,60 @@ steps:
         goto: pr_open
         max_visits: 3
         on_exhausted: pr_review
+      - when: "inputs.parent_branch and inputs.mode != 'fork'"
+        goto: stack_follow
+      - when: "true"
+        goto: pr_review
+
+  # #807 a stacked run of a project whose CI does not run on pull requests (after pr_open): the engine
+  # follows the parent PR/MR here (wait.parent, transitions.js followStackParent): it rebases the branch
+  # onto the parent's new commits, onto the base once the parent merges (the agent then moves the PR/MR's
+  # base), and a parent closed without merge opens a gate. The run reaches pr_review once the parent merged.
+  stack_follow:
+    display: Stacked pull request
+    goal:
+      description: "PR/MR {{ steps.pr_open.output.pr_url }} targets {{ inputs.base_branch }} once {{ inputs.parent_pr }} merged"
+      until: "not output.conflict"
+      on_exhausted: pr_review
+    loop:
+      interval: 1m
+      max_duration: 1h
+    wait:
+      probe: pr_mergeable
+      target: "{{ steps.pr_open.output.pr_url }}"
+      output: { conflict: false, detail: "" }
+      grace: 10m
+      parent: "{{ inputs.parent_pr }}"
+    prompt: |
+      Branch: `{{ steps.develop.output.branch }}`, stacked on `{{ inputs.parent_branch }}` (the pull request {{ inputs.parent_pr }}); its PR/MR: {{ steps.pr_open.output.pr_url }}.
+      The orchestrator follows the parent PR/MR itself and calls you only when there is something to do:
+      - the engine rebased this branch onto the parent's new commits: push it (`git push --force-with-lease origin HEAD`);
+      - the parent merged: the engine rebased this branch onto `{{ inputs.base_branch }}`: push it and move the
+        PR/MR's base to `{{ inputs.base_branch }}` as the orchestrator says;
+      - none of these (your first turn): only check that the PR/MR is open against `{{ inputs.parent_branch }}`.
+      Then check its mergeability: a conflict → conflict: true with what conflicts in `detail`.
+      pr_number is the PR number (GitHub) or the MR iid (GitLab).
+    output_schema:
+      type: object
+      required: [pr_url, pr_number, conflict]
+      properties:
+        pr_url:    { type: string }
+        pr_number: { type: integer }
+        conflict:  { type: boolean }
+        detail:    { type: string }
+    transitions:
+      - when: "output.conflict"
+        delegate:
+          agent: developer
+          prompt: |
+            PR/MR #{{ output.pr_number }} conflicts with its base: {{ output.detail }}
+            Rebase branch `{{ steps.develop.output.branch }}` on it, resolve it, check it with a focused test,
+            commit, then `git push --force-with-lease`, and report the commit hash.
+        goto: stack_follow
+        max_visits: 3
+        on_exhausted: pr_review
+      - when: "not steps.stack_follow.parentMerged"
+        goto: stack_follow
       - when: "true"
         goto: pr_review
 
