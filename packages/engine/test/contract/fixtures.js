@@ -269,6 +269,7 @@ module.exports = {
   'roadmap:versions': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'runs:active': { arg: null },
   // #810: the contract run is not waiting in a PR monitor: refused (400)
+  'runs:askFix': onRun({ arg: ({ runId }) => ({ runId, ids: ['t1'], note: 'Keep the public API.' }), status: 400, invalid: { arg: { runId: 'r', ids: 'not-a-list' } } }),
   'runs:closePr': onRun({ arg: ({ runId }) => ({ runId }), status: 400, invalid: BAD_RUN }),
   'runs:events': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'runs:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
