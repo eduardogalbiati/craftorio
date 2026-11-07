@@ -18,18 +18,33 @@
 
   // #812: one `glab mr list --output json` entry → a PR card's entry (run-pr.js glMrDisplay's state; the review from
   // detailed_merge_status, the list has no approvals)
+  // #812: the list entry's CI line from its pipeline's status
+  function pullCi(ps) {
+    if (!ps) return { status: 'none', failed: [] };
+    if (GL_FAILED.includes(ps)) return { status: 'failed', failed: [] };
+    if (['success', 'skipped'].includes(ps)) return { status: 'passed', failed: [] };
+    return { status: ['manual', 'scheduled'].includes(ps) ? 'manual' : 'running', failed: [] };
+  }
+
+  // #812: the list entry's state (run-pr.js glMrDisplay's words)
+  function pullState(m, { ci, ps, ms, conflict, draft }) {
+    const s = String(m.state || 'opened').toLowerCase();
+    if (s === 'merged' || s === 'closed') return s;
+    if (draft) return 'draft';
+    if (conflict) return 'conflict';
+    if (ci.status === 'failed') return 'failing';
+    if (GL_PENDING.includes(ps)) return 'pending';
+    return ['passed', 'none'].includes(ci.status) && ['mergeable', 'can_be_merged'].includes(ms) ? 'ready' : 'open';
+  }
+
   function parsePull(m) {
-    const pipeline = m.head_pipeline || m.pipeline || null;
-    const ps = String(pipeline?.status || '').toLowerCase();
-    const ci = { status: !ps ? 'none' : GL_FAILED.includes(ps) ? 'failed' : ['success', 'skipped'].includes(ps) ? 'passed' : ['manual', 'scheduled'].includes(ps) ? 'manual' : 'running', failed: [] };
+    const ps = String((m.head_pipeline || m.pipeline || null)?.status || '').toLowerCase();
+    const ci = pullCi(ps);
     const ms = m.detailed_merge_status || m.merge_status || '';
     const review = { status: ms === 'requested_changes' ? 'changes_requested' : ms === 'not_approved' ? 'required' : 'none', by: [] };
     const conflict = !!m.has_conflicts || ms === 'conflict';
-    const s = String(m.state || 'opened').toLowerCase();
     const draft = !!(m.draft || m.work_in_progress);
-    const state = s === 'merged' ? 'merged' : s === 'closed' ? 'closed' : draft ? 'draft' : conflict ? 'conflict'
-      : ci.status === 'failed' ? 'failing' : GL_PENDING.includes(ps) ? 'pending'
-        : ['passed', 'none'].includes(ci.status) && ['mergeable', 'can_be_merged'].includes(ms) ? 'ready' : 'open';
+    const state = pullState(m, { ci, ps, ms, conflict, draft });
     return {
       number: m.iid, title: m.title || '', url: m.web_url, author: m.author?.username || null, draft,
       head: m.source_branch || null, base: m.target_branch || null, state, ci, review, conflicts: { status: conflict ? 'base' : 'none' },

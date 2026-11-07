@@ -39,7 +39,10 @@
     render();
     // #794: the sidebar's count follows the project: the first list (the app's start, a screen
     // opened before it) and a choice moved by a project created or removed
-    if (current !== before || !known) window.refreshWorkflowsAcceptance?.();
+    if (current !== before || !known) {
+      window.refreshWorkflowsAcceptance?.();
+      window.PullsView?.refreshCount?.(); // #812: the PRs entry's count follows the project too
+    }
     return current;
   }
 
@@ -50,6 +53,7 @@
     try { localStorage.setItem(KEY, id); } catch { /* storage unavailable */ }
     render();
     window.refreshWorkflowsAcceptance?.(); // #794: the sidebar's count follows the project
+    window.PullsView?.refreshCount?.(); // #812: the PRs entry's count too
     if (redraw) showView(state.view);
   }
 

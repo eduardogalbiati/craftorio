@@ -37,20 +37,38 @@
 
   // #812: one `gh pr list --json` entry → a PR card's entry (run-pr.js ghPrDisplay's state, ghMonitor's ci / review /
   // conflicts, read from the list's fields only)
-  function parsePull(p) {
+  // #812: the list entry's CI line (ghMonitor's): none, failed (its jobs), running or passed
+  function pullCi(p) {
     const buckets = (p.statusCheckRollup || []).map(checkBucket);
     const failed = (p.statusCheckRollup || []).filter((c, i) => buckets[i] === 'fail').map((c) => c.name || c.context || '?');
-    const ci = { status: !buckets.length ? 'none' : failed.length ? 'failed' : buckets.includes('pending') ? 'running' : 'passed', failed };
+    return { status: !buckets.length ? 'none' : failed.length ? 'failed' : buckets.includes('pending') ? 'running' : 'passed', failed };
+  }
+
+  // #812: the list entry's review line (ghMonitor's): changes requested (by whom), required, approved or none
+  function pullReview(p) {
     const by = (s) => (p.latestReviews || []).filter((r) => r.state === s).map((r) => r.author?.login).filter(Boolean);
     const decision = String(p.reviewDecision || '').toUpperCase();
-    const review = decision === 'CHANGES_REQUESTED' || (decision !== 'APPROVED' && by('CHANGES_REQUESTED').length) ? { status: 'changes_requested', by: by('CHANGES_REQUESTED') }
-      : decision === 'REVIEW_REQUIRED' ? { status: 'required', by: [] }
-        : decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
-    const conflict = p.mergeable === 'CONFLICTING' || p.mergeStateStatus === 'DIRTY';
+    if (decision === 'CHANGES_REQUESTED' || (decision !== 'APPROVED' && by('CHANGES_REQUESTED').length)) return { status: 'changes_requested', by: by('CHANGES_REQUESTED') };
+    if (decision === 'REVIEW_REQUIRED') return { status: 'required', by: [] };
+    return decision === 'APPROVED' || by('APPROVED').length ? { status: 'approved', by: by('APPROVED') } : { status: 'none', by: [] };
+  }
+
+  // #812: the list entry's state (run-pr.js ghPrDisplay's words)
+  function pullState(p, ci, conflict) {
     const s = String(p.state || 'OPEN').toUpperCase();
-    const state = s === 'MERGED' ? 'merged' : s === 'CLOSED' ? 'closed' : p.isDraft ? 'draft' : conflict ? 'conflict'
-      : ci.status === 'failed' ? 'failing' : ci.status === 'running' ? 'pending'
-        : p.mergeable === 'MERGEABLE' && String(p.mergeStateStatus || '').toUpperCase() === 'CLEAN' ? 'ready' : 'open';
+    if (s === 'MERGED' || s === 'CLOSED') return s.toLowerCase();
+    if (p.isDraft) return 'draft';
+    if (conflict) return 'conflict';
+    if (ci.status === 'failed') return 'failing';
+    if (ci.status === 'running') return 'pending';
+    return p.mergeable === 'MERGEABLE' && String(p.mergeStateStatus || '').toUpperCase() === 'CLEAN' ? 'ready' : 'open';
+  }
+
+  function parsePull(p) {
+    const ci = pullCi(p);
+    const review = pullReview(p);
+    const conflict = p.mergeable === 'CONFLICTING' || p.mergeStateStatus === 'DIRTY';
+    const state = pullState(p, ci, conflict);
     return {
       number: p.number, title: p.title || '', url: p.url, author: p.author?.login || null, draft: !!p.isDraft,
       head: p.headRefName || null, base: p.baseRefName || null, state, ci, review, conflicts: { status: conflict ? 'base' : 'none' },

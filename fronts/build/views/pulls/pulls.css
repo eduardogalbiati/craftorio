@@ -1,0 +1,18 @@
+/* PRs / MRs screen (#812, views/pulls/pulls.js): the three groups (Need you, Waiting, Others), each pull request a
+   framed PR card (the run card's lines, packages/shared/pr-card.js), a stack framed together, bottom first. One
+   column that wraps at phone width: the buttons wrap below the card's lines. */
+.pulls-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 980px; }
+.pulls-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.pulls-group-title { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.pulls-entry { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+.pulls-entry-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pulls-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.pulls-meta { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.pulls-meta .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pulls-entry-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pulls-entry-actions .btn { min-height: 28px; }
+.pulls-stack { border: 1px dashed var(--border); border-radius: var(--radius); padding: 8px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.pulls-stack-title { margin: 0 2px; }
+.pulls-empty { margin: 0; }
+.pulls-project-error { margin: 0; }
+.nav-item .pulls-menu-count { margin-left: auto; }
