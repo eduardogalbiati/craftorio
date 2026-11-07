@@ -491,8 +491,7 @@ module.exports = (ctx) => {
         architectureOracle: () => ({ oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
         // #378: the Refactor proposals workflow ranks with the Refactor tab's Product Owner (channels/refactor.js)
         refactorPriorityOptions: (projectId) => ctx.refactorPriorityOptions?.(projectId) || null,
-        // #809: host.readPrJson stands in for gh/glab (as for the run's PR, run-meta.js): the PR monitor reads through it
-        ...(ctx.host?.readPrJson ? { probe: (a) => (a.probe === 'pr_monitor' ? runPr.fetchPrMonitor({ url: a.target }, { reader: ctx.host.readPrJson }) : run.machine.probe(a)) } : {}),
+        probe: prMonitorProbe(ctx, () => run),
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
@@ -537,8 +536,7 @@ module.exports = (ctx) => {
       } catch (e) { console.error('base health:', e.message); }
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
-      // #809: the roadmap item's PR card follows the monitor's reads
-      if (ev.type === 'pr.monitor' && run.projectId) events.emit('backlog:changed', { projectId: run.projectId, file: 'roadmap', watching: !!ctx.backlogWatching?.() });
+      prCardChanged(ctx, run, ev);
       if (ev.type === 'workflow.started' || ev.type === 'run.recovered') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
       if (ev.type === 'workflow.finished' && onFinished) {

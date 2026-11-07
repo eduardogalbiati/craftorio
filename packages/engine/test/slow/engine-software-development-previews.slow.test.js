@@ -9,7 +9,7 @@ const { runSoftwareDevelopment } = require('../engine-helpers');
 
 const run = ({ inputs = {}, ...rest } = {}) => runSoftwareDevelopment({ file: 'feature.yaml', ...rest, inputs: { mode: 'remote', ...inputs } });
 
-test('feature.yaml (remote): a CI code failure goes to the developer, then ci again → pr_review', { timeout: 120000 }, async () => {
+test('feature.yaml (remote): a CI code failure goes to the developer, then ci again → pr_monitor', { timeout: 120000 }, async () => {
   const { events, finished, transitions } = await run({ mockSequences: { ci_status: ['failed', 'success'], failure_class: ['code'] } });
   assert.equal(finished.status, 'success', finished.error);
   assert.ok(events.some((e) => e.type === 'log' && e.message === 'ci delegated to developer'));
@@ -17,7 +17,7 @@ test('feature.yaml (remote): a CI code failure goes to the developer, then ci ag
   const ciPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'ci').map((e) => e.prompt);
   assert.match(ciPrompts.at(-1), /The developer fixed a previous failure and pushed/);
   assert.ok(!transitions.includes('ci>ci_failed'), 'no human gate for a fixable failure');
-  assert.deepEqual(transitions.slice(-2), ['ci>pr_review', 'pr_review>end']);
+  assert.deepEqual(transitions.slice(-2), ['ci>pr_monitor', 'pr_monitor>end']);
 });
 test('feature.yaml (remote): CI code failures stop at the ci_failed gate after 5 fix rounds', { timeout: 120000 }, async () => {
   const { events, finished, transitions } = await run({
@@ -36,7 +36,7 @@ test('feature.yaml (remote): a CI infra failure goes to the ci_failed gate; appr
   const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'ci_failed');
   assert.match(gate.message, /did not pass \(status: failed\)/);
   assert.ok(!events.some((e) => e.type === 'log' && e.message === 'ci delegated to developer'), 'an infra failure is not sent to the developer');
-  assert.deepEqual(transitions.filter((x) => /ci_failed|^ci>(?!ci$)/.test(x)), ['ci>ci_failed', 'ci_failed>ci', 'ci>pr_review']);
+  assert.deepEqual(transitions.filter((x) => /ci_failed|^ci>(?!ci$)/.test(x)), ['ci>ci_failed', 'ci_failed>ci', 'ci>pr_monitor']);
 });
 test('feature.yaml (remote): an infra build failure skips the fix rounds; "retry" builds again', { timeout: 120000 }, async () => {
   const { events, finished, transitions } = await run({

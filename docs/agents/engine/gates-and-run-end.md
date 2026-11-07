@@ -205,8 +205,14 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
   and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`
   (backlog-refresh, #161): its item is done when its run succeeds (service `roadmapRun` reads the run's
-  workflow file). A run that succeeded with a PR a person merges (#797, `pr_review`) waits for it:
-  see `roadmap-pauses.md`. Any other end pauses the roadmap (`pausedBy`); a resumed run
+  workflow file). A run whose PR a person merges waits for it in the `pr_monitor` step (#809, no agent, no
+  Approve): run/transitions.js `runPrMonitor` reads the PR about once a minute (`prMonitorIntervalMs`,
+  every 5 minutes after a day with no change), emits `pr.monitor` (the card: CI, review, conflicts,
+  comments, result) and ends the run on `merged` (success) or `closed` (failed, "closed without
+  merging"). A failed read keeps the last card and never ends the run; the step keeps no state, so a
+  resumed run reads again and picks up a merge made meanwhile. The run holds no slot while it waits
+  (`slotProblem` skips `run.prMonitor`); Stop only aborts the wait, the PR stays as it is. Runs
+  recorded with the old `pr_review` gate (#797) still wait at it: see `roadmap-pauses.md`. Any other end pauses the roadmap (`pausedBy`); a resumed run
   (`resume.runId` = the item's run) takes the item's place (`adoptResumed`).
   The stage a dispatch runs is `currentStage`: the first **enabled** stage with an item not done or
   skipped. A stage with `disabled: true` (#284, the owner's switch in the stage's ⋮ menu) is skipped

@@ -6,7 +6,8 @@
 //   says the PR waits for the maintainers. [] when the PR was never read.
 // Browser: window.PrCard; Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
+  const tr = () => (typeof module === 'object' && module.exports ? require('./i18n').t : root.I18n?.t || root.t);
+  const t = (...a) => tr()?.(...a) ?? a[0];
   const KEYS = ['ci', 'review', 'conflicts', 'comments', 'result'];
   const names = (list) => (Array.isArray(list) ? list.filter(Boolean).join(', ') : '');
 

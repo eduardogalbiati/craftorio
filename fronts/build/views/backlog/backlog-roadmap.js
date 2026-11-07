@@ -481,7 +481,7 @@
     const skip = may(r, null, x).skip.allowed ? `<button class="btn sm ghost" type="button" data-rm-item="skip" title="${t('backlog_roadmap.count_it_as_finished_the_roadmap')}">${t('backlog_roadmap.skip')}</button>` : '';
     const fail = `${moveOn}${retry}${skip}${resume}${askOracleHtml(x)}`;
     const move = locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="${t('backlog_roadmap.earlier_in_the_stage_or_into')}" aria-label="${t('backlog_roadmap.earlier_in_the_stage')}"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button><button class="btn sm ghost" type="button" data-rm-move="down" title="${t('backlog_roadmap.later_in_the_stage_or_into')}" aria-label="${t('backlog_roadmap.later_in_the_stage')}">↓</button><button class="link-btn small" type="button" data-rm-remove title="${t('backlog_roadmap.take_this_item_out_of_the')}">${t('common.remove')}</button>`;
-    return `<div class="rm-status" data-testid="roadmap-status">${state}${prLinkHtml(x)}${parkedHtml(x)}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
+    return `<div class="rm-status" data-testid="roadmap-status">${state}${prLinkHtml(x)}${window.RoadmapPrCard?.html(x) || ''}${parkedHtml(x)}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
   }
 
   // #797: the PR an item waits for, on the platform (a PR known only by its number has no URL when its project has no repository)

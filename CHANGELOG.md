@@ -14,6 +14,10 @@ Every release of the app, newest first. Items link to their SDLC documents; `#12
 - A new app icon: a hub conducting five agents (#624).
 - First project onboarding, written as AI-native SDLC documents ([first-project-onboarding](docs/work/first-project-onboarding/), #635).
 
+### Changed
+- A run that opens a pull request now waits in a PR monitor instead of an Approve step: its card shows CI, review, conflicts, unanswered comments and what blocks the merge, on the run and on the Roadmap, and the run ends by itself when the pull request merges (or fails when it is closed). A run in the monitor does not count against the concurrent run limit (#809).
+- **Accept your repository workflows again**: `feature`, `fix` and `ai-development-remote-hero` changed (`pr_review` became `pr_monitor`), so a repository's copies must be accepted again on the Workflows screen (#809).
+
 ## [1.4.0] - 2026-10-26
 
 > Release candidates before every stable, and the app split into an engine package and modular fronts.

@@ -47,8 +47,9 @@ Read when running from source; the packaged app ignores the ones marked "source 
 ## Running the app on this repository
 
 `main` is protected and only the maintainer merges. On your own clone, use the
-`ai-development-remote-hero` workflow: it pushes the run's branch, opens a pull request and stops at
-Team review, where the maintainer takes over.
+`ai-development-remote-hero` workflow: it pushes the run's branch, opens a pull request and waits in the
+PR monitor (CI, review, conflicts, comments) while the maintainer reviews it. There is no Approve:
+the run ends by itself when the pull request merges, and fails if it is closed without merging.
 
 1. Add your clone as a project in the app. The repository's manifest (`.multiagent/project.yaml`)
    names `ai-development-remote-hero` as the project's default workflow and as the workflow of a

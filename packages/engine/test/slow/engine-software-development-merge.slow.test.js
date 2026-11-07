@@ -1,6 +1,6 @@
 // feature.yaml (remote) whole runs in mock mode (#305: one theme per slow file; #630: the old
-// software-development.yaml): the team's merge on the platform (pr_review) and merged_commit; a run
-// for several issues and the issue_not_done gate.
+// software-development.yaml): the team's merge on the platform (the pr_monitor step, #809) and
+// merged_commit; a run for several issues and the issue_not_done gate.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
@@ -12,11 +12,11 @@ const { root, runSoftwareDevelopment, GROUP } = require('../engine-helpers');
 const REMOTE = { file: 'feature.yaml' };
 const run = ({ inputs = {}, ...rest } = {}) => runSoftwareDevelopment({ ...REMOTE, ...rest, inputs: { mode: 'remote', ...inputs } });
 
-test('feature.yaml (remote): rejecting the team review ends the run as failed at pr_review; nothing was merged, so merged_commit is empty', { timeout: 120000 }, async () => {
-  const { finished, transitions } = await run({ answers: { pr_review: false } });
+test('feature.yaml (remote): a PR closed without merging ends the run as failed at pr_monitor; nothing was merged, so merged_commit is empty', { timeout: 120000 }, async () => {
+  const { finished, transitions } = await run({ mockSequences: { probes: { pr_monitor: ['closed'] } } });
   assert.equal(finished.status, 'failed');
-  assert.match(finished.error, /ended as failed at step "pr_review" \(rejected\)/);
-  assert.ok(transitions.includes('ci>pr_review'), transitions.join(' '));
+  assert.match(finished.error, /closed without merging/);
+  assert.ok(transitions.includes('ci>pr_monitor'), transitions.join(' '));
   assert.ok(!transitions.some((x) => /push_main|resolve_merge/.test(x)), 'remote mode never merges locally');
   // the template renders empty (no run.local_merge): computeOutputs keeps an empty text as null (#134)
   assert.equal(finished.summary.outputs.merged_commit, null);
@@ -30,7 +30,7 @@ test('feature.yaml (remote): merged_commit comes from run.local_merge, so a remo
   const { finished, transitions } = await run();
   assert.equal(finished.status, 'success', finished.error);
   assert.ok(transitions.includes('verify_change>ci'), transitions.join(' '));
-  assert.deepEqual(transitions.slice(-2), ['ci>pr_review', 'pr_review>end']);
+  assert.deepEqual(transitions.slice(-2), ['ci>pr_monitor', 'pr_monitor>end']);
   assert.ok(!finished.summary.local_merge, 'no local merge in remote mode');
   assert.equal(finished.summary.outputs.merged_commit, null);
 });

@@ -68,7 +68,7 @@ test('#634 a simulated 500 becomes an Inbox intent with its diagnosis, and Propo
   assert.equal(of('workflow.started')[0]?.workflow, 'fix');
   assert.equal(end.type, 'approval.requested', `the fix run ended (${end.status}) without stopping at a human gate`);
   const steps = of('step.started').map((e) => e.step_id);
-  for (const merging of ['resolve_merge', 'push_main', 'ci', 'pr_review']) {
+  for (const merging of ['resolve_merge', 'push_main', 'ci', 'pr_monitor']) {
     assert.equal(steps.includes(merging), false, `the run reached ${merging} before the gate: ${steps.join(' > ')}`);
   }
   assert.equal(api['runs:active']().some((r) => r.runId === runId), true, 'the run is still waiting at the gate');

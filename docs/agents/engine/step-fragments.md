@@ -21,7 +21,7 @@ Step bodies several workflows share, kept once in `fragments/<name>.yaml` and in
 `ways-of-working` seed, [seeds.md](../seeds.md)) and the interview's answers, out of fragments only:
 `intake-pipeline` (write, review, file), `dev-pipeline` (develop, code_review, suite, verify_change,
 validate, verify_failed), then `local-merge-pipeline` (resolve_merge, merge_blocked: the
-`merge: local` style) or `pr-pipeline` (ci, ci_failed, pr_review: the `probe: pr_*` waits), and
+`merge: local` style) or `pr-pipeline` (ci, ci_failed: the `probe: pr_*` waits; pr_monitor: the PR's card until its merge, #809), and
 `release-pipeline` (prepare, suite, notes, approve, tag_rc, soak, tag) wired per release style
 (milestone, per-merge, train, rc-stable). The workflow keeps only what differs per project: the
 transitions, the suite's `command` (the profile's test command), the agents with the project's

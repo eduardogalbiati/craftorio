@@ -14,6 +14,10 @@ Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos se
 - Um ícone novo para o app: um hub regendo cinco agentes (#624).
 - O onboarding do primeiro projeto, escrito como documentos do AI-native SDLC ([first-project-onboarding](docs/work/first-project-onboarding/), #635).
 
+### Changed
+- Uma run que abre um pull request agora espera num monitor do PR em vez de uma etapa de Approve: o card mostra CI, review, conflitos, comentários sem resposta e o que bloqueia o merge, na run e no Roadmap, e a run termina sozinha quando o pull request é mergeado (ou falha quando é fechado). Uma run no monitor não conta no limite de runs simultâneas (#809).
+- **Aceite de novo os workflows do repositório**: `feature`, `fix` e `ai-development-remote-hero` mudaram (`pr_review` virou `pr_monitor`), então as cópias de um repositório precisam ser aceitas de novo na tela Workflows (#809).
+
 ## [1.4.0] - 2026-10-26
 
 > Release candidate antes de cada estável, e o app dividido num pacote de engine e fronts modulares.

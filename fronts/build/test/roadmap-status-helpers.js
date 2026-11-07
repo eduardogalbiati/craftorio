@@ -69,6 +69,8 @@ function loadRoadmap({ listWorkflows, now = NOW, runTitle } = {}) {
   if (exists('estimates.js')) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('menu.js'), sandbox, { filename: 'menu.js' }); // the shared menu (#748)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap-base.js'), sandbox); // the base question's notice (#805)
+  vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'pr-card.js'), sandbox); // the PR monitor's lines (#809)
+  vm.runInContext(read('views', 'backlog', 'backlog-roadmap-pr-card.js'), sandbox); // the PR monitor's card (#809)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return { R: sandbox.window.BacklogRoadmap, sandbox, setNow: both };
 }

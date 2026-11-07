@@ -87,3 +87,16 @@
 .rc-typing .duo-robot { width: 96px; height: 96px; }
 .rc-typing .duo-typing:only-child .duo-robot { width: 132px; height: 132px; }
 .rc-typing .duo-typing.rc-right { margin-left: auto; flex-direction: row-reverse; }
+
+/* #809: the PR monitor's card (pr-monitor-card.js on the run, backlog-roadmap-pr-card.js on the Roadmap):
+   the PR's link and the last read lead, then one label + badge per line */
+.pr-monitor { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; max-width: 520px; }
+.pr-monitor-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pr-monitor-link { font-family: var(--mono); }
+.pr-monitor-lines { display: grid; gap: 4px; }
+.pr-monitor-line { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 8px; font-size: 12px; }
+.pr-monitor-label { color: var(--muted); }
+.pr-monitor-value { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-monitor-error { color: var(--amber); margin: 0; }
+.rm-pr-card { padding: 6px 8px; gap: 4px; margin-top: 6px; }
+.rm-pr-card .pr-monitor-line { grid-template-columns: 76px minmax(0, 1fr); font-size: 11px; }

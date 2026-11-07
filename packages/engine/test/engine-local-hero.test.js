@@ -18,7 +18,7 @@ test('local hero workflow: no CI/PR/deploy, a local worktree, an automatic merge
   assert.equal(render(String(wf.orchestrator.worktree.remote), { inputs: { mode: 'remote' } }), 'true');
   assert.equal(wf.orchestrator.limits.max_total_context, '40M');
   const ids = wf.steps.map((s) => s.id);
-  // #630: feature's Remote mode has ci / ci_failed / pr_review (and the ci_pusher); Local mode merges, then push_main
+  // #630: feature's Remote mode has ci / ci_failed / pr_monitor (#809) (and the ci_pusher); Local mode merges, then push_main
   for (const gone of ['pr_babysitter', 'deploy_test', 'approve_merge', 'deploy_prod', 'approve_local_merge']) assert.ok(!ids.includes(gone), gone);
   assert.ok(!Object.keys(wf.agents).some((a) => ['pr_babysitter', 'deployer'].includes(a)));
   const verify = wf.steps.find((s) => s.id === 'verify_change');

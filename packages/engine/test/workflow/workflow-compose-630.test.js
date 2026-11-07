@@ -79,23 +79,23 @@ const stepsOf = (out, name) => {
 
 for (const ci of ['none', 'release']) {
   for (const name of ['feature', 'fix']) {
-    test(`#630 remote with ci ${ci}: ${name} opens the PR (pr_open, pr_review) without waiting for a PR CI`, () => {
+    test(`#630 remote with ci ${ci}: ${name} opens the PR (pr_open, pr_monitor) without waiting for a PR CI`, () => {
       const ids = stepsOf(compose({ ...REMOTE, ci }), name);
-      assert.deepEqual(['pr_open', 'pr_review'].filter((id) => !ids.includes(id)), [], `the steps: ${JSON.stringify(ids)}`);
+      assert.deepEqual(['pr_open', 'pr_monitor'].filter((id) => !ids.includes(id)), [], `the steps: ${JSON.stringify(ids)}`);
       assert.deepEqual(ids.filter((id) => id === 'ci' || id === 'ci_failed'), []);
     });
   }
 }
 
 for (const name of ['feature', 'fix']) {
-  test(`#630 remote with ci pr+release: ${name} waits for the PR CI (ci, ci_failed) before the PR review`, () => {
+  test(`#630 remote with ci pr+release: ${name} waits for the PR CI (ci, ci_failed) before the PR monitor (#809)`, () => {
     const ids = stepsOf(compose(REMOTE), name);
-    assert.deepEqual(['ci', 'ci_failed', 'pr_review'].filter((id) => !ids.includes(id)), [], `the steps: ${JSON.stringify(ids)}`);
+    assert.deepEqual(['ci', 'ci_failed', 'pr_monitor'].filter((id) => !ids.includes(id)), [], `the steps: ${JSON.stringify(ids)}`);
     assert.equal(ids.includes('pr_open'), false, `the steps: ${JSON.stringify(ids)}`);
   });
 }
 
 test('#630 local: feature has no PR step at all', () => {
   const ids = stepsOf(compose(LOCAL), 'feature');
-  assert.deepEqual(ids.filter((id) => ['pr_open', 'pr_review', 'ci', 'ci_failed'].includes(id)), []);
+  assert.deepEqual(ids.filter((id) => ['pr_open', 'pr_monitor', 'ci', 'ci_failed'].includes(id)), []);
 });

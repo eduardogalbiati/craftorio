@@ -45,9 +45,12 @@ stage is current.
 
 ## An item that waits for its PR's merge (#797)
 
-A run that succeeded with a PR it did not merge itself (`ai-development-remote-hero` stops at
-`pr_review`, the merge happens on the platform) is no failure: its item is `waiting_merge` (derived in
-`roadmap-status.js`, never stored), with `error: null` and `pr: { number, url, state, detail, checkedAt }`.
+A run that waits for a PR it did not merge itself (`ai-development-remote-hero` waits in its
+`pr_monitor` step since #809, `pr_review` gate in older runs; the merge happens on the platform) is no
+failure: its item is `waiting_merge` (derived in `roadmap-status.js`, never stored), with `error: null`
+and `pr: { number, url, state, detail, checkedAt }`; a run in the monitor adds its last card (`ci`,
+`review`, `conflicts`, `comments`, `result`, `error`: roadmap.js `mergeGateOf` from `run.prMonitorCard`),
+drawn by `backlog-roadmap-pr-card.js`. The run ends on the merge, and its stage with it.
 It is not finished, so it holds its stage and no later stage starts from a base without that work, and
 the roadmap keeps running (`stageStep` does not pause on it). The owner's Skip goes on without the merge.
 
