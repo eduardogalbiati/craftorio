@@ -267,10 +267,7 @@ const methods = {
     const target = (step.target ? render(step.target, this.ctx).trim() : '')
       || this.ctx.steps?.ci?.output?.pr_url || this.ctx.steps?.pr_open?.output?.pr_url || '';
     this.prMonitor = step.id;
-    if (this.worktree?.dir && !this.prMonitorKeptSaid) {
-      this.prMonitorKeptSaid = true;
-      this.emitEvent('log', { level: 'info', step_id: step.id, message: `worktree: ${this.worktree.dir} is kept while the run waits for the merge, unused (no agent, no run slot): the end of the run removes it, deleting its branch once merged, or keeps the work on its branch if the pull/merge request closes.` });
-    }
+    this.sayPrMonitorWorktreeKept(step);
     const base = { step_id: step.id, url: target, number: parseTarget(target)?.id ?? null, fork: this.ctx.inputs?.mode === 'fork' };
     let r;
     try {
@@ -295,6 +292,18 @@ const methods = {
     this.prMonitorSeen = seen;
     this.prMonitorCard = card;
     if (r.state !== 'merged' && r.state !== 'closed') return null;
+    return this.endPrMonitor(step, st, r, card, target, t0);
+  },
+
+  // #809: once, the log line saying why the run keeps its worktree while it waits in the monitor
+  sayPrMonitorWorktreeKept(step) {
+    if (!this.worktree?.dir || this.prMonitorKeptSaid) return;
+    this.prMonitorKeptSaid = true;
+    this.emitEvent('log', { level: 'info', step_id: step.id, message: `worktree: ${this.worktree.dir} is kept while the run waits for the merge, unused (no agent, no run slot): the end of the run removes it, deleting its branch once merged, or keeps the work on its branch if the pull/merge request closes.` });
+  },
+
+  // #809: the PR/MR merged (success) or closed without merging (failed, saying so): the monitor step ends
+  async endPrMonitor(step, st, r, card, target, t0) {
     this.prMonitor = null;
     const closed = r.state === 'closed';
     if (closed) this.emitEvent('log', { level: 'warn', step_id: step.id, message: `The pull/merge request ${target} was closed without merging.` });
@@ -693,6 +702,7 @@ const monitorSeen = (r) => JSON.stringify([r.state, r.ci, r.review, r.conflicts,
 // its log's `pr.monitor` events: it waits in the monitor (no run slot, areas/runs.js slotProblem), its last
 // card, and when the card last changed (the slower pace after a day survives a restart)
 function prMonitorSeed(events, stepId) {
+  /** @type {{ prMonitor: string, prMonitorCard: object | null, prMonitorSeen: string | undefined, prMonitorChangedAt: number | undefined }} */
   const seed = { prMonitor: stepId, prMonitorCard: null, prMonitorSeen: undefined, prMonitorChangedAt: undefined };
   for (const ev of events || []) {
     if (ev.type !== 'pr.monitor' || ev.step_id !== stepId || ev.error) continue;
