@@ -604,6 +604,7 @@ class WorkflowRun extends EventEmitter {
     } else if (step.type === 'suite') {
       // no agent, no supervisor (#177): the result (pass, fail with the failing tests, blocked) is
       // the output, and the transitions route it
+      await this.depsBeforeStep(step);
       try {
         output = await this.runSuiteStep(step, st);
       } finally {
@@ -614,6 +615,7 @@ class WorkflowRun extends EventEmitter {
       scope = { ...this.ctx, output, iteration: st.iteration };
     } else if (PLAIN_MACHINE_STEPS[step.type]) {
       // no agent, no model call: the output is the step's result, the transitions route it
+      await this.depsBeforeStep(step); // #778: a check runs the project's scripts on a usable tree
       output = await this[PLAIN_MACHINE_STEPS[step.type]](step, st);
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
@@ -637,6 +639,8 @@ class WorkflowRun extends EventEmitter {
       scope = { ...this.ctx, output, status: output.status, iteration: st.iteration };
     } else {
       if (step.base_worktree) await this.setupBaseWorktree();
+      // #778: the build (an agent step) and its Retry start on a usable dependency tree
+      await this.depsBeforeStep(step);
       const slow = this.watchSlowStep(step, st);
       try {
         output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);

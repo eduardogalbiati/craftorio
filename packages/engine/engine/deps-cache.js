@@ -19,6 +19,8 @@
 // the entry is complete only once entry.json is written, an entry an agent changed through the link
 // (a package added: the hidden lockfile changed) or emptied (`npm ci`) is marked unusable and never
 // given to a new worktree, and a worktree's link is removed (never followed) before the worktree is.
+// #778: the worktree whose agent changed the entry keeps it (entry.json `changed_by`); the other
+// worktrees linking it are relinked to a usable generation of the key at their next check.
 // #599: an npm workspaces monorepo is cached too. npm links each workspace package into node_modules
 // (`node_modules/@scope/a` → `packages/a`), a link that must point into the worktree that loads it:
 // the entry holds the installed tree without those links, and the worktree's node_modules is a real
@@ -251,11 +253,13 @@ function entryUsable(entry) {
   return fs.existsSync(path.join(entry, 'node_modules', meta.sentinel || '.'));
 }
 
-// Marks an entry so no new worktree gets it; the worktrees that link it keep it until they go.
-function markUnusable(entry, why) {
+// Marks an entry so no new worktree gets it. #778: `by` (the node_modules it was changed through) is
+// recorded as `changed_by`, its worktree folder (never its node_modules: every link resolves to the
+// same entry): that worktree keeps the entry, the others are relinked at their next check.
+function markUnusable(entry, why, by = null) {
   const meta = entryMeta(entry);
   if (!meta || meta.unusable) return false;
-  writeJson(path.join(entry, 'entry.json'), { ...meta, unusable: why, marked_at: new Date().toISOString() });
+  writeJson(path.join(entry, 'entry.json'), { ...meta, unusable: why, marked_at: new Date().toISOString(), ...(by ? { changed_by: path.dirname(path.resolve(by)) } : {}) });
   return true;
 }
 
@@ -456,10 +460,12 @@ function markIfChanged(entry, nm, log) {
   // #599: a workspaces worktree has its own copy of the hidden lockfile, rewritten by a package added there
   const copy = mountedEntry(nm) && linksEntry(nm, entry) ? path.join(nm, meta.sentinel) : null;
   if (!fs.existsSync(sentinel)) {
-    markUnusable(entry, EMPTIED);
+    markUnusable(entry, EMPTIED, nm);
     log('warn', `dependency cache: ${path.basename(entry)} was emptied through ${nm}; it is never given to a new worktree`);
   } else if (meta.sentinel_sha256 && [sentinel, copy].some((f) => f && fs.existsSync(f) && fileHash(f) !== meta.sentinel_sha256)) {
-    markUnusable(entry, 'changed through a worktree link');
+    // #778 limit: without workspaces the tree is shared, so the first worktree checked after the
+    // change is the one it is attributed to (the engine checks after each agent step: the changer)
+    markUnusable(entry, 'changed through a worktree link', nm);
     log('info', `dependency cache: ${path.basename(entry)} was changed through ${nm} (a package added or removed); new worktrees get a fresh install`);
   }
 }
@@ -534,15 +540,21 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
   };
 
   // this folder's own entry, changed by its agent (a package added without a lockfile change):
-  // it keeps it; only an emptied one is replaced
+  // it keeps it; only an emptied one is replaced. #778: an entry another worktree changed (its
+  // `changed_by` is not this folder) is left: this folder is relinked to a usable generation of the
+  // key, installed when none exists. An entry marked before #778 (no `changed_by`) is kept, as before.
   const own = previous?.entry && previous.key === key && entryMeta(previous.entry);
-  if (own && own.unusable !== EMPTIED && linksEntry(nm, previous.entry)) {
+  const changedElsewhere = own?.unusable && own.changed_by && !samePath(own.changed_by, workDir);
+  if (own && own.unusable !== EMPTIED && !changedElsewhere && linksEntry(nm, previous.entry)) {
     touch(previous.entry, nm);
     return { ...previous, status: 'linked', seconds: (Date.now() - t0) / 1000 };
   }
+  const relinked = changedElsewhere && linksEntry(nm, previous.entry)
+    ? { reason: `${path.basename(previous.entry)} was changed through ${own.changed_by} (${own.unusable}); relinked to a usable generation of ${key}` }
+    : {};
 
   let entry = usable();
-  if (entry) return (await link(entry, 'hit')) || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
+  if (entry) return (await link(entry, 'hit', relinked)) || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
 
   let waited = false;
   const release = await acquireLock(path.join(projectDir, `${key}.lock`), {
@@ -551,7 +563,7 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
   });
   try {
     entry = usable(); // installed by the run we waited for
-    if (entry) return (await link(entry, 'hit', { waited })) || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
+    if (entry) return (await link(entry, 'hit', { waited, ...relinked })) || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
 
     // an incomplete entry (no entry.json: a crash or a cancel) is ours to replace; an unusable
     // one may still be linked by other worktrees: the new install gets the next generation
@@ -588,7 +600,7 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
       bytes: dirBytes(path.join(entry, 'node_modules')), install_seconds: seconds, created_at: now, last_used: now,
     });
     touch(entry, nm);
-    return { status: 'miss', ...base, key, entry, seconds, waited, ...(links != null ? { workspace_links: links } : {}) };
+    return { status: 'miss', ...base, key, entry, seconds, waited, ...relinked, ...(links != null ? { workspace_links: links } : {}) };
   } finally {
     release();
   }

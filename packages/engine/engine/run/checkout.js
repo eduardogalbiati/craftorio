@@ -130,8 +130,9 @@ const methods = {
   // ---- dependencies from the shared cache (#198, packages/engine/engine/deps-cache.js) ---------------------
   // Installed once per lockfile content in <workspace>/cache/deps and linked into the worktree when
   // it is ready, again after each agent step (a lockfile the step changed: the new key is installed
-  // once), and into the base worktree. Records `deps.ready`; agents are told in their command guide.
-  // which: 'worktree' | 'base'. A simulated run has no worktree, so nothing is installed.
+  // once), before each build, suite, check and agent step (#778: an entry another run's agent changed
+  // is left for a usable generation), and into the base worktree. Records `deps.ready`; agents are
+  // told in their command guide. which: 'worktree' | 'base'. A simulated run has no worktree, so nothing is installed.
   async prepareDeps(which, dir, after) {
     if (this.machine.simulated || !dir) return null;
     this.deps ??= {};
@@ -163,6 +164,13 @@ const methods = {
     });
     this.emitEvent('log', { level: r.status === 'failed' || r.status === 'local' ? 'warn' : 'info', message: depsLine(which, r) });
     return r;
+  },
+
+  // #778: the worktree's dependencies checked before a step runs (the build, a suite or e2e, a check,
+  // their Retry): a link to an entry another run's agent changed is relinked first; never throws
+  async depsBeforeStep(step) {
+    if (!this.worktree || this.abort.signal.aborted) return;
+    await this.prepareDeps('worktree', this.ctx.worktree_dir, `before step ${step.id}`).catch(() => {});
   },
 
   // The lines of an agent's command guide about dependencies: what is ready and what never to run

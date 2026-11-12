@@ -300,6 +300,8 @@ steps:
       {{ steps.build.output.report }}
       Building again only helps once the environment is fixed (e.g. the process holding a file
       of the worktree is stopped: the orchestrator stops the ones started from the worktree).
+      A missing module from a broken dependency-cache link (another run changed the shared entry)
+      needs no hand work: "Build again" fixes it, the engine relinks the dependencies before the build.
     choices:
       - { id: continue, label: "Continue to verification anyway" }
       - { id: retry,    label: "Build again (I fixed the environment)" }

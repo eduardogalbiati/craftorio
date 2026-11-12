@@ -49,6 +49,11 @@ No test suite here (`npm test` and the like): the test writer already ran it, an
   `npm run build` errors such as `Cannot find module` are a consequence, not a separate code failure.
 - **infra** too: the build tool fails on the linked `node_modules` itself (it refuses a directory
   junction or symlink): name the tool and the error in the report; the owner decides.
+- **infra** too (#778): `Cannot find module` / `Failed to locate module` for a package of the lockfile
+  while `node_modules` links into the shared dependency cache: the cache entry was changed through
+  another run's link (its `entry.json` has `unusable`). Say the cause is a broken cache link and that
+  **Retry fixes it** (the engine checks the dependencies before the build and relinks a usable
+  generation); never ask the owner to rebuild the cache or re-point the links by hand.
 
 ## Audit
 
