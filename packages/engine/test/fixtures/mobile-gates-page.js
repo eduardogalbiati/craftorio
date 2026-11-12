@@ -11,7 +11,7 @@ async function phoneGatesFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phone-gates-smoke-'));
   const state = { language: 'en', time: Date.now(), open: true, answers: [] };
   const gate = {
-    approval_id: 'approval-mobile', step_id: 'review', message: 'Review the mobile recovery change',
+    approval_id: 'approval-mobile', step_id: 'review', message: 'Review the mobile recovery change.\n\n' + 'Detailed verification evidence for the mobile recovery behavior.\n'.repeat(60),
     choices: [
       { id: 'approve', label: 'Approve release', help: 'Merges the branch into main.' },
       { id: 'redo', label: 'Request changes', help: 'Returns the change to the developer with your note.', feedback_required: true },
@@ -22,8 +22,10 @@ async function phoneGatesFixture() {
       recommend: 'redo: Review the evidence before shipping.', answers: gate.choices }),
     evidence: [{ label: 'Implementation evidence', url: 'https://example.test/evidence/phone-gates' }],
   };
+  gate.requested_at = new Date(state.time - 12 * 60000).toISOString();
   const run = {
     runId: 'simulated-mobile', title: 'Phone gates: accessible recovery', gates: [gate],
+    projectId: 'multiagent-orchestrator', issues: [{ number: 226 }],
     nextTurns: [{ agent: 'developer', turn: { kind: 'warm', tokens: 20000 } }],
   };
   const server = createMobileGatesServer({

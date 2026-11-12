@@ -19,7 +19,8 @@ const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setIm
 async function browser(html, fetch, { token = 'device-token', search = '', configure = () => {} } = {}) {
   const stored = new Map(token ? [['multiagent-phone-token', token]] : []);
   const sandbox = {
-    fetch, AbortController, setTimeout, clearTimeout, URLSearchParams,
+    fetch, AbortController, setTimeout, clearTimeout, URLSearchParams, setInterval: () => 0, clearInterval() {},
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     navigator: { userAgent: 'Test phone' }, location: { search }, history: { replaceState() {} },
     localStorage: { getItem: (k) => stored.get(k) || null, setItem: (k, v) => stored.set(k, v), removeItem: (k) => stored.delete(k) },
   };
@@ -220,4 +221,120 @@ test('blocked storage is reported before any list read or answer request', async
     assert.equal(calls, 0);
     if (confirmation) assert.equal(b.get('answer-submit').disabled, false);
   }
+});
+
+test('long gate reports stay in collapsed details with a short headline and document title', () => {
+  const full = 'The check needs review.\n' + 'Full report detail.\n'.repeat(200);
+  const gate = { ...GATE, message: full, brief: { headline: 'Review one failed check.' } };
+  const html = gatePage({ run: RUN, gate }, 't', null, 'en', GATE.choices).html;
+  const dom = createDom(); dom.loadBody(html);
+  assert.equal(dom.document.querySelector('h1').textContent, gate.brief.headline);
+  assert.ok(dom.document.querySelector('details').textContent.includes(full));
+  assert.equal(dom.document.querySelector('details').hasAttribute('open'), false);
+  assert.match(html, /<title>Mobile release<\/title>/);
+});
+
+test('confirmation retains brief and evidence and highlights a contrary choice without another dialog', () => {
+  const { gateBrief } = require('../../engine/gate-summary');
+  const choices = [...GATE.choices, { id: 'stop', label: 'Stop now' }];
+  const brief = { ...gateBrief({ summary: 'The check failed.', recommend: 'stop: Do not ship.', answers: choices }),
+    evidence: [{ label: 'Failing check', url: 'https://example.test/check' }] };
+  const gate = { ...GATE, brief };
+  const html = gatePage({ run: RUN, gate }, 't', choices[0], 'en', choices).html;
+  for (const text of ['The check failed.', 'Do not ship.', 'https://example.test/check', 'The recommendation is Stop now. You are choosing Ship it.']) assert.ok(html.includes(text));
+  assert.match(html, /id="confirm"/);
+  assert.ok(!gatePage({ run: RUN, gate }, 't', choices[1], 'en', choices).html.includes('class="decision-warning"'));
+});
+
+test('tab drafts restore only this gate note and clear after a confirmed success', async () => {
+  const saved = new Map();
+  const configure = (s) => { s.sessionStorage = { getItem: (k) => saved.get(k) || null, setItem: (k, v) => saved.set(k, v), removeItem: (k) => saved.delete(k) }; };
+  const first = await browser(confirmHtml(), async () => reply({ ok: true }), { configure });
+  first.type(first.get('fb'), 'Line one\nLine two');
+  assert.match(first.get('note-count').textContent, /17 \/ 2000/);
+  const record = JSON.parse([...saved.values()][0]);
+  assert.deepEqual(Object.keys(record).sort(), ['at', 'note']);
+  const restored = await browser(confirmHtml(), async () => reply({ ok: true }), { configure });
+  assert.equal(restored.get('fb').value, 'Line one\nLine two');
+  assert.match(restored.get('draft-status').textContent, /Draft restored/);
+  const other = gatePage({ run: RUN, gate: { ...GATE, approval_id: 'a2' } }, 't', GATE.choices[0], 'en', GATE.choices).html;
+  const isolated = await browser(other, async () => reply({}), { configure });
+  assert.equal(isolated.get('fb').value, '');
+  await submit(restored);
+  assert.equal(saved.size, 0);
+});
+
+test('expired drafts and blocked optional storage never queue or send an answer', async () => {
+  let calls = 0;
+  const b = await browser(confirmHtml(), async () => { calls++; return reply({}); }, {
+    configure: (s) => { s.sessionStorage = { getItem: () => JSON.stringify({ note: 'Old', at: Date.now() - 25 * 3600000 }), removeItem() {}, setItem() { throw Error('denied'); } }; },
+  });
+  assert.equal(b.get('fb').value, '');
+  b.type(b.get('fb'), 'Manual note');
+  assert.match(b.get('draft-status').textContent, /unavailable/);
+  assert.equal(b.get('answer-submit').disabled, false);
+  assert.equal(calls, 0);
+});
+
+test('a failed refresh keeps the known list and returning to the visible tab refreshes it', async () => {
+  let fail = false; let calls = 0;
+  const gates = [{ runId: 'r1', approvalId: 'a1', projectId: 'project-one', issues: [{ number: 42 }], requestedAt: new Date(0).toISOString(), serverNow: 600000, title: 'Title', message: 'Review', stepId: 'ship', url: '/gates/r1/a1?t=t' }];
+  const b = await browser(gatesPage('en').html, async () => { calls++; if (fail) throw Error('offline'); return reply({ gates }); });
+  assert.match(b.get('gates').textContent, /project-one · #42 · ship · Waiting 10 min/);
+  const link = b.get('gates').querySelector('a'); link.focus();
+  fail = true;
+  await b.get('retry').onclick();
+  assert.equal(b.get('gates').querySelector('a'), link);
+  assert.match(b.get('list-updated').textContent, /Outdated list/);
+  fail = false;
+  link.focus();
+  b.document.dispatchEvent(new b.classes.Event('visibilitychange'));
+  await settle();
+  assert.equal(calls, 3);
+  assert.equal(b.document.activeElement === link, true);
+  assert.equal(b.get('gates').querySelector('a'), link);
+  assert.match(b.get('list-updated').textContent, /Last updated/);
+});
+
+test('server-relative expiry blocks a stale confirmation without losing the note or sending a POST', async () => {
+  let tick; let clock = 100000; let calls = 0;
+  const html = gatePage({ run: RUN, gate: GATE }, 't', GATE.choices[0], 'en', GATE.choices, { expiresAt: 2000, serverNow: 1000 }).html;
+  const b = await browser(html, async () => { calls++; return reply({}); }, {
+    configure: (s) => { s.Date = class extends Date { static now() { return clock; } }; s.setInterval = (fn) => { tick = fn; }; },
+  });
+  b.type(b.get('fb'), 'Still here');
+  assert.match(b.get('gate-expiry').textContent, /expires in 1 min/);
+  clock += 2000; tick();
+  assert.equal(b.get('answer-submit').disabled, true);
+  assert.equal(b.get('fresh-link').hidden, false);
+  await submit(b);
+  assert.equal(calls, 0);
+  assert.equal(b.get('fb').value, 'Still here');
+});
+
+test('an ended gate clears only its own tab draft', async () => {
+  const { noticePage } = require('../../domains/workspace/mobile-gates-page');
+  const saved = new Map([['gate-one', 'note'], ['gate-two', 'other note']]);
+  await browser(noticePage('ended', 'en', 200, { ended: true, draftKey: 'gate-one' }).html, async () => assert.fail('No request on an ended gate'), {
+    configure: (s) => { s.sessionStorage = { removeItem: (k) => saved.delete(k) }; },
+  });
+  assert.equal(saved.has('gate-one'), false);
+  assert.equal(saved.get('gate-two'), 'other note');
+});
+
+test('the authenticated queue includes gate context and HTML uses the actual signed expiry and server clock', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phone-context-'));
+  const time = 1000000;
+  const service = { workspace: () => ({ root }), api: { 'runs:active': () => [{ ...RUN, projectId: 'project-one', issues: [{ number: 42, body: 'Not part of the phone contract' }], gates: [{ ...GATE, requested_at: new Date(time - 60000).toISOString() }] }] }, answerPhoneGate: () => assert.fail('Reads never answer') };
+  const m = createMobileGatesServer({ service, now: () => time, linkTtlMs: 120000 });
+  const { url } = await m.listen();
+  t.after(async () => { await m.close(); fs.rmSync(root, { recursive: true, force: true }); });
+  const paired = await (await fetch(url + '/pair', { method: 'POST', body: JSON.stringify({ code: m.pair().code }) })).json();
+  const list = await (await fetch(url + '/gates.json', { headers: { Authorization: 'Bearer ' + paired.token } })).json();
+  assert.equal(list.gates[0].projectId, 'project-one');
+  assert.deepEqual(list.gates[0].issues, [{ number: 42 }]);
+  assert.equal(list.gates[0].serverNow, time);
+  assert.equal(list.gates[0].requestedAt, new Date(time - 60000).toISOString());
+  const html = await (await fetch(list.gates[0].url)).text();
+  assert.ok(html.includes('"expiresAt":1120000,"serverNow":1000000'));
 });

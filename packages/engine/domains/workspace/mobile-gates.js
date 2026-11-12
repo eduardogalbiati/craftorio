@@ -203,6 +203,8 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
       if (!deviceOf(req)) throw new HttpError(401, 'This phone is not paired.');
       const gates = openGates().map(({ run, gate }) => ({
         runId: run.runId, approvalId: gate.approval_id, stepId: gate.step_id, message: gate.message, title: runTitle(run),
+        projectId: run.projectId || null, issues: (run.issues || []).map((i) => ({ number: i.number })),
+        requestedAt: gate.requested_at || null, serverNow: now(),
         headline: gate.brief?.headline || null, url: gateLink(run.runId, gate.approval_id),
       }));
       sendJson(res, 200, { gates });
@@ -221,7 +223,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
         }
         const found = findGate(runId, approvalId);
         if (!found) {
-          const p = noticePage('ended', language());
+          const p = noticePage('ended', language(), 200, { ended: true, draftKey: `phone-note:${runId}/${approvalId}` });
           res.writeHead(200, p.headers);
           res.end(p.html);
           return;
@@ -229,7 +231,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
         const want = url.searchParams.get('answer');
         const chosen = want ? choicesOf(found.gate).find((c) => c.id === want) : null;
         if (want && !chosen) throw new HttpError(400, 'Unknown answer.');
-        const p = gatePage(found, t, chosen, language(), choicesOf(found.gate));
+        const p = gatePage(found, t, chosen, language(), choicesOf(found.gate), { expiresAt: JSON.parse(Buffer.from(t.split('.')[0], 'base64url').toString('utf8')).exp, serverNow: now() });
         res.writeHead(200, p.headers);
         res.end(p.html);
         return;

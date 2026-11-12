@@ -513,6 +513,11 @@ fallback. Reload an open page after changing the language. Gate messages, button
 notes keep their original text. The pairing code and note fields have labels, status changes are
 announced to screen readers, and the page supports keyboard navigation and narrow phone screens.
 
+The gate starts with its short summary, recommendation and the action needed from you. **Full
+details** keeps the complete message available without putting a long report above the choices.
+The confirmation repeats this context and its evidence links. When your choice differs from the
+recommendation, it says so beside the confirmation; the decision is still yours.
+
 If the connection fails while reading the list, **Try again** reads it again without removing the
 pairing. A pairing that is no longer valid asks for a new code; an expired or invalid gate link
 offers the list so you can open a fresh link. An answered gate says it is no longer waiting.
@@ -521,6 +526,20 @@ If the connection fails after you confirm an answer, its result may be unknown: 
 already have received it. **Check gate status** only reads the gate; it never resends the answer.
 If the gate is still open, choose and confirm again yourself. If it has ended, the page says so
 without claiming which answer ended it. There is no offline queue or automatic retry of answers.
+
+The list identifies each gate's project, issues and wait time. It refreshes when you return to the
+visible tab or the connection comes back. A failed read keeps the last list visible and marks it
+outdated; refreshing never sends an answer or changes the field you are editing.
+
+The confirmation accepts a multiline note with a character count. Its draft is scoped to that gate
+in this browser tab and expires after 24 hours. Going back or reloading restores only the note, never
+a chosen answer. A confirmed answer or an ended gate removes its draft. If the browser blocks draft
+storage, the field still works and the page asks you to keep a copy before leaving.
+
+An open gate shows its signed link's remaining lifetime using the server's time. When it expires,
+confirmation is disabled and the page offers the list for a fresh link; the note stays in the tab.
+The server still checks the signature and expiration on every answer. Keeping the page open does
+not renew its authorization.
 
 **Tests: on or off, per workflow and per run** (#203; inputs `unit_tests` and `e2e_tests`, shown
 like `mode` in the Start drawer, the roadmap item's Edit form and the Backlog's Assign dialog, with
