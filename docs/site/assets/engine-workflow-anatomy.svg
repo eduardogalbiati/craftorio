@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 560" width="820" height="560" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="560" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<rect x="24" y="24" width="378" height="132" rx="10" fill="#151820" stroke="#7dd3fc" stroke-opacity="0.7"/>
+<text x="42" y="56" fill="#7dd3fc" font-size="19" font-weight="700" text-anchor="start">inputs</text>
+<text x="42" y="80" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">what the user fills in at Start</text>
+<text x="42" y="105" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">prompt, goal, max_rounds</text>
+<text x="42" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">writer_provider, writer_model</text>
+<rect x="418" y="24" width="378" height="132" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity="0.7"/>
+<text x="436" y="56" fill="#c084fc" font-size="19" font-weight="700" text-anchor="start">agents</text>
+<text x="436" y="80" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">who works, with which CLI and rules</text>
+<text x="436" y="105" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">writer: provider, model, session,</text>
+<text x="436" y="130" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  skills, capabilities, system_prompt</text>
+<rect x="24" y="172" width="772" height="132" rx="10" fill="#151820" stroke="#8a91a3" stroke-opacity="0.7"/>
+<text x="42" y="204" fill="#8a91a3" font-size="19" font-weight="700" text-anchor="start">providers · defaults · orchestrator</text>
+<text x="42" y="228" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">how each CLI is called, the limits, the supervisor</text>
+<text x="42" y="253" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">claude / codex / grok flags · timeout, max_context, retry</text>
+<text x="42" y="278" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">supervisor: max_interventions · limits: max_total_cost_usd</text>
+<rect x="24" y="320" width="772" height="232" rx="10" fill="#151820" stroke="#7c9cff" stroke-opacity="0.7"/>
+<text x="42" y="352" fill="#7c9cff" font-size="19" font-weight="700" text-anchor="start">steps</text>
+<text x="42" y="376" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">the graph: who runs, what is asked, what must be answered, where to go next</text>
+<text x="42" y="401" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">- id: review    agent: reviewer</text>
+<text x="42" y="426" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  prompt: | … {{ steps.write.output.document }} …</text>
+<text x="42" y="451" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  output_schema: { score, summary, notes }</text>
+<text x="42" y="476" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">  transitions:</text>
+<text x="42" y="501" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">    - { when: "output.score &gt;= inputs.threshold", goto: signoff }</text>
+<text x="42" y="526" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">    - { when: "true", goto: write, loop: { max_iterations: 4 } }</text>
+</svg>

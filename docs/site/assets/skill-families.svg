@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 540" width="820" height="540" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="540" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<text x="24" y="38" fill="#8a91a3" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1.2">FAMILY</text>
+<text x="194" y="38" fill="#8a91a3" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1.2">SHARED (uses:)</text>
+<text x="428" y="38" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">js</text>
+<text x="496" y="38" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">python</text>
+<text x="564" y="38" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">go</text>
+<text x="632" y="38" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">java</text>
+<text x="700" y="38" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">csharp</text>
+<text x="768" y="38" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">rust</text>
+<rect x="12" y="44" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="68" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">unit-test-writer-…</text>
+<text x="194" y="68" fill="#e6e8ee" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">testing-principles</text>
+<rect x="404" y="53" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="68" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">js</text>
+<rect x="472" y="53" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="68" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">python</text>
+<rect x="540" y="53" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="564" y="68" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">go</text>
+<rect x="608" y="53" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="632" y="68" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">java</text>
+<rect x="676" y="53" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="700" y="68" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">csharp</text>
+<rect x="744" y="53" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="768" y="68" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">rust</text>
+<rect x="12" y="84" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="108" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">e2e-test-writer-…</text>
+<text x="194" y="108" fill="#e6e8ee" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">e2e-scenarios</text>
+<rect x="404" y="93" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="108" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">js</text>
+<rect x="472" y="93" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="108" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">python</text>
+<rect x="540" y="93" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="564" y="108" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">go</text>
+<rect x="608" y="93" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="632" y="108" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">java</text>
+<rect x="676" y="93" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="700" y="108" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">csharp</text>
+<rect x="744" y="93" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="768" y="108" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">rust</text>
+<rect x="12" y="124" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="148" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">build-audit-…</text>
+<text x="194" y="148" fill="#e6e8ee" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">dependency-audit-policy</text>
+<rect x="404" y="133" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="148" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">js</text>
+<rect x="472" y="133" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="148" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">python</text>
+<rect x="540" y="133" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="564" y="148" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">go</text>
+<rect x="608" y="133" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="632" y="148" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">java</text>
+<rect x="676" y="133" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="700" y="148" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">csharp</text>
+<rect x="744" y="133" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="768" y="148" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">rust</text>
+<text x="24" y="198" fill="#8a91a3" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1.2">FAMILY</text>
+<text x="194" y="198" fill="#8a91a3" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1.2">SHARED (uses:)</text>
+<text x="428" y="198" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gh</text>
+<text x="496" y="198" fill="#7dd3fc" font-size="14" font-weight="700" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gl</text>
+<rect x="12" y="204" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="228" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">ci-pipeline-…</text>
+<text x="194" y="228" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">–</text>
+<rect x="404" y="213" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="228" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gh</text>
+<rect x="472" y="213" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="228" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gl</text>
+<rect x="12" y="244" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="268" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">deploy-…</text>
+<text x="194" y="268" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">–</text>
+<rect x="404" y="253" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="268" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gh</text>
+<rect x="472" y="253" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="268" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gl</text>
+<rect x="12" y="284" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="308" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">issue-creator-…</text>
+<text x="194" y="308" fill="#e6e8ee" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">issue-writing</text>
+<rect x="404" y="293" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="308" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gh</text>
+<rect x="472" y="293" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="308" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gl</text>
+<rect x="12" y="324" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="348" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">pr-babysitter-…</text>
+<text x="194" y="348" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">–</text>
+<rect x="404" y="333" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="348" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gh</text>
+<rect x="472" y="333" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="348" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gl</text>
+<rect x="12" y="364" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="388" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">backlog-refresh-…</text>
+<text x="194" y="388" fill="#e6e8ee" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">backlog-refresh</text>
+<rect x="404" y="373" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="388" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gh</text>
+<rect x="472" y="373" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="388" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gl</text>
+<rect x="12" y="404" width="796" height="36" rx="8" fill="#151820"/>
+<text x="24" y="428" fill="#e6e8ee" font-size="14.5" font-weight="600" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">pr-screenshots-…</text>
+<text x="194" y="428" fill="#e6e8ee" font-size="13.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">pr-screenshots</text>
+<rect x="404" y="413" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="428" y="428" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gh</text>
+<rect x="472" y="413" width="48" height="22" rx="6" fill="rgba(124,156,255,.14)" stroke="rgba(124,156,255,.4)"/>
+<text x="496" y="428" fill="#7c9cff" font-size="12.5" font-weight="400" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">gl</text>
+<text x="24" y="480" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">A workflow asks for "unit-test-writer-{{ inputs.language }}": the family decides, the suffix follows the project.</text>
+<text x="24" y="504" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">A test enforces one skill per suffix in every family; what a family shares is a suffix-less skill loaded first.</text>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 594" width="820" height="594" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="594" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<rect x="60" y="24" width="270" height="66" rx="10" fill="#151820" stroke="#7c9cff" stroke-opacity="0.7"/>
+<text x="195" y="65" fill="#7c9cff" font-size="18" font-weight="700" text-anchor="middle">Pick the step</text>
+<text x="354" y="65" fill="#8a91a3" font-size="15.5" font-weight="400" text-anchor="start">the one the last transition named</text>
+<line x1="195" y1="93" x2="195" y2="117" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="120" width="270" height="66" rx="10" fill="#151820" stroke="#7c9cff" stroke-opacity="0.7"/>
+<text x="195" y="161" fill="#7c9cff" font-size="18" font-weight="700" text-anchor="middle">Render the prompt</text>
+<text x="354" y="161" fill="#8a91a3" font-size="15.5" font-weight="400" text-anchor="start">a template: inputs, earlier outputs, feedback</text>
+<line x1="195" y1="189" x2="195" y2="213" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="216" width="270" height="66" rx="10" fill="#151820" stroke="#fb923c" stroke-opacity="0.7"/>
+<text x="195" y="257" fill="#fb923c" font-size="18" font-weight="700" text-anchor="middle">Agent turn</text>
+<text x="354" y="257" fill="#8a91a3" font-size="15.5" font-weight="400" text-anchor="start">one headless CLI process, with its session</text>
+<line x1="195" y1="285" x2="195" y2="309" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="312" width="270" height="66" rx="10" fill="#151820" stroke="#4ade80" stroke-opacity="0.7"/>
+<text x="195" y="353" fill="#4ade80" font-size="18" font-weight="700" text-anchor="middle">Check the answer</text>
+<text x="354" y="353" fill="#8a91a3" font-size="15.5" font-weight="400" text-anchor="start">against output_schema; a wrong one is asked again</text>
+<line x1="195" y1="381" x2="195" y2="405" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="408" width="270" height="66" rx="10" fill="#151820" stroke="#7c9cff" stroke-opacity="0.7"/>
+<text x="195" y="449" fill="#7c9cff" font-size="18" font-weight="700" text-anchor="middle">Transitions</text>
+<text x="354" y="449" fill="#8a91a3" font-size="15.5" font-weight="400" text-anchor="start">the first when that holds says where to go</text>
+<path d="M 60 441 H 36 V 57 H 57" fill="none" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<text x="60" y="502" fill="#e6e8ee" font-size="15.5" font-weight="400" text-anchor="start">then: the next step · the same step again · a human gate (the run waits) · end</text>
+<text x="60" y="528" fill="#f87171" font-size="15" font-weight="400" text-anchor="start">On a failure the supervisor is called, a few times per step at most; never for a gate.</text>
+<text x="60" y="552" fill="#4ade80" font-size="15" font-weight="400" text-anchor="start">Everything is recorded: events.jsonl, summary.json, sessions, handoffs, evidence.</text>
+</svg>

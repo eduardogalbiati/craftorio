@@ -25,6 +25,7 @@
   "scripts": {
     "check": "node scripts/check.js",
     "docs": "node scripts/docs.js",
+    "docs:site": "node scripts/docs-site.js",
     "docs:usage": "node scripts/docs-usage.js",
     "evals": "node scripts/evals.js",
     "lint:lists": "node scripts/lint-lists.js",

@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 958" width="820" height="958" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="958" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<rect x="60" y="24" width="700" height="156" rx="10" fill="#151820" stroke="#262b37" stroke-opacity="1"/>
+<text x="76" y="47" fill="#8a91a3" font-size="12.5" font-weight="700" text-anchor="start" letter-spacing="1.2">DEVELOP</text>
+<text x="744" y="47" fill="#4ade80" font-size="13" font-weight="700" text-anchor="end">→ end</text>
+<rect x="76" y="58" width="95" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="123.5" y="78" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">develop</text>
+<text x="123.5" y="96" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">developer</text>
+<rect x="181" y="58" width="204.2" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="283.1" y="78" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">requirements_left_out</text>
+<text x="283.1" y="96" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="395.2" y="58" width="146.79999999999998" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="468.59999999999997" y="78" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">issue_not_done</text>
+<text x="468.59999999999997" y="96" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="76" y="116" width="204.2" height="48" rx="8" fill="#1b1f29" stroke="#4ade80" stroke-opacity="0.8"/>
+<text x="178.1" y="136" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">developer_screenshots</text>
+<text x="178.1" y="154" fill="#4ade80" font-size="12.5" font-weight="400" text-anchor="middle">no agent</text>
+<rect x="290.2" y="116" width="155" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="367.7" y="136" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">developer_check</text>
+<text x="367.7" y="154" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<line x1="410" y1="183" x2="410" y2="217" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="220" width="700" height="98" rx="10" fill="#151820" stroke="#262b37" stroke-opacity="1"/>
+<text x="76" y="243" fill="#8a91a3" font-size="12.5" font-weight="700" text-anchor="start" letter-spacing="1.2">REVIEW</text>
+<text x="744" y="243" fill="#4ade80" font-size="13" font-weight="700" text-anchor="end">→ end</text>
+<rect x="76" y="254" width="122.19999999999999" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="137.1" y="274" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">code_review</text>
+<text x="137.1" y="292" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">reviewer</text>
+<rect x="208.2" y="254" width="130.39999999999998" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="273.4" y="274" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">human_review</text>
+<text x="273.4" y="292" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<line x1="410" y1="321" x2="410" y2="355" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="358" width="700" height="156" rx="10" fill="#151820" stroke="#262b37" stroke-opacity="1"/>
+<text x="76" y="381" fill="#8a91a3" font-size="12.5" font-weight="700" text-anchor="start" letter-spacing="1.2">VALIDATE</text>
+<text x="744" y="381" fill="#4ade80" font-size="13" font-weight="700" text-anchor="end">→ end</text>
+<rect x="76" y="392" width="109" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="130.5" y="412" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">test</text>
+<text x="130.5" y="430" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">test_writer</text>
+<rect x="195" y="392" width="88" height="48" rx="8" fill="#1b1f29" stroke="#4ade80" stroke-opacity="0.8"/>
+<text x="239" y="412" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">suite</text>
+<text x="239" y="430" fill="#4ade80" font-size="12.5" font-weight="400" text-anchor="middle">no agent</text>
+<rect x="293" y="392" width="122.19999999999999" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="354.1" y="412" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">test_failed</text>
+<text x="354.1" y="430" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="425.2" y="392" width="81" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="465.7" y="412" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">build</text>
+<text x="465.7" y="430" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">builder</text>
+<rect x="516.2" y="392" width="130.39999999999998" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="581.4000000000001" y="412" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">build_failed</text>
+<text x="581.4000000000001" y="430" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="76" y="450" width="97.6" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="124.8" y="470" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">evidence</text>
+<text x="124.8" y="488" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">evidence</text>
+<rect x="183.6" y="450" width="138.6" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="252.89999999999998" y="470" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">verify_change</text>
+<text x="252.89999999999998" y="488" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">verifier</text>
+<rect x="332.2" y="450" width="138.6" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="401.5" y="470" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">verify_failed</text>
+<text x="401.5" y="488" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<line x1="410" y1="517" x2="410" y2="551" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="554" width="700" height="98" rx="10" fill="#151820" stroke="#262b37" stroke-opacity="1"/>
+<text x="76" y="577" fill="#8a91a3" font-size="12.5" font-weight="700" text-anchor="start" letter-spacing="1.2">PR &amp; CI</text>
+<text x="744" y="577" fill="#4ade80" font-size="13" font-weight="700" text-anchor="end">→ end</text>
+<rect x="76" y="588" width="95" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="123.5" y="608" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">ci</text>
+<text x="123.5" y="626" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">ci_pusher</text>
+<rect x="181" y="588" width="105.8" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="233.9" y="608" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">ci_failed</text>
+<text x="233.9" y="626" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="296.8" y="588" width="138.6" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="366.1" y="608" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">pr_babysitter</text>
+<text x="366.1" y="626" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">pr_babysitter</text>
+<rect x="445.4" y="588" width="163.2" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="527" y="608" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">comment_decision</text>
+<text x="527" y="626" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<line x1="410" y1="655" x2="410" y2="689" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<rect x="60" y="692" width="700" height="156" rx="10" fill="#151820" stroke="#262b37" stroke-opacity="1"/>
+<text x="76" y="715" fill="#8a91a3" font-size="12.5" font-weight="700" text-anchor="start" letter-spacing="1.2">DEPLOY</text>
+<text x="744" y="715" fill="#4ade80" font-size="13" font-weight="700" text-anchor="end">→ end</text>
+<rect x="76" y="726" width="122.19999999999999" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="137.1" y="746" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">deploy_test</text>
+<text x="137.1" y="764" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">deployer</text>
+<rect x="208.2" y="726" width="146.79999999999998" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="281.59999999999997" y="746" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">preview_failed</text>
+<text x="281.59999999999997" y="764" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="365" y="726" width="138.6" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="434.3" y="746" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">approve_merge</text>
+<text x="434.3" y="764" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="513.6" y="726" width="163.2" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="595.2" y="746" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">resolve_conflict</text>
+<text x="595.2" y="764" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">developer</text>
+<rect x="76" y="784" width="130.39999999999998" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="141.2" y="804" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">merge_failed</text>
+<text x="141.2" y="822" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="216.39999999999998" y="784" width="122.19999999999999" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="277.5" y="804" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">deploy_prod</text>
+<text x="277.5" y="822" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">deployer</text>
+<rect x="348.59999999999997" y="784" width="138.6" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="417.9" y="804" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">deploy_failed</text>
+<text x="417.9" y="822" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<path d="M 760 302 H 774 V 570 H 763" fill="none" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<path d="M 60 236 H 46 V 164 H 57" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#a-warn)"/>
+<text x="42" y="204" fill="#fb923c" font-size="11.5" font-weight="400" text-anchor="end"></text>
+<path d="M 60 374 H 32 V 164 H 57" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#a-warn)"/>
+<text x="28" y="273" fill="#fb923c" font-size="11.5" font-weight="400" text-anchor="end"></text>
+<path d="M 60 708 H 18 V 636 H 57" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#a-warn)"/>
+<text x="14" y="676" fill="#fb923c" font-size="11.5" font-weight="400" text-anchor="end">×2</text>
+<path d="M 60 708 H 46 V 302 H 57" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#a-warn)"/>
+<text x="42" y="509" fill="#fb923c" font-size="11.5" font-weight="400" text-anchor="end"></text>
+<path d="M 60 708 H 32 V 164 H 57" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#a-warn)"/>
+<text x="28" y="440" fill="#fb923c" font-size="11.5" font-weight="400" text-anchor="end"></text>
+<text x="60" y="902" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">Stages top to bottom · a step is a chip:</text>
+<rect x="60" y="916" width="12" height="12" rx="3" fill="#c084fc"/>
+<text x="78" y="927" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">an agent</text>
+<rect x="156" y="916" width="12" height="12" rx="3" fill="#facc15"/>
+<text x="174" y="927" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">you (a gate)</text>
+<rect x="280" y="916" width="12" height="12" rx="3" fill="#4ade80"/>
+<text x="298" y="927" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">no model</text>
+<rect x="376" y="916" width="12" height="12" rx="3" fill="#7c9cff"/>
+<text x="394" y="927" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">child runs</text>
+<rect x="486" y="916" width="12" height="12" rx="3" fill="#fb923c"/>
+<text x="504" y="927" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">back to an earlier stage</text>
+<text x="60" y="952" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">26 steps · 9 agents · gates: 13</text>
+</svg>

@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 500" width="820" height="500" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="500" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<text x="24" y="36" fill="#8a91a3" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1">Declared in the YAML</text>
+<text x="336" y="36" fill="#8a91a3" font-size="13" font-weight="700" text-anchor="middle" letter-spacing="1">Claude Code</text>
+<text x="426" y="36" fill="#8a91a3" font-size="13" font-weight="700" text-anchor="middle" letter-spacing="1">Codex CLI</text>
+<text x="516" y="36" fill="#8a91a3" font-size="13" font-weight="700" text-anchor="middle" letter-spacing="1">Grok Build</text>
+<rect x="12" y="52" width="796" height="50" rx="8" fill="#151820"/>
+<text x="24" y="76" fill="#e6e8ee" font-size="14.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">tools: read / edit / write</text>
+<text x="336" y="78" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="426" y="78" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="516" y="78" fill="#facc15" font-size="18" font-weight="400" text-anchor="middle">◐</text>
+<text x="566" y="68" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">--tools + acceptEdits</text>
+<text x="566" y="82" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">read-only or workspace-write sandbox</text>
+<text x="566" y="96" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">read-only tool sets only</text>
+<text x="24" y="126" fill="#e6e8ee" font-size="14.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">bash:git, bash:npm (which commands)</text>
+<text x="336" y="128" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="426" y="128" fill="#f87171" font-size="18" font-weight="400" text-anchor="middle">○</text>
+<text x="516" y="128" fill="#f87171" font-size="18" font-weight="400" text-anchor="middle">○</text>
+<text x="566" y="118" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">Bash(git:*) allow rules</text>
+<text x="566" y="132" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">the sandbox limits writes, not commands</text>
+<text x="566" y="146" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">not restricted</text>
+<rect x="12" y="152" width="796" height="50" rx="8" fill="#151820"/>
+<text x="24" y="176" fill="#e6e8ee" font-size="14.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">web: false</text>
+<text x="336" y="178" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="426" y="178" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="516" y="178" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="566" y="168" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">WebSearch/WebFetch not offered</text>
+<text x="566" y="182" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">web_search disabled</text>
+<text x="566" y="196" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">--disable-web-search</text>
+<text x="24" y="226" fill="#e6e8ee" font-size="14.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">subagents: false</text>
+<text x="336" y="228" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="426" y="228" fill="#8a91a3" font-size="18" font-weight="400" text-anchor="middle">–</text>
+<text x="516" y="228" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="566" y="218" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">Agent/Task not offered</text>
+<text x="566" y="232" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">Codex has none</text>
+<text x="566" y="246" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">--no-subagents</text>
+<rect x="12" y="252" width="796" height="50" rx="8" fill="#151820"/>
+<text x="24" y="276" fill="#e6e8ee" font-size="14.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">mcp: [names]</text>
+<text x="336" y="278" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="426" y="278" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="516" y="278" fill="#f87171" font-size="18" font-weight="400" text-anchor="middle">○</text>
+<text x="566" y="268" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">--mcp-config, declared servers only</text>
+<text x="566" y="282" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">declared servers only</text>
+<text x="566" y="296" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">not passed</text>
+<text x="24" y="326" fill="#e6e8ee" font-size="14.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">isolation (no user setup)</text>
+<text x="336" y="328" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="426" y="328" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="516" y="328" fill="#f87171" font-size="18" font-weight="400" text-anchor="middle">○</text>
+<text x="566" y="318" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">no settings, plugins, hooks, memory</text>
+<text x="566" y="332" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">plugins, apps, memories off</text>
+<text x="566" y="346" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">user MCP, skills, memory still load</text>
+<rect x="12" y="352" width="796" height="50" rx="8" fill="#151820"/>
+<text x="24" y="376" fill="#e6e8ee" font-size="14.5" font-weight="400" text-anchor="start" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">max_requests (budget per turn)</text>
+<text x="336" y="378" fill="#4ade80" font-size="18" font-weight="400" text-anchor="middle">●</text>
+<text x="426" y="378" fill="#f87171" font-size="18" font-weight="400" text-anchor="middle">○</text>
+<text x="516" y="378" fill="#f87171" font-size="18" font-weight="400" text-anchor="middle">○</text>
+<text x="566" y="368" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">--max-turns n</text>
+<text x="566" y="382" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">runs to its end</text>
+<text x="566" y="396" fill="#8a91a3" font-size="11.5" font-weight="400" text-anchor="start">runs to its end</text>
+<text x="24" y="430" fill="#4ade80" font-size="16" font-weight="400" text-anchor="start">●</text>
+<text x="42" y="430" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">enforced</text>
+<text x="128" y="430" fill="#facc15" font-size="16" font-weight="400" text-anchor="start">◐</text>
+<text x="146" y="430" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">partly</text>
+<text x="217" y="430" fill="#f87171" font-size="16" font-weight="400" text-anchor="start">○</text>
+<text x="235" y="430" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">not enforceable</text>
+<text x="373.5" y="430" fill="#8a91a3" font-size="16" font-weight="400" text-anchor="start">–</text>
+<text x="391.5" y="430" fill="#8a91a3" font-size="13.5" font-weight="400" text-anchor="start">n/a</text>
+<text x="24" y="460" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">Context economy, not a security boundary: only Codex’s sandbox is enforced by the OS.</text>
+<text x="24" y="482" fill="#8a91a3" font-size="14" font-weight="400" text-anchor="start">What a CLI cannot enforce is written to the run log, once per agent.</text>
+</svg>

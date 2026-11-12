@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 345" width="820" height="345" font-family="Segoe UI, system-ui, sans-serif" font-size="16">
+<rect width="820" height="345" rx="12" fill="#0e1014"/>
+<defs><marker id="a-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a91a3"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fb923c"/></marker><marker id="a-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker><marker id="a-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c9cff"/></marker></defs>
+<text x="24" y="36" fill="#8a91a3" font-size="15" font-weight="400" text-anchor="start">workflows/writer-reviewer.yaml: the engine decides by the score; yellow = a human gate</text>
+<rect x="24" y="70" width="140" height="70" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="94" y="101" fill="#e6e8ee" font-size="17" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">write</text>
+<text x="94" y="125" fill="#c084fc" font-size="15" font-weight="400" text-anchor="middle">writer</text>
+<rect x="214" y="70" width="140" height="70" rx="10" fill="#151820" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="284" y="101" fill="#e6e8ee" font-size="17" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">review</text>
+<text x="284" y="125" fill="#c084fc" font-size="15" font-weight="400" text-anchor="middle">reviewer</text>
+<rect x="404" y="70" width="140" height="70" rx="10" fill="#151820" stroke="#7c9cff" stroke-opacity="0.8"/>
+<text x="474" y="101" fill="#e6e8ee" font-size="17" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">signoff</text>
+<text x="474" y="125" fill="#7c9cff" font-size="15" font-weight="400" text-anchor="middle">supervisor</text>
+<rect x="594" y="70" width="140" height="70" rx="10" fill="#151820" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="664" y="101" fill="#e6e8ee" font-size="17" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">decide</text>
+<text x="664" y="125" fill="#facc15" font-size="15" font-weight="400" text-anchor="middle">you</text>
+<line x1="164" y1="105" x2="214" y2="105" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<line x1="354" y1="105" x2="404" y2="105" stroke="#4ade80" stroke-width="2" marker-end="url(#a-ok)"/>
+<line x1="544" y1="105" x2="594" y2="105" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
+<text x="379" y="58" fill="#4ade80" font-size="14" font-weight="400" text-anchor="middle">score ≥ threshold</text>
+<line x1="734" y1="105" x2="796" y2="105" stroke="#4ade80" stroke-width="2" marker-end="url(#a-ok)"/>
+<text x="742" y="93" fill="#4ade80" font-size="14" font-weight="400" text-anchor="start">accept</text>
+<path d="M 254 140 V 180 H 94 V 142" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#a-warn)"/>
+<text x="44" y="202" fill="#fb923c" font-size="14.5" font-weight="400" text-anchor="start">below threshold: back to the writer with the notes, up to max_rounds</text>
+<line x1="324" y1="140" x2="324" y2="240" stroke="#f87171" stroke-width="2" marker-end="url(#a-bad)"/>
+<rect x="254" y="240" width="170" height="54" rx="10" fill="#151820" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="339" y="265" fill="#e6e8ee" font-size="16" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">out_of_rounds</text>
+<text x="339" y="285" fill="#facc15" font-size="14" font-weight="400" text-anchor="middle">you</text>
+<text x="439" y="272" fill="#f87171" font-size="14.5" font-weight="400" text-anchor="start">rounds used up: you decide</text>
+<path d="M 664 140 V 332 H 54 V 142" fill="none" stroke="#8a91a3" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a-g)"/>
+<text x="68" y="320" fill="#8a91a3" font-size="14.5" font-weight="400" text-anchor="start">revise: your instructions go into every next prompt</text>
+</svg>
