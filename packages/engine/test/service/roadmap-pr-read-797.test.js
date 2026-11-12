@@ -71,15 +71,23 @@ async function seeded(t, answer) {
   writeRun(ws, p.id);
   const pushed = [];
   service.events.on('backlog:changed', (e) => { if (e.file === 'roadmap' && e.projectId === p.id) pushed.push(e); });
+  // #818: the backlog/ watcher (areas/backlog-watch.js, started by makeService's setWorkspace) pushes its own
+  // backlog:changed for the roadmap file written above, debounced: 300 ms later, after the listener. Counted as
+  // a read's push, it made a count from seeding reach 2 when both landed between two checks of until, and the
+  // wait for exactly 1 never ended (#810's suite). It is drained here: `pushed` holds only what a test does.
+  if (api['backlog:watching']()) await until(() => pushed.length >= 1);
+  pushed.length = 0;
   const projectId = p.id;
   return {
     service, api, ws, projectId, itemId, pr, reads, pushed,
     first: () => api['roadmap:get']({ projectId }).stages[0].items[0],
     sync: () => api['backlog:sync']({ projectId }),
-    // the first read is behind it: what a later sync finds is compared with this
+    // the first read is behind it: what a later sync finds is compared with this. It waits for the push of
+    // this open's own read, whatever came before it (a failed sync, #818)
     async opened() {
+      const before = pushed.length;
       api['backlog:get']({ projectId });
-      await until(() => pushed.length === 1);
+      await until(() => pushed.length > before);
     },
   };
 }
