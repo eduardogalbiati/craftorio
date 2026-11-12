@@ -7,6 +7,7 @@
 // phone: { answered_by: 'owner', via: 'mobile', device } on the gate's approval.resolved event.
 
 const qrcode = require('qrcode-generator');
+const I18n = require('@multiagent/shared/i18n');
 const workspace = require('../../domains/workspace/workspace');
 const {
   createMobileGatesServer,
@@ -34,6 +35,7 @@ module.exports = (ctx) => {
       service: { api: { 'runs:active': () => ctx.activeRuns() }, workspace: () => ctx.ws, answerPhoneGate },
       secret: linkSecret(ctx.ws),
       publicUrl,
+      language: () => I18n.resolveLanguage(workspace.readSettings(ctx.ws).language?.interface, ctx.host?.locale),
     });
     const port = Number(config().port) || 0;
     try {

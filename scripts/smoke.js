@@ -2,6 +2,7 @@
 // gates automatically and saves a screenshot.
 // Usage: npx electron scripts/smoke.js <output.png> [--lang pt-BR]
 //        npx electron scripts/smoke.js --startup-budget     the startup budget (#389), below
+//        npx electron scripts/smoke.js --phone-gates <out-dir>  gates-only page, simulated data
 //
 // Never calls a real model: MULTIAGENT_SIMULATION_ONLY=1 makes the engine refuse real runs, the app
 // opens a fresh temporary workspace (never the user's) with Developer mode on, and the script fails
@@ -16,6 +17,11 @@
 // window's creation (then from the reload) to Home's overview on screen. Fails when a first paint
 // takes over FIRST_PAINT_MS, a channel blocks the main process over CHANNEL_MS, or anything stalls
 // it over STALL_MS.
+
+if (process.argv.includes('--phone-gates')) {
+  require('./smoke-phone-gates').run();
+  return;
+}
 
 const fs = require('fs');
 const os = require('os');

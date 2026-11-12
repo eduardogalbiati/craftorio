@@ -122,25 +122,26 @@
   const turnTitle = (t) => (t ? `${TURN_TITLES[t.kind] || ''} ${ESTIMATE}`.trim() : 'Closed: this session has no next turn.');
 
   // One entry of the gate card's Continue line: "fresh from note ~20K", "resumes cold ~140K ≈ $0.70"
-  function gateTurnText(t) {
+  function gateTurnText(t, text = (_key, english) => english) {
     const tokens = t.tokens > 0 ? ` ~${kTok(t.tokens)}` : '';
-    if (t.kind === 'fresh') return `fresh from note${tokens}`;
-    if (t.kind === 'warm') return `resumes warm${tokens}`;
-    if (t.kind === 'cold') return `resumes cold${tokens}${usdOf(t.cost_usd)}`;
-    if (t.kind === 'resume') return `resumes${tokens} (cache lifetime unknown)`;
-    return 'new session';
+    if (t.kind === 'fresh') return `${text('fresh', 'fresh from note')}${tokens}`;
+    if (t.kind === 'warm') return `${text('warm', 'resumes warm')}${tokens}`;
+    if (t.kind === 'cold') return `${text('cold', 'resumes cold')}${tokens}${usdOf(t.cost_usd)}`;
+    if (t.kind === 'resume') return `${text('resume', 'resumes')}${tokens} (${text('unknown', 'cache lifetime unknown')})`;
+    return text('new', 'new session');
   }
 
   // The lead of the Continue line: '' when an agent resumes cold (or with an unknown lifetime)
-  function continueLead(turns) {
-    if (!turns.length) return 'no agent session to resume';
-    return turns.some((x) => x.turn.kind === 'cold' || x.turn.kind === 'resume') ? '' : 'every agent starts fresh or warm';
+  function continueLead(turns, text = (_key, english) => english) {
+    if (!turns.length) return text('none', 'no agent session to resume');
+    return turns.some((x) => x.turn.kind === 'cold' || x.turn.kind === 'resume') ? '' : text('all', 'every agent starts fresh or warm');
   }
 
-  // The whole line as plain text (the phone page): turns from agentNextTurns, label(agent) its name
-  function continueText(turns, label = (a) => a) {
-    const parts = [continueLead(turns), ...turns.map(({ agent, turn }) => `${label(agent)} ${gateTurnText(turn)}`)].filter(Boolean);
-    return `Continue: ${parts.join(' · ')}`;
+  // The whole line as plain text (the phone page): turns from agentNextTurns, label(agent) its name.
+  // An optional text(key, English fallback) localizes the phone's copy without global language state.
+  function continueText(turns, label = (a) => a, text = (_key, english) => english) {
+    const parts = [continueLead(turns, text), ...turns.map(({ agent, turn }) => `${label(agent)} ${gateTurnText(turn, text)}`)].filter(Boolean);
+    return `${text('continue', 'Continue')}: ${parts.join(' · ')}`;
   }
 
   // The gate card's line: one entry per agent whose latest session is open, plus a handoff agent
