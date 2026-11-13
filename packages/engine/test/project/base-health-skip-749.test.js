@@ -100,6 +100,43 @@ test('#749 no check when the commits since the last green check touch only docs 
   assert.equal(r.status, 'skipped');
 });
 
+test('#749 a check "not tested green" runs the suite even at the last green commit', async (t) => {
+  const ws = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  const tip = await greenAtTip(ws, f);
+  const s = countingGreen();
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f, { trigger: 'not-green' }), runSuite: s.runSuite });
+  assert.equal(s.ran, 1, '"not tested green" is never skipped');
+  assert.equal(r.status, 'green');
+  assert.equal(r.commit, tip);
+});
+
+test('#749 a last green commit the repository does not know runs the suite (no skip on a guess)', async (t) => {
+  const ws = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  loadStore().writeStore(ws, PROJECT, { failures: [], flaky: [], lastGreen: { commit: 'a'.repeat(40), at: '2026-11-01T10:00:00.000Z' } });
+  const s = countingGreen();
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f), runSuite: s.runSuite });
+  assert.equal(s.ran, 1);
+  assert.equal(r.status, 'green');
+  assert.equal(r.commit, git(f.repo, 'rev-parse', 'main'));
+});
+
+test('#749 a code merge that lands while a skip is decided runs the suite on the new tip', async (t) => {
+  const ws = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  await greenAtTip(ws, f);
+  // the merge lands at the check's start (onStart: the moment the service stops coalescing into it)
+  let landed = null;
+  const onStart = () => { if (!landed) landed = commitIn(f.repo, 'src/late.js', 'module.exports = 2;\n', 'late merge'); };
+  const s = countingGreen();
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f), runSuite: s.runSuite, onStart });
+  assert.ok(landed, 'fixture: the check called onStart');
+  assert.equal(s.ran, 1, 'the late code merge is checked, not skipped');
+  assert.equal(r.status, 'green');
+  assert.equal(r.commit, landed, 'on the tip with the late merge');
+});
+
 test('#749 a code file changed since the last green check still runs the whole suite on the tip', async (t) => {
   const ws = tmpWs(t);
   const f = fixture(t, 'canonical');
