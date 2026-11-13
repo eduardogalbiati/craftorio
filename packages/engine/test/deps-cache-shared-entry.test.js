@@ -174,3 +174,114 @@ test('#778 a run\'s dependency check relinks its worktree off an entry another w
   assert.equal(typeof ready[0].reason, 'string', 'the relink says why');
   assert.equal(ready[0].reason.includes(path.basename(wtA)), true, `the reason names the worktree that changed the entry: ${ready[0].reason}`);
 });
+
+test('#778 an entry marked unusable before #778 (no changed_by in entry.json) is kept by the worktree that links it, as before', async (t) => {
+  const cacheDir = tmpDir(t, 'cache-778-');
+  const { run, calls } = fakeRun();
+  const wtA = tmpDir(t, 'wtA-778-');
+  const wtB = tmpDir(t, 'wtB-778-');
+  npmProject(wtA);
+  npmProject(wtB);
+  const rA = await ensure(wtA, cacheDir, run);
+  const rB = await ensure(wtB, cacheDir, run);
+  changeThroughLink(wtA);
+  // what an older engine wrote: unusable, marked_at, nobody named
+  const metaFile = path.join(rA.entry, 'entry.json');
+  const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+  fs.writeFileSync(metaFile, JSON.stringify({ ...meta, unusable: 'changed through a worktree link', marked_at: '2026-11-03T17:02:13Z' }));
+
+  const installsBefore = calls.installs;
+  const rB2 = await ensure(wtB, cacheDir, run, rB);
+  assert.equal(rB2.status, 'linked');
+  assert.equal(rB2.entry, rA.entry);
+  assert.equal(linkedEntry(wtB), path.resolve(rA.entry));
+  assert.equal(calls.installs, installsBefore, 'nothing installed');
+});
+
+test('#778 an entry emptied through A\'s link (npm ci): A reinstalls, and B is relinked to that new generation with a reason naming A', async (t) => {
+  const cacheDir = tmpDir(t, 'cache-778-');
+  const { run } = fakeRun();
+  const wtA = tmpDir(t, 'wtA-778-');
+  const wtB = tmpDir(t, 'wtB-778-');
+  npmProject(wtA);
+  npmProject(wtB);
+  const rA = await ensure(wtA, cacheDir, run);
+  const rB = await ensure(wtB, cacheDir, run);
+  fs.unlinkSync(path.join(wtA, 'node_modules', '.package-lock.json'));
+
+  const rA2 = await ensure(wtA, cacheDir, run, rA);
+  assert.equal(rA2.status, 'miss', 'A reinstalls: its own entry was emptied');
+  assert.notEqual(rA2.entry, rA.entry);
+
+  const rB2 = await ensure(wtB, cacheDir, run, rB);
+  assert.equal(rB2.status, 'hit', `${rB2.status} ${rB2.reason || ''}`);
+  assert.equal(rB2.entry, rA2.entry);
+  assert.equal(linkedEntry(wtB), path.resolve(rA2.entry));
+  assert.equal(String(rB2.reason || '').includes(path.basename(wtA)), true, `the reason names A: ${rB2.reason}`);
+  assert.equal(fs.existsSync(path.join(wtB, 'node_modules', '.package-lock.json')), true);
+});
+
+// ---- depsBeforeStep (packages/engine/engine/run/checkout.js): the check a step starts with -----------
+
+// Two worktrees on one key (the run's real npm/node versions), A changed the entry and a usable
+// generation exists: B's check relinks without installing
+async function brokenSharedEntry(t) {
+  const ws = tmpDir(t, 'ws-778-');
+  const cacheDir = path.join(ws, 'cache', 'deps');
+  const { run } = fakeRun({ realVersions: true });
+  const ensureReal = (workDir, previous = null) => depsCache.ensureDeps({ workDir, cacheDir, project: 'p', env: process.env, run, previous });
+  const [wtA, wtB, wtC] = ['wtA-778-', 'wtB-778-', 'wtC-778-'].map((p) => { const d = tmpDir(t, p); npmProject(d); return d; });
+  const rA = await ensureReal(wtA);
+  const rB = await ensureReal(wtB);
+  changeThroughLink(wtA);
+  await ensureReal(wtA, rA);
+  const rC = await ensureReal(wtC);
+  assert.equal(rC.status, 'miss', rC.reason || '');
+  return { ws, wtA, wtB, rA, rB, rC };
+}
+
+function workflowOf(ws, wtB, rB, extra = {}) {
+  const { methods } = require('../engine/run/checkout');
+  const events = [];
+  const wf = {
+    machine: { simulated: false }, runDir: path.join(ws, 'runs', 'r-697'), projectId: 'p', abort: new AbortController(),
+    ctx: { worktree_dir: wtB }, worktree: { dir: wtB, workDir: wtB }, deps: { worktree: rB },
+    emitEvent: (type, ev) => events.push({ type, ...ev }),
+    prepareDeps: methods.prepareDeps, depsBeforeStep: methods.depsBeforeStep,
+    ...extra,
+  };
+  return { wf, events };
+}
+
+test('#778 depsBeforeStep: before the build step, a worktree on an entry another worktree changed is relinked and deps.ready says it came before the step', { timeout: 120000 }, async (t) => {
+  const { ws, wtA, wtB, rB, rC } = await brokenSharedEntry(t);
+  const { wf, events } = workflowOf(ws, wtB, rB);
+  await wf.depsBeforeStep({ id: 'build' });
+  assert.equal(linkedEntry(wtB), path.resolve(rC.entry));
+  const ready = events.filter((e) => e.type === 'deps.ready');
+  assert.equal(ready.length, 1, JSON.stringify(events.map((e) => e.type)));
+  assert.equal(ready[0].after, 'before step build');
+  assert.equal(String(ready[0].reason).includes(path.basename(wtA)), true, String(ready[0].reason));
+});
+
+test('#778 depsBeforeStep: a run without a worktree, or a cancelled one, checks nothing (the link is left as it is)', { timeout: 120000 }, async (t) => {
+  const { ws, wtB, rA, rB } = await brokenSharedEntry(t);
+  const none = workflowOf(ws, wtB, rB, { worktree: null });
+  await none.wf.depsBeforeStep({ id: 'build' });
+  assert.equal(none.events.length, 0);
+
+  const cancelled = workflowOf(ws, wtB, rB);
+  cancelled.wf.abort.abort();
+  await cancelled.wf.depsBeforeStep({ id: 'suite' });
+  assert.equal(cancelled.events.length, 0);
+  assert.equal(linkedEntry(wtB), path.resolve(rA.entry), 'B was not touched');
+});
+
+test('#778 depsBeforeStep never throws: a failing dependency check lets the step start', async () => {
+  const { methods } = require('../engine/run/checkout');
+  const wf = {
+    worktree: { dir: 'x' }, ctx: { worktree_dir: 'x' }, abort: new AbortController(),
+    prepareDeps: async () => { throw new Error('cache broken'); },
+  };
+  await assert.doesNotReject(methods.depsBeforeStep.call(wf, { id: 'build' }));
+});
