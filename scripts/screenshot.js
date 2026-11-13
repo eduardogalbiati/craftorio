@@ -97,6 +97,9 @@
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
 //                      failed (an error with what was written kept); Stop: --click "#po-log [data-live-stop]",
 //                      the steps folded: --click "#po-log [data-live-steps]"
+//   --refresh <state>  backlog: the Backlog Refresh banner with the project's add time as the baseline
+//                      (#784, #830): fresh (added an hour ago, no merge since: no banner) | onboarded
+//                      (added 3 days ago, 12 merges since); needs the project's folder
 //   --agents-window <agent>  the Agents window (#263) opened from the view on oracle | product-owner |
 //                      supervisor, and captured instead of the main window (--size sizes it: 700x800
 //                      shows the rail collapsed; --click applies inside it, e.g. a rail item)
@@ -212,6 +215,7 @@ const VALUE_OPTIONS = {
   '--oracle': 'oracle',
   '--po': 'po',
   '--project': 'project',
+  '--refresh': 'refresh',
   '--release': 'release',
   '--release-filter': 'releaseFilter',
   '--roadmap': 'roadmap',
