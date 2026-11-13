@@ -24,10 +24,26 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   (`package.json`, a lockfile, `scripts/test.js`) or a project without a JS/TS graph selects the
   whole suite. `node scripts/affected-tests.js --base main` prints the files and why each was
   chosen (`imports packages/engine/domains/roadmap/roadmap.js`); `--files` prints only the paths, for `npm test -- <files>`.
-- **Slow tests**: files under `packages/engine/test/slow/` or named `*.slow.test.js` (whole simulated runs) never
-  join the affected set; they run with the full suite only. Put a test that simulates a whole run
-  there, and keep big files split by area so `node --test` runs them in parallel (one file's tests
-  run in sequence). See "Whole simulated runs" below.
+- **Slow tests**: files under `packages/engine/test/slow/` or named `*.slow.test.js` (whole simulated runs) stay
+  out of the affected list itself (`slow` lists them), and the slow files the change reaches run in
+  every `scope: affected` round with the affected files, before any whole suite (#736): a change to
+  the slow test, or to a file it reads (a workflow YAML), runs it; deleting or renaming that file
+  counts (the changed files are listed with `--no-renames`, so a rename is its old and its new path).
+  The slow files the change does not reach run with the full suite only. Put a test that simulates a
+  whole run there, and keep big files split by area so `node --test` runs them in parallel (one
+  file's tests run in sequence). See "Whole simulated runs" below.
+- **Guards (#736)**: `test/guards.json` lists the repository-wide guard tests (size ratchet, bare
+  controls, i18n catalog, layers, test ids, channel schema ratchet, docs checks): tests no changed file
+  reaches through the graph but any change can break. Every `scope: affected` selection (and an
+  agent's `affected` test request) adds them (reason `repository-wide guard (test/guards.json)`), so a
+  scoped round runs them too. Add a guard there (an existing, fast `*.test.js`, one per line, sorted);
+  a project without the file has no guards.
+- **Pre-existing against the last green base (#736)**: a failure red on the run and on the current base
+  is pre-existing only when it fails on the base's last green commit too (the base health's
+  `lastGreen`, checked out as `<worktreesDir>/<run_id>-green`, log `suite-<round>-last-green.log`,
+  output `last_green_check`); green there, it is the run's failure and goes back to the developer, so
+  one red merge never lets the next ones through. No last green commit (a new project, a simulation),
+  the current base's own commit, or a check that cannot run: the current base decides (#211, #527).
 - **Who runs what**: the suite step with `scope: affected` (software-development and the local
   hero) runs the affected files every round, and the whole suite at most once per run, when the
   affected files first pass (log `suite-<round>-full.log`); the files that failed in a round join

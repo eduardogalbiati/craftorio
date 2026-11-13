@@ -28,12 +28,14 @@ const { capturePreview } = require('./preview-capture');
 const suiteStep = require('./suite-step');
 const {
   affectedTests,
+  guardFiles,
   isTest,
   relatedTests,
 } = require('./affected-tests');
 const { shipRelease, writeReleaseVersion } = require('../domains/releases/releases');
 const {
   confirmedFailures,
+  readStore,
   recordSightings,
 } = require('./base-health-store');
 
@@ -108,8 +110,11 @@ function real() {
     // #527: the failures a base check confirmed red alone since its last green check, the only ones a
     // run's suite counts as pre-existing (a store it cannot read: none confirmed)
     confirmedOnMain: (root, projectId) => { try { return confirmedFailures(root, projectId); } catch { return []; } },
+    // #736: the base's last green commit (the base health's lastGreen), null when unknown
+    lastGreenOnMain: (root, projectId) => { try { return readStore(root, projectId).lastGreen?.commit || null; } catch { return null; } },
     // the test files the run's change can break (#212), plus those that failed in an earlier round;
-    // only the failures the unit runner runs (#754 #755: never a .feature an E2E step failed)
+    // only the failures the unit runner runs (#754 #755: never a .feature an E2E step failed);
+    // #736: plus the repository-wide guards (test/guards.json), in every affected selection
     affectedTests({ root, base, failed = [] }) {
       if (!root || !base) return { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: 'the run has no worktree or base branch: the whole suite' };
       const sel = affectedTests({ root, base });
@@ -117,6 +122,11 @@ function real() {
         if (sel.mode !== 'affected' || !isTest(f) || sel.files.includes(f) || !fs.existsSync(path.join(root, f))) continue;
         sel.files.push(f);
         sel.reasons[f] = 'failed in an earlier round';
+      }
+      for (const f of sel.mode === 'affected' ? guardFiles(root) : []) {
+        if (sel.files.includes(f)) continue;
+        sel.files.push(f);
+        sel.reasons[f] = 'repository-wide guard (test/guards.json)';
       }
       sel.files.sort();
       return sel;
@@ -176,6 +186,8 @@ function simulated({ sequences = null } = {}) {
     noteFailingOnMain: () => {},
     // no base check in a simulation: every failure on the base too stays pre-existing (#211)
     confirmedOnMain: () => null,
+    // #736: no last green base in a simulation (the current base decides)
+    lastGreenOnMain: () => null,
     affectedTests: () => ({
       mode: 'affected', files: [...SIMULATED_FILES],
       reasons: { [SIMULATED_FILES[0]]: 'imports src/simulated.js', [SIMULATED_FILES[1]]: 'imports src/simulated.js (through src/simulated-user.js)' },

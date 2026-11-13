@@ -336,6 +336,8 @@ const methods = {
           // `base_check: false` (#260, release.yaml): the worktree is the base itself, so a test that
           // fails there too is the regression to fix, never a pre-existing failure to wave through
           base: step.base_check === false ? null : () => this.suiteBase(),
+          // #736: a failure red on the base too is pre-existing only when red on its last green commit too
+          lastGreenBase: step.base_check === false ? null : () => this.suiteLastGreenBase(root),
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
           confirmedOnBase: this.confirmedOnBase(root),
           log: (level, message) => this.emitEvent('log', { level, message }),
@@ -409,23 +411,22 @@ const methods = {
   // its commit as `tested` gave it), the selection takes the changes since that commit and no whole
   // suite follows; only a whole-suite selection (a shared root changed) runs it again. Only a whole
   // suite that stands for every file counts (lastWholeRound, #364: not timed out, every failure in a
-  // known file); after it, the slow files the changes reach join the selection, since no later whole
-  // suite runs them.
+  // known file). #736: the slow files the changes reach (their own file, or a file they read, edited,
+  // deleted or renamed) join every affected selection, before any whole suite: a broken slow test goes
+  // back to the developer without waiting for a whole round.
   async affectedRound(step, st, once, tested) {
     const whole = this.wholeSuiteRun?.commit ? this.wholeSuiteRun : null;
     let selection;
     try { selection = this.affectedSelection(whole ? { since: whole.commit } : {}); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
-    if (whole) {
-      const since = `round ${whole.round}'s whole suite (${whole.commit.slice(0, 7)})`;
-      const slow = selection.mode === 'affected' ? (selection.slow || []).filter((f) => !selection.files.includes(f)) : [];
-      const why = slow.length ? `${selection.why.replace(/; \d+ slow file\(s\) left to the full suite/, '')}; ${slow.length} slow file(s) run with them` : selection.why;
-      selection = {
-        ...selection,
-        files: [...selection.files, ...slow],
-        reasons: { ...selection.reasons, ...Object.fromEntries(slow.map((f) => [f, 'slow, reaches the change'])) },
-        why: selection.mode === 'affected' ? `since ${since}: ${why}` : `${selection.why} again, after ${since}`,
-      };
-    }
+    const slow = selection.mode === 'affected' ? (selection.slow || []).filter((f) => !selection.files.includes(f)) : [];
+    const why = slow.length ? `${selection.why.replace(/; \d+ slow file\(s\) reach it too/, '')}; ${slow.length} slow file(s) run with them` : selection.why;
+    const since = whole ? `round ${whole.round}'s whole suite (${whole.commit.slice(0, 7)})` : '';
+    selection = {
+      ...selection,
+      files: [...selection.files, ...slow],
+      reasons: { ...selection.reasons, ...Object.fromEntries(slow.map((f) => [f, 'slow, reaches the change'])) },
+      why: !whole ? why : selection.mode === 'affected' ? `since ${since}: ${why}` : `${selection.why} again, after ${since}`,
+    };
     this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${selectionLines(selection).slice(0, 6).join('\n')}` });
     let output = await once(selection.mode === 'affected' ? { files: selection.files, selection, wholeTests: whole?.tests || 0 } : { selection });
     if (output.scope === 'files') this.suiteRuns.affected = (this.suiteRuns.affected || 0) + 1;

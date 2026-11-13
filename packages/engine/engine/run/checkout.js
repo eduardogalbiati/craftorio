@@ -2,7 +2,8 @@
 // The run's checkout (#250, from packages/engine/engine/workflow.js): the per-run git worktree and its branch
 // (`setupWorktree` / `finishWorktree`: removed or retired, the worktree summary, HEAD and branch),
 // its dependencies from the shared cache (`prepareDeps`, `depsGuide`), the base worktree a suite
-// compares against (`setupBaseWorktree`, `suiteBase`, `baseRefs`), the base brought into the branch
+// compares against (`setupBaseWorktree`, `suiteBase`, `baseRefs`; #736 `suiteLastGreenBase`, the
+// base's last green commit), the base brought into the branch
 // before a suite round (`bringBaseIn`, #403), the scratch workspace (#120)
 // and the processes agents leave running in it (`stopWorktreeProcesses`).
 // The git operations themselves are packages/engine/engine/worktree.js.
@@ -220,6 +221,28 @@ const methods = {
     return this.baseWorktree && this.ctx.base_worktree_dir ? { dir: this.ctx.base_worktree_dir, commit: this.baseWorktree.commit || null } : null;
   },
 
+  // #736: a checkout of the base's last green commit (the base health's lastGreen), where a failure red
+  // on the current base too is checked again: <worktreesDir>/<run_id>-green, detached, with its
+  // dependencies, removed with the run's worktree. → { dir, commit } or null (no project, no worktree,
+  // no last green commit, or it is the current base's commit: the current base decides).
+  async suiteLastGreenBase(root) {
+    const wt = this.worktree;
+    const commit = this.projectId ? this.machine.lastGreenOnMain?.(root, this.projectId) : null;
+    if (!commit || !wt || !this.worktreesDir) return null;
+    const current = await this.suiteBase();
+    if (current?.commit && String(current.commit).startsWith(String(commit))) return null;
+    if (this.greenWorktree?.commit !== commit) {
+      const log = (level, message) => this.emitEvent('log', { level, message });
+      const info = await prepareBaseWorktree({ repo: wt.repo, base: wt.base, dir: path.join(this.worktreesDir, `${this.runId}-green`), log, remote: false });
+      if (!info) return null;
+      await git(['checkout', '--detach', '--force', commit], info.dir);
+      this.greenWorktree = { ...info, commit };
+      log('info', `worktree: last green base checkout ${info.dir} at ${String(commit).slice(0, 8)}`);
+      await this.prepareDeps('green', info.workDir, 'last green base checkout ready');
+    }
+    return { dir: this.greenWorktree.workDir, commit };
+  },
+
   // The run's scratch workspace (#120), { workspace, userData } under <run>/scratch: a copy of the
   // owner's agents, skills, workflows and settings with project entries pointing to empty folders
   // (local-preview.scratchWorkspace). Agents get it in their environment, so the app's tools they
@@ -252,6 +275,11 @@ const methods = {
       const b = this.baseWorktree;
       await removeWorktree({ repo: b.repo, dir: b.dir, base: null, log, remote: false }).catch((e) => log('warn', `worktree: could not remove the base checkout: ${e.message}`));
       this.baseWorktree = null;
+    }
+    if (this.greenWorktree) {
+      const g = this.greenWorktree;
+      await removeWorktree({ repo: g.repo, dir: g.dir, base: null, log, remote: false }).catch((e) => log('warn', `worktree: could not remove the last green base checkout: ${e.message}`));
+      this.greenWorktree = null;
     }
     try {
       if (status === 'paused') {

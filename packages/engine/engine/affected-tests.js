@@ -14,8 +14,10 @@
 // on the missing file), while the tests that still reach a deleted source stay selected.
 // A change to a shared root (package.json, a lockfile, the suite's runner scripts/test.js) selects
 // the whole suite (`mode: 'all'`), and so does a project without a JS/TS graph (other languages).
-// Slow tests (a test/slow/ folder or a `*.slow.test.js` name: whole simulated runs) never join the
-// affected set; they run with the full suite only (`slow` lists those the change reaches).
+// Slow tests (a test/slow/ folder or a `*.slow.test.js` name: whole simulated runs) never join
+// `files`; `slow` lists those the change reaches (#736: the suite step's affected rounds run them too).
+// A rename counts as a deletion and an addition (#736, `--no-renames`): the tests that read the old
+// path are reached. guardFiles (#736): the project's repository-wide guard tests (test/guards.json).
 // → { mode: affected | all, files, reasons: { <test file>: 'imports src/x.js' }, changed, slow, why }
 // Used by the suite step's `scope: affected` and by agents' test requests (packages/engine/engine/suite-step.js,
 // packages/engine/engine/workflow.js); scripts/affected-tests.js prints it.
@@ -64,9 +66,19 @@ function projectFiles(root) {
 function changedFiles(root, base) {
   let from = base;
   try { from = git(root, ['merge-base', base, 'HEAD']).trim() || base; } catch { /* base unrelated: diff against it */ }
-  const changed = new Set(lines(git(root, ['diff', '--name-only', from])));
+  const changed = new Set(lines(git(root, ['diff', '--name-only', '--no-renames', from])));
   for (const f of lines(git(root, ['ls-files', '--others', '--exclude-standard']))) changed.add(f);
   return [...changed].sort();
+}
+
+// #736: the repository-wide guard tests (size ratchets, bare controls, i18n parity, docs checks) that
+// run in every affected round: test/guards.json, a JSON array of repository-relative test files.
+// Only existing test files; no file, or one that is not a list: none.
+function guardFiles(root) {
+  let list;
+  try { list = JSON.parse(fs.readFileSync(path.join(root, 'test', 'guards.json'), 'utf8')); } catch { return []; }
+  if (!Array.isArray(list)) return [];
+  return list.map((f) => slash(String(f))).filter((f) => isTest(f) && fs.existsSync(path.join(root, f)));
 }
 
 const read = (root, f) => {
@@ -214,7 +226,7 @@ function affectedTests({ root, base, changed } = {}) {
   for (const f of out.files) out.reasons[f] = reasonOf(from.get(f), f);
   out.mode = 'affected';
   out.why = out.files.length
-    ? `${out.files.length} test file(s) reach the ${out.changed.length} changed file(s)${out.slow.length ? `; ${out.slow.length} slow file(s) left to the full suite` : ''}`
+    ? `${out.files.length} test file(s) reach the ${out.changed.length} changed file(s)${out.slow.length ? `; ${out.slow.length} slow file(s) reach it too` : ''}`
     : `no test file reaches the ${out.changed.length} changed file(s)`;
   return out;
 }
@@ -340,6 +352,7 @@ module.exports = {
   affectedTests,
   changedFiles,
   classifyFailures,
+  guardFiles,
   IN_CHANGE,
   isSlow,
   isTest,

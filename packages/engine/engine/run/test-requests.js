@@ -156,7 +156,7 @@ const methods = {
     const output = await this.machine.runSuite({
       command: this.suiteCommand(), cwd, runDir: this.runDir, round: this.testRequests, logName: name,
       env: { ...process.env, ...capabilities.agentEnv() }, passthrough: this.envPassthrough(), testWorkers: this.workers?.testWorkers, preexisting: this.preexisting, signal: this.abort.signal,
-      base: () => this.suiteBase(), baseCacheDir: path.join(root, 'cache', 'base-tests'),
+      base: () => this.suiteBase(), lastGreenBase: () => this.suiteLastGreenBase(root), baseCacheDir: path.join(root, 'cache', 'base-tests'),
       confirmedOnBase: this.confirmedOnBase(root),
       files, selection: { mode: 'affected', files, reasons, why },
       log: (level, message) => this.emitEvent('log', { level, message }),

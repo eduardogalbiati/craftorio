@@ -131,7 +131,7 @@ module.exports = (ctx) => {
       const names = subdirs(ctx.ws.worktrees);
       const tmpIds = subdirs(ctx.ws.runs).filter((id) => fs.existsSync(path.join(ctx.ws.runs, id, 'tmp')));
       if (!names.length && !tmpIds.length) return [];
-      const ids = names.map((name) => name.replace(/-base$/, ''));
+      const ids = names.map((name) => name.replace(/-(base|green)$/, ''));
       // a run using a worktree started after the run it is named after
       const since = [...ids, ...tmpIds].reduce((a, b) => (a && a < b ? a : b), '');
       const used = worktreeRuns(ctx.ws.runs, ctx.ws.worktrees, { since });
@@ -665,7 +665,7 @@ module.exports = (ctx) => {
     return cleaning;
   };
   // the worktree folders the runs of `active` use (a resumed run's is the earlier run's, #406)
-  const activeWorktreeDirs = () => [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean);
+  const activeWorktreeDirs = () => [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`), path.join(ctx.ws.worktrees, `${r.runId}-green`)]).filter(Boolean);
   const cleanupPass = async () => {
     if (!ctx.ws) return [];
     const removed = await cleanupWorktrees({

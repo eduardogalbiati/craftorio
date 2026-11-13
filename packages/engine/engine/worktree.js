@@ -773,8 +773,9 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], scratchDay
     const dir = path.join(worktreesDir, name);
     const inUse = [...(typeof active === 'function' ? active() : active), ...liveWorktrees(runsDir, worktreesDir)];
     if (inUse.some((a) => a && samePath(a, dir))) continue;
-    // <run_id>-base: the run's checkout of the base (#198), gone once its run is not live
-    const baseOf = name.endsWith('-base') ? name.slice(0, -5) : null;
+    // <run_id>-base: the run's checkout of the base (#198), gone once its run is not live; #736: and
+    // <run_id>-green, its checkout of the base's last green commit
+    const baseOf = /-(base|green)$/.test(name) ? name.replace(/-(base|green)$/, '') : null;
     const runDir = path.join(runsDir, baseOf || name);
     const run = runState(runDir);
     if (run.live) continue;

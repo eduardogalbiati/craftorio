@@ -83,6 +83,7 @@ const {
 } = require('./suite-command-line');
 const { saveCoverage } = require('../domains/evidence/coverage-summary');
 const { suiteSlotRun } = require('./suite-slot');
+const { excusedOnBase } = require('./suite-last-green');
 const {
   processTreeCommands,
   stopProcessesIn,
@@ -762,7 +763,8 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // confirmedOnBase (#527): the failures the base check confirmed red alone since its last green check
 // (base-health-store confirmedFailures); as a list, a failure that fails on the base too is pre-existing
 // only when it is listed there, else it counts as the run's own. null: every one is pre-existing (#211).
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null, wholeTests, stepId = null }) {
+// lastGreenBase (#736): async () => { dir, commit }, the base's last green commit: a failure red there too stays pre-existing.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, lastGreenBase = null, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null, wholeTests, stepId = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -865,17 +867,12 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   });
   // the failures the run does not know yet: do they fail on the base too? (#211)
   if (out.failures.length && (base || mock) && !signal?.aborted) {
-    const { onBase: redOnBase, info } = await checkOnBase({
-      command: out.command, failures: out.failures, base, mock, signal, run,
-      env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `suite-${round}-base.log`)) } : undefined, timeoutMs: out.timeout_ms,
-      logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log, platform, onLog,
-    });
+    const where = (name) => ({ command: out.command, mock, signal, run, timeoutMs: out.timeout_ms, runDir, cacheDir: baseCacheDir, log, platform, onLog, logFile: logFile ? path.join(runDir, 'logs', `${name}.log`) : null,
+      env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `${name}.log`)) } : undefined });
+    const { onBase: redOnBase, info } = await checkOnBase({ ...where(`suite-${round}-base`), failures: out.failures, base });
     out.base_check = info;
-    // #527: red on the base too excuses a failure only when a base check confirmed it alone
-    const confirmed = (f) => !Array.isArray(confirmedOnBase) || confirmedOnBase.some((c) => sameTest(f, c));
-    const onBase = redOnBase.filter(confirmed);
-    const unconfirmed = redOnBase.filter((f) => !onBase.includes(f));
-    if (unconfirmed.length) log('info', `suite: ${plural(unconfirmed.length, 'failure')} red on the base too but not confirmed by a base check, counted as the run's: ${unconfirmed.map((f) => f.test).join(', ')}`);
+    // #527: confirmed alone by a base check; #736: and red on the base's last green commit too (suite-last-green.js)
+    const onBase = await excusedOnBase({ redOnBase, confirmedOnBase, lastGreenBase, sameTest, out, log, recheck: (failures, green) => checkOnBase({ ...where(`suite-${round}-last-green`), failures, base: green }) });
     if (onBase.length) {
       const where = info.commit && !String(info.commit).startsWith('(') ? ` (${String(info.commit).slice(0, 8)})` : '';
       out.preexisting.push(...onBase);

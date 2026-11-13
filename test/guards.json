@@ -1,0 +1,13 @@
+[
+  "apps/desktop/test/bare-controls-383.test.js",
+  "apps/desktop/test/file-size-ratchet-334.test.js",
+  "apps/desktop/test/i18n-catalog-check-329.test.js",
+  "apps/desktop/test/layers-345.test.js",
+  "apps/desktop/test/testid-check-246.test.js",
+  "packages/engine/test/service/channel-schema-ratchet-338.test.js",
+  "test/decisions-log-332.test.js",
+  "test/docs-topic-indexes-573.test.js",
+  "test/docs-usage-rules.test.js",
+  "test/test-fixture-rule-695.test.js",
+  "test/test-suite-layout-305-306.test.js"
+]
