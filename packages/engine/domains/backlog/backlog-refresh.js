@@ -41,6 +41,17 @@ function refreshRuns(list) {
 }
 
 /**
+ * The point the backlog last matched the code (#784): the last successful refresh run's start, or,
+ * with none, a valid addedAt (when the project was added); null with neither. The service counts the
+ * merges since it; refreshState counts the hours since it.
+ */
+function refreshBaseline(runs, addedAt) {
+  const { last } = refreshRuns(runs);
+  if (last) return last.startedAt || null;
+  return addedAt && Number.isFinite(Date.parse(addedAt)) ? addedAt : null;
+}
+
+/**
  * The banner's state. runs: the project's runs, newest first, live ones with status `running`;
  * intervalHours: the setting (0/empty = off); merges: merges on the base since the last refresh
  * started, or since addedAt with no refresh run (null when unknown); addedAt: when the project
@@ -51,8 +62,7 @@ function refreshRuns(list) {
 function refreshState({ runs, intervalHours, merges = null, addedAt = null, dismissedOn = null, now = Date.now() }) {
   const interval = Number(intervalHours) > 0 ? Number(intervalHours) : 0;
   const { last, running } = refreshRuns(runs);
-  const added = addedAt ? Date.parse(addedAt) : NaN;
-  const since = last ? last.startedAt || null : (Number.isFinite(added) ? addedAt : null);
+  const since = refreshBaseline(runs, addedAt);
   const baseline = last || since;
   const startedAt = since ? Date.parse(since) : NaN;
   const hoursAgo = Number.isFinite(startedAt) ? Math.max(0, Math.floor((now - startedAt) / 3600e3)) : null;
@@ -85,6 +95,7 @@ module.exports = {
   isRefreshRun,
   localDay,
   readDismissed,
+  refreshBaseline,
   refreshedIssues,
   refreshRuns,
   refreshState,

@@ -69,7 +69,7 @@ module.exports = (ctx) => {
     const { ws } = ctx;
     const hours = workspace.readSettings(ws).backlogRefreshHours;
     const { last } = refreshes.refreshRuns(list);
-    const baseline = last ? last.startedAt : project?.createdAt;
+    const baseline = refreshes.refreshBaseline(list, project?.createdAt);
     const stale = baseline && Number(hours) > 0 && Date.now() - Date.parse(baseline) >= Number(hours) * 3600e3;
     const count = stale && project?.folder ? mergeCount(project, baseline, local?.base || 'HEAD') : null;
     const state = refreshes.refreshState({

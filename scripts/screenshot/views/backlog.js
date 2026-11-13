@@ -172,32 +172,35 @@ function demoBacklogRefresh(ws, folder, projectId) {
     repo: DEMO_REPO.replace('https://github.com/', ''), platform: 'gh', mode: 'safe', at: finished,
     results: [{ number: 15, result: 'updated', changes: ['body (3 edits)'] }, { number: 12, result: 'updated', changes: ['body (1 edit)', 'complexity:3 -> complexity:2'] }, { number: 9, result: 'skipped', reason: 'edited after the review' }],
   }, null, 2));
+  // the first one before the refresh, 14 merges after it
+  demoMainCommits(folder, Array.from({ length: 15 }, (_, n) => hoursAgo(n ? 22 - n : 30)), 60);
+}
+
+const hoursAgo = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+
+// The project's folder a git repository on main: one commit per date, the first "Initial commit",
+// the next ones "Merge change n (#firstIssue+n)".
+function demoMainCommits(folder, dates, firstIssue) {
   const git = gitRepo(folder);
   git(['init', '-q', '-b', 'main']);
-  for (let n = 0; n < 15; n++) {
+  dates.forEach((at, n) => {
     fs.writeFileSync(path.join(folder, 'CHANGES.md'), `change ${n}\n`);
     git(['add', '-A']);
-    // the first one before the refresh, 14 merges after it
-    git(['commit', '-q', '-m', n ? `Merge change ${n} (#${60 + n})` : 'Initial commit'], new Date(Date.now() - (n ? 22 - n : 30) * 3600e3).toISOString());
-  }
+    git(['commit', '-q', '-m', n ? `Merge change ${n} (#${firstIssue + n})` : 'Initial commit'], at);
+  });
 }
 
 // --refresh (#784): no Backlog Refresh run, the project's add time as the baseline. 'onboarded': added
 // 3 days ago, 12 merges on main since ("not refreshed since the project was added · 12 merges since");
-// 'fresh': added an hour ago, no merge since (no banner).
-function demoOnboardedRefresh(ws, projects, project, mode) {
-  const hoursAgo = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+// 'fresh': added an hour ago, no merge since (no banner). createdAt is written into the project's
+// file directly: updateProject keeps it (it is set only at creation).
+function demoOnboardedRefresh(ws, project, mode) {
   const added = mode === 'fresh' ? 1 : 72;
-  projects.updateProject(ws.projects, project.id, { createdAt: hoursAgo(added) });
-  const git = gitRepo(project.folder);
-  git(['init', '-q', '-b', 'main']);
+  const file = path.join(ws.projects, `${project.id}.json`);
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), createdAt: hoursAgo(added) }, null, 2));
   const merges = mode === 'fresh' ? 0 : 12;
-  for (let n = 0; n <= merges; n++) {
-    fs.writeFileSync(path.join(project.folder, 'CHANGES.md'), `change ${n}\n`);
-    git(['add', '-A']);
-    // the clone's last commit before the add time, then the merges after it
-    git(['commit', '-q', '-m', n ? `Merge change ${n} (#${70 + n})` : 'Initial commit'], hoursAgo(n ? added - 4 * n : added + 1));
-  }
+  // the clone's last commit before the add time, then the merges after it
+  demoMainCommits(project.folder, Array.from({ length: merges + 1 }, (_, n) => hoursAgo(n ? added - 4 * n : added + 1)), 70);
 }
 
 // #405: two tests known to fail on the base (packages/engine/domains/project/base-health.js store), one with its bug issue
@@ -226,7 +229,7 @@ function seed({ args, ws, project, projects }) {
   // #291: the release v0.10 of the roadmap's cut line, in a state (needs the history: Backlog only)
   if (args.release) demoReleaseRun(ws, project.id, args.release);
   demoPoConversation(ws, project.id, args.po);
-  if (project.folder && args.refresh) demoOnboardedRefresh(ws, projects, project, args.refresh);
+  if (project.folder && args.refresh) demoOnboardedRefresh(ws, project, args.refresh);
   else if (project.folder) demoBacklogRefresh(ws, project.folder, project.id);
   // #258: the committed cards, as badges on their issues
   demoCommittedCards(ws, project.id);
