@@ -1002,7 +1002,7 @@
 
   // The Backlog Refresh alert (#161, packages/engine/domains/backlog/backlog-refresh.js; a warning, #270): on every view when the
   // last refresh is older than Settings › General › Backlog's interval and the base got merges since
-  // (or none ever ran); "Refreshing…" (an info) with a link while a refresh run is live. Never starts
+  // (with none, since the project was added, #784; or no baseline at all); "Refreshing…" (an info) with a link while a refresh run is live. Never starts
   // a run by itself. "Dismiss for today" is remembered by the service; × hides it until it is due again.
   const ago = (h) => (h >= 48 ? t('backlog.days_ago', { days: Math.floor(h / 24) }) : t('backlog.hours_ago', { hours: h }));
   function refreshAlert() {
@@ -1018,7 +1018,9 @@
         actions: [{ label: t('backlog.open_the_run'), onClick: () => openRun({ dataset: { run: r.running.runId, workflow: r.running.workflow || '' } }) }],
       }];
     }
-    const when = r.lastRun ? t('backlog.backlog_refreshed_ago', { ago: ago(r.hoursAgo), merges: r.merges != null ? t('backlog.merges_since', { count: r.merges }) : '' }) : t('backlog.backlog_never_refreshed');
+    const merges = r.merges != null ? t('backlog.merges_since', { count: r.merges }) : '';
+    const when = r.lastRun ? t('backlog.backlog_refreshed_ago', { ago: ago(r.hoursAgo), merges })
+      : r.since ? t('backlog.backlog_not_refreshed_since_added', { merges }) : t('backlog.backlog_never_refreshed');
     return [{
       id: `refresh:${bl.projectId}`,
       level: 'warning',

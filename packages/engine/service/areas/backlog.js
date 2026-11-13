@@ -63,16 +63,17 @@ module.exports = (ctx) => {
   }
 
   // The Backlog Refresh banner (#161, packages/engine/domains/backlog/backlog-refresh.js): the merges on the base since the
-  // last refresh are counted (first-parent commits: merges and squashes) only when it is stale;
-  // `refreshed`: the issues that refresh updated, for a day.
+  // last refresh (with none, since the project was added, #784) are counted (first-parent commits:
+  // merges and squashes) only when it is stale; `refreshed`: the issues that refresh updated, for a day.
   function refreshBanner(project, list, local) {
     const { ws } = ctx;
     const hours = workspace.readSettings(ws).backlogRefreshHours;
     const { last } = refreshes.refreshRuns(list);
-    const stale = last && Number(hours) > 0 && Date.now() - Date.parse(last.startedAt) >= Number(hours) * 3600e3;
-    const count = stale && project?.folder ? mergeCount(project, last.startedAt, local?.base || 'HEAD') : null;
+    const baseline = last ? last.startedAt : project?.createdAt;
+    const stale = baseline && Number(hours) > 0 && Date.now() - Date.parse(baseline) >= Number(hours) * 3600e3;
+    const count = stale && project?.folder ? mergeCount(project, baseline, local?.base || 'HEAD') : null;
     const state = refreshes.refreshState({
-      runs: list, intervalHours: hours, merges: count == null ? null : Number(count), dismissedOn: project ? refreshes.readDismissed(ws.backlog, project.id) : null,
+      runs: list, intervalHours: hours, merges: count == null ? null : Number(count), addedAt: project?.createdAt || null, dismissedOn: project ? refreshes.readDismissed(ws.backlog, project.id) : null,
     });
     const refreshed = last ? refreshes.refreshedIssues(path.join(ws.runs, last.runId), last.finishedAt) : [];
     return { ...state, base: local?.base || null, refreshed };

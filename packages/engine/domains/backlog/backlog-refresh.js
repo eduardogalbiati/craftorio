@@ -1,5 +1,6 @@
 // Backlog Refresh suggestion (#161): when a project's last successful backlog-refresh run is older
-// than the backlogRefreshHours setting (or none ever ran) and its base branch got merges since, the
+// than the backlogRefreshHours setting (with none, the project's add time is the baseline, #784; with
+// neither, "never refreshed") and its base branch got merges since, the
 // Backlog shows a banner offering to start one (never starts it by itself). "Dismiss for today" is
 // kept per project in <workspace>/backlog/<project id>.refresh.json. The issues the last refresh
 // updated (its applied-safe.json) carry a "refreshed" badge for a day after the run.
@@ -42,23 +43,28 @@ function refreshRuns(list) {
 /**
  * The banner's state. runs: the project's runs, newest first, live ones with status `running`;
  * intervalHours: the setting (0/empty = off); merges: merges on the base since the last refresh
- * started (null when unknown or never refreshed); dismissedOn: the day of Dismiss for today.
- * due: show "Refresh now" (stale, merges since or never ran, not dismissed today, none running).
+ * started, or since addedAt with no refresh run (null when unknown); addedAt: when the project
+ * was added (#784: the baseline with no refresh run; none = "never refreshed");
+ * dismissedOn: the day of Dismiss for today.
+ * due: show "Refresh now" (stale, merges since or no baseline, not dismissed today, none running).
  */
-function refreshState({ runs, intervalHours, merges = null, dismissedOn = null, now = Date.now() }) {
+function refreshState({ runs, intervalHours, merges = null, addedAt = null, dismissedOn = null, now = Date.now() }) {
   const interval = Number(intervalHours) > 0 ? Number(intervalHours) : 0;
   const { last, running } = refreshRuns(runs);
-  const startedAt = last ? Date.parse(last.startedAt) : NaN;
+  const added = addedAt ? Date.parse(addedAt) : NaN;
+  const since = last ? last.startedAt || null : (Number.isFinite(added) ? addedAt : null);
+  const baseline = last || since;
+  const startedAt = since ? Date.parse(since) : NaN;
   const hoursAgo = Number.isFinite(startedAt) ? Math.max(0, Math.floor((now - startedAt) / 3600e3)) : null;
-  const stale = !last || hoursAgo == null || hoursAgo >= interval;
-  const changed = last ? merges > 0 : true;
+  const stale = !baseline || hoursAgo == null || hoursAgo >= interval;
+  const changed = baseline ? merges > 0 : true;
   return {
     interval,
     lastRun: last ? { runId: last.runId, startedAt: last.startedAt, mock: !!last.mock } : null,
     running: running ? { runId: running.runId, workflow: running.workflow || null } : null,
     hoursAgo,
-    merges: last ? merges : null,
-    since: last?.startedAt || null,
+    merges: baseline ? merges : null,
+    since,
     dismissed: dismissedOn === localDay(now),
     due: !!interval && !running && stale && changed && dismissedOn !== localDay(now),
   };
