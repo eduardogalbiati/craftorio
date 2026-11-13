@@ -744,13 +744,9 @@ function stepsThatDontApply(v, all) {
 
 // #465: each deterministic step's log for its terminal buttons: the latest round's (its step.log, else
 // the log its output names) and the base check's of that round (step.log with `base`), relative to the
-// run folder
+// run folder (packages/shared/run-log-path.js)
 function stepLogs(v) {
-  const rel = (p) => {
-    const s = String(p || '').replace(/\\/g, '/');
-    const at = s.lastIndexOf('/logs/');
-    return at >= 0 ? s.slice(at + 1) : s.startsWith('logs/') ? s : null;
-  };
+  const rel = window.runLogPath;
   const out = new Map();
   for (const ev of v.events || []) {
     if (!ev.step_id) continue;

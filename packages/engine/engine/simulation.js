@@ -21,6 +21,7 @@ function e2eSuiteDelay(stepId, signal, env = process.env) {
   const ms = Number(env.MULTIAGENT_E2E_SUITE_DELAY_MS);
   if (!stepId || !(ms > 0) || env.MULTIAGENT_E2E_SUITE_DELAY_STEP !== stepId || !simulationOnly(env)) return null;
   return new Promise((resolve) => {
+    if (signal?.aborted) { resolve(); return; } // the run stopped before the step began
     const timer = setTimeout(resolve, ms);
     signal?.addEventListener?.('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
   });

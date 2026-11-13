@@ -61,19 +61,18 @@
   // a sub-agent call (Claude's Agent/Task tool, capabilities.subagents): its type and what it was asked
   // #795: the orchestrator's messages (steps with no agent): the step types that are not the orchestrator's
   // work (gates wait for a person, the PR monitor has its card), how a log line says it waits, the
-  // suite's command line ("suite: <cmd> (round N, timeout M min, log <path>)"), and a log path made
-  // relative to the run folder (logs/…)
+  // statuses a step ends well with (any other one is a failure: `missing`, `broken`, `fail`, `blocked`...;
+  // no status at all is a step that just ended), the suite's command line ("suite: <cmd> (round N,
+  // timeout M min, log <path>)"), and a log path made relative to the run folder (run-log-path.js)
   const NOT_MACHINE = ['agent', 'human_approval', 'human_edit', 'pr_monitor'];
-  const WAITING = ['suite_env_rerun', 'memory_hold', 'suite_slot'];
-  const FAILED = ['fail', 'blocked', 'error'];
+  const WAITING = ['memory_hold', 'screenshot_slot', 'suite_env_rerun', 'suite_slot'];
+  const ENDED_WELL = ['done', 'linked', 'local', 'none', 'ok', 'pass', 'passed', 'skipped', 'success', 'unchanged', 'written'];
   const SUITE_LINE = /^suite: (.+) \(round (\d+), timeout (\d+) min, log (\S+)\)$/;
   const MAX_FAILURES = 5;
   const MAX_NOTES = 5;
-  const logRel = (p) => {
-    const s = String(p || '').replace(/\\/g, '/');
-    const i = s.lastIndexOf('/logs/');
-    return !s ? null : i >= 0 ? s.slice(i + 1) : s;
-  };
+  const logRel = typeof module === 'object' && module.exports ? require('@multiagent/shared/run-log-path.js').runLogPath : root.runLogPath;
+  // the first line of an engine text, after its "<step>: " prefix
+  const firstLine = (s, step) => clip(String(s || '').split('\n')[0].replace(new RegExp(`^${String(step).replace(/\W/g, '\\$&')}: `), ''), 400);
   // #795: what a finished machine step's output says, onto its orchestrator message
   const machineCounts = (o, c) => (o.passed != null || o.failed != null || c
     ? { passed: o.passed ?? c?.passed ?? null, failed: typeof o.failed === 'number' ? o.failed : c?.failed ?? null } : null);
@@ -81,16 +80,19 @@
     .map((f) => ({ test: clip(String(f?.test || f?.name || f || ''), 300), file: f?.file ? String(f.file) : null }));
   function machineOutcome(it, ev) {
     const o = ev.output || {};
-    const failed = !!ev.error || FAILED.includes(o.status);
+    const failed = !!ev.error || (o.status != null && !ENDED_WELL.includes(o.status));
     Object.assign(it, {
       state: failed ? 'failed' : 'passed', finishedAt: ev.ts || null, durationMs: ev.duration_ms ?? o.duration_ms ?? null,
       round: o.round ?? it.round, log: logRel(o.log) || it.log, command: o.command || it.command, waitingReason: null,
       counts: machineCounts(o, it.counts), failures: machineFailures(o),
+      scope: o.scope || it.scope, why: o.selection?.why ? firstLine(o.selection.why, it.step) : it.why,
+      // why it did not simply pass (test ids missing, a broken red check, a skipped check), in the engine's words
+      summary: o.status && !['pass', 'passed', 'ok', 'success'].includes(o.status) && o.message ? firstLine(o.message, it.step) : null,
       error: ev.error ? clip(String(o.error || o.message || 'unknown error'), 600) : null,
     });
     if (o.timeout_ms) it.timeoutMin = Math.round(o.timeout_ms / 60e3);
   }
-  const subagentOf =(name, input) => (['Agent', 'Task'].includes(name) && input && typeof input === 'object'
+  const subagentOf = (name, input) => (['Agent', 'Task'].includes(name) && input && typeof input === 'object'
     ? { type: String(input.subagent_type || 'general-purpose'), description: clip(String(input.description || ''), 200) } : null);
 
   class RunChatModel {
@@ -113,9 +115,12 @@
     }
 
     // #795: the orchestrator message a `log` event belongs to: its step's, else (the suite's command
-    // line carries no step id) the open one writing to that log, else the last one opened
+    // line carries no step id) the open one writing to that log, else the one its message names
+    // ("<step id>: …", as the screenshot slot's wait), else the last one opened
     machineItem(ev, logPath) {
       if (ev.step_id) return this.machine.get(baseStep(ev.step_id)) || null;
+      const named = /^([\w-]+): /.exec(String(ev.message || ''));
+      if (!logPath) return (named && WAITING.includes(ev.kind) && this.machine.get(named[1])) || null;
       const open = [...this.machine.values()];
       return open.find((it) => logPath && it.log === logPath) || open.at(-1) || null;
     }
@@ -277,6 +282,7 @@
           kind: 'orchestrator', ts: ev.ts, step: ev.step_id, stepId: ev.step_id, visit: ev.visit || 1, round: ev.visit || 1,
           name: this.stepName(ev.step_id), state: 'running', startedAt: ev.ts, finishedAt: null, durationMs: null,
           log: null, command: null, timeoutMin: null, counts: null, failures: [], waitingReason: null, notes: [], error: null,
+          scope: null, why: null, summary: null,
         }));
       }
     },
@@ -402,13 +408,15 @@
       // #795: a deterministic step's log lines fold into its orchestrator message (no line each)
       const message = String(ev.message || '');
       const line = !ev.step_id ? SUITE_LINE.exec(message) : null;
-      const it = ev.step_id || line ? this.machineItem(ev, line && logRel(line[4])) : null;
+      const it = this.machineItem(ev, line && (logRel(line[4]) || line[4]));
       if (it) {
         if (line) {
-          Object.assign(it, { state: 'running', waitingReason: null, command: line[1], round: Number(line[2]), timeoutMin: Number(line[3]), log: logRel(line[4]) });
+          Object.assign(it, { state: 'running', waitingReason: null, command: line[1], round: Number(line[2]), timeoutMin: Number(line[3]), log: logRel(line[4]) || line[4] });
         } else if (WAITING.includes(ev.kind)) {
           Object.assign(it, { state: 'waiting', waitingReason: clip(message, 400) });
         } else {
+          // the suite's selection (which files and why: no status yet) is the scope's reason, kept to the end
+          if (ev.kind === 'suite' && ev.status == null) it.why = firstLine(message, it.step);
           if (typeof ev.failures === 'number') it.counts = { passed: it.counts?.passed ?? null, failed: ev.failures };
           it.notes = [...it.notes, clip(message, 400)].slice(-MAX_NOTES);
         }

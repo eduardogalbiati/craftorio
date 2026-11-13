@@ -80,6 +80,7 @@
 .rc-orch-who { color: var(--muted); font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .rc-orch-cmd { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-orch-why { color: var(--muted); overflow-wrap: anywhere; }
+.rc-orch-scope { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-orch[data-state="waiting"] .rc-orch-why { color: var(--yellow); }
 .rc-orch[data-state="failed"] .rc-orch-why { color: var(--red); }
 .rc-orch-fails ul { margin: 2px 0 0; padding-left: 18px; font-size: 11px; color: var(--red); }

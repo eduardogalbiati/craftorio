@@ -188,7 +188,7 @@
   // message per visit, updated in place: its state, elapsed time (ticking while it runs, tickOrchestrator)
   // and timeout, the counts, the first failures, why it waits; the tail of its log one click away
   // (api.runLogTail, followed while it runs) and the whole log in a log terminal (termAction, #465)
-  const ORCH_PILL = { running: 'pill-running', waiting: 'pill-warn', passed: 'pill-done', failed: 'pill-failed' };
+  const ORCH_PILL = { running: 'pill-running', waiting: 'pill-warn', passed: 'pill-success', failed: 'pill-failed' };
   const orchState = (s) => ({ running: t('runchat.orch_running'), waiting: t('runchat.orch_waiting'), passed: t('runchat.orch_passed'), failed: t('runchat.orch_failed') })[s] || esc(s);
   const orchLive = (it) => it.state === 'running' || it.state === 'waiting';
   // a step still open in a run nobody runs any more (#288) stopped at its last event
@@ -196,9 +196,11 @@
     : (chat.live ? Date.now() : Date.parse(chat.model.run.lastTs || it.startedAt)) - Date.parse(it.startedAt));
   function orchestratorHtml(it) {
     const open = chat.openLogs.has(it.id);
-    const meta = [t('runchat.orch_round', { round: it.round }), it.timeoutMin ? t('runchat.orch_timeout', { min: it.timeoutMin }) : '',
+    const meta = [t('runchat.orch_round', { round: it.round }), it.scope || '', it.timeoutMin ? t('runchat.orch_timeout', { min: it.timeoutMin }) : '',
       it.counts?.passed != null ? t('runchat.orch_passed_count', { count: it.counts.passed }) : '', it.counts?.failed ? t('runchat.orch_failed_count', { count: it.counts.failed }) : ''].filter(Boolean).join(' · ');
-    const why = it.waitingReason || it.error || (orchLive(it) ? it.notes.at(-1) : '') || '';
+    // the scope's reason (the engine's selection) stays after the end; then why it waits, failed or was skipped
+    const scopeWhy = it.why && it.why !== it.notes.at(-1) ? it.why : '';
+    const why = it.waitingReason || it.error || it.summary || (orchLive(it) ? it.notes.at(-1) : '') || '';
     const fails = it.failures.length ? `<div class="rc-orch-fails"><span class="muted small">${t('runchat.orch_first_failures')}</span><ul>${it.failures.map((f) => `<li class="mono" title="${esc(f.file || f.test)}">${esc(f.test)}</li>`).join('')}</ul></div>` : '';
     const log = it.log ? `<div class="rc-orch-log"><button type="button" class="link-btn small" data-testid="runchat-orchestrator-log-toggle" data-orch-toggle="${it.id}" aria-expanded="${open}">${t(open ? 'runchat.orch_hide_log' : 'runchat.orch_show_log')}</button>
       <button type="button" class="link-btn small mono" data-term="log" data-orch-log="${esc(it.log)}" data-testid="runchat-orchestrator-log-link" title="${esc(t('runchat.orch_whole_log', { log: it.log }))}">${esc(it.log)}</button></div>
@@ -206,7 +208,7 @@
     return `<div class="rc-orch" data-item="${it.id}" data-testid="runchat-orchestrator-message" data-step="${esc(it.step)}" data-state="${esc(it.state)}">
       <div class="duo-meta"><b class="rc-orch-who">${t('runchat.orch_label')}</b>${stepTag(it.stepId, it.visit)}<span class="pill ${ORCH_PILL[it.state] || ''}">${orchState(it.state)}</span><span class="mono small" data-elapsed="${orchLive(it) && chat.live ? esc(it.startedAt) : ''}">${fmtSecs(orchElapsed(it))}</span><span class="time">${clock(it.ts)}</span></div>
       ${it.command ? `<div class="rc-orch-cmd mono" title="${esc(it.command)}">$ ${esc(it.command)}</div>` : ''}<div class="muted small">${esc(meta)}</div>
-      ${why ? `<div class="rc-orch-why small">${esc(why)}</div>` : ''}${fails}${log}</div>`;
+      ${scopeWhy ? `<div class="muted small rc-orch-scope" title="${esc(it.why)}">${esc(scopeWhy)}</div>` : ''}${why ? `<div class="rc-orch-why small">${esc(why)}</div>` : ''}${fails}${log}</div>`;
   }
   // the tail of an expanded message's log, kept across redraws
   async function loadTail(id) {

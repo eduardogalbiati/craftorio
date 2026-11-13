@@ -2,6 +2,7 @@
 // events, answering a gate and resuming a run from a step. Several runs can be in progress (Settings ›
 // Execution › Concurrent runs): the channels that act on one take its runId.
 
+const fs = require('fs');
 const runs = require('../../domains/run/runs');
 const projects = require('../../domains/project/projects');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -37,7 +38,6 @@ const {
   text,
   WORKFLOW_FILE,
 } = require('../schemas');
-const fs = require('fs');
 
 // #795: the last `bytes` (8 KB by default, 64 KB at most) of a log file, from its first whole line
 const TAIL_BYTES = 8192;
