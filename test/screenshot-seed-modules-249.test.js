@@ -87,6 +87,22 @@ for (const argv of CASES) {
   });
 }
 
+// #784 #830: with the project's folder, --refresh draws the banner from the project's add time: no
+// Backlog Refresh run, the project added 3 days ago with 12 merges since (onboarded) or an hour ago
+// with none (fresh)
+for (const [mode, hours, commits] of [['onboarded', 72, 13], ['fresh', 1, 1]]) {
+  test(`--view backlog --refresh ${mode} with the project's folder: added ${hours} h ago, ${commits - 1} merges since, no Backlog Refresh run`, async (t) => {
+    const { ws, project } = await seedView(t, ['--view', 'backlog', '--refresh', mode], { withFolder: true });
+    const saved = JSON.parse(fs.readFileSync(path.join(ws.projects, `${project.id}.json`), 'utf8'));
+    const ageHours = (Date.now() - Date.parse(saved.createdAt)) / 3600e3;
+    assert.equal(Math.abs(ageHours - hours) < 0.5, true, `createdAt ${saved.createdAt} is ${ageHours.toFixed(2)} h ago`);
+    const refreshRuns = seededEvents(ws).filter(({ event }) => event.type === 'workflow.started' && event.workflow === 'backlog-refresh');
+    assert.deepEqual(refreshRuns.map(({ run }) => run), []);
+    const count = require('child_process').execFileSync('git', ['-C', project.folder, 'rev-list', '--count', 'main'], { encoding: 'utf8' }).trim();
+    assert.equal(count, String(commits));
+  });
+}
+
 test('--view project --mode large (#387): the Architecture tab gets a latest report of production-like volume', async (t) => {
   const { ws, project } = await seedView(t, ['--view', 'project', '--tab', 'architecture', '--mode', 'large'], { withFolder: true });
   const dir = path.join(ws.root, 'architecture', project.id);
