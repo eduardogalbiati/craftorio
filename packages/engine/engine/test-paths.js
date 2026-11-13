@@ -85,12 +85,17 @@ function insideGit(dir) {
 // the files modified, deleted, untracked or unmerged, and the unmerged ones, relative to the
 // repository root (porcelain paths always are; with -z never quoted). No renames: a renamed file is
 // its new path plus its old one deleted, as `diff --name-only` lists them.
+// #737: `head` is HEAD's commit from the same process (`# branch.oid`), null on a branch with no
+// commit yet ("(initial)").
 async function status(root) {
-  const entries = (await git(['--no-optional-locks', 'status', '--porcelain=v2', '-z', '--untracked-files=all', '--no-renames'], root)).split('\0');
+  const entries = (await git(['--no-optional-locks', 'status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all', '--no-renames'], root)).split('\0');
   const changed = new Set();
   const unmerged = new Set();
+  let head = null;
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
+    const oid = /^# branch\.oid ([0-9a-f]{40,64})$/.exec(e);
+    if (oid) head = oid[1];
     // the path follows a fixed number of fields: 8 for `1` (changed), 9 for `2` (renamed, the old path
     // in the next entry), 10 for `u` (unmerged)
     if (e[0] === '1') changed.add(e.split(' ').slice(8).join(' '));
@@ -98,7 +103,7 @@ async function status(root) {
     else if (e[0] === 'u') { const f = e.split(' ').slice(10).join(' '); changed.add(f); unmerged.add(f); }
     else if (e[0] === '?') changed.add(e.slice(2));
   }
-  return { changed: [...changed], unmerged };
+  return { changed: [...changed], unmerged, head };
 }
 
 // State of the checkout before a turn, or null when `dir` is not a git work tree: HEAD, and the
@@ -115,7 +120,9 @@ async function snapshot(dir, patterns = TESTS_PATHS, { repo } = {}) {
       throw e;
     }
   }
-  const [head, local] = await Promise.all([git(['rev-parse', '--verify', 'HEAD'], root), status(root)]);
+  // #737: HEAD comes with the status; rev-parse only without a commit yet, for its error
+  const local = await status(root);
+  const head = local.head || await git(['rev-parse', '--verify', 'HEAD'], root);
   const isTest = testMatcher(patterns);
   // inside a rebase HEAD sits on the base: keep the branch's side, the turn may finish the rebase
   const rebaseHead = await rebaseOrigHead(root, gitDir);

@@ -51,13 +51,15 @@ function roundLogName(stepId, visit, reruns) {
 }
 
 // #364: the commit a suite round tests and whether the worktree was clean when it started (no
-// uncommitted or untracked change), or { commit: null, clean: false } without a git checkout
+// uncommitted or untracked change), or { commit: null, clean: false } without a git checkout.
+// #737: both from one `git status` (HEAD's commit is its `# branch.oid` line, "(initial)" without one).
 function testedTree(dir) {
   if (!dir) return { commit: null, clean: false };
-  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] });
   try {
-    const commit = git('rev-parse', 'HEAD').trim() || null;
-    return { commit, clean: !!commit && git('status', '--porcelain').trim() === '' };
+    const out = execFileSync('git', ['status', '--porcelain=v2', '--branch'], { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const lines = out.split('\n').map((l) => l.replace(/\r$/, '')).filter(Boolean);
+    const commit = lines.map((l) => /^# branch\.oid ([0-9a-f]{40,64})$/.exec(l)?.[1]).find(Boolean) || null;
+    return { commit, clean: !!commit && lines.every((l) => l.startsWith('#')) };
   } catch {
     return { commit: null, clean: false };
   }
