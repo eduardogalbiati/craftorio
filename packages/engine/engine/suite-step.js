@@ -91,6 +91,7 @@ const { killTree, OWN_GROUP } = require('./providers');
 const { MAX_TEST_TIMEOUT_MS } = require('./test-timeouts');
 const { generatedLines, generatedNote, splitMissingBaselines } = require('./visual-baselines');
 const { workerEnv } = require('../domains/machine/machine-profile');
+const { e2eSuiteDelay } = require('./simulation'); // #795
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
 const MIN_TIMEOUT_MS = 10 * 60e3;
@@ -761,7 +762,7 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // confirmedOnBase (#527): the failures the base check confirmed red alone since its last green check
 // (base-health-store confirmedFailures); as a list, a failure that fails on the base too is pre-existing
 // only when it is listed there, else it counts as the run's own. null: every one is pre-existing (#211).
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null, wholeTests }) {
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null, wholeTests, stepId = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -808,7 +809,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir, passthrough });
   if (logFile) {
     writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, logPrefix });
-    onLog?.({ path: out.log, command: out.command });
+    onLog?.({ path: out.log, command: out.command, timeout_ms: out.timeout_ms });
   }
   // #455: a whole-suite round waits for the machine-wide suite slot; the wait is not the round's time
   const runRound = await suiteSlotRun({ slot, mock, scope: out.scope, signal, logFile, run });
@@ -816,6 +817,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   let text = '';
   if (mock) {
     if (mockResult === 'blocked') { out.reason = '(simulated) the test command was not found'; return finish(); }
+    await e2eSuiteDelay(stepId, signal);
     const r = mockSuite(mockResult, preexisting);
     out.exit_code = r.code;
     text = r.text;

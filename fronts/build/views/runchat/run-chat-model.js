@@ -59,7 +59,38 @@
   const clip = (s, n = MAX_TEXT) => (s.length > n ? `${s.slice(0, n)}…` : s);
   const brief = (v) => clip(typeof v === 'string' ? v : JSON.stringify(v ?? ''), 600);
   // a sub-agent call (Claude's Agent/Task tool, capabilities.subagents): its type and what it was asked
-  const subagentOf = (name, input) => (['Agent', 'Task'].includes(name) && input && typeof input === 'object'
+  // #795: the orchestrator's messages (steps with no agent): the step types that are not the orchestrator's
+  // work (gates wait for a person, the PR monitor has its card), how a log line says it waits, the
+  // suite's command line ("suite: <cmd> (round N, timeout M min, log <path>)"), and a log path made
+  // relative to the run folder (logs/…)
+  const NOT_MACHINE = ['agent', 'human_approval', 'human_edit', 'pr_monitor'];
+  const WAITING = ['suite_env_rerun', 'memory_hold', 'suite_slot'];
+  const FAILED = ['fail', 'blocked', 'error'];
+  const SUITE_LINE = /^suite: (.+) \(round (\d+), timeout (\d+) min, log (\S+)\)$/;
+  const MAX_FAILURES = 5;
+  const MAX_NOTES = 5;
+  const logRel = (p) => {
+    const s = String(p || '').replace(/\\/g, '/');
+    const i = s.lastIndexOf('/logs/');
+    return !s ? null : i >= 0 ? s.slice(i + 1) : s;
+  };
+  // #795: what a finished machine step's output says, onto its orchestrator message
+  const machineCounts = (o, c) => (o.passed != null || o.failed != null || c
+    ? { passed: o.passed ?? c?.passed ?? null, failed: typeof o.failed === 'number' ? o.failed : c?.failed ?? null } : null);
+  const machineFailures = (o) => (Array.isArray(o.failures) ? o.failures : []).slice(0, MAX_FAILURES)
+    .map((f) => ({ test: clip(String(f?.test || f?.name || f || ''), 300), file: f?.file ? String(f.file) : null }));
+  function machineOutcome(it, ev) {
+    const o = ev.output || {};
+    const failed = !!ev.error || FAILED.includes(o.status);
+    Object.assign(it, {
+      state: failed ? 'failed' : 'passed', finishedAt: ev.ts || null, durationMs: ev.duration_ms ?? o.duration_ms ?? null,
+      round: o.round ?? it.round, log: logRel(o.log) || it.log, command: o.command || it.command, waitingReason: null,
+      counts: machineCounts(o, it.counts), failures: machineFailures(o),
+      error: ev.error ? clip(String(o.error || o.message || 'unknown error'), 600) : null,
+    });
+    if (o.timeout_ms) it.timeoutMin = Math.round(o.timeout_ms / 60e3);
+  }
+  const subagentOf =(name, input) => (['Agent', 'Task'].includes(name) && input && typeof input === 'object'
     ? { type: String(input.subagent_type || 'general-purpose'), description: clip(String(input.description || ''), 200) } : null);
 
   class RunChatModel {
@@ -78,6 +109,15 @@
       this.sides = new Map(); // agent → 'left' | 'right', given when it first speaks
       this.touched = [];
       this.prCard = null; // #809: the PR monitor's card item
+      this.machine = new Map(); // #795: step id → its orchestrator message while the step runs
+    }
+
+    // #795: the orchestrator message a `log` event belongs to: its step's, else (the suite's command
+    // line carries no step id) the open one writing to that log, else the last one opened
+    machineItem(ev, logPath) {
+      if (ev.step_id) return this.machine.get(baseStep(ev.step_id)) || null;
+      const open = [...this.machine.values()];
+      return open.find((it) => logPath && it.log === logPath) || open.at(-1) || null;
     }
 
     // Each agent gets a side the first time it speaks, alternating left, right, left… in order
@@ -230,6 +270,32 @@
         for (const a of agents) this.sideOf(a); // a fan-out's agents get their sides in the step's order
         this.groups.set(ev.step_id, this.add({ kind: 'group', ts: ev.ts, stepId: ev.step_id, visit: ev.visit || 1, agents, done: false }));
       }
+      // #795: a step with no agent (a suite, a check, a merge...) is the orchestrator's: one message per
+      // visit, updated in place by its step.log, log and step.finished events
+      if (!agents.length && !NOT_MACHINE.includes(ev.step_type)) {
+        this.machine.set(ev.step_id, this.add({
+          kind: 'orchestrator', ts: ev.ts, step: ev.step_id, stepId: ev.step_id, visit: ev.visit || 1, round: ev.visit || 1,
+          name: this.stepName(ev.step_id), state: 'running', startedAt: ev.ts, finishedAt: null, durationMs: null,
+          log: null, command: null, timeoutMin: null, counts: null, failures: [], waitingReason: null, notes: [], error: null,
+        }));
+      }
+    },
+
+    // #795: the log a deterministic step writes to (its live terminal follows it); not the base check's
+    'step.log'(ev) {
+      const it = this.machine.get(ev.step_id);
+      if (!it || ev.base) return;
+      Object.assign(it, { log: logRel(ev.path) || it.log, command: ev.command || it.command });
+      if (ev.timeout_ms) it.timeoutMin = Math.round(ev.timeout_ms / 60e3);
+      this.touch(it);
+    },
+
+    // #795: the memory came back: the step waiting for it goes on
+    'memory.hold'(ev) {
+      const it = this.machine.get(ev.step_id);
+      if (!it) return;
+      if (ev.recovered && it.state === 'waiting') Object.assign(it, { state: 'running', waitingReason: null });
+      this.touch(it);
     },
 
     'step.finished'(ev) {
@@ -238,6 +304,14 @@
         this.groups.delete(ev.step_id);
         Object.assign(group, { done: true, failed: (ev.output?.failed || []).map((f) => f.agent), error: !!ev.error });
         this.touch(group);
+      }
+      // #795: the orchestrator message becomes the step's outcome (an error is on it, not a second item)
+      const it = this.machine.get(ev.step_id);
+      if (it) {
+        this.machine.delete(ev.step_id);
+        machineOutcome(it, ev);
+        this.touch(it);
+        return;
       }
       if (ev.error) this.add({ kind: 'fail', ts: ev.ts, stepId: ev.step_id, text: String(ev.output?.error || 'unknown error') });
     },
@@ -325,7 +399,23 @@
     },
 
     log(ev) {
-      if (ev.level === 'warn' || ev.level === 'error') this.system(ev, ev.level, clip(String(ev.message || ''), 400));
+      // #795: a deterministic step's log lines fold into its orchestrator message (no line each)
+      const message = String(ev.message || '');
+      const line = !ev.step_id ? SUITE_LINE.exec(message) : null;
+      const it = ev.step_id || line ? this.machineItem(ev, line && logRel(line[4])) : null;
+      if (it) {
+        if (line) {
+          Object.assign(it, { state: 'running', waitingReason: null, command: line[1], round: Number(line[2]), timeoutMin: Number(line[3]), log: logRel(line[4]) });
+        } else if (WAITING.includes(ev.kind)) {
+          Object.assign(it, { state: 'waiting', waitingReason: clip(message, 400) });
+        } else {
+          if (typeof ev.failures === 'number') it.counts = { passed: it.counts?.passed ?? null, failed: ev.failures };
+          it.notes = [...it.notes, clip(message, 400)].slice(-MAX_NOTES);
+        }
+        this.touch(it);
+        return;
+      }
+      if (ev.level === 'warn' || ev.level === 'error') this.system(ev, ev.level, clip(message, 400));
       // a persistent conversation that outgrew max_context: the agent's next turn starts fresh from its note
       else if (ev.kind === 'context_rotation') this.system(ev, 'plain', clip(String(ev.message || ''), 400));
     },
@@ -424,6 +514,9 @@
       // a fan-out that threw (too few agents answered) gets no step.finished
       for (const group of this.groups.values()) { Object.assign(group, { done: true, error: ev.status !== 'success' }); this.touch(group); }
       this.groups.clear();
+      // #795: a step the run ended in (stopped, interrupted) gets no step.finished
+      for (const it of this.machine.values()) { Object.assign(it, { state: ev.status === 'success' ? 'passed' : 'failed', finishedAt: ev.ts || null, waitingReason: null }); this.touch(it); }
+      this.machine.clear();
       // tested (#396): 'not green' when the run went on without a green suite
       this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), cost: s.cost_usd ?? this.run.cost, durationMs: s.duration_ms || 0, tested: s.tested || null });
     },

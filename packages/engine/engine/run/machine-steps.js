@@ -340,7 +340,9 @@ const methods = {
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
           ...(step.id === 'suite' && !env ? {} : { logName: roundLog }),
           // #465: the log the command writes to, followed by the step's live terminal
-          onLog: ({ path: rel, command, base }) => this.emitEvent('step.log', { step_id: step.id, path: rel, command, ...(base ? { base: true } : {}) }),
+          // #795: with the round's timeout, for the run chat's orchestrator message
+          onLog: ({ path: rel, command, base, timeout_ms: timeoutMs }) => this.emitEvent('step.log', { step_id: step.id, path: rel, command, ...(base ? { base: true } : {}), ...(timeoutMs ? { timeout_ms: timeoutMs } : {}) }),
+          stepId: step.id,
           // the wait for memory was written to the round's log: kept when this execution writes that file
           ...(logPrefix && (extra.logName ? `${extra.logName}${env}` : roundLog) === roundLog ? { logPrefix } : {}),
           // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed

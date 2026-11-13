@@ -18,7 +18,8 @@
   const fmtSecs = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}m ${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}s` : `${Math.round((ms || 0) / 1000)}s`);
   const DOING = { thinking: 'is thinking', reading: 'is using a tool', writing: 'is writing' };
 
-  let chat = { model: new RunChatModel(), runId: null, live: false, follow: false, loading: false, buffer: [] };
+  // openLogs / tails (#795): the orchestrator messages whose log tail is expanded, and the tails read
+  let chat = { model: new RunChatModel(), runId: null, live: false, follow: false, loading: false, buffer: [], openLogs: new Set(), tails: new Map() };
 
   // ---------------------------------------------------------------- avatars
   const isSupervisor = (agent) => /^_?supervisor$/.test(agent || '');
@@ -183,6 +184,61 @@
       <div class="rc-group-body"></div></div>`;
   }
 
+  // #795: the deterministic orchestrator working on a step with no agent (a suite, a check, a merge): one
+  // message per visit, updated in place: its state, elapsed time (ticking while it runs, tickOrchestrator)
+  // and timeout, the counts, the first failures, why it waits; the tail of its log one click away
+  // (api.runLogTail, followed while it runs) and the whole log in a log terminal (termAction, #465)
+  const ORCH_PILL = { running: 'pill-running', waiting: 'pill-warn', passed: 'pill-done', failed: 'pill-failed' };
+  const orchState = (s) => ({ running: t('runchat.orch_running'), waiting: t('runchat.orch_waiting'), passed: t('runchat.orch_passed'), failed: t('runchat.orch_failed') })[s] || esc(s);
+  const orchLive = (it) => it.state === 'running' || it.state === 'waiting';
+  // a step still open in a run nobody runs any more (#288) stopped at its last event
+  const orchElapsed = (it) => (it.finishedAt ? it.durationMs ?? Date.parse(it.finishedAt) - Date.parse(it.startedAt)
+    : (chat.live ? Date.now() : Date.parse(chat.model.run.lastTs || it.startedAt)) - Date.parse(it.startedAt));
+  function orchestratorHtml(it) {
+    const open = chat.openLogs.has(it.id);
+    const meta = [t('runchat.orch_round', { round: it.round }), it.timeoutMin ? t('runchat.orch_timeout', { min: it.timeoutMin }) : '',
+      it.counts?.passed != null ? t('runchat.orch_passed_count', { count: it.counts.passed }) : '', it.counts?.failed ? t('runchat.orch_failed_count', { count: it.counts.failed }) : ''].filter(Boolean).join(' · ');
+    const why = it.waitingReason || it.error || (orchLive(it) ? it.notes.at(-1) : '') || '';
+    const fails = it.failures.length ? `<div class="rc-orch-fails"><span class="muted small">${t('runchat.orch_first_failures')}</span><ul>${it.failures.map((f) => `<li class="mono" title="${esc(f.file || f.test)}">${esc(f.test)}</li>`).join('')}</ul></div>` : '';
+    const log = it.log ? `<div class="rc-orch-log"><button type="button" class="link-btn small" data-testid="runchat-orchestrator-log-toggle" data-orch-toggle="${it.id}" aria-expanded="${open}">${t(open ? 'runchat.orch_hide_log' : 'runchat.orch_show_log')}</button>
+      <button type="button" class="link-btn small mono" data-term="log" data-orch-log="${esc(it.log)}" data-testid="runchat-orchestrator-log-link" title="${esc(t('runchat.orch_whole_log', { log: it.log }))}">${esc(it.log)}</button></div>
+      <pre class="rc-orch-tail" data-testid="runchat-orchestrator-log-tail"${open ? '' : ' hidden'}>${esc(chat.tails.get(it.id) ?? '')}</pre>` : '';
+    return `<div class="rc-orch" data-item="${it.id}" data-testid="runchat-orchestrator-message" data-step="${esc(it.step)}" data-state="${esc(it.state)}">
+      <div class="duo-meta"><b class="rc-orch-who">${t('runchat.orch_label')}</b>${stepTag(it.stepId, it.visit)}<span class="pill ${ORCH_PILL[it.state] || ''}">${orchState(it.state)}</span><span class="mono small" data-elapsed="${orchLive(it) && chat.live ? esc(it.startedAt) : ''}">${fmtSecs(orchElapsed(it))}</span><span class="time">${clock(it.ts)}</span></div>
+      ${it.command ? `<div class="rc-orch-cmd mono" title="${esc(it.command)}">$ ${esc(it.command)}</div>` : ''}<div class="muted small">${esc(meta)}</div>
+      ${why ? `<div class="rc-orch-why small">${esc(why)}</div>` : ''}${fails}${log}</div>`;
+  }
+  // the tail of an expanded message's log, kept across redraws
+  async function loadTail(id) {
+    const it = chat.model.byId.get(id);
+    const runId = chat.runId;
+    if (!it?.log || !runId) return;
+    let text;
+    try { text = (await api.runLogTail(runId, it.log))?.text || t('runchat.orch_tail_empty'); } catch (e) { text = t('runchat.orch_tail_error', { error: errMsg(e) }); }
+    if (chat.runId !== runId) return;
+    chat.tails.set(id, text);
+    const pre = $c(`#rc-messages [data-item="${id}"] [data-testid="runchat-orchestrator-log-tail"]`);
+    if (pre) { pre.textContent = text; pre.scrollTop = pre.scrollHeight; }
+  }
+  function toggleLog(btn) {
+    const id = btn.dataset.orchToggle;
+    const open = !chat.openLogs.has(id);
+    if (open) chat.openLogs.add(id); else chat.openLogs.delete(id);
+    btn.setAttribute('aria-expanded', String(open));
+    btn.textContent = t(open ? 'runchat.orch_hide_log' : 'runchat.orch_show_log');
+    const pre = btn.closest('.rc-orch')?.querySelector('[data-testid="runchat-orchestrator-log-tail"]');
+    if (pre) pre.hidden = !open;
+    if (open) loadTail(id);
+  }
+  // each second while the run is live: the elapsed times, and every 2 s the expanded tails of running steps
+  let ticks = 0;
+  function tickOrchestrator() {
+    if (!chat.live || !visible()) return;
+    for (const el of $c('#rc-messages').querySelectorAll('[data-elapsed]:not([data-elapsed=""])')) el.textContent = fmtSecs(Date.now() - Date.parse(el.dataset.elapsed));
+    if (++ticks % 2) return;
+    for (const id of chat.openLogs) if (orchLive(chat.model.byId.get(id) || {})) loadTail(id);
+  }
+
   // #396: the end's pill of a run that went on without a green suite (the event's summary, else its row's `tested`)
   const testedPill = (it) => ((it.tested || chat.tested) === 'not green'
     ? ` <span class="pill pill-warn" data-testid="runchat-tested" title="${t('runchat.the_run_reached_the_build_without')}">${t('runchat.not_tested_green')}</span>` : '');
@@ -205,6 +261,7 @@
       case 'turn': return turnHtml(it);
       case 'fallback': return fallbackHtml(it);
       case 'group': return groupHtml(it);
+      case 'orchestrator': return orchestratorHtml(it); // #795
       case 'gate': return gateHtml(it);
       // #809: the PR monitor's card (pr-monitor-card.js), updated in place by each read
       case 'pr_card': return window.PrMonitorCard.html(it, { item: it.id, runId: chat.live ? chat.runId : '' }); // #810: its buttons act on a live run only
@@ -243,9 +300,11 @@
         continue;
       }
       const html = itemHtml(it);
-      if (el) { el.outerHTML = html; continue; }
-      const parent = it.parent && box.querySelector(`[data-item="${it.parent}"] .rc-group-body`);
-      (parent || box).insertAdjacentHTML('beforeend', html);
+      const parent = !el && it.parent && box.querySelector(`[data-item="${it.parent}"] .rc-group-body`);
+      if (el) el.outerHTML = html;
+      else (parent || box).insertAdjacentHTML('beforeend', html);
+      // #795: an expanded message's tail follows its step (the outcome's last lines too)
+      if (it.kind === 'orchestrator' && chat.openLogs.has(id)) loadTail(id);
     }
     // an interrupted run's note stays the last message (#288)
     box.querySelector('[data-testid="runchat-interrupted-note"]')?.remove();
@@ -299,7 +358,7 @@
   }
 
   function reset(runId) {
-    chat = { model: new RunChatModel(), runId, live: false, elsewhere: null, follow: chat.follow, loading: true, buffer: [] };
+    chat = { model: new RunChatModel(), runId, live: false, elsewhere: null, follow: chat.follow, loading: true, buffer: [], openLogs: new Set(), tails: new Map() };
     $c('#rc-messages').innerHTML = '';
     $c('#rc-typing').innerHTML = '';
     delete $c('#rc-typing').dataset.key;
@@ -393,6 +452,15 @@
       const at = e.target.closest('[data-resume-at]');
       if (at) { window.openResumeDialog?.(chat.runId, at.dataset.resumeAt ? { step: at.dataset.resumeAt } : {}); return; }
       if (e.target.closest('[data-resume]')) { window.openResumeDialog?.(chat.runId); return; }
+      // #795: an orchestrator message's log: its tail, or the whole log in a log terminal
+      const tail = e.target.closest('[data-orch-toggle]');
+      if (tail) { toggleLog(tail); return; }
+      const whole = e.target.closest('[data-orch-log]');
+      if (whole) {
+        window.termAction?.(whole, { sessionId: whole.dataset.orchLog, runId: chat.runId, label: whole.dataset.orchLog })
+          .then((r) => { if (r?.error) showToast(t('runchat.orch_whole_log_failed'), r.text); });
+        return;
+      }
       if (e.target.closest('[data-gate-tool]')) { if (chat.live) onGateTool(e, chat.runId); return; }
       const b = e.target.closest('button[data-approval]');
       if (!b || !chat.live || b.disabled) return;
@@ -437,6 +505,7 @@
       draw(chat.model.items.map((it) => it.id));
     });
     api.onEvent(onEvent);
+    setInterval(tickOrchestrator, 1000); // #795
   }
 
   registerView({

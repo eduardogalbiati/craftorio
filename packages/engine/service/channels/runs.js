@@ -37,6 +37,23 @@ const {
   text,
   WORKFLOW_FILE,
 } = require('../schemas');
+const fs = require('fs');
+
+// #795: the last `bytes` (8 KB by default, 64 KB at most) of a log file, from its first whole line
+const TAIL_BYTES = 8192;
+function logTail(file, bytes) {
+  const want = Math.min(Math.max(Number(bytes) || TAIL_BYTES, 256), 65536);
+  let fd;
+  try { fd = fs.openSync(file, 'r'); } catch { return { text: '', size: 0 }; }
+  try {
+    const size = fs.fstatSync(fd).size;
+    const start = Math.max(0, size - want);
+    const buf = Buffer.alloc(size - start);
+    fs.readSync(fd, buf, 0, buf.length, start);
+    const text = buf.toString('utf8');
+    return { text: start > 0 ? text.slice(text.indexOf('\n') + 1) : text, size };
+  } finally { fs.closeSync(fd); }
+}
 
 // a run's title as the lists show it (run-meta setRunTitle, pushed on run:meta)
 const TITLE = shape({ runId: RUN_ID, title: STRING, customTitle: ANY }, ['runId']);
@@ -184,6 +201,15 @@ module.exports = (ctx) => [
     params: ['runId', '...opts'],
     schema: { params: args({ runId: RUN_ID, activity: FLAG }, ['runId']), result: listOf(OBJECT) },
     fn: ({ runId, activity }) => runs.runEvents(ctx.runFolder(requireId(runId, 'run id')), { activity: !!activity }),
+  },
+  // #795: the end of a deterministic step's log (`path` relative to the run, only under its logs/), for
+  // the run chat's orchestrator message: { text, size }; a log not written yet gives ''
+  {
+    channel: 'runs:logTail',
+    method: 'runLogTail',
+    params: ['runId', 'path', '...opts'],
+    schema: { params: args({ runId: RUN_ID, path: text(500), bytes: NUMBER }, ['runId', 'path']), result: shape({ text: STRING, size: NUMBER }) },
+    fn: ({ runId, path: rel, bytes }) => logTail(ctx.logTarget({ runId: requireId(runId, 'run id'), logPath: rel }).file, bytes),
   },
   // the run's scratch workspace (#201: not artifacts, shown on the Run screen while it exists):
   // { dir, files, bytes } or null

@@ -70,6 +70,25 @@
 .rc-sys.error span { color: var(--red); white-space: pre-wrap; }
 .rc-sys.supervisor span { color: var(--supervisor); }
 
+/* #795: the orchestrator's message for a step with no agent (a suite, a check): centred, mono, a dashed
+   frame coloured by its state, not an agent's bubble; its log tail scrolls in a bounded box */
+.rc-orch { align-self: center; width: min(720px, 92%); min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--border); border-left: 3px solid var(--accent); background: var(--panel-2); font-size: 12px; }
+.rc-orch[data-state="waiting"] { border-left-color: var(--yellow); }
+.rc-orch[data-state="passed"] { border-left-color: var(--green); }
+.rc-orch[data-state="failed"] { border-left-color: var(--red); }
+.rc-orch .duo-meta { align-items: center; gap: 8px; }
+.rc-orch-who { color: var(--muted); font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.rc-orch-cmd { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-orch-why { color: var(--muted); overflow-wrap: anywhere; }
+.rc-orch[data-state="waiting"] .rc-orch-why { color: var(--yellow); }
+.rc-orch[data-state="failed"] .rc-orch-why { color: var(--red); }
+.rc-orch-fails ul { margin: 2px 0 0; padding-left: 18px; font-size: 11px; color: var(--red); }
+.rc-orch-fails li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-orch-log { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rc-orch-log .link-btn { min-height: 24px; }
+.rc-orch-log [data-orch-log] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-orch-tail { margin: 2px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+
 /* human gates: the full width of the conversation (#181), the message kept at a readable width and
    the extra room going to the right column (Changed files, From the developer, Run files) */
 .rc-gate { align-self: stretch; width: 100%; min-width: 0; }
