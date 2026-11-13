@@ -88,7 +88,9 @@ function phoneGatesClient(text, state, progress) {
       const r = await request('/gates.json', { headers: { Authorization: 'Bearer ' + tk } });
       if (r.status === 401) {
         localStorage.removeItem(key);
-        showPair('pair_invalid');
+        // Kept so an automatic refresh (visibilitychange, timer) still explains why the phone is unpaired.
+        pairError = 'pair_invalid';
+        showPair(pairError);
         return;
       }
       if (!r.ok || !Array.isArray(r.data.gates)) throw new Error('Unreadable gates');
