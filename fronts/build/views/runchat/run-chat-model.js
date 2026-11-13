@@ -66,7 +66,20 @@
   // timeout M min, log <path>)"), and a log path made relative to the run folder (run-log-path.js)
   const NOT_MACHINE = ['agent', 'human_approval', 'human_edit', 'pr_monitor'];
   const WAITING = ['memory_hold', 'screenshot_slot', 'suite_env_rerun', 'suite_slot'];
-  const ENDED_WELL = ['done', 'linked', 'local', 'none', 'ok', 'pass', 'passed', 'skipped', 'success', 'unchanged', 'written'];
+  // (one status per line: these are step statuses, not the roadmap's states of roadmap-model.js, #349)
+  const ENDED_WELL = [
+    'done',
+    'linked',
+    'local',
+    'none',
+    'ok',
+    'pass',
+    'passed',
+    'skipped',
+    'success',
+    'unchanged',
+    'written',
+  ];
   const SUITE_LINE = /^suite: (.+) \(round (\d+), timeout (\d+) min, log (\S+)\)$/;
   const MAX_FAILURES = 5;
   const MAX_NOTES = 5;
