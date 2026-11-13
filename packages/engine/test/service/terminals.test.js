@@ -1,7 +1,7 @@
 // packages/engine/service/areas/terminals.js: the 'command' terminal kind (#147) — commandSpec builds the
 // shell invocation for a command the app itself suggests (an install command, gh's billing scope
-// hint); openTerminal refuses any other string and, like every real CLI terminal, refuses to start
-// under MULTIAGENT_SIMULATION_ONLY.
+// hint); openTerminal refuses any other string and, under MULTIAGENT_SIMULATION_ONLY, opens a simulated
+// (virtual) terminal instead of a real process (#783).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { installCommands } = require('../../domains/machine/install-commands');
@@ -118,9 +118,14 @@ test("term:open kind command: refuses a command the app doesn't suggest, before 
   assert.throws(() => api['term:open']({ kind: 'command', command: 'rm -rf /' }), /Only the commands the app suggests can run in a command terminal\./);
 });
 
-test('term:open kind command: an allowed command is still refused under MULTIAGENT_SIMULATION_ONLY (automated checks never open a real terminal)', async (t) => {
+// #783: under MULTIAGENT_SIMULATION_ONLY an allowed command opens a simulated (virtual) terminal, never
+// a real process: the browser UI's ▶ can be checked end to end.
+test('term:open kind command (#783): an allowed command opens a simulated terminal under MULTIAGENT_SIMULATION_ONLY, never a real process', async (t) => {
   const { api } = makeService(t);
-  assert.throws(() => api['term:open']({ kind: 'command', command: SCOPE_HINT }), /Simulation only .*the command "gh auth refresh -s user"/);
+  const opened = api['term:open']({ kind: 'command', command: SCOPE_HINT });
+  assert.equal(typeof opened.id, 'string');
+  assert.equal(opened.title, SCOPE_HINT);
+  assert.equal(opened.pid, undefined, 'no real process');
 });
 
 // #319 (acceptance tests, written before the code): the Setup's Sign in buttons run each CLI's
@@ -148,11 +153,12 @@ test('commandSpec (#319): every sign-in command is accepted on every platform', 
   }
 });
 
-test('term:open kind command (#319): a sign-in command passes the allowlist and only meets the simulation guard', async (t) => {
+test('term:open kind command (#319, #783): a sign-in command passes the allowlist and opens a simulated terminal under simulation', async (t) => {
   const { signInCommands } = require('../../domains/machine/install-commands');
   const { api } = makeService(t);
   for (const cmd of Object.values(signInCommands())) {
-    assert.throws(() => api['term:open']({ kind: 'command', command: cmd }), /Simulation only/);
+    const opened = api['term:open']({ kind: 'command', command: cmd });
+    assert.equal(opened.pid, undefined, `${cmd}: no real process`);
   }
 });
 

@@ -295,6 +295,12 @@ registerView({
     $('#btn-bd-cancel').onclick = () => closeModal('#budget-modal');
     document.querySelectorAll('#view-usage [data-scope]').forEach((b) => (b.onclick = () => setUsageScope(b.dataset.scope)));
     renderScopeToggles();
+    // #783: the scope hint's terminal (gh auth refresh -s user) exiting with 0 re-reads the Actions minutes
+    if (typeof onSuggestedCommandExit === 'function') {
+      onSuggestedCommandExit(({ command, exitCode }) => {
+        if (exitCode === 0 && command === state.actionsUsage?.hint) loadActionsUsage(true);
+      });
+    }
   },
   show() { renderUsage(); loadUsage(); loadActionsUsage(); },
 });

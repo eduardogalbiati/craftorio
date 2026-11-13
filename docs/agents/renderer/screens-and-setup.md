@@ -25,6 +25,10 @@ The views, the first-run Setup dialog and one folder per screen (the sidebar, ad
   checked again when it ends. Deep link: `window.Settings.open('agents', { highlight, onClose })`, used
   by the project wizard's Open Setup (the wizard hides, the CLI's row is highlighted; closing the section
   shows the wizard again on its step and checks the CLI again). Closing goes back to the previous screen.
+  #783: in the browser, the ▶ of any other suggested command (gh's billing scope on the Usage screen)
+  confirms, then opens a terminal of the dock on the engine (`term:open` kind `command`, its allow list;
+  simulated in simulation); a refused command shows "Run this on the computer where the app runs".
+  `onSuggestedCommandExit(fn)` tells a screen when that terminal exits (the Actions card re-reads on 0).
 - **One folder per screen** (#78, moved in slices, the last in #154): every screen is
   `apps/desktop/renderer/views/<view>/<view>.js` + `<view>.css`, plus the screen's other parts in the same
   folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and

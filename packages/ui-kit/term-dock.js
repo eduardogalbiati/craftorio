@@ -42,7 +42,7 @@ const TERM_HEIGHT_KEY = 'multiagent.termHeight';
 const IS_MAC = (api.platform || navigator.platform || '').toLowerCase().startsWith('mac') || api.platform === 'darwin';
 const isOrchSession = (s) => s.id === 'orchestrator' || s.agent === 'orchestrator';
 const dock = {
-  tabs: [],            // { key, id, kind, runId, sessionId, title, term, fit, pane, exited, lastPaste }
+  tabs: [],            // { key, id, kind, runId, sessionId, title, term, fit, pane, exited, exitCode, lastPaste }
   active: null,
   collapsed: false,
   pending: new Map(),  // backend id -> [{ data } | { exitCode }] received before term:open resolved
@@ -282,6 +282,7 @@ function flashTermMsg(text, error = false) {
 function markExited(tab, exitCode) {
   if (tab.exited) return;
   tab.exited = true;
+  tab.exitCode = exitCode; // #783: a suggested command's listeners read it (command-hint.js)
   tab.term.write(`\r\n\x1b[90m[process exited with code ${exitCode ?? '?'}]\x1b[0m\r\n`);
   if (tab.onChange) tab.onChange();
   else renderTermTabs();

@@ -13,17 +13,30 @@ function commandHint(command, { signIn = false } = {}) {
 }
 
 // Resolves to the dock's tab (the Setup re-checks a CLI when it exits, #319), or null.
-// `signIn`: a CLI's sign-in command (#319), confirmed with words that fit it.
-async function runSuggestedCommand(command, { signIn = false } = {}) {
+// `signIn`: a CLI's sign-in command (#319), confirmed with words that fit it. `onRefused(e)`: what to
+// show when the terminal does not open (#783: the browser UI says where to run it instead).
+async function runSuggestedCommand(command, { signIn = false, onRefused = null } = {}) {
   const what = signIn ? 'It signs this CLI in to your account (a browser page may open).' : 'It may download and install software on this machine.';
   const ok = await confirmDialog(t('command_hint.run_this_command'), t('command_hint.a_terminal_opens_and_runs_command', { command, what }), t('command_hint.run'));
   if (!ok) return null;
   try {
     return await openTerminal({ kind: 'command', sessionId: command, label: t('command_hint.command'), open: (cols, rows) => api.termOpen({ kind: 'command', command, cols, rows }) });
   } catch (e) {
-    showToast(t('command_hint.could_not_run_the_command'), errMsg(e));
+    if (onRefused) onRefused(e);
+    else showToast(t('command_hint.could_not_run_the_command'), errMsg(e));
     return null;
   }
+}
+
+// #783: who wants to know when a terminal a ▶ opened exits (the Usage screen re-reads the Actions
+// minutes after gh's billing scope): fn({ command, exitCode }).
+const commandExitListeners = [];
+function onSuggestedCommandExit(fn) { commandExitListeners.push(fn); }
+function followCommandExit(tab, command) {
+  if (!tab) return;
+  const notify = () => { for (const fn of commandExitListeners) { try { fn({ command, exitCode: tab.exitCode }); } catch (e) { console.error(e); } } };
+  tab.onChange = () => { renderTermTabs(); if (tab.exited) notify(); };
+  if (tab.exited) notify();
 }
 
 // #319: whether a suggested command can run here: the browser UI (npm run serve) may be on another
@@ -33,8 +46,9 @@ async function runSuggestedCommand(command, { signIn = false } = {}) {
 const canRunCommands = () => (api.platform === 'browser' ? typeof api.cliSetupStart === 'function' : typeof Terminal !== 'undefined');
 const NO_TERMINAL_HINT = 'Run this on the computer where the app runs';
 
-// #740: the browser UI has no terminal of its own: a CLI's install / sign-in command runs as the engine's
-// job (window.SettingsClis.run, confirmed there); any other command is shown to run on the server.
+// #740: in the browser UI a CLI's install / sign-in command runs as the engine's job (window.SettingsClis.run,
+// confirmed there). #783: any other command opens a terminal of the dock on the engine (term:open kind
+// 'command', confirmed first); one the engine refuses (not on its allow list) is shown to run on the server.
 async function runOnEngine(command, { signIn = false } = {}) {
   let tool = null;
   try {
@@ -42,18 +56,22 @@ async function runOnEngine(command, { signIn = false } = {}) {
   } catch {
     tool = null;
   }
-  if (tool && window.SettingsClis) {
+  if (tool) {
+    // an install / sign-in is always the engine's job, never a terminal of the page (#740)
+    if (!window.SettingsClis) { showToast(NO_TERMINAL_HINT, command); return null; }
     const action = tool.signInCommand === command && (signIn || tool.installCommand !== command) ? 'login' : 'install';
     return window.SettingsClis.run(tool.id, action);
   }
-  showToast(NO_TERMINAL_HINT, command);
-  return null;
+  const tab = await runSuggestedCommand(command, { signIn, onRefused: () => showToast(NO_TERMINAL_HINT, command) });
+  followCommandExit(tab, command);
+  return tab;
 }
 
 document.addEventListener('click', (e) => {
   const b = e.target.closest?.('[data-run-command]');
   if (!b) return;
+  const command = b.dataset.runCommand;
   const opts = { signIn: b.dataset.signIn !== undefined };
-  if (api.platform === 'browser') runOnEngine(b.dataset.runCommand, opts);
-  else runSuggestedCommand(b.dataset.runCommand, opts);
+  if (api.platform === 'browser') runOnEngine(command, opts);
+  else runSuggestedCommand(command, opts).then((tab) => followCommandExit(tab, command));
 });

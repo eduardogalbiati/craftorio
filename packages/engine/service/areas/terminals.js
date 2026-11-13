@@ -106,6 +106,11 @@ module.exports = (ctx) => {
     if (kind === 'shell') return { ...openProgram(shellSpec(opts.folder), cols, rows), cwd: path.resolve(String(opts.folder)) };
     if (kind === 'command') {
       const spec = commandSpec(opts.command);
+      // #783: in simulation a virtual terminal shows the command instead of refusing it (the allow list
+      // above still applies), as cli-setup's machineSpawn does: no real process ever starts
+      if (simulation.simulationOnly()) {
+        return { ...terminals.openVirtual({ title: spec.title, start: (write) => { write(`$ ${opts.command}\n(simulated: no command runs in simulation)\n`); } }), cwd: spec.cwd };
+      }
       simulation.refuseReal(`the command "${opts.command}"`);
       return { ...openProgram(spec, cols, rows), cwd: spec.cwd };
     }
