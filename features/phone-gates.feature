@@ -7,8 +7,7 @@ Feature: Phone gates page
   # gates page's own address (127.0.0.1:<port>), the address and a one-time pairing code coming from the
   # engine's phonegates:pair channel, as Settings › Phone gates gets them. The gate comes from a
   # simulated feature run with Validation "Validated" (#777), so it waits for an answer.
-  # Assumes each choice of the phone's gate page (the links that lead to the confirmation) gets
-  # data-testid="phone-gate-choice".
+  # The choices of the phone's gate page are its links that lead to the confirmation.
 
   @issue-819
   Scenario: A note written under one choice is not pre-filled under another, and comes back under its own choice

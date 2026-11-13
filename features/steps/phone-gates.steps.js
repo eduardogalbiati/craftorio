@@ -47,16 +47,17 @@ Then('the paired devices list says no phone is paired yet', async ({ e2e }) => {
 // --- features/phone-gates.feature (#819): the phone's own gates page -------------------------------
 // The phone is the served engine's browser window (e2e.window, features/support/served.js) on the
 // gates page's address; the address and a one-time code come from the phonegates:pair channel, as
-// Settings › Phone gates gets them (it also starts the page). Locators:
-//   phone-gates-page     the page's <main> (existing)
-//   phone-gate-choice    NEW: each choice link of the phone's gate page (leads to the confirmation)
-//   the note field, the links and the pairing form by role and accessible name (existing)
+// Settings › Phone gates gets them (it also starts the page). Locators: the page is served by the
+// engine, outside the renderer's layers, so its test ids are not usable here (#246, #588): the page's
+// main landmark by role, each choice by its link to the confirmation (?…&answer=<choice>), and the note
+// field, the links and the pairing form by role and accessible name.
 
 const PHONE_TIMEOUT = 30000;
 const TOKEN_KEY = 'multiagent-phone-token'; // the phone page's localStorage key for its device token
 const ORDINALS = { first: 0, second: 1, third: 2 };
 
-const phonePage = (e2e) => e2e.window.getByTestId('phone-gates-page');
+const phonePage = (e2e) => e2e.window.getByRole('main');
+const gateChoices = (e2e) => phonePage(e2e).getByRole('link').and(e2e.window.locator('a[href*="answer="]'));
 const noteField = (e2e) => e2e.window.getByRole('textbox', { name: /^Note for the run/ });
 
 // a pairing code from the engine → { code, link: <page address>/?pair=<code> }; starts the page
@@ -98,12 +99,12 @@ When('I enter {int} wrong pairing code(s) on my phone', async ({ e2e }, attempts
 
 When('I open the waiting gate on my phone', async ({ e2e }) => {
   await phonePage(e2e).getByRole('link', { name: 'Open the gate' }).first().click();
-  await expect(phonePage(e2e).getByTestId('phone-gate-choice').first()).toBeVisible({ timeout: PHONE_TIMEOUT });
+  await expect(gateChoices(e2e).first()).toBeVisible({ timeout: PHONE_TIMEOUT });
 });
 
 When('I pick the gate\'s {word} choice on my phone', async ({ e2e }, ordinal) => {
   expect(ordinal in ORDINALS, `"${ordinal}" is one of ${Object.keys(ORDINALS).join(', ')}`).toBe(true);
-  const choices = phonePage(e2e).getByTestId('phone-gate-choice');
+  const choices = gateChoices(e2e);
   await expect(choices.nth(ORDINALS[ordinal])).toBeVisible({ timeout: PHONE_TIMEOUT });
   await choices.nth(ORDINALS[ordinal]).click();
   await expect(noteField(e2e)).toBeVisible({ timeout: PHONE_TIMEOUT });
@@ -117,7 +118,7 @@ When('I write the note {string} on my phone', async ({ e2e }, note) => {
 
 When('I go back to the gate on my phone', async ({ e2e }) => {
   await phonePage(e2e).getByRole('link', { name: 'Back to the gate' }).click();
-  await expect(phonePage(e2e).getByTestId('phone-gate-choice').first()).toBeVisible({ timeout: PHONE_TIMEOUT });
+  await expect(gateChoices(e2e).first()).toBeVisible({ timeout: PHONE_TIMEOUT });
 });
 
 When('I reload the page on my phone', async ({ e2e }) => {
