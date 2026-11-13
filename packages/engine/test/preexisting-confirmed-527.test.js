@@ -24,7 +24,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { fixture } = require('./worktree-helpers');
+const {
+  commit,
+  fixture,
+} = require('./worktree-helpers');
 const { runSuite } = require('../engine/suite-step');
 
 const loadStore = () => require('../engine/base-health-store');
@@ -78,6 +81,7 @@ test('#527 a test the base check found red alone after a green check is confirme
   const runAlone = async ({ file }) => ({ status: 'fail', failures: [{ test: SLOW.test, file, error: 'still failing alone' }], ms: 900 });
   const { runBaseCheck } = loadHealth();
   assert.equal((await runBaseCheck(ws, { ...args, runSuite: async () => ({ failures: [], log: 'green' }), runAlone })).status, 'green');
+  commit(f.repo, 'board.js', 'module.exports = 2;\n', 'board'); // #749: a check at the last green commit is skipped
   assert.equal((await runBaseCheck(ws, { ...args, runSuite: async () => ({ failures: [{ ...SLOW }], log: 'red' }), runAlone })).status, 'red');
   assert.deepEqual(confirmedTests(ws), [SLOW.test], 'confirmed red alone after the last green');
   assert.equal((await runBaseCheck(ws, { ...args, runSuite: async () => ({ failures: [], log: 'green' }), runAlone })).status, 'green');

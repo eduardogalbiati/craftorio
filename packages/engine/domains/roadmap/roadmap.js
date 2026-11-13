@@ -923,6 +923,15 @@ function skipItem(dir, projectId, itemId, why) {
   }));
 }
 
+/**
+ * #749: the ids of the stages a step ended: open in `before` (not disabled, an item unfinished), no
+ * item unfinished in `after`, with an item `counts` keeps (a real one: the base check runs after it).
+ */
+function endedStages(before, after, counts = () => true) {
+  return (before?.stages || []).filter((s) => !s.disabled && (s.items || []).some((x) => !isFinished(x))).map((s) => (after?.stages || []).find((x) => x.id === s.id))
+    .filter((s) => s && s.items.length && s.items.every(isFinished) && s.items.some(counts)).map((s) => s.id);
+}
+
 /** Each planned issue's place in the roadmap (the Backlog's cards): number → { stage, status, itemId }; a test-batch item never hides the item that implements the issue. */
 function issueStages(roadmap) {
   const out = new Map();
@@ -942,6 +951,7 @@ module.exports = {
   currentStage,
   dependencyBase,
   dropIssues,
+  endedStages,
   findItem,
   findStage,
   finishRoadmap,

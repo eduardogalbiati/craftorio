@@ -10,7 +10,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { fixture } = require('../worktree-helpers');
+const {
+  commit,
+  fixture,
+} = require('../worktree-helpers');
 const { runBaseCheck } = require('../../domains/project/base-health');
 const { knownFailures, readStore } = require('../../engine/base-health-store');
 const { runFileAlone } = require('../../engine/suite-step');
@@ -77,6 +80,7 @@ test('#527 a check whose only failures are green alone is green-alone: the last 
   const greenAt = readStore(ws, PROJECT).lastGreen?.at;
   assert.ok(greenAt, 'a green check sets the last green (fixture check)');
   const stillRed = async () => ({ failures: [{ ...PLAIN }], log: 'red again' });
+  commit(f.repo, 'cart.js', 'module.exports = 2;\n', 'cart'); // #749: a check at the last green commit is skipped
   assert.equal((await runBaseCheck(ws, { ...args, rerunFiles: stillRed, runSuite: suite([PLAIN]) })).status, 'red');
 
   const r = await runBaseCheck(ws, { ...args, runSuite: suite([SLOW]) });

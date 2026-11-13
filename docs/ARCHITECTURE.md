@@ -33,6 +33,13 @@ transports carry the same channels: Electron IPC in the desktop app (`apps/deskt
 `packages/engine/server/`). The optional control channel (`packages/engine/control/`) lets a terminal or another agent drive
 the running app through an allowlist of those channels.
 
+The base check (#405, `packages/engine/service/areas/base-health.js`, the whole suite on the local
+base tip) runs once per roadmap stage, after its last item merged or finished without merging, and
+the next stage starts meanwhile (#749); a run outside the roadmap starts one after its merge,
+shared with the merges that come before it starts; a merge "not tested green" checks at once. It
+is skipped, and the base reads green, when the tip is the last green check's commit or only
+`docs/**` and `*.md` changed since it. Details: `docs/agents/engine/suite-step.md`.
+
 ## The renderer
 
 The UI is plain HTML, CSS and JavaScript, no bundler and no framework: the UI kit (`packages/ui-kit/`:

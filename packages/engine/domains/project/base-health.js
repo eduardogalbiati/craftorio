@@ -8,8 +8,9 @@
 //   first red commit, each group files one issue (`Red on the base: <file> (19 tests)`, every test in
 //   its body) or comments on the one an entry of the group has (the newly red tests, last seen); the
 //   "Fix the base" item holds one issue per group.
-// - runBaseCheck: after a merge into the local base (and at once after a merge "not tested green"),
-//   the whole suite runs on a clean detached checkout of the base tip (<workspace>/worktrees/
+// - runBaseCheck: once per roadmap stage, after a merge outside the roadmap (#749), and at once after
+//   a merge "not tested green"; skipped (no suite) when nothing a test reads merged since the last
+//   green check (the tip is lastGreen's commit, or only docs/** and *.md changed). The whole suite runs on a clean detached checkout of the base tip (<workspace>/worktrees/
 //   base-check-<project>), with no agent, in simulation (MULTIAGENT_SIMULATION_ONLY=1), one check at
 //   a time, deferred while a release run holds the base. A red test files a bug issue naming the
 //   commit range (last green, first red) and the log; with Settings › Execution's onRed 'fix' a
@@ -35,7 +36,11 @@ const path = require('path');
 const issues = require('../backlog/issues');
 const roadmaps = require('../roadmap/roadmap');
 const { LOCAL } = require('@multiagent/shared/default-workflow');
-const { prepareBaseWorktree, removeWorktree } = require('../../engine/worktree');
+const {
+  git,
+  prepareBaseWorktree,
+  removeWorktree,
+} = require('../../engine/worktree');
 const { suiteEnv } = require('../../engine/suite-step');
 const {
   acquireSlot,
@@ -59,6 +64,21 @@ const {
 
 const ON_RED = ['off', 'issue', 'fix'];
 const LOG_TAIL_LINES = 60;
+// #749: a file no test reads (docs, Markdown): commits touching only these need no base check
+const UNTESTED = (file) => file.startsWith('docs/') || file.endsWith('.md');
+
+// #749: why the check needs no suite (the tip is the last green commit, or only untested files
+// changed since it) → the reason, or null to run the suite (an unreachable commit runs it too)
+async function nothingNew(repo, base, lastGreen) {
+  if (!lastGreen) return { tip: null, reason: null };
+  const tip = await git(['rev-parse', '--verify', `${base}^{commit}`], repo).catch(() => null);
+  if (!tip) return { tip: null, reason: null };
+  if (tip === lastGreen) return { tip, reason: 'the base tip is the last green commit' };
+  const changed = await git(['diff', '--name-only', lastGreen, tip], repo).catch(() => null);
+  if (changed === null) return { tip, reason: null };
+  const files = changed.split('\n').map((f) => f.trim()).filter(Boolean);
+  return { tip, reason: files.every(UNTESTED) ? 'only docs changed since the last green commit' : null };
+}
 
 const short = (c) => String(c || '').slice(0, 12) || 'unknown';
 const stamp = (at) => String(at).replace(/[:.]/g, '-');
@@ -251,7 +271,11 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
 
 /**
  * The base check: the suite on a clean checkout of the local base tip; a red test files its issue
- * and, with onRed 'fix', a fix item. → { status: green | red | deferred | error, commit, issues, fixItem }
+ * and, with onRed 'fix', a fix item. → { status: green | red | deferred | skipped | error, commit, issues, fixItem }
+ * #749: `skipped` (with `reason`, `commit` the tip) when the tip is the store's lastGreen commit or
+ * the commits since it touch only files no test reads (UNTESTED); never for trigger 'not-green'.
+ * `onStart` is called when the check leaves the queue (the service coalesces merges until then);
+ * trigger is 'merge', 'not-green' or 'stage' (the end of a roadmap stage).
  * #527: it takes the machine-wide `suite` slot first (waiting for a run's whole suite, `slot.onWait`
  * and a log line say so), frees it however it ends.
  * #613: with failures, a second round (`rerunFiles`) runs only the failed tests' files; a test is
@@ -263,7 +287,7 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
  *   runSuite: ({ cwd, env, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
  *   rerunFiles?: ({ cwd, env, files, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
  *   slot?: { dir?: string, holder?: string, onWait?: Function, pollMs?: number },
- *   liveRunForIssues?: (issues: object[]) => object|null, load?: () => string[],
+ *   liveRunForIssues?: (issues: object[]) => object|null, load?: () => string[], onStart?: () => void,
  *   exec?: Function, workflow?: string, log?: Function }} opts
  */
 function runBaseCheck(ws, opts) {
@@ -274,6 +298,15 @@ function runBaseCheck(ws, opts) {
     if (opts.releaseHoldsBase?.()) return deferred;
     const { projectId, repo, base, log = () => {} } = opts;
     const onRed = ON_RED.includes(opts.onRed) ? opts.onRed : 'fix';
+    opts.onStart?.();
+    // #749: nothing a test reads merged since the last green check: no suite ("not tested green" always runs)
+    if (opts.trigger !== 'not-green') {
+      const { tip, reason } = await nothingNew(repo, base, readStore(ws, projectId).lastGreen?.commit);
+      if (reason) {
+        log('info', `base check skipped at ${short(tip)}: ${reason}`);
+        return { status: 'skipped', reason, commit: tip, issues: [], fixItem: null };
+      }
+    }
     const dir = path.join(ws, 'worktrees', `base-check-${slug(projectId)}`);
     // #527: one whole suite at a time per machine (#455), the base check's included
     const slot = opts.slot || {};

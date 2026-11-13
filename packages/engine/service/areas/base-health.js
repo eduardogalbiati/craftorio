@@ -1,8 +1,11 @@
 // Service area: main stays green (#405, packages/engine/domains/project/base-health.js). A real run's suite step that counted
 // failures as pre-existing has them recorded by the engine; the service files their issue
-// (afterStepFinished, from the run's step.finished event); a merge into the local base starts the
-// base check in the background (afterBaseMerge, from worktree.merged; at once when the merge was
-// "not tested green"). A check deferred while a release run held the base runs when a run of the
+// (afterStepFinished, from the run's step.finished event); the base check runs in the background
+// (#749): once per roadmap stage (afterStageEnded, from areas/roadmap.js when a stage's last item
+// ended; a roadmap run's merge only records the base), after a merge outside the roadmap (afterBaseMerge,
+// from worktree.merged; merges before the check starts share it, on the latest tip), and at once
+// when the merge was "not tested green". A check with nothing new since the last green one is
+// `skipped` and the base reads green at that commit. A check deferred while a release run held the base runs when a run of the
 // project ends and nothing holds it any more (afterBaseReleased). Both read Settings › Execution
 // baseCheck.onRed each time, and file through the project's synced platform and repository. A red
 // or failed check is a notice. #598: the check's checkout gets its dependencies before the suite (the
@@ -210,14 +213,57 @@ module.exports = (ctx) => {
     }
   }
 
-  // After a run's `merge: local`: the base check, in the background (one at a time, packages/engine/domains/project/base-health.js)
+  // #749: projectId -> the base a roadmap stage merged into (checked once, when the stage ends)
+  const stageBases = new Map();
+  // #749: projectId -> the check of merges outside the roadmap not started yet (later merges share it)
+  const queued = new Map();
+  // #749: a roadmap run: an item of the project's roadmap names it
+  function roadmapRun(projectId, runId) {
+    if (!runId) return false;
+    try {
+      return roadmaps.readRoadmap(ctx.ws.backlog, projectId).stages.some((s) => (s.items || []).some((x) => x.runId === runId || (x.runs || []).includes(runId)));
+    } catch { return false; }
+  }
+
+  // After a run's `merge: local`: at once when "not tested green"; a roadmap run's waits for its
+  // stage's end (#749, afterStageEnded); a run outside the roadmap gets one, shared with the merges
+  // that come before it starts (it checks the latest tip)
   function afterBaseMerge(run, { base, tested } = {}) {
     if (!run.projectId || run.mock || onRed() === 'off') return null;
     const project = projects.readProject(ctx.ws.projects, run.projectId);
     if (!project.isGit || !base) return null;
+    if (tested === 'not green') return startCheck(project, { base, trigger: 'not-green' });
+    if (roadmapRun(project.id, run.runId)) {
+      stageBases.set(project.id, base);
+      return null;
+    }
+    const waiting = queued.get(project.id);
+    if (waiting && waiting.base === base) return waiting.check;
+    const entry = { base };
+    const forget = () => { if (queued.get(project.id) === entry) queued.delete(project.id); };
+    entry.check = startCheck(project, { base, trigger: 'merge', onStart: forget });
+    queued.set(project.id, entry);
+    entry.check.finally(forget).catch(() => {});
+    return entry.check;
+  }
+
+  // #749: a roadmap stage ended (its last item merged or finished without merging; areas/roadmap.js):
+  // one check on the base tip, none when nothing of the stage merged (no base given or recorded)
+  function afterStageEnded(projectId, { base } = {}) {
+    if (!projectId || onRed() === 'off') return null;
+    const project = projects.readProject(ctx.ws.projects, projectId);
+    const on = base || stageBases.get(project.id);
+    if (!project.isGit || !on) return null;
+    stageBases.delete(project.id);
+    return startCheck(project, { base: on, trigger: 'stage' });
+  }
+
+  // The base check, in the background (one at a time, packages/engine/domains/project/base-health.js)
+  function startCheck(project, { base, trigger, onStart }) {
     const check = baseHealth.runBaseCheck(ctx.ws.root, {
       projectId: project.id, repo: project.folder, base, onRed: onRed(), workflow: fixWorkflow(project.id),
-      trigger: tested === 'not green' ? 'not-green' : 'merge',
+      trigger,
+      onStart,
       releaseHoldsBase: () => releaseHoldsBase(project.id),
       runSuite: suiteFor(project),
       rerunFiles: rerunFor(project),
@@ -228,7 +274,7 @@ module.exports = (ctx) => {
       ...(({ platform, repo, exec }) => ({ platform, ghRepo: repo, exec }))(issueTarget(project.id)),
     });
     check.then((r) => {
-      if (r.status === 'deferred') pending.set(project.id, { run, base, tested });
+      if (r.status === 'deferred') pending.set(project.id, { base, trigger });
       else ended(project.id, r);
       noticeOf(project, r);
     }).catch((e) => {
@@ -240,6 +286,11 @@ module.exports = (ctx) => {
 
   // the check ended: green or red with the count, or the error; its log stays reachable (#465)
   function ended(projectId, r) {
+    // #749: nothing new since the last green check: the base reads green at that commit, no run
+    if (r.status === 'skipped') {
+      announce(projectId, { status: 'green', commit: r.commit || null, endedAt: new Date().toISOString(), failures: 0, error: null, skipped: true });
+      return;
+    }
     if (!states.has(projectId)) return;
     announce(projectId, {
       status: r.status, commit: r.commit || states.get(projectId).commit, endedAt: new Date().toISOString(),
@@ -255,12 +306,15 @@ module.exports = (ctx) => {
     const waiting = run?.projectId && pending.get(run.projectId);
     if (!waiting || releaseHoldsBase(run.projectId)) return null;
     pending.delete(run.projectId);
-    return afterBaseMerge(waiting.run, waiting);
+    if (onRed() === 'off') return null;
+    const project = projects.readProject(ctx.ws.projects, run.projectId);
+    return project.isGit ? startCheck(project, waiting) : null;
   }
 
   return {
     afterBaseMerge,
     afterBaseReleased,
+    afterStageEnded,
     afterStepFinished,
     baseCheckLog: logOf,
     baseCheckState,

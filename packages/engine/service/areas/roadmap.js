@@ -387,6 +387,9 @@ module.exports = (ctx) => {
     const changed = JSON.stringify({ ...roadmaps.persisted(roadmap), updatedAt: null }) !== JSON.stringify({ ...before, updatedAt: null });
     if (changed) roadmaps.updateRoadmap(ws.backlog, projectId, (cur) => (cur.updatedAt === before.updatedAt ? roadmap : null));
     notifyAdvance(projectId, before, roadmap);
+    // #749: a stage that ended in this step (with a real item) starts the base check once, on the
+    // base tip; the next stage starts meanwhile (its runs wait for the suite slot)
+    checkEndedStages(projectId, before, roadmap, mockOf);
     // #279: a stage that ended may update the app (areas/app-update.js): its cycle paused every
     // roadmap, nothing more starts here
     if (!before.simulated && appUpdateStarted(before, roadmap, mockOf)) return;
@@ -519,6 +522,16 @@ module.exports = (ctx) => {
     const at = RoadmapModel.currentStage(before);
     const stage = at >= 0 ? roadmap.stages.find((s) => s.id === before.stages[at].id) : null;
     return !!stage && stage.items.some((x) => !mockOf(x)) && !RoadmapModel.hasUnfinished(stage) && ctx.appUpdateEvent({ type: 'stage-done' });
+  }
+
+  // #749: a stage of a real roadmap that ended in this step, with a real item (roadmaps.endedStages):
+  // the base check after the stage (areas/base-health.js afterStageEnded), never awaited
+  function checkEndedStages(projectId, before, roadmap, mockOf) {
+    if (before.simulated || typeof ctx.afterStageEnded !== 'function') return;
+    if (!roadmaps.endedStages(before, roadmap, (x) => !mockOf(x)).length) return;
+    try {
+      Promise.resolve(ctx.afterStageEnded(projectId)).catch((e) => console.error('base health:', e.message));
+    } catch (e) { console.error('base health:', e.message); }
   }
 
   // Start: a roadmap with real items is refused in simulation-only mode (automated checks), like assignments.
