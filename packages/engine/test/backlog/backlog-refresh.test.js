@@ -203,6 +203,36 @@ test('#784 refreshState: a past refresh run still decides, whatever the add time
   assert.equal(state.lastRun.runId, 'r1');
 });
 
+// #784 refreshBaseline: the point the backlog last matched the code, shared by refreshState and the
+// service's merge count (the `since` of git rev-list).
+test('#784 refreshBaseline: the last successful refresh run\'s start wins over an older add time', () => {
+  const { refreshBaseline } = require('../../domains/backlog/backlog-refresh');
+  const runs = [
+    { file: 'backlog-refresh.yaml', status: 'failed', runId: 'f', startedAt: '2026-11-12T00:00:00Z' },
+    { file: 'backlog-refresh.yaml', status: 'success', runId: 'r1', startedAt: '2026-11-10T08:00:00Z' },
+  ];
+  assert.equal(refreshBaseline(runs, '2026-01-01T00:00:00Z'), '2026-11-10T08:00:00Z');
+  assert.equal(refreshBaseline(runs, null), '2026-11-10T08:00:00Z');
+});
+
+test('#784 refreshBaseline: with no successful refresh run, a valid add time is the baseline', () => {
+  const { refreshBaseline } = require('../../domains/backlog/backlog-refresh');
+  const runs = [
+    { file: 'backlog-refresh.yaml', status: 'failed', runId: 'f', startedAt: '2026-11-12T00:00:00Z' },
+    { file: 'other.yaml', status: 'success', runId: 'x', startedAt: '2026-11-12T01:00:00Z' },
+  ];
+  assert.equal(refreshBaseline(runs, '2026-11-01T09:30:00.000Z'), '2026-11-01T09:30:00.000Z');
+  assert.equal(refreshBaseline([], '2026-11-01T09:30:00.000Z'), '2026-11-01T09:30:00.000Z');
+});
+
+test('#784 refreshBaseline: no refresh run and no valid add time gives null', () => {
+  const { refreshBaseline } = require('../../domains/backlog/backlog-refresh');
+  for (const addedAt of [undefined, null, '', 'not a date']) {
+    assert.equal(refreshBaseline([], addedAt), null, `addedAt ${JSON.stringify(addedAt)}`);
+  }
+  assert.equal(refreshBaseline(undefined, undefined), null);
+});
+
 test('refreshedIssues: returns the numbers a run updated, within a day of it finishing', (t) => {
   const dir = tmpDir(t);
   fs.writeFileSync(path.join(dir, 'applied-safe.json'), JSON.stringify({
