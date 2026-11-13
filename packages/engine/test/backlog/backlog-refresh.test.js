@@ -129,6 +129,80 @@ test('refreshState: a negative or missing intervalHours normalizes to 0 (off)', 
   assert.equal(refreshState({ runs: [], intervalHours: undefined }).interval, 0);
 });
 
+// #784: a project with no successful refresh run counts from when it was added (onboarding finished, or
+// the clone): `addedAt`, an ISO date the service passes from the project. hoursAgo and merges count from
+// it, `since` names it and `lastRun` stays null, so the screen says "since onboarding" (lastRun null,
+// since set) instead of "never refreshed" (lastRun null, since null). The same stale + merges rule as a
+// past refresh decides `due`. No (or no valid) addedAt keeps today's "never refreshed, due" behaviour.
+test('#784 refreshState: a project added an hour ago, with no refresh run and no merge since, is not due', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const addedAt = new Date(now - 1 * 3600e3).toISOString();
+  const state = refreshState({ runs: [], intervalHours: 24, merges: 0, addedAt, now });
+  assert.equal(state.due, false);
+  assert.equal(state.lastRun, null);
+  assert.equal(state.hoursAgo, 1);
+  assert.equal(state.since, addedAt);
+});
+
+test('#784 refreshState: a project added within the interval is not due, even with merges since', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const addedAt = new Date(now - 2 * 3600e3).toISOString();
+  const state = refreshState({ runs: [], intervalHours: 24, merges: 5, addedAt, now });
+  assert.equal(state.due, false);
+  assert.equal(state.hoursAgo, 2);
+});
+
+test('#784 refreshState: a project added longer ago than the interval, with merges since, is due and counts from its add time', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const addedAt = new Date(now - 30 * 3600e3).toISOString();
+  const state = refreshState({ runs: [], intervalHours: 24, merges: 12, addedAt, now });
+  assert.equal(state.due, true);
+  assert.equal(state.lastRun, null, 'no refresh run: the screen words it "since onboarding"');
+  assert.equal(state.since, addedAt);
+  assert.equal(state.hoursAgo, 30);
+  assert.equal(state.merges, 12);
+});
+
+test('#784 refreshState: a project added longer ago than the interval but with no merge since is not due', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const addedAt = new Date(now - 72 * 3600e3).toISOString();
+  const state = refreshState({ runs: [], intervalHours: 24, merges: 0, addedAt, now });
+  assert.equal(state.due, false);
+  assert.equal(state.merges, 0);
+  assert.equal(state.hoursAgo, 72);
+});
+
+test('#784 refreshState: a project added longer ago than the interval with an unknown merge count (null) is not due yet', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const addedAt = new Date(now - 72 * 3600e3).toISOString();
+  const state = refreshState({ runs: [], intervalHours: 24, merges: null, addedAt, now });
+  assert.equal(state.due, false);
+  assert.equal(state.since, addedAt);
+});
+
+test('#784 refreshState: with no recorded add time (or an invalid one), no refresh run keeps "never refreshed" and due', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  for (const addedAt of [undefined, null, '', 'not a date']) {
+    const state = refreshState({ runs: [], intervalHours: 24, merges: 3, addedAt, now });
+    assert.equal(state.due, true, `addedAt ${JSON.stringify(addedAt)}`);
+    assert.equal(state.lastRun, null);
+    assert.equal(state.since, null, `addedAt ${JSON.stringify(addedAt)}`);
+    assert.equal(state.hoursAgo, null);
+  }
+});
+
+test('#784 refreshState: a past refresh run still decides, whatever the add time', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const startedAt = new Date(now - 10 * 3600e3).toISOString();
+  const addedAt = new Date(now - 300 * 3600e3).toISOString();
+  const runs = [{ file: 'backlog-refresh.yaml', status: 'success', runId: 'r1', startedAt }];
+  const state = refreshState({ runs, intervalHours: 24, merges: 9, addedAt, now });
+  assert.equal(state.due, false, 'the last refresh is within the interval');
+  assert.equal(state.since, startedAt);
+  assert.equal(state.hoursAgo, 10);
+  assert.equal(state.lastRun.runId, 'r1');
+});
+
 test('refreshedIssues: returns the numbers a run updated, within a day of it finishing', (t) => {
   const dir = tmpDir(t);
   fs.writeFileSync(path.join(dir, 'applied-safe.json'), JSON.stringify({
