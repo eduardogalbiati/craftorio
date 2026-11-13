@@ -221,7 +221,7 @@ module.exports = (ctx) => {
   function roadmapRun(projectId, runId) {
     if (!runId) return false;
     try {
-      return roadmaps.readRoadmap(ctx.ws.backlog, projectId).stages.some((s) => (s.items || []).some((x) => x.runId === runId || (x.runs || []).includes(runId)));
+      return !!roadmaps.itemOfRun(roadmaps.readRoadmap(ctx.ws.backlog, projectId), runId);
     } catch { return false; }
   }
 

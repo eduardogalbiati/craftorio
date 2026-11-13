@@ -695,7 +695,7 @@ function parkStage(dir, projectId, stageId, { runOf, now = new Date() }) {
 function adoptResumed(dir, projectId, oldRunId, newRunId) {
   if (!fs.existsSync(roadmapFile(dir, projectId))) return null;
   const r = readRoadmap(dir, projectId);
-  const item = allItems(r).find((x) => x.runId === oldRunId) || allItems(r).find((x) => (x.runs || []).includes(oldRunId));
+  const item = itemOfRun(r, oldRunId);
   // #260: a cut line's release run resumed (from its Ship gate after a Hold): the new run is the line's,
   // and a roadmap paused at that line waits for it again
   const line = item ? null : r.stages.find((s) => isRelease(s) && s.runId === oldRunId);
@@ -923,14 +923,16 @@ function skipItem(dir, projectId, itemId, why) {
   }));
 }
 
-/**
- * #749: the ids of the stages a step ended: open in `before` (not disabled, an item unfinished), no
- * item unfinished in `after`, with an item `counts` keeps (a real one: the base check runs after it).
- */
-function endedStages(before, after, counts = () => true) {
-  return (before?.stages || []).filter((s) => !s.disabled && (s.items || []).some((x) => !isFinished(x))).map((s) => (after?.stages || []).find((x) => x.id === s.id))
-    .filter((s) => s && s.items.length && s.items.every(isFinished) && s.items.some(counts)).map((s) => s.id);
+/** #749: the ids of a roadmap's open stages (not disabled, an item unfinished). */
+const openStages = (r) => (r?.stages || []).filter((s) => !s.disabled && (s.items || []).some((x) => !isFinished(x))).map((s) => s.id);
+// #749: the ids of the stages a step ended: open in `before` or `seen` (open at an earlier step: a skip or a Move on
+// finished it between two steps), no item unfinished in `after`, an item `counts` keeps (a real one: the base check runs)
+function endedStages(before, after, counts = () => true, seen = []) {
+  const open = new Set([...openStages(before), ...seen]);
+  return (after?.stages || []).filter((s) => open.has(s.id) && !s.disabled && s.items.length && s.items.every(isFinished) && s.items.some(counts)).map((s) => s.id);
 }
+/** The item a run is of: its current run, else one of its earlier runs (`runs`, #112); null when none. */
+const itemOfRun = (r, runId) => (runId && (allItems(r).find((x) => x.runId === runId) || allItems(r).find((x) => (x.runs || []).includes(runId)))) || null;
 
 /** Each planned issue's place in the roadmap (the Backlog's cards): number → { stage, status, itemId }; a test-batch item never hides the item that implements the issue. */
 function issueStages(roadmap) {
@@ -960,11 +962,13 @@ module.exports = {
   insertFrontStage,
   issueStages,
   itemAction,
+  itemOfRun,
   itemsToStart,
   markStarted,
   mergedPullRequest,
   moveLeftoverQueues,
   normalizeItem,
+  openStages,
   parkStage,
   pauseAfterStage,
   pauseRoadmap,

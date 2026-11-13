@@ -524,11 +524,16 @@ module.exports = (ctx) => {
     return !!stage && stage.items.some((x) => !mockOf(x)) && !RoadmapModel.hasUnfinished(stage) && ctx.appUpdateEvent({ type: 'stage-done' });
   }
 
+  // #749: projectId -> the stage ids open after the previous step: a stage a skip at its start
+  // (skipClosed, skipItem) or a Move on (parkStage) finished between two steps ended too
+  const openSeen = new Map();
   // #749: a stage of a real roadmap that ended in this step, with a real item (roadmaps.endedStages):
   // the base check after the stage (areas/base-health.js afterStageEnded), never awaited
   function checkEndedStages(projectId, before, roadmap, mockOf) {
     if (before.simulated || typeof ctx.afterStageEnded !== 'function') return;
-    if (!roadmaps.endedStages(before, roadmap, (x) => !mockOf(x)).length) return;
+    const seen = openSeen.get(projectId) || [];
+    openSeen.set(projectId, roadmaps.openStages(roadmap));
+    if (!roadmaps.endedStages(before, roadmap, (x) => !mockOf(x), seen).length) return;
     try {
       Promise.resolve(ctx.afterStageEnded(projectId)).catch((e) => console.error('base health:', e.message));
     } catch (e) { console.error('base health:', e.message); }

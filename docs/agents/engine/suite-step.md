@@ -27,12 +27,14 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   (test, file, first/last seen, runs; the engine records them, the service files); seen by 2 runs, a
   failure files one bug issue, updated (a comment) by every later sighting, never a second one.
   #749: the base check runs once per roadmap stage (`afterStageEnded`, when the dispatch sees the
-  stage's last item finished, `roadmaps.endedStages`; a roadmap run's `worktree.merged` only records
-  the base), after a `worktree.merged` of a real run outside the roadmap (merges before that check
-  starts share it, on the latest tip), and at once for `tested: 'not green'` (trigger `not-green`).
-  It is `skipped` (no suite, the Roadmap's card reads green at that commit) when the tip is the
-  store's `lastGreen.commit` or the commits since it touch only `docs/**` and `*.md` (`UNTESTED` in
-  `domains/project/base-health.js`), never for `not-green`. Otherwise the base check runs the whole suite on a
+  stage's last item finished, `roadmaps.endedStages`, with the stages open at the previous dispatch
+  so a stage a skip or a Move on finished counts too; a roadmap run's `worktree.merged` only records
+  the base), after a `worktree.merged` of a real run outside the roadmap (merges until that check
+  holds the suite slot share it, on the latest tip), and at once for `tested: 'not green'` (trigger
+  `not-green`). It is `skipped` (no suite, the Roadmap's card reads green at that commit) when the
+  tip is the store's `lastGreen.commit` or the commits since it touch only `docs/**` and `*.md`
+  (`UNTESTED` in `domains/project/base-health.js`), never for `not-green`. The docs skip trusts the
+  run's own suite (#736) for the tests that read docs (`test/docs-*.test.js`, `test/agents-md-331.test.js`). Otherwise the base check runs the whole suite on a
   clean detached checkout of the local base tip (`worktrees/base-check-<project>`), with no agent,
   `MULTIAGENT_SIMULATION_ONLY=1`, its own lock folder, the suite timeout from the project's recent
   durations, one check at a time. While a release run holds the base it is deferred, and runs when

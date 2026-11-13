@@ -274,7 +274,8 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
  * and, with onRed 'fix', a fix item. → { status: green | red | deferred | skipped | error, commit, issues, fixItem }
  * #749: `skipped` (with `reason`, `commit` the tip) when the tip is the store's lastGreen commit or
  * the commits since it touch only files no test reads (UNTESTED); never for trigger 'not-green'.
- * `onStart` is called when the check leaves the queue (the service coalesces merges until then);
+ * `onStart` is called once the check holds the suite slot, or is about to skip (the service
+ * coalesces merges until then, the check reading the tip after it);
  * trigger is 'merge', 'not-green' or 'stage' (the end of a roadmap stage).
  * #527: it takes the machine-wide `suite` slot first (waiting for a run's whole suite, `slot.onWait`
  * and a log line say so), frees it however it ends.
@@ -298,13 +299,17 @@ function runBaseCheck(ws, opts) {
     if (opts.releaseHoldsBase?.()) return deferred;
     const { projectId, repo, base, log = () => {} } = opts;
     const onRed = ON_RED.includes(opts.onRed) ? opts.onRed : 'fix';
-    opts.onStart?.();
     // #749: nothing a test reads merged since the last green check: no suite ("not tested green" always runs)
     if (opts.trigger !== 'not-green') {
       const { tip, reason } = await nothingNew(repo, base, readStore(ws, projectId).lastGreen?.commit);
       if (reason) {
-        log('info', `base check skipped at ${short(tip)}: ${reason}`);
-        return { status: 'skipped', reason, commit: tip, issues: [], fixItem: null };
+        opts.onStart?.();
+        // a merge that joined while the tip was read is on a newer tip: the suite runs for it
+        const now = await git(['rev-parse', '--verify', `${base}^{commit}`], repo).catch(() => null);
+        if (now === tip) {
+          log('info', `base check skipped at ${short(tip)}: ${reason}`);
+          return { status: 'skipped', reason, commit: tip, issues: [], fixItem: null };
+        }
       }
     }
     const dir = path.join(ws, 'worktrees', `base-check-${slug(projectId)}`);
@@ -322,6 +327,8 @@ function runBaseCheck(ws, opts) {
     } catch (e) {
       return { status: 'error', error: e.message, commit: null, issues: [], fixItem: null };
     }
+    // #749: the merges that came while the check waited for the slot share it (the tip is read below)
+    opts.onStart?.();
     let info;
     let result;
     let failures = [];
