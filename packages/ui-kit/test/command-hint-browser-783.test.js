@@ -27,7 +27,7 @@ const ALLOWED = [SCOPE_HINT, INSTALL, SIGN_IN];
 
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
 
-function browserHint({ confirm = true } = {}) {
+function browserHint({ confirm = true, settingsClis = true } = {}) {
   const calls = { confirms: 0, openKinds: [], termOpen: [], toasts: [], cliRuns: [] };
   let clickHandler = null;
   const sandbox = {
@@ -52,6 +52,7 @@ function browserHint({ confirm = true } = {}) {
     showToast: (title) => { calls.toasts.push(String(title)); },
     errMsg: (e) => String(e?.message || e),
   };
+  if (!settingsClis) delete sandbox.SettingsClis;
   sandbox.window = sandbox;
   vm.createContext(withI18n(sandbox));
   const esc = /const esc = \(s\) => [^\n]+;/.exec(appSrc)[0];
@@ -89,6 +90,16 @@ test('#783 a command the engine refuses keeps the toast "Run this on the compute
   await settle();
   assert.deepEqual(hint.calls.cliRuns, [], 'not a cli-setup job');
   assert.deepEqual(hint.calls.toasts, [NO_TERMINAL_HINT], 'only the toast that says where to run it');
+});
+
+test('#783 a CLI\'s install command without the Settings\' CLI job on the page shows the toast, never a terminal', async () => {
+  const hint = browserHint({ settingsClis: false });
+  hint.click(INSTALL);
+  await settle();
+  assert.equal(hint.calls.confirms, 0, 'no confirmation for a terminal that never opens');
+  assert.deepEqual(hint.calls.openKinds, []);
+  assert.deepEqual(hint.calls.termOpen, [], 'an install never goes to a terminal of the page');
+  assert.deepEqual(hint.calls.toasts, [NO_TERMINAL_HINT]);
 });
 
 // guards (#740, pass before #783): a CLI's install / sign-in still goes to the engine's job
