@@ -32,19 +32,33 @@ test('an unsupported host locale falls back to English', async (t) => {
   assert.match(await f.html(), /lang="en"/);
 });
 
-test('#819 a malformed run issue list still answers the paired gate list with the valid issue numbers', async (t) => {
+// #819: one active run with the given issues; checks the list is behind the token, then reads it paired.
+async function pairedGates(t, issues) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phone-issues-'));
   const ws = { root, settings: path.join(root, 'settings.json') };
   fs.writeFileSync(ws.settings, JSON.stringify({ phoneGates: { enabled: true, port: 0 } }));
-  const run = { runId: 'r1', title: 'Release', issues: [null, 7, { number: 9 }], gates: [{ approval_id: 'a1', step_id: 'ship', message: 'Ship?' }] };
+  const run = { runId: 'r1', title: 'Release', issues, gates: [{ approval_id: 'a1', step_id: 'ship', message: 'Ship?' }] };
   const phone = phoneGatesArea({ ws, host: { locale: 'en' }, activeRuns: () => [run], active: new Map() });
   t.after(async () => { await phone.stopPhoneGates(); fs.rmSync(root, { recursive: true, force: true }); });
   const { code, state } = await phone.pairPhone();
   assert.equal((await fetch(state.url + '/gates.json')).status, 401);
   const paired = await (await fetch(state.url + '/pair', { method: 'POST', body: JSON.stringify({ code }) })).json();
   const res = await fetch(state.url + '/gates.json', { headers: { Authorization: 'Bearer ' + paired.token } });
-  assert.equal(res.status, 200);
-  const list = await res.json();
+  return { status: res.status, list: res.status === 200 ? await res.json() : null };
+}
+
+test('#819 a malformed run issue list still answers the paired gate list with the valid issue numbers', async (t) => {
+  const { status, list } = await pairedGates(t, [null, 7, { number: 9 }]);
+  assert.equal(status, 200);
   assert.equal(list.gates.length, 1);
   assert.deepEqual(list.gates[0].issues.map((i) => i.number), [7, 9]);
 });
+
+for (const [label, issues] of [['empty objects and non-numeric numbers', [{}, { number: 'abc' }]], ['a string instead of a list', 'not a list']]) {
+  test(`#819 a run whose issues are ${label} keeps its gate with no issue numbers`, async (t) => {
+    const { status, list } = await pairedGates(t, issues);
+    assert.equal(status, 200);
+    assert.equal(list.gates.length, 1);
+    assert.deepEqual(list.gates[0].issues.map((i) => i.number), []);
+  });
+}

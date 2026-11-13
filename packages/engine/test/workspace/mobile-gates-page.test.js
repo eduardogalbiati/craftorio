@@ -368,6 +368,32 @@ test('#819 an ended gate clears the note written for any of its choices', async 
   assert.equal(again.get('fb').value, '');
 });
 
+test('#819 a note draft left in the gate-wide format of #815 is not restored and the page still saves and clears notes', async () => {
+  const { saved, configure } = tabStorage();
+  saved.set('phone-note:r1/a1', JSON.stringify({ note: 'Old gate-wide note', at: Date.now() }));
+  const changes = await browser(choicePage(CHOICES[1]), async () => reply({ ok: true }), { configure });
+  assert.equal(changes.get('fb').value, '');
+  assert.doesNotMatch(changes.get('draft-status').textContent, /Draft restored|unavailable/);
+  changes.type(changes.get('fb'), 'Please split the migration');
+  assert.match(changes.get('draft-status').textContent, /Draft saved/);
+  const reloaded = await browser(choicePage(CHOICES[1]), async () => reply({ ok: true }), { configure });
+  assert.equal(reloaded.get('fb').value, 'Please split the migration');
+  await submit(reloaded);
+  assert.equal(saved.size, 0);
+});
+
+test('#819 a revoked device token keeps its explanation when the tab becomes visible again', async () => {
+  let calls = 0;
+  const b = await browser(gatesPage('en').html, async () => { calls++; return reply({}, 401); });
+  assert.match(b.message(), /no longer valid/);
+  assert.equal(b.stored.size, 0);
+  b.document.dispatchEvent(new b.classes.Event('visibilitychange'));
+  await settle();
+  assert.match(b.message(), /no longer valid/);
+  assert.equal(b.get('pairing').hidden, false);
+  assert.equal(calls, 1);
+});
+
 test('#819 a refused QR pairing keeps its message when the tab becomes visible again without a token', async () => {
   const b = await browser(gatesPage('en').html, async () => reply({}, 403), { token: null, search: '?pair=INVALID' });
   assert.match(b.message(), /wrong, expired or already used/);
