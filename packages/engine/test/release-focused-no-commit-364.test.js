@@ -203,6 +203,39 @@ test('a suite round on a worktree with an uncommitted change records it as not c
   assert.equal(out.clean, false);
 });
 
+// #737: the commit and the cleanliness now come from one `git status --branch`; the cases its
+// parsing must keep: an untracked file, a detached HEAD, a repository with no commit yet.
+const e2eRound = (dir, t) => suiteRunState(t, dir).suiteRound({ id: 'e2e', type: 'suite', command: 'npm run test:e2e', scope: 'failed', base_check: false }, { visits: 1, outputs: [] }, { execution: 1, reruns: 0, stopped: [] });
+
+test('a suite round on a worktree with only an untracked file records HEAD and not clean (#364, #737)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(dir, 'src', 'new-untracked.js'), 'new\n');
+  const out = await e2eRound(dir, t);
+  assert.equal(typeof out.commit, 'string', `the output carries the commit; got ${JSON.stringify(out.commit)}`);
+  assert.ok(head.startsWith(out.commit), `${out.commit} is HEAD (${head})`);
+  assert.equal(out.clean, false);
+});
+
+test('a suite round on a detached HEAD records that commit and a clean tree (#364, #737)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'checkout', '-q', '--detach', 'HEAD');
+  const out = await e2eRound(dir, t);
+  assert.equal(typeof out.commit, 'string', `the output carries the commit; got ${JSON.stringify(out.commit)}`);
+  assert.ok(head.startsWith(out.commit), `${out.commit} is HEAD (${head})`);
+  assert.equal(out.clean, true);
+});
+
+test('a suite round on a repository with no commit yet records no commit and not clean (#364, #737)', async (t) => {
+  const dir = tmp(t, 'release-737-nohead-');
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n');
+  git(dir, 'init', '-q');
+  const out = await e2eRound(dir, t);
+  assert.equal(out.commit == null, true, `no commit to name; got ${JSON.stringify(out.commit)}`);
+  assert.equal(out.clean, false);
+});
+
 test('suiteScope: a round names the commit it tested, for the release summary (#364)', () => {
   const sha = 'abc1234def5678901234567890abcdef12345678';
   assert.match(suiteScope({ kind: 'suite', scope: 'full', passed: 193, failed: 0, duration_ms: 44 * 60e3, commit: sha }, 'scenario'), /abc1234/);

@@ -156,6 +156,39 @@ test('snapshot rejects when HEAD does not resolve (a repository with no commits 
   await assert.rejects(() => snapshot(dir), /Needed a single revision/);
 });
 
+// #737: HEAD is read from the same `git status --branch` as the local changes
+test('snapshot takes HEAD on a branch and on a detached HEAD (#737)', async (t) => {
+  const dir = makeRepo(t);
+  assert.equal((await snapshot(dir)).head, git(dir, 'rev-parse', 'HEAD'));
+  commit(dir, 'feature', { 'src/app.js': 'module.exports = 2;\n' });
+  git(dir, 'checkout', '-q', '--detach', 'HEAD~1');
+  assert.equal((await snapshot(dir)).head, git(dir, 'rev-parse', 'HEAD'));
+});
+
+test('snapshot during a rebase stopped on a conflict: head is the base side, rebaseHead the branch (#737)', async (t) => {
+  const dir = makeRepo(t);
+  commit(dir, 'feature', { 'src/app.js': 'module.exports = 2;\n' });
+  const branch = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'switch', '-q', 'main');
+  commit(dir, 'base change', { 'src/app.js': 'module.exports = 3;\n' });
+  const base = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'switch', '-q', 'feat');
+  assert.throws(() => git(dir, 'rebase', 'main'), 'the rebase stops on the conflict');
+  t.after(() => { try { git(dir, 'rebase', '--abort'); } catch { /* already ended */ } });
+  const snap = await snapshot(dir);
+  assert.equal(snap.head, base);
+  assert.equal(snap.rebaseHead, branch);
+});
+
+test('snapshot of a repository with no commit yet still rejects with git\'s own error, even with files in it (#737)', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-paths-nohead-files-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  git(dir, 'init', '-q');
+  write(dir, 'test/a.test.js', 'new\n');
+  git(dir, 'add', 'test/a.test.js');
+  await assert.rejects(() => snapshot(dir), /Needed a single revision/);
+});
+
 test('loadWorkflow validates edits_tests and tests_paths', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-tests-paths-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

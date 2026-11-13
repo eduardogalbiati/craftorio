@@ -215,6 +215,20 @@ test('#525 snapshot given the repository of an earlier snapshot does not ask git
   assert.deepEqual(Object.keys(again.dirty), ['test/app.test.js']);
 });
 
+// #737: HEAD comes with the local changes, from one `git status --branch`, not a separate rev-parse
+test('#737 a snapshot of a known repository with no dirty test file starts one git process and has HEAD', async (t) => {
+  const repo = makeRepo(t);
+  const first = await snapshot(repo);
+  commit(repo, 'feature', { 'src/app.js': 'module.exports = 2;\n' });
+  write(repo, 'src/extra.js', 'not a test\n');
+  const started = [];
+  calls = started;
+  let again;
+  try { again = await snapshot(repo, undefined, { repo: { root: first.root, gitDir: first.gitDir } }); } finally { calls = null; }
+  assert.equal(started.length, 1, `${started.length} git processes for the snapshot (one):\n${started.join('\n')}`);
+  assert.equal(again.head, git(repo, 'rev-parse', 'HEAD'));
+});
+
 // Porcelain paths: spaces and non-ASCII letters, never quoted
 test('#525 changedTestFiles lists modified and untracked test files whose names have spaces and accents', async (t) => {
   const repo = makeRepo(t);
