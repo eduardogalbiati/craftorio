@@ -3,19 +3,41 @@
 function phoneGateProgress(text, state) {
   const field = document.getElementById('fb');
   const hint = document.getElementById('draft-status');
-  const key = state.draftKey;
+  // One draft per choice (#819): the gate key holds the list of choices with a draft, so an
+  // ended gate or a confirmed answer clears them all, and a note never moves to another choice.
+  const gateKey = state.draftKey;
+  const key = gateKey && state.draftChoice ? `${gateKey}/${state.draftChoice}` : null;
   let finished = false;
   let interval = null;
   const ttl = 24 * 60 * 60 * 1000;
+  function choicesWithDraft() {
+    try {
+      const ids = JSON.parse(sessionStorage.getItem(gateKey));
+      return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+    } catch { return []; }
+  }
   function clearDraft() {
     if (!key) return;
     try { sessionStorage.removeItem(key); } catch { /* optional storage */ }
   }
-  if (state.ended) clearDraft();
+  function clearGate() {
+    if (!gateKey) return;
+    const ids = choicesWithDraft();
+    try {
+      sessionStorage.removeItem(gateKey);
+      for (const id of ids) sessionStorage.removeItem(`${gateKey}/${id}`);
+    } catch { /* optional storage */ }
+  }
+  if (state.ended) clearGate();
   function paintCount() {
     document.getElementById('note-count').textContent = text.note_count.replace('{count}', String(field.value.length));
   }
-  if (field) {
+  function saveDraft(note) {
+    sessionStorage.setItem(key, JSON.stringify({ note, at: Date.now() }));
+    const ids = choicesWithDraft();
+    if (!ids.includes(state.draftChoice)) sessionStorage.setItem(gateKey, JSON.stringify([...ids, state.draftChoice]));
+  }
+  if (field && key) {
     let restored = false;
     try {
       const raw = sessionStorage.getItem(key);
@@ -32,7 +54,7 @@ function phoneGateProgress(text, state) {
     field.addEventListener('input', () => {
       paintCount();
       try {
-        if (field.value) sessionStorage.setItem(key, JSON.stringify({ note: field.value.slice(0, 2000), at: Date.now() }));
+        if (field.value) saveDraft(field.value.slice(0, 2000));
         else clearDraft();
         hint.textContent = text[field.value ? 'draft_saved' : 'draft_help'];
       } catch { hint.textContent = text.draft_unavailable; }
@@ -57,7 +79,7 @@ function phoneGateProgress(text, state) {
   updateExpiry();
   if (expiry && deadline && !expired()) interval = setInterval(updateExpiry, 1000);
   function finish() {
-    clearDraft();
+    clearGate();
     finished = true;
     clearInterval(interval);
     if (expiry) expiry.hidden = true;

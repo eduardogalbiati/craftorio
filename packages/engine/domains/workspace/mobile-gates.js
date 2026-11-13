@@ -76,6 +76,10 @@ const sendJson = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 
+// A run's issues may be objects, bare numbers or junk: keep the valid numbers, never fail the list (#819).
+const phoneIssues = (issues) => (Array.isArray(issues) ? issues : [])
+  .map((i) => Number(i?.number ?? i)).filter(Boolean).map((number) => ({ number }));
+
 // ---- the server -----------------------------------------------------------------------------------
 // ---- paired devices (<workspace>/phone-gates/devices.json; the token itself is never stored) -------
 const devicesFile = (ws) => path.join(ws.root, 'phone-gates', 'devices.json');
@@ -203,7 +207,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
       if (!deviceOf(req)) throw new HttpError(401, 'This phone is not paired.');
       const gates = openGates().map(({ run, gate }) => ({
         runId: run.runId, approvalId: gate.approval_id, stepId: gate.step_id, message: gate.message, title: runTitle(run),
-        projectId: run.projectId || null, issues: (run.issues || []).map((i) => ({ number: i.number })),
+        projectId: run.projectId || null, issues: phoneIssues(run.issues),
         requestedAt: gate.requested_at || null, serverNow: now(),
         headline: gate.brief?.headline || null, url: gateLink(run.runId, gate.approval_id),
       }));

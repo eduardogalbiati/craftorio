@@ -81,7 +81,8 @@ function briefHtml(brief, t) {
 function gatePage({ run, gate }, token, chosen, language, choices, validity = {}) {
   const { t } = translator(language);
   const brief = gate.brief || {};
-  const state = { ...validity, draftKey: `phone-note:${run.runId}/${gate.approval_id}` };
+  // The draft key names the gate (an ended gate clears it); draftChoice keeps a note on its own choice (#819).
+  const state = { ...validity, draftKey: `phone-note:${run.runId}/${gate.approval_id}`, draftChoice: chosen?.id || null };
   const expiry = `<p id="gate-expiry" role="status"></p><p><a id="fresh-link" class="btn" href="/" hidden>${esc(t('fresh_link'))}</a></p>`;
   const head = `<div class="muted">${esc(run.title || run.workflow || run.runId)} · ${esc(gate.step_id || '')}</div><h1>${esc(brief.headline || firstSentences(gate.message) || t('approval'))}</h1>`;
   const self = `/gates/${encodeURIComponent(run.runId)}/${encodeURIComponent(gate.approval_id)}?t=${encodeURIComponent(token)}`;
@@ -93,7 +94,7 @@ function gatePage({ run, gate }, token, chosen, language, choices, validity = {}
   const context = rec + links + details;
   if (chosen) return confirmationPage({ head, context, expiry, recommendation: brief.recommendation, self, token, chosen, language, state });
   const turns = Array.isArray(run.nextTurns) ? `<p class="muted">${esc(continueText(run.nextTurns, (a) => displayName(a, run.agent_names), (key) => t(`turn_${key}`)))}</p>` : '';
-  const buttons = choices.map((c) => `<a class="btn" href="${esc(`${self}&answer=${encodeURIComponent(c.id)}`)}">${esc(c.label || c.id)}${c.help ? `<span class="help">${esc(c.help)}</span>` : ''}</a>`).join('');
+  const buttons = choices.map((c) => `<a class="btn" data-testid="phone-gate-choice" href="${esc(`${self}&answer=${encodeURIComponent(c.id)}`)}">${esc(c.label || c.id)}${c.help ? `<span class="help">${esc(c.help)}</span>` : ''}</a>`).join('');
   return page(run.title || t('title'), `<div class="card">${head}${expiry}${context}${turns}<div class="btns">${buttons}</div></div><p><a class="btn" href="/">${esc(t('all'))}</a></p>`, language, true, state);
 }
 

@@ -8,6 +8,8 @@ function phoneGatesClient(text, state, progress) {
   const retry = byId('retry');
   let busy = false;
   let lastRead = null;
+  // The last refused pairing stays on screen through automatic refreshes until a new attempt (#819).
+  let pairError = null;
 
   function status(name, error = false, focus = false) {
     msg.setAttribute('role', error ? 'alert' : 'status');
@@ -80,7 +82,7 @@ function phoneGatesClient(text, state, progress) {
     retry.disabled = true;
     try {
       const tk = token();
-      if (!tk) { showPair(); return; }
+      if (!tk) { showPair(automatic ? pairError : null); return; }
       byId('pairing').hidden = true;
       if (!automatic) status('loading');
       const r = await request('/gates.json', { headers: { Authorization: 'Bearer ' + tk } });
@@ -128,6 +130,7 @@ function phoneGatesClient(text, state, progress) {
     try { error = await pair(code); } catch { error = 'pair_failed'; }
     busy = false;
     button.disabled = false;
+    pairError = error || null;
     if (error) {
       showPair(error);
       if (focus) msg.focus();
