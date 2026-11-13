@@ -169,13 +169,23 @@ test('two runs racing for the same PR/MR: the second merges first, the first is 
 
 // ---- #99: workflows/feature.yaml, the scoped re-check (real prompts) --
 
+// #826: these runs check the repository itself (repo_path: root). Two costs per run made the file
+// pass the suite's 5-minute file timeout under load, none of which these tests assert on:
+// - rule_check ran the project's real `npm run check` (7-10 s alone, twice per run): a trivial
+//   check_command keeps the step (and its pass route) without linting the whole repository;
+// - the code → tests map of the whole repository (seconds of synchronous CPU, writeTestMap) was
+//   rebuilt by each run: the runs share the mock's per-folder cache, built once for the file.
+const CHECK_COMMAND = 'node --version';
+const sharedTestMaps = new Map();
+
 // Runs the real local-hero workflow up to and including a failed local merge; gates get
 // `answers[step]` (default: approve / first choice). `patchAgent` can replace a step's answer
 // (e.g. to control an array-length field the generic mock can't vary).
 async function runLocalHero(t, { mockSequences, answers = {}, patchAgent } = {}) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
-  const run = new WorkflowRun({ file: LOCAL_HERO, inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir, mockSequences });
+  const run = new WorkflowRun({ file: LOCAL_HERO, inputs: { task: 'Engine test', repo_path: root, check_command: CHECK_COMMAND }, mock: true, runsDir, mockSequences });
+  run.mockTestMaps = sharedTestMaps;
   // #380: the mock fills every optional string, so its resolve_merge answer always carries a
   // test_conflict (handed to the test writer); these scenarios are conflicts in code, not in tests
   const mocked = run.sendToAgent.bind(run);
