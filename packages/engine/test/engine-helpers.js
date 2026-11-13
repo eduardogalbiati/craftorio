@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
+const { runUntilStall } = require('./helpers/run-watch');
 
 const root = path.join(__dirname, '..', '..', '..');
 // #648: writer-reviewer.yaml and ai-arena.yaml left workflows/ (aliases of write-doc); their own tests read these copies
@@ -39,6 +40,11 @@ async function runConditionalAction(t, cleanup) {
 // per visit to that gate (shifted as it is visited again; the last one repeats past the end).
 // The rule check runs a trivial command: the repository's own `npm run check` would take most of
 // the test's time on every visit of rule_check (#705).
+// #737: the runs of a test process share the mock's code → tests map of the repository (seconds of
+// synchronous CPU per run otherwise; the mock never changes the checkout), and a run that stops
+// progressing fails at once, naming its step (helpers/run-watch.js), instead of at the test's timeout.
+const sharedTestMaps = new Map();
+const RUN_STALL_MS = 30000;
 async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = {}, inputs = {}, issues, file = 'feature.yaml' }) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
@@ -49,6 +55,7 @@ async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = 
     mockSequences,
     issues,
   });
+  run.mockTestMaps = sharedTestMaps;
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
@@ -60,7 +67,7 @@ async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = 
       setImmediate(() => run.resolveApproval(ev.approval_id, answer, 'user', text));
     }
   });
-  await run.start();
+  await runUntilStall(run, { stallMs: RUN_STALL_MS });
   const finished = events.find((e) => e.type === 'workflow.finished');
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
   fs.rmSync(runsDir, { recursive: true, force: true });

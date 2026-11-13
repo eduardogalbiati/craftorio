@@ -7,7 +7,9 @@
 // #630: software-development is feature.yaml (remote), tests first: the test writer's persistent
 // session starts at acceptance_tests, before develop changed any file, so it loads the skills of
 // every listed language; the builder's first turn (build) comes after develop and still filters.
-const test = require('node:test');
+// #737: the five runs are independent (no worktree, each its own runsDir): they run concurrently, so
+// the file stays within the integration tier's ~30 s budget.
+const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
@@ -27,30 +29,31 @@ async function skillsFor(inputs, mockSequences = {}) {
   return { test: loaded(firstPrompt(events, 'acceptance_tests')), build: loaded(firstPrompt(events, 'build')) };
 }
 
-test('language: a single value loads that language\'s skills, whatever files changed (js, as today; rust)', { timeout: 240000 }, async () => {
-  const js = await skillsFor({ language: 'js' });
-  assert.deepEqual(js.test, ['e2e-test-writer-js', 'unit-test-writer-js']);
-  assert.deepEqual(js.build, ['build-audit-js']);
+describe('language skills (#340)', { concurrency: true }, () => {
+  test('language: a single value loads that language\'s skills, whatever files changed (js, as today; rust)', { timeout: 240000 }, async () => {
+    const [js, rust] = await Promise.all([skillsFor({ language: 'js' }), skillsFor({ language: 'rust' })]);
+    assert.deepEqual(js.test, ['e2e-test-writer-js', 'unit-test-writer-js']);
+    assert.deepEqual(js.build, ['build-audit-js']);
 
-  const rust = await skillsFor({ language: 'rust' });
-  assert.deepEqual(rust.test, ['e2e-test-writer-rust', 'unit-test-writer-rust']);
-  assert.deepEqual(rust.build, ['build-audit-rust']);
-});
+    assert.deepEqual(rust.test, ['e2e-test-writer-rust', 'unit-test-writer-rust']);
+    assert.deepEqual(rust.build, ['build-audit-rust']);
+  });
 
-test('language "js,rust": a run that changes only JS/TS files: the builder loads only the JS skills, the test writer (before any change) both', { timeout: 120000 }, async () => {
-  const r = await skillsFor({ language: 'js,rust' });
-  assert.deepEqual(r.test, BOTH); // written before any change: every listed language
-  assert.deepEqual(r.build, ['build-audit-js']);
-});
+  test('language "js,rust": a run that changes only JS/TS files: the builder loads only the JS skills, the test writer (before any change) both', { timeout: 120000 }, async () => {
+    const r = await skillsFor({ language: 'js,rust' });
+    assert.deepEqual(r.test, BOTH); // written before any change: every listed language
+    assert.deepEqual(r.build, ['build-audit-js']);
+  });
 
-test('language "js,rust": a run that changes JS and Rust files loads the skills of both', { timeout: 120000 }, async () => {
-  const r = await skillsFor({ language: 'js,rust' }, { files_changed: [['src/app.js', 'crates/core/src/lib.rs']] });
-  assert.deepEqual(r.test, BOTH);
-  assert.deepEqual(r.build, ['build-audit-js', 'build-audit-rust']);
-});
+  test('language "js,rust": a run that changes JS and Rust files loads the skills of both', { timeout: 120000 }, async () => {
+    const r = await skillsFor({ language: 'js,rust' }, { files_changed: [['src/app.js', 'crates/core/src/lib.rs']] });
+    assert.deepEqual(r.test, BOTH);
+    assert.deepEqual(r.build, ['build-audit-js', 'build-audit-rust']);
+  });
 
-test('language "js,rust": a run that changes only Rust files: the builder loads only the Rust skills, the test writer (before any change) both', { timeout: 120000 }, async () => {
-  const r = await skillsFor({ language: 'js,rust' }, { files_changed: [['crates/core/src/lib.rs', 'crates/core/tests/api.rs']] });
-  assert.deepEqual(r.test, BOTH); // written before any change: every listed language
-  assert.deepEqual(r.build, ['build-audit-rust']);
+  test('language "js,rust": a run that changes only Rust files: the builder loads only the Rust skills, the test writer (before any change) both', { timeout: 120000 }, async () => {
+    const r = await skillsFor({ language: 'js,rust' }, { files_changed: [['crates/core/src/lib.rs', 'crates/core/tests/api.rs']] });
+    assert.deepEqual(r.test, BOTH); // written before any change: every listed language
+    assert.deepEqual(r.build, ['build-audit-rust']);
+  });
 });

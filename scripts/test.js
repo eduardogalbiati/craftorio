@@ -9,6 +9,10 @@
 // node --test to one file at a time), so a slow suite inside the app can be compared with a shell (#210).
 // The unit report ends with the five slowest files and their wall time (#305): the suite's wall
 // time is bounded below by its longest file.
+// Two tiers by name (#737, test-timeouts.js testTier): the integration tests are the slow files
+// (*.slow.test.js or a slow/ folder: a whole simulated run on a real git repository, about 30 s per
+// file at most), every other file is a unit test. MULTIAGENT_TEST_TIMINGS_FILE=<file> appends one JSON
+// line per run ({ at, wall_ms, files: [{ file, tier, ms }] }), kept over time to compare runs with.
 // With test files as arguments (the suite step's check of failures on the base, #211), only those
 // run, without the full flow. #553: the same with MULTIAGENT_TEST_FILES=<file> (one test path per
 // line, relative to the project), the suite step's selection too long for the command line.
@@ -67,7 +71,7 @@ const { isAgentMode, REPORTER } = require('@multiagent/engine/engine/agent-test-
 const { workspaces } = require('./source-tree');
 const machineSlot = require('@multiagent/engine/engine/machine-slot');
 const { TEST_FILES_ENV } = require('@multiagent/engine/engine/suite-command-line');
-const { testTimeoutMs } = require('@multiagent/engine/engine/test-timeouts');
+const { testTier, testTimeoutMs } = require('@multiagent/engine/engine/test-timeouts');
 
 // decided before the variable below is set: the orchestrator's own MULTIAGENT_SIMULATION_ONLY counts
 const agent = isAgentMode(process.env, { isTTY: !!process.stdout.isTTY });
@@ -202,12 +206,31 @@ const shown = (file) => {
   return (rel.startsWith('..') || path.isAbsolute(rel) ? file : rel).split(path.sep).join('/');
 };
 
-function saySlowest() {
+// #737: one JSON line per run appended to MULTIAGENT_TEST_TIMINGS_FILE, kept over time so a later run
+// can compare with it; never on stdout (agent mode keeps it one JSON line)
+function keepTimings(times, wallMs) {
+  const file = process.env.MULTIAGENT_TEST_TIMINGS_FILE;
+  if (!file) return;
+  const record = {
+    at: new Date().toISOString(),
+    wall_ms: wallMs,
+    files: Object.entries(times).map(([f, ms]) => ({ file: shown(f), tier: testTier(shown(f)), ms })),
+  };
+  try {
+    fs.mkdirSync(path.dirname(path.resolve(root, file)), { recursive: true });
+    fs.appendFileSync(path.resolve(root, file), `${JSON.stringify(record)}\n`);
+  } catch (e) {
+    say(`warning: the timings file ${file} could not be written (${e.message})`);
+  }
+}
+
+function saySlowest(wallMs) {
   const times = {};
   for (const g of groups) {
     try { Object.assign(times, JSON.parse(fs.readFileSync(g.timesFile, 'utf8'))); } catch { /* the runner died before reporting */ }
   }
   fs.rmSync(timesDir, { recursive: true, force: true });
+  keepTimings(times, wallMs);
   const slowest = Object.entries(times).sort((a, b) => b[1] - a[1]).slice(0, 5);
   if (!slowest.length) return;
   say(`\n== Slowest test files (wall time, ${Object.keys(times).length} file(s)) ==`);
@@ -260,14 +283,16 @@ function finish(flow) {
 }
 
 async function main() {
+  const startedAt = Date.now();
   // a concurrency of 1 is one test file at a time: the groups run one after the other
   if (concurrency < 2) for (const g of groups) await runGroup(g);
   else await Promise.all(groups.map(runGroup));
+  const wallMs = Date.now() - startedAt;
   unitStatus = groups.every((g) => g.status === 0) ? 0 : 1;
   for (const g of groups.filter((x) => x.specFile)) {
     try { say(fs.readFileSync(g.specFile, 'utf8').trimEnd()); } catch { /* the runner died before reporting */ }
   }
-  saySlowest();
+  saySlowest(wallMs);
   if (unitStatus !== 0 || only.length || workspaceDir !== null) finish(null);
 
   say('\n== Full flow in mock mode ==');

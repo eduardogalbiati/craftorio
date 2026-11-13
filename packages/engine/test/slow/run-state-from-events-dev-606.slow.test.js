@@ -10,19 +10,15 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { root, liveState, replayState, recordedRun } = require('../run-state-606');
+const { repoFromTemplate } = require('../helpers/git-fixture');
 
 const bundled = (name) => path.join(root, 'workflows', name);
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
-// a repository on main with one production file, the run's branch checked out
+// a repository on main with one production file, the run's branch checked out (#737: a copy of the
+// template repository)
 function makeRepo(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-606-repo-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
-  git(dir, 'init', '-q');
-  fs.mkdirSync(path.join(dir, 'src'));
-  fs.writeFileSync(path.join(dir, 'src', 'app.js'), 'module.exports = 1;\n');
-  git(dir, 'add', '-A');
-  git(dir, 'commit', '-q', '-m', 'base');
+  const dir = repoFromTemplate(t);
   git(dir, 'switch', '-q', '-c', 'feat');
   return dir;
 }

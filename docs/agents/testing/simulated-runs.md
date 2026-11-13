@@ -21,7 +21,23 @@ the default mock answers, `MULTIAGENT_MOCK_DELAY_SCALE=0.05`, alone on the machi
   (`evalExpr` on the `when:`), a loaded definition (`loadWorkflow`: steps, choices, skills), a
   single function. A tiny workflow written for the test (`tempWorkflow`, `packages/engine/test/fixtures/*.yaml`)
   exercising one engine mechanism stays in its area's file when it runs in about a second.
-- **Where whole runs live**: `packages/engine/test/slow/`, one workflow and theme per file, each under about 60 s
+- **Two tiers (#737)**: the unit tests (`*.test.js`: one function, one module, a definition; 90 s
+  per test) and the integration tests (the integration tier: every `*.slow.test.js` file, or a file
+  under a `slow/` folder; a whole simulated run against a real git repository; 5 min per test).
+  `scripts/test.js` runs them as two groups at once (`test-timeouts.js` `testTier`/`testTimeoutMs`).
+- **The integration tier's budget (#737)**: about 30 s per integration file on the suite; a file
+  over it is split by theme (`merge-recovery-runs` / `merge-recovery-local-hero`), and its
+  independent tests run concurrently (`describe(..., { concurrency: true })`, each its own repository).
+- **The template repository (#737)**: `packages/engine/test/helpers/git-fixture.js`
+  `repoFromTemplate(t)` builds a repository once per test process (init on `main`, `src/app.js`
+  committed as `base`, no local config) and gives each test its own copy (`fs.cpSync`), deleted when the test ends; a
+  test adds only its own commits and branches on it, instead of `git init` + commits each time.
+- **Fail fast (#737)**: `packages/engine/test/helpers/run-watch.js` `runUntilStall(run, { stallMs })`
+  replaces `await run.start()`: a run with no event for `stallMs` (default 5 s) is stopped and the
+  test fails at once, naming the step it stopped at, instead of reaching the test's timeout.
+- **Timings kept over time (#737)**: `MULTIAGENT_TEST_TIMINGS_FILE=<file> npm test` appends one JSON
+  line per run (`at`, `wall_ms`, `files: [{ file, tier, ms }]`): the baseline a later run compares with.
+- **Where whole runs live**: `packages/engine/test/slow/`, one workflow and theme per file, each under about 30 s
   on the suite (`engine-software-development-<theme>.slow.test.js`; a mixed file keeps its
   definition/prompt tests in `test/` and its runs in `packages/engine/test/slow/<same name>.slow.test.js`). A
   non-slow file never starts a run with the engine helpers (`runSoftwareDevelopment`, `runWith`,
@@ -33,8 +49,8 @@ the default mock answers, `MULTIAGENT_MOCK_DELAY_SCALE=0.05`, alone on the machi
   and names the file and line of any registration.
 - **The slowest files**: `scripts/test.js` ends the unit report with the five slowest files and
   their wall time (`scripts/test-reporter-slowest.js`, from node's per-file entry): the next
-  critical path shows in every `npm test`, and in the human log in agent mode. A file over about
-  60 s there is split by theme.
+  critical path shows in every `npm test`, and in the human log in agent mode. An integration file
+  over about 30 s there is split by theme (#737).
 
 ### Inventory of the whole runs (2026-10-12)
 
@@ -51,7 +67,8 @@ bundled workflow's runs, per file and theme (`sd` = software-development, `lh` =
 | `engine-software-development-validated` | sd | 5 | validated mode: developer_check stop / changes / fix round / Stop; approve_merge message; developer_screenshots | 43 s |
 | `engine-software-development-suite` | sd | 7 | suite → test writer once, pre-existing, blocked → test_failed, 2 retries, run_existing → developer; skills and tests_plan | 40 s |
 | `engine-software-development-test-inputs` | sd | 9 | `unit_tests` × `e2e_tests`: test and suite steps visited or not (#203) | 41 s |
-| `merge-recovery-runs` | fixture, lh | 9 | `check:`/`precheck:` recovery, max_visits cap, two runs racing; lh resolve_merge re-check (#99) | 24 s |
+| `merge-recovery-runs` | fixture | 5 | `check:`/`precheck:` recovery, max_visits cap, two runs racing (concurrent, #737) | 1 s |
+| `merge-recovery-local-hero` | lh | 4 | lh resolve_merge re-check (#99; split from `merge-recovery-runs`, concurrent, #737) | 10 s |
 | `ai-development-local-hero` | aid | 20 | normal path (full list), acceptance send-back, protected tests, screenshots/ui_reviewer fan-out, #247 change request | 38 s |
 | `ai-development-e2e` | aid | 10 | e2e scope, scenarios first, healer loop, product bug → develop, test_failed gate (#223) | 20 s |
 | `ai-development-warm-up-301-304` | aid | 8 | warm_up once (fix rounds and change requests skip it), mapper failure, affected then whole suite | 16 s |

@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../../engine/workflow');
+const { repoFromTemplate } = require('../helpers/git-fixture');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
@@ -20,14 +21,9 @@ const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 // a repository on main with one production file, and the run's branch checked out
+// #737: a copy of the template repository (src/app.js on main), then the run's branch
 function makeRepo(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-warm-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
-  git(dir, 'init', '-q');
-  fs.mkdirSync(path.join(dir, 'src'));
-  fs.writeFileSync(path.join(dir, 'src', 'app.js'), 'module.exports = 1;\n');
-  git(dir, 'add', '-A');
-  git(dir, 'commit', '-q', '-m', 'base');
+  const dir = repoFromTemplate(t);
   git(dir, 'switch', '-q', '-c', 'feat');
   return dir;
 }

@@ -32,10 +32,17 @@ function testTimeoutMs(file, env = process.env) {
   return isSlow(String(file || '').replace(/\\/g, '/')) ? SLOW_TEST_TIMEOUT_MS : UNIT_TEST_TIMEOUT_MS;
 }
 
+// #737: a file's tier by name: the slow files (a slow/ folder or *.slow.test.js) are the integration
+// tests (a whole simulated run on a real git repository), every other test file is a unit test
+function testTier(file) {
+  return isSlow(String(file || '').replace(/\\/g, '/')) ? 'integration' : 'unit';
+}
+
 module.exports = {
   MAX_TEST_TIMEOUT_MS,
   overrideMs,
   SLOW_TEST_TIMEOUT_MS,
+  testTier,
   testTimeoutMs,
   UNIT_TEST_TIMEOUT_MS,
 };
