@@ -83,6 +83,8 @@ test('#736 the real machine adds the guards to an affected selection, with their
   assert.equal(machineActions.simulated({}).lastGreenOnMain(), null);
 });
 
+const MISSING_COMMIT = '0123456789abcdef0123456789abcdef01234567';
+
 function checkoutState(t, { lastGreen, current }) {
   const repo = tmp(t, 'green-736i-repo-');
   fs.writeFileSync(path.join(repo, 'f.txt'), 'old\n');
@@ -97,7 +99,7 @@ function checkoutState(t, { lastGreen, current }) {
   const state = Object.create(WorkflowRun.prototype);
   Object.assign(state, {
     runId: 'run-736i', projectId: 'p736', worktreesDir, worktree: { repo, base: 'main' },
-    machine: { simulated: true, lastGreenOnMain: () => (lastGreen === 'first' ? first : lastGreen === 'second' ? second : null) },
+    machine: { simulated: true, lastGreenOnMain: () => (lastGreen === 'first' ? first : lastGreen === 'second' ? second : lastGreen === 'missing' ? MISSING_COMMIT : null) },
     suiteBase: async () => ({ dir: repo, commit: current === 'first' ? first : second }),
     emitEvent: () => {},
   });
@@ -120,4 +122,26 @@ test('#736 suiteLastGreenBase: null without a last green commit, without a proje
   const { state } = checkoutState(t, { lastGreen: 'first', current: 'second' });
   state.projectId = null;
   assert.equal(await state.suiteLastGreenBase('/ws'), null);
+});
+
+test('#736 a last green commit missing from the repository: its check is skipped and the current base decides (pre-existing)', async (t) => {
+  const { state } = checkoutState(t, { lastGreen: 'missing', current: 'second' });
+  const FILE = 'test/a.test.js';
+  const cwd = tmp(t, 'green-736i-branch-');
+  const baseDir = tmp(t, 'green-736i-base-');
+  const runDir = tmp(t, 'green-736i-run-');
+  for (const d of [cwd, baseDir]) { fs.mkdirSync(path.join(d, 'test'), { recursive: true }); fs.writeFileSync(path.join(d, FILE), "require('node:test');\n"); }
+  const run = async ({ logFile }) => {
+    fs.appendFileSync(logFile, `✖ failing tests:\n\ntest at ${FILE}:3:1\n✖ a (1ms)\n  Error: a broke\n\nℹ pass 0\nℹ fail 1\n`);
+    return { code: 1, timedOut: false, error: null };
+  };
+  const out = await require('../engine/suite-step').runSuite({
+    command: 'npm test', cwd, runDir, round: 1, run, timeoutMs: 30e3, baseCacheDir: tmp(t, 'green-736i-cache-'), confirmedOnBase: null,
+    base: async () => ({ dir: baseDir, commit: 'bbbb2222red' }),
+    lastGreenBase: () => state.suiteLastGreenBase('/ws'),
+  });
+  t.after(() => { try { git(state.worktree.repo, 'worktree', 'remove', '--force', path.join(state.worktreesDir, 'run-736i-green')); } catch { /* never created */ } });
+  assert.equal(out.status, 'pass', out.message);
+  assert.ok(out.preexisting.some((f) => f.test === 'a'), `pre-existing as before: ${JSON.stringify(out.preexisting)}`);
+  assert.notEqual(out.last_green_check?.status, 'done', `the last green check did not run: ${JSON.stringify(out.last_green_check)}`);
 });

@@ -85,6 +85,32 @@ test('cleanupWorktrees: an ended run\'s uncommitted work becomes a WIP commit on
   assert.equal(git(f.repo, 'rev-parse', 'refs/heads/feat/interrupted'), head, 'the branch keeps the run\'s commits');
 });
 
+test('#736 cleanupWorktrees: the <run_id>-green checkout (the last green base) of an ended run goes, without a branch or WIP commit; a live run keeps its own', async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const greenOf = async (runId) => {
+    const dir = path.join(f.worktrees, `${runId}-green`);
+    await prepareWorktree({ repo: f.repo, base: 'main', dir });
+    git(dir, 'checkout', '-q', '--detach');
+    fs.writeFileSync(path.join(dir, 'left.txt'), 'left by a test run\n');
+    return dir;
+  };
+  const ended = await greenOf('20261113-100000-ended001');
+  const endedDir = endedRun(runsDir, '20261113-100000-ended001', { summary: { status: 'failed' } });
+  const live = await greenOf('20261113-110000-live0001');
+  const liveDir = endedRun(runsDir, '20261113-110000-live0001', { owner: { pid: process.ppid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString() } });
+  age(ended, 30, endedDir);
+  age(live, 30, liveDir);
+  const branches = git(f.repo, 'branch', '--list');
+
+  const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [] });
+  assert.deepEqual(removed.map((d) => path.basename(d)), ['20261113-100000-ended001-green']);
+  assert.equal(fs.existsSync(ended), false, 'the ended run\'s last green checkout is gone');
+  assert.equal(fs.existsSync(path.join(live, 'left.txt')), true, 'a live run keeps its last green checkout');
+  assert.equal(git(f.repo, 'branch', '--list'), branches, 'no branch was created for a last green checkout');
+  assert.equal(runEvents(endedDir).some((e) => e.type === 'worktree.removed'), false, 'not recorded as the run\'s own worktree');
+});
+
 test('cleanupWorktrees: never removes the worktree of a run live in another app process, or of a run waiting at a human gate, however old', async (t) => {
   const f = fixture(t);
   const runsDir = path.join(f.tmp, 'runs');

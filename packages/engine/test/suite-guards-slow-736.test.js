@@ -298,6 +298,53 @@ test('#736 a slow test the change touches that fails in the scoped run fails the
   assert.equal(suite.wholeRuns(), 0, `found before any whole suite: ${shown(suite.calls)}`);
 });
 
+test('#736 a change that only deletes a workflow file runs the slow test that reads it alone first, before any whole suite', async (t) => {
+  machineFolder(t);
+  const r = slowRepo(t);
+  r.remove('workflows/old.yaml');
+  const { suite, round } = engineRun(t, r.dir);
+  suite.failing.add(SLOW_FILE);
+  const one = await round();
+  assert.deepEqual(suite.calls[0]?.files, [SLOW_FILE], `the first run is the reached slow test only: ${shown(suite.calls)}`);
+  assert.equal(one.status, 'fail', one.message);
+  assert.equal(suite.wholeRuns(), 0, `no whole suite while the slow test is red: ${shown(suite.calls)}`);
+});
+
+// ---- an agent's `affected` test request gets the guards too ------------------------------------------------
+
+test('#736 an agent\'s run-tests request for `affected` runs the guards with the affected files', async (t) => {
+  const r = repo(t, { extra: { 'test/guards.json': JSON.stringify([GUARD]), [GUARD]: "require('node:test');\n" } });
+  r.commit('src/x.js', 'module.exports = 2;\n');
+  const runDir = path.join(tmp(t, 'suite-736-req-'), 'runs', 'run-736r');
+  fs.mkdirSync(runDir, { recursive: true });
+  const asked = [];
+  const state = Object.create(WorkflowRun.prototype);
+  Object.assign(state, {
+    machine: {
+      ...machineActions.real(),
+      simulated: false,
+      runSuite: async (opts) => { asked.push(opts); return { status: 'pass', command: 'npm test', passed: opts.files.length, failed: 0, failures: [], preexisting: [], log: 'logs/tests-develop-1.log' }; },
+      confirmedOnMain: () => [],
+      lastGreenOnMain: () => null,
+    },
+    wf: { agents: { developer: {} }, defaults: {}, steps: [STEP] },
+    runDir,
+    runId: 'run-736r',
+    worktree: { repo: r.dir, base: 'main', dir: r.dir },
+    ctx: { worktree_dir: r.dir, steps: {} },
+    abort: new AbortController(),
+    preexisting: [],
+    suiteRuns: { engine: 0 },
+    suiteFailedFiles: [],
+    emitEvent: () => {},
+  });
+  const summary = await state.runTestRequest('developer', 'develop', { affected: true, files: [] });
+  assert.equal(asked.length, 1, `the request ran the tests: ${summary}`);
+  assert.ok(asked[0].files.includes('test/x.test.js'), `the affected file runs: ${JSON.stringify(asked[0].files)}`);
+  assert.ok(asked[0].files.includes(GUARD), `the guard runs: ${JSON.stringify(asked[0].files)}`);
+  assert.match(String(asked[0].selection?.reasons?.[GUARD]), /guard/i, 'the guard\'s reason says it is a guard');
+});
+
 // ---- docs -------------------------------------------------------------------------------------------------
 
 test('#736 the docs give the rule: the testing topic names the guard list and decisions.md records #736', () => {
