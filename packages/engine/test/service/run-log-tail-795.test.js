@@ -47,3 +47,15 @@ test('#795 e2eSuiteDelay: only in a simulation, for the named step, with a posit
   ac.abort();
   await long;
 });
+
+test('#795 e2eSuiteDelay: a signal already aborted before the step resolves at once', async () => {
+  const env = { MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_E2E_SUITE_DELAY_MS: '60000', MULTIAGENT_E2E_SUITE_DELAY_STEP: 'suite' };
+  const ac = new AbortController();
+  ac.abort();
+  const t0 = Date.now();
+  const p = e2eSuiteDelay('suite', ac.signal, env);
+  assert.equal(p === null, false, 'the hook applies to this step');
+  const winner = await Promise.race([p.then(() => 'resolved'), new Promise((r) => setTimeout(() => r('pending'), 500).unref())]);
+  assert.equal(winner, 'resolved');
+  assert.ok(Date.now() - t0 < 500);
+});

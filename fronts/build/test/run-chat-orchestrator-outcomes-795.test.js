@@ -69,3 +69,18 @@ test('runLogPath: relative to the run folder, null outside logs/', () => {
   assert.equal(runLogPath('other.log'), null);
   assert.equal(runLogPath(''), null);
 });
+
+test('each state pill class of the orchestrator message has a style rule', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '..', '..', '..');
+  const src = fs.readFileSync(require('../../../scripts/source-tree').pageFile(root, 'views/runchat/runchat.js'), 'utf8');
+  const map = /const ORCH_PILL = \{([^}]*)\}/.exec(src);
+  assert.ok(map, 'runchat.js maps each state to a pill class');
+  const classes = Array.from(map[1].matchAll(/'(pill-[\w-]+)'/g), (m) => m[1]);
+  assert.deepEqual(classes.length >= 4, true);
+  const css = ['packages/ui-kit/style.css', 'fronts/build/views/runchat/runchat.css']
+    .map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  const missing = classes.filter((c) => !new RegExp(`\\.${c}\\b[^{]*\\{`).test(css));
+  assert.deepEqual(missing, []);
+});
