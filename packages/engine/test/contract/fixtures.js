@@ -277,6 +277,8 @@ module.exports = {
   'runs:closePr': onRun({ arg: ({ runId }) => ({ runId }), status: 400, invalid: BAD_RUN }),
   'runs:events': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'runs:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
+  // #795: the end of a step's log; a log not written yet is empty
+  'runs:logTail': onRun({ arg: ({ runId }) => ({ runId, path: 'logs/suite-1.log' }), invalid: BAD_RUN }),
   'runs:mergePr': onRun({ arg: ({ runId }) => ({ runId }), status: 400, invalid: BAD_RUN }),
   'runs:prState': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'runs:resumeOptions': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
