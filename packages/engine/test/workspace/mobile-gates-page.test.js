@@ -322,6 +322,80 @@ test('an ended gate clears only its own tab draft', async () => {
   assert.equal(saved.get('gate-two'), 'other note');
 });
 
+// #819: one gate, two choices; the confirmation page for each choice shares the tab's storage.
+const CHOICES = [{ id: 'approve', label: 'Approve' }, { id: 'changes', label: 'Request changes', feedback_required: true }];
+const TWO = { ...GATE, choices: CHOICES };
+const choicePage = (choice) => gatePage({ run: RUN, gate: TWO }, 't', choice, 'en', CHOICES).html;
+const tabStorage = () => {
+  const saved = new Map();
+  return { saved, configure: (s) => { s.sessionStorage = { getItem: (k) => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, String(v)), removeItem: (k) => saved.delete(k) }; } };
+};
+
+test('#819 a note written for Request changes is not pre-filled after Back and choosing Approve', async () => {
+  const { configure } = tabStorage();
+  const changes = await browser(choicePage(CHOICES[1]), async () => reply({}), { configure });
+  changes.type(changes.get('fb'), 'Please split the migration');
+  const approve = await browser(choicePage(CHOICES[0]), async () => reply({}), { configure });
+  assert.equal(approve.get('fb').value, '');
+  assert.doesNotMatch(approve.get('draft-status').textContent, /Draft restored/);
+});
+
+test('#819 a note for Request changes is restored on reload and after visiting Approve and coming back', async () => {
+  const { configure } = tabStorage();
+  const changes = await browser(choicePage(CHOICES[1]), async () => reply({}), { configure });
+  changes.type(changes.get('fb'), 'Please split the migration');
+  const reloaded = await browser(choicePage(CHOICES[1]), async () => reply({}), { configure });
+  assert.equal(reloaded.get('fb').value, 'Please split the migration');
+  await browser(choicePage(CHOICES[0]), async () => reply({}), { configure });
+  const back = await browser(choicePage(CHOICES[1]), async () => reply({}), { configure });
+  assert.equal(back.get('fb').value, 'Please split the migration');
+  assert.match(back.get('draft-status').textContent, /Draft restored/);
+});
+
+test('#819 an ended gate clears the note written for any of its choices', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phone-ended-'));
+  const runs = [{ ...RUN, gates: [TWO] }];
+  const m = createMobileGatesServer({ service: { workspace: () => ({ root }), api: { 'runs:active': () => runs }, answerPhoneGate: () => assert.fail('No answer') }, language: () => 'en' });
+  await m.listen();
+  t.after(async () => { await m.close(); fs.rmSync(root, { recursive: true, force: true }); });
+  const { configure } = tabStorage();
+  const changes = await browser(choicePage(CHOICES[1]), async () => reply({}), { configure });
+  changes.type(changes.get('fb'), 'Please split the migration');
+  runs[0] = { ...RUN, gates: [] };
+  const ended = await (await fetch(m.gateLink('r1', 'a1'))).text();
+  await browser(ended, async () => assert.fail('No request on an ended gate'), { configure });
+  const again = await browser(choicePage(CHOICES[1]), async () => reply({}), { configure });
+  assert.equal(again.get('fb').value, '');
+});
+
+test('#819 a refused QR pairing keeps its message when the tab becomes visible again without a token', async () => {
+  const b = await browser(gatesPage('en').html, async () => reply({}, 403), { token: null, search: '?pair=INVALID' });
+  assert.match(b.message(), /wrong, expired or already used/);
+  b.document.dispatchEvent(new b.classes.Event('visibilitychange'));
+  await settle();
+  assert.match(b.message(), /wrong, expired or already used/);
+  assert.equal(b.get('pairing').hidden, false);
+});
+
+test('#819 a rate-limited QR pairing keeps its message when the connection comes back without a token', async () => {
+  const b = await browser(gatesPage('en').html, async () => reply({}, 429), { token: null, search: '?pair=INVALID' });
+  assert.match(b.message(), /Too many pairing attempts/);
+  b.sandbox.dispatchEvent(new b.classes.Event('online'));
+  await settle();
+  assert.match(b.message(), /Too many pairing attempts/);
+  assert.equal(b.get('pairing').hidden, false);
+});
+
+test('#819 with a stored device token, returning to the tab after a refused pairing reads the gates', async () => {
+  const gates = [{ runId: 'r1', approvalId: 'a1', title: 'Listed gate', message: 'Review', stepId: 'ship', url: '/gates/r1/a1?t=t' }];
+  const b = await browser(gatesPage('en').html, async (url) => (url === '/pair' ? reply({}, 403) : reply({ gates })), { search: '?pair=INVALID' });
+  assert.match(b.message(), /wrong, expired or already used/);
+  b.document.dispatchEvent(new b.classes.Event('visibilitychange'));
+  await settle();
+  assert.equal(b.get('gates').querySelector('h2').textContent, 'Listed gate');
+  assert.equal(b.get('pairing').hidden, true);
+});
+
 test('the authenticated queue includes gate context and HTML uses the actual signed expiry and server clock', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phone-context-'));
   const time = 1000000;
