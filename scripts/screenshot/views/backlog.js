@@ -1,5 +1,5 @@
 // Screenshot seed of the Backlog (--view backlog, #249): its modes, the options only it takes (--live,
-// --roadmap, --po) and its demo data: the release flow (views/releases.js), the demo roadmap
+// --roadmap, --po, --refresh) and its demo data: the release flow (views/releases.js), the demo roadmap
 // (views/roadmap.js) and its Conflict map (#150; #354: drawn on the project's page, the Roadmap links
 // to it; demoConflictMap, also on views/project.js), the release run of --release (#291), the Product
 // Owner's conversation, a Backlog Refresh run, the committed cards (views/discovery.js), an issue
@@ -182,6 +182,24 @@ function demoBacklogRefresh(ws, folder, projectId) {
   }
 }
 
+// --refresh (#784): no Backlog Refresh run, the project's add time as the baseline. 'onboarded': added
+// 3 days ago, 12 merges on main since ("not refreshed since the project was added · 12 merges since");
+// 'fresh': added an hour ago, no merge since (no banner).
+function demoOnboardedRefresh(ws, projects, project, mode) {
+  const hoursAgo = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  const added = mode === 'fresh' ? 1 : 72;
+  projects.updateProject(ws.projects, project.id, { createdAt: hoursAgo(added) });
+  const git = gitRepo(project.folder);
+  git(['init', '-q', '-b', 'main']);
+  const merges = mode === 'fresh' ? 0 : 12;
+  for (let n = 0; n <= merges; n++) {
+    fs.writeFileSync(path.join(project.folder, 'CHANGES.md'), `change ${n}\n`);
+    git(['add', '-A']);
+    // the clone's last commit before the add time, then the merges after it
+    git(['commit', '-q', '-m', n ? `Merge change ${n} (#${70 + n})` : 'Initial commit'], hoursAgo(n ? added - 4 * n : added + 1));
+  }
+}
+
 // #405: two tests known to fail on the base (packages/engine/domains/project/base-health.js store), one with its bug issue
 function demoBaseFailures(ws, projectId) {
   const dir = path.join(ws.backlog, 'base-health');
@@ -208,7 +226,8 @@ function seed({ args, ws, project, projects }) {
   // #291: the release v0.10 of the roadmap's cut line, in a state (needs the history: Backlog only)
   if (args.release) demoReleaseRun(ws, project.id, args.release);
   demoPoConversation(ws, project.id, args.po);
-  if (project.folder) demoBacklogRefresh(ws, project.folder, project.id);
+  if (project.folder && args.refresh) demoOnboardedRefresh(ws, projects, project, args.refresh);
+  else if (project.folder) demoBacklogRefresh(ws, project.folder, project.id);
   // #258: the committed cards, as badges on their issues
   demoCommittedCards(ws, project.id);
   demoEnrichRun(ws, project.id);
@@ -240,6 +259,6 @@ module.exports = {
   open,
   // the options only this view takes, and their values: the Live roadmap (#164), more states of the
   // roadmap card (#282, #284; #395: an item parked at its gate; #797: one waiting for its PR's merge), the Product Owner's drawer (#180)
-  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['merge', 'parked', 'states'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS },
+  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['merge', 'parked', 'states'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS, refresh: ['fresh', 'onboarded'] },
   seed,
 };
