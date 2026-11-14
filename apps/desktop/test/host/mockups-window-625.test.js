@@ -149,3 +149,74 @@ test('#625 MOCKUP_CSP blocks every source and the network, with no http: or http
   const csp = load().MOCKUP_CSP;
   assert.deepEqual([csp.includes("default-src 'none'"), csp.includes("connect-src 'none'"), /https?:/.test(csp)], [true, true, false]);
 });
+
+// ---- serveMockup: what protocol.handle('mockup') answers (D6, D7, D11) ---------------------------
+
+const MODULE = require.resolve('../../host/mockups-window.js');
+const PAGE = '<!doctype html><html><head><title>Orders</title></head><body><main data-mid="m1">Orders</main></body></html>';
+
+function servedWorkspace(t) {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'serve-ws-625-'));
+  const dir = path.join(ws, 'mockups', 'p1', 'screens', 'orders');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'index.html'), PAGE);
+  fs.mkdirSync(path.join(ws, 'mockups', 'p1', 'kit'), { recursive: true });
+  fs.writeFileSync(path.join(ws, 'mockups', 'p1', 'kit', 'tokens.css'), ':root { --primary: #1a73e8; }');
+  t.after(() => fs.rmSync(ws, { recursive: true, force: true }));
+  return ws;
+}
+
+// a fresh copy of the module (its axe script is cached once per process)
+function fresh(t, { noAxe = false } = {}) {
+  const Module = require('module');
+  delete require.cache[MODULE];
+  if (noAxe) {
+    const original = Module._resolveFilename;
+    Module._resolveFilename = function (request, ...rest) {
+      if (String(request).startsWith('axe-core')) { const e = new Error(`Cannot find module '${request}'`); e.code = 'MODULE_NOT_FOUND'; throw e; }
+      return original.call(this, request, ...rest);
+    };
+    t.after(() => { Module._resolveFilename = original; });
+  }
+  t.after(() => { delete require.cache[MODULE]; });
+  return require(MODULE);
+}
+
+test('#625 serveMockup serves a screen with the CSP and the inspector, then the axe script, before </body>', async (t) => {
+  const ws = servedWorkspace(t);
+  const { serveMockup, MOCKUP_CSP } = fresh(t);
+  const res = await serveMockup('mockup://p1/screens/orders/index.html', ws);
+  const body = String(res.body);
+  const inspectorAt = body.indexOf('mockup:select');
+  const axeAt = body.indexOf('mockup:axe');
+  assert.deepEqual([res.status, res.headers['content-security-policy'] === MOCKUP_CSP, /text\/html/.test(res.headers['content-type'])], [200, true, true]);
+  assert.deepEqual([body.includes('<main data-mid="m1">Orders</main>'), inspectorAt > 0, axeAt > inspectorAt, body.includes('window.axe.run')], [true, true, true, true]);
+  assert.equal(body.lastIndexOf('</body>') > axeAt, true, 'the scripts go before </body>');
+});
+
+test('#625 serveMockup without axe-core installed serves the screen with only the inspector', async (t) => {
+  const ws = servedWorkspace(t);
+  const { serveMockup } = fresh(t, { noAxe: true });
+  const original = console.error;
+  console.error = () => {};
+  t.after(() => { console.error = original; });
+  const res = await serveMockup('mockup://p1/screens/orders/index.html', ws);
+  const body = String(res.body);
+  assert.deepEqual([res.status, body.includes('mockup:select'), body.includes('mockup:axe'), body.includes('window.axe')], [200, true, false, false]);
+});
+
+test('#625 serveMockup serves a stylesheet as is, with the CSP', async (t) => {
+  const ws = servedWorkspace(t);
+  const { serveMockup, MOCKUP_CSP } = fresh(t);
+  const res = await serveMockup('mockup://p1/kit/tokens.css', ws);
+  assert.deepEqual([res.status, String(res.body), /text\/css/.test(res.headers['content-type']), res.headers['content-security-policy'] === MOCKUP_CSP],
+    [200, ':root { --primary: #1a73e8; }', true, true]);
+});
+
+test('#625 serveMockup answers 404 for a missing file, a traversal or a .git path', async (t) => {
+  const ws = servedWorkspace(t);
+  const { serveMockup } = fresh(t);
+  const statuses = [];
+  for (const url of ['mockup://p1/screens/nope/index.html', 'mockup://p1/../secret.txt', 'mockup://p1/.git/config']) statuses.push((await serveMockup(url, ws)).status);
+  assert.deepEqual(statuses, [404, 404, 404]);
+});

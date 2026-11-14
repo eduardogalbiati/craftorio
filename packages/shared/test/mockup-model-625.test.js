@@ -155,3 +155,37 @@ test('#625 tokensCss writes one declaration per token, in order, inside a :root 
   assert.match(css, /:root\s*\{/);
   assert.deepEqual([css.indexOf('--primary: #1a73e8;') >= 0, css.indexOf('--gap: 8px;') > css.indexOf('--primary: #1a73e8;'), css.includes('----')], [true, true, false]);
 });
+
+// ---- the designer's chat turn (D8, Q-8) ----------------------------------------------------------
+
+const FENCE = '```';
+
+test('#625 parseDesignerReply splits the prose from the html block', () => {
+  const r = load().parseDesignerReply(`I moved the button.\n\n${FENCE}html\n<main><h1>Orders</h1></main>\n${FENCE}\nAnything else?`);
+  assert.deepEqual([r.html.trim(), r.reply.includes('I moved the button.'), r.reply.includes('Anything else?'), r.reply.includes(FENCE)],
+    ['<main><h1>Orders</h1></main>', true, true, false]);
+});
+
+test('#625 parseDesignerReply with several html blocks keeps the last one', () => {
+  const r = load().parseDesignerReply(`First try:\n${FENCE}html\n<p>one</p>\n${FENCE}\nBetter:\n${FENCE}html\n<p>two</p>\n${FENCE}`);
+  assert.equal(r.html.trim(), '<p>two</p>');
+  assert.equal(r.reply.includes('Better:'), true);
+});
+
+test('#625 parseDesignerReply with an empty html block changes nothing (html null)', () => {
+  const r = load().parseDesignerReply(`Nothing to change.\n${FENCE}html\n\n${FENCE}`);
+  assert.deepEqual([r.html, r.reply], [null, 'Nothing to change.']);
+});
+
+test('#625 parseDesignerReply with no html block (or no text) returns the prose and html null', () => {
+  const { parseDesignerReply } = load();
+  assert.deepEqual(parseDesignerReply('  Just an answer.  '), { reply: 'Just an answer.', html: null });
+  assert.deepEqual(parseDesignerReply(undefined), { reply: '', html: null });
+});
+
+test('#625 chatCostUsd sums the entries\' costUsd, ignoring entries without a cost', () => {
+  const { chatCostUsd } = load();
+  assert.equal(chatCostUsd([{ costUsd: 0.05 }, { role: 'user' }, { costUsd: 0.1 }, { costUsd: 'x' }]), 0.15);
+  assert.equal(chatCostUsd([]), 0);
+  assert.equal(chatCostUsd(null), 0);
+});
