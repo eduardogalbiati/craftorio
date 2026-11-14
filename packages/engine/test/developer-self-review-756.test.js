@@ -23,6 +23,7 @@ const WORKFLOWS = [
   'workflows/release.yaml',
   'workflows/test-backfill.yaml',
   '.multiagent/workflows/ai-development-local-hero.yaml',
+  '.multiagent/workflows/ai-development-remote-hero.yaml',
 ];
 
 const developerSkills = (file) => {

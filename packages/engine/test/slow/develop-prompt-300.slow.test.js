@@ -97,6 +97,29 @@ test('develop prompt (#418): stays under 40K characters with a long run folder p
   assert.ok(develop.prompt.length < 40000, `the develop prompt stays under 40K characters with a long run folder (got ${develop.prompt.length})`);
 });
 
+// #756: what the engine really sends (loadSkills expanding `uses`/`reads`, not a test helper): the
+// developer gets its self-review and is pointed to the shared reuse pass; the reviewer gets the reuse
+// pass inline with its code-review skill, before the verdict
+test('self-review (#756): the develop turn carries the self-review and points to the reuse pass; the code_review turn carries the reuse pass inline', { timeout: 120000 }, async (t) => {
+  const { finished, turns } = await mockRun(t);
+  assert.equal(finished.status, 'success', finished.error);
+  const develop = turns.find((x) => x.step === 'develop');
+  assert.ok(develop, 'the developer had a turn');
+  assert.ok(develop.prompt.includes('<skill name="developer-self-review"'), 'the develop prompt carries the developer-self-review skill');
+  const reuseDir = path.join('skills', 'reuse-pass');
+  assert.ok(develop.prompt.includes('<skill name="reuse-pass"') || develop.prompt.includes(reuseDir), 'the develop prompt carries or points to the shared reuse-pass skill');
+
+  const review = turns.find((x) => x.step === 'code_review');
+  assert.ok(review, 'the reviewer had a turn');
+  const at = review.prompt.indexOf('<skill name="reuse-pass"');
+  assert.ok(at >= 0, 'the code_review prompt carries the reuse-pass skill inline');
+  const flatReview = review.prompt.slice(at).replace(/\s+/g, ' ');
+  assert.match(flatReview, /literal values/i, 'the reviewer reads the search by literal values');
+  assert.match(flatReview, /mapping table/i, 'the reviewer reads the mapping table rule');
+  const verdict = review.prompt.search(/^#{2,4} .*verdict/im);
+  assert.ok(verdict > at, 'the reuse pass comes before the verdict section in the reviewer\'s prompt');
+});
+
 test('shared skills (#300): a section addressed to the developer or the test writer reaches only that role\'s prompt', { timeout: 120000 }, async (t) => {
   const { finished, turns } = await mockRun(t);
   assert.equal(finished.status, 'success', finished.error);
