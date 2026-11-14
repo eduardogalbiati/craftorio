@@ -2,8 +2,28 @@
 // check and the main window's preload and isolation. Pure of Electron.
 // sideWindowOptions({ dirname, devTools, min, defaults, bounds, title }) → the BrowserWindow options
 // (the same preload, contextIsolation on, no nodeIntegration); onScreenBounds(state, min, screen) →
-// state.bounds when sane, at least `min` and (with `screen`) still on a display, else null.
+// state.bounds when sane, at least `min` and (with `screen`) still on a display, else null;
+// windowState(statePath, tag) → { read(), write(patch) } (the window's JSON state file: {} when missing
+// or corrupt; write merges, makes the folder and logs a failure with `tag`).
+const fs = require('fs');
 const path = require('path');
+
+function windowState(statePath, tag) {
+  function read() {
+    try {
+      const s = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      return s && typeof s === 'object' ? s : {};
+    } catch { return {}; }
+  }
+  function write(patch) {
+    const s = { ...read(), ...patch };
+    try {
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify(s, null, 2));
+    } catch (e) { console.error(`[${tag}] could not save its state:`, e.message); }
+  }
+  return { read, write };
+}
 
 function onScreenBounds(state, min, screen) {
   const b = state && state.bounds;
@@ -40,4 +60,5 @@ function sideWindowOptions({ dirname, devTools = false, min, defaults, bounds = 
 module.exports = {
   onScreenBounds,
   sideWindowOptions,
+  windowState,
 };

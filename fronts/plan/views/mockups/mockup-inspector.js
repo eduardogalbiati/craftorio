@@ -2,7 +2,8 @@
 // screen (served on mockup:// by apps/desktop/host/mockups-window.js, which injects this file before
 // </body>; sandbox allow-scripts without allow-same-origin, so it reaches no window.api). A click on the
 // screen climbs to the nearest element with data-mid (the generator puts one on every node,
-// MockupModel.addMids) and posts { type: 'mockup:select', mid, selector, kit, text, box, html } to the
+// MockupModel.addMids) and posts { type: 'mockup:select', mid, selector, kit, text, box, html, add } (add:
+// Shift, Ctrl or ⌘ held, the element joins the selection) to the
 // editor (fronts/plan/views/mockups/mockup-editor.js), which draws it as a selection chip in the designer
 // chat. describeElement(el) → { mid, selector (ancestors' tag.class, ending with the element's), kit
 // (data-kit or null), text (trimmed, at most 200 characters), box ([x, y, width, height] rounded),
@@ -62,7 +63,8 @@
       if (!d) return;
       e.preventDefault();
       e.stopPropagation();
-      parent.postMessage({ type: 'mockup:select', ...d }, '*');
+      // Shift (or Ctrl/⌘) adds the element to the selection instead of replacing it
+      parent.postMessage({ type: 'mockup:select', ...d, add: !!(e.shiftKey || e.ctrlKey || e.metaKey) }, '*');
     }, true);
     return true;
   }

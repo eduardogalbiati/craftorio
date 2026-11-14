@@ -9,11 +9,11 @@
 // with the main window's preload and isolation (the same window.api and service channels) and, like
 // it, never navigates (apps/desktop/host/window-guards.js, #466). Closing it never stops an agent's turn: the
 // service runs the turns, the window only shows them.
-const fs = require('fs');
 const path = require('path');
 const {
   onScreenBounds,
   sideWindowOptions,
+  windowState,
 } = require('./side-window');
 const { guardWindow } = require('./window-guards');
 
@@ -23,20 +23,7 @@ const MIN = { width: 640, height: 480 };
 function createAgentsWindow({ BrowserWindow, statePath, dirname, page = null, devTools = false, screen = null }) {
   let win = null;
   let agent = null; // the agent the window shows (the last asked or reported)
-
-  function readState() {
-    try {
-      const s = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-      return s && typeof s === 'object' ? s : {};
-    } catch { return {}; }
-  }
-  function writeState(patch) {
-    const s = { ...readState(), ...patch };
-    try {
-      fs.mkdirSync(path.dirname(statePath), { recursive: true });
-      fs.writeFileSync(statePath, JSON.stringify(s, null, 2));
-    } catch (e) { console.error('[agents-window] could not save its state:', e.message); }
-  }
+  const { read: readState, write: writeState } = windowState(statePath, 'agents-window');
 
   function current() {
     return win && !win.isDestroyed() ? win : null;

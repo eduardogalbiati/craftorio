@@ -19,7 +19,7 @@
 
   const currentProjectId = async () => (await (window.CurrentProject?.resolve?.() ?? window.CurrentProject?.get?.())) || null;
   const errorLine = (msg) => { const p = $('#mockups-error'); if (p) p.textContent = msg || ''; };
-  const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+  const money = (n) => (window.I18n?.formatCost ? window.I18n.formatCost(n) : `$${(Number(n) || 0).toFixed(2)}`);
 
   // D15: the estimate of an action from the service (the page's MockupModel when it has none)
   async function estimate(action) {

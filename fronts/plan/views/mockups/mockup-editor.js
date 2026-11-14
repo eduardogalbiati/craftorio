@@ -6,18 +6,25 @@
 // the chosen frame's width (Q-5: Desktop 1440, Tablet 768, Phone 390); the versions (one commit per turn,
 // D10: Restore makes a new commit); and the designer chat (AgentChat, pasted images become refs/, D9).
 // A click on the canvas reaches the inspector inside the frame (mockup-inspector.js), whose
-// postMessage({ type: 'mockup:select' }) becomes the selection chip in the chat's compose slot; Send builds
-// MockupModel.buildChatMessage's fields (selection, refs, frame, message) for mockups:chat, then draws the
-// new version, the designer's reply and the kit lint's problems (D11). A second open of the window
-// (mockups-window:show) switches the screen. Test ids: mockup-editor, mockup-canvas, mockup-chat,
-// mockup-selection-chip, mockup-frames, mockup-versions, mockup-lint.
-// Uses app.js globals at call time (esc, api, errMsg, showToast), AgentChat, MockupModel.
+// postMessage({ type: 'mockup:select' }) becomes a selection chip in the chat's compose slot (a click
+// replaces the selection, Shift/Ctrl/⌘ adds to it); Send builds MockupModel.buildChatMessage's fields
+// (selection, refs, frame, message) for mockups:chat (one turn of the screen's persistent designer
+// session, D8), then draws the new version, the designer's reply and the kit lint's problems (D11).
+// The axe the canvas runs on each version (mockup:axe, apps/desktop/host/mockups-window.js) is the
+// mockup-axe badge. The chat's head slot shows the next turn's estimate (D15, chat-edit) and what this
+// mockup's chat has cost so far (Q-8, MockupModel.chatCostUsd). Not yet (phase 2): a selection's cropped
+// image (`crop`) and the Area mode for regions. A second open of the window (mockups-window:show)
+// switches the screen. Test ids: mockup-editor, mockup-canvas, mockup-chat, mockup-selection-chip,
+// mockup-frames, mockup-versions, mockup-lint, mockup-axe, mockup-chat-cost.
+// Uses app.js globals at call time (esc, api, errMsg, showToast, fmtCost), AgentChat, MockupModel.
 (() => {
   const query = () => { try { return new URLSearchParams(window.location?.search || ''); } catch { return new URLSearchParams(); } };
   const isWindowPage = () => query().get('window') === 'mockup';
-  // projectId, slug, frame (a FRAMES id), selection ([inspector descriptions]), versions, problems (kit lint)
-  const ed = { projectId: null, slug: null, frame: 'desktop-1440', selection: [], versions: [], problems: [], chat: null, root: null };
-  const frames = () => window.MockupModel?.FRAMES || [{ id: 'desktop-1440', label: 'Desktop', width: 1440 }];
+  // projectId, slug, frame (a FRAMES id), selection ([inspector descriptions]), versions, problems (kit
+  // lint), axe (the canvas' violations, null before it reports), totalUsd (the chat's cost so far)
+  const ed = { projectId: null, slug: null, frame: null, selection: [], versions: [], problems: [], axe: null, totalUsd: 0, chat: null, root: null };
+  const frames = () => window.MockupModel.FRAMES;
+  const money = (n) => (window.I18n?.formatCost ? window.I18n.formatCost(n) : `$${(Number(n) || 0).toFixed(2)}`);
   const q = (sel) => ed.root?.querySelector(sel) || null;
   const canvasUrl = (bust) => `mockup://${encodeURIComponent(ed.projectId)}/screens/${encodeURIComponent(ed.slug)}/index.html${bust ? `?v=${encodeURIComponent(bust)}` : ''}`;
 
@@ -30,6 +37,7 @@
             <h1 id="mockup-title"></h1>
             <span id="mockup-version" class="badge neutral mono"></span>
             <span id="mockup-lint" class="badge" data-testid="mockup-lint"></span>
+            <span id="mockup-axe" class="badge neutral hidden" data-testid="mockup-axe"></span>
           </div>
           <div class="seg sm" role="group" aria-label="${t('mockups.frame')}" data-testid="mockup-frames">${seg}</div>
         </header>
@@ -70,7 +78,24 @@
     const lint = q('#mockup-lint');
     lint.className = `badge ${ed.problems.length ? 'warning' : 'success'}`;
     lint.textContent = ed.problems.length ? t('mockups.lint_problems', { count: ed.problems.length }) : t('mockups.lint_clean');
-    lint.title = ed.problems.map((p) => p.message || p.kind || '').join('\n');
+    lint.title = ed.problems.map((p) => `${p.rule}: ${p.value}`).join('\n');
+    const axe = q('#mockup-axe');
+    axe.classList.toggle('hidden', !ed.axe);
+    if (ed.axe) {
+      const v = ed.axe.violations || [];
+      axe.className = `badge ${ed.axe.error || v.length ? 'warning' : 'success'}`;
+      axe.textContent = v.length ? t('mockups.axe_problems', { count: v.length }) : t('mockups.axe_clean');
+      axe.title = ed.axe.error || v.map((x) => `${x.id} (${x.impact || '—'}, ${x.nodes}): ${x.help}`).join('\n');
+    }
+  }
+
+  // D15/Q-8: the next turn's estimate and the chat's total, in the chat's head slot
+  function renderCost() {
+    const box = ed.chat?.slot?.('head');
+    if (!box) return;
+    const e = window.MockupModel.estimateCost('chat-edit');
+    const estimate = t('mockups.estimate', { min: money(e.min), max: money(e.max), model: e.model || '—' });
+    box.innerHTML = `<p class="muted small mockup-chat-cost" data-testid="mockup-chat-cost">${esc(t('mockups.chat_cost', { estimate, total: money(ed.totalUsd) }))}</p>`;
   }
 
   function renderVersions() {
@@ -98,9 +123,15 @@
 
   function onMessage(e) {
     const canvas = q('#mockup-canvas');
-    if (!canvas || e.source !== canvas.contentWindow || e.data?.type !== 'mockup:select' || !e.data.mid) return;
-    const { mid, selector, kit, text, box, html } = e.data;
-    ed.selection = [{ mid: String(mid), selector, kit: kit || null, text, box, html }];
+    if (!canvas || e.source !== canvas.contentWindow) return;
+    if (e.data?.type === 'mockup:axe') { ed.axe = { violations: Array.isArray(e.data.violations) ? e.data.violations : [], error: e.data.error || null }; renderHead(); return; }
+    if (e.data?.type !== 'mockup:select' || !e.data.mid) return;
+    const { mid, selector, kit, text, box, html, add } = e.data;
+    const picked = { mid: String(mid), selector, kit: kit || null, text, box, html };
+    const at = ed.selection.findIndex((s) => s.mid === picked.mid);
+    if (!add) ed.selection = [picked];
+    else if (at >= 0) ed.selection.splice(at, 1);
+    else ed.selection.push(picked);
     renderChips();
     ed.chat?.refresh?.();
   }
@@ -115,10 +146,13 @@
     try {
       const [versions, history] = await Promise.all([api.listMockupVersions(projectId, slug), api.readMockupChat(projectId, slug)]);
       ed.versions = Array.isArray(versions) ? versions : [];
+      ed.totalUsd = window.MockupModel.chatCostUsd(history);
       ed.chat?.setMessages(Array.isArray(history) ? history : []);
     } catch (e) { errorLine(errMsg(e)); }
+    ed.axe = null; // the new version's axe comes from the canvas
     if (canvas) canvas.src = canvasUrl(bust || ed.versions[0]?.commit || '');
     renderHead();
+    renderCost();
     renderVersions();
   }
 
@@ -135,7 +169,6 @@
     ed.selection = [];
     renderChips();
     await load(ed.projectId, ed.slug, { bust: out?.commit || String(Date.now()) });
-    if (out?.runId) showToast(t('mockups.designer_started'), ed.slug);
     return { ok: true };
   }
 
@@ -170,7 +203,7 @@
 
   function mount(el) {
     ed.root = el;
-    ed.frame = window.MockupModel?.DEFAULT_FRAME || ed.frame;
+    ed.frame = window.MockupModel.DEFAULT_FRAME;
     el.innerHTML = markup();
     el.addEventListener('click', onClick);
     window.addEventListener('message', onMessage);

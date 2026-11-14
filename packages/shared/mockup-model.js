@@ -6,7 +6,9 @@
 // lintMockup({ html, css, tokens }) (the free kit lint of every turn, D11: raw-color, unknown-token,
 // large-script); estimateCost(action) (D15, shown before every real action, USD); extractTokens(files)
 // and tokensCss(tokens) (the deterministic machine step of the kit, D2); draftScreen({ title, prompt })
-// (the simulated designer's first version of a screen, static HTML importing the kit, D4).
+// (the simulated designer's first version of a screen, static HTML importing the kit, D4); ACTIONS (COSTS'
+// keys); parseDesignerReply(text) → { reply, html } (a designer turn's prose and its last ```html block, D8);
+// chatCostUsd(entries) (Q-8: a screen's designer chat total).
 // Browser: window.MockupModel; Node: module.exports. The domain is fronts/plan/engine/domains/mockups.js.
 (function (root) {
   'use strict';
@@ -172,15 +174,35 @@
       + `</head><body>${body}</body></html>\n`;
   }
 
+  // ---- the designer's chat turn (D8) -----------------------------------------------------------
+
+  // a designer answer: its prose (the reply) and the new screen, the last ```html block (null: no change)
+  function parseDesignerReply(text) {
+    const all = String(text ?? '');
+    const blocks = [...all.matchAll(/```html[^\n]*\n([\s\S]*?)```/gi)];
+    const last = blocks.at(-1);
+    if (!last) return { reply: all.trim(), html: null };
+    return { reply: (all.slice(0, last.index) + all.slice(last.index + last[0].length)).trim(), html: last[1].trim() ? last[1] : null };
+  }
+
+  // Q-8: what a screen's designer chat has cost so far (USD), from its entries' costUsd
+  function chatCostUsd(entries) {
+    const sum = (Array.isArray(entries) ? entries : []).reduce((n, m) => n + (Number(m?.costUsd) || 0), 0);
+    return +sum.toFixed(6);
+  }
+
   const api = {
+    ACTIONS: Object.keys(COSTS),
     DEFAULT_FRAME,
     FRAMES,
     addMids,
     buildChatMessage,
+    chatCostUsd,
     draftScreen,
     estimateCost,
     extractTokens,
     lintMockup,
+    parseDesignerReply,
     slugify,
     tokensCss,
   };

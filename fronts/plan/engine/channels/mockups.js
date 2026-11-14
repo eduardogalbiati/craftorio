@@ -6,9 +6,9 @@
 //   stylesheets → kit/tokens.css, free), then, real only, the ui-kit-map workflow for the components (D2);
 // - mockups:create-screen: from a prompt (or a Discovery card's text); simulated (MULTIAGENT_SIMULATION_ONLY)
 //   the simulated designer writes MockupModel.draftScreen at once, real a mockup-generate run writes it;
-// - mockups:chat: one designer turn (MockupModel.buildChatMessage: selection, refs, message), kept in
-//   chat/<slug>.jsonl; simulated the designer answers and commits a turn at once, real a mockup-generate
-//   run (mode edit) answers and its html becomes the turn's commit (one commit per turn, D10);
+// - mockups:chat: one designer turn (MockupModel.buildChatMessage: selection, refs, message) in the screen's
+//   persistent designer session (D8, ../domains/mockup-designer.js, no workflow run), kept in
+//   chat/<slug>.jsonl; → { commit, problems, reply, costUsd, totalUsd } (one commit per turn, D10);
 // - mockups:save-turn / mockups:restore / mockups:save-ref: a turn's html, a version back, a pasted image;
 // - mockups:open-editor: the editor window (ctx.host.openMockupEditor, desktop only; { opened: false } in a browser).
 // The designer never writes to the project's repository: its runs' outputs are written here, into the
@@ -16,6 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const designer = require('../domains/mockup-designer');
 const mockups = require('../domains/mockups');
 const MockupModel = require('@multiagent/shared/mockup-model');
 const projects = require('@multiagent/engine/domains/project/projects');
@@ -28,7 +29,6 @@ const { args, listOf, nullable, OBJECT, PROJECT_ID, shape, STRING, text } = sche
 const WORKFLOW = 'mockup-generate';
 const KIT_WORKFLOW = 'ui-kit-map.yaml';
 const SLUG = text(100);
-const ACTIONS = ['build-kit', 'generate-screen', 'chat-edit', 'review-screen', 'lint'];
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'vendor', '.next']);
 const STYLE_FILE = /\.(css|scss|less)$|^tailwind\.config\.[cm]?[jt]s$|^theme\.[cm]?[jt]s$/i;
 const MAX_FILES = 200;
@@ -125,23 +125,22 @@ module.exports = (ctx) => {
     return { slug, commit, runId: started?.runId || null };
   }
 
+  // one designer turn in its persistent session (D8, ../domains/mockup-designer.js), no workflow run
   async function chat({ projectId, slug, message, selection = [], refs = [], area = null, frame = null }) {
     const versions = mockups.listVersions(wsRoot(), projectId, slug);
     let payload;
     try {
       payload = MockupModel.buildChatMessage({ mockup: slug, version: versions[0]?.commit?.slice(0, 7) || '', frame, selection, area, refs, message });
     } catch (e) { throw clientError(e.message); }
-    mockups.appendChat(wsRoot(), projectId, slug, { role: 'user', text: payload.message, payload });
-    if (simulation.simulationOnly()) {
-      // the simulated designer: a marked turn, so each message is one commit (D10), no model call
-      const html = mockups.screenHtml(wsRoot(), projectId, slug).replace(/(<\/body>|$)/i, `<!-- designer: ${payload.message.replace(/--/g, '- -')} -->$1`);
-      const turn = mockups.saveTurn(wsRoot(), projectId, { slug, html, message: payload.message });
-      const reply = `Simulated designer: noted "${payload.message}"${payload.selection.length ? ` for ${payload.selection.map((s) => s.mid).join(', ')}` : ''}.`;
-      mockups.appendChat(wsRoot(), projectId, slug, { role: 'assistant', text: reply });
-      return { ...turn, reply, runId: null };
-    }
-    const started = await startDesigner(projectId, slug, { mode: 'edit', title: slug, prompt: JSON.stringify(payload), message: payload.message });
-    return { commit: null, problems: [], reply: null, runId: started?.runId || null };
+    return designer.designerTurn({
+      workspace: wsRoot(),
+      projectId,
+      slug,
+      payload,
+      projectFolder: projectOf(projectId)?.folder || null,
+      skillsDirs: [ctx.ws?.skills, ctx.BUNDLED_SKILLS_DIR],
+      simulated: simulation.simulationOnly(),
+    });
   }
 
   async function buildKit({ projectId }) {
@@ -186,7 +185,7 @@ module.exports = (ctx) => {
       channel: 'mockups:estimate',
       method: 'estimateMockupCost',
       params: ['action'],
-      schema: { params: args({ action: { type: 'string', enum: ACTIONS } }, ['action']), result: shape({ model: nullable(STRING), min: { type: 'number' }, max: { type: 'number' } }, ['min', 'max']) },
+      schema: { params: args({ action: { type: 'string', enum: MockupModel.ACTIONS } }, ['action']), result: shape({ model: nullable(STRING), min: { type: 'number' }, max: { type: 'number' } }, ['min', 'max']) },
       fn: ({ action }) => MockupModel.estimateCost(action),
     },
     // the kit's machine step (free) and, real only, the ui-kit-map run for the components

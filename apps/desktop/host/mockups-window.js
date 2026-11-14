@@ -12,12 +12,13 @@
 // traversal, plain or percent-encoded, or a .git path) and MOCKUP_CSP is the header of every answer (no
 // network: default-src and connect-src 'none', inline scripts and styles of the agent's markup only).
 // main.js registers the scheme and serves it with protocol.handle, injecting the inspector
-// (fronts/plan/views/mockups/mockup-inspector.js) into the html.
+// (fronts/plan/views/mockups/mockup-inspector.js) and axe (D11, when axe-core is installed) into the html.
 const fs = require('fs');
 const path = require('path');
 const {
   onScreenBounds,
   sideWindowOptions,
+  windowState,
 } = require('./side-window');
 const { guardWindow } = require('./window-guards');
 
@@ -48,21 +49,32 @@ const TYPES = {
 // the element inspector, run inside the canvas (the index.html page loads the same file for the editor)
 const INSPECTOR = path.join(__dirname, '..', '..', '..', 'fronts', 'plan', 'views', 'mockups', 'mockup-inspector.js');
 
+// D11: axe on every version, inside the canvas (its origin is opaque: the editor cannot reach in), with
+// the screenshot checks' rules (packages/engine/domains/evidence/ui-review-checks.js AXE_RULES); the
+// result goes to the editor as { type: 'mockup:axe', violations: [{ id, impact, help, nodes }] }.
+// axe-core is a development dependency: without it (a packaged app) the canvas only has the inspector.
+let axeScript = null;
+function axeTag() {
+  if (axeScript !== null) return axeScript;
+  axeScript = '';
+  try {
+    const source = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+    const { AXE_RULES } = require('@multiagent/engine/domains/evidence/ui-review-checks');
+    const run = `window.addEventListener('load', async () => {
+      if (!window.axe || window.parent === window) return;
+      try {
+        const r = await window.axe.run(document, { runOnly: { type: 'rule', values: ${JSON.stringify(Object.keys(AXE_RULES))} }, resultTypes: ['violations'] });
+        window.parent.postMessage({ type: 'mockup:axe', violations: r.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length })) }, '*');
+      } catch (e) { window.parent.postMessage({ type: 'mockup:axe', error: String((e && e.message) || e) }, '*'); }
+    });`;
+    axeScript = [source, run].map((s) => `<script>${s.replace(/<\/script/gi, '<\\/script')}</script>`).join('');
+  } catch (e) { console.error('[mockups-window] no axe in the canvas:', e.message); }
+  return axeScript;
+}
+
 function createMockupsWindow({ BrowserWindow, statePath, dirname, page = null, devTools = false, screen = null }) {
   let win = null;
-
-  function readState() {
-    try {
-      const s = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-      return s && typeof s === 'object' ? s : {};
-    } catch { return {}; }
-  }
-  function writeState(patch) {
-    try {
-      fs.mkdirSync(path.dirname(statePath), { recursive: true });
-      fs.writeFileSync(statePath, JSON.stringify({ ...readState(), ...patch }, null, 2));
-    } catch (e) { console.error('[mockups-window] could not save its state:', e.message); }
-  }
+  const { read: readState, write: writeState } = windowState(statePath, 'mockups-window');
 
   function current() {
     return win && !win.isDestroyed() ? win : null;
@@ -116,7 +128,7 @@ async function serveMockup(url, workspace) {
   if (ext === '.html') {
     let inspector = '';
     try { inspector = await fs.promises.readFile(INSPECTOR, 'utf8'); } catch (e) { console.error('[mockups-window] no inspector:', e.message); }
-    const script = `<script>${inspector.replace(/<\/script/gi, '<\\/script')}</script>`;
+    const script = `<script>${inspector.replace(/<\/script/gi, '<\\/script')}</script>${axeTag()}`;
     const html = body.toString('utf8');
     const at = html.toLowerCase().lastIndexOf('</body>');
     body = at >= 0 ? html.slice(0, at) + script + html.slice(at) : html + script;
