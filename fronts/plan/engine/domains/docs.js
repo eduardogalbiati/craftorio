@@ -44,7 +44,8 @@ const DocModel = require('@multiagent/shared/doc-model');
 const { gitOut } = require('@multiagent/engine/service/common');
 
 const DOCS = ['intent', 'spec', 'plan']; // #633: the plan, the pre-flow's third document
-const READABLE = [...DOCS, 'maintain']; // #650: maintain.md is read and listed, never created or accepted
+const LISTED = [...DOCS, 'test']; // #702: test.md (written by the runs, sdlc-record / sdlc-test) is listed, never created here
+const READABLE = [...LISTED, 'maintain']; // #650: maintain.md is read and listed, never created or accepted
 const ITEM = /^[a-z0-9][a-z0-9._-]{0,99}$/i;
 const MESSAGE_ID = /^[\w.:-]{1,100}$/;
 const COMMIT = /^[0-9a-f]{7,40}$/i;
@@ -142,13 +143,15 @@ function listItems(dir) {
     const docs = [];
     let stage = null;
     let title = null;
-    for (const doc of DOCS) {
+    for (const doc of LISTED) {
       const text = readText(path.join(work, entry.name, `${doc}.md`));
       if (text === null) continue;
       const fm = DocModel.frontMatter(text);
-      docs.push({ doc, file: `docs/work/${entry.name}/${doc}.md`, status: fm.status || 'draft', translation: fm.translation || null });
+      // #702: a plan whose Progress is N of N done is built (sdlc-record sets it too); a status's inline comment is not shown
+      const status = doc === 'plan' && DocModel.planBuilt(text) ? 'built' : String(fm.status || 'draft').replace(/\s+#.*$/, '');
+      docs.push({ doc, file: `docs/work/${entry.name}/${doc}.md`, status, translation: fm.translation || null });
       stage = fm.stage || doc;
-      title = titleOf(text) || title;
+      if (doc !== 'test') title = titleOf(text) || title;
     }
     // #650: the Maintain stage's document, apart from `docs` (the pre-flow's, whose latest is the row's
     // stage and pill) for the editor's stepper

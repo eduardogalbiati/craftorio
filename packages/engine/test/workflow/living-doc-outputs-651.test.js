@@ -50,41 +50,16 @@ test('#651 convertValue: an object input takes an object as it is, a JSON text p
   assert.equal(convertValue([1, 2], def), undefined);
 });
 
-// ---- sdlc-record's record prompt, rendered from the chained run's inputs ---------------------------------
+// ---- sdlc-record's record step, rendered from the chained run's inputs ---------------------------------
+// #702: a machine step (type: record_docs, no prompt); the run, its commit, PR, issues and evidence
+// go to record-docs-step.js as inputs (tested in test/record-docs-702.test.js)
 
-const recordPrompt = (inputs) => {
+test('#651 sdlc-record\'s record step renders the item and the branch named after the item and the run', () => {
   const wf = loadWorkflow(path.join(WORKFLOWS, 'sdlc-record.yaml'));
   const step = wf.steps.find((s) => s.id === 'record');
-  return render(step.prompt, { inputs: { item: 'write-doc', base_branch: 'main', ...inputs }, run_id: 'r-1', steps: {} });
-};
-
-test('#651 sdlc-record\'s prompt shows the run, its commit, its PR, its issues and its evidence', () => {
-  const text = recordPrompt({
-    run: '20261103-101010-abcd1234',
-    merged_commit: '1a2b3c4',
-    pr_url: 'https://example.test/pr/7',
-    issues: ['https://example.test/issues/12'],
-    evidence: { suite: 'pass', e2e: '3 scenarios passed', screenshots: [{ path: 'evidence/a.png', caption: 'A' }], axe: [] },
-  });
-  assert.equal(text.includes('Record the Code & Build run 20261103-101010-abcd1234'), true);
-  assert.equal(text.includes('merged commit: 1a2b3c4'), true);
-  assert.equal(text.includes('PR / MR: https://example.test/pr/7'), true);
-  assert.equal(text.includes('issues: https://example.test/issues/12'), true);
-  assert.equal(text.includes('suite: pass'), true, 'the evidence is listed');
-  assert.equal(text.includes('evidence/a.png'), true, 'the screenshots are listed');
-  assert.equal(text.includes('docs/work/write-doc/plan.md'), true);
-  assert.equal(text.includes('docs/work/write-doc/test.md'), true);
-  assert.equal(text.includes('sdlc-record/write-doc-r-1'), true, 'the branch is named after the item and the run');
-});
-
-test('#651 sdlc-record\'s prompt says "none" for what the run did not give (no commit, PR, issues or evidence)', () => {
-  const text = recordPrompt({ run: 'r-0', merged_commit: '', pr_url: '', issues: [] });
-  assert.equal(text.includes('merged commit: none'), true);
-  assert.equal(text.includes('PR / MR: none (local mode)'), true);
-  assert.equal(text.includes('issues: none named'), true);
-  assert.match(text, /evidence \(suite, e2e, screenshots, axe\):\s*\n\s*none\s*\n/);
-  assert.equal(text.includes('null'), false, 'no "null" leaks into the prompt');
-  assert.equal(text.includes('undefined'), false);
+  const scope = { inputs: { item: 'write-doc', base_branch: 'main', run: 'r-0' }, run_id: 'r-1', steps: {} };
+  assert.deepEqual([step.type, step.prompt, render(step.item, scope), render(step.branch, scope)],
+    ['record_docs', undefined, 'write-doc', 'sdlc-record/write-doc-r-1']);
 });
 
 // ---- write-doc: the routes after the approval --------------------------------------------------------------

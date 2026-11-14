@@ -202,6 +202,35 @@
     return batches;
   }
 
+  // #702: a work item's plan named in an issue (`docs/work/<item>/plan.md`; a spec or intent does not count)
+  const PLAN_PATH = /docs\/work\/([a-z0-9][a-z0-9._-]{0,99})\/plan\.md/i;
+
+  /** The work item whose plan a text names (`docs/work/<item>/plan.md`), or ''. */
+  function planItem(text) {
+    const m = String(text || '').match(PLAN_PATH);
+    return m && !m[1].includes('..') ? m[1] : '';
+  }
+
+  /**
+   * #702 the default then of a Code & Build run (feature, fix): when it finished with success and its
+   * task or one of its issues names a work item's plan, sdlc-record records it in that item's docs
+   * (the run itself, its evidence, merged commit, PR and issues); else null (a failed or stopped run
+   * starts nothing, a run without an item chains nothing). The service applies it at the run's start,
+   * so it is shown and editable on the Run screen like any chain.
+   */
+  function defaultThen({ status, task, issues } = {}) {
+    if (status !== 'success') return null;
+    const texts = [task, ...(Array.isArray(issues) ? issues : []).map((i) => (plain(i) ? `${i.title || ''}\n${i.body || ''}` : i))];
+    const item = texts.map(planItem).find(Boolean);
+    if (!item) return null;
+    return {
+      action: 'workflow',
+      workflow: 'sdlc-record.yaml',
+      map: { run: RUN_SOURCE, evidence: 'evidence', merged_commit: 'merged_commit', pr_url: 'pr_url', issues: 'issues' },
+      inputs: { item },
+    };
+  }
+
   /**
    * Why a finished run's chain does not go on ('' = it goes on): only a success continues, and a
    * workflow that declares `merged_commit` (a development workflow) must have merged. Simulated runs
@@ -335,6 +364,7 @@
     chainWorkflows,
     convertValue,
     defaultMap,
+    defaultThen,
     estimateCost,
     estimateText,
     nextInputs,
@@ -342,6 +372,7 @@
     normalizeThen,
     pipelineOf,
     pipelineStagesHtml,
+    planItem,
     producedIssues,
     queueBatches,
     runChain,

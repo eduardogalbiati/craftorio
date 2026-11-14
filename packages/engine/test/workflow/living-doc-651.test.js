@@ -61,12 +61,18 @@ test('#651 sdlc-record takes the Code & Build run and its outputs as inputs (run
   assert.equal(String(inputs.run?.type), 'run');
 });
 
+// #702: the record is a machine step (type: record_docs, no model); what it writes is the step
+// module's (packages/engine/engine/record-docs-step.js, tested in test/record-docs-702.test.js)
+const RECORD_DOCS = path.join(root, 'packages', 'engine', 'engine', 'record-docs-step.js');
+const recordDocsText = () => require('fs').readFileSync(RECORD_DOCS, 'utf8');
+
 test('#651 sdlc-record writes the Progress row of plan.md with the run, the commit and the PR', () => {
-  const text = stepText(loadBundled('sdlc-record'), 'record');
-  assert.equal(text.includes('plan.md'), true, 'the record step names plan.md');
-  assert.equal(/progress/i.test(text), true, 'the record step names the Progress table');
-  for (const input of ['inputs.run', 'inputs.merged_commit', 'inputs.pr_url']) {
-    assert.equal(text.includes(input), true, `the record step uses ${input}`);
+  assert.equal(step(loadBundled('sdlc-record'), 'record')?.type, 'record_docs');
+  const text = recordDocsText();
+  assert.equal(text.includes('plan.md'), true, 'record_docs names plan.md');
+  assert.equal(/## Progress/.test(text), true, 'record_docs names the Progress table');
+  for (const input of ['merged_commit', 'pr_url', 'run']) {
+    assert.equal(text.includes(input), true, `record_docs uses ${input}`);
   }
 });
 
@@ -76,9 +82,10 @@ test('#651 sdlc-record no longer writes a separate progress.md', () => {
 });
 
 test('#651 sdlc-record writes the run\'s evidence row in test.md (suite, E2E, screenshots, axe)', () => {
-  const text = stepText(loadBundled('sdlc-record'), 'record');
-  assert.equal(text.includes('test.md'), true, 'the record step names test.md');
-  assert.equal(text.includes('inputs.evidence'), true, 'the record step uses inputs.evidence');
+  assert.equal(step(loadBundled('sdlc-record'), 'record')?.type, 'record_docs');
+  const text = recordDocsText();
+  assert.equal(text.includes('test.md'), true, 'record_docs names test.md');
+  assert.equal(text.includes('evidence'), true, 'record_docs uses the evidence');
   const lower = text.toLowerCase();
   assert.deepEqual(['suite', 'e2e', 'screenshots', 'axe'].filter((w) => !lower.includes(w)), []);
 });
@@ -110,7 +117,9 @@ test('#651 a then from a feature run to sdlc-record fills its inputs from the ru
 
 test('#651 sdlc-test records the Test stage in test.md at the code owner\'s gate', () => {
   const wf = loadBundled('sdlc-test');
-  assert.equal(stepText(wf, 'record').includes('test.md'), true, 'the record step names test.md');
+  // #702: record_docs steps set test.md's status (in review before the gate, passed or failed after it)
+  const stages = (wf.steps || []).filter((s) => s?.type === 'record_docs').map((s) => s.stage);
+  assert.deepEqual(['in review', 'passed', 'failed'].filter((s) => !stages.includes(s)), [], `its stages: ${stages}`);
   const gates = (wf.steps || []).filter((s) => s?.type === 'human_approval');
   assert.equal(gates.some((g) => /code owner/i.test(`${g.message || ''} ${g.approver || ''} ${g.help || ''}`)), true,
     'a human_approval gate names the code owner');

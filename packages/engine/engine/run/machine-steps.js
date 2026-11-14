@@ -23,7 +23,10 @@ const checkStep = require('../check-step');
 const { childEnv } = require('../child-env');
 const evidence = require('../../domains/evidence/evidence');
 const expectedFiles = require('../expected-files');
-const { recordDocs } = require('../record-docs-step');
+const {
+  recordDocs,
+  recordStage,
+} = require('../record-docs-step');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
 const { changedFiles, selectionLines } = require('../affected-tests');
@@ -633,17 +636,21 @@ const methods = {
     const inputs = this.ctx.inputs || {};
     const item = (step.item ? render(String(step.item), this.ctx) : String(inputs.item ?? '')).trim();
     const run = String(inputs.run ?? '').trim();
+    // sdlc-test's own record (`stage:`): the Test stage's status and summary in test.md
+    const stage = step.stage ? render(String(step.stage), this.ctx).trim() : '';
     const branch = (step.branch ? render(String(step.branch), this.ctx) : `sdlc-record/${item}-${this.runId}`).trim();
     const skipped = (message) => ({ kind: 'record_docs', status: 'skipped', item, run, commit: null, files: [], problems: [], built: false, message });
     let output;
-    if (this.machine.simulated) output = skipped(`Simulated: run ${run || '(none)'} would be recorded in docs/work/${item}/plan.md (Progress) and test.md (evidence).`);
+    if (this.machine.simulated) output = skipped(stage ? `Simulated: docs/work/${item}/test.md would be set to status ${stage}.` : `Simulated: run ${run || '(none)'} would be recorded in docs/work/${item}/plan.md (Progress) and test.md (evidence).`);
     else if (!this.worktree || !this.ctx.worktree_dir) output = skipped('The run has no worktree of its own: nothing is written in the repository folder.');
     else {
       try {
-        output = await recordDocs(this.ctx.worktree_dir, {
-          item, run, branch, merged_commit: inputs.merged_commit, pr_url: inputs.pr_url, issues: inputs.issues, evidence: inputs.evidence,
-          runDir: run ? path.join(path.dirname(this.runDir), run) : null,
-        });
+        output = stage
+          ? await recordStage(this.ctx.worktree_dir, { item, status: stage, summary: step.stage_summary ? render(String(step.stage_summary), this.ctx) : '', branch })
+          : await recordDocs(this.ctx.worktree_dir, {
+            item, run, branch, merged_commit: inputs.merged_commit, pr_url: inputs.pr_url, issues: inputs.issues, evidence: inputs.evidence,
+            runDir: run ? path.join(path.dirname(this.runDir), run) : null,
+          });
       } catch (e) {
         output = { ...skipped(`Nothing recorded: ${e.message}`), status: 'invalid' };
       }

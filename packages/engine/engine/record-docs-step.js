@@ -15,6 +15,9 @@
 //     problem writes nothing and commits nothing (status invalid, problems listed); else ONE commit
 //     `docs(<item>): record run <run>` on `branch` when the checkout is detached (a run's worktree).
 // It reads only those inputs: the run's declared `evidence` output, its merged_commit / pr_url.
+// - recordStage(repoDir, { item, status, summary?, branch? }) (a step with `status:`, used by sdlc-test):
+//   test.md / test.pt-BR.md get `status` (in review | passed | failed) and the summary under `## Summary`
+//   / `## Resumo`; the same lint, then ONE commit `docs(<item>): test stage <status>`.
 'use strict';
 
 const fs = require('fs');
@@ -218,4 +221,60 @@ async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_
   };
 }
 
-module.exports = { recordDocs };
+// The Test workflow's own record (sdlc-test): test.md and test.pt-BR.md get `status` and the run's
+// summary under `## Summary` / `## Resumo` (replaced at each run), DocModel's lint before ONE commit.
+const STAGE_STATUSES = ['in review', 'passed', 'failed'];
+const SUMMARY = { en: '## Summary', pt: '## Resumo' };
+
+function withSummary(text, lang, summary) {
+  const lines = text.replace(/\n*$/, '').split('\n');
+  const at = lines.findIndex((l) => l.trim() === SUMMARY[lang]);
+  const block = [SUMMARY[lang], '', ...String(summary).trim().split('\n')];
+  if (at < 0) return `${[...lines, '', ...block].join('\n')}\n`;
+  let end = lines.findIndex((l, i) => i > at && /^#{1,2}\s/.test(l));
+  if (end < 0) end = lines.length;
+  lines.splice(at, end - at, ...block, ...(end < lines.length ? [''] : []));
+  return `${lines.join('\n')}\n`;
+}
+
+async function recordStage(repoDir, { item, status, summary, branch } = {}) {
+  const name = String(item ?? '');
+  if (!ITEM.test(name) || name.includes('..')) throw new Error(`Not a work item of docs/work: ${name}`);
+  const wanted = String(status ?? '').trim();
+  if (!STAGE_STATUSES.includes(wanted)) throw new Error(`Not a Test stage status: ${wanted} (${STAGE_STATUSES.join(', ')})`);
+  const folder = path.join(repoDir, 'docs', 'work', name);
+  const rel = (f) => `docs/work/${name}/${f}`;
+  const original = { 'test.md': readText(path.join(folder, 'test.md')), 'test.pt-BR.md': readText(path.join(folder, 'test.pt-BR.md')) };
+  if (original['test.md'] === null) throw new Error(`No test document for ${name}: ${rel('test.md')} is missing.`);
+  const next = {};
+  for (const [file, lang] of [['test.md', 'en'], ['test.pt-BR.md', 'pt']]) {
+    if (original[file] === null) continue;
+    const text = String(summary ?? '').trim() ? withSummary(original[file], lang, summary) : original[file];
+    next[file] = DocModel.setFrontMatter(text, { status: wanted });
+  }
+  const exists = (target) => fs.existsSync(path.join(folder, target));
+  const problems = [
+    ...DocModel.lintDoc({ kind: 'test', markdown: next['test.md'], exists }).problems.map((p) => ({ file: rel('test.md'), ...p })),
+    ...(next['test.pt-BR.md'] ? DocModel.lintTranslation(next['test.md'], next['test.pt-BR.md']).map((p) => ({ file: rel('test.pt-BR.md'), ...p })) : []),
+  ];
+  const base = { kind: 'record_docs', item: name, status_set: wanted, problems };
+  if (problems.length) return { ...base, status: 'invalid', commit: null, files: [], message: `Nothing recorded: DocModel's lint found ${problems.length} problem(s) in the test documents of ${name}.` };
+  const files = [];
+  for (const [file, text] of Object.entries(next)) {
+    if (text === original[file]) continue;
+    fs.writeFileSync(path.join(folder, file), text);
+    files.push(rel(file));
+  }
+  if (!files.length) return { ...base, status: 'recorded', commit: null, files, message: `${rel('test.md')} is ${wanted} already.` };
+  if (branch && !(await git(['symbolic-ref', '-q', 'HEAD'], repoDir).catch(() => ''))) await git(['switch', '-q', '-c', branch], repoDir);
+  await git(['add', '--', ...files], repoDir);
+  await git([...(await identityArgs(repoDir)), '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', `docs(${name}): test stage ${wanted}`, '--', ...files], repoDir);
+  const commit = await git(['rev-parse', 'HEAD'], repoDir);
+  return { ...base, status: 'recorded', commit, files, message: `The Test stage of ${name} is ${wanted}: ${files.length} file(s).` };
+}
+
+module.exports = {
+  STAGE_STATUSES,
+  recordDocs,
+  recordStage,
+};

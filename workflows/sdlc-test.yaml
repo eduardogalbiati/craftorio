@@ -1,17 +1,25 @@
 # =============================================================================
-# Workflow: SDLC test (#633, docs/work/first-project-onboarding/spec.md R9; #651, docs/work/write-doc/spec.md R16)
+# Workflow: SDLC test (#633, #651, #702: docs/work/write-doc/spec.md R16)
 # -----------------------------------------------------------------------------
-#   record ──► approval (the code owner) ──► merge: local ──► end
+#   suite (full, coverage) ──► baselines (@visual) ──► e2e (full, @visual) ──► ui_review (mockups)
+#     ──► evals (Full work model only) ──► summary ──► in_review (test.md: status in review)
+#     ──► approval (the code owner, human_approval)
+#           ├── approved ──► record_passed (status passed) ──merge: local──► end
+#           └── rejected ──► record_failed (status failed) ──► file_fixes (fix issues) ──► end (failed)
 #
-# The post-flow of the AI-native SDLC work model, after sdlc-record (started from the Roadmap's
-# Test stage): reads the plan's Proof and what the Code & Build runs left as evidence (the rows
-# sdlc-record wrote in test.md, their tests, the checks they ran) and records the Test stage in
-# docs/work/<item>/test.md: each proof of the plan with the test or check that shows it, or the
-# gap. #651: the approval is the code owner's gate, who approves by looking at what was proven.
-# The Code & Build runs never write docs/work/ (their developer protects it).
+# The Test stage of a work item of the AI-native SDLC work model, started from the Roadmap on a built
+# item only ("Start Test", never automatically): its plan's Progress is N of N (sdlc-record set
+# `status: built`) and test.md holds one evidence row per Code & Build run. This run runs the
+# quality gates on the item's merged code: the full suite with coverage (#225), the committed
+# baseline of every @visual scenario of the item's issues (a missing one is a finding at the gate,
+# #696), the full E2E with the @visual scenarios, the screens against the spec's mockups (the
+# ui_reviewer, #670) and the evals in the Full work model; then writes the summary and `status: in
+# review` in test.md (record_docs `stage:`, DocModel's lint before the commit, #695) and stops at the
+# code owner's gate. Only the person answers a human_approval (no automation, supervisor included):
+# approve → `status: passed` (the reader moves the item to Deploy) and the branch merged into the
+# local base; reject → `status: failed` and the findings filed as fix issues.
 # The run works in its own worktree, detached at the LOCAL <base_branch> (remote: false): the
-# recorder writes on the branch sdlc-test/<item>-<run id>, the accept merges it into the local
-# base (never pushed).
+# records commit on sdlc-test/<item>-<run id>.
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -19,8 +27,8 @@ kind: Workflow
 
 metadata:
   name: sdlc-test
-  version: 0.1.0
-  description: Records the Test stage of a work item (each proof of its plan with the tests and checks of its runs, or the gap) in docs/work/<item>/test.md, for the code owner to approve.
+  version: 0.2.0
+  description: Closes the Test stage of a built work item (full suite with coverage, full E2E with @visual, screens against the mockups, evals) at the code owner's gate, recorded in docs/work/<item>/test.md.
   tags: [sdlc, documents, test]
   category: plan
 
@@ -40,7 +48,41 @@ inputs:
     label: "Work item"
     type: string
     required: true
-    description: The item's folder name under docs/work/ (e.g. write-doc).
+    description: The item's folder name under docs/work/ (e.g. write-doc); its plan is built.
+  issues:
+    label: "Issues"
+    type: array
+    default: []
+    description: The item's issues (their @issue-<n> scenarios and @visual baselines are checked).
+  work_model:
+    label: "Work model"
+    type: string
+    enum: [light, full]
+    default: light
+    options: { light: Light, full: Full }
+    description: "Full runs the skills' and workflows' evals (npm run evals) too."
+  git_platform:
+    label: "Git platform"
+    type: string
+    enum: [gh, gl]
+    default: gh
+    options: { gh: GitHub, gl: GitLab }
+    description: Where a rejected Test stage files its fix issues.
+  test_command:
+    label: Test command
+    type: string
+    default: ""
+    description: "The project's whole-suite command (e.g. npm test). Empty: found from the project's files."
+  e2e_command:
+    label: E2E command
+    type: string
+    default: ""
+    description: "The project's E2E command (empty: npm run test:e2e)."
+  steps_folders:
+    label: "Step definition folders"
+    type: array
+    default: [features/steps]
+    description: "The folders of the project's E2E step definitions, repository-relative, read by the baseline check."
 
 # -----------------------------------------------------------------------------
 providers:
@@ -73,58 +115,246 @@ orchestrator:
     enabled: true
     max_interventions: 2
   limits:
-    max_total_duration: 2h
-    max_total_cost_usd: 10
+    max_total_duration: 4h
+    max_total_cost_usd: 15
 
 # -----------------------------------------------------------------------------
 agents:
-  recorder:
+  # #670: the screens against the spec's mockups (as feature.yaml's ui_reviewer)
+  ui_reviewer:
+    color: "#C77DFF"
     provider: claude
     model: claude-sonnet-5
     session: persistent
-    capabilities: { tools: [read, write, edit, bash:git], web: false }
-    skills: [plan-writing]
+    capabilities: { tools: [read, bash:git], web: false }
+    skills: [ui-conventions, design-system]
     system_prompt: |
-      You are the test recorder of the work item `{{ inputs.item }}`. You write only under
-      docs/work/{{ inputs.item }}/ and change no other file; you never run the project's tests
-      (the runs did). Nobody answers questions during a turn: state an assumption.
+      You are the UI Reviewer of the Test stage of `{{ inputs.item }}`. You review how its screens
+      look and are used, on the E2E run's screenshots and the spec's mockups, against the
+      ui-conventions and design-system skills. You do not change code, do not commit and do not
+      run tests.
+
+  # the summary of the gates for the code owner (read only; record_docs writes test.md)
+  summarizer:
+    provider: claude
+    model: claude-sonnet-5
+    session: ephemeral
+    capabilities: { tools: [read], web: false }
+    system_prompt: |
+      You summarize the Test stage of `{{ inputs.item }}` for its code owner. You change no file.
+
+  # a rejected Test stage's findings, as fix issues
+  issue_filer:
+    provider: claude
+    model: claude-sonnet-5
+    session: ephemeral
+    capabilities: { tools: [read, bash:gh, bash:glab], web: false }
+    skills: ["issue-creator-{{ inputs.git_platform }}"]
+    system_prompt: |
+      You file the fix issues of the rejected Test stage of `{{ inputs.item }}` with
+      {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %}, and report the URLs. You change no file.
 
 groups:
-  - name: Record
-    steps: [record, approval]
+  - name: Gates
+    steps: [suite, baselines, e2e, ui_review, evals]
+  - name: Review
+    steps: [summary, in_review, approval]
+  - name: Close
+    steps: [record_passed, record_failed, file_fixes]
 
 # -----------------------------------------------------------------------------
 steps:
 
-  - id: record
-    agent: recorder
+  # the full suite with coverage (#225); a failure is a finding at the gate, the run goes on
+  - id: suite
+    display: Run suite (Unit, coverage)
+    type: suite
+    command: "{{ inputs.test_command }}"
+    scope: full
+    coverage: true
+    transitions:
+      - when: "true"
+        goto: baselines
+
+  # #696: every @visual scenario of the item's issues has its committed baseline; a missing one is listed at the gate
+  - id: baselines
+    display: Baseline check (@visual)
+    type: visual_baselines
+    issues: "{% for n in inputs | issue_numbers %}{{ n }}{{ ',' if not loop.last }}{% endfor %}"
+    steps: "{{ (inputs.steps_folders or []) | join('\\n') }}"
+    transitions:
+      - when: "true"
+        goto: e2e
+
+  # the full E2E: every scenario, the @visual ones compare their screens with the baselines
+  - id: e2e
+    display: Run suite (E2E, @visual)
+    type: suite
+    command: '{{ inputs.e2e_command or "npm run test:e2e" }}'
+    scope: full
+    timeout: 60m
+    transitions:
+      - when: "true"
+        goto: ui_review
+
+  # #670: each screen against its mockup in the item's spec
+  - id: ui_review
+    agent: ui_reviewer
     prompt: |
-      Record the Test stage of `{{ inputs.item }}`. Read docs/work/{{ inputs.item }}/plan.md (its
-      Proof), spec.md (its requirements) and test.md (the evidence rows of the runs), and find in
-      the repository the tests that the item's commits on {{ inputs.base_branch }} added. Switch
-      to the branch `sdlc-test/{{ inputs.item }}-{{ run_id }}`, update docs/work/{{ inputs.item }}/test.md:
-      one line per proof or requirement with the test file (and test name) that shows it, or
-      "gap" and why, and set its front matter's status (keep the runs' rows); then commit it
-      ("docs(work): record the tests of {{ inputs.item }}").
-      Answer with `summary` (one sentence, the number of gaps) and `file` (the path you wrote).
+      {% set spec = 'docs/work/' ~ inputs.item ~ '/spec.md' %}
+      Review the screens of the work item `{{ inputs.item }}` (its spec: `{{ spec }}`, its issues:
+      {{ inputs.issues | join(', ') or 'see the spec' }}).
+      The E2E run: {{ steps.e2e.output.message if steps.e2e.output else 'not run' }}; its screenshots
+      and the @visual baselines are under the project's features/__screenshots__/ and `{{ run_dir }}`.
+      Read the spec and compare each screen it shows (its mockups: the images and links in it) with
+      the screenshot of that screen. Each difference from a mockup, and each mockup screen without a
+      screenshot, is a finding. List the coverage: each mockup with the screenshot that shows it, or
+      "not covered".
+      Answer with `findings` (each: screen, mockup, problem) and `coverage` (each: mockup, screenshot
+      or "not covered"), and `summary` (one sentence).
     output_schema:
       type: object
-      required: [summary, file]
+      required: [findings, coverage, summary]
+      properties:
+        findings:
+          type: array
+          items:
+            type: object
+            required: [screen, problem]
+            properties:
+              screen:  { type: string }
+              mockup:  { type: string }
+              problem: { type: string }
+        coverage:
+          type: array
+          items:
+            type: object
+            required: [mockup, screenshot]
+            properties:
+              mockup:     { type: string }
+              screenshot: { type: string }
+        summary: { type: string }
+    transitions:
+      - when: "inputs.work_model == 'full'"
+        goto: evals
+      - when: "true"
+        goto: summary
+
+  # the skills' and workflows' evals, in the Full work model only (scripts/evals.js)
+  - id: evals
+    display: Evals (Full work model)
+    type: check
+    command: "npm run evals"
+    timeout: 30m
+    transitions:
+      - when: "true"
+        goto: summary
+
+  - id: summary
+    agent: summarizer
+    prompt: |
+      Summarize the Test stage of `{{ inputs.item }}` for its code owner, from these results
+      (read docs/work/{{ inputs.item }}/test.md for the evidence rows of the Code & Build runs):
+      - Suite (full, coverage): {{ steps.suite.output.message if steps.suite.output else 'not run' }}
+      - @visual baselines: {{ steps.baselines.output.message if steps.baselines.output else 'not checked' }}
+      {% for m in (steps.baselines.output.missing if steps.baselines.output else []) or [] %}  - missing: {{ m.file }} ({{ m.feature }}: {{ m.scenario }})
+      {% endfor %}
+      - E2E (full): {{ steps.e2e.output.message if steps.e2e.output else 'not run' }}
+      - Screens vs mockups: {{ steps.ui_review.output.summary if steps.ui_review.output else 'not reviewed' }}
+      {% for f in (steps.ui_review.output.findings if steps.ui_review.output else []) or [] %}  - {{ f.screen }}: {{ f.problem }}
+      {% endfor %}
+      - Evals: {{ steps.evals.output.message if steps.evals.output else 'not run (Light work model)' }}
+      Answer with `summary`: a short Markdown list, one line per gate (pass or fail, the counts, the
+      coverage), then each finding (a failed test, a missing baseline, a mockup difference, an eval
+      that dropped) on its own line.
+    output_schema:
+      type: object
+      required: [summary]
       properties:
         summary: { type: string }
-        file:    { type: string }
+    transitions:
+      - when: "true"
+        goto: in_review
 
-  # #651: the code owner's gate of the Test stage
+  # test.md: the summary and `status: in review`, DocModel's lint before the commit (#695)
+  - id: in_review
+    type: record_docs
+    item: "{{ inputs.item }}"
+    branch: "sdlc-test/{{ inputs.item }}-{{ run_id }}"
+    stage: in review
+    stage_summary: "{{ steps.summary.output.summary }}"
+    transitions:
+      - when: "output.status == 'invalid'"
+        goto: end
+        status: failed
+      - when: "true"
+        goto: approval
+
+  # #702: the code owner's gate; only the person answers it
   - id: approval
     type: human_approval
     message: |
-      {{ steps.record.output.summary }}
-      The code owner's gate: approve the Test stage by what was proven.
-      Approve: merge {{ steps.record.output.file }} into the local {{ inputs.base_branch }}. Reject: stop; the branch is kept, not merged.
+      The code owner's gate of the Test stage of `{{ inputs.item }}`: read docs/work/{{ inputs.item }}/test.md
+      (the evidence rows of the runs and this run's summary) and approve by what was proven.
+      {{ steps.summary.output.summary }}
+      Approve: test.md gets `status: passed` and is merged into the local {{ inputs.base_branch }} (the item moves to Deploy).
+      Reject: test.md gets `status: failed` and the findings are filed as fix issues.
     transitions:
       - when: "approved"
+        goto: record_passed
+      - when: "rejected"
+        goto: record_failed
+
+  - id: record_passed
+    type: record_docs
+    item: "{{ inputs.item }}"
+    branch: "sdlc-test/{{ inputs.item }}-{{ run_id }}"
+    stage: passed
+    transitions:
+      - when: "output.status == 'invalid'"
+        goto: end
+        status: failed
+      - when: "true"
         merge: local
         goto: end
-      - when: "rejected"
+
+  - id: record_failed
+    type: record_docs
+    item: "{{ inputs.item }}"
+    branch: "sdlc-test/{{ inputs.item }}-{{ run_id }}"
+    stage: failed
+    transitions:
+      - when: "output.status == 'invalid'"
+        goto: file_fixes
+      - when: "true"
+        merge: local
+        goto: file_fixes
+
+  - id: file_fixes
+    agent: issue_filer
+    prompt: |
+      The code owner rejected the Test stage of `{{ inputs.item }}`.
+      The findings:
+      {{ steps.summary.output.summary }}
+      File one fix issue per finding in the project's repository: a title "{{ inputs.item }}: fix <the
+      finding in a few words>", a body with the finding, the evidence (test, screenshot, mockup) and
+      a link to docs/work/{{ inputs.item }}/test.md. Create no label.
+      Answer with `filed` (each issue: number, url, title) and `summary` (one sentence).
+    output_schema:
+      type: object
+      required: [filed, summary]
+      properties:
+        filed:
+          type: array
+          items:
+            type: object
+            required: [number, url, title]
+            properties:
+              number: { type: integer }
+              url:    { type: string }
+              title:  { type: string }
+        summary: { type: string }
+    transitions:
+      - when: "true"
         goto: end
-        status: cancelled
+        status: failed

@@ -92,6 +92,9 @@ orchestrator:
   limits:
     max_total_duration: 30m
 
+# no model: the one step is a machine step (the loader wants the map, even empty)
+agents: {}
+
 groups:
   - name: Record
     steps: [record]

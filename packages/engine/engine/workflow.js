@@ -125,6 +125,10 @@ const functionOrNull = (f) => (typeof f === 'function' ? f : null);
 const thenWithRetrospective = (then, inputs) => (!then && [true, 'true'].includes(inputs.retrospective)
   ? chain.normalizeThen({ action: 'workflow', workflow: 'retrospective.yaml', map: { run_id: '@run' } })
   : then);
+// #702: a Code & Build run (its workflow declares `evidence`) whose issue names docs/work/<item>/plan.md
+// chains sdlc-record (chain-model defaultThen), unless it was started with a then (Nothing included)
+const sdlcRecordThen = (wf, given, inputs, issues) => (wf.outputs?.evidence && given == null
+  ? chain.normalizeThen(chain.defaultThen({ status: 'success', task: inputs.task, issues: issues || [] })) : null);
 // #396: the failures of the suite steps that ended red, with their class (in or outside the change)
 const testedFailures = (steps) => Object.entries(steps)
   .filter(([, s]) => s?.output?.kind === 'suite' && s.output.status === 'fail')
@@ -253,7 +257,7 @@ class WorkflowRun extends EventEmitter {
     this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
-    this.then = thenWithRetrospective(this.then, this.inputs); // #631
+    this.then = thenWithRetrospective(this.then, this.inputs) || sdlcRecordThen(this.wf, then, this.inputs, this.issues); // #631, #702
     this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
     this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
     // #212: the whole suite passed once in this run (scope: affected stops running it), and the

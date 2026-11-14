@@ -172,6 +172,9 @@
     text('branch', ['record_docs', 'release_version']),
     // `type: record_docs` (#702): the work item whose docs record the Code & Build run (default inputs.item)
     text('item', ['record_docs']),
+    // sdlc-test's own record: the Test stage's status (in review | passed | failed) and its summary
+    text('stage', ['record_docs']),
+    text('stage_summary', ['record_docs']),
     // `type: pr_monitor` (#809): the PR/MR the run waits to see merged (a template; empty: the ci or pr_open step's pr_url)
     text('target', ['pr_monitor']),
     // `type: project_map` (#372): the project map's machine steps, `from` the step whose output they read
