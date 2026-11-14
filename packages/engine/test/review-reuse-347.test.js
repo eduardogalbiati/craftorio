@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../engine/workflow');
+const { reusePassSections, skillsPrompt, reaches } = require('./reuse-pass-text');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const FIXTURES = path.join(__dirname, 'fixtures', 'review-reuse');
@@ -18,15 +19,19 @@ const skill = (name) => fs.readFileSync(path.join(ROOT, 'skills', name, 'SKILL.m
 const flat = (s) => s.replace(/\s+/g, ' ');
 const fixtures = () => fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json')).map((f) => ({ f, b: JSON.parse(fs.readFileSync(path.join(FIXTURES, f), 'utf8')) }));
 
-// The reuse pass of the code-review skill: the text from its heading to the next heading.
+// The reuse pass the reviewer gets: since #756 it is written once under skills/ (in code-review or
+// in a shared text the code-review skill pulls in or points to). `text`: the reviewer's code-review
+// prompt (with its `uses:`); `at`: where it first names the reuse pass; `body`: the shared section.
 function reusePass() {
-  const text = skill('code-review');
-  const m = /^#{2,4} .*\breuse\b.*$/im.exec(text);
-  assert.ok(m, 'skills/code-review/SKILL.md has a heading for the reuse pass');
-  const rest = text.slice(m.index + m[0].length);
-  const next = rest.search(/\n#{2,4} /);
-  return { text, at: m.index, body: flat(next < 0 ? rest : rest.slice(0, next)) };
+  const [section] = reusePassSections();
+  assert.ok(section, 'a reuse pass section exists under skills/');
+  const text = skillsPrompt(['code-review'], 'reviewer');
+  assert.ok(reaches(text, section), `the code-review skill carries or points to ${section.rel}`);
+  return { text, at: text.search(/reuse pass/i), body: section.body };
 }
+
+// What the reviewer reads about the reuse pass: its code-review prompt plus the shared section.
+const reviewerText = () => flat(`${reusePass().text}\n${reusePass().body}`);
 
 test('#347 the code-review skill has a reuse pass before the verdict', () => {
   const { text, at } = reusePass();
@@ -82,7 +87,7 @@ test('#347 the review fixture of a second provider mapping table expects a major
 });
 
 test('#347 the code-review skill states every rule the review fixtures need', () => {
-  const text = flat(skill('code-review'));
+  const text = reviewerText();
   for (const { f, b } of fixtures()) {
     for (const rule of b.skillRules) assert.match(text, new RegExp(rule, 'i'), `${f}: the code-review skill states "${rule}"`);
   }
