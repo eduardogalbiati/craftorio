@@ -91,6 +91,20 @@ async function workflowCopy(client) {
   return { file, spec };
 }
 
+// #625: a project with one mockup screen (the simulated designer draws it at once; its first commit)
+async function mockupScreen(client) {
+  const { projectId } = await project(client);
+  const { slug, commit } = await client.call('mockups:create-screen', { projectId, title: unique('Contract screen'), prompt: 'A screen the contract suite reads.' });
+  return { projectId, slug, commit };
+}
+const onScreen = ({ projectId, slug }) => ({ projectId, slug });
+// the same screen with a second version (a turn): its first version can be restored
+async function editedMockupScreen(client) {
+  const state = await mockupScreen(client);
+  await client.call('mockups:save-turn', { ...onScreen(state), html: '<main><h1>Second version</h1></main>', message: 'A contract turn' });
+  return state;
+}
+
 // ---- invalid arguments the schemas refuse --------------------------------------------------------
 
 const NOT_AN_OBJECT = { arg: 'not an object' };
@@ -98,6 +112,7 @@ const BAD_PROJECT = { arg: { projectId: 42 } };
 const BAD_CARD = { arg: { projectId: 'p', cardId: 42 } };
 const BAD_RUN = { arg: { runId: 42 } };
 const BAD_FILE = { arg: '../outside.yaml' };
+const BAD_SCREEN = { arg: { projectId: 'p', slug: 42 } };
 
 module.exports = {
   'agents:create': { arg: AGENT, invalid: NOT_AN_OBJECT },
@@ -202,6 +217,21 @@ module.exports = {
   'monitor:propose-fix': { setup: project, arg: ({ projectId }) => ({ projectId, fingerprint: 'no-such-group' }), invalid: BAD_PROJECT },
   'monitor:save-source': { setup: project, arg: ({ projectId }) => ({ projectId, source: { type: 'log-file', label: 'contract log', path: UNREACHABLE_REPO } }), invalid: BAD_PROJECT },
   'monitor:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #625: Plan & Design › Mockups, simulated (the designer draws and answers at $0, no workflow run)
+  'mockups:build-kit': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'mockups:chat': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), message: 'Make the title bigger.', selection: [{ mid: 'm1', selector: 'main', text: 'Contract' }] }), invalid: BAD_SCREEN },
+  'mockups:chat-history': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
+  'mockups:create-screen': { setup: project, arg: ({ projectId }) => ({ projectId, title: 'A contract screen', prompt: 'An orders list.' }), invalid: BAD_PROJECT },
+  'mockups:estimate': { arg: { action: 'chat-edit' }, invalid: { arg: { action: 'fly' } } },
+  'mockups:kit': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'mockups:list': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // the engine server has no editor window: { opened: false }
+  'mockups:open-editor': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
+  'mockups:restore': { setup: editedMockupScreen, arg: (s) => ({ ...onScreen(s), commit: s.commit }), invalid: BAD_SCREEN },
+  'mockups:save-ref': { setup: project, arg: ({ projectId }) => ({ projectId, data: 'data:image/png;base64,iVBORw0KGgo=', ext: 'png' }), invalid: BAD_PROJECT },
+  'mockups:save-turn': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), html: '<main><h1>Saved by the contract suite</h1></main>', message: 'A contract turn' }), invalid: BAD_SCREEN },
+  'mockups:screen': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
+  'mockups:versions': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
   'monitor:webhook': { setup: project, arg: ({ projectId }) => ({ projectId, enable: false }), invalid: BAD_PROJECT },
   'nightwatch:morning': { arg: null },
   'nightwatch:report': { arg: null },

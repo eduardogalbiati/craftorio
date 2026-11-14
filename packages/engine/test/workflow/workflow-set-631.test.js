@@ -38,7 +38,8 @@ const CODE_AND_BUILD = [
   'refactor', 'release', 'retrospective', 'test-backfill',
 ];
 // #633: the SDLC flows are not Code & Build
-const PLANNING_TOOLS = ['sdlc-record', 'sdlc-release', 'sdlc-test', 'write-doc'];
+// #625: the Mockups screen's workflows (a new screen, the visual kit) are Plan & Design tools too
+const PLANNING_TOOLS = ['mockup-generate', 'sdlc-record', 'sdlc-release', 'sdlc-test', 'ui-kit-map', 'write-doc'];
 
 const ALIASES = [
   ['project-map', 'analyze-project.yaml'],

@@ -230,6 +230,8 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:issue.yaml:code_analyzer',
     'workflow:issue.yaml:issue_writer',
     'workflow:issue.yaml:issue_filer',
+    // #625: the mockups' designer (a new screen) and the visual kit's mapper
+    'workflow:mockup-generate.yaml:designer',
     'workflow:refactor.yaml:test_writer',
     'workflow:refactor.yaml:developer',
     'workflow:refactor.yaml:reviewer',
@@ -245,6 +247,7 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:sdlc-test.yaml:issue_filer',
     'workflow:test-backfill.yaml:test_writer',
     'workflow:test-backfill.yaml:developer',
+    'workflow:ui-kit-map.yaml:kit_mapper',
     'workflow:write-doc.yaml:writer',
     'workflow:write-doc.yaml:writer_2',
     'workflow:write-doc.yaml:writer_3',
