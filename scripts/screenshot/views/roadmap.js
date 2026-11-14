@@ -34,6 +34,19 @@ const {
 // #807: under its stage the merge-wait notice (Move on, Stack), with the expected files it shares with
 // the next stage (MERGE_FILES).
 const MERGE_FILES = ['packages/engine/server/routes.js', 'packages/engine/server/report.js'];
+// #702 (--roadmap test): the work items of the "Work items" stage, `done` of `total` Progress rows done
+const WORK_ITEMS = [{ item: 'checkout-flow', title: 'Checkout flow', done: 3, total: 3 }, { item: 'saved-searches', title: 'Saved searches', done: 2, total: 4 }];
+// their docs/work/<item>/plan.md in the project's folder (roadmapView reads it: built at N of N, DocModel.planStatus)
+function demoWorkItems(folder) {
+  if (!folder) return;
+  for (const w of WORK_ITEMS) {
+    const dir = path.join(folder, 'docs', 'work', w.item);
+    fs.mkdirSync(dir, { recursive: true });
+    const rows = Array.from({ length: w.total }, (_, i) => `| #${701 + i} Step ${i + 1} | ${i < w.done ? 'done' : 'pending'} | ${i < w.done ? '20261101-1000' + i + '0-demo' : '—'} | ${i < w.done ? 'a1b2c3' + i : '—'} |`);
+    fs.writeFileSync(path.join(dir, 'plan.md'), ['---', `item: ${w.item}`, 'stage: build', `status: ${w.done === w.total ? 'built' : 'accepted'}`, 'date: 2026-11-01', '---', '',
+      `# Plan: ${w.title}`, '', '## Progress', '', '| Step | Status | Run | Last commit |', '| --- | --- | --- | --- |', ...rows, ''].join('\n'));
+  }
+}
 function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   const states = more === 'states';
   const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
@@ -104,6 +117,11 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
         inputs: { language: 'js', mode: 'validated', unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',
         cost: { level: 5, name: 'Generous', inputs: { unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, notAdjustable: [] },
       })] },
+      // #702 (--roadmap test): two done work items (inputs.item, their docs/work/<item>/plan.md written by
+      // demoWorkItems): a built plan offers "Start Test", one at 2 of 4 Progress rows offers nothing
+      ...(more === 'test' ? [{ id: 'stage-work-items', name: 'Work items', note: '', items: WORK_ITEMS.map((w, i) => item(`work-item-${w.item}`, 'feature.yaml', [[11, 16][i]], {
+        status: 'done', inputs: { language: 'js', mode: 'auto', item: w.item },
+      })) }] : []),
     ],
   }, null, 2));
   // (the settings file directly: this runs before the app's code is loaded, maybe from another --ref)
@@ -516,4 +534,5 @@ module.exports = {
   // #254: the same as --view backlog --mode roadmap (its tab until then)
   alias: { view: 'backlog', mode: 'roadmap' },
   demoRoadmap,
+  demoWorkItems,
 };

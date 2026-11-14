@@ -24,7 +24,10 @@ const {
   demoReleaseRun,
   demoReleases,
 } = require('./releases');
-const { demoRoadmap } = require('./roadmap');
+const {
+  demoRoadmap,
+  demoWorkItems,
+} = require('./roadmap');
 
 // The Roadmap's Conflict map (#150): 20 runs, three hot files (one named by merge conflicts), a quiet
 // one, and a long import line most runs changed.
@@ -222,6 +225,8 @@ function seed({ args, ws, project, projects }) {
   // #260: the "Released" badge on the issues the history shipped
   demoReleases(ws, project.id);
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
+  // #702 (--roadmap test): the work items' plans, one built (Start Test)
+  if (args.roadmap === 'test') demoWorkItems(project.folder);
   // #405: the Roadmap's "known failures on the base" line
   demoBaseFailures(ws, project.id);
   // #150: the Roadmap's Conflict map
@@ -262,6 +267,6 @@ module.exports = {
   open,
   // the options only this view takes, and their values: the Live roadmap (#164), more states of the
   // roadmap card (#282, #284; #395: an item parked at its gate; #797: one waiting for its PR's merge), the Product Owner's drawer (#180)
-  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['merge', 'parked', 'states'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS, refresh: ['fresh', 'onboarded'] },
+  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['merge', 'parked', 'states', 'test'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS, refresh: ['fresh', 'onboarded'] },
   seed,
 };
