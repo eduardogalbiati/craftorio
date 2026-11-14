@@ -113,4 +113,18 @@ The steps without an agent besides the suite, and the test requests, coverage an
   the owner's gate or the review; the routes into it test `worktree_dir | check_command(...)` (the
   template filter), so a project without a check command never visits it. A failure goes back to
   develop with the findings at most twice per review round (`vars.check_returns`), then to the
-  `check_failed` gate; a pass goes to `developer_check` (validated mode) or the review.
+  `check_failed` gate; a pass goes to `docs_check` (#757).
+- A **docs check step** (`type: docs_check`, no agent, no model call, #757; `runDocsCheckStep` →
+  `packages/engine/engine/expected-files.js`): the paths the run's issues list under `## Expected
+  files` (in `inputs.task`: the first backticked path of each item, `(new)` dropped, directories
+  with their slash), only the docs among them (under `docs/`, `README.md`, any `*.md`), against the
+  run's diff since `base` (a template; the `changedFiles` of affected-tests.js). Output `{ kind:
+  'docs_check', status: pass | missing | skipped, expected, touched, declared, missing, message,
+  round }`; the message starts with the counts the timeline shows (`docs expected: 2, touched: 0`).
+  `pass` when one expected doc is touched (a directory entry: any file under it) or every untouched
+  one is in the `left_out` of the step named by `from` (default develop) with a reason (the
+  reviewer still judges it); `skipped` without docs to expect or without a checkout. feature and
+  the AI Development heroes run it as `docs_check` right after `rule_check` (or in its place
+  without a check command): `missing` goes back to develop with the list at most once per review
+  round (`vars.docs_returns`, reset when it goes on), then `developer_check` (validated mode) or
+  the review.

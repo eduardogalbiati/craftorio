@@ -3,7 +3,8 @@
 // #144), `type: suite` (`runSuiteStep` naming its command for a pause #368, `suiteRounds`, `suiteRound` with the memory guard's waits and reruns #276,
 // the machine-wide suite slot of a whole-suite round and its `suite_slot` log while it waits #455,
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
-// (`runTestIdsStep`, #246), `type: visual_baselines` (`runVisualBaselinesStep`, #696), `type: check` (`runCheckStep`, the project's rule checks, #404), `type:
+// (`runTestIdsStep`, #246), `type: visual_baselines` (`runVisualBaselinesStep`, #696), `type: check` (`runCheckStep`, the project's rule checks, #404), `type: docs_check`
+// (`runDocsCheckStep`, the docs the issues expect against the diff, #757), `type:
 // workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
 // #325), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
 // screenshots step emits step.log { step_id, path, command } when its command's log starts (its live
@@ -20,6 +21,7 @@ const capabilities = require('../capabilities');
 const checkStep = require('../check-step');
 const { childEnv } = require('../child-env');
 const evidence = require('../../domains/evidence/evidence');
+const expectedFiles = require('../expected-files');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
 const { changedFiles, selectionLines } = require('../affected-tests');
@@ -594,6 +596,28 @@ const methods = {
         : { ...base, status: 'pass', message: 'Every baseline the issue\'s scenarios use is committed.' };
     }
     this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'visual_baselines', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
+    return output;
+  },
+
+  // `type: docs_check` (#757): the docs the run's issues list under `## Expected files` against the
+  // run's diff (packages/engine/engine/expected-files.js), no agent, no model call. `base`: a template,
+  // the branch the diff starts from; `from`: the step whose `left_out` excuses a doc (default develop).
+  // Output: { kind: 'docs_check', status: pass | missing | skipped, expected, touched, declared,
+  // missing, message, round }; skipped without docs to expect or without a checkout.
+  runDocsCheckStep(step, st) {
+    const dir = this.ctx.worktree_dir;
+    const base = (step.base ? render(String(step.base), this.ctx).trim() : '') || 'HEAD';
+    const leftOut = this.ctx.steps?.[step.from || 'develop']?.output?.left_out || [];
+    const text = String(this.ctx.inputs?.task || '');
+    let changed = [];
+    let why = '';
+    if (!dir || !fs.existsSync(dir)) why = 'the run has no checkout';
+    else {
+      try { changed = changedFiles(dir, base); } catch (e) { why = `the diff could not be read (${String(e.message).split('\n')[0]})`; }
+    }
+    let output = { kind: 'docs_check', round: st.visits, ...expectedFiles.checkExpectedDocs({ text, changed, leftOut }) };
+    if (why && output.status !== 'skipped') output = { ...output, status: 'skipped', missing: [], message: `${output.message.split('\n')[0]} Docs check skipped: ${why}.` };
+    this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'docs_check', step_id: step.id, status: output.status, message: `${step.id}: ${output.message.split('\n')[0]}` });
     return output;
   },
 

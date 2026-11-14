@@ -82,9 +82,11 @@ const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || nul
 // Refactor proposals workflow's facts, proposals, ranking and filing; release_version (#325): never
 // fails the run, the output says what was written; test_ids (#246): the missing test ids; check
 // (#404): the project's rule checks (its command sweeps what it leaves running); visual_baselines
-// (#696): the missing baselines of the issues' @visual scenarios
+// (#696): the missing baselines of the issues' @visual scenarios; docs_check (#757): the docs the
+// issues expect that the diff does not touch
 const PLAIN_MACHINE_STEPS = {
   check: 'runCheckStep',
+  docs_check: 'runDocsCheckStep',
   project_map: 'runProjectMapStep',
   refactor_proposals: 'runRefactorProposalsStep',
   release_version: 'runReleaseVersionStep',

@@ -2,7 +2,7 @@
 // Templates and expressions of a run (#250, from packages/engine/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
-// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `issue_numbers`,
+// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `expected_docs`, `issue_numbers`,
 // `issue_lines`, `one_line`, `suite_lines`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
 // loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
@@ -16,6 +16,7 @@ const { execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
 const checkStep = require('../check-step');
+const expectedFiles = require('../expected-files');
 const gateSummary = require('../gate-summary');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
@@ -181,6 +182,11 @@ tpl.addFilter('ui_files', (files, folders) => {
 // [{ file, ref }]; [] for an issue without mockups, whose screens are reviewed as before.
 //   {% for m in inputs.task | mockups %}- {{ m.file }}: {{ m.ref }}{% endfor %}
 tpl.addFilter('mockups', (text) => uiReviewChecks.issueMockups(text));
+
+// The docs an issue's text lists under `## Expected files` (#757, packages/engine/engine/expected-files.js):
+// [] for a task without the section or without docs in it, whose run never visits docs_check.
+//   - when: "output.committed and inputs.task | expected_docs | length"
+tpl.addFilter('expected_docs', (text) => expectedFiles.docsEntries(expectedFiles.parseExpectedFiles(String(text ?? ''))));
 
 // The project's check command of a checkout (#404, packages/engine/engine/check-step.js): the given one (the
 // check_command input), else `npm run check` when its package.json has a `check` script; '' when
