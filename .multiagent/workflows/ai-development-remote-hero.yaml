@@ -1017,7 +1017,7 @@ steps:
       {% if wreuse | length %}
       The Warm Up found these existing helpers, rules and tables: reuse these, do not rewrite them
       (call or import them; a new copy of one is a review finding):
-      {% for r in wreuse %}- `{{ r.name }}` ({{ r.path }}:{{ r.line }}): {{ r.what }}
+      {% for r in wreuse %}- `{{ r.name }}` ({{ r.path }}:{{ r.line }}): {{ r.what }}{% if r.issue %} (for issue {{ r.issue }}){% endif %}
       {% endfor %}
       {% endif %}
       {% elif not steps.develop.output and previous_step == 'warm_up' %}
@@ -1569,7 +1569,7 @@ steps:
       {% if wreuse | length %}
       Reuse pass: the Warm Up listed these existing helpers, rules and tables before develop. Start
       your reuse pass from them and check that the diff calls them instead of rewriting them:
-      {% for r in wreuse %}- `{{ r.name }}` ({{ r.path }}:{{ r.line }}): {{ r.what }}
+      {% for r in wreuse %}- `{{ r.name }}` ({{ r.path }}:{{ r.line }}): {{ r.what }}{% if r.issue %} (for issue {{ r.issue }}){% endif %}
       {% endfor %}
       {% endif %}
       {% if inputs.e2e_tests != 'off' %}A missing baseline of a new @visual scenario (its PNG not under features/__screenshots__/ on the branch) is blocking (#696): name the file and its update command (`npm run test:e2e:update -- --grep @issue-<n>`), never leave it as a note.{% endif %}
