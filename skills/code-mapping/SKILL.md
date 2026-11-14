@@ -1,7 +1,7 @@
 ---
 name: code-mapping
-description: Maps the code a task touches before anyone edits it - per issue, the production files and functions to change or reuse with their line numbers, how they connect, the tests that cover each file (direct first, then transitive) as a run-tests block, and the conventions to follow - in a capped map the developer starts from. Use for a read-only mapping step before the developer (e.g. the Warm Up step).
-summary: "Maps the files, functions, line numbers, connections, tests and conventions of a task before the first edit, in a map of at most 300 lines"
+description: Maps the code a task touches before anyone edits it - per issue, the production files and functions to change or reuse with their line numbers, the existing helpers, rules and tables the change must reuse instead of rewriting, how they connect, the tests that cover each file (direct first, then transitive) as a run-tests block, and the conventions to follow - in a capped map the developer starts from. Use for a read-only mapping step before the developer (e.g. the Warm Up step).
+summary: "Maps the files, functions, line numbers, connections, helpers to reuse, tests and conventions of a task before the first edit, in a map of at most 300 lines"
 used_by: "mapper"
 ---
 
@@ -28,7 +28,7 @@ In each section:
 - **Files to change**: each production file, with the functions (or the blocks: a YAML step, a
   CSS rule, a template) and their **line numbers**, and one line on what changes there.
 - **Files to reuse**: helpers, components and shared lists the change should call or copy, with
-  line numbers. Prefer what exists over a new helper.
+  line numbers; the ones the change would otherwise rewrite also go into the reuse list (section 3).
 - **How they connect**: who calls what, where the data comes from (the request, the event, the
   store, the file), and where the result goes (the screen, the event, the output).
 - **Tests to run**: for each production file the section names, the test files that reach it,
@@ -43,7 +43,24 @@ In each section:
 Short excerpts only where a signature or a shape matters (a function's parameters, an output
 schema); never paste whole functions.
 
-## 3. The tests to run, as a block
+## 3. The reuse list, per issue
+
+Rewriting what the repository already has is the most frequent reason a review sends the
+developer back (#758). For each issue, list the existing functions, constants, rules and mapping
+tables the change will need, so the developer calls them instead of writing its own copy:
+
+- Look for them in three places: the names and concepts of the issue's text and of its
+  Expected files (search by name, by synonym and by the literal values a new helper would map); the helpers
+  of the files the map already names; the shared modules, `packages/shared/` and `packages/ui-kit/`.
+- One entry each: `name`, `path`, `line` (where it is defined) and `what` (one line on what it
+  does). Only what the change needs, not every helper of a mapped file.
+- At most ~30 lines per issue. Nothing found: an empty list (develop and the reviewer then show
+  nothing).
+
+The developer's prompt shows the list as "reuse these, do not rewrite them", and the reviewer
+starts its reuse pass from it.
+
+## 4. The tests to run, as a block
 
 End each section with the tests to run before committing, as a block the developer and the test
 writer can run as it is (focused files only, never the whole suite: the orchestrator runs it):
@@ -55,19 +72,21 @@ node --test test/acceptance.test.js test/direct.test.js test/transitive.test.js
 Use the project's own focused form when it is not a Node project (e.g. `pytest <files>`,
 `go test ./pkg/...`).
 
-## 4. Size
+## 5. Size
 
 The whole map stays under **300 lines**. Cut the explanation, not the line numbers or the tests:
 a list of `path:line function - what` beats a paragraph. When a run has many issues, shorten each
 section rather than dropping one.
 
-## 5. Answer
+## 6. Answer
 
 - `map`: the map above, in Markdown.
 - `files`: every production and test file the map names, repository-relative, sorted.
+- `reuse`: the reuse list of section 3, one object per entry (`issue`, `name`, `path`, `line`,
+  `what`); an empty list when there is none.
 
 ## Done when
 
 Each issue has its section with files, line numbers, connections, tests to run (direct, then
-transitive, or `no test reaches it`) and conventions, the map is under 300 lines, and no file was
-changed.
+transitive, or `no test reaches it`) and conventions, its reuse list is in `reuse` (or empty), the
+map is under 300 lines, and no file was changed.

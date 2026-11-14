@@ -100,8 +100,10 @@ Quote the requirement line for each finding:
 ### Reuse pass
 
 The costly duplication is rarely copied lines: it is the same rule or the same mapping written
-again in another place, which then drifts. For each new function, constant or mapping table in
-the diff, search the repository for an existing one before the verdict:
+again in another place, which then drifts. When your prompt carries the Warm Up's reuse list
+(#758), start from it: a diff that rewrites one of its entries instead of calling it is a finding.
+Then, for each new function, constant or mapping table in the diff, search the repository for an
+existing one before the verdict:
 - by **name** (and obvious synonyms: `CLI_BY_TYPE`, `cliForProvider`, `providerCli`);
 - by the **literal values** it maps or lists (`grep` for two or three of its keys or values
   together, e.g. `'claude-code'` and `'codex-cli'`);

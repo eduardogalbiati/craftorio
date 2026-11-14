@@ -417,7 +417,7 @@ acceptance tests → red check → Warm Up → develop → code review → suite
 |---|---|---|---|
 | Acceptance tests | Test Writer (Opus 5.5) | The issue's tests from its criteria, not from the implementation, on the run's branch; with `test_order: e2e_first`, its E2E scenarios too. It gets the project's code → tests map (`test_map: true`). A task with nothing testable goes straight to develop | `unit-test-writer-<language>`, `e2e-test-writer-<language>` |
 | Red check | (no agent) | Runs exactly those files once (`expect: red`). A test already green is reported to the developer; a file that cannot run goes back to the test writer once. The existing tests related to them come from the code → tests graph | |
-| Warm Up | Mapper (the developer's model) | Before the first develop turn only, maps per issue the files and lines to change, the conventions and the tests to run (#301, #304); a failed Warm Up goes on without a map | `code-mapping` |
+| Warm Up | Mapper (the developer's model) | Before the first develop turn only, maps per issue the files and lines to change, the conventions and the tests to run (#301, #304), and the existing helpers to reuse, shown to develop and to the reviewer (#758); a failed Warm Up goes on without a map | `code-mapping` |
 | Develop | Developer (Opus 5.5 or Fable 5.1) | Implements until the acceptance tests pass; the engine refuses a turn that changes one (`protect_files`), while the developer may add its own internal tests | `long-commands`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log` |
 | Code review | Code Review (Opus 5.5) | The diff on correctness, spec, standards and reuse; with `review: multi_model`, a second independent reviewer on another model in parallel | `code-review` |
 | Suite | (no agent) | `scope: affected`: the test files the change reaches each round, then the whole suite once when they pass | |
@@ -1335,7 +1335,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
 | `clarity-score` | the Discovery board (its score and Grill me, src/clarity.js); issue (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
-| `code-mapping` | mapper | Maps the files, functions, line numbers, connections, tests and conventions of a task before the first edit, in a map of at most 300 lines |
+| `code-mapping` | mapper | Maps the files, functions, line numbers, connections, helpers to reuse, tests and conventions of a task before the first edit, in a map of at most 300 lines |
 | `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md` |
 | `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |

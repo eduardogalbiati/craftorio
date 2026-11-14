@@ -811,7 +811,8 @@ steps:
   # Warm Up (#301): a read-only agent maps the code before the first develop turn (fix rounds, change
   # requests and conflict resolutions start from their findings, not from a new map). Its map names,
   # per issue, the files and line numbers to change, how they connect, the conventions and the tests
-  # to run for each file (#304: from the code → tests map, as a run-tests block). It never blocks the
+  # to run for each file (#304: from the code → tests map, as a run-tests block), and the existing
+  # helpers the change should reuse (#758: `reuse`, shown to develop and to the reviewer). It never blocks the
   # run: a failure or a timeout goes on to develop without a map (no supervisor: on_error).
   - id: warm_up
     display: Warm Up
@@ -846,6 +847,9 @@ steps:
       read it whole). For each production file you name, list its tests to run: direct first, then
       transitive, or `no test reaches it`; end each issue's section with a ```run-tests block.
 
+      In `reuse`, per issue, list the existing functions, constants, rules and mapping tables the
+      change will need (path, line, one line on what each does), so the developer calls them
+      instead of rewriting them: an empty list when there is none.
       Keep the map under 300 lines. Change nothing: no edit, no commit, no test run.
     output_schema:
       type: object
@@ -853,6 +857,18 @@ steps:
       properties:
         map:   { type: string }
         files: { type: array, items: { type: string } }
+        # #758: the existing helpers to reuse, per issue (optional: an older answer stays valid)
+        reuse:
+          type: array
+          items:
+            type: object
+            required: [name, path, line, what]
+            properties:
+              issue: { type: [string, integer] }
+              name:  { type: string }
+              path:  { type: string }
+              line:  { type: integer }
+              what:  { type: string }
     transitions:
       - when: "true"
         goto: develop
@@ -967,6 +983,14 @@ steps:
       <warm_up_map>
       {{ wmap }}
       </warm_up_map>
+      {# #758: the existing helpers the Warm Up found for the change #}
+      {% set wreuse = steps.warm_up.output.reuse or [] %}
+      {% if wreuse | length %}
+      The Warm Up found these existing helpers, rules and tables: reuse these, do not rewrite them
+      (call or import them; a new copy of one is a review finding):
+      {% for r in wreuse %}- `{{ r.name }}` ({{ r.path }}:{{ r.line }}): {{ r.what }}
+      {% endfor %}
+      {% endif %}
       {% elif not steps.develop.output and previous_step == 'warm_up' %}
       The Warm Up step ended without a map (it failed or timed out): map the code yourself, with one exploration sub-agent before your first edit.
       {% endif %}
@@ -1511,6 +1535,14 @@ steps:
       Developer summary: {{ steps.develop.output.summary }}
       {% if not steps.develop.output.committed %}The developer made no production change this turn (its summary above says why): review the commits already on the branch (e.g. the test writer's) against the task.{% endif %}
       {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
+      {# #758: the Warm Up's reuse list, what the reuse pass checks the diff against #}
+      {% set wreuse = (steps.warm_up.output.reuse if steps.warm_up and steps.warm_up.output else none) or [] %}
+      {% if wreuse | length %}
+      Reuse pass: the Warm Up listed these existing helpers, rules and tables before develop. Start
+      your reuse pass from them and check that the diff calls them instead of rewriting them:
+      {% for r in wreuse %}- `{{ r.name }}` ({{ r.path }}:{{ r.line }}): {{ r.what }}
+      {% endfor %}
+      {% endif %}
       {% if inputs.e2e_tests != 'off' %}A missing baseline of a new @visual scenario (its PNG not under features/__screenshots__/ on the branch) is blocking (#696): name the file and its update command (`npm run test:e2e:update -- --grep @issue-<n>`), never leave it as a note.{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
