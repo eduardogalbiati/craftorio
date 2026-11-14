@@ -2154,6 +2154,8 @@
   "discovery.loading_the_board": "Loading the board…",
   "discovery.make_this_version_the_document_again": "Make this version the document again; the current document is kept as a version",
   "discovery.missing": "Missing:",
+  "discovery.mock_this_card": "Mock this card",
+  "discovery.mock_this_card_hint": "The designer draws a mockup screen from the card's title and document (Plan & Design › Mockups)",
   "discovery.move_anyway": "Move anyway",
   "discovery.move_this_card_to_another_column": "Move this card to another column",
   "discovery.move_to": "Move to…",

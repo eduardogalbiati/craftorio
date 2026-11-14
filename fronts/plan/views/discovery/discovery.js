@@ -857,10 +857,12 @@
 
   // The column's actions: in Shape, the two screens that work on the document; in Ready, the commit
   // (#258); a committed card shows its delivery and starts new learning as a new card.
+  // Shape and Ready also offer "Mock this card" (#625, D1): a Mockups screen from the card (MockupsActions).
   function renderActions() {
     const box = $('#dsc-detail-actions');
     if (!box || !dv.open) return;
-    if (dv.open.column === 'ready') { box.innerHTML = commit().actionHtml(dv.open); return; }
+    const mock = `<button type="button" class="btn sm" data-testid="card-mock" data-detail="mock" title="${t('discovery.mock_this_card_hint')}">${t('discovery.mock_this_card')}</button>`;
+    if (dv.open.column === 'ready') { box.innerHTML = `${commit().actionHtml(dv.open)}<div class="row dsc-actions">${mock}</div>`; return; }
     if (readOnly()) {
       box.innerHTML = `
       <section class="inbox-section dsc-delivery-box" aria-label="${t('discovery.delivery')}">
@@ -875,6 +877,7 @@
     box.innerHTML = dv.open.column !== 'shape' ? '' : `
       <div class="row dsc-actions" role="group" aria-label="${t('discovery.shape')}">
         <button type="button" class="btn sm" data-testid="card-write-doc" data-detail="write-doc" title="${t('discovery.the_writer_drafts_an_intent_from')}">${t('discovery.write_a_document')}</button>
+        ${mock}
       </div>
       <p class="muted small dsc-actions-hint">${t('discovery.the_card_s_document_is_the')}</p>`;
   }
@@ -1281,7 +1284,8 @@
   // when that run finishes its document is recorded on the card (discovery:record-result). The link
   // is kept in localStorage, so a run that ends while the app is closed is caught up on the next visit.
   function writeDocument() { if (!editBlocks()) window.writeDocForCard({ projectId: dv.openProject, cardId: dv.open.id, title: dv.open.title }).catch((e) => detailError(errMsg(e))); }
-  const RUN_ACTS = { 'write-doc': writeDocument };
+  function mockCard() { if (!editBlocks()) window.MockupsActions.fromCard({ projectId: dv.openProject, cardId: dv.open.id, title: dv.open.title, text: dv.open.document || '' }).catch((e) => detailError(errMsg(e))); }
+  const RUN_ACTS = { mock: mockCard, 'write-doc': writeDocument };
 
   const readRuns = () => { try { return JSON.parse(localStorage.getItem(LS_RUNS)) || {}; } catch { return {}; } };
   const writeRuns = (runs) => { try { localStorage.setItem(LS_RUNS, JSON.stringify(runs)); } catch { /* ignore */ } };

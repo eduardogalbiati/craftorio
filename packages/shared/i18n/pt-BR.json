@@ -2154,6 +2154,8 @@
   "discovery.loading_the_board": "Carregando o quadro…",
   "discovery.make_this_version_the_document_again": "Tornar esta versão o documento de novo; o documento atual é guardado como versão",
   "discovery.missing": "Faltando:",
+  "discovery.mock_this_card": "Fazer mockup deste cartão",
+  "discovery.mock_this_card_hint": "O designer desenha uma tela de mockup a partir do título e do documento do cartão (Plan & Design › Mockups)",
   "discovery.move_anyway": "Mover assim mesmo",
   "discovery.move_this_card_to_another_column": "Mover este cartão para outra coluna",
   "discovery.move_to": "Mover para…",
