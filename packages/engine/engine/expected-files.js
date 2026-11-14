@@ -50,14 +50,15 @@ function parseExpectedFiles(text) {
  * @returns {string[]}
  */
 function docsEntries(paths) {
-  return [].concat(paths ?? []).map(norm).filter((p) => p.startsWith('docs/') || /(^|\/)README\.md$/i.test(p) || /\.md$/i.test(p));
+  return (Array.isArray(paths) ? paths : []).map(norm).filter((p) => p.startsWith('docs/') || /(^|\/)README\.md$/i.test(p) || /\.md$/i.test(p));
 }
 
 // a changed file answers an expected entry: the same path, or a file under a directory entry
 const touches = (entry, file) => (entry.endsWith('/') ? norm(file).startsWith(entry) : norm(file) === entry);
 
 // a left_out item with a reason that names the entry (its path, or a directory without the slash)
-const declared = (entry, leftOut) => [].concat(leftOut ?? []).some((g) => {
+/** @type {(entry: string, leftOut: Array<{ requirement?: string, reason?: string }>) => boolean} */
+const declared = (entry, leftOut) => (Array.isArray(leftOut) ? leftOut : []).some((g) => {
   if (!g || !String(g.reason ?? '').trim()) return false;
   const req = String(g.requirement ?? '').replace(/\\/g, '/');
   return req.includes(entry) || (entry.endsWith('/') && req.includes(entry.slice(0, -1)));
@@ -70,7 +71,7 @@ const declared = (entry, leftOut) => [].concat(leftOut ?? []).some((g) => {
  */
 function checkExpectedDocs({ text = '', changed = [], leftOut = [] } = {}) {
   const expected = docsEntries(parseExpectedFiles(text));
-  const files = [].concat(changed ?? []);
+  const files = Array.isArray(changed) ? changed : [];
   const touched = expected.filter((e) => files.some((f) => touches(e, f)));
   const counts = `docs expected: ${expected.length}, touched: ${touched.length}`;
   if (!expected.length) {

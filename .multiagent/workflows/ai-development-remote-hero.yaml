@@ -16,7 +16,7 @@
 # Workflow: AI Development, local hero (tests first)
 # The local-hero pipeline with the tests written BEFORE the code (owner, 2026-10-03; option C of
 # reports/piramide-de-testes-com-agentes-2026-10-03.md, #220):
-#   acceptance_tests ─► red_check ─► warm_up ─► develop ─► rule_check ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge
+#   acceptance_tests ─► red_check ─► warm_up ─► develop ─► rule_check ─► docs_check ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge
 #   - acceptance_tests (the test writer, Opus 5.5): the acceptance tests of the task, from the issue
 #     and its criteria, not from the implementation, committed on the run's branch. It gets the
 #     project's code → tests map (`test_map: true`, #219) to put the tests where they belong and
@@ -40,6 +40,9 @@
 #     rule checks (`check_command`, or the `check` script of its package.json; none: skipped). A
 #     failure goes back to develop with the findings, at most twice per review round, then to the
 #     owner at check_failed; never to the test writer. The suite still runs every test after it.
+#   - docs_check (no agent, #757): right after rule_check (or in its place without a check command),
+#     when the issues list docs under `## Expected files`: none of them touched by the run's diff
+#     (and not in left_out with a reason) goes back to develop once per review round.
 #   - unit_tests defaults to run_existing (the suite after the review, no second test-writer
 #     step); e2e_tests to off.
 # The rule "the developer never writes tests" (#47) becomes, here only: the developer never edits
@@ -997,6 +1000,12 @@ steps:
       Fix what they report in the production code or the docs (never weaken a rule or an acceptance
       test), run the check command again, commit, and answer again in full.
       {% endif %}
+      {% if previous_step == 'docs_check' and steps.docs_check.output.status == 'missing' %}
+      The orchestrator compared your diff with the docs the issue lists under `## Expected files` (#757):
+      {{ steps.docs_check.output.message }}
+      Write them (a README section in docs/readme/ when the project generates its README), commit,
+      and answer again in full; a doc you leave out on purpose goes to `left_out` with its reason.
+      {% endif %}
       {% if not steps.develop.output %}
       Tests first: the test writer already worked on this task, on the run's branch
       `{{ acc.branch if acc else '(none: create it with git switch -c)' }}`{% if acc and acc.commit %} (commit {{ acc.commit }}){% endif %}.
@@ -1205,6 +1214,9 @@ steps:
       # call); a project without a check command goes on as before
       - when: "output.committed and worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
+      # #757: the docs the issues expect (docs_check, no agent), before the owner's gate or the review
+      - when: "output.committed and inputs.task | expected_docs | length"
+        goto: docs_check
       - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
       # the review findings needed no production change (e.g. they ask for tests, which the test
@@ -1245,13 +1257,41 @@ steps:
       # rounds used up: the owner decides (a goto, not on_exhausted: no supervisor wake-up first)
       - when: "output.status == 'fail'"
         goto: check_failed
-      # passed (or skipped): the owner's gate in validated mode, else the review
+      # passed (or skipped): the docs the issues expect first (docs_check, #757)
+      - when: "inputs.task | expected_docs | length"
+        goto: docs_check
+        set: &checks_passed { check_returns: "0" }
+      # then the owner's gate in validated mode, else the review
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
-        set: &checks_passed { check_returns: "0" }
+        set: *checks_passed
       - when: "true"
         goto: code_review
         set: *checks_passed
+
+  # #757: the docs the run's issues list under `## Expected files` (under docs/, README.md, any
+  # *.md) against the run's diff since the base (packages/engine/engine/expected-files.js), no agent,
+  # no model call, milliseconds. Right after rule_check, or in its place when the project has no
+  # check command; the routes into it test `inputs.task | expected_docs | length`, so an issue
+  # without the section, or without docs in it, never visits it. None of them touched, and not in
+  # develop's left_out with a reason, goes back to develop with the list at most once per review
+  # round (vars.docs_returns; going on resets it); never to the test writer.
+  - id: docs_check
+    display: Docs check
+    type: docs_check
+    base: "{{ inputs.base_branch }}"
+    from: develop
+    transitions:
+      - when: "output.status == 'missing' and (vars.docs_returns or 0) | int < 1"
+        goto: develop
+        set: { docs_returns: "{{ (vars.docs_returns or 0) | int + 1 }}" }
+      # passed, skipped or the return used up: the owner's gate in validated mode, else the review
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_check
+        set: &docs_checked { docs_returns: "0" }
+      - when: "true"
+        goto: code_review
+        set: *docs_checked
 
   # #246: the test ids of the E2E scenarios written first, checked by the orchestrator right after
   # develop commits (no agent, no model call, milliseconds): every static getByTestId('…') of the
@@ -1286,6 +1326,9 @@ steps:
       # #404: the project's rule checks before the owner's gate or the review
       - when: "worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
+      # #757: the docs the issues expect
+      - when: "inputs.task | expected_docs | length"
+        goto: docs_check
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
       - when: "true"
@@ -1318,6 +1361,9 @@ steps:
         goto: developer_screenshots
       - when: "worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
+      # #757: the docs the issues expect
+      - when: "inputs.task | expected_docs | length"
+        goto: docs_check
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
       - when: "true"
@@ -1343,6 +1389,9 @@ steps:
       # #404: the project's rule checks before the owner's gate or the review
       - when: "worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
+      # #757: the docs the issues expect
+      - when: "inputs.task | expected_docs | length"
+        goto: docs_check
       # validated mode: the owner's gate first (the same rounds as develop's transitions)
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
@@ -1467,6 +1516,9 @@ steps:
       # #404: the project's rule checks before the owner's gate or the review
       - when: "choice == 'continue' and worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
+      # #757: the docs the issues expect
+      - when: "choice == 'continue' and inputs.task | expected_docs | length"
+        goto: docs_check
       - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_check
       - when: "choice == 'continue'"
@@ -2055,7 +2107,10 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: failed
-      # continue: rule_check's routes after a pass
+      # continue: rule_check's routes after a pass (the docs check first, #757)
+      - when: "inputs.task | expected_docs | length"
+        goto: docs_check
+        set: *checks_passed
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
         set: *checks_passed
