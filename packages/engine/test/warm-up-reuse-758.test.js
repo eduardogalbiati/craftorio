@@ -138,6 +138,89 @@ for (const file of WORKFLOWS) {
   });
 }
 
+// ------------------------------------------------------------------ after review (test step)
+
+// a run with several issues: each reuse entry belongs to one of them
+const MULTI_REUSE = [
+  { issue: 758, name: 'shQuote', path: 'src/external-terminal.js', line: 35, what: 'quotes one argument for a POSIX shell' },
+  { issue: 801, name: 'PROVIDERS', path: 'providers/claude.js', line: 13, what: 'the table of provider ids and their CLIs' },
+];
+const MULTI_INPUTS = {
+  ...baseInputs,
+  issues: ['https://github.com/o/r/issues/758', 'https://github.com/o/r/issues/801'],
+};
+const lineWith = (prompt, s) => prompt.split('\n').find((l) => l.includes(s)) || '';
+
+for (const file of WORKFLOWS) {
+  const wf = nameOf(file);
+
+  test(`#758 ${wf}: with several issues, develop's reuse list says which issue each entry is for`, () => {
+    const prompt = render(stepOf(file, 'develop').prompt, {
+      agent: 'developer', run_dir: 'C:/runs/r1', previous_step: 'warm_up', test_map: 'C:/runs/r1/test-map.md',
+      inputs: MULTI_INPUTS, vars: {},
+      steps: {
+        acceptance_tests: { output: acc },
+        red_check: { output: { status: 'fail', message: 'The acceptance tests fail.', affected_tests: [] } },
+        warm_up: { output: warmOutput(MULTI_REUSE) },
+      },
+    });
+    assert.match(prompt, DEVELOP_PHRASE);
+    assert.match(lineWith(prompt, '`shQuote`'), /#?758\b/, 'the shQuote entry names issue 758');
+    assert.match(lineWith(prompt, '`PROVIDERS`'), /#?801\b/, 'the PROVIDERS entry names issue 801');
+  });
+
+  test(`#758 ${wf}: with several issues, the reviewer's reuse list says which issue each entry is for`, () => {
+    const prompt = render(stepOf(file, 'code_review').prompt, {
+      agent: 'reviewer', run_dir: 'C:/runs/r1', previous_step: 'develop', test_map: 'C:/runs/r1/test-map.md',
+      inputs: MULTI_INPUTS, vars: {},
+      steps: {
+        acceptance_tests: { output: acc },
+        warm_up: { output: warmOutput(MULTI_REUSE) },
+        develop: { output: { branch: 'feat', committed: true, commit: 'def5678', files_changed: ['src/x.js'], left_out: [], summary: 'Did it.' } },
+      },
+    });
+    assert.match(lineWith(prompt, '`shQuote`'), /#?758\b/, 'the shQuote entry names issue 758');
+    assert.match(lineWith(prompt, '`PROVIDERS`'), /#?801\b/, 'the PROVIDERS entry names issue 801');
+  });
+
+  test(`#758 ${wf}: the reviewer still receives the reuse list on a second review round`, () => {
+    const prompt = render(stepOf(file, 'code_review').prompt, {
+      agent: 'reviewer', run_dir: 'C:/runs/r1', previous_step: 'develop', test_map: 'C:/runs/r1/test-map.md',
+      inputs: baseInputs, vars: {},
+      steps: {
+        acceptance_tests: { output: acc },
+        warm_up: { output: warmOutput(REUSE) },
+        code_review: { output: { verdict: 'changes_requested', findings: [{ severity: 'major', title: 'rewrote shQuote' }] } },
+        develop: { output: { branch: 'feat', committed: true, commit: 'aaa9999', files_changed: ['src/x.js'], left_out: [], summary: 'Fixed the finding.' } },
+      },
+    });
+    assertListsReuse(prompt);
+  });
+
+  test(`#758 ${wf}: the merge-resolution review and the UI reviewer do not get the reuse list`, () => {
+    const scope = (agent, vars) => ({
+      agent, run_dir: 'C:/runs/r1', previous_step: 'resolve_merge', test_map: 'C:/runs/r1/test-map.md',
+      inputs: baseInputs, vars,
+      steps: {
+        acceptance_tests: { output: acc },
+        warm_up: { output: warmOutput(REUSE) },
+        resolve_merge: { output: { previous_head: 'aaa1111', head: 'bbb2222', summary: 'Rebased.' } },
+        develop: { output: { branch: 'feat', committed: true, commit: 'def5678', files_changed: ['src/x.js'], left_out: [], summary: 'Did it.' } },
+      },
+    });
+    const code = stepOf(file, 'code_review').prompt;
+    assert.ok(!render(code, scope('reviewer', { recheck: 'resolution' })).includes('shQuote'), 'not in the resolution review');
+    assert.ok(!render(code, scope('ui_reviewer', {})).includes('shQuote'), 'not for the UI reviewer');
+  });
+
+  test(`#758 ${wf}: a reuse entry may name its issue by number or by URL`, () => {
+    const warm = stepOf(file, 'warm_up');
+    const byUrl = [{ ...REUSE[0], issue: 'https://github.com/o/r/issues/758' }];
+    assert.deepEqual(validateSchema(warmOutput(byUrl), warm.output_schema), []);
+    assert.deepEqual(validateSchema(warmOutput(REUSE), warm.output_schema), []);
+  });
+}
+
 test('#758: the code-mapping skill has a reuse section, per issue, that searches the issue, the mapped files and the shared modules, within ~30 lines', () => {
   const text = read('skills', 'code-mapping', 'SKILL.md');
   const m = text.match(/^##+ [^\n]*reuse[^\n]*$/im);
