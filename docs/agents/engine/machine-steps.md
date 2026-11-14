@@ -1,6 +1,6 @@
-# Machine steps: screenshots, release version, test ids, check
+# Machine steps: screenshots, release version, test ids, check, record docs
 
-The steps without an agent besides the suite, and the test requests, coverage and file guards around the test steps.
+The steps without an agent besides the suite (the SDLC post-flow's `record_docs` of sdlc-record and sdlc-test included), and the test requests, coverage and file guards around the test steps.
 
 - A **screenshots step** (`type: screenshots`, no agent, #144; `runScreenshots` → `packages/engine/engine/screenshot-step.js`): `from: <step>` (whose output lists `screenshots: [{ name, caption, args }]`, `args` = the options of the project's screenshot command), `folder` (default the step id), `base` (template, the ref of the "original" side; default the worktree's base ref), `timeout` per shot (default 3m). It runs `npm run screenshot -- <args> --out <run_dir>/evidence/<folder>/round-<visit> --name <name> --side modified`, then the same with `--side original --ref <base>`, with the agents' environment (simulation only, scratch workspace); at most 8 entries, `--out/--name/--side/--ref/--caption` in `args` are refused. It never fails and never calls the supervisor: an empty list, a simulated run (`mock`: nothing is launched), no worktree, no `screenshot` script in the worktree's package.json, an invalid entry, a timeout or a crash end up in its output `{ kind: 'screenshots', folder, round, dir, taken, screens, screenshots: [{ path, caption, side }], errors: [{ name, side?, error }], reason, message }` (`message`: "N screenshots of M screens taken in round n" or "No screenshots: <reason>"). software-development and local-hero run `developer_screenshots` (from `develop`, folder `developer`) on every way into `developer_check`, whose message shows `message`; the gate's Artifacts panel shows that round only (`lastCapture` in gate-panel.js).
   - **The screenshot slot (#199)**: at most one Electron screenshot process at a time on the machine, across all runs and apps. Each capture of the step takes the machine-wide slot (`packages/engine/engine/machine-slot.js`, `acquireSlot('screenshot')`: a file `<os tmp>/multiagent-orchestrator/locks/screenshot.slot` with pid, host and token, or under `MULTIAGENT_LOCKS_DIR`) and passes its token to `npm run screenshot` (`MULTIAGENT_SCREENSHOT_SLOT`), which then does not wait for it. While another run holds it the step emits `screenshots.waiting` (`holder_pid`) and a log line "waiting for the screenshot slot". `scripts/screenshot.js` takes the same slot itself (`acquireSlotSync`), so an agent's `npm run screenshot` (evidence, test writer, E2E runner) waits too and prints the same line. A slot whose process is gone, or held over 15 minutes, is freed; a wait over 20 minutes fails that capture.
@@ -128,3 +128,20 @@ The steps without an agent besides the suite, and the test requests, coverage an
   without a check command): `missing` goes back to develop with the list at most once per review
   round (`vars.docs_returns`, reset when it goes on), then `developer_check` (validated mode) or
   the review.
+- A **record docs step** (`type: record_docs`, no agent, no model call, #702; `runRecordDocsStep` →
+  `packages/engine/engine/record-docs-step.js`): the SDLC post-flow's record of a successful Code &
+  Build run in its work item's documents (`docs/work/<item>/`), in the run's own worktree. It reads
+  only the step's inputs: `item`, `run`, the run's declared `evidence` output, `merged_commit`,
+  `pr_url`, `issues`. It writes plan.md's `## Progress` row (done, the run, the commit or the PR; every
+  row done → `status: built`, the reader then shows the item in Test) and one test.md row (EN and
+  pt-BR: run, unit and E2E counts, screenshots taken or the run's reason for none, axe findings, never
+  an empty cell; `status: collecting`), copies the screenshots to `images/`, runs DocModel's lint
+  (`lintDoc`, `lintTranslation`) on every document first (a problem writes nothing: `status:
+  invalid`), then makes one docs commit (a docs commit runs no tests, #695). With `status:` (in review
+  | passed | failed) it records the Test stage instead: test.md's status and the run's summary.
+  Output `{ kind: 'record_docs', status: recorded | invalid, commit, files, problems, built, message }`.
+  Used by `sdlc-record` (one step, then the merge the project works with) and `sdlc-test` (the full
+  suite with coverage, the full E2E with `@visual` baselines, the ui_reviewer against the spec's
+  mockups, evals, then `in review` and the code owner's `human_approval` gate: approve → `passed`,
+  reject → `failed` and fix issues). sdlc-test is started from the Roadmap on a built item only
+  ("Start Test"), never by a chain.

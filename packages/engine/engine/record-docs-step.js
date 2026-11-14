@@ -140,6 +140,55 @@ function recordTest(text, lang, row, images, run, date) {
 
 const readText = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
 
+// the screenshots to copy: absolute paths, or relative to the Code & Build run's folder
+function collectImages(shots, runDir, notes) {
+  return (Array.isArray(shots) ? shots : []).map((s) => (typeof s === 'string' ? { path: s } : s || {}))
+    .map((s) => ({ ...s, from: path.isAbsolute(String(s.path || '')) ? s.path : (runDir && s.path ? path.join(runDir, s.path) : null) }))
+    .filter((s) => {
+      const ok = s.from && fs.existsSync(s.from);
+      if (!ok && s.path) notes.push(`screenshot not found: ${s.path}`);
+      return ok;
+    })
+    .map((s) => ({ from: s.from, name: path.basename(s.from), caption: s.caption || '' }));
+}
+
+// DocModel's lint of the documents about to be written (a docs commit runs no tests, #695)
+function lintRecorded(next, folder, images, rel) {
+  const exists = (target) => images.some((i) => `images/${i.name}` === target) || fs.existsSync(path.join(folder, target));
+  const problems = [];
+  const lint = (file, kind, source) => {
+    if (next[file] === null || next[file] === undefined) return;
+    const md = next[file];
+    const found = source ? DocModel.lintTranslation(next[source], md) : DocModel.lintDoc({ kind, markdown: md, exists }).problems;
+    problems.push(...found.map((p) => ({ file: rel(file), ...p })));
+  };
+  lint('plan.md', 'plan');
+  lint('plan.pt-BR.md', 'plan', 'plan.md');
+  lint('test.md', 'test');
+  if (next['test.md'] !== null) lint('test.pt-BR.md', 'test', 'test.md');
+  return problems;
+}
+
+// writes the changed documents, copies the images, then ONE commit (on `branch` when detached)
+async function writeAndCommit(repoDir, { folder, rel, next, original, images = [], branch, message }) {
+  const files = [];
+  for (const [file, text] of Object.entries(next)) {
+    if (text === null || text === original[file]) continue;
+    fs.writeFileSync(path.join(folder, file), text);
+    files.push(rel(file));
+  }
+  if (images.length) fs.mkdirSync(path.join(folder, 'images'), { recursive: true });
+  for (const img of images) {
+    fs.copyFileSync(img.from, path.join(folder, 'images', img.name));
+    files.push(rel(`images/${img.name}`));
+  }
+  if (!files.length) return { files, commit: null };
+  if (branch && !(await git(['symbolic-ref', '-q', 'HEAD'], repoDir).catch(() => ''))) await git(['switch', '-q', '-c', branch], repoDir);
+  await git(['add', '--', ...files], repoDir);
+  await git([...(await identityArgs(repoDir)), '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', message, '--', ...files], repoDir);
+  return { files, commit: await git(['rev-parse', 'HEAD'], repoDir) };
+}
+
 async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_url: prUrl, issues, evidence, runDir, branch, date } = {}) {
   const name = String(item ?? '');
   if (!ITEM.test(name) || name.includes('..')) throw new Error(`Not a work item of docs/work: ${name}`);
@@ -152,16 +201,7 @@ async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_
   const ev = evidence && typeof evidence === 'object' ? evidence : {};
   const day = date || new Date().toISOString().slice(0, 10);
   const notes = [];
-
-  // the screenshots to copy: absolute paths, or relative to the Code & Build run's folder
-  const images = (Array.isArray(ev.screenshots) ? ev.screenshots : []).map((s) => (typeof s === 'string' ? { path: s } : s || {}))
-    .map((s) => ({ ...s, from: path.isAbsolute(String(s.path || '')) ? s.path : (runDir && s.path ? path.join(runDir, s.path) : null) }))
-    .filter((s) => {
-      const ok = s.from && fs.existsSync(s.from);
-      if (!ok && s.path) notes.push(`screenshot not found: ${s.path}`);
-      return ok;
-    })
-    .map((s) => ({ from: s.from, name: path.basename(s.from), caption: s.caption || '' }));
+  const images = collectImages(ev.screenshots, runDir, notes);
 
   // the plan's Progress row (the same row, by order, in the translation)
   const progress = DocModel.progressRows(original['plan.md']);
@@ -180,18 +220,7 @@ async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_
   if (next['test.md'] === null) notes.push(`${rel('test.md')} is missing: no evidence row written`);
 
   // DocModel's lint before anything is written (a docs commit runs no tests, #695)
-  const exists = (target) => images.some((i) => `images/${i.name}` === target) || fs.existsSync(path.join(folder, target));
-  const problems = [];
-  const lint = (file, kind, source) => {
-    if (next[file] === null) return;
-    const md = next[file];
-    const found = source ? DocModel.lintTranslation(next[source], md) : DocModel.lintDoc({ kind, markdown: md, exists }).problems;
-    problems.push(...found.map((p) => ({ file: rel(file), ...p })));
-  };
-  lint('plan.md', 'plan');
-  lint('plan.pt-BR.md', 'plan', 'plan.md');
-  lint('test.md', 'test');
-  if (next['test.md'] !== null) lint('test.pt-BR.md', 'test', 'test.md');
+  const problems = lintRecorded(next, folder, images, rel);
   const built = DocModel.frontMatter(next['plan.md']).status === 'built';
   const base = { kind: 'record_docs', item: name, run: runId, built, notes };
   if (problems.length) {
@@ -199,22 +228,8 @@ async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_
   }
 
   // write, copy the images, ONE commit
-  const files = [];
-  for (const [file, text] of Object.entries(next)) {
-    if (text === null || text === original[file]) continue;
-    fs.writeFileSync(path.join(folder, file), text);
-    files.push(rel(file));
-  }
-  if (images.length) fs.mkdirSync(path.join(folder, 'images'), { recursive: true });
-  for (const img of images) {
-    fs.copyFileSync(img.from, path.join(folder, 'images', img.name));
-    files.push(rel(`images/${img.name}`));
-  }
-  if (!files.length) return { ...base, status: 'recorded', commit: null, files, problems, message: `Nothing to record for run ${runId}: the documents of ${name} have it already.` };
-  if (branch && !(await git(['symbolic-ref', '-q', 'HEAD'], repoDir).catch(() => ''))) await git(['switch', '-q', '-c', branch], repoDir);
-  await git(['add', '--', ...files], repoDir);
-  await git([...(await identityArgs(repoDir)), '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', `docs(${name}): record run ${runId}`, '--', ...files], repoDir);
-  const commit = await git(['rev-parse', 'HEAD'], repoDir);
+  const { files, commit } = await writeAndCommit(repoDir, { folder, rel, next, original, images, branch, message: `docs(${name}): record run ${runId}` });
+  if (!commit) return { ...base, status: 'recorded', commit: null, files, problems, message: `Nothing to record for run ${runId}: the documents of ${name} have it already.` };
   return {
     ...base, status: 'recorded', commit, files, problems,
     message: `Recorded run ${runId} in ${name}: ${files.length} file(s)${built ? ', the plan is built' : ''}${notes.length ? ` (${notes.join('; ')})` : ''}.`,
@@ -259,22 +274,13 @@ async function recordStage(repoDir, { item, status, summary, branch } = {}) {
   ];
   const base = { kind: 'record_docs', item: name, status_set: wanted, problems };
   if (problems.length) return { ...base, status: 'invalid', commit: null, files: [], message: `Nothing recorded: DocModel's lint found ${problems.length} problem(s) in the test documents of ${name}.` };
-  const files = [];
-  for (const [file, text] of Object.entries(next)) {
-    if (text === original[file]) continue;
-    fs.writeFileSync(path.join(folder, file), text);
-    files.push(rel(file));
-  }
-  if (!files.length) return { ...base, status: 'recorded', commit: null, files, message: `${rel('test.md')} is ${wanted} already.` };
-  if (branch && !(await git(['symbolic-ref', '-q', 'HEAD'], repoDir).catch(() => ''))) await git(['switch', '-q', '-c', branch], repoDir);
-  await git(['add', '--', ...files], repoDir);
-  await git([...(await identityArgs(repoDir)), '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', `docs(${name}): test stage ${wanted}`, '--', ...files], repoDir);
-  const commit = await git(['rev-parse', 'HEAD'], repoDir);
+  const { files, commit } = await writeAndCommit(repoDir, { folder, rel, next, original, branch, message: `docs(${name}): test stage ${wanted}` });
+  if (!commit) return { ...base, status: 'recorded', commit: null, files, message: `${rel('test.md')} is ${wanted} already.` };
   return { ...base, status: 'recorded', commit, files, message: `The Test stage of ${name} is ${wanted}: ${files.length} file(s).` };
 }
 
 module.exports = {
-  STAGE_STATUSES,
   recordDocs,
   recordStage,
+  STAGE_STATUSES,
 };

@@ -17,7 +17,11 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
   takes `run` (`type: run`, mapped with `'@run'`), `merged_commit`, `pr_url`, `issues` and `evidence`
   (a `then` from a successful feature/fix run, `then.inputs.item` the work item) and writes plan.md's
   Progress row and test.md's evidence row. A remote run (a PR, no `merged_commit`) pauses the chain
-  (see below), so its PR is recorded by starting sdlc-record by hand. A `type: object` input takes the output object as it is
+  (see below), so its PR is recorded by starting sdlc-record by hand. The default `then` (#702,
+  `chain-model.js defaultThen`, applied when the run starts without a then by a workflow that
+  declares `evidence`): a run whose task names `docs/work/<item>/plan.md` chains sdlc-record with
+  `inputs.item`; shown and editable on the Run screen like any then; a failed or stopped run, or one
+  without an item, chains nothing. A `type: object` input takes the output object as it is
   (`convertValue`; a JSON text is parsed).
 - `WorkflowRun` options `then` (what follows, `packages/shared/chain-model.js normalizeThen`: `{ action:
   'workflow', workflow, map: { <next input>: <output name> | '@run' }, inputs }`, `{ action:

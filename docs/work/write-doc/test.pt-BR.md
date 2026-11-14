@@ -2,14 +2,14 @@
 item: write-doc
 issue: "#636"
 stage: test
-status: not started       # filled by the runs: suite, E2E, screenshots, evals
+status: not started       # collecting (sdlc-record, each Code & Build run) → in review (sdlc-test) → passed | failed (code owner)
 approver: code owner (at the PR or the developer's gate)
 source: test.md (English)
 ---
 
 # Test: evidência do write doc
 
-Esta etapa não tem um arquivo escrito por alguém: ela junta a evidência que os runs produzem, para o code owner aprovar olhando o que foi provado. Fica vazia até o primeiro run do Build.
+Esta etapa não tem um arquivo escrito por alguém: ela junta a evidência que os runs produzem, para o code owner aprovar olhando o que foi provado. Depois de cada run de Code & Build com sucesso, o run encadeado sdlc-record acrescenta a sua linha aqui; com o plano built, o workflow de Test (iniciado no Roadmap) acrescenta o resumo e termina no gate do code owner.
 
 ## Suíte e testes
 

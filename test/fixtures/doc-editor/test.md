@@ -2,14 +2,14 @@
 item: first-project-onboarding
 issue: "#628"
 stage: test
-status: not started       # filled by the runs: suite, E2E, screenshots, evals
+status: not started       # collecting (sdlc-record, each Code & Build run) → in review (sdlc-test) → passed | failed (code owner)
 approver: code owner (at the PR or the developer's gate)
 translation: test.pt-BR.md
 ---
 
 # Test: onboarding evidence
 
-This stage has no file a person writes: it gathers the evidence the runs produce, so the code owner approves by looking at what was proven. It stays empty until the first Build run.
+This stage has no file a person writes: it gathers the evidence the runs produce, so the code owner approves by looking at what was proven. After each successful Code & Build run the chained sdlc-record run adds its row here; when the plan is built, the Test workflow (started from the Roadmap) adds the summary and ends at the code owner's gate.
 
 ## Suite and tests
 
