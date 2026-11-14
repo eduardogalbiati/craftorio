@@ -20,6 +20,9 @@ built. They are references, not part of the app:
   example in an iframe beside a fake chat, and `doc-editor-model.js`, the payload a selection hands
   the chat (file, anchor, source lines, passage, context, version), a pt-BR selection mapped to the
   English source;
+- `mockup-editor.html`, project mockups phase 0 (#625): a sample screen in a sandboxed iframe
+  (`allow-scripts`, no `allow-same-origin`, no network) with a live inspector that posts the
+  clicked node (`data-mid`, selector, kit component, text, box, HTML) to a fake designer chat;
 - `project-map/`, the cartographer skill draft (`SKILL.md`: how an AI writes a city plan) and the
   plans of this repository and of photocraft, a public Rust repository used to try the plan format;
 - `docs-site/`, the README as a static documentation site in the app's theme (pages on the left,

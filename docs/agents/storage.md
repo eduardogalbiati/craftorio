@@ -8,6 +8,7 @@ Read this before touching run listings, the Backlog roadmap, pending gates, noti
 - [Files are the source of truth](storage/files.md): What each run, roadmap, gate and notification file holds, and how old runs upgrade on read (#350).
 - [The workspace index](storage/index-db.md): What `<workspace>/index.db` adds over the files.
 - [Issues and the backlog files](storage/issues-and-backlog.md): The git platform is the source of truth for issues (#168); who writes the backlog files and the change event (#204).
+- [Project mockups](storage/mockups.md): The project mockups of Plan & Design › Mockups in `<workspace>/mockups/` (#625).
 - [The Night watch log](storage/night-watch.md): The Oracle's Night watch log (#172).
 - [Repository performance](storage/repo-performance.md): Where the repository performance numbers come from (#159).
 - [Storage rules](storage/rules.md): The rules every change to storage keeps.

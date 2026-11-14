@@ -1,0 +1,194 @@
+# =============================================================================
+# Workflow: Mockup generate (#625, Plan & Design › Mockups)
+# -----------------------------------------------------------------------------
+#   design (the designer: a new screen, or one chat turn) ──► end
+#
+# The designer of the project mockups. The Mockups service (fronts/plan/engine/channels/mockups.js)
+# starts one run per big operation (`mode` generate: a new screen's first version, from a prompt or
+# a Discovery card) and, for the chat of the editor window, one per designer turn (`mode` edit: the
+# chat message of MockupModel.buildChatMessage, with the selected nodes, their kit component, box
+# and HTML, the pasted references). The designer answers with the whole screen (`html`, a static
+# HTML document that links ../../kit/tokens.css and ../../kit/components.css, a data-mid on every
+# node) and a short `reply` for the chat; the service writes the html into
+# <workspace>/mockups/<project>/screens/<slug>/index.html as one commit (one commit per turn, D10)
+# and runs the kit lint on it. The designer only reads: the current folder is the mockup folder and
+# the project's repository is read-only (it never writes to the user's repository).
+# No human_approval: the chat is driven by the owner, the run only prepares a version. Defaults:
+# Opus to generate, Sonnet to edit (Q-3), switchable per run. Simulated (MULTIAGENT_SIMULATION_ONLY)
+# the service does not start this workflow: its simulated designer answers at once, no model call.
+# Outputs: `html` (the screen) and `reply` (what the designer says in the chat).
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: mockup-generate
+  version: 0.1.0
+  description: The designer draws a high-fidelity screen of a project from its visual kit, or changes one from a chat message with the selected parts, writing only into the mockup folder.
+  tags: [design, mockups, plan]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  project_path:
+    label: "Project folder"
+    type: string
+    required: false
+    default: ""
+    description: The project's repository, read-only for the designer (its screens, styles and components). Empty for a greenfield project.
+  project_id:
+    label: "Project"
+    type: string
+    required: true
+    description: The project's id; its mockups live in <workspace>/mockups/<project id>/.
+  mockup_dir:
+    label: "Mockup folder"
+    type: string
+    required: true
+    description: The project's mockup folder (kit/, screens/, refs/), the designer's current folder.
+  mockup_slug:
+    label: "Screen"
+    type: string
+    required: true
+    description: The screen's folder name under screens/.
+  mode:
+    label: "Mode"
+    type: string
+    enum: [generate, edit]
+    default: generate
+    options: { "generate": "Generate a new screen", "edit": "Edit the screen (one chat turn)" }
+    description: Generate draws the screen's first version; edit applies one chat message to the current version.
+  title:
+    label: "Title"
+    type: string
+    required: false
+    default: ""
+    description: The screen's title.
+  prompt:
+    label: "Prompt"
+    type: string
+    required: false
+    default: ""
+    description: Generate, what the screen is (purpose, sections, data); edit, the chat message as JSON (selection, refs, message).
+  message:
+    label: "Message"
+    type: string
+    required: false
+    default: ""
+    description: The commit message of the turn (the owner's words).
+  designer_provider:
+    label: "Designer CLI"
+    options: { "claude": "Claude", "codex": "Codex" }
+    type: string
+    enum: [claude, codex]
+    default: claude
+    description: CLI of the designer.
+  designer_model:
+    label: "Designer model"
+    type: string
+    default: ""
+    description: Empty, Opus to generate and Sonnet to edit.
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"
+
+defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime continues fresh from its handoff note
+  fresh_after_idle: 55m
+  timeout: 20m
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5-5
+  supervisor:
+    enabled: true
+    max_interventions: 1   # per step
+  limits:
+    max_total_duration: 1h
+    max_total_cost_usd: 5
+
+# -----------------------------------------------------------------------------
+agents:
+  designer:
+    provider: "{{ inputs.designer_provider }}"
+    model: "{% if inputs.designer_model %}{{ inputs.designer_model }}{% elif inputs.mode == 'edit' %}claude-sonnet-5-5{% else %}claude-opus-5-5{% endif %}"
+    session: persistent   # the turns of one mockup build on each other
+    fresh_after_idle: 55m
+    skills: [mockup-design]
+    # it only reads: the Mockups service writes the screen and its commit
+    capabilities: { tools: [read], web: false }
+    working_dir: "{{ inputs.mockup_dir }}"
+    system_prompt: |
+      You are the designer of the project mockups. The current folder is the project's mockup
+      folder (kit/tokens.css, kit/components.css, kit/kit.json, screens/<slug>/index.html, refs/).
+      {% if inputs.project_path %}The project's repository, read-only, is {{ inputs.project_path }}.{% endif %}
+      You never write files: you answer with the whole screen and the service saves it.
+
+groups:
+  - name: Design
+    steps: [design]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: design
+    agent: designer
+    prompt: |
+      Screen: screens/{{ inputs.mockup_slug }}/index.html ({{ inputs.title }}).
+      {% if inputs.mode == 'edit' %}Apply this chat message to the current version of the screen (read it first).
+      The message, with the selected nodes (their data-mid, selector, kit component, box and HTML)
+      and the reference images under refs/:
+      {{ inputs.prompt }}{% else %}Draw the screen's first version from this description:
+      {{ inputs.prompt }}{% endif %}
+
+      Follow the mockup-design skill: static HTML and CSS only, linking ../../kit/tokens.css and
+      ../../kit/components.css, colours, sizes and spacing only from the kit's tokens, a data-mid on
+      every node, no network. Answer with `html` (the whole document) and `reply` (one or two
+      sentences for the chat: what changed and the assumptions you made).
+    output_schema:
+      type: object
+      required: [html, reply]
+      properties:
+        html: { type: string }
+        reply: { type: string }
+
+# -----------------------------------------------------------------------------
+outputs:
+  html:
+    type: string
+    description: The screen's HTML (the service writes it as one commit).
+    value: "{{ steps.design.output.html }}"
+  reply:
+    type: string
+    description: What the designer says in the chat.
+    value: "{{ steps.design.output.reply }}"
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

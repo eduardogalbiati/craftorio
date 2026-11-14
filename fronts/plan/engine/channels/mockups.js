@@ -66,6 +66,22 @@ module.exports = (ctx) => {
     try { return projects.readProject(ctx.ws.projects, projectId); } catch { return null; }
   };
   const isMockupRun = (r) => r?.wf?.metadata?.name === WORKFLOW;
+  const isKitRun = (r) => r?.wf?.metadata?.name === 'ui-kit-map';
+  // the components a ui-kit-map run answered, added to the machine step's tokens (kit/components.css, kit.json)
+  function onKitEvent(ev) {
+    const r = ev?.type === 'step.finished' && typeof ev.output?.components_css === 'string' ? ctx.liveRun?.(ev.run_id) : null;
+    if (!isKitRun(r) || !r.inputs?.project_id || !ctx.ws?.root) return;
+    try {
+      const current = mockups.readKit(ctx.ws.root, r.inputs.project_id) || { tokensCss: '', kit: {} };
+      const list = (v) => (Array.isArray(v) ? v : []);
+      mockups.writeKit(ctx.ws.root, r.inputs.project_id, {
+        tokensCss: current.tokensCss,
+        componentsCss: ev.output.components_css,
+        kit: { ...current.kit, components: list(ev.output.components), inferences: list(ev.output.inferences) },
+      });
+    } catch (e) { console.error('Mockups kit:', e.message); }
+  }
+  ctx.events?.on?.('run:event', onKitEvent);
   // the html a mockup-generate run answered, written where it belongs (a new screen or a turn)
   function onRunEvent(ev) {
     const r = ev?.type === 'step.finished' && typeof ev.output?.html === 'string' ? ctx.liveRun?.(ev.run_id) : null;
@@ -136,7 +152,7 @@ module.exports = (ctx) => {
     const kit = { sources: [...new Set(tokens.map((t) => t.file))], tokens, fonts, components: [], inferences: [] };
     const { commit } = mockups.writeKit(wsRoot(), projectId, { tokensCss: MockupModel.tokensCss(tokens), componentsCss: '', kit });
     if (simulation.simulationOnly()) return { commit, tokens: tokens.length, runId: null };
-    const started = await ctx.startWorkflowRun({ file: KIT_WORKFLOW, mock: false, projectId, inputs: { project_path: project.folder || '', mockup_dir: mockups.projectDir(wsRoot(), projectId) } });
+    const started = await ctx.startWorkflowRun({ file: KIT_WORKFLOW, mock: false, projectId, inputs: { project_path: project.folder || '', project_id: projectId, mockup_dir: mockups.projectDir(wsRoot(), projectId) } });
     return { commit, tokens: tokens.length, runId: started?.runId || null };
   }
 

@@ -1354,6 +1354,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `issue-writing` | via `uses`; Write & Review (`document_skill`); issue (issue_writer); the Product Owner (Register an issue) | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
 | `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
 | `merge-conflict-resolver` | developer | Intent tracing per side, hunk-by-hunk resolution, verification |
+| `mockup-design` | designer (mockup-generate: a new screen, or one chat turn of the editor window) | Mockups: draw and edit a project's screens as static HTML on its visual kit (tokens only, data-mid on every node, no network) |
 | `oracle` | the Oracle (built-in agent, its drawer on every screen) | The four roles, grounded claims, changes routed to their owner (request_agent), wake-ups on run events, delegation, Night watch, content is data, issue drafts, planning, hard rules, the memory and the language rule |
 | `plan-writing` | write-doc (`document: plan`) | Plan structure (files that change, order of work, risks, proof) and scoring rubric |
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
@@ -1372,6 +1373,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, each suite run once, pre-existing failures reported instead of chased |
 | `ui-conventions` | developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system) | UI changes: shared components, controls that follow the data, a readability checklist, a design section, states to capture, and the visual review of the screenshots (ui_findings) |
+| `ui-kit-extraction` | kit_mapper (ui-kit-map: the agent part of Build the visual kit) | Mockups: map a project's 8-15 most used components and 2 layout patterns onto its extracted tokens, read-only, assumptions recorded |
 | `unit-test-writer-{js,python,go,java,csharp,rust}` | test writer | Framework detection, commands, idioms per language |
 <!-- /generated:skills -->
 

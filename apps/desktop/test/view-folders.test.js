@@ -23,9 +23,9 @@ const indexHtml = fs.readFileSync(pageFileOf('index.html'), 'utf8');
 const viewIds = pageDirs(ROOT).flatMap((dir) => (fs.existsSync(path.join(ROOT, dir, 'views')) ? viewsOf(ROOT, dir) : []));
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-test('views/: all 25 screens have moved into their own folders (#260 added releases, #257 discovery, #647 docs, #634 errors, #812 pulls)', () => {
+test('views/: all 26 screens have moved into their own folders (#260 added releases, #257 discovery, #647 docs, #634 errors, #812 pulls, #625 mockups)', () => {
   assert.deepEqual([...viewIds].sort(), [
-    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'discovery', 'docs', 'duo', 'errors', 'inbox', 'nightwatch', 'oracle',
+    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'discovery', 'docs', 'duo', 'errors', 'inbox', 'mockups', 'nightwatch', 'oracle',
     'project', 'projects', 'pulls', 'releases', 'run', 'runchat', 'sessions', 'settings', 'skills', 'supervisor', 'usage', 'workflows',
   ]);
 });

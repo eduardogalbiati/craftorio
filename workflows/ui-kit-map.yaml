@@ -1,0 +1,139 @@
+# =============================================================================
+# Workflow: UI kit map (#625, Plan & Design › Mockups › Build the visual kit)
+# -----------------------------------------------------------------------------
+#   (machine step, in the service) ──► components (the kit agent, read-only) ──► end
+#
+# The visual kit of a project's mockups (D2, D3): a minimal kit that grows. The deterministic part
+# runs in the Mockups service before this run starts (mockups:build-kit, fronts/plan/engine/channels/
+# mockups.js, no model): the CSS custom properties and fonts of the project's stylesheets and theme
+# files (MockupModel.extractTokens) become kit/tokens.css and kit/kit.json in
+# <workspace>/mockups/<project>/, one commit. This run is the agent part: it reads the project's
+# repository (read-only, like the cartographer of project-map) and the tokens, and answers with the
+# 8-15 most used components and 2 layout patterns as CSS built on the tokens (`components_css`), the
+# catalogue (`components`: name, source file and lines) and the assumptions it made (`inferences`);
+# the service writes them into kit/components.css and kit.json, one commit. It never writes to the
+# project's repository and records its assumptions instead of asking: no human_approval, the kit is
+# reviewed in the Mockups screen, not at a gate. Simulated (MULTIAGENT_SIMULATION_ONLY) the service
+# keeps the machine step only and does not start this workflow.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: ui-kit-map
+  version: 0.1.0
+  description: Reads a project's code (read-only) and maps its most used UI components and layout patterns onto the tokens the machine step extracted, for the project's mockups kit.
+  tags: [design, mockups, kit]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  project_path:
+    label: "Project folder"
+    type: string
+    required: true
+    description: The project's repository, read-only.
+  project_id:
+    label: "Project"
+    type: string
+    required: true
+    description: The project's id; its kit lives in <workspace>/mockups/<project id>/kit/.
+  mockup_dir:
+    label: "Mockup folder"
+    type: string
+    required: true
+    description: The project's mockup folder, where kit/tokens.css already holds the machine step's tokens.
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+defaults:
+  timeout: 30m
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5-5
+  supervisor:
+    enabled: true
+    max_interventions: 1   # per step
+  limits:
+    max_total_duration: 1h
+    max_total_cost_usd: 6
+
+# -----------------------------------------------------------------------------
+agents:
+  kit_mapper:
+    provider: claude
+    model: claude-opus-5-5
+    session: ephemeral
+    skills: [ui-kit-extraction]
+    capabilities: { tools: [read], web: false }
+    working_dir: "{{ inputs.project_path }}"
+    system_prompt: |
+      You map a project's user interface into a small visual kit for its mockups. The current
+      folder is the project's repository: you only read it, you never write files.
+
+groups:
+  - name: Kit
+    steps: [components]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: components
+    agent: kit_mapper
+    prompt: |
+      The tokens the machine step extracted from this repository are in
+      {{ inputs.mockup_dir }}/kit/tokens.css and {{ inputs.mockup_dir }}/kit/kit.json (with their
+      source files and lines). Follow the ui-kit-extraction skill: find the 8-15 most used
+      components and 2 layout patterns, and answer with
+      - `components_css`: their CSS, every colour, size and gap from a token (var(--…));
+      - `components`: one entry per component, its kit name (e.g. Button/primary), class and source;
+      - `inferences`: each assumption you made, with its evidence.
+    output_schema:
+      type: object
+      required: [components_css, components, inferences]
+      properties:
+        components_css: { type: string }
+        components:
+          type: array
+          items:
+            type: object
+            required: [name, class]
+            properties:
+              name: { type: string }
+              class: { type: string }
+              source: { type: string }
+        inferences:
+          type: array
+          items: { type: string }
+
+# -----------------------------------------------------------------------------
+outputs:
+  components:
+    type: array
+    description: The kit's component catalogue (also in kit/kit.json).
+    value: "{{ steps.components.output.components }}"
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

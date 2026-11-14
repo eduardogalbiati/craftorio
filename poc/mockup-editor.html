@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mockups phase 0: the editor with a live inspector (spike)</title>
+<!--
+  Project mockups, phase 0 (#625): the editor window's canvas and side chat, a spike. The canvas is
+  an iframe with sandbox="allow-scripts" and no allow-same-origin, so the mock screen runs in an
+  opaque origin: it cannot reach this page, window.api, cookies or storage, and its own CSP
+  (default-src 'none', connect-src 'none') keeps it off the network. The sample screen uses a
+  subset of the app's own tokens (packages/ui-kit/style.css :root) as its "kit", and every node
+  carries a data-mid, like the generator writes them (MockupModel.addMids).
+
+  The live inspector (the app's version: fronts/plan/views/mockups/mockup-inspector.js) runs inside
+  the frame: a click on a node posts { type: 'mockup:select', mid, selector, kit, text, box, html }
+  to the parent, which shows it as a chip in the fake chat; sending puts the chat message the
+  designer would get (the shape of MockupModel.buildChatMessage) in the log. Nothing leaves the
+  page: no model is called, no request is made. The app serves its frames on mockup://, a protocol
+  this file cannot register; srcdoc stands in for it here.
+
+  Open: open the file in a browser (file:// works, nothing is fetched).
+-->
+<style>
+  :root { color-scheme: dark; --bg: #0f1218; --panel: #161a22; --line: #262c38; --text: #d7dce5; --muted: #8a91a3; --accent: #6aa9ff; --mono: ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: var(--text); font: 13px/1.5 system-ui, sans-serif; }
+  header { display: flex; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 14px; margin: 0 12px 0 0; }
+  header .muted { color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+  aside { display: grid; grid-template-rows: 1fr auto; border-left: 1px solid var(--line); background: var(--panel); min-height: 0; }
+  #log { overflow: auto; padding: 10px 12px; }
+  #log pre { white-space: pre-wrap; font: 11px/1.4 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  form { display: grid; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); }
+  .chip { display: none; align-items: center; gap: 6px; font: 11px var(--mono); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 8px; width: fit-content; }
+  .chip.on { display: inline-flex; }
+  .chip button { background: none; border: 0; color: var(--muted); cursor: pointer; }
+  textarea { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: inherit; min-height: 60px; }
+  form > button { justify-self: end; background: var(--accent); color: #000; border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mockup editor (spike)</h1>
+  <span class="muted">orders-dashboard · desktop-1440 · click an element on the canvas, then ask</span>
+</header>
+<main>
+  <iframe id="canvas" title="The mockup screen" sandbox="allow-scripts"></iframe>
+  <aside>
+    <div id="log"><p class="muted">Fake designer chat: nothing is sent to a model.</p></div>
+    <form id="compose">
+      <span class="chip" id="chip"><span id="chip-text"></span><button type="button" id="chip-x" aria-label="Remove the selection">×</button></span>
+      <textarea id="message" placeholder="Select on the canvas, then say what to change"></textarea>
+      <button type="submit">Send</button>
+    </form>
+  </aside>
+</main>
+<script>
+  const SCREEN = `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+<style>
+  :root { --bg: #0f1218; --panel: #161a22; --line: #262c38; --text: #d7dce5; --muted: #8a91a3; --accent: #6aa9ff; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 system-ui, sans-serif; }
+  .page-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--line); }
+  .btn { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 6px 12px; }
+  .btn-primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .card .muted { color: var(--muted); font-size: 12px; }
+  [data-mid]:hover { outline: 1px dashed var(--accent); }
+</style></head>
+<body data-mid="m1">
+  <header class="page-head" data-mid="m2"><h1 data-mid="m3">Orders</h1><button class="btn btn-primary export" data-mid="m4" data-kit="Button/primary">Export</button></header>
+  <section class="cards" data-mid="m5">
+    <div class="card" data-mid="m6" data-kit="Card"><div class="muted" data-mid="m7">Open</div><strong data-mid="m8">128</strong></div>
+    <div class="card" data-mid="m9" data-kit="Card"><div class="muted" data-mid="m10">Shipped today</div><strong data-mid="m11">42</strong></div>
+    <div class="card" data-mid="m12" data-kit="Card"><div class="muted" data-mid="m13">Late</div><strong data-mid="m14">3</strong></div>
+  </section>
+<script>
+  const describe = (el) => {
+    const node = el.closest('[data-mid]');
+    if (!node) return null;
+    const r = node.getBoundingClientRect();
+    const cls = [...node.classList].map((c) => '.' + c).join('');
+    const parent = node.parentElement && node.parentElement.closest('[data-mid]');
+    const own = node.tagName.toLowerCase() + cls;
+    return {
+      mid: node.dataset.mid,
+      selector: parent && parent !== document.body ? parent.tagName.toLowerCase() + ' > ' + own : own,
+      kit: node.dataset.kit || null,
+      text: node.textContent.trim().slice(0, 120),
+      box: [r.x, r.y, r.width, r.height].map(Math.round),
+      html: node.outerHTML.slice(0, 300),
+    };
+  };
+  document.addEventListener('click', (e) => {
+    e.preventDefault();
+    const d = describe(e.target);
+    if (d) parent.postMessage(Object.assign({ type: 'mockup:select' }, d), '*');
+  }, true);
+<\/script>
+</body></html>`;
+
+  const frame = document.getElementById('canvas');
+  const chip = document.getElementById('chip');
+  const log = document.getElementById('log');
+  let selection = null;
+  frame.srcdoc = SCREEN;
+
+  window.addEventListener('message', (e) => {
+    if (e.source !== frame.contentWindow || !e.data || e.data.type !== 'mockup:select') return;
+    const { type, ...picked } = e.data;
+    selection = picked;
+    document.getElementById('chip-text').textContent = `${picked.mid} · ${picked.kit || picked.selector}`;
+    chip.classList.add('on');
+  });
+  document.getElementById('chip-x').addEventListener('click', () => { selection = null; chip.classList.remove('on'); });
+  document.getElementById('compose').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = document.getElementById('message').value.trim();
+    if (!text) return;
+    const payload = { mockup: 'orders-dashboard', version: 'v1 (spike)', frame: 'desktop-1440', selection: selection ? [selection] : [], area: null, refs: [], message: text };
+    const pre = document.createElement('pre');
+    pre.textContent = JSON.stringify(payload, null, 2);
+    log.append(pre);
+    document.getElementById('message').value = '';
+  });
+</script>
+</body>
+</html>
