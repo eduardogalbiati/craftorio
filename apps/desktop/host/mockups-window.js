@@ -15,6 +15,10 @@
 // (fronts/plan/views/mockups/mockup-inspector.js) into the html.
 const fs = require('fs');
 const path = require('path');
+const {
+  onScreenBounds,
+  sideWindowOptions,
+} = require('./side-window');
 const { guardWindow } = require('./window-guards');
 
 const DEFAULTS = { width: 1440, height: 900 };
@@ -60,21 +64,6 @@ function createMockupsWindow({ BrowserWindow, statePath, dirname, page = null, d
     } catch (e) { console.error('[mockups-window] could not save its state:', e.message); }
   }
 
-  // the saved bounds when they are sane and (with `screen`) still on a display
-  function savedBounds(s) {
-    const b = s.bounds;
-    if (!b || ![b.x, b.y, b.width, b.height].every((n) => Number.isFinite(n))) return null;
-    if (b.width < MIN.width || b.height < MIN.height) return null;
-    if (screen?.getAllDisplays) {
-      const on = screen.getAllDisplays().some((d) => {
-        const a = d.workArea || d.bounds;
-        return b.x + b.width > a.x && b.x < a.x + a.width && b.y + b.height > a.y && b.y < a.y + a.height;
-      });
-      if (!on) return null;
-    }
-    return b;
-  }
-
   function current() {
     return win && !win.isDestroyed() ? win : null;
   }
@@ -88,22 +77,8 @@ function createMockupsWindow({ BrowserWindow, statePath, dirname, page = null, d
       live.webContents.send('mockups-window:show', { projectId, slug });
       return live;
     }
-    const bounds = savedBounds(readState());
-    win = new BrowserWindow({
-      ...DEFAULTS,
-      ...(bounds || {}),
-      minWidth: MIN.width,
-      minHeight: MIN.height,
-      backgroundColor: '#0e1014',
-      title: 'Mockup · Multiagent Orchestrator',
-      autoHideMenuBar: true,
-      webPreferences: {
-        preload: path.join(dirname, 'preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        devTools,
-      },
-    });
+    const bounds = onScreenBounds(readState(), MIN, screen);
+    win = new BrowserWindow(sideWindowOptions({ dirname, devTools, min: MIN, defaults: DEFAULTS, bounds, title: 'Mockup · Multiagent Orchestrator' }));
     const opened = win;
     guardWindow(opened.webContents, { openExternal: (url) => require('electron').shell.openExternal(url) });
     opened.on('close', () => { try { writeState({ bounds: opened.getBounds() }); } catch { /* the window is gone */ } });
