@@ -56,12 +56,25 @@ function docsEntries(paths) {
 // a changed file answers an expected entry: the same path, or a file under a directory entry
 const touches = (entry, file) => (entry.endsWith('/') ? norm(file).startsWith(entry) : norm(file) === entry);
 
+const escapeRe = (/** @type {string} */ s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// the path as a whole word: after the start, a space, a backtick, a quote or '('; before the end,
+// a space or punctuation ('/' only after a directory entry, which carries its own slash)
+const PATH_BEFORE = '(?:^|[\\s`\'"(])';
+const PATH_AFTER = '(?=$|[\\s`\'")\\],;:!?]|\\.(?:\\s|$))';
+/** @type {(entry: string, text: string) => boolean} */
+const namesPath = (entry, text) => {
+  if (entry.endsWith('/')) {
+    const dir = escapeRe(entry.slice(0, -1));
+    return new RegExp(`${PATH_BEFORE}${dir}(?:/|${PATH_AFTER})`).test(text);
+  }
+  return new RegExp(`${PATH_BEFORE}${escapeRe(entry)}${PATH_AFTER}`).test(text);
+};
+
 // a left_out item with a reason that names the entry (its path, or a directory without the slash)
 /** @type {(entry: string, leftOut: Array<{ requirement?: string, reason?: string }>) => boolean} */
 const declared = (entry, leftOut) => (Array.isArray(leftOut) ? leftOut : []).some((g) => {
   if (!g || !String(g.reason ?? '').trim()) return false;
-  const req = String(g.requirement ?? '').replace(/\\/g, '/');
-  return req.includes(entry) || (entry.endsWith('/') && req.includes(entry.slice(0, -1)));
+  return namesPath(entry, String(g.requirement ?? '').replace(/\\/g, '/'));
 });
 
 /**
