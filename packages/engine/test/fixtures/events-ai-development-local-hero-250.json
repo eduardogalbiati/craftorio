@@ -1,7 +1,7 @@
 {
-  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events); then #465: a machine step announces its log with step.log, once in red_check and twice in suite (focused round, then the whole suite) (184 events); then #630 (local mode pushes main): verify_change goes to push_main, a developer turn, then to end, so the sessions close and the run finishes in push_main#1 (201 events, re-recorded by #710).",
+  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events); then #465: a machine step announces its log with step.log, once in red_check and twice in suite (focused round, then the whole suite) (184 events); then #630 (local mode pushes main): verify_change goes to push_main, a developer turn, then to end, so the sessions close and the run finishes in push_main#1 (201 events, re-recorded by #710); then #756: the developer loads developer-self-review (one more 'skill loaded' log in develop#1 run) and code-review pulls reuse-pass through uses (one more in code_review#1 run) (203 events).",
   "status": "success",
-  "count": 201,
+  "count": 203,
   "steps": [
     "workflow.started",
     "step.started acceptance_tests",
@@ -131,6 +131,7 @@
       "log",
       "log",
       "log",
+      "log",
       "step.finished develop",
       "step.transition develop>developer_screenshots"
     ],
@@ -143,6 +144,7 @@
       "step.started code_review"
     ],
     "code_review#1 run": [
+      "log",
       "log",
       "step.finished code_review",
       "step.transition code_review>suite"
