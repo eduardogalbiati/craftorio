@@ -61,6 +61,9 @@ const DESKTOP = [
   // window: the window sends the target, main relays it to the main window (AgentsWindow.onNavigate)
   { send: 'agents-window:navigate', method: 'navigateMainWindow', params: 'target', desktop: 'The Agents window' },
   { event: 'main-window:navigate', method: 'onMainWindowNavigate' },
+  // The mockup editor window (#625, apps/desktop/host/mockups-window.js): a second open asks it to show
+  // another screen ({ projectId, slug }); it is opened through the mockups:open-editor channel
+  { event: 'mockups-window:show', method: 'onMockupsWindowShow' },
   // the Findings button (#361): the calling window's capture, a PNG data URL
   { channel: 'window:capture', method: 'captureWindow', desktop: 'Capturing the window' },
 ];
