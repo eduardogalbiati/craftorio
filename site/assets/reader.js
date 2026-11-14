@@ -12,11 +12,11 @@
     { f: 'intent', name: 'Plan', fills: 'Written by a person (or Grill me) and accepted by the product owner.' },
     { f: 'spec', name: 'Design', fills: 'Written from the accepted intent and signed off by the product owner.' },
     { f: 'plan', name: 'Build', fills: 'Written by the engineer; its Progress table is filled by the Code & Build runs.' },
-    { f: 'test', name: 'Test', fills: 'Created by the first Build run: suite, E2E, screenshots and evals.' },
+    { f: 'test', name: 'Test', fills: 'Recorded by sdlc-record after each successful run; closed by the Test workflow at the code owner’s gate.' },
     { f: 'deploy', name: 'Deploy', fills: 'Created by the review, the PR and the release workflow.' },
     { f: 'maintain', name: 'Maintain', fills: 'Created by the Monitor and the Night watch after the release.' }
   ];
-  var OK = /^(accepted|signed off|approved|done|passed|merged|released|shipped|resolved)$/;
+  var OK = /^(accepted|signed off|approved|built|done|passed|merged|released|shipped|resolved)$/;
   var NONE = /^(not started|no incidents|missing)$/;
   var BAD = /^(rejected|failed|blocked)$/;
   var WORKING = /^(draft|in progress|writing|running)$/;
@@ -417,14 +417,16 @@
     return para.length > 220 ? para.slice(0, 217).replace(/\s+\S*$/, '') + '…' : para;
   }
   // The stage being worked on: the first one with a working status (draft, in progress); else the last
-  // one started, moving past it when it is approved (an accepted plan means Build is on, so it stays).
+  // one started, moving past it when it is approved (an accepted plan means Build is on, so it stays; a
+  // `built` plan, set by sdlc-record when Progress is N of N, moves the item on to Test, #702).
   function currentStage(stages) {
     var w = stages.findIndex(function (s) { return WORKING.test((s.meta.status || '').toLowerCase()); });
     if (w >= 0) return w;
     var last = -1;
     stages.forEach(function (s, i) { if (statusCls(s.meta.status) !== 'none') last = i; });
     if (last < 0) return 0;
-    if (statusCls(stages[last].meta.status) === 'ok' && /^(intent|spec|test|deploy)$/.test(stages[last].f) && last < stages.length - 1) return last + 1;
+    var done = /^(intent|spec|test|deploy)$/.test(stages[last].f) || (stages[last].f === 'plan' && /^built$/i.test(stages[last].meta.status || ''));
+    if (statusCls(stages[last].meta.status) === 'ok' && done && last < stages.length - 1) return last + 1;
     return last;
   }
   // EN reads the source, PT the translation; the choice is remembered per viewer
@@ -1137,5 +1139,5 @@
     }
   }
 
-  window.SdlcReader = { home: home, item: item };
+  window.SdlcReader = { currentStage: currentStage, home: home, item: item, statusCls: statusCls };
 })();

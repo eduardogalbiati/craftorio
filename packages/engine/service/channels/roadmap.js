@@ -287,6 +287,7 @@ module.exports = (ctx) => {
     // `confirmed` (Start from scratch), which lets the item's next start go past that work.
     // #804: `keepPaused` on the skip of the item that paused the roadmap: it stays paused, nothing
     // starts until Resume (without it the roadmap goes on, as ever).
+    // #702 `start_test`: Start Test on a built work item (sdlc-test.yaml; refused unless the plan is built).
     {
       channel: 'roadmap:item',
       method: 'roadmapItem',
@@ -296,6 +297,11 @@ module.exports = (ctx) => {
         requireText(action, 'roadmap item action', 40);
         const id = project(projectId);
         const item = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
+        // #702 Start Test: the sdlc-test workflow on a built work item (areas/roadmap.js startTest)
+        if (action === 'start_test') {
+          await ctx.startTest(id, String(itemId));
+          return current(projectId);
+        }
         // #395 Move on: an owner edit (kept in the history, Undo takes it back); the run keeps its gate
         if (action === 'park') {
           const before = stagesOf(id);

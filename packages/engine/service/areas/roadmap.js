@@ -16,6 +16,7 @@
 // Stack (#807): a run at its PR's review gate waits for that merge (mergeGateOf); a stacked item starts
 // from its parent's branch (stackInputs) and its card names it (`stackedOn`).
 
+const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
@@ -28,6 +29,8 @@ const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
 const runPr = require('../../domains/run/run-pr');
 const seedRuns = require('../seed-runs');
+const chain = require('@multiagent/shared/chain-model');
+const DocModel = require('@multiagent/shared/doc-model');
 const RoadmapModel = require('@multiagent/shared/roadmap-model');
 const RunProgress = require('@multiagent/shared/run-progress-model');
 const { clientError } = require('../common');
@@ -107,10 +110,50 @@ module.exports = (ctx) => {
           const stackedOn = stack?.branch && !stack.parentMerged ? { stackedOn: { branch: stack.branch, prNumber: stack.prNumber, prUrl: stack.prUrl } } : {};
           // #807: the effective run mode of an item waiting for its merge (the project's runDefaults too), for its notice
           const mode = x.status === 'waiting_merge' ? { effectiveMode: itemMode(projectId, x) } : {};
-          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn, ...mode };
+          // #702: the work item (docs/work/<item>/) and its plan's status, for Start Test on a built plan
+          const sdlc = sdlcOf(projectId, x);
+          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn, ...mode, ...(sdlc ? { sdlc } : {}) };
         }),
       })),
     }, list, { issues: known, prices });
+  }
+
+  // #702: a roadmap item's work item: its `inputs.item`, else the docs/work/<item>/plan.md its body or its
+  // issues name (chain-model planItem); `status` is plan.md's, `built` when its Progress is N of N
+  // (DocModel.planBuilt). Null when the item names no work item or the project has no folder.
+  function sdlcOf(projectId, x) {
+    const texts = [x.body, ...(x.issues || []).map((i) => (i && typeof i === 'object' ? `${i.title || ''}\n${i.body || ''}` : ''))];
+    const item = x.inputs?.item || texts.map(chain.planItem).find(Boolean);
+    if (!item || /[\\/]|\.\./.test(item)) return null;
+    const folder = projects.listProjects(ctx.ws.projects).find((p) => p.id === path.basename(String(projectId)))?.folder;
+    if (!folder) return null;
+    let text = '';
+    try { text = fs.readFileSync(path.join(folder, 'docs', 'work', item, 'plan.md'), 'utf8'); } catch { return { item, status: null }; }
+    const status = DocModel.planBuilt(text) ? 'built' : String(DocModel.frontMatter(text).status || '').replace(/\s+#.*$/, '').trim() || null;
+    return { item, status };
+  }
+
+  // #702 Start Test (the Roadmap's button on a built work item): starts sdlc-test.yaml on the item, never by
+  // itself; the run's id is kept on the item (`testRunId`) for its card. Refused unless the plan is built.
+  async function startTest(projectId, itemId) {
+    const id = path.basename(String(projectId));
+    const x = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
+    if (!x) throw clientError(`Roadmap item ${itemId} not found.`);
+    const sdlc = sdlcOf(id, x);
+    if (sdlc?.status !== 'built') throw clientError(`Start Test needs a built plan: every Progress row of docs/work/${sdlc?.item || '<item>'}/plan.md done.`);
+    if (x.testRunId && ctx.runAlive(x.testRunId)) return { runId: x.testRunId };
+    const project = projects.listProjects(ctx.ws.projects).find((p) => p.id === id);
+    const inputs = { project_path: project.folder, base_branch: x.inputs?.base_branch || x.inputs?.base || 'main', item: sdlc.item };
+    const started = await ctx.startWorkflowRun({ file: 'sdlc-test.yaml', inputs, mock: !!x.mock, projectId: id });
+    const runId = started?.runId || null;
+    if (runId) {
+      roadmaps.updateRoadmap(ctx.ws.backlog, id, (r) => {
+        const it = roadmaps.findItem(r, x.id);
+        if (it) it.testRunId = runId;
+        return r;
+      });
+    }
+    return { runId };
   }
 
   // #384: an item whose run was resumed (#250) shows the run that resumed it (the latest of the chain),
@@ -619,6 +662,7 @@ module.exports = (ctx) => {
     pauseStage,
     roadmapView,
     startRoadmap,
+    startTest,
     syncWaitingPrs,
   };
 };
