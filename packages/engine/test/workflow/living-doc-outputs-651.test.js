@@ -12,27 +12,41 @@ const WORKFLOWS = path.join(__dirname, '..', '..', '..', '..', 'workflows');
 const value = (name, out, scope) => JSON.parse(render(loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`)).outputs[out].value, scope).trim());
 const text = (name, out, scope) => render(loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`)).outputs[out].value, scope).trim();
 
-test('#651 feature evidence: the suite, the E2E, the screenshots and the axe findings of the run', () => {
+// #702: suite and e2e carry { status, passed, failed } (the runners' counts) for the test.md row
+test('#651 feature evidence: the suite, the E2E (with their counts), the screenshots and the axe findings of the run', () => {
   const steps = {
-    suite: { output: { status: 'pass' } },
-    e2e: { output: { status: 'pass', message: '3 scenarios passed' } },
+    suite: { output: { status: 'pass', passed: 120, failed: 0 } },
+    e2e: { output: { status: 'pass', passed: 3, failed: 0, message: '3 scenarios passed' } },
     evidence: { output: { screenshots: [{ path: 'evidence/a.png', caption: 'A' }] } },
-    developer_screenshots: { output: { axe_findings: [] } },
+    developer_screenshots: { output: { taken: 1, axe_findings: [] } },
   };
-  assert.deepEqual(value('feature', 'evidence', { steps, run: {} }), {
-    suite: 'pass', e2e: '3 scenarios passed', screenshots: [{ path: 'evidence/a.png', caption: 'A' }], axe: [],
-  });
+  const ev = value('feature', 'evidence', { steps, run: {} });
+  assert.deepEqual([ev.suite, ev.e2e, ev.screenshots, ev.axe], [
+    { status: 'pass', passed: 120, failed: 0 },
+    { status: 'pass', passed: 3, failed: 0, message: '3 scenarios passed' },
+    [{ path: 'evidence/a.png', caption: 'A' }],
+    [],
+  ]);
+});
+
+test('#702 feature evidence: 0 screenshots carry the reason the screenshot step gave', () => {
+  const steps = { developer_screenshots: { output: { taken: 0, reason: 'no UI change', axe_findings: [] } } };
+  const ev = value('feature', 'evidence', { steps, run: {} });
+  assert.deepEqual([ev.screenshots, ev.screenshots_reason], [[], 'no UI change']);
 });
 
 test('#651 feature evidence: a step that did not run is "not run" or empty', () => {
-  assert.deepEqual(value('feature', 'evidence', { steps: {}, run: {} }), { suite: 'not run', e2e: 'not run', screenshots: [], axe: [] });
+  const ev = value('feature', 'evidence', { steps: {}, run: {} });
+  assert.deepEqual([ev.suite, ev.e2e.status, ev.screenshots, ev.axe], [{ status: 'not run' }, 'not run', [], []]);
 });
 
 test('#651 fix outputs: the merged commit, the PR and the suite of the run', () => {
-  const scope = { steps: { suite: { output: { status: 'pass' } }, ci: { output: { pr_url: 'https://x/pr/1' } } }, run: { issues: [], local_merge: { commit: 'abc' } } };
+  const scope = { steps: { suite: { output: { status: 'pass', passed: 40, failed: 0 } }, ci: { output: { pr_url: 'https://x/pr/1' } } }, run: { issues: [], local_merge: { commit: 'abc' } } };
   assert.equal(text('fix', 'merged_commit', scope), 'abc');
   assert.equal(text('fix', 'pr_url', scope), 'https://x/pr/1');
-  assert.deepEqual(value('fix', 'evidence', scope), { suite: 'pass', e2e: 'not run', screenshots: [], axe: [] });
+  const ev = value('fix', 'evidence', scope);
+  assert.deepEqual([ev.suite, ev.e2e, ev.screenshots, ev.axe], [{ status: 'pass', passed: 40, failed: 0 }, 'not run', [], []]);
+  assert.equal(typeof ev.screenshots_reason === 'string' && ev.screenshots_reason.length > 0, true, 'a fix names why it took no screenshots');
   assert.equal(text('fix', 'pr_url', { steps: {}, run: {} }), '');
 });
 

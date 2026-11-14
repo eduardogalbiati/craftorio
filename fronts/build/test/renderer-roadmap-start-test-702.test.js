@@ -28,6 +28,19 @@ test('#702 roadmap: a built item offers "Start Test"', () => {
   assert.deepEqual([btn !== null, btn ? /Start Test/i.test(H.visibleText(btn.inner)) : false], [true, true]);
 });
 
+const testRun = (html, id) => H.findEl(H.itemEl(html, id).outer, (e) => e.attrs['data-testid'] === 'roadmap-test-run');
+
+test('#702 roadmap: while its Test run is going, a built item shows the run, not "Start Test"', () => {
+  const html = render([doneItem('e', { testRunId: 'run-test-1', sdlc: { item: 'write-doc', status: 'built', testRunning: true } })]);
+  const run = testRun(html, 'e');
+  assert.deepEqual([run !== null, run ? run.attrs['data-run'] : null, startTest(html, 'e') !== null], [true, 'run-test-1', false]);
+});
+
+test('#702 roadmap: once its Test run has finished, a built item offers "Start Test" again next to the run', () => {
+  const html = render([doneItem('f', { testRunId: 'run-test-2', sdlc: { item: 'write-doc', status: 'built', testRunning: false } })]);
+  assert.deepEqual([testRun(html, 'f') !== null, startTest(html, 'f') !== null], [true, true]);
+});
+
 test('#702 roadmap: "Start Test" is offered only on built items', () => {
   const html = render([
     doneItem('b', { sdlc: { item: 'write-doc', status: 'built' } }),

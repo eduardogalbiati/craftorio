@@ -108,13 +108,14 @@ const THREE_ROWS = [...TWO_ROWS, ['Step three (#13)', 'pending']];
 const ISSUES = [{ number: 12, title: 'Step two', url: 'https://github.com/o/r/issues/12' }];
 const RUN = 'run-702-abc';
 
-function repo(t, rows, opts) {
+// opts: `risks` (plan), `noTest` (no test.md / test.pt-BR.md yet), `files` (more committed files)
+function repo(t, rows, opts = {}) {
   const r = makeRepo(t, {
     'src/app.js': 'module.exports = 1;\n',
     'docs/work/demo/plan.md': plan(rows, opts),
     'docs/work/demo/plan.pt-BR.md': planPt(rows, opts),
-    'docs/work/demo/test.md': TEST_MD,
-    'docs/work/demo/test.pt-BR.md': TEST_PT,
+    ...(opts.noTest ? {} : { 'docs/work/demo/test.md': TEST_MD, 'docs/work/demo/test.pt-BR.md': TEST_PT }),
+    ...(opts.files || {}),
   });
   r.git('config', 'user.name', 't');
   r.git('config', 'user.email', 't@t');
@@ -221,4 +222,106 @@ test('#702 record_docs: a plan that fails DocModel\'s lint is not committed', as
   try { out = await record(r, evidence()); } catch { threw = true; }
   const problems = out && Array.isArray(out.problems) ? out.problems.length : 0;
   assert.deepEqual([r.head() === before, threw || problems > 0], [true, true]);
+});
+
+// ---- review round 2: the skeleton, the images' names, the stage's date, the engine step ----------------
+
+test('#702 record_docs: an item with no test.md yet gets the EN and pt-BR skeleton, with the run\'s row, in one commit', async (t) => {
+  const r = repo(t, THREE_ROWS, { noTest: true });
+  const before = r.head();
+  const out = await record(r, evidence());
+  const en = read(r, 'docs/work/demo/test.md');
+  const pt = read(r, 'docs/work/demo/test.pt-BR.md');
+  const files = r.git('show', '--name-only', '--format=', 'HEAD').split('\n').map((s) => s.trim()).filter(Boolean);
+  assert.deepEqual([out.status, out.problems.length], ['recorded', 0], JSON.stringify(out.problems));
+  assert.deepEqual([
+    DocModel.frontMatter(en).status, DocModel.frontMatter(en).stage, DocModel.frontMatter(pt).source,
+    rowOf(en, RUN) !== '', rowOf(pt, RUN) !== '',
+  ], ['collecting', 'test', 'test.md', true, true]);
+  assert.deepEqual([
+    r.git('rev-list', '--count', `${before}..HEAD`),
+    files.includes('docs/work/demo/test.md'), files.includes('docs/work/demo/test.pt-BR.md'), files.includes('docs/work/demo/plan.md'),
+    r.git('status', '--porcelain'),
+  ], ['1', true, true, true, '']);
+});
+
+test('#702 record_docs: a screenshot whose name images/ already holds with other content is copied as <run>-<name>', async (t) => {
+  const NAME = '12-login-empty.original.png';
+  const r = repo(t, THREE_ROWS, { files: { [`docs/work/demo/images/${NAME}`]: 'an older run\'s image' } });
+  const shots = evidenceDir(t, [NAME]);
+  await record(r, evidence({ screenshots: shots }));
+  const images = path.join(r.dir, 'docs', 'work', 'demo', 'images');
+  const renamed = `${RUN}-${NAME}`;
+  assert.deepEqual([
+    fs.readFileSync(path.join(images, NAME), 'utf8'),
+    fs.existsSync(path.join(images, renamed)) ? fs.readFileSync(path.join(images, renamed), 'utf8') : null,
+    read(r, 'docs/work/demo/test.md').includes(`images/${renamed}`),
+  ], ['an older run\'s image', `png ${NAME}`, true]);
+});
+
+test('#702 record_docs: a screenshot identical to the one images/ already holds keeps its name', async (t) => {
+  const NAME = '12-login-empty.original.png';
+  const r = repo(t, THREE_ROWS, { files: { [`docs/work/demo/images/${NAME}`]: `png ${NAME}` } });
+  await record(r, evidence({ screenshots: evidenceDir(t, [NAME]) }));
+  const images = fs.readdirSync(path.join(r.dir, 'docs', 'work', 'demo', 'images')).sort();
+  assert.deepEqual(images, [NAME]);
+});
+
+test('#702 recordStage: a test.md without `date` gets one, its status set, and DocModel\'s lint passes', async (t) => {
+  const noDate = (text) => text.replace('date: 2026-11-01\n', '').replace('status: not started', 'status: collecting');
+  const r = repo(t, TWO_ROWS, { noTest: true, files: { 'docs/work/demo/test.md': noDate(TEST_MD), 'docs/work/demo/test.pt-BR.md': noDate(TEST_PT) } });
+  assert.equal(DocModel.frontMatter(read(r, 'docs/work/demo/test.md')).date, undefined, 'the fixture has no date');
+  const before = r.head();
+  const out = await load().recordStage(r.dir, { item: 'demo', status: 'in review', summary: 'Suite 120 passed, E2E 3 passed.' });
+  const front = DocModel.frontMatter(read(r, 'docs/work/demo/test.md'));
+  assert.deepEqual([out.status, out.problems.length, front.status, /^\d{4}-\d{2}-\d{2}$/.test(String(front.date)), r.head() !== before],
+    ['recorded', 0, 'in review', true, true], JSON.stringify(out.problems));
+});
+
+// the engine's `type: record_docs` step (machine-steps.js runRecordDocsStep), called on WorkflowRun.prototype
+// with a small run state, as release-rounds-internals-324-325.test.js does
+function stepState(t, r, inputs, { simulated = false } = {}) {
+  const machineActions = require('../engine/machine-actions');
+  const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-702-'));
+  t.after(() => fs.rmSync(runs, { recursive: true, force: true }));
+  const events = [];
+  const state = {
+    mock: simulated, machine: simulated ? machineActions.simulated() : machineActions.real(), runId: 'sdlc-run-1',
+    runDir: path.join(runs, 'sdlc-run-1'), worktree: { repo: r.dir, base: 'main' }, ctx: { worktree_dir: r.dir, inputs },
+    emitEvent: (type, data) => events.push({ type, ...data }),
+  };
+  return { state, events, runs };
+}
+const runStep = (state, step = { id: 'record', type: 'record_docs' }) => {
+  const { WorkflowRun } = require('../engine/workflow');
+  return WorkflowRun.prototype.runRecordDocsStep.call(state, step);
+};
+
+test('#702 record_docs step: records from the chained inputs (run, merged_commit, evidence), screenshots found in the run\'s folder, on its own branch', async (t) => {
+  const r = repo(t, THREE_ROWS);
+  r.git('checkout', '-q', '--detach'); // a run's worktree is detached
+  const inputs = {
+    item: 'demo', run: 'cb-run-1', merged_commit: r.merged, pr_url: '', issues: ISSUES,
+    evidence: evidence({ suite: { status: 'pass', passed: 77, failed: 0 }, screenshots: [{ path: 'evidence/12-a.modified.png', caption: 'A' }] }),
+    task: 'a task text that names 999 tests', retrospective: true,
+  };
+  const { state, events, runs } = stepState(t, r, inputs);
+  fs.mkdirSync(path.join(runs, 'cb-run-1', 'evidence'), { recursive: true });
+  fs.writeFileSync(path.join(runs, 'cb-run-1', 'evidence', '12-a.modified.png'), 'png a');
+  const out = await runStep(state);
+  const row = rowOf(read(r, 'docs/work/demo/test.md'), 'cb-run-1');
+  assert.deepEqual([
+    out.status, /\b77\b/.test(row), /\b999\b/.test(row),
+    fs.existsSync(path.join(r.dir, 'docs', 'work', 'demo', 'images', '12-a.modified.png')),
+    r.git('rev-parse', '--abbrev-ref', 'HEAD'),
+    events.filter((e) => e.type === 'log' && e.kind === 'record_docs').length,
+  ], ['recorded', true, false, true, 'sdlc-record/demo-sdlc-run-1', 1], row);
+});
+
+test('#702 record_docs step: a simulated run writes nothing and says what it would record', async (t) => {
+  const r = repo(t, THREE_ROWS);
+  const before = r.head();
+  const { state } = stepState(t, r, { item: 'demo', run: 'cb-run-1', merged_commit: r.merged, evidence: evidence() }, { simulated: true });
+  const out = await runStep(state);
+  assert.deepEqual([out.status, r.head() === before, r.git('status', '--porcelain'), /demo/.test(String(out.message))], ['skipped', true, '', true]);
 });

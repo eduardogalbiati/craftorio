@@ -58,6 +58,13 @@ test('#702 listItems reads a plan whose Progress is N of N done as `built`', (t)
   assert.equal(docOf(item, 'plan')?.status, 'built');
 });
 
+test('#702 listItems leaves a `not started` test.md (the skeleton, no run recorded) out: the item stays in the plan stage', (t) => {
+  const skeleton = TEST_MD.replace('status: collecting', 'status: not started       # filled by the runs');
+  const dir = repo(t, { 'intent.md': INTENT, 'spec.md': SPEC, 'plan.md': plan(['done', 'pending']), 'test.md': skeleton });
+  const [item] = load().listItems(dir);
+  assert.deepEqual([(item?.docs || []).map((d) => d.doc).join(','), item?.stage], ['intent,spec,plan', 'plan']);
+});
+
 test('#702 listItems keeps a plan with N-1 of N done `accepted`', (t) => {
   const dir = repo(t, { 'intent.md': INTENT, 'spec.md': SPEC, 'plan.md': plan(['done', 'pending']) });
   const [item] = load().listItems(dir);
