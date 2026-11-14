@@ -21,6 +21,7 @@ const {
   nativeImage,
   Notification,
   powerSaveBlocker,
+  protocol,
   safeStorage,
   screen,
   session,
@@ -28,6 +29,10 @@ const {
   systemPreferences,
 } = require('electron');
 const { createAgentsWindow } = require('./agents-window');
+const {
+  createMockupsWindow,
+  serveMockup,
+} = require('./mockups-window');
 const { resolveCommand } = require('@multiagent/engine/engine/providers');
 const {
   externalTerminal,
@@ -169,6 +174,8 @@ const service = createService({
     relaunch: () => restartApp(),
     // #634: the Monitor's source tokens, encrypted by the system (host/secrets.js)
     secrets: createSecrets({ file: path.join(app.getPath('userData'), 'secrets.bin'), safeStorage }),
+    // #625: the mockup editor window (mockups:open-editor, fronts/plan/engine/channels/mockups.js)
+    openMockupEditor: (a) => !!mockupsWindow?.open(a || {}),
   },
   // the fronts this app ships (apps/desktop/composition.js, phase 4 of the study, #590): their
   // engine-side channels and areas load with the kernel's
@@ -206,9 +213,9 @@ ipc.on('api:manifest', (_arg, e) => {
   service.code.markLoaded();
   e.returnValue = service.manifest;
 });
-// pushed to the main window and to the Agents window (#263) when it is open
+// pushed to the main window, to the Agents window (#263) and to the mockup editor (#625) when open
 function broadcast(channel, payload) {
-  for (const w of [win, agentsWindow?.current()]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
+  for (const w of [win, agentsWindow?.current(), mockupsWindow?.current()]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
 for (const channel of PUSHED_EVENTS) {
   service.events.on(channel, (payload) => broadcast(channel, payload));
@@ -220,6 +227,8 @@ for (const channel of PUSHED_EVENTS) {
 // shows (agents-window:agent) so it reopens there. A link in its chats to a screen of the app
 // (agents-window:navigate) is relayed to the main window (main-window:navigate), brought to the front.
 let agentsWindow = null;
+// #625 the mockup editor window (apps/desktop/host/mockups-window.js), created with the Agents window
+let mockupsWindow = null;
 ipc.handle('agents-window:open', (arg) => { agentsWindow?.open(arg || {}); });
 ipc.on('agents-window:agent', (arg) => agentsWindow?.setAgent(arg?.agent));
 ipc.on('agents-window:navigate', (arg) => {
@@ -419,7 +428,7 @@ function createWindow() {
   // a run that died with the app last time, once the window can open it
   win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
   // the Agents window goes with the main one (#263)
-  win.on('closed', () => { const aw = agentsWindow?.current(); if (aw) aw.close(); });
+  win.on('closed', () => { for (const w of [agentsWindow?.current(), mockupsWindow?.current()]) if (w) w.close(); });
   // Packaged-app smoke (scripts/smoke-package.js, the release jobs): in simulation only, the app
   // writes MULTIAGENT_SMOKE_FILE a few seconds after its page loads and quits by itself
   const smokeFile = process.env.MULTIAGENT_SIMULATION_ONLY === '1' && process.env.MULTIAGENT_SMOKE_FILE;
@@ -558,6 +567,8 @@ function restartApp() {
 
 // Windows shows notifications under the app's AppUserModelID (the exe itself in development).
 if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'MultiagentOrchestrator' : process.execPath);
+// #625: the mockup canvas's own scheme (relative links to the kit resolve, served with no network)
+protocol?.registerSchemesAsPrivileged?.([{ scheme: 'mockup', privileges: { standard: true, secure: true } }]);
 
 app.whenReady().then(async () => {
   restrictPermissions(session.defaultSession);
@@ -576,6 +587,11 @@ app.whenReady().then(async () => {
   if (!ws) return app.quit();
   service.setWorkspace(ws);
   agentsWindow = createAgentsWindow({ BrowserWindow, screen, statePath: path.join(ws.root, 'agents-window.json'), dirname: __dirname, devTools: !app.isPackaged });
+  mockupsWindow = createMockupsWindow({ BrowserWindow, screen, statePath: path.join(ws.root, 'mockups-window.json'), dirname: __dirname, devTools: !app.isPackaged });
+  protocol?.handle?.('mockup', async (req) => {
+    const r = await serveMockup(req.url, ws.root);
+    return new Response(r.body, { status: r.status, headers: r.headers });
+  });
   keepAwake.update();
   setInterval(() => keepAwake.update(), 15 * 1000).unref();
   updateControl().catch((e) => console.error('control channel:', e.message));

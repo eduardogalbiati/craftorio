@@ -35,7 +35,8 @@
 // undoChange refuses (the files as they were) when a later request changed the same lines.
 // A request, an item or a document outside docs/work/<item>/ is refused before anything is written.
 // A repository without an identity commits as the person at this machine (user.name/user.email given
-// to that commit only).
+// to that commit only). git(dir, args) and commit(dir, files, message) are shared with the mockups
+// domain (#625, fronts/plan/engine/domains/mockups.js).
 
 const fs = require('fs');
 const os = require('os');
@@ -468,8 +469,10 @@ module.exports = {
   acceptDoc,
   applyDraft,
   applyRequest,
+  commit,
   createDoc,
   ensureBranch,
+  git,
   listChanges,
   listIntents,
   listItems,

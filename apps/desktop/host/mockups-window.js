@@ -1,0 +1,157 @@
+// The mockup editor window (#625, D6): a BrowserWindow of its own for one project's mockup screen, opened
+// from Plan & Design › Mockups (fronts/plan/views/mockups/mockup-editor.js on the app's page,
+// `?window=mockup&project=<id>&slug=<slug>`). Pure of Electron, the Agents window's pattern
+// (apps/desktop/host/agents-window.js): createMockupsWindow({ BrowserWindow, statePath, dirname, page?,
+// devTools?, screen? }) → { open({ projectId, slug }), current() }. One window at a time (a second open
+// focuses it and sends `mockups-window:show` with the asked screen); its bounds are remembered in
+// `statePath` (a JSON file in the workspace). The same preload and isolation as the main window, and like
+// it the window never navigates (apps/desktop/host/window-guards.js, #466).
+// The canvas is a sandboxed iframe (allow-scripts, no allow-same-origin: an opaque origin without
+// window.api) on the `mockup:` protocol: resolveMockupRequest(url, workspace) maps
+// mockup://<projectId>/<path> to <workspace>/mockups/<projectId>/<path> (null for another scheme, a
+// traversal, plain or percent-encoded, or a .git path) and MOCKUP_CSP is the header of every answer (no
+// network: default-src and connect-src 'none', inline scripts and styles of the agent's markup only).
+// main.js registers the scheme and serves it with protocol.handle, injecting the inspector
+// (fronts/plan/views/mockups/mockup-inspector.js) into the html.
+const fs = require('fs');
+const path = require('path');
+const { guardWindow } = require('./window-guards');
+
+const DEFAULTS = { width: 1440, height: 900 };
+const MIN = { width: 800, height: 560 };
+const MOCKUP_CSP = [
+  "default-src 'none'",
+  "connect-src 'none'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline' mockup:",
+  'img-src mockup: data:',
+  'font-src mockup: data:',
+  "form-action 'none'",
+].join('; ');
+const TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+};
+// the element inspector, run inside the canvas (the index.html page loads the same file for the editor)
+const INSPECTOR = path.join(__dirname, '..', '..', '..', 'fronts', 'plan', 'views', 'mockups', 'mockup-inspector.js');
+
+function createMockupsWindow({ BrowserWindow, statePath, dirname, page = null, devTools = false, screen = null }) {
+  let win = null;
+
+  function readState() {
+    try {
+      const s = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      return s && typeof s === 'object' ? s : {};
+    } catch { return {}; }
+  }
+  function writeState(patch) {
+    try {
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify({ ...readState(), ...patch }, null, 2));
+    } catch (e) { console.error('[mockups-window] could not save its state:', e.message); }
+  }
+
+  // the saved bounds when they are sane and (with `screen`) still on a display
+  function savedBounds(s) {
+    const b = s.bounds;
+    if (!b || ![b.x, b.y, b.width, b.height].every((n) => Number.isFinite(n))) return null;
+    if (b.width < MIN.width || b.height < MIN.height) return null;
+    if (screen?.getAllDisplays) {
+      const on = screen.getAllDisplays().some((d) => {
+        const a = d.workArea || d.bounds;
+        return b.x + b.width > a.x && b.x < a.x + a.width && b.y + b.height > a.y && b.y < a.y + a.height;
+      });
+      if (!on) return null;
+    }
+    return b;
+  }
+
+  function current() {
+    return win && !win.isDestroyed() ? win : null;
+  }
+
+  function open({ projectId = '', slug = '' } = {}) {
+    const live = current();
+    if (live) {
+      if (live.isMinimized()) live.restore();
+      live.show();
+      live.focus();
+      live.webContents.send('mockups-window:show', { projectId, slug });
+      return live;
+    }
+    const bounds = savedBounds(readState());
+    win = new BrowserWindow({
+      ...DEFAULTS,
+      ...(bounds || {}),
+      minWidth: MIN.width,
+      minHeight: MIN.height,
+      backgroundColor: '#0e1014',
+      title: 'Mockup · Multiagent Orchestrator',
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: path.join(dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        devTools,
+      },
+    });
+    const opened = win;
+    guardWindow(opened.webContents, { openExternal: (url) => require('electron').shell.openExternal(url) });
+    opened.on('close', () => { try { writeState({ bounds: opened.getBounds() }); } catch { /* the window is gone */ } });
+    opened.on('closed', () => { if (win === opened) win = null; });
+    opened.loadFile(page || path.join(dirname, '..', 'renderer', 'index.html'), { query: { window: 'mockup', project: String(projectId), slug: String(slug) } });
+    return opened;
+  }
+
+  return { open, current };
+}
+
+// mockup://<projectId>/<path> → the file under <workspace>/mockups/<projectId>/, or null
+function resolveMockupRequest(url, workspace) {
+  // the raw string, never new URL(): it would fold `..` and `%2e%2e` away before the check
+  const m = /^mockup:\/\/([^/?#]+)(\/[^?#]*)?/i.exec(String(url ?? ''));
+  if (!m || !workspace) return null;
+  let segments;
+  try { segments = [m[1], ...(m[2] || '').split('/')].map((s) => decodeURIComponent(s)).filter((s) => s !== ''); } catch { return null; }
+  if (segments.length < 2) return null;
+  if (segments.some((s) => s === '.' || s === '..' || /[\\/\0]/.test(s) || s.toLowerCase() === '.git')) return null;
+  const base = path.join(workspace, 'mockups', segments[0]);
+  const file = path.join(base, ...segments.slice(1));
+  return file.startsWith(base + path.sep) ? file : null;
+}
+
+// What protocol.handle('mockup') answers: { status, headers, body } (the file with MOCKUP_CSP; an html
+// page gets the inspector injected before </body>; 404 for a refused or missing path)
+async function serveMockup(url, workspace) {
+  const file = resolveMockupRequest(url, workspace);
+  const missing = { status: 404, headers: { 'content-type': 'text/plain', 'content-security-policy': MOCKUP_CSP }, body: 'Not found' };
+  if (!file) return missing;
+  let body;
+  try { body = await fs.promises.readFile(file); } catch { return missing; }
+  const ext = path.extname(file).toLowerCase();
+  if (ext === '.html') {
+    let inspector = '';
+    try { inspector = await fs.promises.readFile(INSPECTOR, 'utf8'); } catch (e) { console.error('[mockups-window] no inspector:', e.message); }
+    const script = `<script>${inspector.replace(/<\/script/gi, '<\\/script')}</script>`;
+    const html = body.toString('utf8');
+    const at = html.toLowerCase().lastIndexOf('</body>');
+    body = at >= 0 ? html.slice(0, at) + script + html.slice(at) : html + script;
+  }
+  return { status: 200, headers: { 'content-type': TYPES[ext] || 'application/octet-stream', 'content-security-policy': MOCKUP_CSP }, body };
+}
+
+module.exports = {
+  createMockupsWindow,
+  MOCKUP_CSP,
+  resolveMockupRequest,
+  serveMockup,
+};

@@ -447,6 +447,7 @@
     sections,
     selectionPayload,
     setFrontMatter,
+    slug,
     tableCell,
     version,
   };
