@@ -16,13 +16,16 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const DIRS = [path.join(ROOT, 'workflows'), path.join(ROOT, '.multiagent', 'workflows')];
 
 const stepAgents = (s) => [].concat(s.agents || [], s.agent || []);
-// every workflow file with a step the ui_reviewer runs in: [{ file, wf, step }]
-const UI_WORKFLOWS = DIRS.filter((d) => fs.existsSync(d)).flatMap((d) => fs.readdirSync(d)
+// every Code & Build workflow file (one with a develop step) with a step the ui_reviewer runs in:
+// [{ file, wf, step }]. #702: sdlc-test's ui_reviewer has no develop to send a difference back to;
+// its differences are findings at the code owner's gate (packages/engine/test/workflow/sdlc-workflows-702.test.js).
+const ALL_UI_WORKFLOWS = DIRS.filter((d) => fs.existsSync(d)).flatMap((d) => fs.readdirSync(d)
   .filter((f) => /\.ya?ml$/.test(f))
   .map((f) => path.join(d, f))
   .map((file) => ({ file, wf: loadWorkflow(file) }))
   .map((x) => ({ ...x, step: (x.wf.steps || []).find((s) => stepAgents(s).includes('ui_reviewer')) }))
   .filter((x) => x.step));
+const UI_WORKFLOWS = ALL_UI_WORKFLOWS.filter((x) => x.wf.steps.some((s) => s.id === 'develop'));
 const rel = (file) => path.relative(ROOT, file).replace(/\\/g, '/');
 
 // the ui_reviewer's branch of a fan-out prompt: from `{% if agent == 'ui_reviewer' %}` to the next branch
@@ -41,7 +44,7 @@ test('#670 the bundled workflows with a ui_reviewer are found (ai-development-lo
 });
 
 test('#670 the ui_reviewer\'s prompt carries the issue\'s mockups', () => {
-  for (const { file, step } of UI_WORKFLOWS) assert.match(uiReviewerPrompt(step), /mockup/i, rel(file));
+  for (const { file, step } of ALL_UI_WORKFLOWS) assert.match(uiReviewerPrompt(step), /mockup/i, rel(file));
 });
 
 test('#670 the ui_reviewer\'s prompt makes a difference from the mockup blocking', () => {

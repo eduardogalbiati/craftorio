@@ -238,9 +238,11 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:release.yaml:reviewer',
     'workflow:release.yaml:ci_pusher',
     'workflow:retrospective.yaml:retro',
-    'workflow:sdlc-record.yaml:recorder',
+    // #702: sdlc-record is one record_docs machine step (no agent); sdlc-test has its own agents
     'workflow:sdlc-release.yaml:recorder',
-    'workflow:sdlc-test.yaml:recorder',
+    'workflow:sdlc-test.yaml:ui_reviewer',
+    'workflow:sdlc-test.yaml:summarizer',
+    'workflow:sdlc-test.yaml:issue_filer',
     'workflow:test-backfill.yaml:test_writer',
     'workflow:test-backfill.yaml:developer',
     'workflow:write-doc.yaml:writer',
