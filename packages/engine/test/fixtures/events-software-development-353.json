@@ -53,7 +53,7 @@
     {"type":"session.stream"},
     {"type":"session.message_received","step_id":"warm_up","session.provider":"mock","session.simulates":"claude"},
     {"type":"session.closed","status":"success","session.provider":"mock","session.simulates":"claude"},
-    {"type":"step.finished","step_id":"warm_up","output":{"files":["(simulated) files"],"map":"(simulated) map"}},
+    {"type":"step.finished","step_id":"warm_up","output":{"files":["(simulated) files"],"map":"(simulated) map","reuse":[{"issue":"(simulated) issue","line":0,"name":"(simulated) name","path":"(simulated) path","what":"(simulated) what"}]}},
     {"type":"step.transition","from":"warm_up","to":"develop"},
     {"type":"step.started","step_id":"develop"},
     {"type":"log"},
