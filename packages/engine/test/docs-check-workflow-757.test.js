@@ -71,6 +71,47 @@ for (const file of WORKFLOWS) {
     assert.ok(second.goto && second.goto !== 'develop', `the second missing result in the same round does not return again (got ${second.goto})`);
   });
 
+  test(`#757 ${file}: going on after a check gives the next review round its own return to develop`, () => {
+    const wf = wfOf();
+    const step = wf.steps.find((s) => s.id === STEP);
+    assert.ok(step, `${file} has no ${STEP} step`);
+    const base = { inputs: defaults(wf), steps: {}, worktree_dir: '' };
+    const missing = { kind: 'docs_check', status: 'missing', missing: ['docs/agents/guide.md'], message: 'docs expected: 1, touched: 0' };
+    for (const status of ['pass', 'skipped']) {
+      const back = take(step, { ...base, vars: {}, output: missing });
+      assert.equal(back.goto, 'develop');
+      const on = take(step, { ...base, vars: back.vars, output: { kind: 'docs_check', status, missing: [], message: '' } });
+      assert.notEqual(on.goto, 'develop');
+      const nextRound = take(step, { ...base, vars: on.vars, output: missing });
+      assert.equal(nextRound.goto, 'develop', `after a ${status} check, a missing doc in the next round returns again`);
+    }
+  });
+
+  test(`#757 ${file}: after a passing rule check or test id check, a task with docs goes to docs_check and one without does not`, () => {
+    const wf = wfOf();
+    const byId = Object.fromEntries(wf.steps.map((s) => [s.id, s]));
+    const withDocs = 'Add the guide\n\n## Expected files\n\n- `src/app.js`: the code\n- `docs/agents/guide.md` (new): the guide\n';
+    const withoutDocs = 'Add the guide\n\n## Expected files\n\n- `src/app.js`: the code\n';
+    const develop = { committed: true, files_changed: ['src/app.js'], screenshots: [], issues: [], left_out: [] };
+    const checked = ['rule_check', 'testid_check'].filter((id) => byId[id]);
+    assert.ok(checked.includes('rule_check'), `${file} has rule_check`);
+    for (const id of checked) {
+      const scope = (task) => ({ inputs: { ...defaults(wf), task, issues: [], screenshots: 'off' }, steps: { develop: { output: develop } }, worktree_dir: '', vars: {}, output: { status: 'pass', missing: [], findings: [] } });
+      assert.equal(take(byId[id], scope(withDocs)).goto, STEP, `${id} passed with docs expected goes to ${STEP}`);
+      const other = take(byId[id], scope(withoutDocs)).goto;
+      assert.ok(other && other !== STEP, `${id} passed without docs expected does not visit ${STEP} (got ${other})`);
+    }
+  });
+
+  test(`#757 ${file}: continuing at the check_failed gate goes to docs_check when the task expects docs`, (t) => {
+    const wf = wfOf();
+    const gate = wf.steps.find((s) => s.id === 'check_failed');
+    if (!gate) return t.skip(`${file} has no check_failed gate`);
+    const task = 'Add the guide\n\n## Expected files\n\n- `docs/agents/guide.md` (new): the guide\n';
+    const scope = { inputs: { ...defaults(wf), task, issues: [], screenshots: 'off' }, steps: { develop: { output: { committed: true, files_changed: [], screenshots: [], issues: [] } } }, worktree_dir: '', vars: {}, output: {}, choice: 'continue' };
+    assert.equal(take(gate, scope).goto, STEP);
+  });
+
   test(`#757 ${file}: a pass or a skipped check goes on without returning to develop`, () => {
     const wf = wfOf();
     const step = wf.steps.find((s) => s.id === STEP);

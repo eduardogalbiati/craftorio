@@ -162,6 +162,29 @@ test('#757 checkExpectedDocs: an issue without the section, or with no docs in i
   assert.equal(checkExpectedDocs({ text: codeOnly, changed: ['src/app.js'], leftOut: [] }).status, 'skipped');
 });
 
+test('#757 checkExpectedDocs: a left_out that names a more specific file does not excuse the expected one', () => {
+  const { checkExpectedDocs } = load();
+  const text = issue('Add the guide', ['- `README.md`: a line for the feature']);
+  const r = checkExpectedDocs({
+    text,
+    changed: ['src/app.js'],
+    leftOut: [{ requirement: 'Update packages/engine/README.md', reason: 'the package README is generated later' }],
+  });
+  assert.equal(r.status, 'missing', 'packages/engine/README.md is another file than the root README.md');
+  assert.deepEqual(r.missing, ['README.md']);
+});
+
+test('#757 the expected_docs template filter lists the docs a task expects, empty without them', () => {
+  const { render, evalExpr } = require('../engine/run/templates');
+  const withDocs = issue('Add the guide', ['- `docs/agents/guide.md` (new): the guide', '- `src/app.js`: the code']);
+  const codeOnly = issue('Add the code', ['- `src/app.js`: the code']);
+  assert.equal(render('{{ inputs.task | expected_docs | join(",") }}', { inputs: { task: withDocs } }), 'docs/agents/guide.md');
+  assert.equal(evalExpr('inputs.task | expected_docs | length', { inputs: { task: withDocs } }), true);
+  assert.equal(evalExpr('inputs.task | expected_docs | length', { inputs: { task: codeOnly } }), false);
+  assert.equal(evalExpr('inputs.task | expected_docs | length', { inputs: { task: 'Add the feature' } }), false);
+  assert.equal(evalExpr('inputs.task | expected_docs | length', { inputs: {} }), false);
+});
+
 test('#757 checkExpectedDocs tolerates a missing left_out and changed list', () => {
   const { checkExpectedDocs } = load();
   const text = issue('Add the guide', ['- `docs/agents/guide.md` (new): the guide']);
