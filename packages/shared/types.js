@@ -287,7 +287,7 @@
  * (docs/agents/engine/field-reference.md).
  * @typedef {object} WorkflowStep
  * @property {string} id
- * @property {'agent' | 'check' | 'docs_check' | 'human_approval' | 'project_map' | 'refactor_proposals' | 'release_version' | 'screenshots' | 'suite' | 'test_ids' | 'visual_baselines' | 'workflow'} [type] agent when missing
+ * @property {'agent' | 'check' | 'docs_check' | 'human_approval' | 'project_map' | 'record_docs' | 'refactor_proposals' | 'release_version' | 'screenshots' | 'suite' | 'test_ids' | 'visual_baselines' | 'workflow'} [type] agent when missing
  * @property {string} [agent]
  * @property {string[]} [agents]
  * @property {string} [prompt]

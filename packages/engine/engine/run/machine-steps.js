@@ -4,7 +4,8 @@
 // the machine-wide suite slot of a whole-suite round and its `suite_slot` log while it waits #455,
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
 // (`runTestIdsStep`, #246), `type: visual_baselines` (`runVisualBaselinesStep`, #696), `type: check` (`runCheckStep`, the project's rule checks, #404), `type: docs_check`
-// (`runDocsCheckStep`, the docs the issues expect against the diff, #757), `type:
+// (`runDocsCheckStep`, the docs the issues expect against the diff, #757), `type: record_docs`
+// (`runRecordDocsStep`, a Code & Build run in its work item's docs, #702), `type:
 // workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
 // #325), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
 // screenshots step emits step.log { step_id, path, command } when its command's log starts (its live
@@ -22,6 +23,7 @@ const checkStep = require('../check-step');
 const { childEnv } = require('../child-env');
 const evidence = require('../../domains/evidence/evidence');
 const expectedFiles = require('../expected-files');
+const { recordDocs } = require('../record-docs-step');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
 const { changedFiles, selectionLines } = require('../affected-tests');
@@ -618,6 +620,36 @@ const methods = {
     let output = { kind: 'docs_check', round: st.visits, ...expectedFiles.checkExpectedDocs({ text, changed, leftOut }) };
     if (why && output.status !== 'skipped') output = { ...output, status: 'skipped', missing: [], message: `${output.message.split('\n')[0]} Docs check skipped: ${why}.` };
     this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'docs_check', step_id: step.id, status: output.status, message: `${step.id}: ${output.message.split('\n')[0]}` });
+    return output;
+  },
+
+  // `type: record_docs` (#702, sdlc-record): the Code & Build run `inputs.run` recorded in its work item's
+  // docs (packages/engine/engine/record-docs-step.js) from the run's inputs `merged_commit`, `pr_url`,
+  // `issues` and `evidence` only; `item` (default inputs.item) and `branch` (default
+  // sdlc-record/<item>-<run id>) are templates. Only in the run's own worktree; a simulation writes
+  // nothing and says what it would record. Output: { kind: 'record_docs', status: recorded | invalid |
+  // skipped, commit, files, problems, built, message }.
+  async runRecordDocsStep(step) {
+    const inputs = this.ctx.inputs || {};
+    const item = (step.item ? render(String(step.item), this.ctx) : String(inputs.item ?? '')).trim();
+    const run = String(inputs.run ?? '').trim();
+    const branch = (step.branch ? render(String(step.branch), this.ctx) : `sdlc-record/${item}-${this.runId}`).trim();
+    const skipped = (message) => ({ kind: 'record_docs', status: 'skipped', item, run, commit: null, files: [], problems: [], built: false, message });
+    let output;
+    if (this.machine.simulated) output = skipped(`Simulated: run ${run || '(none)'} would be recorded in docs/work/${item}/plan.md (Progress) and test.md (evidence).`);
+    else if (!this.worktree || !this.ctx.worktree_dir) output = skipped('The run has no worktree of its own: nothing is written in the repository folder.');
+    else {
+      try {
+        output = await recordDocs(this.ctx.worktree_dir, {
+          item, run, branch, merged_commit: inputs.merged_commit, pr_url: inputs.pr_url, issues: inputs.issues, evidence: inputs.evidence,
+          runDir: run ? path.join(path.dirname(this.runDir), run) : null,
+        });
+      } catch (e) {
+        output = { ...skipped(`Nothing recorded: ${e.message}`), status: 'invalid' };
+      }
+    }
+    const problems = (output.problems || []).map((p) => `- ${p.file}: ${p.message}`).join('\n');
+    this.emitEvent('log', { level: output.status === 'invalid' ? 'warn' : 'info', kind: 'record_docs', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}${problems ? `\n${problems}` : ''}` });
     return output;
   },
 

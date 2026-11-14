@@ -30,6 +30,14 @@
 // - alignedLines(sourceMd, translationMd, { start }): { start, end } of the translation that match
 //   the source block at that line (the alignment rule above, source to translation), null without a match.
 // - ACCEPTED: { intent: 'accepted', spec: 'signed off', plan: 'accepted' }, the status past the SDLC gate.
+// #702 the Build and Test stages' tables (sdlc-record's record_docs step, the Documents' list):
+// - tableCell(value): one markdown table cell (whitespace joined, `|` escaped);
+// - progressRows(markdown): [{ index, cells }] of the plan's `## Progress` (`## Progresso`) table, its
+//   body rows only (index: 0-based line of the markdown);
+// - planBuilt(markdown): every Progress row done (`done` / `feito`), at least one row;
+// - addTableRow(markdown, headings, row): the row in the first table of the section titled one of
+//   `headings` (`## …` lines), in place of its "nothing yet" row (every cell `—` but the last), else
+//   after its last row; the markdown unchanged without that section.
 // Browser: window.DocModel; Node: module.exports.
 (function (root) {
   'use strict';
@@ -344,6 +352,63 @@
     return rows.join('\n');
   }
 
+  // #702 ---- the Progress table of a plan and the evidence table of test.md -------------------------
+  const PROGRESS = ['## Progress', '## Progresso'];
+  const DONE = ['done', 'feito'];
+  const tableCell = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
+  const isRow = (text) => /^\s*\|/.test(text);
+  const isSeparator = (text) => /^\s*\|[\s|:-]+\|\s*$/.test(text) && text.includes('-');
+  const cellsOf = (text) => text.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map((c) => c.trim());
+
+  // [start, end) of the section's body lines (its heading excluded), null when it is missing
+  function sectionLines(rows, headings) {
+    const start = rows.findIndex((l) => headings.includes(l.replace(/\r$/, '').trim()));
+    if (start < 0) return null;
+    const next = rows.findIndex((l, i) => i > start && /^#{1,2}\s/.test(l));
+    return [start + 1, next < 0 ? rows.length : next];
+  }
+
+  // the indexes of the first table's body rows (header and separator left out) in the section
+  function tableBody(rows, headings) {
+    const range = sectionLines(rows, headings);
+    if (!range) return null;
+    const out = [];
+    let seenSeparator = false;
+    for (let i = range[0]; i < range[1]; i += 1) {
+      if (!isRow(rows[i])) { if (out.length || seenSeparator) break; continue; }
+      if (!seenSeparator) { seenSeparator = isSeparator(rows[i]); continue; }
+      out.push(i);
+    }
+    return { range, body: out, seenSeparator };
+  }
+
+  function progressRows(markdown) {
+    const rows = markdown.split('\n');
+    const table = tableBody(rows, PROGRESS);
+    return table ? table.body.map((index) => ({ index, cells: cellsOf(rows[index]) })) : [];
+  }
+
+  function planBuilt(markdown) {
+    const rows = progressRows(markdown);
+    return rows.length > 0 && rows.every((r) => DONE.includes(String(r.cells[1] || '').toLowerCase()));
+  }
+
+  function addTableRow(markdown, headings, row) {
+    const rows = markdown.split('\n');
+    const table = tableBody(rows, headings);
+    if (!table) return markdown;
+    const empty = table.body.find((i) => {
+      const c = cellsOf(rows[i]);
+      return c.length > 1 && c.slice(0, -1).every((x) => /^[—–-]$/.test(x));
+    });
+    if (empty !== undefined) rows[empty] = row;
+    else {
+      const last = table.body.length ? table.body[table.body.length - 1] : -1;
+      rows.splice(last >= 0 ? last + 1 : table.range[1], 0, row);
+    }
+    return rows.join('\n');
+  }
+
   function replaceLines(markdown, { start, end }, text) {
     const rows = markdown.split('\n');
     rows.splice(start - 1, end - start + 1, ...String(text).split('\n'));
@@ -352,16 +417,20 @@
 
   const api = {
     ACCEPTED,
+    addTableRow,
     alignedLines,
     blocks,
     frontMatter,
     itemName,
     lintDoc,
     lintTranslation,
+    planBuilt,
+    progressRows,
     replaceLines,
     sections,
     selectionPayload,
     setFrontMatter,
+    tableCell,
     version,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

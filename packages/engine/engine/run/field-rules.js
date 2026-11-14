@@ -59,6 +59,7 @@
     'human_edit',
     'pr_monitor',
     'project_map',
+    'record_docs',
     'refactor_proposals',
     'release_version',
     'screenshots',
@@ -99,7 +100,7 @@
 
   // Where a step field applies: every step type, a list of types, or every type except some
   const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-  const NO_AGENT_TYPES = ['check', 'docs_check', 'pr_monitor', 'project_map', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
+  const NO_AGENT_TYPES = ['check', 'docs_check', 'pr_monitor', 'project_map', 'record_docs', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
   // The protected gates: only the person ends them; human_edit (#647) also takes the person's edit
   // requests, each a turn of its named agent, while it waits
   const GATE = ['human_approval', 'human_edit'];
@@ -168,7 +169,9 @@
     // `type: release_version` (#325): the release's version into the project's package.json
     text('version', ['release_version']),
     text('dir', ['release_version']),
-    text('branch', ['release_version']),
+    text('branch', ['record_docs', 'release_version']),
+    // `type: record_docs` (#702): the work item whose docs record the Code & Build run (default inputs.item)
+    text('item', ['record_docs']),
     // `type: pr_monitor` (#809): the PR/MR the run waits to see merged (a template; empty: the ci or pr_open step's pr_url)
     text('target', ['pr_monitor']),
     // `type: project_map` (#372): the project map's machine steps, `from` the step whose output they read

@@ -83,11 +83,12 @@ const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || nul
 // fails the run, the output says what was written; test_ids (#246): the missing test ids; check
 // (#404): the project's rule checks (its command sweeps what it leaves running); visual_baselines
 // (#696): the missing baselines of the issues' @visual scenarios; docs_check (#757): the docs the
-// issues expect that the diff does not touch
+// issues expect that the diff does not touch; record_docs (#702): a Code & Build run in its work item's docs
 const PLAIN_MACHINE_STEPS = {
   check: 'runCheckStep',
   docs_check: 'runDocsCheckStep',
   project_map: 'runProjectMapStep',
+  record_docs: 'runRecordDocsStep',
   refactor_proposals: 'runRefactorProposalsStep',
   release_version: 'runReleaseVersionStep',
   test_ids: 'runTestIdsStep',
