@@ -332,7 +332,7 @@ const STEP_CHECKS = resolveChecks('steps[].', [
   askHumanShape,
   // the step types without an agent, then the agent steps (one applies to a step)
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
-  childWorkflow, 'steps', 'renderer', 'issues', 'version', 'dir', 'branch', 'target', 'action', projectMapFrom, fanOutGoal, knownAgents, editAgent,
+  childWorkflow, 'steps', 'renderer', 'issues', 'version', 'dir', 'branch', 'item', 'stage', 'stage_summary', 'target', 'action', projectMapFrom, fanOutGoal, knownAgents, editAgent,
   'goal.until', 'wait', waitOnLoop, 'wait.probe', 'wait.target', 'wait.output', outputNeedsProbe('output'),
   'wait.infra_output', outputNeedsProbe('infra_output'), 'wait.grace', 'wait.parent',
   'choices', 'full_suite', 'commit_tests', commitTestsSingleAgent, 'base_worktree', baseWorktreeNeedsWorktree,
