@@ -57,8 +57,8 @@ function realRunTurn() {
 }
 
 async function modelTurn({ dir, slug, prompt, sessionId, model, projectFolder, runTurn }) {
-  const { refuseReal } = require('@multiagent/engine/engine/simulation');
-  refuseReal('the mockup designer\'s CLI (claude)');
+  // an injected runTurn (tests) never reaches a CLI
+  if (!runTurn) require('@multiagent/engine/engine/simulation').refuseReal('the mockup designer\'s CLI (claude)');
   const { render } = require('@multiagent/engine/engine/workflow');
   const { providerArgs, dedupeFlags } = require('@multiagent/engine/engine/capabilities');
   const { PROVIDERS } = require('@multiagent/engine/domains/workflow/workflow-builder');
@@ -110,7 +110,7 @@ async function designerTurn({ workspace, projectId, slug, payload, projectFolder
 }
 
 module.exports = {
-  FRESH_AFTER_IDLE_MS,
   designerTurn,
+  FRESH_AFTER_IDLE_MS,
   handoffNote,
 };

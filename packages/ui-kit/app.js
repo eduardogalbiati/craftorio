@@ -348,8 +348,8 @@ function shownRunId() {
 // After the current task: the screens set the run they show right after switching to it.
 let notifyContextTimer = null;
 function reportNotifyContext() {
-  // the Agents window (#263) never speaks for the main window's screen
-  if (window.AgentsWindow?.isWindowPage?.()) return;
+  // the Agents window (#263) and the mockup editor window (#625) never speak for the main window's screen
+  if (window.AgentsWindow?.isWindowPage?.() || window.MockupEditor?.isWindowPage?.()) return;
   if (notifyContextTimer) return;
   notifyContextTimer = setTimeout(() => {
     notifyContextTimer = null;

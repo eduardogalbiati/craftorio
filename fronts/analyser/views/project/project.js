@@ -214,9 +214,15 @@ function renderProjectView() {
     <div class="row">
       <button class="btn ghost" id="pv-open-folder" ${p?.exists ? '' : 'disabled'}>${t('project.open_folder')}</button>
       <button class="btn ghost" id="pv-ways-of-working" data-testid="project-ways-of-working" ${p?.exists ? '' : 'disabled'}>${t('project.ways_of_working')}</button>
+      <button class="btn ghost" id="pv-mockups" data-testid="project-mockups" title="${esc(t('mockups.overview_link_title'))}">${t('mockups.overview_link')}</button>
       <button class="btn primary" id="pv-start">${t('project.start_workflow')}</button>
     </div>`;
   $('#pv-open-folder').onclick = () => p && api.openPath(p.folder);
+  // #625 (D1): the Overview's door to Plan & Design › Mockups, for this page's project
+  $('#pv-mockups').onclick = () => {
+    if (window.CurrentProject?.get?.() !== pv.id) window.CurrentProject?.set?.(pv.id, { redraw: false });
+    showView('mockups');
+  };
   // #487: the interview drawer (project-ways-of-working.js)
   $('#pv-ways-of-working').onclick = () => p && window.ProjectWaysOfWorking?.open(p);
   $('#pv-start').onclick = () => openDrawer({ project: pv.id });
