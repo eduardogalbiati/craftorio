@@ -203,12 +203,14 @@
   }
 
   // #702: a work item's plan named in an issue (`docs/work/<item>/plan.md`; a spec or intent does not count)
-  const PLAN_PATH = /docs\/work\/([a-z0-9][a-z0-9._-]{0,99})\/plan\.md/i;
+  const PLAN_PATH = /docs\/work\/([^/\s()[\]`'"<>]+)\/plan\.md/i;
+  // the work item's name rule is DocModel's (isItemName); any load order, read at call time
+  const docModel = () => (typeof module === 'object' && module.exports ? require('./doc-model') : root.DocModel);
 
   /** The work item whose plan a text names (`docs/work/<item>/plan.md`), or ''. */
   function planItem(text) {
     const m = String(text || '').match(PLAN_PATH);
-    return m && !m[1].includes('..') ? m[1] : '';
+    return m && docModel()?.isItemName(m[1]) ? m[1] : '';
   }
 
   /**

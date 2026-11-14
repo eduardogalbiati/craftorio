@@ -135,10 +135,13 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   `pr_url`, `issues`. It writes plan.md's `## Progress` row (done, the run, the commit or the PR; every
   row done → `status: built`, the reader then shows the item in Test) and one test.md row (EN and
   pt-BR: run, unit and E2E counts, screenshots taken or the run's reason for none, axe findings, never
-  an empty cell; `status: collecting`), copies the screenshots to `images/`, runs DocModel's lint
-  (`lintDoc`, `lintTranslation`) on every document first (a problem writes nothing: `status:
-  invalid`), then makes one docs commit (a docs commit runs no tests, #695). With `status:` (in review
+  an empty cell; `status: collecting`; an item without test.md gets it from the skeleton), copies the
+  screenshots to `images/` (a name an earlier run's image has becomes `<run>-<name>`), runs DocModel's
+  lint (`lintDoc`, `lintTranslation`) on every document first (a problem writes nothing: `status:
+  invalid`), then makes one docs commit (a docs commit runs no tests, #695). With `stage:` (in review
   | passed | failed) it records the Test stage instead: test.md's status and the run's summary.
+  `sdlc-record` merges `local` only: a project that works with PRs pauses the chain (no
+  `merged_commit`) and its record stays a local commit until the owner pushes it.
   Output `{ kind: 'record_docs', status: recorded | invalid, commit, files, problems, built, message }`.
   Used by `sdlc-record` (one step, then the merge the project works with) and `sdlc-test` (the full
   suite with coverage, the full E2E with `@visual` baselines, the ui_reviewer against the spec's

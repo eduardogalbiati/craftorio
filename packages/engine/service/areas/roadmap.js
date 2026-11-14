@@ -93,6 +93,7 @@ module.exports = (ctx) => {
       };
     };
     const prices = workspace.readSettings(ctx.ws).prices || {};
+    const folder = projectFolder(projectId); // #702: the project's folder, once, for sdlcOf
     // the backlog's issues: their complexity:n labels scale each item's estimate (#215)
     const known = issues || backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
     return costEstimate.withEstimates({
@@ -111,7 +112,7 @@ module.exports = (ctx) => {
           // #807: the effective run mode of an item waiting for its merge (the project's runDefaults too), for its notice
           const mode = x.status === 'waiting_merge' ? { effectiveMode: itemMode(projectId, x) } : {};
           // #702: the work item (docs/work/<item>/) and its plan's status, for Start Test on a built plan
-          const sdlc = sdlcOf(projectId, x);
+          const sdlc = sdlcOf(folder, x);
           return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn, ...mode, ...(sdlc ? { sdlc } : {}) };
         }),
       })),
@@ -119,18 +120,31 @@ module.exports = (ctx) => {
   }
 
   // #702: a roadmap item's work item: its `inputs.item`, else the docs/work/<item>/plan.md its body or its
-  // issues name (chain-model planItem); `status` is plan.md's, `built` when its Progress is N of N
-  // (DocModel.planBuilt). Null when the item names no work item or the project has no folder.
-  function sdlcOf(projectId, x) {
+  // issues name (chain-model planItem); `status` is plan.md's (DocModel.planStatus: `built` when its
+  // Progress is N of N); `testRunning`: its Test run (`testRunId`) is still alive, else Start Test is
+  // offered again (after a rejected Test). Null when the item names no work item or the project has no
+  // folder (`folder`: the project's, resolved once per roadmap by projectFolder).
+  const projectFolder = (projectId) => projects.listProjects(ctx.ws.projects).find((p) => p.id === path.basename(String(projectId)))?.folder || null;
+  function sdlcOf(folder, x) {
     const texts = [x.body, ...(x.issues || []).map((i) => (i && typeof i === 'object' ? `${i.title || ''}\n${i.body || ''}` : ''))];
     const item = x.inputs?.item || texts.map(chain.planItem).find(Boolean);
-    if (!item || /[\\/]|\.\./.test(item)) return null;
-    const folder = projects.listProjects(ctx.ws.projects).find((p) => p.id === path.basename(String(projectId)))?.folder;
-    if (!folder) return null;
+    if (!item || !DocModel.isItemName(item) || !folder) return null;
+    const testRunning = !!(x.testRunId && ctx.runAlive(x.testRunId));
     let text = '';
-    try { text = fs.readFileSync(path.join(folder, 'docs', 'work', item, 'plan.md'), 'utf8'); } catch { return { item, status: null }; }
-    const status = DocModel.planBuilt(text) ? 'built' : String(DocModel.frontMatter(text).status || '').replace(/\s+#.*$/, '').trim() || null;
-    return { item, status };
+    try { text = fs.readFileSync(path.join(folder, 'docs', 'work', item, 'plan.md'), 'utf8'); } catch { return { item, status: null, testRunning }; }
+    return { item, status: DocModel.planStatus(text) || null, testRunning };
+  }
+
+  // #702: the issues a Test run checks (their @visual baselines, #696; the ui_review's list): the roadmap
+  // item's own, else the `#n` of the plan's Progress rows (owner/repo from the item's issue URL when it has one)
+  function testIssues(folder, x, item) {
+    const own = (x.issues || []).map((i) => (i && typeof i === 'object' ? i.url || i.number : i)).filter(Boolean);
+    if (x.url) own.unshift(x.url);
+    if (own.length) return [...new Set(own.map(String))];
+    let text = '';
+    try { text = fs.readFileSync(path.join(folder, 'docs', 'work', item, 'plan.md'), 'utf8'); } catch { return []; }
+    const numbers = DocModel.progressRows(text).flatMap((r) => [...String(r.cells[0]).matchAll(/#(\d+)\b/g)].map((m) => m[1]));
+    return [...new Set(numbers)].map((n) => `#${n}`);
   }
 
   // #702 Start Test (the Roadmap's button on a built work item): starts sdlc-test.yaml on the item, never by
@@ -139,11 +153,12 @@ module.exports = (ctx) => {
     const id = path.basename(String(projectId));
     const x = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
     if (!x) throw clientError(`Roadmap item ${itemId} not found.`);
-    const sdlc = sdlcOf(id, x);
+    const folder = projectFolder(id);
+    const sdlc = sdlcOf(folder, x);
     if (sdlc?.status !== 'built') throw clientError(`Start Test needs a built plan: every Progress row of docs/work/${sdlc?.item || '<item>'}/plan.md done.`);
-    if (x.testRunId && ctx.runAlive(x.testRunId)) return { runId: x.testRunId };
-    const project = projects.listProjects(ctx.ws.projects).find((p) => p.id === id);
-    const inputs = { project_path: project.folder, base_branch: x.inputs?.base_branch || x.inputs?.base || 'main', item: sdlc.item };
+    if (sdlc.testRunning) return { runId: x.testRunId };
+    const issues = testIssues(folder, x, sdlc.item);
+    const inputs = { project_path: folder, base_branch: x.inputs?.base_branch || x.inputs?.base || 'main', item: sdlc.item, ...(issues.length ? { issues } : {}) };
     const started = await ctx.startWorkflowRun({ file: 'sdlc-test.yaml', inputs, mock: !!x.mock, projectId: id });
     const runId = started?.runId || null;
     if (runId) {

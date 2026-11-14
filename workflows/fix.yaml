@@ -313,4 +313,4 @@ outputs:
   evidence:
     type: object
     description: "The run's evidence (suite, e2e, screenshots, axe) for the post-flow's test.md row; a fix runs no E2E, screenshots or axe."
-    value: "{% set ev = { 'suite': (steps.suite.output.status if steps.suite.output and steps.suite.output.status else 'not run'), 'e2e': 'not run', 'screenshots': [], 'axe': [] } %}{{ ev | to_json }}"
+    value: "{% set so = steps.suite.output or {} %}{% set ev = { 'suite': { 'status': so.status or 'not run', 'passed': so.passed, 'failed': so.failed }, 'e2e': 'not run', 'screenshots': [], 'screenshots_reason': 'the fix workflow takes no screenshots', 'axe': [] } %}{{ ev | to_json }}"

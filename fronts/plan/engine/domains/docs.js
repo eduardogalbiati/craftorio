@@ -2,8 +2,9 @@
 // only code that writes a work item's stage documents (the write-doc agents only read). Plain
 // synchronous functions, the repository folder first; git runs in that folder with its own config.
 // - listItems(dir) → [{ item, title?, stage, docs: [{ doc, file, status, translation }] }] from the front
-//   matter of docs/work/<item>/intent.md, spec.md and (#633) plan.md (stage: the latest document's; title:
-//   the latest document's heading, #670); [] without docs/work;
+//   matter of docs/work/<item>/intent.md, spec.md, (#633) plan.md and (#702) test.md once a run wrote it
+//   (a `not started` skeleton is not listed) (stage: the latest document's; title: the latest document's
+//   heading, #670); [] without docs/work;
 // - readDoc(dir, { item, doc }) → { item, doc, status, source: { file, markdown }, translation: { file, markdown } | null };
 // - createDoc(dir, { item, doc, title, date }) → { item, doc, commit }: the playbook's skeleton of the
 //   document and its pt-BR translation (the sections of DocModel's lint, one line each to write), one
@@ -46,7 +47,6 @@ const { gitOut } = require('@multiagent/engine/service/common');
 const DOCS = ['intent', 'spec', 'plan']; // #633: the plan, the pre-flow's third document
 const LISTED = [...DOCS, 'test']; // #702: test.md (written by the runs, sdlc-record / sdlc-test) is listed, never created here
 const READABLE = [...LISTED, 'maintain']; // #650: maintain.md is read and listed, never created or accepted
-const ITEM = /^[a-z0-9][a-z0-9._-]{0,99}$/i;
 const MESSAGE_ID = /^[\w.:-]{1,100}$/;
 const COMMIT = /^[0-9a-f]{7,40}$/i;
 const REQUEST_TRAILER = /^Doc-Request: (\S+)$/m;
@@ -107,7 +107,7 @@ function ensureBranch(dir, branch) {
 
 function checkItem(item) {
   const name = String(item ?? '');
-  if (!ITEM.test(name) || name.includes('..')) throw new Error(`Not a work item of docs/work: ${name}`);
+  if (!DocModel.isItemName(name)) throw new Error(`Not a work item of docs/work: ${name}`);
   return name;
 }
 function checkDoc(doc, allowed = DOCS) {
@@ -139,7 +139,7 @@ function listItems(dir) {
   if (!fs.existsSync(work)) return [];
   const items = [];
   for (const entry of fs.readdirSync(work, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !ITEM.test(entry.name)) continue;
+    if (!entry.isDirectory() || !DocModel.isItemName(entry.name)) continue;
     const docs = [];
     let stage = null;
     let title = null;
@@ -148,7 +148,9 @@ function listItems(dir) {
       if (text === null) continue;
       const fm = DocModel.frontMatter(text);
       // #702: a plan whose Progress is N of N done is built (sdlc-record sets it too); a status's inline comment is not shown
-      const status = doc === 'plan' && DocModel.planBuilt(text) ? 'built' : String(fm.status || 'draft').replace(/\s+#.*$/, '');
+      const status = (doc === 'plan' ? DocModel.planStatus(text) : String(fm.status || '').replace(/\s+#.*$/, '').trim()) || 'draft';
+      // #702: a test.md no run wrote yet (`not started`, the skeleton) neither advances the stage nor is the latest document
+      if (doc === 'test' && status === 'not started') continue;
       docs.push({ doc, file: `docs/work/${entry.name}/${doc}.md`, status, translation: fm.translation || null });
       stage = fm.stage || doc;
       if (doc !== 'test') title = titleOf(text) || title;
@@ -446,7 +448,7 @@ function listIntents(dir) {
   if (!fs.existsSync(work)) return [];
   const out = [];
   for (const entry of fs.readdirSync(work, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !ITEM.test(entry.name)) continue;
+    if (!entry.isDirectory() || !DocModel.isItemName(entry.name)) continue;
     const text = readText(path.join(work, entry.name, 'intent.md'));
     if (text === null) continue;
     const fm = DocModel.frontMatter(text);

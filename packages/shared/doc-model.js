@@ -35,6 +35,9 @@
 // - progressRows(markdown): [{ index, cells }] of the plan's `## Progress` (`## Progresso`) table, its
 //   body rows only (index: 0-based line of the markdown);
 // - planBuilt(markdown): every Progress row done (`done` / `feito`), at least one row;
+// - planStatus(markdown): the plan's effective status, `built` when planBuilt, else its front matter's
+//   `status` without an inline `# comment` ('' without one);
+// - isItemName(name): a work item's folder name (letters, digits, `.`, `_`, `-`, 100 characters, no `..`);
 // - addTableRow(markdown, headings, row): the row in the first table of the section titled one of
 //   `headings` (`## …` lines), in place of its "nothing yet" row (every cell `—` but the last), else
 //   after its last row; the markdown unchanged without that section.
@@ -55,6 +58,8 @@
     plan: ['Files that change', 'Order of work', 'Risks', 'Proof'],
   };
   const FRONT_MATTER_KEYS = ['item', 'stage', 'status', 'date'];
+  // #702 a work item's folder name under docs/work/ (isItemName adds: no `..`)
+  const ITEM_NAME = /^[a-z0-9][a-z0-9._-]{0,99}$/i;
   // the status of a document past its SDLC gate (Accept intent, Sign off spec, #633 Accept plan)
   const ACCEPTED = { intent: 'accepted', spec: 'signed off', plan: 'accepted' };
   const RECOMMENDED = /\*\*(Recommended|Recomendado):\*\*/;
@@ -393,6 +398,16 @@
     return rows.length > 0 && rows.every((r) => DONE.includes(String(r.cells[1] || '').toLowerCase()));
   }
 
+  function planStatus(markdown) {
+    if (planBuilt(markdown)) return 'built';
+    return String(frontMatter(markdown).status || '').replace(/\s+#.*$/, '').trim();
+  }
+
+  function isItemName(name) {
+    const s = String(name ?? '');
+    return ITEM_NAME.test(s) && !s.includes('..');
+  }
+
   function addTableRow(markdown, headings, row) {
     const rows = markdown.split('\n');
     const table = tableBody(rows, headings);
@@ -421,10 +436,12 @@
     alignedLines,
     blocks,
     frontMatter,
+    isItemName,
     itemName,
     lintDoc,
     lintTranslation,
     planBuilt,
+    planStatus,
     progressRows,
     replaceLines,
     sections,

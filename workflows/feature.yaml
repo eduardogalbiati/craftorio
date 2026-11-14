@@ -2643,8 +2643,8 @@ outputs:
   # scenarios, the before/after screenshots and the axe check; 'not run' / [] when a step did not run
   evidence:
     type: object
-    description: "The run's evidence (suite, e2e, screenshots, axe) for the post-flow's test.md row."
-    value: "{% set ev = { 'suite': (steps.suite.output.status if steps.suite.output and steps.suite.output.status else 'not run'), 'e2e': ((steps.e2e.output.message or steps.e2e.output.status) if steps.e2e.output else 'not run'), 'screenshots': ((steps.evidence.output.screenshots if steps.evidence.output else []) or []), 'axe': ((steps.developer_screenshots.output.axe_findings if steps.developer_screenshots.output else []) or []) } %}{{ ev | to_json }}"
+    description: "The run's evidence for the post-flow's test.md row: suite and e2e { status, passed, failed } (the runners' counts), the screenshots taken or the reason none were, the axe findings."
+    value: "{% set so = steps.suite.output or {} %}{% set eo = steps.e2e.output or {} %}{% set ds = steps.developer_screenshots.output or {} %}{% set ev = { 'suite': { 'status': so.status or 'not run', 'passed': so.passed, 'failed': so.failed }, 'e2e': { 'status': eo.status or 'not run', 'passed': eo.passed, 'failed': eo.failed, 'message': eo.message }, 'screenshots': ((steps.evidence.output.screenshots if steps.evidence.output else []) or ds.screenshots or []), 'screenshots_reason': ds.reason or (ds.message if not ds.taken else ''), 'axe': ds.axe_findings or [] } %}{{ ev | to_json }}"
 
 observability:
   storage:

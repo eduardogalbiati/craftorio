@@ -8,16 +8,19 @@
 //     merged commit (7 characters) or the PR; every row done → front matter `status: built`;
 //   - test.md (and test.pt-BR.md): one row under `## Suite and tests` / `## Suíte e testes` (Run | Unit |
 //     E2E | Screenshots | Axe | Result; a 4-column table gets the 6-column header), never an empty cell:
-//     0 screenshots → the run's reason (evidence.screenshots_reason); front matter `status: collecting`;
+//     0 screenshots → the run's reason (evidence.screenshots_reason); front matter `status: collecting`
+//     (and `date` when it has none); an item without test.md gets both from the skeleton first;
 //   - the screenshots (absolute paths, or relative to `runDir`, the Code & Build run's folder) copied
-//     to docs/work/<item>/images/ and listed under the screenshots section;
+//     to docs/work/<item>/images/ and listed under the screenshots section, each with its run; a name
+//     an earlier run's image already has (same screen) becomes `<run>-<name>`, never overwritten;
 //   - DocModel's lint (lintDoc, lintTranslation) on every document before anything is written: a
 //     problem writes nothing and commits nothing (status invalid, problems listed); else ONE commit
 //     `docs(<item>): record run <run>` on `branch` when the checkout is detached (a run's worktree).
 // It reads only those inputs: the run's declared `evidence` output, its merged_commit / pr_url.
-// - recordStage(repoDir, { item, status, summary?, branch? }) (a step with `status:`, used by sdlc-test):
-//   test.md / test.pt-BR.md get `status` (in review | passed | failed) and the summary under `## Summary`
-//   / `## Resumo`; the same lint, then ONE commit `docs(<item>): test stage <status>`.
+// - recordStage(repoDir, { item, status, summary?, branch?, date? }) (a step with `stage:`, used by
+//   sdlc-test): test.md / test.pt-BR.md get `status` (in review | passed | failed), `date` when they have
+//   none, and the summary under `## Summary` / `## Resumo`; the same lint, then ONE commit
+//   `docs(<item>): test stage <status>`.
 'use strict';
 
 const fs = require('fs');
@@ -25,7 +28,6 @@ const path = require('path');
 const DocModel = require('@multiagent/shared/doc-model');
 const { git, identityArgs } = require('./worktree');
 
-const ITEM = /^[a-z0-9][a-z0-9._-]{0,99}$/i;
 const SUITE = ['## Suite and tests', '## Suíte e testes'];
 const SHOTS = ['## Before and after screenshots', '## Screenshots de antes e depois'];
 const HEADER = {
@@ -140,8 +142,31 @@ function recordTest(text, lang, row, images, run, date) {
 
 const readText = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
 
-// the screenshots to copy: absolute paths, or relative to the Code & Build run's folder
-function collectImages(shots, runDir, notes) {
+// test.md / test.pt-BR.md of an item that has none (the pre-flow writes intent, spec and plan only):
+// the skeleton of docs/work/<item>/test.md, `status: not started`, titled after the plan
+const SKELETON = {
+  en: { title: 'Test', evidence: 'evidence', intro: 'The evidence the runs produce: each successful Code & Build run adds its row (sdlc-record); the Test workflow adds the summary and ends at the code owner\'s gate.', evals: ['## Evals', 'Only in the Full work model: the evals\' result.'], shots: 'The original/modified pairs of the runs, with the axe checks.', nothing: 'nothing yet' },
+  pt: { title: 'Teste', evidence: 'evidências', intro: 'As evidências que as runs produzem: cada run de Code & Build com sucesso acrescenta sua linha (sdlc-record); o workflow de Test acrescenta o resumo e termina no gate do code owner.', evals: ['## Evals', 'Só no modelo de trabalho Full: o resultado dos evals.'], shots: 'Os pares original/modificado das runs, com as checagens de axe.', nothing: 'nada ainda' },
+};
+function testSkeleton(name, planText, lang, date) {
+  const s = SKELETON[lang];
+  const title = (/^# (?:Plan: |Plano: )?(.+)$/m.exec(planText || '') || [])[1] || name;
+  return [
+    '---', `item: ${name}`, 'stage: test', 'status: not started', `date: ${date}`,
+    lang === 'en' ? 'translation: test.pt-BR.md' : 'source: test.md', '---', '',
+    `# ${s.title}: ${title.trim()} ${s.evidence}`, '', s.intro, '',
+    SUITE[lang === 'en' ? 0 : 1], '', HEADER[lang][0], HEADER[lang][1], `| — | — | — | — | — | ${s.nothing} |`, '',
+    SHOTS[lang === 'en' ? 0 : 1], '', s.shots, '', s.evals[0], '', s.evals[1], '',
+  ].join('\n');
+}
+
+// the screenshots to copy: absolute paths, or relative to the Code & Build run's folder; a name an earlier
+// run's image has already (another content in images/) gets the run's id in front, never overwritten
+function collectImages(shots, runDir, notes, { folder, run } = {}) {
+  const taken = (name, from) => {
+    const there = folder ? path.join(folder, 'images', name) : null;
+    return !!there && fs.existsSync(there) && !fs.readFileSync(there).equals(fs.readFileSync(from));
+  };
   return (Array.isArray(shots) ? shots : []).map((s) => (typeof s === 'string' ? { path: s } : s || {}))
     .map((s) => ({ ...s, from: path.isAbsolute(String(s.path || '')) ? s.path : (runDir && s.path ? path.join(runDir, s.path) : null) }))
     .filter((s) => {
@@ -149,7 +174,10 @@ function collectImages(shots, runDir, notes) {
       if (!ok && s.path) notes.push(`screenshot not found: ${s.path}`);
       return ok;
     })
-    .map((s) => ({ from: s.from, name: path.basename(s.from), caption: s.caption || '' }));
+    .map((s) => {
+      const base = path.basename(s.from);
+      return { from: s.from, name: taken(base, s.from) ? `${String(run).replace(/[^\w.-]+/g, '-')}-${base}` : base, caption: s.caption || '' };
+    });
 }
 
 // DocModel's lint of the documents about to be written (a docs commit runs no tests, #695)
@@ -191,7 +219,7 @@ async function writeAndCommit(repoDir, { folder, rel, next, original, images = [
 
 async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_url: prUrl, issues, evidence, runDir, branch, date } = {}) {
   const name = String(item ?? '');
-  if (!ITEM.test(name) || name.includes('..')) throw new Error(`Not a work item of docs/work: ${name}`);
+  if (!DocModel.isItemName(name)) throw new Error(`Not a work item of docs/work: ${name}`);
   const runId = String(run ?? '').trim();
   if (!runId) throw new Error('record_docs needs the Code & Build run it records.');
   const folder = path.join(repoDir, 'docs', 'work', name);
@@ -201,7 +229,14 @@ async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_
   const ev = evidence && typeof evidence === 'object' ? evidence : {};
   const day = date || new Date().toISOString().slice(0, 10);
   const notes = [];
-  const images = collectImages(ev.screenshots, runDir, notes);
+  const images = collectImages(ev.screenshots, runDir, notes, { folder, run: runId });
+  // an item the pre-flow wrote without test.md: both from the skeleton (written with the row, one commit)
+  const base = { 'test.md': original['test.md'], 'test.pt-BR.md': original['test.pt-BR.md'] };
+  if (base['test.md'] === null) {
+    base['test.md'] = testSkeleton(name, original['plan.md'], 'en', day);
+    base['test.pt-BR.md'] = testSkeleton(name, original['plan.md'], 'pt', day);
+    notes.push(`${rel('test.md')} created from the skeleton`);
+  }
 
   // the plan's Progress row (the same row, by order, in the translation)
   const progress = DocModel.progressRows(original['plan.md']);
@@ -215,23 +250,22 @@ async function recordDocs(repoDir, { item, run, merged_commit: mergedCommit, pr_
   };
   // the evidence row, EN and pt-BR
   const row = (w) => `| ${[cell(runId), countsCell(ev.suite, w), countsCell(ev.e2e, w), screensCell(images.map((i) => i.name), ev.screenshots_reason, w), axeCell(ev.axe, w), resultCell(ev, w)].join(' | ')} |`;
-  next['test.md'] = recordTest(original['test.md'], 'en', row(WORDS.en), images, runId, day);
-  next['test.pt-BR.md'] = recordTest(original['test.pt-BR.md'], 'pt', row(WORDS.pt), images, runId, day);
-  if (next['test.md'] === null) notes.push(`${rel('test.md')} is missing: no evidence row written`);
+  next['test.md'] = recordTest(base['test.md'], 'en', row(WORDS.en), images, runId, day);
+  next['test.pt-BR.md'] = recordTest(base['test.pt-BR.md'], 'pt', row(WORDS.pt), images, runId, day);
 
   // DocModel's lint before anything is written (a docs commit runs no tests, #695)
   const problems = lintRecorded(next, folder, images, rel);
   const built = DocModel.frontMatter(next['plan.md']).status === 'built';
-  const base = { kind: 'record_docs', item: name, run: runId, built, notes };
+  const out = { kind: 'record_docs', item: name, run: runId, built, notes };
   if (problems.length) {
-    return { ...base, status: 'invalid', commit: null, files: [], problems, message: `Nothing recorded: DocModel's lint found ${problems.length} problem(s) in the documents of ${name}.` };
+    return { ...out, status: 'invalid', commit: null, files: [], problems, message: `Nothing recorded: DocModel's lint found ${problems.length} problem(s) in the documents of ${name}.` };
   }
 
   // write, copy the images, ONE commit
   const { files, commit } = await writeAndCommit(repoDir, { folder, rel, next, original, images, branch, message: `docs(${name}): record run ${runId}` });
-  if (!commit) return { ...base, status: 'recorded', commit: null, files, problems, message: `Nothing to record for run ${runId}: the documents of ${name} have it already.` };
+  if (!commit) return { ...out, status: 'recorded', commit: null, files, problems, message: `Nothing to record for run ${runId}: the documents of ${name} have it already.` };
   return {
-    ...base, status: 'recorded', commit, files, problems,
+    ...out, status: 'recorded', commit, files, problems,
     message: `Recorded run ${runId} in ${name}: ${files.length} file(s)${built ? ', the plan is built' : ''}${notes.length ? ` (${notes.join('; ')})` : ''}.`,
   };
 }
@@ -252,9 +286,10 @@ function withSummary(text, lang, summary) {
   return `${lines.join('\n')}\n`;
 }
 
-async function recordStage(repoDir, { item, status, summary, branch } = {}) {
+async function recordStage(repoDir, { item, status, summary, branch, date } = {}) {
   const name = String(item ?? '');
-  if (!ITEM.test(name) || name.includes('..')) throw new Error(`Not a work item of docs/work: ${name}`);
+  const day = date || new Date().toISOString().slice(0, 10);
+  if (!DocModel.isItemName(name)) throw new Error(`Not a work item of docs/work: ${name}`);
   const wanted = String(status ?? '').trim();
   if (!STAGE_STATUSES.includes(wanted)) throw new Error(`Not a Test stage status: ${wanted} (${STAGE_STATUSES.join(', ')})`);
   const folder = path.join(repoDir, 'docs', 'work', name);
@@ -265,7 +300,8 @@ async function recordStage(repoDir, { item, status, summary, branch } = {}) {
   for (const [file, lang] of [['test.md', 'en'], ['test.pt-BR.md', 'pt']]) {
     if (original[file] === null) continue;
     const text = String(summary ?? '').trim() ? withSummary(original[file], lang, summary) : original[file];
-    next[file] = DocModel.setFrontMatter(text, { status: wanted });
+    // DocModel's lint needs a `date`: a skeleton without one gets the day (as recordTest does)
+    next[file] = DocModel.setFrontMatter(text, { status: wanted, ...(DocModel.frontMatter(text).date ? {} : { date: day }) });
   }
   const exists = (target) => fs.existsSync(path.join(folder, target));
   const problems = [

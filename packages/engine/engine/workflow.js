@@ -129,7 +129,8 @@ const thenWithRetrospective = (then, inputs) => (!then && [true, 'true'].include
 // chains sdlc-record (chain-model defaultThen), unless it was started with a then (Nothing included)
 const sdlcRecordThen = (wf, given, inputs, issues) => (wf.outputs?.evidence && given == null
   ? chain.normalizeThen(chain.defaultThen({ status: 'success', task: inputs.task, issues: issues || [] })) : null);
-// the then a run starts with: the given one, the retrospective (#631), else sdlc-record's default (#702)
+// the then a run starts with: the given one, the retrospective (#631), else sdlc-record's default (#702);
+// a run with `retrospective: true` chains the retrospective, not sdlc-record (record it by hand then)
 const startThen = (run, given) => thenWithRetrospective(run.then, run.inputs) || sdlcRecordThen(run.wf, given, run.inputs, run.issues);
 // #396: the failures of the suite steps that ended red, with their class (in or outside the change)
 const testedFailures = (steps) => Object.entries(steps)
