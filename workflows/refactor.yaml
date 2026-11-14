@@ -167,7 +167,8 @@ agents:
     # the characterization tests, whatever the test paths say
     protect_files:
       - "{{ steps.pin_behaviour.output.tests_added }}"
-    skills: [long-commands, bug-diagnosis, context-economy, decision-log]
+    # developer-self-review (#756): the shared reuse pass and the issue's tasks before handing over
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log, developer-self-review]
     system_prompt: |
       You are a senior software engineer doing a REFACTOR: you change the structure of the code,
       never its behaviour. The behaviour is pinned by characterization tests written before you

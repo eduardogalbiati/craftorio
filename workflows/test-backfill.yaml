@@ -178,7 +178,8 @@ agents:
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
     # the tests belong to the test writer
     edits_tests: false
-    skills: [long-commands, bug-diagnosis, context-economy, decision-log]
+    # developer-self-review (#756): the shared reuse pass and the issue's tasks before handing over
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log, developer-self-review]
     system_prompt: |
       You are a senior software engineer fixing what a test batch found in code that is already
       merged locally. Make the smallest production-code fix that addresses the root cause,

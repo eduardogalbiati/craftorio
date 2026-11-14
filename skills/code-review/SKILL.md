@@ -3,6 +3,8 @@ name: code-review
 description: Reviews a diff/branch on three separate axes - correctness (bugs, security, tests), spec (does it do what the task asked) and standards (repo conventions plus market best practices) - applying per-language rules from rules/<language>.md. Use whenever you review code changes.
 summary: "Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md`"
 used_by: "reviewer"
+# the reuse pass is one text shared with the developer's self-review (#756)
+uses: [reuse-pass]
 ---
 
 # Code review
@@ -99,27 +101,8 @@ Quote the requirement line for each finding:
 
 ### Reuse pass
 
-The costly duplication is rarely copied lines: it is the same rule or the same mapping written
-again in another place, which then drifts. When your prompt carries the Warm Up's reuse list
-(#758), start from it: a diff that rewrites one of its entries instead of calling it is a finding.
-Then, for each new function, constant or mapping table in the diff, search the repository for an
-existing one before the verdict:
-- by **name** (and obvious synonyms: `CLI_BY_TYPE`, `cliForProvider`, `providerCli`);
-- by the **literal values** it maps or lists (`grep` for two or three of its keys or values
-  together, e.g. `'claude-code'` and `'codex-cli'`);
-- by the **rule** it computes (the condition or formula: a cost correction, a "current stage", a
-  status derived from the same fields).
-
-When you find one:
-- A rule or mapping table that already exists elsewhere is a `major` finding (axis `standards`, a
-  hard violation, not a judgement call): name both places (file and line), say which one to keep
-  and which helper to call, or where to move the shared one when neither is reachable (export it,
-  or a small module next to the data it reads).
-- Plain copied lines (the same few statements, no shared rule or table) stay `minor`.
-- When it is unclear whether the two compute the same rule, record your assumption in the finding
-  and pick the lower severity; never stop to wait for an answer.
-
-No match: no finding. Say in your summary that the reuse pass found nothing.
+Before the verdict, run the shared reuse pass (the `reuse-pass` skill, loaded above this one and
+also run by the developer's self-review, #756) on every new function, constant and rule of the diff.
 
 ## 5. Severity and verdict
 

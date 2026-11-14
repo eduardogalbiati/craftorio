@@ -489,8 +489,9 @@ agents:
     # resolve_merge (#418: kept out of the develop prompt's 40K budget);
     # long-commands: installs, builds and focused checks in the foreground; ui-conventions: changes
     # that touch a screen (shared components, controls, the states to capture, the design plan);
-    # design-system (#387): the tokens it builds with, the ones the ui_reviewer checks against
-    skills: [long-commands, bug-diagnosis, context-economy, decision-log, ui-conventions, design-system]
+    # design-system (#387): the tokens it builds with, the ones the ui_reviewer checks against;
+    # developer-self-review (#756): the shared reuse pass and the issue's tasks before handing over
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log, ui-conventions, design-system, developer-self-review]
     system_prompt: |
       You are a senior software engineer. Make small, cohesive changes to the production code
       that follow the architecture and conventions of the existing code.

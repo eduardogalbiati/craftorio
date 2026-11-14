@@ -88,7 +88,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - In the issues language the Language line names (headings translated where it has them); `- [ ]`,
   `#n`, `Closes #n` and labels never change; never rewrite existing text only to translate it.
 
-<!-- skill: context-economy sha256:0705cbff1809 -->
+<!-- skill: context-economy sha256:d29ea7000cd3 -->
 ## context-economy (small context)
 
 - Every call of an answer re-sends the whole conversation: a big tool result is paid again on

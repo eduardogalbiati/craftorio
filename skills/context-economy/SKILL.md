@@ -67,46 +67,24 @@ errors; rerun the suite yourself to decide.
 
 ## Developer: reuse before you add
 
-Before you add a function, a constant or a mapping table, search the repository for an existing
-helper, constant or mapping that already does it (#347): by its name and synonyms, by the literal
-values it would map (`'claude-code'`, a status name, a stage id), and by the rule it computes (a
-cost correction, a "current stage"). Ask the first exploration sub-agent for it with the map.
-- Found one: call it. When it is private, export it or move it to a shared module next to the
-  data it reads; never write a second table or a second copy of the rule.
-- Found none: add yours where the next developer will look for it (next to the related code).
-- When unsure whether two rules are the same, record the assumption in the decision log; never ask.
-- In your handoff note (and `summary`), name what you reused and where it lives, or say you
-  searched and found nothing to reuse.
+Before you add a function, a constant or a mapping, search the repository for an existing helper,
+constant or mapping that already does it (#347; how: the `reuse-pass` skill), with the first
+exploration sub-agent. In your handoff note (and `summary`), name what you reused and where it
+lives, or say you searched and found nothing to reuse.
 
-## Read excerpts, not files
+## Read excerpts, group edits
 
-- Read the lines you need (a function, a block around a match), not the whole file. Read a whole
-  file only when it is small or you are about to rewrite most of it.
-- Don't re-read a file you already read in this turn unless it changed.
-- Keep command output short: filter it (`git log --oneline -20`, `git diff --stat`, a test
-  runner's summary or its failures only) instead of dumping everything.
-
-## Group your edits
-
-- Each tool call re-sends the conversation: make several changes to one file in **one** edit
-  (one larger `Edit` covering the block, or a `Write` of a small file you rewrite), not one `Edit`
-  per line.
-- Plan the change of a file before editing it, so you edit it once or twice, not ten times.
+- Read the lines you need (a function, a block around a match), not whole files; never re-read an
+  unchanged file. Keep command output short (`git log --oneline -20`, a runner's summary).
+- Plan each file's change, then make it in one or two edits, not one `Edit` per line.
 
 ## Fix turns: read only what the findings name
 
-When you come back after a review, a failed test or a failed build, work from the findings: read
-only the files and lines they name (plus your handoff note), fix them, and stop. Don't re-read or
-re-map the whole feature; start a sub-agent when a finding points somewhere you have not mapped,
-or to read a long failure output.
+Back after a review, a failed test or build: read only the files and lines the findings name (plus
+your handoff note), fix them, and stop; a sub-agent reads what you have not mapped.
 
 ## Leave a good handoff note
 
-Your next turn may start in a fresh session that only has your handoff note (the orchestrator
-asks for it at the end of each turn). Write it in the Language line's language so that turn can act without re-exploring:
-- the branch, the commits (hashes) and what each one does;
-- what is left, in order, and the decisions you made with their reasons;
-- the key files with the line ranges that matter;
-- what failed and why (commands, error lines), so nobody retries it blindly.
-
-Point to files and commits; the code is in git. Never paste code into the note.
+Your next turn may start fresh with only your handoff note: write it in the Language line's
+language, with the branch, the commits, what is left, your decisions, the key files and line
+ranges, and what failed and why. Point to files and commits; never paste code.
