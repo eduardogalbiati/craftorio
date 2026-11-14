@@ -19,6 +19,8 @@
 // #809 replaced feature.yaml's pr_review gate with the pr_monitor step (pending, waiting, ready,
 // merged): re-recorded (#723), two runs gave 447 events.
 // #758: the warm_up step's schema has an optional `reuse` list, so its simulated answer carries one.
+// #756: the developer loads developer-self-review and code-review pulls reuse-pass through `uses`:
+// one more "skill loaded" log in develop and one in code_review: 449.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
