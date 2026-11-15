@@ -59,12 +59,17 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   `event.branch`): a lone placeholder keeps the value's type, one inside text becomes text. A rule with
   an unknown `on`, a missing field or a workflow outside the manifest is listed in `triggerErrors` /
   `refusedTriggers`, shown on the project page as "ignored", and never started; it never voids the
-  manifest. The rules are read at HEAD like the workflows (accepted per commit). The service
+  manifest. The rules are read at HEAD and accepted with their workflow: a rule naming a repository
+  workflow the owner has not accepted at that commit (#485) goes to `refusedTriggers` until it is. The service
   (`packages/engine/service/areas/triggers.js`) polls a project only when Settings › Execution ›
   Platform triggers has it on (`settings.triggers.enabled[<id>]`, interval `intervalMinutes`, default
   2, 0 = off), reads the events with `gh api` / `glab api` (`platform-events.js`, no model call, backs
   off on HTTP 403/429), starts one run per new event like a roadmap item (budget, occupancy, memory
-  guard, merge queue), writes `trigger: { kind, id, url }` into the run's `meta.json`, comments once on
-  the issue or PR and keeps the seen ids in `<workspace>/backlog/triggers/<id>.json`. A trigger never
+  guard, merge queue; an `issue_labeled` run is linked to its issue like a roadmap run), writes
+  `trigger: { kind, id, url }` into the run's `meta.json`, comments once on the issue or PR with the
+  run's id and the first human gate it reaches (or how it finished; pending reports wait in
+  `<id>.reports.json`, posted through the platform adapter's `issueSaveCommand` / `prCommentCommand`).
+  A start that throws is logged, shown on the card and retried 3 times, then dropped; a per-event claim
+  file keeps two apps from starting it twice. It keeps the seen ids in `<workspace>/backlog/triggers/<id>.json`. A trigger never
   answers a gate or merges; under `MULTIAGENT_SIMULATION_ONLY=1` it neither reads nor writes the
   platform. Channel `triggers:status { projectId }` feeds the project page's Triggers card.

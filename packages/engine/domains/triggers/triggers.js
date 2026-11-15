@@ -181,6 +181,46 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
   // the repository's history
   let since = readTriggerState(stateDir, project).since || new Date(now()).toISOString();
   const idle = () => ({ polled: false, started: [], backoffMs: null });
+  const markSeen = (state, seen, id) => { seen.add(id); state.seen.push(id); delete state.failures[id]; };
+
+  // a real failure, not a wait: logged, shown on the card, tried MAX_ATTEMPTS times then dropped.
+  // Returns true when the event is tried again on the next poll.
+  function recordFailure(state, seen, event, rule, failure) {
+    const attempts = (Number(state.failures[event.id]) || 0) + 1;
+    console.error(`triggers ${project}: ${event.id} could not start ${rule.workflow} (attempt ${attempts}/${MAX_ATTEMPTS}): ${failure}`);
+    state.lastEvent.error = failure;
+    state.lastError = { eventId: event.id, workflow: rule.workflow, message: failure, at: new Date(now()).toISOString() };
+    if (attempts >= MAX_ATTEMPTS) { markSeen(state, seen, event.id); return false; }
+    state.failures[event.id] = attempts;
+    return true;
+  }
+
+  // starts one matching event under its claim: { held } (claimed elsewhere, waiting, or to retry),
+  // { runId } when started, { error } on a real failure
+  async function startEvent(state, seen, event, rule, mock) {
+    // another app starts this event right now: its state write will say so
+    const release = claimEvent(stateDir, project, event.id);
+    if (!release) return { held: true };
+    const trigger = { kind: event.kind, id: event.id, url: event.url || null };
+    let res = null;
+    try {
+      // started by another app since this poll read the state
+      if (readTriggerState(stateDir, project).seen.includes(event.id)) { markSeen(state, seen, event.id); return {}; }
+      res = await startRun({ project, workflow: rule.workflow, inputs: renderTriggerInputs(rule.inputs, event), trigger, mock, event });
+    } catch (e) {
+      const error = String(e?.message || e);
+      return { error, held: recordFailure(state, seen, event, rule, error) };
+    } finally {
+      if (res?.runId) {
+        markSeen(state, seen, event.id);
+        state.runs.push({ eventId: event.id, runId: res.runId, workflow: rule.workflow, url: trigger.url, at: new Date(now()).toISOString() });
+        writeTriggerState(stateDir, project, state);
+      }
+      release();
+    }
+    // not started (a busy slot, the budget): seen again on the next poll, so `since` stays put
+    return res?.runId ? { runId: res.runId } : { held: true };
+  }
 
   async function pollOnce() {
     if (!enabled || !intervalMs || !rules.length) return idle();
@@ -200,7 +240,6 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
     const started = [];
     const errors = [];
     const mock = process.env.MULTIAGENT_SIMULATION_ONLY === '1';
-    const markSeen = (id) => { seen.add(id); state.seen.push(id); delete state.failures[id]; };
     let dirty = false;
     let held = false;
     for (const event of events || []) {
@@ -208,40 +247,11 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
       const rule = rules.find((r) => matchEvent(r, event));
       state.lastEvent = { id: event.id, kind: event.kind, url: event.url || null, at: new Date(now()).toISOString(), matched: !!rule };
       dirty = true;
-      if (!rule) { markSeen(event.id); continue; }
-      // another app starts this event right now: its state write will say so
-      const release = claimEvent(stateDir, project, event.id);
-      if (!release) { held = true; continue; }
-      const trigger = { kind: event.kind, id: event.id, url: event.url || null };
-      let res = null;
-      let failure = null;
-      try {
-        // started by another app since this poll read the state
-        if (readTriggerState(stateDir, project).seen.includes(event.id)) { markSeen(event.id); continue; }
-        res = await startRun({ project, workflow: rule.workflow, inputs: renderTriggerInputs(rule.inputs, event), trigger, mock, event });
-      } catch (e) {
-        failure = String(e?.message || e);
-      } finally {
-        if (res?.runId) {
-          markSeen(event.id);
-          state.runs.push({ eventId: event.id, runId: res.runId, workflow: rule.workflow, url: trigger.url, at: new Date(now()).toISOString() });
-          writeTriggerState(stateDir, project, state);
-        }
-        release();
-      }
-      if (failure) {
-        // a real failure, not a wait: logged, shown on the card, tried MAX_ATTEMPTS times then dropped
-        const attempts = (Number(state.failures[event.id]) || 0) + 1;
-        console.error(`triggers ${project}: ${event.id} could not start ${rule.workflow} (attempt ${attempts}/${MAX_ATTEMPTS}): ${failure}`);
-        state.lastEvent.error = failure;
-        state.lastError = { eventId: event.id, workflow: rule.workflow, message: failure, at: new Date(now()).toISOString() };
-        errors.push({ eventId: event.id, error: failure });
-        if (attempts >= MAX_ATTEMPTS) markSeen(event.id);
-        else { state.failures[event.id] = attempts; held = true; }
-        continue;
-      }
-      // not started (a busy slot, the budget): seen again on the next poll, so `since` stays put
-      if (!res?.runId) { held = true; continue; }
+      if (!rule) { markSeen(state, seen, event.id); continue; }
+      const res = await startEvent(state, seen, event, rule, mock);
+      if (res.error) errors.push({ eventId: event.id, error: res.error });
+      if (res.held) held = true;
+      if (!res.runId) continue;
       started.push({ eventId: event.id, runId: res.runId, workflow: rule.workflow });
       if (comment) { try { await comment({ event, runId: res.runId, workflow: rule.workflow }); } catch { /* the report is best effort */ } }
     }
