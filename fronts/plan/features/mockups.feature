@@ -30,3 +30,34 @@ Feature: Project mockups in Plan & Design
     Then the mockup editor window shows the canvas
     When I click "Export" on the mockup's canvas
     Then the designer chat shows a selection chip for "Export"
+
+  @issue-835
+  Scenario: The Kit tab lists the kit's tokens and components with a live preview
+    Given the app is open
+    And the project has a visual kit with the token "--color-primary" and the component "Button/primary"
+    When I open "Mockups" in the sidebar
+    And I open the Kit tab of the Mockups screen
+    Then the Kit tab lists the token "--color-primary"
+    And the Kit tab lists the component "Button/primary" with a preview
+
+  @issue-835
+  Scenario: The editor shows the screen in the Phone frame and keeps a new variant as the current one
+    Given the app is open
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    When I open "Mockups" in the sidebar
+    And I open the mockup "Orders dashboard" in its editor window
+    And I switch the mockup editor's frame to "Phone"
+    Then the mockup's canvas is 390 pixels wide
+    When I create the variant "bold" of the mockup
+    Then the mockup editor shows "bold" as the current variant
+
+  @issue-835
+  Scenario: Comparing the two latest versions shows them side by side with the changed nodes highlighted
+    Given the app is open
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    And the mockup "Orders dashboard" has a newer version where the button reads "Download"
+    When I open "Mockups" in the sidebar
+    And I open the mockup "Orders dashboard" in its editor window
+    And I compare the two latest versions of the mockup
+    Then the comparison shows the version with "Export" beside the version with "Download"
+    And the comparison highlights the changed nodes
