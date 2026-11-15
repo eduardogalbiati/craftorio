@@ -33,8 +33,9 @@ const { createServer } = require('../../server');
 // backlog:sync takes `followed`; #782: architecture:city answers `analysed`; #797: backlog:state's items
 // answer `pr`; #804: roadmap:item takes `keepPaused`; #799: runs:resume takes `inputs`; #805: run:start, roadmap:start and pipelines:run take `baseChoice`, and backlog:assign can answer the base question; #810: runs:mergePr and runs:closePr; #811: runs:askFix; #812: pulls:list, pulls:merge and pulls:close; #795: runs:logTail; #625: the mockups:* channels of Plan & Design › Mockups; #835: the phase 2 mockups:* channels: kit map,
 // promote, compare, variants, flows, export and attach; #836: mockups:freeze, mockups:crops, mockups:review
-// and mockups:recreate; #837: mockups:storybook, mockups:export-repo, mockups:figma-import and mockups:live-link).
-const MAIN_CONTRACT = 'c2ec96370b9d';
+// and mockups:recreate; #837: mockups:storybook, mockups:export-repo, mockups:figma-import and mockups:live-link;
+// #568: triggers:status).
+const MAIN_CONTRACT = '3e115ae8a23a';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;
