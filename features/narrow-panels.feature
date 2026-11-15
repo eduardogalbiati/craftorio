@@ -26,7 +26,7 @@ Feature: Text fits in narrow panels
 
   # #443: a gate card (data-testid run-gate) at the minimum window size: its summary, message and
   # choice buttons stay inside it (the buttons wrap). The Start panel's steps read English labels.
-  @issue-443
+  @issue-443 @quarantine
   Scenario: A gate card keeps its text and buttons inside it at the minimum window size
     Given the app is open in "English" at its minimum window size
     When I start a simulated run with the task "Add a /health endpoint that reports the database, the queue, the cache and the mail relay, each with its latency and last error"

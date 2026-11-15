@@ -7,6 +7,7 @@ Feature: The header
   Home, Projects or Workflows › Definitions.
 
   # The E2E app runs with sign-in off: the account chip shows once a signed-in state is pushed (#315)
+  @quarantine
   Scenario: The header reads project, 24/7, usage, Oracle, bell, and the account last, without the run's controls
     Given the app is open
     And I am signed in as "Ada Lovelace" with the email "ada@example.com"

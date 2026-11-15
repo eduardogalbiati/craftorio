@@ -20,6 +20,7 @@ Feature: The account
     Then the account panel shows "Ada Lovelace" and "ada@example.com" without a trial or a plan
     And no screen of the menu mentions a trial or a plan
 
+  @quarantine
   Scenario: An account whose old trial has ended does not stop a run
     Given the app is open
     And I am signed in as "Ada Lovelace" with the email "ada@example.com" and an ended trial

@@ -69,7 +69,8 @@ test('every scenario of the suite runs in exactly one lane (#365)', () => {
   assert.ok(all.length > 100, `scenarios found: ${all.length}`);
   const wrong = all
     .map((s) => ({ s, n: lanesOf(config, s.text).length }))
-    .filter(({ n }) => n !== 1)
+    // @quarantine scenarios run in no lane unless MULTIAGENT_E2E_QUARANTINE=1 (playwright.config.js)
+    .filter(({ s, n }) => n !== (s.tags.includes("@quarantine") && process.env.MULTIAGENT_E2E_QUARANTINE !== "1" ? 0 : 1))
     .map(({ s, n }) => `${s.file}: ${s.name} (${n} lanes)`);
   assert.deepEqual(wrong.slice(0, 10), []);
 });

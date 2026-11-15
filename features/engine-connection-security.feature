@@ -18,7 +18,7 @@ Feature: Engine connection security
     Then the engine connection page warns that the token is stored unencrypted
     And the engine connection page does not say the token is kept encrypted
 
-  @issue-479
+  @issue-479 @quarantine
   Scenario: With encryption on this computer, the engine connection page shows no unencrypted-token warning
     Given the app is open
     When I open "Settings" in the sidebar

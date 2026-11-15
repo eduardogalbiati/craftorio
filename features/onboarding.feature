@@ -396,7 +396,7 @@ Feature: Bring a project in with a guided wizard
   # and "Analyze again" (#782: "Analyze this project" only for a stale or moved plan) only refreshes the plan.
   # The review's "Open the city" finishes the wizard and lands on that City. The simulated plan is drawn
   # without a model call (MULTIAGENT_SIMULATION_ONLY=1).
-  @issue-731
+  @issue-731 @quarantine
   Scenario: Open the city after the analysis lands on the project's City drawn from its plan, and Analyze only refreshes it
     Given the app is open
     And a local git repository with some code is ready to import

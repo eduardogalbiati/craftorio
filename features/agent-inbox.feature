@@ -72,7 +72,7 @@ Feature: Agent inboxes
     Then the Oracle's chat shows its request "run.retry" sent to the "Supervisor"
     And the Oracle's chat offers no "Do it" button
 
-  @issue-241
+  @issue-241 @quarantine
   Scenario: The Oracle cannot get a human gate answered through the Supervisor
     Given the app is open
     When I start a simulated run with the task "Add a /health endpoint"

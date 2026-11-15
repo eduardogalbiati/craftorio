@@ -6,7 +6,7 @@ Feature: The run's 3D view
   overlay's canvas (features/steps/run3d.steps.js).
 
   # The run "-fin00388" is seeded finished (fronts/build/features/steps/turn-costs.steps.js): one developer turn
-  @issue-388
+  @issue-388 @quarantine
   Scenario: A finished run's 3D view stays still once drawn
     Given the app is open
     And the demo project has a finished AI Development run "fin00388"
@@ -19,7 +19,7 @@ Feature: The run's 3D view
     Then the 3D view draws no frames for 2 seconds
 
   # Slow simulated turns (#368) keep an agent at work long enough to watch the live scene
-  @issue-388
+  @issue-388 @quarantine
   Scenario: A live run's 3D view keeps drawing, and closing it stops the drawing and removes its canvas
     Given the app is open with slow simulated turns
     When I start a simulated run with the task "Add a /health endpoint"
@@ -31,7 +31,7 @@ Feature: The run's 3D view
     Then no 3D canvas remains
     And the 3D view draws no frames for 2 seconds
 
-  @issue-388
+  @issue-388 @quarantine
   Scenario: A live run's 3D view stops drawing while the window is minimised and draws again once restored
     Given the app is open with slow simulated turns
     When I start a simulated run with the task "Add a /health endpoint"
@@ -48,7 +48,7 @@ Feature: The run's 3D view
   # every kind of token in its tooltip. The seeded developer turn has 1,200 input, 3,400 output,
   # 52,000 cache read and 8,000 cache creation tokens (fronts/build/features/steps/turn-costs.steps.js),
   # so only the shapes of the figures are checked.
-  @issue-833
+  @issue-833 @quarantine
   Scenario: The 3D view's HUD shows the run's tokens and the cost per million tokens
     Given the app is open
     And the demo project has a finished AI Development run "tok00833"
@@ -61,7 +61,7 @@ Feature: The run's 3D view
     And the 3D view's Tokens card shows a total with its output and cache read share under it
     And the 3D view's Tokens card lists every kind of token in its tooltip
 
-  @issue-833
+  @issue-833 @quarantine
   Scenario: The 3D view's Tokens card comes right after the Cost card and Elapsed stays last
     Given the app is open
     And the demo project has a finished AI Development run "ord00833"

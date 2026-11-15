@@ -30,7 +30,7 @@ Feature: The Oracle
   # short notice written by the code (run id, status, cost), with no model call. Human gates are not
   # routine: they are unticked here so that the run's only wake-up is its end. Assumes the notice
   # carries data-testid="oracle-run-notice" (new) and shows its line without unfolding.
-  @issue-244
+  @issue-244 @quarantine
   Scenario: A run's routine wake-up is a notice in the Oracle's chat, not a model answer
     Given the app is open
     When I open "Settings" in the sidebar

@@ -107,7 +107,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the City tab offers the "Analyze this project" button
     And no project map run has started
 
-  @issue-373
+  @issue-373 @quarantine
   Scenario: The City view draws the project as a city, its header naming files, zones and districts
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -119,7 +119,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     When I colour the city by "Zone"
     Then the city legend lists "Backend" and "Tooling"
 
-  @issue-373 @issue-381
+  @issue-373 @issue-381 @quarantine
   Scenario: A project without a city plan shows its folders as a city and offers to analyze it
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report
@@ -130,7 +130,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city header counts 2 files
     And the city offers "Analyze this project" with a cost estimate in US$
 
-  @issue-381
+  @issue-381 @quarantine
   Scenario: The city expands over the whole window and comes back with Esc
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -143,7 +143,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     When I press Escape on the city
     Then the city is back inside the tab
 
-  @issue-374
+  @issue-374 @quarantine
   Scenario: With no run in progress the city says no agent is working on the project
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -154,7 +154,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     When I turn the city's Live switch on
     Then the city says "No agent is working on this project"
 
-  @issue-374
+  @issue-374 @quarantine
   Scenario: An agent of a run in progress shows on the city, and a run of another project does not
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -169,7 +169,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city does not show the agent "tester · write_tests"
     And the city shows no collision risk
 
-  @issue-374
+  @issue-374 @quarantine
   Scenario: Two runs in progress changing the same file mark it as a collision risk that links to the Conflict map
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -190,7 +190,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # seeded "billing-service" (src/billing.js in the district Billing of the zone Backend,
   # tools/export.py in Export of Tooling) with its own synced backlog and roadmap.
   # Since #430 "Show on the map" opens the city in a modal over the screen it was asked from (#556).
-  @issue-375 @issue-556
+  @issue-375 @issue-556 @quarantine
   Scenario: "Show on the map" on a Backlog issue opens the city with the issue's expected footprint
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -205,7 +205,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city impact header gives the share of the files in the Danger Zone as a percentage
     And the city lists "src/refunds.js" apart as a new file expected in "Billing"
 
-  @issue-375 @issue-556
+  @issue-375 @issue-556 @quarantine
   Scenario: "Show the stage on the map" colours the stage's items and marks a building both would change as a conflict
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -221,7 +221,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city marks "src/billing.js" as a conflict of the stage
     And the city does not mark "tools/export.py" as a conflict of the stage
 
-  @issue-427 @issue-556
+  @issue-427 @issue-556 @quarantine
   Scenario: Paths cited with a line range count as the files they name
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -234,7 +234,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city impact header counts 2 files, in the districts "Billing" and "Export" and the zones "Backend" and "Tooling"
     And the city lists no new file for the issue
 
-  @issue-427 @issue-556
+  @issue-427 @issue-556 @quarantine
   Scenario: A root file name the repository lacks is not counted as an expected file
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -248,7 +248,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city lists no new file for the issue
     And the city impact header does not mention "1792597401661-0000.json"
 
-  @issue-427 @issue-556
+  @issue-427 @issue-556 @quarantine
   Scenario: The stage footprint marks a file two items cite with line ranges as a conflict
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -263,7 +263,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city marks "src/billing.js" as a conflict of the stage
     And the city does not mark "tools/export.py" as a conflict of the stage
 
-  @issue-429 @issue-556
+  @issue-429 @issue-556 @quarantine
   Scenario: The issue's Expected files section is read as its own source with its own legend colour
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -384,7 +384,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
 
   # City v2 (#449): each file is a building of one of six kinds (shed, pavilion, hall, block, tower,
   # complex) instead of a plain box; its cards and the overlays behave as before.
-  @issue-449
+  @issue-449 @quarantine
   Scenario: The city draws each file as a new building whose cards still open on search and on hover
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan

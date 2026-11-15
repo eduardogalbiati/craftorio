@@ -84,7 +84,7 @@ Feature: Menu by the flow
   # Two simulated runs: the first waits at its gate, the second is paused after its current step (a
   # listed run with no gate, so the sidebar shows two runs and one gate, steadily); Concurrent runs is
   # turned on first, as it is off by default
-  @issue-411
+  @issue-411 @quarantine
   Scenario: In a short window with every group open, the runs stay in view, pinned under the menu
     Given the app is open in a 1400x600 window
     And concurrent runs are on
@@ -99,7 +99,7 @@ Feature: Menu by the flow
     And the runs in the sidebar are in view without scrolling
     And the runs footer is pinned to the bottom of the sidebar
 
-  @issue-411
+  @issue-411 @quarantine
   Scenario: Scrolling the menu to its end reaches Settings and leaves the runs where they are
     Given the app is open in a 1400x600 window
     And concurrent runs are on

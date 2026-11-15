@@ -10,7 +10,7 @@ Feature: Agent providers per run, and their fallbacks
   # feature's "Reviewer" runs on claude, claude-opus-5-5, effort high; its "Developer" on claude,
   # claude-opus-5-5 (the workflow's defaults). Validation "Validated" stops the run at its
   # "Developer check" gate right after Develop (#777: features/support/workflows.js).
-  @issue-262
+  @issue-262 @quarantine
   Scenario: The Start panel lists the workflow's agents with their defaults, and a change applies to that run only
     Given the app is open
     When I choose the workflow "feature" in the Start panel

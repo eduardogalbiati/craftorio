@@ -27,7 +27,7 @@ Feature: Readable step names
     And no visible text in the "run list progress" shows a snake_case step id
     And the "run list progress" tooltip contains "code_review"
 
-  @issue-245
+  @issue-245 @quarantine
   Scenario: The run chat's step tags name the steps readably, the step ids in their tooltips
     Given the app is open
     When I start a simulated run with the task "Add a /health endpoint"

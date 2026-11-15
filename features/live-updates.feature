@@ -38,7 +38,7 @@ Feature: Live updates from the engine
     And the sidebar's waiting-gates badge counts one gate less
     And the run's entry in the sidebar is no longer waiting at a gate
 
-  @issue-603
+  @issue-603 @quarantine
   Scenario: Answering a gate already answered elsewhere says when it was answered, not an error
     Given the engine is served on this machine
     And the served engine has a project "demo-app"

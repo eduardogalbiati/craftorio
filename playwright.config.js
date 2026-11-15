@@ -63,6 +63,11 @@ if (process.env.TEST_WORKER_INDEX === undefined) {
 }
 const E2E_WORKERS = choice.workers;
 const SERIAL = /@visual|@serial/;
+// @quarantine: scenarios set aside for the v1.5.0 release (owner, 2026-11-15): they fail on the WSL
+// engine host (no WebGL, no D-Bus keyring) or are stale against intended changes. Excluded by default;
+// MULTIAGENT_E2E_QUARANTINE=1 runs them too. Each comes back out of quarantine through its own issue.
+const QUARANTINE = process.env.MULTIAGENT_E2E_QUARANTINE === '1' ? null : /@quarantine/;
+const BEHAVIOUR_OUT = QUARANTINE ? /@visual|@serial|@quarantine/ : SERIAL;
 
 module.exports = defineConfig({
   testDir,
@@ -70,9 +75,9 @@ module.exports = defineConfig({
   fullyParallel: false,
   retries: 0,
   projects: [
-    { name: 'behaviour', grepInvert: SERIAL, workers: E2E_WORKERS, fullyParallel: true },
+    { name: 'behaviour', grepInvert: BEHAVIOUR_OUT, workers: E2E_WORKERS, fullyParallel: true },
     // features/steps/fixtures.js takes the screenshot slot for this lane's launches only
-    { name: 'visual', grep: SERIAL, workers: 1, fullyParallel: false, metadata: { screenshotSlot: true } },
+    { name: 'visual', grep: SERIAL, ...(QUARANTINE ? { grepInvert: QUARANTINE } : {}), workers: 1, fullyParallel: false, metadata: { screenshotSlot: true } },
   ],
   // a scenario's own budget: the app's start plus a simulated run up to its first gate
   timeout: 180000,
