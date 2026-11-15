@@ -935,7 +935,13 @@
 
   function renderAttachments() {
     const box = $('#dsc-files');
-    if (dv.open && box) box.innerHTML = parts().attachmentsHtml(dv.open, dv.previews);
+    if (!dv.open || !box) return;
+    // #835 a mockup version the editor attached (<slug>@<sha7>.mockup.json) shows its frozen thumbnail
+    for (const n of dv.open.attachments) {
+      const m = window.MockupModel?.parseAttachmentName?.(n);
+      if (m && !dv.previews.has(`${dv.open.id}/${n}`)) dv.previews.set(`${dv.open.id}/${n}`, { dataUrl: window.MockupModel.attachmentThumbnail({ title: m.slug, commit: m.commit }) });
+    }
+    box.innerHTML = parts().attachmentsHtml(dv.open, dv.previews);
   }
 
   // The images' thumbnails, read once per card and name.

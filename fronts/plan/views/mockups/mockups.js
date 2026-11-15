@@ -8,13 +8,19 @@
 // $1.50–$4.00). New mockup is a dialog (Title, Prompt, Create) with the generate-screen estimate; the
 // simulated designer (MULTIAGENT_SIMULATION_ONLY) writes the screen at once, a real one starts a
 // mockup-generate run. A Discovery card's "Mock this card" calls MockupsActions.fromCard.
+// #835: once the kit exists, a tablist Gallery | Kit; the Kit tab lists the components (name, file:line
+// source, a live preview: a sandboxed iframe on mockup://<id>/kit/components.html#c-<slug>), the tokens
+// (a swatch for a colour) and the inferred gaps (kit.json inferences, not a gate); Export .zip
+// (mockups:export, base64 → a Blob download).
 // Test ids: mockups-view, mockups-empty, mockups-build-kit, mockups-new, mockups-gallery, mockups-card,
-// mockups-open, mockups-new-dialog, mockups-kit.
+// mockups-open, mockups-new-dialog, mockups-kit, mockups-gallery-tab, mockups-kit-tab, mockups-kit-panel,
+// mockups-kit-token, mockups-kit-component, mockups-kit-preview, mockups-export.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, api, errMsg,
 // openModal, closeModal, showToast, showView), MockupModel (packages/shared/mockup-model.js), CurrentProject.
 (() => {
   // projectId: the header's; screens: mockups:list's rows; kit: mockups:kit (null before it is built)
-  const mk = { projectId: null, screens: [], kit: null, seq: 0, busy: false };
+  // tab: 'gallery' or 'kit' (#835)
+  const mk = { projectId: null, screens: [], kit: null, seq: 0, busy: false, tab: 'gallery' };
   const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 8h18M8 21h8M12 18v3" /></svg>';
 
   const currentProjectId = async () => (await (window.CurrentProject?.resolve?.() ?? window.CurrentProject?.get?.())) || null;
@@ -82,15 +88,72 @@
       </article>`;
   }
 
+  // ---- #835 the Kit tab: components with a live preview, tokens, inferred gaps (not a gate) ----------
+  const COLOR = /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([^)]*\))$/i;
+  function kitPanelHtml() {
+    const kit = mk.kit?.kit || {};
+    const tokens = Array.isArray(kit.tokens) ? kit.tokens : [];
+    const components = Array.isArray(kit.components) ? kit.components.filter((c) => c?.name) : [];
+    const gaps = Array.isArray(kit.inferences) ? kit.inferences : [];
+    const gallery = `mockup://${encodeURIComponent(mk.projectId)}/kit/components.html`;
+    const slug = (name) => window.MockupModel?.slugify?.(name) || '';
+    const comp = (c) => `
+      <article class="mockups-kit-component" data-testid="mockups-kit-component">
+        <div class="mockups-kit-component-head">
+          <h4 title="${esc(c.name)}">${esc(c.name)}</h4>
+          ${c.source ? `<span class="muted small mono" title="${esc(c.source)}">${esc(c.source)}</span>` : ''}
+        </div>
+        <iframe class="mockups-kit-preview" data-testid="mockups-kit-preview" sandbox="allow-scripts" loading="lazy" tabindex="-1"
+          title="${esc(t('mockups.kit_preview_of', { name: c.name }))}" src="${gallery}#c-${esc(slug(c.name))}"></iframe>
+      </article>`;
+    const token = (tk) => `<li class="mockups-kit-token" data-testid="mockups-kit-token" title="${esc(`${tk.name}: ${tk.value}${tk.file ? ` (${tk.file}:${tk.line})` : ''}`)}">`
+      + `${COLOR.test(String(tk.value || '').trim()) ? `<span class="mockups-swatch" style="background:${esc(tk.value)}" aria-hidden="true"></span>` : ''}`
+      + `<span class="mono small">${esc(tk.name)}</span> <span class="muted small mono">${esc(tk.value)}</span></li>`;
+    return `
+      <div class="mockups-kit-panel" role="tabpanel" id="mockups-kit-panel" aria-labelledby="mockups-tab-kit" data-testid="mockups-kit-panel">
+        <h3>${t('mockups.kit_components', { count: components.length })}</h3>
+        ${components.length ? `<div class="mockups-kit-components">${components.map(comp).join('')}</div>` : `<p class="muted small">${t('mockups.kit_no_components')}</p>`}
+        <h3>${t('mockups.kit_tokens', { count: tokens.length })}</h3>
+        ${tokens.length ? `<ul class="mockups-kit-tokens">${tokens.map(token).join('')}</ul>` : `<p class="muted small">${t('mockups.kit_no_tokens')}</p>`}
+        <h3>${t('mockups.kit_inferences')}</h3>
+        ${gaps.length ? `<ul class="mockups-kit-gaps small">${gaps.map((g) => `<li>${esc(g)}</li>`).join('')}</ul>` : `<p class="muted small">${t('mockups.kit_no_inferences')}</p>`}
+      </div>`;
+  }
+
+  function tabsHtml() {
+    const tab = (id, label) => `<button type="button" role="tab" id="mockups-tab-${id}" class="tab${mk.tab === id ? ' active' : ''}" aria-selected="${mk.tab === id}" aria-controls="mockups-${id}-panel" data-mockups-tab="${id}"${id === 'kit' ? ' data-testid="mockups-kit-tab"' : ' data-testid="mockups-gallery-tab"'}>${label}</button>`;
+    return `<div class="tabs mockups-tabs" role="tablist" aria-label="${t('mockups.mockups')}">${tab('gallery', t('mockups.gallery_tab'))}${tab('kit', t('mockups.kit_tab'))}</div>`;
+  }
+
   function render(kitEstimate) {
     const body = $('#mockups-body');
     if (!body) return;
     if (!mk.projectId) { body.innerHTML = `<p class="muted">${t('mockups.choose_a_project')}</p>`; return; }
     if (!mk.kit && !mk.screens.length) { body.innerHTML = emptyHtml(kitEstimate); return; }
-    body.innerHTML = `${kitHtml(kitEstimate)}
-      ${mk.screens.length
-    ? `<div class="mockups-gallery" data-testid="mockups-gallery">${mk.screens.map(cardHtml).join('')}</div>`
-    : `<p class="muted">${t('mockups.no_screens_yet')}</p>`}`;
+    const gallery = mk.screens.length
+      ? `<div class="mockups-gallery" data-testid="mockups-gallery">${mk.screens.map(cardHtml).join('')}</div>`
+      : `<p class="muted">${t('mockups.no_screens_yet')}</p>`;
+    const panel = mk.tab === 'kit' && mk.kit
+      ? kitPanelHtml()
+      : `<div role="tabpanel" id="mockups-gallery-panel" aria-labelledby="mockups-tab-gallery">${gallery}</div>`;
+    body.innerHTML = `<div class="row mockups-bar">${mk.kit ? tabsHtml() : ''}${kitHtml(kitEstimate)}
+        ${mk.screens.length ? `<button type="button" class="btn sm ghost" data-testid="mockups-export" data-mockups-export>${t('mockups.export_zip')}</button>` : ''}</div>
+      ${panel}`;
+  }
+
+  // #835 the static .zip export (screens, kit, flows), saved as a file by the page
+  async function exportZip() {
+    try {
+      const b64 = await api.exportMockupsZip(mk.projectId);
+      const bytes = Uint8Array.from(atob(String(b64 || '')), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+      const a = Object.assign(document.createElement('a'), { href: url, download: `mockups-${mk.projectId}.zip` });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast(t('mockups.exported'), `mockups-${mk.projectId}.zip`);
+    } catch (e) { errorLine(errMsg(e)); }
   }
 
   // ---- actions ----------------------------------------------------------------------------------
@@ -142,6 +205,9 @@
 
   function onBodyClick(e) {
     if (e.target.closest('[data-mockups-build-kit]')) return buildKit();
+    if (e.target.closest('[data-mockups-export]')) return exportZip();
+    const tab = e.target.closest('[data-mockups-tab]');
+    if (tab) { mk.tab = tab.dataset.mockupsTab; render(null); $(`#mockups-tab-${mk.tab}`)?.focus({ preventScroll: true }); return undefined; }
     const open = e.target.closest('[data-mockups-open]');
     if (open) return openEditor(open.dataset.mockupsOpen);
     return undefined;

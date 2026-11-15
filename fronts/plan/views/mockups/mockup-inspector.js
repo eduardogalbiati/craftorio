@@ -8,7 +8,10 @@
 // chat. describeElement(el) → { mid, selector (ancestors' tag.class, ending with the element's), kit
 // (data-kit or null), text (trimmed, at most 200 characters), box ([x, y, width, height] rounded),
 // html (outerHTML, at most 300 characters) }. The main window loads it too: there (not in a frame) it
-// installs nothing. UMD: module.exports in Node, window.MockupInspector in the browser.
+// installs nothing. #835: the editor's { type: 'mockup:mode', mode } switches a click to
+// { type: 'mockup:navigate', mid } (Interact mode, the flow decides the target); { type: 'mockup:highlight',
+// mids } marks a Compare side's changed elements (data-testid mockup-changed, an outline). Only messages from
+// the parent count. UMD: module.exports in Node, window.MockupInspector in the browser.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -53,16 +56,35 @@
     };
   }
 
-  // inside a frame only: a click selects (and does not follow links or submit forms)
+  // #835 Compare: the changed elements carry data-testid="mockup-changed" and an outline
+  function highlight(doc, mids) {
+    for (const mid of Array.isArray(mids) ? mids : []) {
+      const el = doc.querySelector(`[data-mid="${String(mid).replace(/[^\w-]/g, '')}"]`);
+      if (!el) continue;
+      el.setAttribute('data-testid', 'mockup-changed');
+      el.style.outline = '2px solid #f59e0b';
+      el.style.outlineOffset = '2px';
+    }
+  }
+
+  // inside a frame only: a click selects (and does not follow links or submit forms); in Interact mode
+  // (#835, { type: 'mockup:mode', mode: 'interact' } from the editor) it posts mockup:navigate instead
   function install(win) {
     let parent = null;
     try { parent = win.parent; } catch { return false; }
     if (!parent || parent === win || !win.document?.addEventListener) return false;
+    let mode = 'select';
+    win.addEventListener?.('message', (e) => {
+      if (e.source !== parent) return;
+      if (e.data?.type === 'mockup:mode') mode = e.data.mode === 'interact' ? 'interact' : 'select';
+      if (e.data?.type === 'mockup:highlight') highlight(win.document, e.data.mids);
+    });
     win.document.addEventListener('click', (e) => {
       const d = describeElement(e.target);
       if (!d) return;
       e.preventDefault();
       e.stopPropagation();
+      if (mode === 'interact') { parent.postMessage({ type: 'mockup:navigate', mid: d.mid }, '*'); return; }
       // Shift (or Ctrl/⌘) adds the element to the selection instead of replacing it
       parent.postMessage({ type: 'mockup:select', ...d, add: !!(e.shiftKey || e.ctrlKey || e.metaKey) }, '*');
     }, true);

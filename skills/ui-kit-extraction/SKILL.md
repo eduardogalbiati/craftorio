@@ -24,7 +24,11 @@ are the truth: build on them, never rename them.
 - Keep the **8-15 most used** (buttons and their variants, inputs, select, card, badge, table,
   tabs, modal, navigation, toast…) and **2 layout patterns** (the page shell, a list or a form page).
 - Name each `<Component>/<variant>` (`Button/primary`), give it a class (`btn btn-primary`) and its
-  source (`src/ui/Button.tsx:12-40`).
+  source as `file:line` (`src/ui/Button.tsx:12`, or a range `src/ui/Button.tsx:12-40`): the place a
+  person opens to check it.
+- Give each component a small sample `html` (one element or a few, using its class and plain text, no
+  script, no external URL): the service writes the samples into `kit/components.html`, the kit's live
+  gallery in the Kit tab and in the .zip export.
 
 ## 3. Write `components_css`
 
@@ -37,4 +41,12 @@ are the truth: build on them, never rename them.
 One line per assumption with its evidence ("Button/danger inferred from the red token
 `--err` and src/ui/Delete.tsx:8; no danger button in the code"). A project with no UI (an API,
 a CLI) or no tokens: an empty catalogue and one inference saying so; the designer then starts from
-references.
+references ("Start from references", a greenfield project: pasted captures or a brand description).
+
+## 5. What the service writes
+
+From your answer, in one commit of the mockup repository (#835): `kit/components.css` (your
+`components_css`), `kit/components.html` (one section per component: its name, its `file:line` source,
+its sample `html`) and `kit/kit.json` (the tokens, then `components: [{ name, class, source, html }]` and
+your `inferences`). The Kit tab lists the inferences as the kit's gaps; nothing waits on them. Later
+components come from the screens with "Promote to kit".

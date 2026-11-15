@@ -14,6 +14,21 @@
 .mockups-card .btn { align-self: flex-start; }
 .mockups-new-form { display: flex; flex-direction: column; gap: 6px; min-width: 420px; }
 .mockups-new-form textarea { resize: vertical; }
+/* #835 the Gallery / Kit tabs, the Export button and the Kit tab */
+.mockups-bar { align-items: center; gap: 12px; flex-wrap: wrap; }
+.mockups-bar .mockups-tabs { margin: 0; }
+.mockups-kit-panel { display: flex; flex-direction: column; gap: 10px; }
+.mockups-kit-panel h3 { margin: 6px 0 0; font-size: 13px; }
+.mockups-kit-components { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.mockups-kit-component { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); min-width: 0; }
+.mockups-kit-component-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.mockups-kit-component-head h4 { margin: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mockups-kit-component-head .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mockups-kit-preview { display: block; width: 100%; height: 120px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); }
+.mockups-kit-tokens { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.mockups-kit-token { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mockups-swatch { flex: none; width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 4px; }
+.mockups-kit-gaps { margin: 0; padding-left: 18px; color: var(--muted); }
 
 /* the editor window */
 body.mockup-window-page > .shell { display: none; }
@@ -21,6 +36,17 @@ body.mockup-window-page > .shell { display: none; }
 .mockup-editor { display: flex; flex-direction: column; height: 100%; background: var(--bg); color: var(--text); }
 .mockup-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .mockup-editor-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mockup-editor-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* #835 Compare: the two versions side by side */
+.mockup-compare { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+.mockup-compare-head { align-items: center; gap: 8px; }
+.mockup-compare-sides { flex: 1; min-height: 0; display: flex; flex-direction: row; gap: 12px; }
+.mockup-compare-side { flex: 1; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.mockup-compare-frame { flex: 1; width: 100%; min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.mockup-flows { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.mockup-flows-pick { align-items: center; gap: 6px; }
+.mockup-flows-pick select { flex: 1; min-width: 0; }
+.mockup-flow-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .mockup-editor-title h1 { margin: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mockup-editor > .error:empty { display: none; }
 .mockup-editor-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }

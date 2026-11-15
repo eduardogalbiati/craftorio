@@ -11,6 +11,11 @@
 //   chat/<slug>.jsonl; → { commit, problems, reply, costUsd, totalUsd } (one commit per turn, D10);
 // - mockups:save-turn / mockups:restore / mockups:save-ref: a turn's html, a version back, a pasted image;
 // - mockups:open-editor: the editor window (ctx.host.openMockupEditor, desktop only; { opened: false } in a browser).
+// #835 (phase 2): mockups:kit-map (a ui-kit-map answer applied: components.css/html, kit.json; the run's own
+// step.finished goes the same way), mockups:promote (Promote to kit), mockups:compare (two versions and the
+// changed data-mids), mockups:variants / create-variant / switch-variant / keep-variant (the repository's
+// branches), mockups:flows / flow / save-flow (flows/<name>.json), mockups:export (the static .zip, base64)
+// and mockups:attach (a frozen version for a Discovery card: { projectId, slug, commit, title, thumbnail }).
 // The designer never writes to the project's repository: its runs' outputs are written here, into the
 // mockup folder. The project's repository is only read (the machine step of the kit).
 
@@ -34,6 +39,10 @@ const STYLE_FILE = /\.(css|scss|less)$|^tailwind\.config\.[cm]?[jt]s$|^theme\.[c
 const MAX_FILES = 200;
 const MAX_BYTES = 512 * 1024;
 const onScreen = (properties = {}, required = []) => args({ projectId: PROJECT_ID, slug: SLUG, ...properties }, ['projectId', 'slug', ...required]);
+// a domain refusal of the client's input (a bad name, sha, mid or link) answered as a client error
+const userError = (fn) => {
+  try { return fn(); } catch (e) { throw clientError(e.message); }
+};
 
 // the project's stylesheets and theme files (relative paths), at most MAX_FILES, read-only
 function styleFiles(folder) {
@@ -72,13 +81,7 @@ module.exports = (ctx) => {
     const r = ev?.type === 'step.finished' && typeof ev.output?.components_css === 'string' ? ctx.liveRun?.(ev.run_id) : null;
     if (!isKitRun(r) || !r.inputs?.project_id || !ctx.ws?.root) return;
     try {
-      const current = mockups.readKit(ctx.ws.root, r.inputs.project_id) || { tokensCss: '', kit: {} };
-      const list = (v) => (Array.isArray(v) ? v : []);
-      mockups.writeKit(ctx.ws.root, r.inputs.project_id, {
-        tokensCss: current.tokensCss,
-        componentsCss: ev.output.components_css,
-        kit: { ...current.kit, components: list(ev.output.components), inferences: list(ev.output.inferences) },
-      });
+      mockups.applyKitMap(ctx.ws.root, r.inputs.project_id, ev.output);
     } catch (e) { console.error('Mockups kit:', e.message); }
   }
   ctx.events?.on?.('run:event', onKitEvent);
@@ -263,6 +266,98 @@ module.exports = (ctx) => {
         const open = ctx.host?.openMockupEditor;
         return { opened: typeof open === 'function' ? !!open({ projectId, slug }) : false };
       },
+    },
+    // #835 a ui-kit-map answer (components.css, components with their file:line source, inferences), one commit
+    {
+      channel: 'mockups:kit-map',
+      method: 'applyMockupKitMap',
+      params: ['projectId', 'components_css', 'components', 'inferences'],
+      schema: { params: args({ projectId: PROJECT_ID, components_css: text(2000000), components: listOf(OBJECT), inferences: listOf(STRING) }, ['projectId']), result: OBJECT },
+      fn: ({ projectId, ...map }) => mockups.applyKitMap(wsRoot(), projectId, map),
+    },
+    // Promote to kit: the selected element becomes a kit component, its colours tokens
+    {
+      channel: 'mockups:promote',
+      method: 'promoteMockupToKit',
+      params: ['projectId', 'slug', 'mid', 'name'],
+      schema: { params: onScreen({ mid: text(32), name: text(80) }, ['mid', 'name']), result: OBJECT },
+      fn: ({ projectId, slug, mid, name }) => userError(() => mockups.promoteToKit(wsRoot(), projectId, { slug, mid, name })),
+    },
+    // two versions of a screen side by side and the changed data-mids
+    {
+      channel: 'mockups:compare',
+      method: 'compareMockupVersions',
+      params: ['projectId', 'slug', 'from', 'to'],
+      schema: { params: onScreen({ from: text(64), to: text(64) }, ['from', 'to']), result: shape({ before: STRING, after: STRING, changed: listOf(STRING) }, ['before', 'after', 'changed']) },
+      fn: ({ projectId, slug, from, to }) => userError(() => mockups.compareVersions(wsRoot(), projectId, { slug, from, to })),
+    },
+    // the variants (branches) of the project's mockups and the current one
+    {
+      channel: 'mockups:variants',
+      method: 'listMockupVariants',
+      params: ['projectId'],
+      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT },
+      fn: ({ projectId }) => mockups.listVariants(wsRoot(), projectId),
+    },
+    {
+      channel: 'mockups:create-variant',
+      method: 'createMockupVariant',
+      params: ['projectId', 'name'],
+      schema: { params: args({ projectId: PROJECT_ID, name: text(80) }, ['projectId', 'name']), result: OBJECT },
+      fn: ({ projectId, name }) => userError(() => mockups.createVariant(wsRoot(), projectId, { name })),
+    },
+    {
+      channel: 'mockups:switch-variant',
+      method: 'switchMockupVariant',
+      params: ['projectId', 'name'],
+      schema: { params: args({ projectId: PROJECT_ID, name: text(80) }, ['projectId', 'name']), result: OBJECT },
+      fn: ({ projectId, name }) => userError(() => mockups.switchVariant(wsRoot(), projectId, { name })),
+    },
+    // keep one variant: it becomes main, the other branches are deleted
+    {
+      channel: 'mockups:keep-variant',
+      method: 'keepMockupVariant',
+      params: ['projectId', 'name'],
+      schema: { params: args({ projectId: PROJECT_ID, name: text(80) }, ['projectId', 'name']), result: OBJECT },
+      fn: ({ projectId, name }) => userError(() => mockups.keepVariant(wsRoot(), projectId, { name })),
+    },
+    // the project's flows [{ name }], one flow, a flow saved (flows/<name>.json, one commit)
+    {
+      channel: 'mockups:flows',
+      method: 'listMockupFlows',
+      params: ['projectId'],
+      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: listOf(OBJECT) },
+      fn: ({ projectId }) => mockups.listFlows(wsRoot(), projectId),
+    },
+    {
+      channel: 'mockups:flow',
+      method: 'readMockupFlow',
+      params: ['projectId', 'name'],
+      schema: { params: args({ projectId: PROJECT_ID, name: text(80) }, ['projectId', 'name']), result: OBJECT },
+      fn: ({ projectId, name }) => userError(() => mockups.readFlow(wsRoot(), projectId, name)),
+    },
+    {
+      channel: 'mockups:save-flow',
+      method: 'saveMockupFlow',
+      params: ['projectId', 'name', 'links'],
+      schema: { params: args({ projectId: PROJECT_ID, name: text(80), links: listOf(OBJECT) }, ['projectId', 'name']), result: OBJECT },
+      fn: ({ projectId, name, links }) => userError(() => mockups.saveFlow(wsRoot(), projectId, { name, links: links || [] })),
+    },
+    // the static .zip export (screens, kit, flows, an index.html), base64: the renderer saves it as a file
+    {
+      channel: 'mockups:export',
+      method: 'exportMockupsZip',
+      params: ['projectId'],
+      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: STRING },
+      fn: ({ projectId }) => mockups.exportZip(wsRoot(), projectId).toString('base64'),
+    },
+    // a frozen version for a Discovery card: { projectId, slug, commit (full sha), title, thumbnail }
+    {
+      channel: 'mockups:attach',
+      method: 'mockupAttachment',
+      params: ['projectId', 'slug', 'commit'],
+      schema: { params: onScreen({ commit: text(64) }, ['commit']), result: OBJECT },
+      fn: ({ projectId, slug, commit }) => userError(() => mockups.attachment(wsRoot(), projectId, { slug, commit })),
     },
   ];
 };

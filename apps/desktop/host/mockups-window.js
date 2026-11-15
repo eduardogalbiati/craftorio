@@ -13,8 +13,10 @@
 // network: default-src and connect-src 'none', inline scripts and styles of the agent's markup only).
 // main.js registers the scheme and serves it with protocol.handle, injecting the inspector
 // (fronts/plan/views/mockups/mockup-inspector.js) and axe (D11, when axe-core is installed) into the html.
+// #835: `?at=<sha>` answers the file of that commit (git show, the editor's Compare sides).
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 const {
   onScreenBounds,
   sideWindowOptions,
@@ -118,12 +120,24 @@ function resolveMockupRequest(url, workspace) {
 
 // What protocol.handle('mockup') answers: { status, headers, body } (the file with MOCKUP_CSP; an html
 // page gets the inspector injected before </body>; 404 for a refused or missing path)
+// #835 Compare: `?at=<sha>` serves the file as it was in that commit of the mockup repository
+function readAt(file, workspace, url) {
+  const at = /[?&]at=([0-9a-f]{7,40})(?:[&#]|$)/i.exec(String(url));
+  if (!at) return fs.promises.readFile(file);
+  const id = /^mockup:\/\/([^/?#]+)/i.exec(String(url))[1];
+  const base = path.join(workspace, 'mockups', decodeURIComponent(id));
+  const relPath = path.relative(base, file).split(path.sep).join('/');
+  return new Promise((resolve, reject) => {
+    execFile('git', ['show', `${at[1]}:${relPath}`], { cwd: base, encoding: 'buffer', maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (err, out) => (err ? reject(err) : resolve(out)));
+  });
+}
+
 async function serveMockup(url, workspace) {
   const file = resolveMockupRequest(url, workspace);
   const missing = { status: 404, headers: { 'content-type': 'text/plain', 'content-security-policy': MOCKUP_CSP }, body: 'Not found' };
   if (!file) return missing;
   let body;
-  try { body = await fs.promises.readFile(file); } catch { return missing; }
+  try { body = await readAt(file, workspace, url); } catch { return missing; }
   const ext = path.extname(file).toLowerCase();
   if (ext === '.html') {
     let inspector = '';

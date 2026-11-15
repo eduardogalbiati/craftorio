@@ -104,6 +104,12 @@ async function editedMockupScreen(client) {
   await client.call('mockups:save-turn', { ...onScreen(state), html: '<main><h1>Second version</h1></main>', message: 'A contract turn' });
   return state;
 }
+// #835: the screen with a saved flow (no link yet)
+async function mockupFlow(client) {
+  const state = await mockupScreen(client);
+  await client.call('mockups:save-flow', { projectId: state.projectId, name: 'contract-flow', links: [] });
+  return state;
+}
 
 // ---- invalid arguments the schemas refuse --------------------------------------------------------
 
@@ -218,19 +224,33 @@ module.exports = {
   'monitor:save-source': { setup: project, arg: ({ projectId }) => ({ projectId, source: { type: 'log-file', label: 'contract log', path: UNREACHABLE_REPO } }), invalid: BAD_PROJECT },
   'monitor:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #625: Plan & Design › Mockups, simulated (the designer draws and answers at $0, no workflow run)
+  // #835: a frozen version for a Discovery card
+  'mockups:attach': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), commit: s.commit }), invalid: BAD_SCREEN },
   'mockups:build-kit': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'mockups:chat': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), message: 'Make the title bigger.', selection: [{ mid: 'm1', selector: 'main', text: 'Contract' }] }), invalid: BAD_SCREEN },
   'mockups:chat-history': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
+  'mockups:compare': { setup: editedMockupScreen, arg: (s) => ({ ...onScreen(s), from: s.commit, to: s.commit }), invalid: BAD_SCREEN },
   'mockups:create-screen': { setup: project, arg: ({ projectId }) => ({ projectId, title: 'A contract screen', prompt: 'An orders list.' }), invalid: BAD_PROJECT },
+  'mockups:create-variant': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'contract-variant' }), invalid: BAD_PROJECT },
   'mockups:estimate': { arg: { action: 'chat-edit' }, invalid: { arg: { action: 'fly' } } },
+  'mockups:export': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'mockups:flow': { setup: mockupFlow, arg: ({ projectId }) => ({ projectId, name: 'contract-flow' }), invalid: BAD_PROJECT },
+  'mockups:flows': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'mockups:keep-variant': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'main' }), invalid: BAD_PROJECT },
   'mockups:kit': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'mockups:kit-map': { setup: project, arg: ({ projectId }) => ({ projectId, components_css: '.btn { padding: 4px; }\n', components: [{ name: 'Button', source: 'src/button.css:1' }], inferences: [] }), invalid: BAD_PROJECT },
   'mockups:list': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // the engine server has no editor window: { opened: false }
   'mockups:open-editor': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
+  // the simulated designer's draft: m1 is its <main>
+  'mockups:promote': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), mid: 'm1', name: 'contract-page' }), invalid: BAD_SCREEN },
   'mockups:restore': { setup: editedMockupScreen, arg: (s) => ({ ...onScreen(s), commit: s.commit }), invalid: BAD_SCREEN },
+  'mockups:save-flow': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'contract-flow', links: [] }), invalid: BAD_PROJECT },
   'mockups:save-ref': { setup: project, arg: ({ projectId }) => ({ projectId, data: 'data:image/png;base64,iVBORw0KGgo=', ext: 'png' }), invalid: BAD_PROJECT },
   'mockups:save-turn': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), html: '<main><h1>Saved by the contract suite</h1></main>', message: 'A contract turn' }), invalid: BAD_SCREEN },
   'mockups:screen': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
+  'mockups:switch-variant': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'main' }), invalid: BAD_PROJECT },
+  'mockups:variants': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'mockups:versions': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
   'monitor:webhook': { setup: project, arg: ({ projectId }) => ({ projectId, enable: false }), invalid: BAD_PROJECT },
   'nightwatch:morning': { arg: null },

@@ -8,7 +8,12 @@
 // and tokensCss(tokens) (the deterministic machine step of the kit, D2); draftScreen({ title, prompt })
 // (the simulated designer's first version of a screen, static HTML importing the kit, D4); ACTIONS (COSTS'
 // keys); parseDesignerReply(text) → { reply, html } (a designer turn's prose and its last ```html block, D8);
-// chatCostUsd(entries) (Q-8: a screen's designer chat total).
+// chatCostUsd(entries) (Q-8: a screen's designer chat total). #835: diffMids(before, after) (the data-mids
+// whose element changed, was added or removed, sorted: Compare); normalizeFlow({ name, links }, screens?)
+// (flows/<name>.json: [{ from: { screen, mid }, to }], a slug-like name, known screens) and
+// flowTarget(flow, screen, mid) (Interact mode: the target screen or null); esc (HTML escape); COLOR;
+// attachmentName / parseAttachmentName ('<slug>@<sha7>.mockup.json', a Discovery card's frozen version)
+// and attachmentThumbnail({ title, commit }) (its SVG data URL).
 // Browser: window.MockupModel; Node: module.exports. The domain is fronts/plan/engine/domains/mockups.js.
 (function (root) {
   'use strict';
@@ -191,17 +196,99 @@
     return +sum.toFixed(6);
   }
 
+  // ---- compare (#835) ----------------------------------------------------------------------------
+
+  // data-mid → its opening tag and its own text (up to the next tag): what a change of the element shows in
+  function midSignatures(html) {
+    const text = String(html ?? '');
+    const [start, end] = bodyRange(text);
+    const part = text.slice(start, end);
+    const map = new Map();
+    for (const m of part.matchAll(TOKEN)) {
+      if (m[0].startsWith('<!--') || m[1]) continue;
+      const mid = /\bdata-mid\s*=\s*["']([^"']+)["']/.exec(m[4]);
+      if (!mid) continue;
+      const after = part.slice(m.index + m[0].length);
+      const lt = after.indexOf('<');
+      map.set(mid[1], `${m[0]}\u0000${lt < 0 ? after : after.slice(0, lt)}`);
+    }
+    return map;
+  }
+
+  // the data-mids whose element changed (text or attributes), was removed or was added, sorted (m2 before m10)
+  function diffMids(before, after) {
+    const a = midSignatures(before);
+    const b = midSignatures(after);
+    const changed = new Set();
+    for (const [mid, sig] of a) if (b.get(mid) !== sig) changed.add(mid);
+    for (const mid of b.keys()) if (!a.has(mid)) changed.add(mid);
+    return [...changed].sort((x, y) => x.localeCompare(y, 'en', { numeric: true }));
+  }
+
+  // ---- flows (#835) ------------------------------------------------------------------------------
+
+  const FLOW_NAME = /^[a-z0-9][a-z0-9-]{0,80}$/;
+
+  // { name, links: [{ from: { screen, mid }, to }] }; with `screens`, every screen of a link must be in it
+  function normalizeFlow({ name, links } = {}, screens) {
+    const flowName = String(name ?? '').trim();
+    if (!FLOW_NAME.test(flowName)) throw new Error(`Not a flow name (lowercase letters, digits and dashes): ${flowName}`);
+    const known = Array.isArray(screens) ? new Set(screens) : null;
+    const out = (Array.isArray(links) ? links : []).map((l, i) => {
+      const screen = String(l?.from?.screen ?? '').trim();
+      const mid = String(l?.from?.mid ?? '').trim();
+      const to = String(l?.to ?? '').trim();
+      if (!screen || !mid || !to) throw new Error(`Link ${i + 1} of the flow ${flowName} needs a screen, an element and a target screen.`);
+      for (const s of [screen, to]) if (known && !known.has(s)) throw new Error(`The flow ${flowName} links an unknown screen: ${s}`);
+      return { from: { screen, mid }, to };
+    });
+    return { name: flowName, links: out };
+  }
+
+  // the screen a click on (screen, mid) goes to in the flow, null without a link
+  function flowTarget(flow, screen, mid) {
+    const link = (Array.isArray(flow?.links) ? flow.links : []).find((l) => l?.from?.screen === screen && l?.from?.mid === mid);
+    return link ? link.to : null;
+  }
+
+  // ---- a Discovery card's mockup attachment (#835): a frozen version -----------------------------
+
+  const ATTACHMENT = /^([a-z0-9][a-z0-9-]{0,80})@([0-9a-f]{7,40})\.mockup\.json$/;
+  const attachmentName = ({ slug, commit }) => `${slug}@${String(commit ?? '').slice(0, 7)}.mockup.json`;
+  // '<slug>@<sha7>.mockup.json' → { slug, commit }, null for another file
+  function parseAttachmentName(name) {
+    const m = ATTACHMENT.exec(String(name ?? ''));
+    return m ? { slug: m[1], commit: m[2] } : null;
+  }
+  // a small SVG of the version (the screen's title and its short sha) as a data URL, Node and browser alike
+  function attachmentThumbnail({ title, commit } = {}) {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="150" viewBox="0 0 240 150">'
+      + '<rect width="240" height="150" rx="8" fill="#1d2230"/><rect x="12" y="12" width="216" height="18" rx="3" fill="#2c3346"/>'
+      + '<rect x="12" y="40" width="140" height="10" rx="3" fill="#3a4258"/><rect x="12" y="58" width="190" height="52" rx="4" fill="#262c3c"/>'
+      + `<text x="12" y="132" font-family="sans-serif" font-size="13" fill="#e6e8ee">${esc(String(title ?? '').slice(0, 28))}</text>`
+      + `<text x="228" y="132" font-family="monospace" font-size="11" fill="#8a91a3" text-anchor="end">${esc(String(commit ?? '').slice(0, 7))}</text></svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
+
   const api = {
     ACTIONS: Object.keys(COSTS),
+    COLOR,
     DEFAULT_FRAME,
     FRAMES,
     addMids,
+    attachmentName,
+    attachmentThumbnail,
     buildChatMessage,
     chatCostUsd,
+    diffMids,
     draftScreen,
+    esc,
     estimateCost,
     extractTokens,
+    flowTarget,
     lintMockup,
+    normalizeFlow,
+    parseAttachmentName,
     parseDesignerReply,
     slugify,
     tokensCss,

@@ -10,8 +10,9 @@
 # <workspace>/mockups/<project>/, one commit. This run is the agent part: it reads the project's
 # repository (read-only, like the cartographer of project-map) and the tokens, and answers with the
 # 8-15 most used components and 2 layout patterns as CSS built on the tokens (`components_css`), the
-# catalogue (`components`: name, source file and lines) and the assumptions it made (`inferences`);
-# the service writes them into kit/components.css and kit.json, one commit. It never writes to the
+# catalogue (`components`: name, class, source as file:line, a sample html) and the assumptions it made
+# (`inferences`); the service (mockups.applyKitMap, #835) writes them into kit/components.css,
+# kit/components.html (the live gallery) and kit/kit.json (sources and inferences), one commit. It never writes to the
 # project's repository and records its assumptions instead of asking: no human_approval, the kit is
 # reviewed in the Mockups screen, not at a gate. Simulated (MULTIAGENT_SIMULATION_ONLY) the service
 # keeps the machine step only and does not start this workflow.
@@ -98,7 +99,9 @@ steps:
       source files and lines). Follow the ui-kit-extraction skill: find the 8-15 most used
       components and 2 layout patterns, and answer with
       - `components_css`: their CSS, every colour, size and gap from a token (var(--…));
-      - `components`: one entry per component, its kit name (e.g. Button/primary), class and source;
+      - `components`: one entry per component, its kit name (e.g. Button/primary), class, source as
+        file:line (e.g. src/ui/Button.tsx:12) and a small sample `html` using its class (no script,
+        no external URL): the service writes kit/components.html and kit/kit.json from them;
       - `inferences`: each assumption you made, with its evidence.
     output_schema:
       type: object
@@ -114,6 +117,7 @@ steps:
               name: { type: string }
               class: { type: string }
               source: { type: string }
+              html: { type: string }
         inferences:
           type: array
           items: { type: string }
