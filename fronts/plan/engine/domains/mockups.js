@@ -28,6 +28,17 @@
 // - saveCrops(ws, id, { slug, commit, regions: [{ mid, data }] }) → [{ mid, file, name }] (saveRef; a mid
 //   missing at that version throws): the cropped images of the Product Owner issues (#258 commit dialog);
 // - reviewScreen(ws, id, { slug, axe }) → findings (kind 'kit' from the lint, 'axe' from the given violations).
+// #837 (phase 4: Storybook, export by PR, Figma, the live link):
+// - detectStorybook(folder) → { available, configDir }: a `.storybook/` folder ('.storybook') or a `storybook` /
+//   `@storybook/*` dependency in package.json; createScreen records `components: 'storybook' | 'static-kit'`
+//   in meta.json (listScreens: 'static-kit' when absent, D4);
+// - exportPlan(ws, id, { slugs, kitOfficial }) → { targetDir: 'design/mockups', kitOfficial, files: [{ from, to }] }
+//   (the kit and only the chosen screens; empty or unknown throws; no commit): the mockups-export.yaml run's list;
+// - importFigma(ws, id, { file | fileKey, token, fetch }) → { commit, tokens, references }: the FILL styles become
+//   kit tokens (source 'figma', tokens.css too), the top-level frames kit.json references, an inference records
+//   it, ONE commit; by fileKey it downloads GET /v1/files/:key, never in simulation;
+// - liveLinkPage(ws, id, slug) → the screen's html with the kit inlined (no link, no script added): the page
+//   the engine server serves on a live link (fronts/plan/engine/areas/mockup-live-links.js).
 // git and commit are the Documents domain's (./docs.js). Service: fronts/plan/engine/channels/mockups.js.
 
 const crypto = require('crypto');
@@ -36,6 +47,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { execFileSync } = require('child_process');
 const MockupModel = require('@multiagent/shared/mockup-model');
+const simulation = require('@multiagent/engine/engine/simulation');
 const { gitOut } = require('@multiagent/engine/service/common');
 const { commit, git } = require('./docs');
 
@@ -87,13 +99,34 @@ function existingScreen(workspace, projectId, slug) {
   return { dir, slug: s };
 }
 
-function createScreen(workspace, projectId, { title, html, source = null } = {}) {
+// #837 does the project render its components with Storybook? (pure: no git, a missing folder has none)
+function detectStorybook(folder) {
+  const none = { available: false, configDir: null };
+  if (!folder || typeof folder !== 'string') return none;
+  try {
+    if (fs.statSync(path.join(folder, '.storybook')).isDirectory()) return { available: true, configDir: '.storybook' };
+  } catch { /* no .storybook/ */ }
+  let pkg = {};
+  try { pkg = JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8')) || {}; } catch { return none; }
+  const deps = Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) });
+  return deps.some((d) => d === 'storybook' || d.startsWith('@storybook/')) ? { available: true, configDir: null } : none;
+}
+
+const COMPONENTS = ['storybook', 'static-kit'];
+
+function createScreen(workspace, projectId, { title, html, source = null, components = 'static-kit' } = {}) {
   const dir = ensureProject(workspace, projectId);
   const base = MockupModel.slugify(title);
   let slug = base;
   for (let n = 2; fs.existsSync(screenDir(dir, slug)); n += 1) slug = `${base}-${n}`;
   fs.mkdirSync(screenDir(dir, slug), { recursive: true });
-  const meta = { slug, title: String(title || '').trim() || slug, source, createdAt: new Date().toISOString() };
+  const meta = {
+    slug,
+    title: String(title || '').trim() || slug,
+    source,
+    components: COMPONENTS.includes(components) ? components : 'static-kit',
+    createdAt: new Date().toISOString(),
+  };
   fs.writeFileSync(path.join(screenDir(dir, slug), 'index.html'), MockupModel.addMids(html || MockupModel.draftScreen({ title })));
   fs.writeFileSync(path.join(screenDir(dir, slug), 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
   const sha = commit(dir, [rel('screens', slug, 'index.html'), rel('screens', slug, 'meta.json')], `New screen ${slug}: ${meta.title}`);
@@ -108,7 +141,13 @@ function listScreens(workspace, projectId) {
     .map((e) => {
       let meta = {};
       try { meta = JSON.parse(fs.readFileSync(path.join(root, e.name, 'meta.json'), 'utf8')); } catch { meta = {}; }
-      return { slug: e.name, title: meta.title || e.name, source: meta.source || null, createdAt: meta.createdAt || null };
+      return {
+        slug: e.name,
+        title: meta.title || e.name,
+        source: meta.source || null,
+        components: meta.components === 'storybook' ? 'storybook' : 'static-kit',
+        createdAt: meta.createdAt || null,
+      };
     })
     .sort((a, b) => a.slug.localeCompare(b.slug));
 }
@@ -477,6 +516,102 @@ function exportZip(workspace, projectId) {
   return zipBuffer([{ name: 'index.html', data: Buffer.from(index, 'utf8') }, ...entries]);
 }
 
+// ---- export to the repository by PR (#837) --------------------------------------------------------
+
+const EXPORT_DIR = 'design/mockups';
+
+// the files the mockups-export.yaml run copies into the project's repository: the kit and the chosen
+// screens' versioned files (from: the mockup folder, to: the repository); no commit here
+function exportPlan(workspace, projectId, { slugs, kitOfficial = false } = {}) {
+  const chosen = [...new Set(Array.isArray(slugs) ? slugs.map(String) : [])];
+  if (!chosen.length) throw new Error('Choose at least one screen to export.');
+  for (const s of chosen) existingScreen(workspace, projectId, s);
+  const dir = ensureProject(workspace, projectId);
+  const versioned = git(dir, ['ls-files', '-z']).split('\0').filter(Boolean);
+  const screenFiles = chosen.flatMap((s) => versioned.filter((f) => f.startsWith(`${rel('screens', s)}/`)));
+  const files = [...KIT_FILES.filter((f) => versioned.includes(f)), ...screenFiles].map((from) => ({ from, to: `${EXPORT_DIR}/${from}` }));
+  return { targetDir: EXPORT_DIR, kitOfficial: kitOfficial === true, files };
+}
+
+// ---- Figma import (#837) --------------------------------------------------------------------------
+
+const FIGMA_API = 'https://api.figma.com/v1/files/';
+const hex2 = (c) => Math.round(Math.min(1, Math.max(0, Number(c) || 0)) * 255).toString(16).padStart(2, '0');
+
+// the Figma file's top-level frames and its FILL styles used by a solid fill
+function figmaParts(file) {
+  const frames = [];
+  const tokens = [];
+  const seen = new Set();
+  const visit = (node, depth) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'FRAME' && depth === 2) frames.push({ id: String(node.id), name: String(node.name ?? '') });
+    const style = node.styles?.fill ? file.styles?.[node.styles.fill] : null;
+    const fill = Array.isArray(node.fills) ? node.fills[0] : null;
+    if (style?.styleType === 'FILL' && fill?.type === 'SOLID' && fill.color) {
+      const name = `--${MockupModel.slugify(style.name)}`;
+      if (!seen.has(name)) {
+        seen.add(name);
+        tokens.push({ name, value: `#${hex2(fill.color.r)}${hex2(fill.color.g)}${hex2(fill.color.b)}`, source: 'figma' });
+      }
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) visit(child, depth + 1);
+  };
+  visit(file.document, 0);
+  return { frames, tokens };
+}
+
+async function downloadFigma(fileKey, token, fetchFn) {
+  if (simulation.simulationOnly()) throw new Error('Simulated run: the Figma file is not downloaded (no network).');
+  if (typeof fetchFn !== 'function') throw new Error('No fetch to download the Figma file.');
+  const res = await fetchFn(`${FIGMA_API}${encodeURIComponent(String(fileKey))}`, { headers: { 'X-Figma-Token': String(token ?? '') } });
+  if (!res?.ok) throw new Error(`Figma answered ${res?.status ?? 'nothing'} for the file ${fileKey}.`);
+  return res.json();
+}
+
+// a Figma file's fill styles → kit tokens, its frames → references, recorded as an inference, ONE commit
+async function importFigma(workspace, projectId, { file = null, fileKey = null, token = null, fetch: fetchFn = globalThis.fetch } = {}) {
+  const source = file || (fileKey ? await downloadFigma(fileKey, token, fetchFn) : null);
+  if (!source || typeof source.document !== 'object' || !source.document) throw new Error('Not a Figma file: it has no document.');
+  const { frames, tokens } = figmaParts(source);
+  const dir = ensureProject(workspace, projectId);
+  const kit = kitJson(dir);
+  const name = String(source.name || fileKey || 'Figma file');
+  const kept = (Array.isArray(kit.tokens) ? kit.tokens : []).filter((x) => !tokens.some((t) => t.name === x?.name));
+  const ids = new Set(frames.map((f) => f.id));
+  const refs = (Array.isArray(kit.references) ? kit.references : []).filter((r) => !(r?.source === 'figma' && ids.has(r.id)));
+  const inference = `Figma import of "${name}": ${tokens.length} fill style(s) as kit tokens, ${frames.length} frame(s) as references.`;
+  writeJson(path.join(dir, 'kit', 'kit.json'), {
+    ...kit,
+    tokens: [...kept, ...tokens],
+    references: [...refs, ...frames.map((f) => ({ source: 'figma', ...f }))],
+    inferences: [...(Array.isArray(kit.inferences) ? kit.inferences : []), inference],
+  });
+  const css = kitTokens(dir);
+  if (tokens.length || !fs.existsSync(path.join(dir, 'kit', 'tokens.css'))) {
+    fs.writeFileSync(path.join(dir, 'kit', 'tokens.css'), `${css}${css && !css.endsWith('\n') ? '\n' : ''}${tokens.length ? MockupModel.tokensCss(tokens) : ''}`);
+  }
+  if (!fs.existsSync(path.join(dir, 'kit', 'components.css'))) fs.writeFileSync(path.join(dir, 'kit', 'components.css'), '');
+  return {
+    commit: commit(dir, KIT_FILES, `Figma import: ${name}`),
+    tokens: tokens.map((t) => t.name),
+    references: frames,
+  };
+}
+
+// ---- the live link's page (#837) ------------------------------------------------------------------
+
+// the screen's html, self-contained: the kit's stylesheets inlined in <style> (the page is served alone,
+// with a CSP that forbids the network); nothing is added (no script, no window.api)
+function liveLinkPage(workspace, projectId, slug) {
+  const html = screenHtml(workspace, projectId, slug);
+  const dir = projectDir(workspace, projectId);
+  const inline = { 'tokens.css': kitTokens(dir), 'components.css': kitComponents(dir) };
+  const safe = (css) => String(css).replace(/<\/style/gi, '<\\/style');
+  return html.replace(/<link\b[^>]*\bhref\s*=\s*["'](?:\.\.\/\.\.\/)?kit\/(tokens\.css|components\.css)["'][^>]*>/gi,
+    (m, f) => `<style>${safe(inline[f])}</style>`);
+}
+
 module.exports = {
   appendChat,
   applyKitMap,
@@ -484,14 +619,18 @@ module.exports = {
   compareVersions,
   createScreen,
   createVariant,
+  detectStorybook,
   ensureProject,
+  exportPlan,
   exportZip,
   freezeVersion,
+  importFigma,
   keepVariant,
   listFlows,
   listScreens,
   listVariants,
   listVersions,
+  liveLinkPage,
   projectDir,
   promoteToKit,
   readChat,

@@ -17,9 +17,14 @@
 // the main window, the editor's handoff (AgentsWindow.onNavigate): 'mockups:start-run' opens the Start
 // panel (openDrawer) with the `mockup` input filled, never a run; 'mockups:prepare-issues' opens the #258
 // commit dialog (DiscoveryCommit.open) of the Discovery card the mockup is attached to, with the crops.
+// #837: Export to the repository opens a dialog (a checkbox per screen, "Make the kit the official design
+// system", Q-2) whose Export opens the Start panel on workflows/mockups-export.yaml with the chosen slugs
+// (`slugs` and `screens`) and `kit_official`; never a run (the owner starts it, the run opens the PR).
 // Test ids: mockups-view, mockups-empty, mockups-build-kit, mockups-new, mockups-gallery, mockups-card,
 // mockups-open, mockups-new-dialog, mockups-kit, mockups-gallery-tab, mockups-kit-tab, mockups-kit-panel,
-// mockups-kit-token, mockups-kit-component, mockups-kit-preview, mockups-export, mockup-recreate-from-app.
+// mockups-kit-token, mockups-kit-component, mockups-kit-preview, mockups-export, mockup-recreate-from-app,
+// mockups-export-repo, mockups-export-repo-dialog, mockups-export-repo-screen, mockups-export-repo-official,
+// mockups-export-repo-submit.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, api, errMsg,
 // openModal, closeModal, showToast, showView), MockupModel (packages/shared/mockup-model.js), CurrentProject.
 (() => {
@@ -146,7 +151,8 @@
       ? kitPanelHtml()
       : `<div role="tabpanel" id="mockups-gallery-panel" aria-labelledby="mockups-tab-gallery">${gallery}</div>`;
     body.innerHTML = `<div class="row mockups-bar">${mk.kit ? tabsHtml() : ''}${kitHtml(kitEstimate)}
-        ${mk.screens.length ? `<button type="button" class="btn sm ghost" data-testid="mockups-export" data-mockups-export>${t('mockups.export_zip')}</button>` : ''}</div>
+        ${mk.screens.length ? `<button type="button" class="btn sm ghost" data-testid="mockups-export" data-mockups-export>${t('mockups.export_zip')}</button>
+        <button type="button" class="btn sm ghost" data-testid="mockups-export-repo" data-mockups-export-repo>${t('mockups.export_repo')}</button>` : ''}</div>
       ${panel}`;
   }
 
@@ -223,8 +229,36 @@
     } catch (x) { $('#mockups-new-error').textContent = errMsg(x); } finally { mk.busy = false; }
   }
 
+  // ---- #837 Export to the repository: the chosen screens and the kit, by a mockups-export.yaml PR run ----
+  function openExportRepo() {
+    $('#mockups-export-repo-list').innerHTML = mk.screens.map((s) => {
+      const title = String(s.title || s.slug);
+      return `<label class="row mockups-export-repo-screen"><input type="checkbox" data-testid="mockups-export-repo-screen" value="${esc(s.slug)}" checked />`
+        + ` <span title="${esc(title)}">${esc(title)}</span> <span class="muted small mono" title="${esc(s.slug)}">${esc(s.slug)}</span></label>`;
+    }).join('');
+    $('#mockups-export-repo-official').checked = false;
+    $('#mockups-export-repo-error').textContent = '';
+    openModal('#mockups-export-repo-dialog');
+    $('#mockups-export-repo-list input')?.focus({ preventScroll: true });
+  }
+
+  function submitExportRepo(e) {
+    e.preventDefault();
+    const slugs = [...document.querySelectorAll('#mockups-export-repo-list input:checked')].map((i) => i.value);
+    if (!slugs.length) { $('#mockups-export-repo-error').textContent = t('mockups.export_repo_choose'); return; }
+    const kitOfficial = $('#mockups-export-repo-official').checked;
+    closeModal('#mockups-export-repo-dialog');
+    window.openDrawer?.({
+      project: mk.projectId,
+      workflow: 'mockups-export.yaml',
+      inputs: { slugs: slugs.join(','), screens: slugs.join(','), kit_official: kitOfficial },
+    });
+    showToast(t('mockups.export_repo_opened'), slugs.join(', '));
+  }
+
   function onBodyClick(e) {
     if (e.target.closest('[data-mockups-build-kit]')) return buildKit();
+    if (e.target.closest('[data-mockups-export-repo]')) return openExportRepo();
     if (e.target.closest('[data-mockups-export]')) return exportZip();
     const tab = e.target.closest('[data-mockups-tab]');
     if (tab) { mk.tab = tab.dataset.mockupsTab; render(null); $(`#mockups-tab-${mk.tab}`)?.focus({ preventScroll: true }); return undefined; }
@@ -317,6 +351,23 @@
             </div>
           </form>
         </div>
+        <div id="mockups-export-repo-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mockups-export-repo-heading" data-testid="mockups-export-repo-dialog">
+          <form id="mockups-export-repo-form" class="modal-card mockups-new-form">
+            <h3 id="mockups-export-repo-heading">${t('mockups.export_repo')}</h3>
+            <p class="muted small">${t('mockups.export_repo_help')}</p>
+            <fieldset class="mockups-new-field">
+              <legend>${t('mockups.export_repo_screens')}</legend>
+              <div id="mockups-export-repo-list"></div>
+            </fieldset>
+            <label class="row"><input id="mockups-export-repo-official" type="checkbox" data-testid="mockups-export-repo-official" /> ${t('mockups.export_repo_kit_official')}</label>
+            <p class="muted small">${t('mockups.export_repo_kit_official_help')}</p>
+            <p id="mockups-export-repo-error" class="error small" role="alert"></p>
+            <div class="modal-actions">
+              <button type="button" id="btn-mockups-export-repo-cancel" class="btn ghost">${t('common.cancel')}</button>
+              <button type="submit" class="btn primary" data-testid="mockups-export-repo-submit">${t('mockups.export_repo_submit')}</button>
+            </div>
+          </form>
+        </div>
       </section>`,
     mount() {
       $('#btn-mockups-new').onclick = () => openNew('new');
@@ -326,8 +377,12 @@
       $('#mockups-body').onclick = onBodyClick;
       $('#mockups-new-form').onsubmit = submitNew;
       $('#btn-mockups-new-cancel').onclick = () => closeModal('#mockups-new-dialog');
+      $('#mockups-export-repo-form').onsubmit = submitExportRepo;
+      $('#btn-mockups-export-repo-cancel').onclick = () => closeModal('#mockups-export-repo-dialog');
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !$('#mockups-new-dialog').classList.contains('hidden')) closeModal('#mockups-new-dialog');
+        if (e.key !== 'Escape') return;
+        if (!$('#mockups-new-dialog').classList.contains('hidden')) closeModal('#mockups-new-dialog');
+        if (!$('#mockups-export-repo-dialog').classList.contains('hidden')) closeModal('#mockups-export-repo-dialog');
       });
     },
     // the header's project changed: CurrentProject shows this screen again, so it follows

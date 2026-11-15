@@ -232,6 +232,9 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:issue.yaml:issue_filer',
     // #625: the mockups' designer (a new screen) and the visual kit's mapper
     'workflow:mockup-generate.yaml:designer',
+    // #837: the export of the mockups to the repository by PR
+    'workflow:mockups-export.yaml:developer',
+    'workflow:mockups-export.yaml:ci_pusher',
     'workflow:refactor.yaml:test_writer',
     'workflow:refactor.yaml:developer',
     'workflow:refactor.yaml:reviewer',

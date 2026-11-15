@@ -1,0 +1,199 @@
+# =============================================================================
+# Workflow: Mockups export (#837, Plan & Design › Mockups, phase 4)
+# -----------------------------------------------------------------------------
+#   develop (copy the kit and the chosen screens into design/mockups/) ─► pr_open ─► pr_monitor ─► end
+#
+# "Export to the repository": the kit (kit/tokens.css, components.css, kit.json) and the chosen screens
+# of a project's mockups (<workspace>/mockups/<project>/, never the repository until now, D14) are copied
+# into the project's repository under design/mockups/, on the run's branch, and proposed as a pull
+# request (fragments/pr-pipeline.yaml: pr_open, then stack_follow when stacked, then pr_monitor; the team
+# merges it). `kit_official` (Q-2, per project): the README says the kit is the project's official design
+# system, or only a reference. The list of files is the Mockups service's exportPlan
+# (fronts/plan/engine/domains/mockups.js); the channel mockups:export-repo starts this run (real only:
+# simulated, MULTIAGENT_SIMULATION_ONLY, it answers the plan and starts nothing). The Mockups screen's
+# "Export to the repository" opens the Start panel with `slugs` (and `screens`, the same list).
+# Docs: docs/agents/storage/mockups.md.
+# =============================================================================
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: mockups-export
+  version: 0.1.0
+  description: "Exports a project's mockup kit and chosen screens into its repository under design/mockups/ and opens a pull request; it can make the kit the project's official design system."
+  tags: [design, mockups, plan, remote]
+  category: plan
+
+inputs:
+  project_path:
+    label: "Project folder"
+    type: string
+    required: true
+    description: The project's repository (a git repository) the mockups are exported to.
+  project_id:
+    label: "Project"
+    type: string
+    default: ""
+    description: The project's id; its mockups live in <workspace>/mockups/<project id>/.
+  mockup_dir:
+    label: "Mockup folder"
+    type: string
+    default: ""
+    description: The project's mockup folder (kit/, screens/), read-only for the run.
+  slugs:
+    label: "Screens"
+    type: string
+    default: ""
+    description: "The screens to export, their folder names under screens/, separated by commas."
+  # the Mockups screen's dialog fills both: `screens` is the same list as `slugs`
+  screens:
+    label: "Screens (list)"
+    type: string
+    default: ""
+    description: "The same list as Screens (the Mockups screen fills both); used when Screens is empty."
+  kit_official:
+    label: "Official design system"
+    type: boolean
+    default: false
+    description: "Make the exported kit the project's official design system (Q-2); off: the kit is a reference."
+  issue:
+    label: "Issue"
+    type: string
+    default: ""
+    description: "URL of an issue the pull request closes (optional)."
+  base_branch:
+    label: "Base branch"
+    type: string
+    default: main
+    description: The branch the pull request targets.
+  mode:
+    label: "Mode"
+    type: string
+    enum: [remote, fork]
+    default: remote
+    options: { remote: "Remote (pull request)", fork: "Fork + PR" }
+    description: "Remote: the run pushes its branch and opens a pull request. Fork + PR (no push access to the original): the branch goes to your fork (origin) and the pull request to the original (upstream)."
+  parent_branch:
+    label: "Parent branch"
+    type: string
+    default: ""
+    description: "Stacked (#807) or Fork + PR (#738): the branch this run starts from. Empty: the base branch."
+  parent_pr:
+    label: "Parent pull request"
+    type: string
+    default: ""
+    description: "Stacked or Fork + PR: the pull request this one builds on. Empty: none."
+  depends_on:
+    label: "Depends on"
+    type: string
+    default: ""
+    show_if: "mode == 'fork'"
+    description: "Fork + PR: the earlier pull request this one depends on (e.g. #12), written in the pull request's body."
+  git_platform:
+    label: "Git platform"
+    type: string
+    enum: [gh, gl]
+    default: gh
+    options: { gh: GitHub, gl: GitLab }
+    description: "Where the pull request opens (merge request on GitLab)."
+
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    effort_args: ["--effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+x-tools:
+  vcs: &vcs [bash:git, bash:gh, bash:glab]
+
+defaults:
+  fresh_after_idle: 55m
+  working_dir: "{{ worktree_dir }}"
+  timeout: 30m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  worktree:
+    repo: "{{ inputs.project_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: true
+    fork: "{{ inputs.mode == 'fork' }}"
+  supervisor:
+    enabled: true
+    on_call: true
+    max_interventions: 2
+    max_cost_usd: 2
+  limits:
+    max_total_duration: 4h
+    max_total_cost_usd: 10
+
+agents:
+  developer:
+    provider: claude
+    model: claude-sonnet-5
+    effort: low
+    session: persistent
+    capabilities: { tools: [bash:git, bash:node, edit, read, write], web: false }
+    protect_files:
+      - "docs/work/**"
+    system_prompt: |
+      You export a project's mockups into its repository. You copy files from the mockup folder
+      `{{ inputs.mockup_dir }}` into `design/mockups/` of the run's branch and commit them; you never
+      change the mockup folder, never write outside design/mockups/, and never push.
+  ci_pusher:
+    provider: claude
+    model: claude-sonnet-5
+    session: handoff
+    capabilities: { tools: [read, *vcs], web: false }
+    skills: ["ci-pipeline-{{ inputs.git_platform }}"]
+    system_prompt: |
+      You are the CI Pusher. You push the branch and make sure a PR/MR is open. You do not change
+      files and you do not merge.
+
+steps:
+  - id: develop
+    agent: developer
+    prompt: |
+      Export the mockups of the project into this repository, on the run's branch.
+      Mockup folder (read-only): `{{ inputs.mockup_dir }}`.
+      Screens: {% if inputs.slugs %}{{ inputs.slugs }}{% else %}{{ inputs.screens }}{% endif %} (folder names under screens/).
+      1. Copy `kit/tokens.css`, `kit/components.css` and `kit/kit.json` to `design/mockups/kit/`.
+      2. For each screen, copy every file of `screens/<slug>/` to `design/mockups/screens/<slug>/`
+         (the screens link ../../kit/*.css: keep that layout). Copy no other screen.
+      3. Write `design/mockups/README.md`: one line per screen (its title from meta.json, its folder) and
+         {% if inputs.kit_official %}a section saying this kit is the project's official design system (its tokens and
+         components are the reference for new screens){% else %}a line saying the kit is a reference, not the project's official design system{% endif %}.
+      4. Commit only design/mockups/ with the message `Export mockups: <screens>`{% if inputs.issue %} and a line `Closes #<number>` for {{ inputs.issue }}{% endif %}.
+      Answer the branch name and a one-paragraph summary of what was exported.
+    output_schema:
+      type: object
+      required: [branch, summary]
+      properties:
+        branch:  { type: string }
+        summary: { type: string }
+    transitions:
+      - when: "true"
+        goto: pr_open
+  - id: pr_open
+    fragment: pr-pipeline
+    agent: ci_pusher
+  - id: stack_follow
+    fragment: pr-pipeline
+    agent: ci_pusher
+  - id: pr_monitor
+    fragment: pr-pipeline
+
+groups:
+  - name: Export
+    steps: [develop]
+  - name: Pull request
+    steps: [pr_open, stack_follow, pr_monitor]

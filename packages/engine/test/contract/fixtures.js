@@ -236,6 +236,21 @@ module.exports = {
   'mockups:crops': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), commit: s.commit, regions: [{ mid: 'm1', box: [0, 0, 100, 40] }] }), invalid: BAD_SCREEN },
   'mockups:estimate': { arg: { action: 'chat-edit' }, invalid: { arg: { action: 'fly' } } },
   'mockups:export': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #837 simulated: the export plan, no workflow run
+  'mockups:export-repo': { setup: mockupScreen, arg: (s) => ({ projectId: s.projectId, slugs: [s.slug], kitOfficial: false }), invalid: BAD_PROJECT },
+  // #837 a local file in the shape of GET /v1/files/:key: no network
+  'mockups:figma-import': {
+    setup: project,
+    arg: ({ projectId }) => ({
+      projectId,
+      file: {
+        name: 'Contract',
+        document: { id: '0:0', type: 'DOCUMENT', children: [{ id: '0:1', type: 'CANVAS', children: [{ id: '1:1', type: 'FRAME', name: 'Home', styles: { fill: 'S:1' } }] }] },
+        styles: { 'S:1': { name: 'Brand', styleType: 'FILL' } },
+      },
+    }),
+    invalid: BAD_PROJECT,
+  },
   'mockups:flow': { setup: mockupFlow, arg: ({ projectId }) => ({ projectId, name: 'contract-flow' }), invalid: BAD_PROJECT },
   'mockups:flows': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #836 a frozen version, the `mockup` input of a dev run
@@ -244,6 +259,8 @@ module.exports = {
   'mockups:kit': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'mockups:kit-map': { setup: project, arg: ({ projectId }) => ({ projectId, components_css: '.btn { padding: 4px; }\n', components: [{ name: 'Button', source: 'src/button.css:1' }], inferences: [] }), invalid: BAD_PROJECT },
   'mockups:list': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #837 a token in memory; the server route stays off until the security review
+  'mockups:live-link': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
   // the engine server has no editor window: { opened: false }
   'mockups:open-editor': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
   // the simulated designer's draft: m1 is its <main>
@@ -257,6 +274,8 @@ module.exports = {
   'mockups:save-ref': { setup: project, arg: ({ projectId }) => ({ projectId, data: 'data:image/png;base64,iVBORw0KGgo=', ext: 'png' }), invalid: BAD_PROJECT },
   'mockups:save-turn': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), html: '<main><h1>Saved by the contract suite</h1></main>', message: 'A contract turn' }), invalid: BAD_SCREEN },
   'mockups:screen': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
+  // #837 a project without a folder: no Storybook
+  'mockups:storybook': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'mockups:switch-variant': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'main' }), invalid: BAD_PROJECT },
   'mockups:variants': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'mockups:versions': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },

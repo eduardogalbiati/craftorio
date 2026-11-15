@@ -34,7 +34,10 @@
 // mockup-compare, mockup-compare-before, mockup-compare-after, mockup-compare-close, mockup-changed (inside
 // a side), mockup-interact, mockup-flows, mockup-flow-select, mockup-flow-new, mockup-link-target,
 // mockup-link, mockup-promote, mockup-attach, mockup-attach-dialog, mockup-review-screen,
-// mockup-cost-estimate, mockup-review-confirm, mockup-review-finding, mockup-start-run, mockup-prepare-issues.
+// mockup-cost-estimate, mockup-review-confirm, mockup-review-finding, mockup-start-run, mockup-prepare-issues,
+// mockup-live-link, mockup-live-link-blocked, mockup-components-source.
+// #837: the components badge says whether the screen uses the project's live Storybook components or the
+// static kit (meta.json `components`); Share a live link stays disabled until the security review (#466–#470).
 // Uses app.js globals at call time (esc, api, errMsg, showToast, fmtCost), AgentChat, MockupModel.
 (() => {
   const query = () => { try { return new URLSearchParams(window.location?.search || ''); } catch { return new URLSearchParams(); } };
@@ -64,6 +67,7 @@
             <span id="mockup-version" class="badge neutral mono"></span>
             <span id="mockup-lint" class="badge" data-testid="mockup-lint"></span>
             <span id="mockup-axe" class="badge neutral hidden" data-testid="mockup-axe"></span>
+            <span id="mockup-components-source" class="badge neutral" data-testid="mockup-components-source"></span>
           </div>
           <div class="mockup-editor-tools">
             <span class="muted small">${t('mockups.variant_current')}</span>
@@ -75,6 +79,8 @@
             <button type="button" class="btn sm" id="mockup-interact" data-testid="mockup-interact" data-mockup-interact aria-pressed="false">${t('mockups.interact')}</button>
             <div class="seg sm" role="group" aria-label="${t('mockups.frame')}" data-testid="mockup-frames">${seg}</div>
             <button type="button" class="btn sm" data-testid="mockup-review-screen" data-mockup-review-screen>${t('mockups.review_screen')}</button>
+            <button type="button" class="btn sm" data-testid="mockup-live-link" disabled aria-disabled="true" aria-describedby="mockup-live-link-blocked">${t('mockups.live_link')}</button>
+            <span id="mockup-live-link-blocked" class="muted small" data-testid="mockup-live-link-blocked">${t('mockups.live_link_blocked')}</span>
             <button type="button" class="btn sm primary" data-testid="mockup-start-run" data-mockup-start-run title="${esc(t('mockups.start_run_help'))}">${t('mockups.start_run')}</button>
           </div>
         </header>
@@ -409,6 +415,16 @@
   }
 
   // ---- loading a screen -------------------------------------------------------------------------
+  // #837 which components the current screen uses (meta.json `components`, mockups:list)
+  function renderComponentsSource() {
+    const el = q('#mockup-components-source');
+    if (!el) return;
+    const screen = ed.screens.find((s) => s.slug === ed.slug);
+    const live = screen?.components === 'storybook';
+    el.textContent = live ? t('mockups.components_storybook') : t('mockups.components_static_kit');
+    el.className = `badge ${live ? 'success' : 'neutral'}`;
+  }
+
   async function load(projectId, slug, { bust = null } = {}) {
     ed.projectId = projectId;
     ed.slug = slug;
@@ -436,6 +452,7 @@
     ed.axe = null; // the new version's axe comes from the canvas
     if (canvas) canvas.src = canvasUrl(bust || ed.versions[0]?.commit || '');
     renderHead();
+    renderComponentsSource();
     renderCost();
     renderVersions();
     renderFlows();

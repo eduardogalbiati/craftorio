@@ -15,7 +15,7 @@ per change (a new screen, a designer turn, a restore, a kit build), so `mockups:
 <workspace>/mockups/<project-id>/
   .git/                versions (one commit per turn)
   kit/  tokens.css  components.css  components.html  kit.json (sources, lines, fonts, components, inferences)
-  screens/<slug>/  index.html (data-mid on every node)  meta.json { slug, title, source, createdAt }
+  screens/<slug>/  index.html (data-mid on every node)  meta.json { slug, title, source, components, createdAt }
   flows/<flow>.json    { name, links: [{ from: { screen, mid }, to }] } (#835)
   refs/<sha256>.<ext>  pasted reference images, named by their hash
   chat/<slug>.jsonl    the designer chat, one { role, text, payload?, runId?, at } per line
@@ -91,3 +91,40 @@ The handoff only prepares work: no channel here starts a development run or file
   preview (the project's `localPreview`, then `.multiagent/local-preview.yaml`); its estimate
   (`recreate-screen`) is shown first. Real: `mockup-generate` with `mode: recreate` and `app_url`;
   simulated: a draft screen that links the kit, no workflow run.
+
+## Storybook, export by PR, Figma and the live link (#837)
+
+- **Live components (Storybook).** `detectStorybook(folder)` (`mockups:storybook`) answers `{ available,
+  configDir }`: a `.storybook/` folder (`configDir: '.storybook'`) or a `storybook` / `@storybook/*`
+  dependency in the project's `package.json`. A new screen (`mockups:create-screen`, `mockups:recreate`)
+  records `components: 'storybook'` in its `meta.json` when the project has Storybook, `'static-kit'`
+  otherwise (D4; an older `meta.json` without the field reads as `static-kit`). The screen still links
+  `kit/tokens.css` and `kit/components.css`; the editor's bar tells which source the screen uses. Limitation:
+  rendering the project's real Storybook components inside the canvas needs the project's Storybook
+  running; this phase records the choice, the canvas keeps the kit.
+- **Export to the repository by PR.** `exportPlan` (`mockups:export-repo`) lists the files to copy:
+  `kit/tokens.css`, `kit/components.css`, `kit/kit.json` and the tracked files of each chosen screen, to
+  `design/mockups/` of the project's repository (`{ targetDir, kitOfficial, files: [{ from, to }] }`; an
+  empty selection or an unknown screen is refused). Real, the channel starts `workflows/mockups-export.yaml`
+  (inputs `project_path`, `project_id`, `mockup_dir`, `slugs`, `kit_official`): its developer copies them on
+  the run's branch with a README and commits, then `fragment: pr-pipeline` opens the PR (`pr_open`,
+  `pr_monitor`; the team merges it). Simulated: the plan, no run. `kit_official` (Q-2, chosen per project at
+  each export) makes the README name the kit the project's official design system. The Mockups screen's
+  **Export to the repository** dialog opens the Start panel with the choice (`slugs` and `screens`); the
+  owner starts the run.
+- **Figma import.** `importFigma` (`mockups:figma-import`) takes a Figma REST `GET /v1/files/:key` answer
+  (`file`), or downloads it by `fileKey` with the token kept in the keychain (`figma:token`; never in
+  simulation, no network then). Each FILL style used by a solid fill becomes a kit token in `kit.json`
+  `tokens: [{ name: '--<slug>', value: '#rrggbb', source: 'figma' }]` and in a `:root` block appended to
+  `tokens.css`; each top-level frame a `references: [{ source: 'figma', id, name }]` entry; `inferences` gets
+  one line naming the Figma file. One `Figma import: <name>` commit; a file without a `document` is refused
+  and the kit is untouched.
+- **Live link (blocked).** `mockups:live-link` answers `{ token (48 hex), path: '/mockups/live/<token>',
+  expiresAt }` (`fronts/plan/engine/areas/mockup-live-links.js`, in the engine's memory only: a restart
+  forgets every link; 24 h by default, `ttlMs` to shorten). The engine server's `GET /mockups/live/<token>`
+  (`packages/engine/server/index.js`) is outside the server token (the link's token admits it) and stays
+  **blocked (403) until the security review #466–#470** is done: `createServer({ mockupLiveLinks: true })`
+  opens it. Open, it serves `liveLinkPage` (the screen with the kit inlined in `<style>`, nothing added: no
+  `window.api`, no script) with a CSP that forbids the network (`default-src 'none'; connect-src 'none'`,
+  inline styles and `data:` images only), `no-store` and `X-Frame-Options: DENY`; another method is 405,
+  an unknown or expired token 404. The editor shows **Share a live link** disabled with the reason.

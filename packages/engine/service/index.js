@@ -153,6 +153,9 @@ function createService({ host, fronts = null, installed = undefined }) {
     // #634: an error source's push to the Monitor's webhook (the engine server's POST /hooks/monitor/<project>,
     // fronts/ai/engine/areas/monitor.js): never a channel; null when the ai front is not served
     monitorWebhook: ctx.monitorWebhookIngest ? (arg) => ctx.monitorWebhookIngest?.(arg) : null,
+    // #837: a mockup live link's page (the engine server's GET /mockups/live/<token>,
+    // fronts/plan/engine/areas/mockup-live-links.js): never a channel; null when the plan front is not served
+    mockupLiveLink: ctx.mockupLiveLinkPage ? (token) => ctx.mockupLiveLinkPage?.(token) : null,
     shutdown() {
       ctx.stopPhoneGates();
       ctx.stopPrTimer();

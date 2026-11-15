@@ -20,6 +20,12 @@
 // mockups:crops (the selected regions as cropped images for the #258 commit dialog; the host captures them,
 // a placeholder without one), mockups:review (Review this screen, on demand, the estimate shown first) and
 // mockups:recreate (a screen of the running app, refused without Run App / Local preview).
+// #837 (phase 4): mockups:storybook (does the project have Storybook: a new screen then records
+// components 'storybook', otherwise 'static-kit', D4), mockups:export-repo (the kit and chosen screens to the
+// repository's design/mockups/ by a mockups-export.yaml PR run; simulated, the plan and no run),
+// mockups:figma-import (a Figma file's fill styles and frames into kit.json; the token from the keychain,
+// `figma:token`) and mockups:live-link (a read-only share link, ../areas/mockup-live-links.js; the server
+// route stays blocked until the security review #466–#470).
 // The designer never writes to the project's repository: its runs' outputs are written here, into the
 // mockup folder. The project's repository is only read (the machine step of the kit).
 
@@ -38,6 +44,8 @@ const { args, listOf, nullable, OBJECT, PROJECT_ID, shape, STRING, text } = sche
 
 const WORKFLOW = 'mockup-generate';
 const KIT_WORKFLOW = 'ui-kit-map.yaml';
+const EXPORT_WORKFLOW = 'mockups-export.yaml';
+const FIGMA_TOKEN_KEY = 'figma:token';
 const SLUG = text(100);
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'vendor', '.next']);
 const STYLE_FILE = /\.(css|scss|less)$|^tailwind\.config\.[cm]?[jt]s$|^theme\.[cm]?[jt]s$/i;
@@ -125,7 +133,9 @@ module.exports = (ctx) => {
   // (create-screen and recreate); `simulated` and `inputs` take the screen's name
   async function newScreen({ projectId, name, prompt, source, simulated, inputs }) {
     const draft = MockupModel.draftScreen({ title: name, prompt });
-    const { slug, commit } = mockups.createScreen(wsRoot(), projectId, { title: name, html: draft, source });
+    // #837 the project's real components when it has Storybook, the static kit otherwise (D4)
+    const components = mockups.detectStorybook(projectOf(projectId)?.folder).available ? 'storybook' : 'static-kit';
+    const { slug, commit } = mockups.createScreen(wsRoot(), projectId, { title: name, html: draft, source, components });
     if (simulation.simulationOnly()) {
       mockups.appendChat(wsRoot(), projectId, slug, { role: 'assistant', text: simulated });
       return { slug, commit, runId: null };
@@ -231,6 +241,47 @@ module.exports = (ctx) => {
     if (simulation.simulationOnly()) return { commit, tokens: tokens.length, runId: null };
     const started = await ctx.startWorkflowRun({ file: KIT_WORKFLOW, mock: false, projectId, inputs: { project_path: project.folder || '', project_id: projectId, mockup_dir: mockups.projectDir(wsRoot(), projectId) } });
     return { commit, tokens: tokens.length, runId: started?.runId || null };
+  }
+
+  // #837 the kit and the chosen screens to the repository by a PR run; simulated, the plan and no run
+  async function exportRepo({ projectId, slugs, kitOfficial = false }) {
+    const project = projectOf(projectId);
+    if (!project) throw clientError(`Unknown project: ${projectId}`);
+    const plan = userError(() => mockups.exportPlan(wsRoot(), projectId, { slugs, kitOfficial }));
+    if (simulation.simulationOnly()) return { plan, runId: null };
+    const started = await ctx.startWorkflowRun({
+      file: EXPORT_WORKFLOW,
+      mock: false,
+      projectId,
+      inputs: {
+        project_path: project.folder || '',
+        project_id: projectId,
+        mockup_dir: mockups.projectDir(wsRoot(), projectId),
+        slugs: [...new Set(slugs)].join(','),
+        kit_official: plan.kitOfficial,
+      },
+    });
+    return { plan, runId: started?.runId || null };
+  }
+
+  // #837 a Figma file (its REST answer, or downloaded by its key with the keychain's token, real only)
+  async function figmaImport({ projectId, file = null, fileKey = null }) {
+    let token = null;
+    if (fileKey && !file && typeof ctx.host?.secrets?.get === 'function') {
+      try { token = await ctx.host.secrets.get(FIGMA_TOKEN_KEY); } catch { token = null; }
+    }
+    try {
+      return await mockups.importFigma(wsRoot(), projectId, { file, fileKey, token });
+    } catch (e) {
+      throw clientError(e.message);
+    }
+  }
+
+  // #837 a read-only share link to one screen (the screen must exist)
+  function liveLink({ projectId, slug, ttlMs }) {
+    userError(() => mockups.screenHtml(wsRoot(), projectId, slug));
+    if (typeof ctx.createMockupLiveLink !== 'function') throw clientError('Live links are not available in this engine.');
+    return ctx.createMockupLiveLink({ projectId, slug, ttlMs });
   }
 
   return [
@@ -465,6 +516,38 @@ module.exports = (ctx) => {
       params: ['projectId', 'title', 'url'],
       schema: { params: args({ projectId: PROJECT_ID, title: text(200), url: text(2000) }, ['projectId', 'title']), result: OBJECT },
       fn: recreate,
+    },
+    // #837 does the project have Storybook: { available, configDir }
+    {
+      channel: 'mockups:storybook',
+      method: 'detectMockupStorybook',
+      params: ['projectId'],
+      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT },
+      fn: ({ projectId }) => mockups.detectStorybook(projectOf(projectId)?.folder),
+    },
+    // #837 export the kit and the chosen screens to the repository by PR: { plan, runId }
+    {
+      channel: 'mockups:export-repo',
+      method: 'exportMockupsToRepo',
+      params: ['projectId', 'slugs', 'kitOfficial'],
+      schema: { params: args({ projectId: PROJECT_ID, slugs: listOf(SLUG), kitOfficial: { type: 'boolean' } }, ['projectId', 'slugs']), result: OBJECT },
+      fn: exportRepo,
+    },
+    // #837 a Figma file into the kit: { commit, tokens, references }
+    {
+      channel: 'mockups:figma-import',
+      method: 'importMockupFigma',
+      params: ['projectId', 'file', 'fileKey'],
+      schema: { params: args({ projectId: PROJECT_ID, file: nullable(OBJECT), fileKey: nullable(text(200)) }, ['projectId']), result: OBJECT },
+      fn: figmaImport,
+    },
+    // #837 a read-only live link to a screen: { token, path, expiresAt }
+    {
+      channel: 'mockups:live-link',
+      method: 'createMockupLiveLink',
+      params: ['projectId', 'slug', 'ttlMs'],
+      schema: { params: onScreen({ ttlMs: { type: 'integer', minimum: 1 } }), result: OBJECT },
+      fn: liveLink,
     },
   ];
 };

@@ -39,7 +39,8 @@ const CODE_AND_BUILD = [
 ];
 // #633: the SDLC flows are not Code & Build
 // #625: the Mockups screen's workflows (a new screen, the visual kit) are Plan & Design tools too
-const PLANNING_TOOLS = ['mockup-generate', 'sdlc-record', 'sdlc-release', 'sdlc-test', 'ui-kit-map', 'write-doc'];
+// #837: the export of the mockups by PR
+const PLANNING_TOOLS = ['mockup-generate', 'mockups-export', 'sdlc-record', 'sdlc-release', 'sdlc-test', 'ui-kit-map', 'write-doc'];
 
 const ALIASES = [
   ['project-map', 'analyze-project.yaml'],

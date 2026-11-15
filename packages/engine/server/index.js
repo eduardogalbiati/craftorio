@@ -23,6 +23,11 @@
 //                         { ok, received } | 401 | 400. Outside the token gate: the key is the
 //                         project's webhook key (monitor:webhook, kept in the keychain), which only
 //                         adds error events; it never reaches a channel (service.monitorWebhook)
+//   GET  /mockups/live/<token>  (#837) a read-only mockup live link (mockups:live-link, 48 hex, in the
+//                         engine's memory, 24 h by default) → 200 the screen's self-contained html with a CSP
+//                         that forbids the network and no window.api | 404 unknown or expired | 405 another
+//                         method. Outside the token gate (the link's token admits it), and BLOCKED (403) until
+//                         the security review #466–#470 is done: createServer({ mockupLiveLinks: true }) opens it
 //
 // Every request needs the server token: `Authorization: Bearer <token>`, or the cookie the server
 // sets after POST /session or when a browser opens /?token=<token> (the desktop app's startUrl). The
@@ -82,6 +87,11 @@ const MAX_BODY = 15 * 1024 * 1024;
 // a Monitor webhook's push (#634): error events, not files
 const MAX_HOOK = 256 * 1024;
 const HOOK_PATH = /^\/hooks\/monitor\/([^/]+)$/;
+// a mockup live link (#837) and its page's policy: no network, no script, no frame, inline styles and
+// data: images only (the editor window's MOCKUP_CSP, apps/desktop/host/mockups-window.js, without mockup:)
+const LIVE_PATH = /^\/mockups\/live\/([0-9a-f]{48})$/;
+const LIVE_CSP = "default-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
+const LIVE_BLOCKED = 'Live links are off until the security review (#466–#470) is done.';
 // the WebSocket ping and heartbeat period (#603): two heartbeats within the page's watchdog (20 s)
 const WS_PING_INTERVAL_MS = 10000;
 
@@ -180,9 +190,10 @@ async function callChannel(fn, arg) {
  * @param allowedHosts  names a loopback-bound server answers besides the loopback ones (the name
  *                 `tailscale serve` forwards, #541); exact, case-insensitive, any port
  * @param wsPingIntervalMs  the WebSocket ping / heartbeat period (#603)
+ * @param mockupLiveLinks  serve GET /mockups/live/<token> (#837); off (403) until the security review #466–#470
  * @returns an http.Server, not listening yet
  */
-function createServer({ service, auth = null, token, root = appRoot(), ui = uiDir(), allowedHosts = [], wsPingIntervalMs = WS_PING_INTERVAL_MS }) {
+function createServer({ service, auth = null, token, root = appRoot(), ui = uiDir(), allowedHosts = [], wsPingIntervalMs = WS_PING_INTERVAL_MS, mockupLiveLinks = false }) {
   const served = staticDirs(root, ui);
   const allowed = [...new Set(allowedHosts.map(normalizeHostName).filter(Boolean))];
   if (!token || String(token).length < 16) throw new Error('The server needs a token of at least 16 characters.');
@@ -237,6 +248,23 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
     const out = await service.monitorWebhook({ projectId, key, payload });
     if (!out?.ok) throw new HttpError(out?.status || 400, out?.error || 'Refused.');
     return sendJson(res, 202, { ok: true, received: out.received });
+  }
+
+  // a mockup live link (#837): the link's token, not the server token, admits it (see the header)
+  async function liveLink(req, res, linkToken) {
+    if (mockupLiveLinks !== true) throw new HttpError(403, LIVE_BLOCKED);
+    if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'A live link is read-only: use GET.');
+    const html = service.mockupLiveLink ? await service.mockupLiveLink(linkToken) : null;
+    if (typeof html !== 'string') throw new HttpError(404, 'Unknown or expired live link.');
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': LIVE_CSP,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+      'Cache-Control': 'no-store',
+    });
+    return res.end(req.method === 'HEAD' ? undefined : html);
   }
 
   function serveStatic(req, res, pathname) {
@@ -296,6 +324,8 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
       }
       const hook = HOOK_PATH.exec(url.pathname);
       if (hook && service.monitorWebhook) return await monitorHook(req, res, hook[1], url.searchParams.get('key'));
+      const live = LIVE_PATH.exec(url.pathname);
+      if (live) return await liveLink(req, res, live[1]);
       if (!authorized(req)) {
         if (req.method === 'GET' && /text\/html/.test(req.headers.accept || '')) {
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY' });
