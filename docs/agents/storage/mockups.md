@@ -61,3 +61,28 @@ links to every screen: a static .zip that opens offline, no live link. `attachme
 freezes a version for a Discovery card: `{ projectId, slug, commit (full sha), name
 '<slug>@<sha7>.mockup.json', thumbnail (an SVG data URL) }`, stored as a card attachment; `discovery:attachment` returns that frozen
 thumbnail as the attachment's `dataUrl`, so the card shows it, and `screenAt` reads that version back.
+
+## Handoff: issues, dev-run input and the review (#836, D5/D11/D13)
+
+The handoff only prepares work: no channel here starts a development run or files an issue, and no
+`human_approval` gate is crossed.
+- `mockups:freeze` (`freezeVersion`) writes `frozen/<slug>@<sha7>/` (the screen's `index.html` and `kit/`
+  as they were at that commit; not versioned, no commit) and answers `{ ref, slug, commit, dir }`. `dir` is
+  the value of a dev run's optional `mockup` input (feature, fix, the local hero): the developer reads the
+  screen and its kit, and the UI reviewer's "Matches the mockup" item compares each `.modified.png` with it.
+  The editor's **Start a development run** freezes the current version and opens the main window's Start
+  panel with `inputs.mockup` filled (`main-window:navigate` `mockups:start-run`); the owner starts the run.
+- `mockups:crops` (`saveCrops`) turns the regions selected in the editor (`data-mid`) into cropped images
+  saved by `saveRef` in `refs/` (`[{ mid, file, name }]`); a mid missing at that version is refused. The host
+  captures the pixels; simulated, a placeholder image. **Prepare issues** then opens the #258 commit dialog
+  of the Discovery card the mockup is attached to (`mockups:prepare-issues`); each crop goes into every
+  issue of the split (`discovery_commit.crops`, a section of the issue body with its `data-mid`), and
+  nothing is filed until the owner confirms in the dialog.
+- `mockups:review` (`reviewScreen`) is **Review this screen**: on demand only, its estimate
+  (`review-screen`) shown first; kit findings from `MockupModel.lintMockup`, axe findings from the given
+  violations, layout findings from the model turn. Simulated: $0, no workflow run. A designer turn never
+  reviews.
+- `mockups:recreate` creates a screen from a page of the running app (D5): refused without Run App / Local
+  preview (the project's `localPreview`, then `.multiagent/local-preview.yaml`); its estimate
+  (`recreate-screen`) is shown first. Real: `mockup-generate` with `mode: recreate` and `app_url`;
+  simulated: a draft screen that links the kit, no workflow run.

@@ -115,6 +115,11 @@
 .dsc-commit-issue input[type="text"], .dsc-commit-issue textarea, .dsc-commit-issue select { width: 100%; }
 .dsc-commit-grid { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
 .dsc-commit-roadmap { margin-bottom: 10px; font-size: 13px; }
+.dsc-commit-crops { margin-bottom: 10px; }
+.dsc-commit-crops .row { flex-wrap: wrap; gap: 8px; }
+.dsc-commit-crop { margin: 0; display: grid; gap: 4px; max-width: 160px; }
+.dsc-commit-crop img { display: block; max-width: 160px; max-height: 96px; object-fit: contain; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; }
+.dsc-commit-crop figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* a narrow window: the columns keep a readable width and the board scrolls sideways (room below
    for a card's open "Move to…" menu); the Committed list goes below the board */

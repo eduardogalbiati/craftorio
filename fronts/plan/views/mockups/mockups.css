@@ -58,5 +58,9 @@ body.mockup-window-page > .shell { display: none; }
 .mockup-versions li { gap: 8px; align-items: center; }
 .mockup-version-msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mockup-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 12px; }
+.mockup-review { display: grid; gap: 6px; margin-bottom: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); }
+.mockup-review p { margin: 0; }
+.mockup-review-list { display: grid; gap: 4px; max-height: 180px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.mockup-review-finding { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .mockup-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 4px 2px 8px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--panel-2); }
 .mockup-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }

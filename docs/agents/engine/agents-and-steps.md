@@ -39,7 +39,11 @@ fields (references between steps, agents, transitions, groups) are the named rul
   `ui_reviewer` compares each `*.modified.png` with its mockup (layout, icons, texts, controls,
   order, states): every difference is a blocking `ui_findings` entry (rule/source `mockup`,
   `mockupFindings`) back to develop; an intended one cites the issue's line. No mockup: the review
-  is as before. A UI change always has screenshots: develop changing files under `ui_folders`
+  is as before. The `mockup` input (#836, feature, fix and the local hero; optional, `default: ""`)
+  is a frozen mockup version (`frozen/<slug>@<sha7>/` of `mockups:freeze`, filled by the mockup
+  editor's Start a development run): develop reads its `index.html` and `kit/`, and the
+  `ui_reviewer` adds the "Matches the mockup" item (`skills/ui-conventions`), each difference a
+  finding with rule `mockup`. Empty: the run behaves as before. A UI change always has screenshots: develop changing files under `ui_folders`
   (the `ui_files` filter) with no `screenshots` goes back to develop once (`vars.ui_screens_returned`)
   instead of skipping `developer_screenshots`.
   Baselines (#696): a new `@visual` scenario's PNG under `features/__screenshots__/` comes with
