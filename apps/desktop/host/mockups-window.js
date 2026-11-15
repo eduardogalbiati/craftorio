@@ -106,6 +106,11 @@ function createMockupsWindow({ BrowserWindow, statePath, dirname, page = null, d
 
 // mockup://<projectId>/<path> → the file under <workspace>/mockups/<projectId>/, or null
 function resolveMockupRequest(url, workspace) {
+  return locateMockup(url, workspace)?.file ?? null;
+}
+
+// the one check of a mockup:// url: { base: <workspace>/mockups/<projectId>, file }, or null
+function locateMockup(url, workspace) {
   // the raw string, never new URL(): it would fold `..` and `%2e%2e` away before the check
   const m = /^mockup:\/\/([^/?#]+)(\/[^?#]*)?/i.exec(String(url ?? ''));
   if (!m || !workspace) return null;
@@ -115,17 +120,15 @@ function resolveMockupRequest(url, workspace) {
   if (segments.some((s) => s === '.' || s === '..' || /[\\/\0]/.test(s) || s.toLowerCase() === '.git')) return null;
   const base = path.join(workspace, 'mockups', segments[0]);
   const file = path.join(base, ...segments.slice(1));
-  return file.startsWith(base + path.sep) ? file : null;
+  return file.startsWith(base + path.sep) ? { base, file } : null;
 }
 
 // What protocol.handle('mockup') answers: { status, headers, body } (the file with MOCKUP_CSP; an html
 // page gets the inspector injected before </body>; 404 for a refused or missing path)
 // #835 Compare: `?at=<sha>` serves the file as it was in that commit of the mockup repository
-function readAt(file, workspace, url) {
+function readAt({ base, file }, url) {
   const at = /[?&]at=([0-9a-f]{7,40})(?:[&#]|$)/i.exec(String(url));
   if (!at) return fs.promises.readFile(file);
-  const id = /^mockup:\/\/([^/?#]+)/i.exec(String(url))[1];
-  const base = path.join(workspace, 'mockups', decodeURIComponent(id));
   const relPath = path.relative(base, file).split(path.sep).join('/');
   return new Promise((resolve, reject) => {
     execFile('git', ['show', `${at[1]}:${relPath}`], { cwd: base, encoding: 'buffer', maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (err, out) => (err ? reject(err) : resolve(out)));
@@ -133,12 +136,12 @@ function readAt(file, workspace, url) {
 }
 
 async function serveMockup(url, workspace) {
-  const file = resolveMockupRequest(url, workspace);
+  const found = locateMockup(url, workspace);
   const missing = { status: 404, headers: { 'content-type': 'text/plain', 'content-security-policy': MOCKUP_CSP }, body: 'Not found' };
-  if (!file) return missing;
+  if (!found) return missing;
   let body;
-  try { body = await readAt(file, workspace, url); } catch { return missing; }
-  const ext = path.extname(file).toLowerCase();
+  try { body = await readAt(found, url); } catch { return missing; }
+  const ext = path.extname(found.file).toLowerCase();
   if (ext === '.html') {
     let inspector = '';
     try { inspector = await fs.promises.readFile(INSPECTOR, 'utf8'); } catch (e) { console.error('[mockups-window] no inspector:', e.message); }

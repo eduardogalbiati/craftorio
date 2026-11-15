@@ -936,18 +936,15 @@
   function renderAttachments() {
     const box = $('#dsc-files');
     if (!dv.open || !box) return;
-    // #835 a mockup version the editor attached (<slug>@<sha7>.mockup.json) shows its frozen thumbnail
-    for (const n of dv.open.attachments) {
-      const m = window.MockupModel?.parseAttachmentName?.(n);
-      if (m && !dv.previews.has(`${dv.open.id}/${n}`)) dv.previews.set(`${dv.open.id}/${n}`, { dataUrl: window.MockupModel.attachmentThumbnail({ title: m.slug, commit: m.commit }) });
-    }
     box.innerHTML = parts().attachmentsHtml(dv.open, dv.previews);
   }
 
-  // The images' thumbnails, read once per card and name.
+  // The images' thumbnails, read once per card and name; #835 a mockup version the editor attached
+  // (<slug>@<sha7>.mockup.json) shows the thumbnail frozen in it
   async function loadPreviews() {
     const c = dv.open;
-    const missing = c.attachments.filter((n) => parts().IMAGE.test(n) && !dv.previews.has(`${c.id}/${n}`));
+    const previewable = (n) => parts().IMAGE.test(n) || !!window.MockupModel?.parseAttachmentName?.(n);
+    const missing = c.attachments.filter((n) => previewable(n) && !dv.previews.has(`${c.id}/${n}`));
     if (!missing.length) return;
     await Promise.all(missing.map(async (n) => {
       try { dv.previews.set(`${c.id}/${n}`, await api.discoveryAttachment(dv.openProject, c.id, n)); } catch { /* shown by its name only */ }

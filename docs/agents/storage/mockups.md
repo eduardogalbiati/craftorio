@@ -45,10 +45,11 @@ screens/<slug>/index.html#<mid>`, in one commit; the kit lint then accepts those
 `compareVersions` (`mockups:compare`) reads one screen at two commits (`git show`, byte for byte) and
 returns `MockupModel.diffMids` (the added, removed or changed `data-mid`s). The canvas can serve an
 older version with `mockup://<id>/screens/<slug>/index.html?at=<sha>` (the Compare sides). A variant is
-a branch of the repository (created on `main`): `mockups:variants` lists them, `mockups:create-variant`
-and `mockups:switch-variant` check out, and every turn of the designer commits on the current branch.
-`mockups:keep-variant` makes the kept branch `main` (`reset --hard`) and deletes the others; `chat/`
-is not tracked, so the chat survives.
+a branch of the repository, created from the current branch (`switch -c`): `mockups:variants` lists
+them, `mockups:create-variant` and `mockups:switch-variant` check out, and every turn of the designer
+commits on the current branch. `mockups:keep-variant` switches to the kept branch, deletes every other
+branch (`branch -D`) and renames the kept one to `main` (`branch -m`); `chat/` is not tracked, so the
+chat survives. A new repository starts on `main` (`init` + `symbolic-ref`, any git version).
 
 ## Flows, export and attachments (#835, D12)
 
@@ -58,5 +59,5 @@ the same sandboxed canvas, with no network and no `window.api`. `exportZip` (`mo
 packs the tracked files (`git ls-files`: no `.git/`, no `chat/`) plus an `index.html` with relative
 links to every screen: a static .zip that opens offline, no live link. `attachment` (`mockups:attach`)
 freezes a version for a Discovery card: `{ projectId, slug, commit (full sha), name
-'<slug>@<sha7>.mockup.json', thumbnail (an SVG data URL) }`, stored as a card attachment; the card shows
-its thumbnail and `screenAt` reads that version back.
+'<slug>@<sha7>.mockup.json', thumbnail (an SVG data URL) }`, stored as a card attachment; `discovery:attachment` returns that frozen
+thumbnail as the attachment's `dataUrl`, so the card shows it, and `screenAt` reads that version back.

@@ -34,11 +34,12 @@ const { gitOut } = require('@multiagent/engine/service/common');
 const { commit, git } = require('./docs');
 
 const FOLDERS = ['kit', 'screens', 'flows', 'refs', 'chat'];
-const SLUG = /^[a-z0-9][a-z0-9-]{0,80}$/;
-const COMMIT = /^[0-9a-f]{7,40}$/i;
+const { SLUG, COMMIT } = MockupModel;
 const REF_EXT = /^(png|jpe?g|gif|webp)$/i;
 const MANIFEST = 'mockup.json';
 const BASE_VARIANT = 'main';
+const VARIANT_NAME = 'variant name (lowercase letters, digits and dashes)';
+const FLOW_NAME = 'flow name (lowercase letters, digits and dashes)';
 const KIT_FILES = ['kit/tokens.css', 'kit/components.css', 'kit/kit.json'];
 
 function projectDir(workspace, projectId) {
@@ -50,8 +51,12 @@ function projectDir(workspace, projectId) {
 function ensureProject(workspace, projectId) {
   const dir = projectDir(workspace, projectId);
   for (const f of FOLDERS) fs.mkdirSync(path.join(dir, f), { recursive: true });
-  // main: the base variant whatever the person's init.defaultBranch (#835)
-  if (!fs.existsSync(path.join(dir, '.git'))) git(dir, ['init', '-q', '-b', BASE_VARIANT]);
+  // main: the base variant whatever the person's init.defaultBranch (#835); symbolic-ref, not `init -b`
+  // (git >= 2.28 only)
+  if (!fs.existsSync(path.join(dir, '.git'))) {
+    git(dir, ['init', '-q']);
+    git(dir, ['symbolic-ref', 'HEAD', `refs/heads/${BASE_VARIANT}`]);
+  }
   if (!gitOut(dir, ['rev-parse', '--verify', '-q', 'HEAD'])) {
     fs.writeFileSync(path.join(dir, MANIFEST), `${JSON.stringify({ projectId, createdAt: new Date().toISOString() }, null, 2)}\n`);
     commit(dir, [MANIFEST], `Mockups of ${projectId}`);
@@ -62,9 +67,10 @@ function ensureProject(workspace, projectId) {
 const rel = (...parts) => parts.join('/');
 const screenDir = (dir, slug) => path.join(dir, 'screens', slug);
 
-function checkSlug(slug) {
+// a screen's, a variant's or a flow's name (SLUG: no '..', '/' or space); `what` names it in the error
+function checkSlug(slug, what = 'mockup screen') {
   const s = String(slug ?? '');
-  if (!SLUG.test(s)) throw new Error(`Not a mockup screen: ${s}`);
+  if (!SLUG.test(s)) throw new Error(`Not a ${what}: ${s}`);
   return s;
 }
 
@@ -219,14 +225,12 @@ function writeKit(workspace, projectId, { tokensCss = '', componentsCss = '', ki
 function readKit(workspace, projectId) {
   const dir = projectDir(workspace, projectId);
   if (!fs.existsSync(path.join(dir, 'kit', 'tokens.css'))) return null;
-  let kit = {};
-  try { kit = JSON.parse(fs.readFileSync(path.join(dir, 'kit', 'kit.json'), 'utf8')); } catch { kit = {}; }
-  return { tokensCss: kitTokens(dir), componentsCss: kitComponents(dir), kit };
+  return { tokensCss: kitTokens(dir), componentsCss: kitComponents(dir), kit: kitJson(dir) };
 }
 
-const kitJson = (dir) => {
+function kitJson(dir) {
   try { return JSON.parse(fs.readFileSync(path.join(dir, 'kit', 'kit.json'), 'utf8')) || {}; } catch { return {}; }
-};
+}
 const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 
 // the kit's component gallery: one section per component (its name, its source, its sample html; without
@@ -298,13 +302,6 @@ function promoteToKit(workspace, projectId, { slug, mid, name } = {}) {
 
 // ---- variants (#835): the branches of the mockup repository ---------------------------------------
 
-// a variant's or a flow's name: SLUG (no '..', '/' or space)
-function checkVariant(name, what = 'variant') {
-  const n = String(name ?? '');
-  if (!SLUG.test(n)) throw new Error(`Not a ${what} name (lowercase letters, digits and dashes): ${n}`);
-  return n;
-}
-
 function listVariants(workspace, projectId) {
   const dir = ensureProject(workspace, projectId);
   const names = git(dir, ['branch', '--format=%(refname:short)']).split('\n').map((s) => s.trim()).filter(Boolean);
@@ -312,7 +309,7 @@ function listVariants(workspace, projectId) {
 }
 
 function createVariant(workspace, projectId, { name } = {}) {
-  const n = checkVariant(name);
+  const n = checkSlug(name, VARIANT_NAME);
   const dir = ensureProject(workspace, projectId);
   if (gitOut(dir, ['rev-parse', '--verify', '-q', `refs/heads/${n}`])) throw new Error(`A variant named ${n} already exists.`);
   git(dir, ['switch', '-q', '-c', n]);
@@ -320,7 +317,7 @@ function createVariant(workspace, projectId, { name } = {}) {
 }
 
 function switchVariant(workspace, projectId, { name } = {}) {
-  const n = checkVariant(name);
+  const n = checkSlug(name, VARIANT_NAME);
   const dir = ensureProject(workspace, projectId);
   if (!gitOut(dir, ['rev-parse', '--verify', '-q', `refs/heads/${n}`])) throw new Error(`No variant named ${n}.`);
   git(dir, ['switch', '-q', n]);
@@ -331,7 +328,7 @@ function switchVariant(workspace, projectId, { name } = {}) {
 function keepVariant(workspace, projectId, { name } = {}) {
   switchVariant(workspace, projectId, { name });
   const dir = projectDir(workspace, projectId);
-  const n = checkVariant(name);
+  const n = checkSlug(name, VARIANT_NAME);
   for (const v of listVariants(workspace, projectId).variants) if (v.name !== n) git(dir, ['branch', '-D', v.name]);
   if (n !== BASE_VARIANT) git(dir, ['branch', '-m', BASE_VARIANT]);
   return listVariants(workspace, projectId);
@@ -354,7 +351,7 @@ function listFlows(workspace, projectId) {
 }
 
 function readFlow(workspace, projectId, name) {
-  const n = checkVariant(name, 'flow');
+  const n = checkSlug(name, FLOW_NAME);
   const text = fs.readFileSync(path.join(projectDir(workspace, projectId), 'flows', `${n}.json`), 'utf8');
   return MockupModel.normalizeFlow(JSON.parse(text));
 }

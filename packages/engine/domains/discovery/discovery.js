@@ -55,6 +55,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { itemName } = require('@multiagent/shared/doc-model');
+const { frozenThumbnail } = require('@multiagent/shared/mockup-model');
 const clarity = require('./clarity');
 const { slugify } = require('../project/projects');
 const { sniffImage } = require('../../engine/providers');
@@ -793,16 +794,13 @@ function removeAttachment(dir, projectId, id, name) {
   return true;
 }
 
-/** An attachment for the screen: { name, size, folder, dataUrl } (folder: the card's attachments/; dataUrl: an image up to MAX_PREVIEW_BYTES, else null). */
+/** An attachment for the screen: { name, size, folder, dataUrl } (folder: the card's attachments/; dataUrl: an image up to MAX_PREVIEW_BYTES, else null; a mockup version, `<slug>@<sha7>.mockup.json` (#835), gives its frozen SVG thumbnail). */
 function readAttachment(dir, projectId, id, name) {
   const file = attachmentFile(existingCard(dir, projectId, id), name);
   const size = fs.statSync(file).size;
-  let dataUrl = null;
-  if (size <= MAX_PREVIEW_BYTES) {
-    const buf = fs.readFileSync(file);
-    const type = sniffImage(buf);
-    if (type) dataUrl = `data:image/${type};base64,${buf.toString('base64')}`;
-  }
+  const buf = size <= MAX_PREVIEW_BYTES ? fs.readFileSync(file) : null;
+  const type = buf && sniffImage(buf);
+  const dataUrl = !buf ? null : type ? `data:image/${type};base64,${buf.toString('base64')}` : frozenThumbnail(file, buf);
   return { name: path.basename(file), size, folder: path.dirname(file), dataUrl };
 }
 

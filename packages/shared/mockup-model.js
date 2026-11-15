@@ -12,7 +12,9 @@
 // whose element changed, was added or removed, sorted: Compare); normalizeFlow({ name, links }, screens?)
 // (flows/<name>.json: [{ from: { screen, mid }, to }], a slug-like name, known screens) and
 // flowTarget(flow, screen, mid) (Interact mode: the target screen or null); esc (HTML escape); COLOR;
-// attachmentName / parseAttachmentName ('<slug>@<sha7>.mockup.json', a Discovery card's frozen version)
+// SLUG (a screen's, variant's or flow's name) and COMMIT (a version's sha), the one copy of each rule;
+// attachmentName / parseAttachmentName ('<slug>@<sha7>.mockup.json', a Discovery card's frozen version),
+// frozenThumbnail(name, text) (the thumbnail stored in that attachment: what discovery:attachment shows)
 // and attachmentThumbnail({ title, commit }) (its SVG data URL).
 // Browser: window.MockupModel; Node: module.exports. The domain is fronts/plan/engine/domains/mockups.js.
 (function (root) {
@@ -227,12 +229,15 @@
 
   // ---- flows (#835) ------------------------------------------------------------------------------
 
-  const FLOW_NAME = /^[a-z0-9][a-z0-9-]{0,80}$/;
+  // a screen's, a variant's or a flow's name (no '..', '/' or space), and a version (a commit sha)
+  const SLUG = /^[a-z0-9][a-z0-9-]{0,80}$/;
+  const COMMIT = /^[0-9a-f]{7,40}$/i;
+  const unanchored = (re) => re.source.replace(/^\^|\$$/g, '');
 
   // { name, links: [{ from: { screen, mid }, to }] }; with `screens`, every screen of a link must be in it
   function normalizeFlow({ name, links } = {}, screens) {
     const flowName = String(name ?? '').trim();
-    if (!FLOW_NAME.test(flowName)) throw new Error(`Not a flow name (lowercase letters, digits and dashes): ${flowName}`);
+    if (!SLUG.test(flowName)) throw new Error(`Not a flow name (lowercase letters, digits and dashes): ${flowName}`);
     const known = Array.isArray(screens) ? new Set(screens) : null;
     const out = (Array.isArray(links) ? links : []).map((l, i) => {
       const screen = String(l?.from?.screen ?? '').trim();
@@ -253,12 +258,20 @@
 
   // ---- a Discovery card's mockup attachment (#835): a frozen version -----------------------------
 
-  const ATTACHMENT = /^([a-z0-9][a-z0-9-]{0,80})@([0-9a-f]{7,40})\.mockup\.json$/;
+  const ATTACHMENT = new RegExp(`^(${unanchored(SLUG)})@(${unanchored(COMMIT)})\\.mockup\\.json$`);
   const attachmentName = ({ slug, commit }) => `${slug}@${String(commit ?? '').slice(0, 7)}.mockup.json`;
   // '<slug>@<sha7>.mockup.json' → { slug, commit }, null for another file
   function parseAttachmentName(name) {
     const m = ATTACHMENT.exec(String(name ?? ''));
     return m ? { slug: m[1], commit: m[2] } : null;
+  }
+  // the thumbnail a '*.mockup.json' attachment froze with its version (an SVG data URL), null for another file
+  function frozenThumbnail(name, text) {
+    if (!/\.mockup\.json$/i.test(String(name ?? ''))) return null;
+    try {
+      const thumb = JSON.parse(String(text))?.thumbnail;
+      return typeof thumb === 'string' && thumb.startsWith('data:image/svg+xml') ? thumb : null;
+    } catch { return null; }
   }
   // a small SVG of the version (the screen's title and its short sha) as a data URL, Node and browser alike
   function attachmentThumbnail({ title, commit } = {}) {
@@ -273,8 +286,10 @@
   const api = {
     ACTIONS: Object.keys(COSTS),
     COLOR,
+    COMMIT,
     DEFAULT_FRAME,
     FRAMES,
+    SLUG,
     addMids,
     attachmentName,
     attachmentThumbnail,
@@ -286,6 +301,7 @@
     estimateCost,
     extractTokens,
     flowTarget,
+    frozenThumbnail,
     lintMockup,
     normalizeFlow,
     parseAttachmentName,

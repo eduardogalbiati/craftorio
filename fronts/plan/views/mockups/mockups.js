@@ -89,7 +89,11 @@
   }
 
   // ---- #835 the Kit tab: components with a live preview, tokens, inferred gaps (not a gate) ----------
-  const COLOR = /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([^)]*\))$/i;
+  // the model's colour rule, anchored: a token whose whole value is a colour
+  const isColor = (value) => {
+    const color = window.MockupModel?.COLOR;
+    return !!color && new RegExp(`^(?:${color.source})$`, 'i').test(value);
+  };
   function kitPanelHtml() {
     const kit = mk.kit?.kit || {};
     const tokens = Array.isArray(kit.tokens) ? kit.tokens : [];
@@ -107,7 +111,7 @@
           title="${esc(t('mockups.kit_preview_of', { name: c.name }))}" src="${gallery}#c-${esc(slug(c.name))}"></iframe>
       </article>`;
     const token = (tk) => `<li class="mockups-kit-token" data-testid="mockups-kit-token" title="${esc(`${tk.name}: ${tk.value}${tk.file ? ` (${tk.file}:${tk.line})` : ''}`)}">`
-      + `${COLOR.test(String(tk.value || '').trim()) ? `<span class="mockups-swatch" style="background:${esc(tk.value)}" aria-hidden="true"></span>` : ''}`
+      + `${isColor(String(tk.value || '').trim()) ? `<span class="mockups-swatch" style="background:${esc(tk.value)}" aria-hidden="true"></span>` : ''}`
       + `<span class="mono small">${esc(tk.name)}</span> <span class="muted small mono">${esc(tk.value)}</span></li>`;
     return `
       <div class="mockups-kit-panel" role="tabpanel" id="mockups-kit-panel" aria-labelledby="mockups-tab-kit" data-testid="mockups-kit-panel">
