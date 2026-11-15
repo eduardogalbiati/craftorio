@@ -154,12 +154,13 @@ test('#836 Start a development run only opens the run start: it never starts a r
   assert.deepEqual([opened, runStarts()], [1, []]);
 });
 
-async function mainWindow() {
+async function mainWindow({ api = {} } = {}) {
   const app = loadApp({
     storage: { 'multiagent.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' }],
       getSettings: async () => ({ lastProject: 'p1' }),
+      ...api,
     },
   });
   await app.boot();
@@ -179,6 +180,64 @@ test('#836 in the main window mockups:start-run opens the drawer and starts no r
   const { app, opened, navigate } = await mainWindow();
   await navigate({ name: 'mockups:start-run', target: { projectId: 'p1', inputs: { mockup: FROZEN } } });
   assert.deepEqual([opened.length, app.apiCalls.map(([n]) => n).filter((n) => RUN_STARTS.test(n))], [1, []]);
+});
+
+// the drawer drops an input its workflow does not declare: the remembered workflow only when it has `mockup`
+const startRunWith = async (lastWorkflow, workflows) => {
+  const { opened, navigate } = await mainWindow({ api: {
+    getSettings: async () => ({ lastProject: 'p1', lastWorkflow }),
+    listWorkflows: async () => workflows,
+  } });
+  await navigate({ name: 'mockups:start-run', target: { projectId: 'p1', inputs: { mockup: FROZEN } } });
+  return opened.map((o) => [o?.workflow, o?.inputs?.mockup]);
+};
+
+test('#836 mockups:start-run falls back to feature.yaml when the remembered workflow has no mockup input', async () => {
+  const got = await startRunWith('chore.yaml', [{ file: 'chore.yaml', inputs: { task: { type: 'string' } } }, { file: 'feature.yaml', inputs: { mockup: { type: 'string' } } }]);
+  assert.deepEqual(got, [['feature.yaml', FROZEN]]);
+});
+
+test('#836 mockups:start-run keeps the remembered workflow when it declares the mockup input', async () => {
+  const got = await startRunWith('fix.yaml', [{ file: 'fix.yaml', inputs: { mockup: { type: 'string', default: '' } } }, { file: 'feature.yaml', inputs: { mockup: { type: 'string' } } }]);
+  assert.deepEqual(got, [['fix.yaml', FROZEN]]);
+});
+
+// ---- the main window's mockups:prepare-issues: the #258 dialog of the Ready card the mockup is attached to
+
+const ATTACHMENT = 'orders-dashboard@c41e2a9.mockup.json';
+const PREPARE = { name: 'mockups:prepare-issues', target: { projectId: 'p1', slug: SLUG, commit: COMMIT, crops: [{ mid: 'm2', file: 'refs/crop0.png', name: 'orders-dashboard@c41e2a9-m2.png' }] } };
+
+async function prepareIn(cards) {
+  const w = await mainWindow({ api: { listDiscoveryCards: async () => structuredClone(cards) } });
+  const dialogs = [];
+  const committed = [];
+  w.app.sandbox.DiscoveryCommit = { open: (o) => { dialogs.push(o); } };
+  w.app.sandbox.DiscoveryActions = { committed: (out, problems) => { committed.push(JSON.parse(JSON.stringify([out, problems]))); } };
+  await w.navigate(PREPARE);
+  const toast = w.app.el('#toast');
+  const toastText = toast && !toast.classList.contains('hidden') ? String(toast.innerHTML).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  return { ...w, dialogs, committed, toastText };
+}
+
+test('#836 mockups:prepare-issues with the attached card not in Ready shows the "move it to Ready" toast and opens no dialog', async () => {
+  const { dialogs, toastText } = await prepareIn([{ id: 'c1', title: 'Orders dashboard', column: 'shaping', clarity: { score: 60 }, attachments: [ATTACHMENT] }]);
+  assert.deepEqual([dialogs.length, toastText.includes('is not in Ready: move it to Ready')], [0, true]);
+});
+
+test('#836 mockups:prepare-issues opens the commit dialog of the Ready card with the crops', async () => {
+  const { dialogs } = await prepareIn([
+    { id: 'c0', title: 'Other', column: 'ready', clarity: { score: 90 }, attachments: [] },
+    { id: 'c1', title: 'Orders dashboard', column: 'ready', clarity: { score: 90 }, attachments: [ATTACHMENT] },
+  ]);
+  assert.deepEqual(dialogs.map((o) => [o.projectId, o.card?.id, (o.crops || []).map((c) => c.mid).join(',')]), [['p1', 'c1', 'm2']]);
+});
+
+test('#836 the commit dialog opened from a mockup hands its result and problems to DiscoveryActions.committed', async () => {
+  const { dialogs, committed } = await prepareIn([{ id: 'c1', title: 'Orders dashboard', column: 'ready', clarity: { score: 90 }, attachments: [ATTACHMENT] }]);
+  const out = { issues: [{ number: 101 }], card: { id: 'c1', column: 'committed' }, simulated: true };
+  const problems = [{ issue: 'Pay button', error: 'label missing' }];
+  dialogs[0]?.done?.(out, problems);
+  assert.deepEqual(committed, [[out, problems]]);
 });
 
 // ---- Prepare issues: the selected regions go to the commit dialog, nothing filed ----------------------

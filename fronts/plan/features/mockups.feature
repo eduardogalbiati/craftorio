@@ -87,6 +87,7 @@ Feature: Project mockups in Plan & Design
   Scenario: Preparing issues from a version opens the commit dialog with the selected region cropped and files nothing before confirming
     Given the app is open
     And the project has the mockup "Orders dashboard" with a button "Export"
+    And the mockup "Orders dashboard" is attached to the Discovery card "Export the orders", in Ready and 90% clear
     When I open "Mockups" in the sidebar
     And I open the mockup "Orders dashboard" in its editor window
     And I click "Export" on the mockup's canvas

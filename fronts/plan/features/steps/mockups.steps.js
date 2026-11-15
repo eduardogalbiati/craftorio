@@ -50,8 +50,32 @@ async function findMockupWindow(e2e) {
 Given('the project has the mockup {string} with a button {string}', async ({ e2e }, title, label) => {
   const mockups = require(path.join(ROOT, 'fronts', 'plan', 'engine', 'domains', 'mockups'));
   const html = `<main class="page"><header class="page-head"><h1>${title}</h1><button class="export">${label}</button></header></main>`;
-  const { slug } = mockups.createScreen(path.join(e2e.scratch, 'workspace'), e2e.project.id, { title, html, source: { kind: 'prompt' } });
+  const { slug, commit } = mockups.createScreen(path.join(e2e.scratch, 'workspace'), e2e.project.id, { title, html, source: { kind: 'prompt' } });
   expect(slug).toBeTruthy();
+  e2e.seededMockups = { ...(e2e.seededMockups || {}), [title]: { slug, commit } };
+});
+
+// #836 (#258): only a Ready card, at or above the clarity bar (85%), can be committed. The card is
+// recorded through the app's service like discovery.steps.js seedCard, then the seeded mockup's current
+// version is attached to it as the editor's Attach does (mockups attachment + discovery:add-attachment).
+Given('the mockup {string} is attached to the Discovery card {string}, in Ready and {int}% clear', async ({ e2e }, title, cardTitle, score) => {
+  const seeded = e2e.seededMockups?.[title];
+  expect(seeded, `the mockup "${title}" was seeded in this scenario`).toBeTruthy();
+  const mockups = require(path.join(ROOT, 'fronts', 'plan', 'engine', 'domains', 'mockups'));
+  const att = mockups.attachment(path.join(e2e.scratch, 'workspace'), e2e.project.id, { slug: seeded.slug, commit: seeded.commit });
+  const data = Buffer.from(JSON.stringify(att, null, 2), 'utf8').toString('base64');
+  const res = await e2e.window.evaluate(async ({ projectId, cardTitle, score, name, data }) => {
+    try {
+      const card = await window.api.createDiscoveryCard(projectId, cardTitle, `Notes about ${cardTitle}`, 'idea');
+      await window.api.updateDiscoveryCard(projectId, card.id, { clarity: { score, gaps: [], ts: new Date().toISOString(), by: 'Product Owner' } });
+      await window.api.moveDiscoveryCard(projectId, card.id, 'ready');
+      await window.api.addDiscoveryAttachment(projectId, card.id, undefined, name, data);
+      return { id: card.id };
+    } catch (e) {
+      return { thrown: String(e?.message || e) };
+    }
+  }, { projectId: e2e.project.id, cardTitle, score, name: att.name, data });
+  expect(res?.thrown, `the card "${cardTitle}" could not be recorded with the mockup attached`).toBeFalsy();
 });
 
 Then('the Mockups screen says the project has no mockups yet', async ({ e2e }) => {
