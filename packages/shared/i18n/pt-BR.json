@@ -3078,6 +3078,7 @@
   "mockups.promoted": "{name} promovido ao kit",
   "mockups.prompt": "Prompt",
   "mockups.prompt_placeholder": "Descreva a tela: o objetivo, as seções, os dados",
+  "mockups.app_page_placeholder": "http://localhost:3000/pedidos",
   "mockups.recreate_from_app": "Recriar a partir do app em execução",
   "mockups.recreate_needs_preview": "Precisa do Run App: configure Projetos › Local preview ou .multiagent/local-preview.yaml. Página vazia: a inicial do app.",
   "mockups.remove_selection": "Remover a seleção",

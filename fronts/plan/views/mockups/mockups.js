@@ -306,7 +306,7 @@
             </div>
             <div id="mockups-new-url-field" class="mockups-new-field hidden">
               <label for="mockups-new-url">${t('mockups.app_page')}</label>
-              <input id="mockups-new-url" type="text" maxlength="2000" autocomplete="off" placeholder="http://localhost:3000/orders" />
+              <input id="mockups-new-url" type="text" maxlength="2000" autocomplete="off" placeholder="${t('mockups.app_page_placeholder')}" />
               <p class="muted small">${t('mockups.recreate_needs_preview')}</p>
             </div>
             <p id="mockups-new-estimate" class="muted small"></p>

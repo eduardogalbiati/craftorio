@@ -165,6 +165,7 @@ inputs:
   # a run without it behaves as before.
   mockup:
     label: "Mockup"
+    group: Project
     type: string
     default: ""
     description: "Folder of a frozen mockup version (index.html and kit/) the screens of this run follow. Empty: no mockup."

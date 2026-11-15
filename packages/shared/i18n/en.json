@@ -3078,6 +3078,7 @@
   "mockups.promoted": "Promoted {name} to the kit",
   "mockups.prompt": "Prompt",
   "mockups.prompt_placeholder": "Describe the screen: its purpose, its sections, its data",
+  "mockups.app_page_placeholder": "http://localhost:3000/orders",
   "mockups.recreate_from_app": "Recreate from the running app",
   "mockups.recreate_needs_preview": "Needs Run App: set Projects › Local preview or .multiagent/local-preview.yaml. Empty page: the app's home.",
   "mockups.remove_selection": "Remove the selection",
