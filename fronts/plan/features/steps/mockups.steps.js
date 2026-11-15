@@ -320,10 +320,18 @@ const CONFIRM = /^(review|run the review|confirm|continue|start)\b/i;
 const REVIEW_TIMEOUT = 60000;
 
 const costEstimate = (win) => win.getByTestId('mockup-cost-estimate').filter({ visible: true }).first();
-// the dialog (or the box) that holds the estimate and its confirm button
+// the dialog (or the nearest ARIA group around the estimate text) that holds the estimate and its confirm button:
+// the testid sits on the estimate's own text line, a sibling of the confirm button, not on a wrapping box
 const estimateBox = (win) => win.getByRole('dialog').filter({ has: win.getByTestId('mockup-cost-estimate') })
-  .or(win.getByTestId('mockup-cost-estimate')).filter({ visible: true }).first();
+  .or(win.getByTestId('mockup-cost-estimate').locator('xpath=ancestor::*[@role="group"][1]'))
+  .filter({ visible: true }).first();
 const startInput = (page, key) => page.locator(`#inputs-form [data-wi-input="${key}"], #adv-form [data-wi-input="${key}"]`);
+// the Versions list sits in a collapsed <details>; open it before its rows (e.g. mockup-prepare-issues) can be used
+async function openVersionsPanel(win) {
+  const details = win.getByTestId('mockup-versions').locator('xpath=ancestor::details[1]');
+  const isOpen = await details.evaluate((el) => el.open).catch(() => true);
+  if (!isOpen) await details.locator('summary').first().click();
+}
 
 function backlogIssues(e2e) {
   const file = path.join(e2e.scratch, 'workspace', 'backlog', `${path.basename(String(e2e.project.id))}.json`);
@@ -385,7 +393,9 @@ Then('the Start panel\'s input {string} holds the current version of the mockup 
 });
 
 When('I choose {string} on the mockup\'s current version', async ({ e2e }, label) => {
-  const button = mockupWindow(e2e).getByTestId('mockup-versions').getByTestId('mockup-prepare-issues').first();
+  const win = mockupWindow(e2e);
+  await openVersionsPanel(win);
+  const button = win.getByTestId('mockup-versions').getByTestId('mockup-prepare-issues').first();
   await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(button).toHaveAccessibleName(new RegExp(`^${label}\\b`, 'i'));
   e2e.backlogIssuesBefore = backlogIssues(e2e);
