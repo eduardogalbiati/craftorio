@@ -100,3 +100,33 @@ test('tokens() and usdPerMTokens(): a filter keeps the same turns cost(filter) k
   close(m.usdPerMTokens((x) => x.agent === 'test_writer'), 4.52, 'test_writer $/M');
   close(m.cost((x) => x.agent === 'test_writer'), 1.13, 'cost(filter) keeps the same turn');
 });
+
+test('tokens() and usdPerMTokens(): a turn with no usage and no cost leaves the run at zero tokens and $/M null', () => {
+  const m = model([
+    ...started(),
+    ev(2, 'step.started', { step_id: 'develop', visit: 1, step_type: 'agent' }),
+    ...turn(3, 's-dev', 'develop', {}),
+  ]);
+  const t = m.tokens();
+  assert.deepEqual([t.input, t.output, t.cache_read, t.cache_write, t.total, t.cacheShare], [0, 0, 0, 0, 0, 0]);
+  assert.equal(m.usdPerMTokens(), null);
+});
+
+// resolve_merge is displayed "Resolve conflicts" from #833 on; a run recorded before keeps the name its
+// workflow.started event carries.
+const withDisplay = (name) => {
+  seq = 0;
+  return [ev(0, 'workflow.started', {
+    workflow: 'feature', file: 'feature.yaml', inputs: { task: 'Old run' },
+    steps: [{ id: 'resolve_merge', type: 'agent', agent: 'developer' }],
+    display: { steps: { resolve_merge: name } },
+  })];
+};
+
+test('a run recorded before #833 keeps "Merge & Resolve" for resolve_merge', () => {
+  assert.equal(model(withDisplay('Merge & Resolve')).label('resolve_merge'), 'Merge & Resolve');
+});
+
+test('a run recorded with the new workflow shows "Resolve conflicts" for resolve_merge', () => {
+  assert.equal(model(withDisplay('Resolve conflicts')).label('resolve_merge'), 'Resolve conflicts');
+});
