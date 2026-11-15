@@ -9,7 +9,10 @@
 //   File the issues / Cancel (Esc; neither while the issues are being filed). Nothing is filed
 //   before File the issues. In developer mode on a workspace that can run for real, the proposal
 //   is the rule-based one and File the issues only previews the commands (as the Product Owner's
-//   own writes do): nothing is filed, the card stays in Ready;
+//   own writes do): nothing is filed, the card stays in Ready. #836: opened from a mockup (Prepare
+//   issues in the mockup editor) with `crops` ([{ mid, file, name }]), it draws each cropped region
+//   (discovery-commit-crop, data-mid, its image on mockup://) and File the issues sends them with
+//   every issue (packages/engine/domains/discovery/discovery-commit.js lists them in the body);
 // - the Committed list beside the board (committedHtml): each committed card with its delivery
 //   (deliveryHtml: the stage In delivery / Delivered / Released, the counts to do, running, merged
 //   locally, done, and each issue with its status, all drawn by StatusPill). A committed card has no
@@ -22,7 +25,7 @@
 
   // cm: the dialog's card and project, the split being edited, what the proposal said about itself
   // preview: developer mode on a workspace that can run for real (nothing is filed or committed)
-  const cm = { projectId: null, card: null, issues: [], loading: false, busy: false, note: '', seq: 0, done: null, preview: false };
+  const cm = { projectId: null, card: null, issues: [], crops: [], loading: false, busy: false, note: '', seq: 0, done: null, preview: false };
   const pill = (status, title) => window.StatusPill.statusPill(status, { title });
 
   const scoreOf = (c) => (typeof c?.clarity?.score === 'number' ? c.clarity.score : null);
@@ -133,11 +136,24 @@
       </div>
     </li>`;
 
+  // #836 the mockup regions the owner selected in the editor: each cropped image with its data-mid; every
+  // issue filed carries them (the owner removes an issue's tasks, not its regions)
+  const cropsHtml = () => (cm.crops.length ? `
+    <section class="dsc-commit-crops" aria-label="${t('discovery_commit.crops')}">
+      <h4 class="muted small">${t('discovery_commit.crops')}</h4>
+      <div class="row">${cm.crops.map((c) => `
+        <figure class="dsc-commit-crop" data-testid="discovery-commit-crop" data-mid="${esc(c.mid)}" title="${esc(c.name)}">
+          <img src="mockup://${encodeURIComponent(cm.projectId)}/${esc(c.file)}" alt="${esc(c.name)}" loading="lazy" />
+          <figcaption class="mono small">${esc(c.mid)}</figcaption>
+        </figure>`).join('')}</div>
+    </section>` : '');
+
   function renderDialog() {
     const body = $('#dsc-commit-body');
     if (cm.loading) body.innerHTML = `<p class="muted small" data-testid="discovery-commit-loading">${t('discovery_commit.the_product_owner_is_proposing_the')}</p>`;
     else {
       body.innerHTML = `${cm.note ? `<p class="muted small" data-testid="discovery-commit-note">${esc(cm.note)}</p>` : ''}
+        ${cropsHtml()}
         <ol class="dsc-commit-issues">${cm.issues.map(issueHtml).join('')}</ol>`;
       // set as a value, not as markup: a task keeps its text as written
       [...body.querySelectorAll('[data-commit-tasks]')].forEach((el, i) => { el.value = cm.issues[i].tasks.join('\n'); });
@@ -163,11 +179,12 @@
    * Opens the dialog for a Ready card and asks the Product Owner for the split.
    * `done(out, problems)`: after the issues were filed and the card committed (the dialog is closed).
    */
-  async function open({ projectId, card, done }) {
+  async function open({ projectId, card, crops = [], done }) {
     if (cm.busy) return; // the issues of another card are being filed
     const seq = ++cm.seq;
     const preview = !!state.settings?.developerMode && !state.simulationOnly;
-    Object.assign(cm, { projectId, card, issues: [], loading: true, busy: false, note: '', done, preview });
+    const regions = (Array.isArray(crops) ? crops : []).filter((c) => c?.mid && c?.file).map(({ mid, file, name }) => ({ mid: String(mid), file: String(file), name: String(name || file) }));
+    Object.assign(cm, { projectId, card, issues: [], crops: regions, loading: true, busy: false, note: '', done, preview });
     const where = state.simulationOnly ? 'Simulation: they only join this workspace\'s backlog, nothing reaches GitHub or GitLab. The card then leaves the board for the Committed list and never comes back.'
       : preview ? 'Developer mode: File the issues only previews the commands. Nothing is filed and the card stays in Ready.'
         : 'They are filed on the project\'s repository. The card then leaves the board for the Committed list and never comes back.';
@@ -194,7 +211,7 @@
   function close() {
     if (cm.busy) return;
     cm.seq++;
-    Object.assign(cm, { card: null, issues: [], loading: false, busy: false, done: null });
+    Object.assign(cm, { card: null, issues: [], crops: [], loading: false, busy: false, done: null });
     closeModal('#dsc-commit-modal');
   }
 
@@ -236,7 +253,8 @@
     renderDialog();
     let out;
     try {
-      out = await api.commitDiscoveryCard(projectId, card.id, { issues: issues.map(({ title, tasks, complexity, workflow }) => ({ title, tasks, complexity, workflow })) }, preview);
+      const crops = cm.crops.length ? { crops: cm.crops } : {};
+      out = await api.commitDiscoveryCard(projectId, card.id, { issues: issues.map(({ title, tasks, complexity, workflow }) => ({ title, tasks, complexity, workflow, ...crops })) }, preview);
     } catch (err) {
       cm.busy = false;
       renderDialog();

@@ -16,6 +16,10 @@
 // changed data-mids), mockups:variants / create-variant / switch-variant / keep-variant (the repository's
 // branches), mockups:flows / flow / save-flow (flows/<name>.json), mockups:export (the static .zip, base64)
 // and mockups:attach (a frozen version for a Discovery card: { projectId, slug, commit, title, thumbnail }).
+// #836 (phase 3, the handoff): mockups:freeze (a version frozen for a dev run's `mockup` input),
+// mockups:crops (the selected regions as cropped images for the #258 commit dialog; the host captures them,
+// a placeholder without one), mockups:review (Review this screen, on demand, the estimate shown first) and
+// mockups:recreate (a screen of the running app, refused without Run App / Local preview).
 // The designer never writes to the project's repository: its runs' outputs are written here, into the
 // mockup folder. The project's repository is only read (the machine step of the kit).
 
@@ -24,6 +28,7 @@ const path = require('path');
 const designer = require('../domains/mockup-designer');
 const mockups = require('../domains/mockups');
 const MockupModel = require('@multiagent/shared/mockup-model');
+const localPreview = require('@multiagent/engine/domains/local/local-preview');
 const projects = require('@multiagent/engine/domains/project/projects');
 const simulation = require('@multiagent/engine/engine/simulation');
 const { clientError } = require('@multiagent/engine/service/common');
@@ -38,6 +43,8 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'cove
 const STYLE_FILE = /\.(css|scss|less)$|^tailwind\.config\.[cm]?[jt]s$|^theme\.[cm]?[jt]s$/i;
 const MAX_FILES = 200;
 const MAX_BYTES = 512 * 1024;
+// #836 a crop no host captured (a browser, simulation): a 1×1 grey PNG
+const PLACEHOLDER_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const onScreen = (properties = {}, required = []) => args({ projectId: PROJECT_ID, slug: SLUG, ...properties }, ['projectId', 'slug', ...required]);
 // a domain refusal of the client's input (a bad name, sha, mid or link) answered as a client error
 const userError = (fn) => {
@@ -144,6 +151,53 @@ module.exports = (ctx) => {
       skillsDirs: [ctx.ws?.skills, ctx.BUNDLED_SKILLS_DIR],
       simulated: simulation.simulationOnly(),
     });
+  }
+
+  // #836 the selected regions as cropped images: a region without `data` is captured by the host
+  // (ctx.host.captureMockupRegion, desktop) or, without one (a browser, simulation), a placeholder image
+  async function crops({ projectId, slug, commit, regions = [] }) {
+    const capture = ctx.host?.captureMockupRegion;
+    const filled = [];
+    for (const r of Array.isArray(regions) ? regions : []) {
+      const data = r?.data || (typeof capture === 'function' ? await capture({ projectId, slug, commit, mid: r?.mid, box: r?.box || null }) : null) || PLACEHOLDER_PNG;
+      filled.push({ mid: r?.mid, data });
+    }
+    return userError(() => mockups.saveCrops(wsRoot(), projectId, { slug, commit, regions: filled }));
+  }
+
+  // #836 Review this screen, on demand only (the editor shows the estimate first): simulated, the free
+  // findings at $0; real, one read-only Sonnet turn (../domains/mockup-designer.js reviewTurn), no run
+  async function review({ projectId, slug, axe = [] }) {
+    userError(() => mockups.screenHtml(wsRoot(), projectId, slug)); // an unknown screen is refused
+    return designer.reviewTurn({
+      workspace: wsRoot(),
+      projectId,
+      slug,
+      axe: Array.isArray(axe) ? axe : [],
+      projectFolder: projectOf(projectId)?.folder || null,
+      simulated: simulation.simulationOnly(),
+    });
+  }
+
+  // #836 a screen of the running app recreated with the project's kit: needs Run App / Local preview (the
+  // project's localPreview, else the repository's .multiagent/local-preview.yaml); simulated, a draft at
+  // once; real, a mockup-generate run in mode 'recreate' with the app's url
+  async function recreate({ projectId, title, url = '' }) {
+    const name = String(title || '').trim();
+    if (!name) throw clientError('Give the mockup a title.');
+    const project = projectOf(projectId);
+    const repo = project?.folder ? localPreview.readRepoConfig(project.folder) : null;
+    const config = localPreview.resolveConfig(project, null, repo?.error ? null : repo);
+    if (!config) throw clientError('Set Run App (Projects › Local preview or .multiagent/local-preview.yaml) to recreate a screen of the running app.');
+    const appUrl = String(url || '').trim() || String(config.url || '');
+    const draft = MockupModel.draftScreen({ title: name, prompt: `Recreated from the running app${appUrl ? ` (${appUrl})` : ''}.` });
+    const { slug, commit } = mockups.createScreen(wsRoot(), projectId, { title: name, html: draft, source: { kind: 'running-app', url: appUrl } });
+    if (simulation.simulationOnly()) {
+      mockups.appendChat(wsRoot(), projectId, slug, { role: 'assistant', text: `Simulated designer: recreated "${name}" from ${appUrl || 'the running app'}.` });
+      return { slug, commit, runId: null };
+    }
+    const started = await startDesigner(projectId, slug, { mode: 'recreate', title: name, app_url: appUrl, message: `Recreate ${name} from the running app` });
+    return { slug, commit, runId: started?.runId || null };
   }
 
   async function buildKit({ projectId }) {
@@ -358,6 +412,38 @@ module.exports = (ctx) => {
       params: ['projectId', 'slug', 'commit'],
       schema: { params: onScreen({ commit: text(64) }, ['commit']), result: OBJECT },
       fn: ({ projectId, slug, commit }) => userError(() => mockups.attachment(wsRoot(), projectId, { slug, commit })),
+    },
+    // #836 a version frozen for a dev run's `mockup` input: { ref, slug, commit (full sha), dir }
+    {
+      channel: 'mockups:freeze',
+      method: 'freezeMockupVersion',
+      params: ['projectId', 'slug', 'commit'],
+      schema: { params: onScreen({ commit: text(64) }, ['commit']), result: OBJECT },
+      fn: ({ projectId, slug, commit }) => userError(() => mockups.freezeVersion(wsRoot(), projectId, { slug, commit })),
+    },
+    // #836 the selected regions as cropped images [{ mid, file, name }] (the #258 commit dialog's issues)
+    {
+      channel: 'mockups:crops',
+      method: 'saveMockupCrops',
+      params: ['projectId', 'slug', 'commit', 'regions'],
+      schema: { params: onScreen({ commit: text(64), regions: listOf(OBJECT) }, ['commit', 'regions']), result: listOf(OBJECT) },
+      fn: crops,
+    },
+    // #836 Review this screen (on demand): { findings: [{ kind: kit | axe | layout, rule, mid?, message }], costUsd, model }
+    {
+      channel: 'mockups:review',
+      method: 'reviewMockupScreen',
+      params: ['projectId', 'slug', 'axe'],
+      schema: { params: onScreen({ axe: listOf(OBJECT) }), result: OBJECT },
+      fn: review,
+    },
+    // #836 a new screen recreated from the running app (Run App / Local preview): { slug, commit, runId }
+    {
+      channel: 'mockups:recreate',
+      method: 'recreateMockupFromApp',
+      params: ['projectId', 'title', 'url'],
+      schema: { params: args({ projectId: PROJECT_ID, title: text(200), url: text(2000) }, ['projectId', 'title']), result: OBJECT },
+      fn: recreate,
     },
   ];
 };

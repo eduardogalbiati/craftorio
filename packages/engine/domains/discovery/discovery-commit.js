@@ -8,7 +8,9 @@
 //                            the simulated answer, and the fallback for a model's unusable one
 //   normalizeSplit(raw, …)   a model's proposal kept to the card: only tasks the card has, each once
 //   checkSplit(split)        the proposal the owner confirmed (titles, tasks, complexity and workflow
-//                            may all have been edited), cleaned; throws when it files nothing
+//                            may all have been edited), cleaned; throws when it files nothing;
+//                            #836: an issue's `crops` ([{ mid, file, name }], the mockup regions
+//                            selected in the editor) are kept and listed in its body with their data-mid
 //   commitCard(…)            (`preview`: checks everything and answers with the commands it would
 //                            run, files and commits nothing: the screen's developer mode)
 //                            files each issue (gh/glab issue create, the issue-writing layout: where it
@@ -137,14 +139,22 @@ function normalizeSplit(raw, card, { workflow = null, workflows = [] } = {}) {
   return { issues };
 }
 
+// #836 an issue's mockup crops [{ mid, file, name }]: the regions the owner selected in the mockup editor
+// (fronts/plan/engine/domains/mockups.js saveCrops), each with its data-mid; anything else dropped
+const cleanCrops = (list) => (Array.isArray(list) ? list : [])
+  .map((c) => ({ mid: String(c?.mid ?? '').trim(), file: String(c?.file ?? '').trim(), name: String(c?.name ?? '').trim() }))
+  .filter((c) => c.mid && c.file)
+  .map((c) => ({ ...c, name: c.name || path.posix.basename(c.file) }));
+
 /**
- * The split the owner confirmed, cleaned: [{ title, tasks, complexity, workflow }]. Throws when it
+ * The split the owner confirmed, cleaned: [{ title, tasks, complexity, workflow, crops? }]. Throws when it
  * has no issue, an issue has no title or no task, or it has more than MAX_ISSUES issues.
  */
 function checkSplit(split) {
   const issues = (Array.isArray(split?.issues) ? split.issues : []).map((i) => {
     const tasks = (Array.isArray(i?.tasks) ? i.tasks : []).map((t) => String(t ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean);
-    return { title: String(i?.title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE), tasks, complexity: complexityOf(i?.complexity, tasks.length), workflow: workflowOf(i?.workflow) };
+    const crops = cleanCrops(i?.crops);
+    return { title: String(i?.title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE), tasks, complexity: complexityOf(i?.complexity, tasks.length), workflow: workflowOf(i?.workflow), ...(crops.length ? { crops } : {}) };
   });
   if (!issues.length) throw new Error('Nothing to file: a card is committed as at least one issue.');
   if (issues.length > MAX_ISSUES) throw new Error(`A card is committed as at most ${MAX_ISSUES} issues (this split has ${issues.length}).`);
@@ -172,6 +182,8 @@ function issueBody({ card, issue, index, total, siblings = [], issuesLanguage = 
     h.tasks,
     '',
     ...issue.tasks.map((t) => `- [ ] ${t}`),
+    // #836 the mockup regions this issue delivers: each cropped image's name and its data-mid
+    ...(issue.crops?.length ? ['', h.mockup, '', ...issue.crops.map((c) => `- \`${c.name}\` (data-mid \`${c.mid}\`, ${c.file})`)] : []),
     ...(evidence ? ['', h.fromCard, '', evidence] : []),
     // the issues filed before this one: the platform shows them the mention, so both sides link
     ...(siblings.length ? ['', `${h.related} ${refs(siblings)} ${h.sameCard}`] : []),

@@ -104,6 +104,7 @@
       screen: '## Screen',
       bundle: '## Finding bundle',
       criteria: '## Acceptance criteria',
+      mockup: '## Mockup regions',
       epic: {
         github: 'The members of this epic are its sub-issues.',
         gitlab: 'Filed by the Product Owner (#138).',
@@ -121,6 +122,7 @@
       screen: '## Tela',
       bundle: '## Pacote do achado',
       criteria: '## Critérios de aceitação',
+      mockup: '## Regiões do mockup',
       epic: {
         github: 'Os membros deste épico são as suas sub-issues.',
         gitlab: 'Registrado pelo Product Owner (#138).',
@@ -138,6 +140,7 @@
       screen: '## Pantalla',
       bundle: '## Paquete del hallazgo',
       criteria: '## Criterios de aceptación',
+      mockup: '## Regiones del mockup',
       epic: {
         github: 'Los miembros de este épico son sus sub-issues.',
         gitlab: 'Registrado por el Product Owner (#138).',

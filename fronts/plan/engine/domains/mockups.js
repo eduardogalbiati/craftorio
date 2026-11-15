@@ -22,6 +22,12 @@
 //   createVariant / switchVariant / keepVariant ({ name }: kept → main, the others deleted);
 // - saveFlow → { commit, file: 'flows/<name>.json' } (MockupModel.normalizeFlow), listFlows, readFlow;
 // - exportZip(ws, id) → a .zip Buffer (the versioned files of the current variant and an index.html, D12).
+// #836 (phase 3, the handoff):
+// - freezeVersion(ws, id, { slug, commit }) → { ref: '<slug>@<full sha>', slug, commit, dir }: frozen/<slug>@<sha7>/
+//   (index.html and kit/ as they were at that commit, not versioned, no commit): a dev run's `mockup` input;
+// - saveCrops(ws, id, { slug, commit, regions: [{ mid, data }] }) → [{ mid, file, name }] (saveRef; a mid
+//   missing at that version throws): the cropped images of the Product Owner issues (#258 commit dialog);
+// - reviewScreen(ws, id, { slug, axe }) → findings (kind 'kit' from the lint, 'axe' from the given violations).
 // git and commit are the Documents domain's (./docs.js). Service: fronts/plan/engine/channels/mockups.js.
 
 const crypto = require('crypto');
@@ -186,6 +192,56 @@ function attachment(workspace, projectId, { slug, commit: sha } = {}) {
   };
 }
 
+// #836 a version frozen for a dev run's `mockup` input: frozen/<slug>@<sha7>/ holds the screen's index.html
+// and the kit (kit/tokens.css, components.css, kit.json) as they were at that commit; no commit, not
+// versioned (later turns, variants or kit changes never touch it); a bad sha throws
+function freezeVersion(workspace, projectId, { slug, commit: sha } = {}) {
+  const { dir, slug: s } = existingScreen(workspace, projectId, slug);
+  const html = fileAt(dir, sha, rel('screens', s, 'index.html'));
+  const full = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]);
+  const out = path.join(dir, 'frozen', `${s}@${full.slice(0, 7)}`);
+  fs.mkdirSync(path.join(out, 'kit'), { recursive: true });
+  fs.writeFileSync(path.join(out, 'index.html'), html);
+  for (const f of KIT_FILES) {
+    let text = null;
+    try { text = fileAt(dir, full, f); } catch { text = null; } // a version older than the kit has none
+    if (text !== null) fs.writeFileSync(path.join(out, ...f.split('/')), text);
+  }
+  return { ref: `${s}@${full}`, slug: s, commit: full, dir: out };
+}
+
+// #836 the regions selected for Product Owner issues: each cropped image saved in refs/ (saveRef), with
+// its data-mid checked against the screen AT that version; [{ mid, file, name }] in the regions' order
+function saveCrops(workspace, projectId, { slug, commit: sha, regions = [] } = {}) {
+  const { dir, slug: s } = existingScreen(workspace, projectId, slug);
+  const html = fileAt(dir, sha, rel('screens', s, 'index.html'));
+  const short = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]).slice(0, 7);
+  const list = Array.isArray(regions) ? regions : [];
+  for (const r of list) if (!elementTag(html, r?.mid)) throw new Error(`No element ${r?.mid} in the screen ${s} at ${short}`);
+  return list.map((r) => {
+    const ext = (/^data:image\/(\w+)/.exec(typeof r.data === 'string' ? r.data : '') || [])[1] || r.ext || 'png';
+    const file = saveRef(workspace, projectId, { data: r.data, ext: ext === 'jpeg' ? 'jpg' : ext });
+    return { mid: String(r.mid), file, name: `${s}@${short}-${r.mid}.${file.split('.').pop()}` };
+  });
+}
+
+// #836 Review this screen, the free part: the kit lint of the current screen (kind 'kit', with the
+// element that carries the value when one does) and the given axe violations (kind 'axe'); the layout
+// findings come from the model turn (fronts/plan/engine/channels/mockups.js)
+function reviewScreen(workspace, projectId, { slug, axe = [] } = {}) {
+  const { dir, slug: s } = existingScreen(workspace, projectId, slug);
+  const html = fs.readFileSync(path.join(screenDir(dir, s), 'index.html'), 'utf8');
+  const tags = [...html.matchAll(/<[a-zA-Z][\w-]*\b[^>]*\bdata-mid\s*=\s*["']([^"']+)["'][^>]*>/g)];
+  const kit = MockupModel.lintMockup({ html, css: kitComponents(dir), tokens: kitTokens(dir) }).map((p) => {
+    const mid = tags.find((m) => m[0].includes(p.value))?.[1];
+    return { kind: 'kit', rule: p.rule, value: p.value, ...(mid ? { mid } : {}), message: `${p.rule}: ${p.value}` };
+  });
+  const axeFindings = (Array.isArray(axe) ? axe : []).filter((v) => v?.id).map((v) => ({
+    kind: 'axe', rule: String(v.id), impact: v.impact || null, nodes: v.nodes ?? null, message: String(v.help || v.description || v.id),
+  }));
+  return [...kit, ...axeFindings];
+}
+
 function saveRef(workspace, projectId, { data, ext = 'png' } = {}) {
   const type = String(ext).toLowerCase();
   if (!REF_EXT.test(type)) throw new Error(`Not an image type: ${ext}`);
@@ -262,6 +318,14 @@ function applyKitMap(workspace, projectId, { components_css: css = '', component
   return { commit: commit(dir, [...KIT_FILES, 'kit/components.html'], 'Kit map') };
 }
 
+// the opening tag of the element marked data-mid="<mid>" in a screen's html, or null
+function elementTag(html, mid) {
+  const id = String(mid ?? '');
+  if (!id) return null;
+  const marked = new RegExp(`\\bdata-mid\\s*=\\s*["']${id.replace(/[^\w-]/g, '\\$&')}["']`);
+  return [...String(html ?? '').matchAll(/<[a-zA-Z][\w-]*\b[^>]*>/g)].map((m) => m[0]).find((t) => marked.test(t)) || null;
+}
+
 // #835 Promote to kit: the element's inline style becomes a kit class, its colours tokens, ONE commit
 function promoteToKit(workspace, projectId, { slug, mid, name } = {}) {
   const label = String(name ?? '').trim();
@@ -269,9 +333,8 @@ function promoteToKit(workspace, projectId, { slug, mid, name } = {}) {
   const cls = MockupModel.slugify(label);
   const html = screenHtml(workspace, projectId, slug);
   const id = String(mid ?? '');
-  const tag = [...html.matchAll(/<[a-zA-Z][\w-]*\b[^>]*>/g)].map((m) => m[0])
-    .find((t) => new RegExp(`\\bdata-mid\\s*=\\s*["']${id.replace(/[^\w-]/g, '\\$&')}["']`).test(t));
-  if (!id || !tag) throw new Error(`No element ${id} in the screen ${slug}`);
+  const tag = elementTag(html, id);
+  if (!tag) throw new Error(`No element ${id} in the screen ${slug}`);
   const dir = ensureProject(workspace, projectId);
   const style = /\bstyle\s*=\s*("([^"]*)"|'([^']*)')/i.exec(tag);
   const tokens = kitTokens(dir);
@@ -420,6 +483,7 @@ module.exports = {
   createVariant,
   ensureProject,
   exportZip,
+  freezeVersion,
   keepVariant,
   listFlows,
   listScreens,
@@ -431,6 +495,8 @@ module.exports = {
   readFlow,
   readKit,
   restoreVersion,
+  reviewScreen,
+  saveCrops,
   saveFlow,
   saveRef,
   saveTurn,

@@ -32,6 +32,8 @@
     'generate-screen': { model: 'opus', min: 0.4, max: 1.2 },
     'chat-edit': { model: 'sonnet', min: 0.03, max: 0.3 },
     'review-screen': { model: 'sonnet', min: 0.1, max: 0.4 },
+    // #836 a screen of the running app recreated with the project's kit (a capture and a generate turn)
+    'recreate-screen': { model: 'opus', min: 0.5, max: 1.5 },
     lint: { model: null, min: 0, max: 0 },
   };
   const SELECTION_KEYS = ['mid', 'selector', 'kit', 'text', 'box', 'html', 'crop'];

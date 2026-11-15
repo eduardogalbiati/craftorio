@@ -12,6 +12,8 @@
 // same session bookkeeping, a marked turn and no model call, $0.
 // designerTurn({ workspace, projectId, slug, payload, projectFolder, model, skillsDirs, simulated, now, runTurn })
 //   → { commit, problems, reply, costUsd, sessionId, startReason, totalUsd }.
+// reviewTurn({ workspace, projectId, slug, axe, projectFolder, model, simulated, runTurn }) → { findings, costUsd,
+//   model } (#836 Review this screen, on demand: never called by a designer turn).
 
 const fs = require('fs');
 const path = require('path');
@@ -109,8 +111,45 @@ async function designerTurn({ workspace, projectId, slug, payload, projectFolder
   return { ...turn, reply: text, costUsd, sessionId, startReason, totalUsd };
 }
 
+// #836 Review this screen (D11, on demand only, never on a designer turn): the free findings (kit lint, the
+// given axe violations, mockups.reviewScreen) and, real only, ONE fresh read-only Sonnet turn (no session
+// kept) that answers more findings (kit conformance, layout) in a ```json block; its cost goes in
+// chat/usage.jsonl (agent reviewer). → { findings, costUsd, model }
+const REVIEW_RULES = [
+  'You review one mockup screen of this project. The current folder is its mockup folder: kit/ (tokens.css,',
+  'components.css, kit.json) and screens/<slug>/index.html. Read; never write a file, never run a command.',
+  'Check kit conformance (tokens and kit classes, never raw values) and layout (alignment, spacing, overflow,',
+  'controls at least 24 x 24 px). Answer ONLY a ```json block: {"findings":[{"kind":"kit"|"layout","rule":"...",',
+  '"mid":"<data-mid or empty>","message":"one sentence"}]}. No problem: {"findings":[]}.',
+].join('\n');
+const REVIEW_KINDS = new Set(['kit', 'axe', 'layout']);
+
+function parseFindings(text) {
+  const blocks = [...String(text || '').matchAll(/```json\s*([\s\S]*?)```/g)];
+  let doc = null;
+  try { doc = JSON.parse(blocks.length ? blocks.at(-1)[1] : String(text || '')); } catch { doc = null; }
+  return (Array.isArray(doc?.findings) ? doc.findings : []).filter((f) => f && REVIEW_KINDS.has(f.kind) && f.message).map((f) => ({
+    kind: f.kind, rule: String(f.rule || f.kind), ...(f.mid ? { mid: String(f.mid) } : {}), message: String(f.message),
+  }));
+}
+
+async function reviewTurn({ workspace, projectId, slug, axe = [], projectFolder = null, model = MockupModel.estimateCost('review-screen').model, simulated = false, runTurn = null }) {
+  const free = mockups.reviewScreen(workspace, projectId, { slug, axe });
+  if (simulated) return { findings: free, costUsd: 0, model: 'simulated' };
+  const dir = mockups.ensureProject(workspace, projectId);
+  const known = free.length ? `## Already found (do not repeat)\n${JSON.stringify(free)}` : '';
+  const prompt = [REVIEW_RULES, `The screen: screens/${slug}/index.html`, known].filter(Boolean).join('\n\n');
+  const res = await modelTurn({ dir, slug, prompt, sessionId: null, model, projectFolder, runTurn });
+  const costUsd = res.costUsd == null ? null : Number(res.costUsd) || 0;
+  try {
+    agentsUsage.appendTurn(path.join(dir, 'chat', 'usage.jsonl'), { agent: 'reviewer', projectId, model, tokens: res.usage || {}, costUsd, sessionId: res.providerSessionId || null, startReason: 'first', extra: { slug } });
+  } catch (e) { console.error('Mockup review: the turn\'s usage was not recorded:', e.message); }
+  return { findings: [...free, ...parseFindings(res.text)], costUsd, model };
+}
+
 module.exports = {
   designerTurn,
   FRESH_AFTER_IDLE_MS,
   handoffNote,
+  reviewTurn,
 };
