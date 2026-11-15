@@ -15,7 +15,7 @@ Read this before changing anything in the UI: the UI kit (`packages/ui-kit/`), a
 - [Page security and shared code](renderer/page-security.md): No bundler, a window that never navigates, sanitized HTML without forms, the IPC guard and the shared dual-load modules.
 - [The new-project wizard](renderer/project-wizard.md): The first project's onboarding: the wizard, its progress tray, the review and the project page's Next steps card (#629).
 - [Prompt fields: pasted images and the prompt cache](renderer/prompt-fields.md): Images pasted into prompt fields (#130) and the prompt cache's Next turn and Continue line (#320).
-- [The run's 3D view](renderer/run-3d.md): The full-screen 3D overlay of a run: what it draws, its model and how to capture it.
+- [The run's 3D view](renderer/run-3d.md): The full-screen 3D overlay of a run: what it draws, its model, its four HUD cards (Step visits, Cost with $/M, Tokens, Elapsed) and how to capture it.
 - [The Run screen: artifacts, tabs, gates and diffs](renderer/run-screen.md): Artifact previews and the image viewer, the Run screen's tabs, the gate layout, the diff viewer and the expanded run row.
 - [Run state and opening a run](renderer/run-state.md): Where a run's state comes from, run titles and PRs, and how every way of opening a run reaches the run view.
 - [Screens, Setup and the screen folders](renderer/screens-and-setup.md): The views, the first-run Setup dialog and one folder per screen (the sidebar, adding a screen).

@@ -1,6 +1,6 @@
 # The run's 3D view
 
-The full-screen 3D overlay of a run: what it draws, its model and how to capture it.
+The full-screen 3D overlay of a run: what it draws, its model, its four HUD cards (Step visits, Cost with $/M, Tokens, Elapsed) and how to capture it.
 
 - **The run's 3D view** (`run3d.js`, `run3d.css`, model `run3d-model.js`) is a full-screen overlay
   opened by the 3D button beside Chat (Run screen `#run-mode-3d`, run chat `#rc-3d`): the run's
