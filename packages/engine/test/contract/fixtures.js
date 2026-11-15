@@ -232,10 +232,14 @@ module.exports = {
   'mockups:compare': { setup: editedMockupScreen, arg: (s) => ({ ...onScreen(s), from: s.commit, to: s.commit }), invalid: BAD_SCREEN },
   'mockups:create-screen': { setup: project, arg: ({ projectId }) => ({ projectId, title: 'A contract screen', prompt: 'An orders list.' }), invalid: BAD_PROJECT },
   'mockups:create-variant': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'contract-variant' }), invalid: BAD_PROJECT },
+  // #836 the simulated designer's draft: m1 is its <main>; no host: the region is drawn as a placeholder
+  'mockups:crops': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), commit: s.commit, regions: [{ mid: 'm1', box: [0, 0, 100, 40] }] }), invalid: BAD_SCREEN },
   'mockups:estimate': { arg: { action: 'chat-edit' }, invalid: { arg: { action: 'fly' } } },
   'mockups:export': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'mockups:flow': { setup: mockupFlow, arg: ({ projectId }) => ({ projectId, name: 'contract-flow' }), invalid: BAD_PROJECT },
   'mockups:flows': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #836 a frozen version, the `mockup` input of a dev run
+  'mockups:freeze': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), commit: s.commit }), invalid: BAD_SCREEN },
   'mockups:keep-variant': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'main' }), invalid: BAD_PROJECT },
   'mockups:kit': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'mockups:kit-map': { setup: project, arg: ({ projectId }) => ({ projectId, components_css: '.btn { padding: 4px; }\n', components: [{ name: 'Button', source: 'src/button.css:1' }], inferences: [] }), invalid: BAD_PROJECT },
@@ -244,7 +248,11 @@ module.exports = {
   'mockups:open-editor': { setup: mockupScreen, arg: onScreen, invalid: BAD_SCREEN },
   // the simulated designer's draft: m1 is its <main>
   'mockups:promote': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), mid: 'm1', name: 'contract-page' }), invalid: BAD_SCREEN },
+  // #836 a fresh project has no Run App / Local preview: the recreate is refused
+  'mockups:recreate': { setup: project, arg: ({ projectId }) => ({ projectId, title: 'From the running app' }), status: 400, invalid: BAD_PROJECT },
   'mockups:restore': { setup: editedMockupScreen, arg: (s) => ({ ...onScreen(s), commit: s.commit }), invalid: BAD_SCREEN },
+  // #836 the on-demand review, simulated ($0, the kit lint and the given axe violations)
+  'mockups:review': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), axe: [] }), invalid: BAD_SCREEN },
   'mockups:save-flow': { setup: mockupScreen, arg: ({ projectId }) => ({ projectId, name: 'contract-flow', links: [] }), invalid: BAD_PROJECT },
   'mockups:save-ref': { setup: project, arg: ({ projectId }) => ({ projectId, data: 'data:image/png;base64,iVBORw0KGgo=', ext: 'png' }), invalid: BAD_PROJECT },
   'mockups:save-turn': { setup: mockupScreen, arg: (s) => ({ ...onScreen(s), html: '<main><h1>Saved by the contract suite</h1></main>', message: 'A contract turn' }), invalid: BAD_SCREEN },

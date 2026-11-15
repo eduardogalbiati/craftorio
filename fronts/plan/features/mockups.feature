@@ -61,3 +61,35 @@ Feature: Project mockups in Plan & Design
     And I compare the two latest versions of the mockup
     Then the comparison shows the version with "Export" beside the version with "Download"
     And the comparison highlights the changed nodes
+
+  @issue-836
+  Scenario: Reviewing the screen shows its cost estimate first and the findings only after confirming
+    Given the app is open
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    When I open "Mockups" in the sidebar
+    And I open the mockup "Orders dashboard" in its editor window
+    And I choose "Review this screen" in the mockup editor
+    Then the mockup editor shows a cost estimate to confirm before it runs
+    When I confirm the mockup editor's cost estimate
+    Then the designer chat shows the review's findings on kit conformance, accessibility and layout
+
+  @issue-836
+  Scenario: Starting a development run from the editor opens the Start panel with the mockup's frozen version and starts no run
+    Given the app is open
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    When I open "Mockups" in the sidebar
+    And I open the mockup "Orders dashboard" in its editor window
+    And I choose "Start a development run" in the mockup editor
+    Then the Start panel's input "mockup" holds the current version of the mockup "Orders dashboard"
+    And the run status shows "idle"
+
+  @issue-836
+  Scenario: Preparing issues from a version opens the commit dialog with the selected region cropped and files nothing before confirming
+    Given the app is open
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    When I open "Mockups" in the sidebar
+    And I open the mockup "Orders dashboard" in its editor window
+    And I click "Export" on the mockup's canvas
+    And I choose "Prepare issues" on the mockup's current version
+    Then the commit dialog lists the proposed issues with 1 cropped region
+    And no issue has been filed to the project's backlog

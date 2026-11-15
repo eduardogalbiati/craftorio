@@ -20,6 +20,7 @@
 // is found among the app's windows (e2e.app.windows()) by its root and kept as e2e.mockupWindow; the
 // fixture closes every window after the scenario.
 
+const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
@@ -261,4 +262,132 @@ Then('the comparison shows the version with {string} beside the version with {st
 
 Then('the comparison highlights the changed nodes', async ({ e2e }) => {
   await expect.poll(() => changedCount(mockupWindow(e2e)), { timeout: LOAD_TIMEOUT, message: 'a changed node is highlighted' }).toBeGreaterThan(0);
+});
+
+// ---- #836: Review this screen, Start a development run, Prepare issues ---------------------------
+// The developer adds these data-testids (in the editor window unless said otherwise):
+//   mockup-review-screen         the "Review this screen" button (an on-demand review: kit conformance,
+//                                axe, layout; never on every turn)
+//   mockup-start-run             the "Start a development run" button: opens the main window's Start
+//                                panel with the `mockup` input filled with a frozen version; never starts
+//                                a run on its own
+//   mockup-recreate-from-app     the "Recreate from the running app" button (not exercised here)
+//   mockup-cost-estimate         the cost estimate shown before a paid action (the review, the recreation),
+//                                in a dialog (role=dialog) or a box holding its confirm button (named
+//                                "Review", "Run the review", "Confirm", "Continue" or "Start")
+//   mockup-prepare-issues        in a row of mockup-versions (the first row is the current version):
+//                                "Prepare issues", opens the Discovery commit dialog (#258)
+//   discovery-commit-crop        in discovery-commit-dialog: one cropped image per selected region
+// The review's findings are written in the designer chat (mockup-chat). The Start panel is the existing
+// one (start-workflow its Start button; an input's control carries data-wi-input="<key>", as in
+// fronts/build/features/steps/run.steps.js). The commit dialog is the existing discovery-commit-dialog
+// with its discovery-commit-issue rows, looked for in the editor window and in the main window. The
+// simulated commit files into <workspace>/backlog/<projectId>.json (discovery-commit.js simulatedExec):
+// "nothing filed" compares its issues with their count when "Prepare issues" was chosen.
+
+// the editor's buttons by their visible label (literal getByTestId calls, so testid-check-588 sees them)
+const EDITOR_ACTIONS = {
+  'Review this screen': (win) => win.getByTestId('mockup-review-screen'),
+  'Start a development run': (win) => win.getByTestId('mockup-start-run'),
+  'Recreate from the running app': (win) => win.getByTestId('mockup-recreate-from-app'),
+};
+const CONFIRM = /^(review|run the review|confirm|continue|start)\b/i;
+// the simulated review (kit conformance, axe, layout) answers in the chat
+const REVIEW_TIMEOUT = 60000;
+
+const costEstimate = (win) => win.getByTestId('mockup-cost-estimate').filter({ visible: true }).first();
+// the dialog (or the box) that holds the estimate and its confirm button
+const estimateBox = (win) => win.getByRole('dialog').filter({ has: win.getByTestId('mockup-cost-estimate') })
+  .or(win.getByTestId('mockup-cost-estimate')).filter({ visible: true }).first();
+const startInput = (page, key) => page.locator(`#inputs-form [data-wi-input="${key}"], #adv-form [data-wi-input="${key}"]`);
+
+function backlogIssues(e2e) {
+  const file = path.join(e2e.scratch, 'workspace', 'backlog', `${path.basename(String(e2e.project.id))}.json`);
+  if (!fs.existsSync(file)) return 0;
+  return (JSON.parse(fs.readFileSync(file, 'utf8')).issues || []).length;
+}
+
+// the window (the editor or the main one) whose commit dialog shows
+async function commitDialogWindow(e2e) {
+  for (const win of [mockupWindow(e2e), e2e.window]) {
+    if (await win.getByTestId('discovery-commit-dialog').isVisible().catch(() => false)) return win;
+  }
+  return null;
+}
+
+When('I choose {string} in the mockup editor', async ({ e2e }, label) => {
+  const locate = EDITOR_ACTIONS[label];
+  expect(Boolean(locate), `the mockup editor has a button "${label}"`).toBe(true);
+  const button = locate(mockupWindow(e2e));
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveAccessibleName(label);
+  await expect(button).toBeEnabled();
+  await button.click();
+});
+
+Then('the mockup editor shows a cost estimate to confirm before it runs', async ({ e2e }) => {
+  const win = mockupWindow(e2e);
+  await expect(costEstimate(win)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(costEstimate(win)).toContainText(/\$\s?\d/);
+  await expect(estimateBox(win).getByRole('button', { name: CONFIRM }).first()).toBeEnabled();
+});
+
+When('I confirm the mockup editor\'s cost estimate', async ({ e2e }) => {
+  const win = mockupWindow(e2e);
+  await estimateBox(win).getByRole('button', { name: CONFIRM }).first().click();
+  await expect(win.getByTestId('mockup-cost-estimate').filter({ visible: true })).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the designer chat shows the review\'s findings on kit conformance, accessibility and layout', async ({ e2e }) => {
+  const chat = mockupWindow(e2e).getByTestId('mockup-chat');
+  await expect(chat).toContainText(/\bkit\b/i, { timeout: REVIEW_TIMEOUT });
+  await expect(chat).toContainText(/\baxe\b|accessib/i);
+  await expect(chat).toContainText(/layout/i);
+});
+
+Then('the Start panel\'s input {string} holds the current version of the mockup {string}', async ({ e2e }, key, title) => {
+  const page = e2e.window;
+  const workspace = path.join(e2e.scratch, 'workspace');
+  const screen = mockups().listScreens(workspace, e2e.project.id).find((s) => s.title === title);
+  expect(screen, `the project has the mockup "${title}"`).toBeTruthy();
+  const [current] = mockups().listVersions(workspace, e2e.project.id, screen.slug);
+  expect(current, `the mockup "${title}" has a version`).toBeTruthy();
+  await expect(page.getByTestId('start-workflow')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const input = startInput(page, key);
+  await expect(input).toHaveCount(1);
+  // frozen: the screen and its version's commit, never a moving "latest"
+  await expect(input).toHaveValue(new RegExp(screen.slug), { timeout: LOAD_TIMEOUT });
+  await expect(input).toHaveValue(new RegExp(String(current.commit).slice(0, 7)));
+});
+
+When('I choose {string} on the mockup\'s current version', async ({ e2e }, label) => {
+  const button = mockupWindow(e2e).getByTestId('mockup-versions').getByTestId('mockup-prepare-issues').first();
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveAccessibleName(new RegExp(`^${label}\\b`, 'i'));
+  e2e.backlogIssuesBefore = backlogIssues(e2e);
+  await button.click();
+});
+
+Then('the commit dialog lists the proposed issues with {int} cropped region(s)', async ({ e2e }, count) => {
+  await expect.poll(async () => !!(await commitDialogWindow(e2e)), { timeout: DESIGNER_TIMEOUT, message: 'the Discovery commit dialog opened' }).toBe(true);
+  const dialog = (await commitDialogWindow(e2e)).getByTestId('discovery-commit-dialog');
+  await expect(dialog).toHaveRole('dialog');
+  await expect(dialog.getByTestId('discovery-commit-issue').first()).toBeVisible();
+  const crops = dialog.getByTestId('discovery-commit-crop');
+  await expect(crops).toHaveCount(count);
+  for (let i = 0; i < count; i += 1) {
+    await expect(crops.nth(i)).toBeVisible();
+    // an image: an <img> (inside the crop or the crop itself) with a loaded picture, or role=img
+    await expect.poll(() => crops.nth(i).evaluate((el) => {
+      const img = el.tagName === 'IMG' ? el : el.querySelector('img');
+      return img ? img.complete && img.naturalWidth > 0 : el.getAttribute('role') === 'img';
+    }), { message: `the cropped region ${i + 1} is an image` }).toBe(true);
+  }
+});
+
+Then('no issue has been filed to the project\'s backlog', async ({ e2e }) => {
+  const win = await commitDialogWindow(e2e);
+  expect(win, 'the commit dialog still waits for the owner\'s confirmation').toBeTruthy();
+  await expect(win.getByTestId('discovery-commit-dialog').getByRole('button', { name: 'File the issues', exact: true })).toBeVisible();
+  expect(backlogIssues(e2e)).toBe(e2e.backlogIssuesBefore ?? 0);
 });
