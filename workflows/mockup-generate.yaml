@@ -17,6 +17,8 @@
 # No human_approval: the chat is driven by the owner, the run only prepares a version. Defaults:
 # Opus to generate, Sonnet to edit (Q-3), switchable per run. Simulated (MULTIAGENT_SIMULATION_ONLY)
 # the service does not start this workflow: its simulated designer answers at once, no model call.
+# `mode` recreate (#836, the running-app source): mockups:recreate starts it with `app_url`, the page of
+# the running app (Run App / Local preview); the designer redraws that page with the project's kit.
 # Outputs: `html` (the screen) and `reply` (what the designer says in the chat).
 # =============================================================================
 
@@ -56,10 +58,10 @@ inputs:
   mode:
     label: "Mode"
     type: string
-    enum: [generate, edit]
+    enum: [generate, edit, recreate]
     default: generate
-    options: { "generate": "Generate a new screen", "edit": "Edit the screen (one chat turn)" }
-    description: Generate draws the screen's first version; edit applies one chat message to the current version.
+    options: { "generate": "Generate a new screen", "edit": "Edit the screen (one chat turn)", "recreate": "Recreate a screen of the running app" }
+    description: Generate draws the screen's first version; edit applies one chat message to the current version; recreate redraws a page of the running app (app_url) with the project's kit.
   title:
     label: "Title"
     type: string
@@ -78,6 +80,13 @@ inputs:
     required: false
     default: ""
     description: The commit message of the turn (the owner's words).
+  # #836: the running-app source (Run App / Local preview), read by mode recreate
+  app_url:
+    label: "App page"
+    type: string
+    required: false
+    default: ""
+    description: Recreate, the page of the running app (Run App / Local preview) to redraw with the project's kit.
   designer_provider:
     label: "Designer CLI"
     options: { "claude": "Claude", "codex": "Codex" }
@@ -156,6 +165,10 @@ steps:
       {% if inputs.mode == 'edit' %}Apply this chat message to the current version of the screen (read it first).
       The message, with the selected nodes (their data-mid, selector, kit component, box and HTML)
       and the reference images under refs/:
+      {{ inputs.prompt }}{% elif inputs.mode == 'recreate' %}Recreate this page of the project's running app as the screen's first
+      version: {{ inputs.app_url or 'the running app (Run App / Local preview)' }}. Read the project's
+      code that renders it (its markup, texts and states) and redraw it with the project's kit: same
+      layout, controls, texts and order, the kit's tokens and components instead of the app's own styles.
       {{ inputs.prompt }}{% else %}Draw the screen's first version from this description:
       {{ inputs.prompt }}{% endif %}
 

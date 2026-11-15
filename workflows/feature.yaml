@@ -161,6 +161,13 @@ inputs:
     type: array
     default: []
     description: "URLs of the issues this run implements together, in one branch (set by the Backlog screen; one per line)."
+  # #836: a frozen mockup version (the mockups editor's "Start a development run" fills it); optional,
+  # a run without it behaves as before.
+  mockup:
+    label: "Mockup"
+    type: string
+    default: ""
+    description: "Folder of a frozen mockup version (index.html and kit/) the screens of this run follow. Empty: no mockup."
   repo_path:
     label: "Repository"
     type: string
@@ -1049,6 +1056,14 @@ steps:
       with its mockup: every difference is blocking and comes back here; one you made on purpose (a
       later phase) cites the issue's line that says so in `summary`.
       {% endif %}
+      {% if inputs.mockup %}
+      {# #836: a frozen mockup version is the specification of this run's screen #}
+      This run follows a frozen mockup version, in `{{ inputs.mockup }}`: its `index.html` is the
+      screen and `kit/` (tokens.css, components.css, kit.json) the kit it uses. Open both before the
+      markup: the screen you build matches the mockup (layout, controls, texts, order, states) and
+      takes its tokens and components from the project's own design system, the kit's names as a
+      guide. List that screen in `screenshots`: the UI Reviewer checks that it matches the mockup.
+      {% endif %}
       {% if previous_step == 'developer_screenshots' and vars.mockup_self_check == 'yes' and steps.developer_screenshots.output %}
       Before the review, look at your own screenshots next to the mockups: {{ steps.developer_screenshots.output.message }}{% if steps.developer_screenshots.output.dir %},
       in `{{ run_dir }}/{{ steps.developer_screenshots.output.dir }}` as `<name>.modified.png`{% endif %}.
@@ -1608,6 +1623,14 @@ steps:
       mockup`, `convention: mockup: <file>`): the run goes back to develop with it, in every mode; it
       is not a suggestion. A mockup screen with no screenshot is blocking too. A difference the
       developer says is intended (a later phase) passes only when it cites the issue's line saying so.
+      {% endif %}
+      {% if inputs.mockup %}
+      {# #836: the run's frozen mockup version #}
+      Matches the mockup: this run follows the frozen mockup version in `{{ inputs.mockup }}`
+      (`index.html` the screen, `kit/` its kit). Compare each `<name>.modified.png` of that screen
+      with it: layout, controls, texts, order, states. Each difference is a blocking UI finding
+      (`rule: mockup`, `source: mockup`, `convention: mockup: {{ inputs.mockup }}`); mark the
+      checklist's "Matches the mockup" item pass or fail.
       {% endif %}
       Look at each PNG once, original and modified. When there is no screenshot (a simulated run, a
       failed capture, or no screen listed), review the diff of the styles and markup instead:

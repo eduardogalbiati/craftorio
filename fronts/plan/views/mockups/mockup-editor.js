@@ -22,12 +22,19 @@
 // mockup:navigate and follow the chosen flow (MockupModel.flowTarget); the Flows box links the selected
 // element to another screen (mockups:save-flow); Promote to kit (one selected element, a name dialog);
 // Attach on a version: a Discovery card gets '<slug>@<sha7>.mockup.json' (mockups:attach, frozen).
+// #836 the handoff: Review this screen shows its estimate (MockupModel 'review-screen') in the chat's top
+// slot and reviews only on its confirm (mockups:review: kit, axe, layout findings; never on a load or a
+// turn); Start a development run freezes the current version (mockups:freeze) and asks the main window
+// (navigateMainWindow 'mockups:start-run') to open the Start panel with the `mockup` input, never a run;
+// Prepare issues on the current version crops the selected regions (mockups:crops) and asks the main
+// window ('mockups:prepare-issues') to open the #258 commit dialog with them; nothing is filed here.
 // Test ids: mockup-editor, mockup-canvas, mockup-chat, mockup-selection-chip,
 // mockup-frames, mockup-versions, mockup-lint, mockup-axe, mockup-chat-cost, mockup-variant-current,
 // mockup-variants, mockup-variant-new, mockup-variant-keep, mockup-name-dialog, mockup-compare-open,
 // mockup-compare, mockup-compare-before, mockup-compare-after, mockup-compare-close, mockup-changed (inside
 // a side), mockup-interact, mockup-flows, mockup-flow-select, mockup-flow-new, mockup-link-target,
-// mockup-link, mockup-promote, mockup-attach, mockup-attach-dialog.
+// mockup-link, mockup-promote, mockup-attach, mockup-attach-dialog, mockup-review-screen,
+// mockup-cost-estimate, mockup-review-confirm, mockup-review-finding, mockup-start-run, mockup-prepare-issues.
 // Uses app.js globals at call time (esc, api, errMsg, showToast, fmtCost), AgentChat, MockupModel.
 (() => {
   const query = () => { try { return new URLSearchParams(window.location?.search || ''); } catch { return new URLSearchParams(); } };
@@ -67,6 +74,8 @@
             <button type="button" class="btn sm" id="mockup-compare-open" data-testid="mockup-compare-open" data-mockup-compare disabled>${t('mockups.compare')}</button>
             <button type="button" class="btn sm" id="mockup-interact" data-testid="mockup-interact" data-mockup-interact aria-pressed="false">${t('mockups.interact')}</button>
             <div class="seg sm" role="group" aria-label="${t('mockups.frame')}" data-testid="mockup-frames">${seg}</div>
+            <button type="button" class="btn sm" data-testid="mockup-review-screen" data-mockup-review-screen>${t('mockups.review_screen')}</button>
+            <button type="button" class="btn sm primary" data-testid="mockup-start-run" data-mockup-start-run title="${esc(t('mockups.start_run_help'))}">${t('mockups.start_run')}</button>
           </div>
         </header>
         <p id="mockup-error" class="error small" role="alert"></p>
@@ -191,7 +200,8 @@
       <li class="row">
         <span class="mono small" title="${esc(v.commit)}">${esc(String(v.commit).slice(0, 7))}</span>
         <span class="small mockup-version-msg" title="${esc(v.message || '')}">${esc(v.message || '')}</span>
-        ${i === 0 ? `<span class="badge neutral">${t('mockups.current')}</span>` : `<button type="button" class="btn sm ghost" data-mockup-restore="${esc(v.commit)}">${t('mockups.restore')}</button>`}
+        ${i === 0 ? `<span class="badge neutral">${t('mockups.current')}</span>
+        <button type="button" class="btn sm ghost" data-testid="mockup-prepare-issues" data-mockup-prepare-issues title="${esc(t('mockups.prepare_issues_help'))}">${t('mockups.prepare_issues')}</button>` : `<button type="button" class="btn sm ghost" data-mockup-restore="${esc(v.commit)}">${t('mockups.restore')}</button>`}
         <button type="button" class="btn sm ghost" data-testid="mockup-attach" data-mockup-attach="${esc(v.commit)}" aria-label="${esc(t('mockups.attach_named', { commit: String(v.commit).slice(0, 7) }))}">${t('mockups.attach')}</button>
       </li>`).join('');
   }
@@ -467,6 +477,78 @@
     } catch (e) { errorLine(errMsg(e)); }
   }
 
+  // ---- #836 the handoff: Review this screen (on demand, the estimate first), Start a development run,
+  // Prepare issues. The review's estimate and findings go in the chat's 'top' slot; nothing reviews on a
+  // load or a finished run, and the editor never starts a run nor files an issue.
+  const reviewBox = () => ed.chat?.slot?.('top') || null;
+  function openReview() {
+    const box = reviewBox();
+    if (!box) return;
+    const e = window.MockupModel.estimateCost('review-screen');
+    box.innerHTML = `
+      <div class="mockup-review" role="group" aria-label="${esc(t('mockups.review_screen'))}">
+        <p class="small" data-testid="mockup-cost-estimate">${esc(t('mockups.estimate', { min: money(e.min), max: money(e.max), model: e.model || '—' }))}</p>
+        <p class="muted small">${t('mockups.review_help')}</p>
+        <div class="row">
+          <button type="button" class="btn sm primary" data-testid="mockup-review-confirm" data-mockup-review-confirm>${t('mockups.review_confirm')}</button>
+          <button type="button" class="btn sm ghost" data-mockup-review-cancel>${t('common.cancel')}</button>
+        </div>
+      </div>`;
+  }
+
+  function findingsHtml(findings) {
+    const count = (kind) => findings.filter((f) => f?.kind === kind).length;
+    const summary = t('mockups.review_summary', { kit: count('kit'), axe: count('axe'), layout: count('layout') });
+    const items = findings.map((f) => `
+      <li class="mockup-review-finding" data-testid="mockup-review-finding"${f?.mid ? ` data-mid="${esc(f.mid)}"` : ''}>
+        <span class="badge ${f?.kind === 'axe' ? 'warning' : 'neutral'}">${esc(f?.kind || '—')}</span>
+        <span class="small" title="${esc(f?.rule || '')}">${esc(f?.message || f?.rule || '')}</span>
+      </li>`).join('');
+    return `
+      <div class="mockup-review" role="group" aria-label="${esc(t('mockups.review_findings'))}">
+        <p class="small"><strong>${t('mockups.review_findings')}</strong> <span class="muted">${esc(summary)}</span>
+          <button type="button" class="btn sm ghost" data-mockup-review-cancel aria-label="${esc(t('common.close'))}">×</button></p>
+        ${findings.length ? `<ul class="mockup-review-list">${items}</ul>` : `<p class="muted small">${t('mockups.review_none')}</p>`}
+      </div>`;
+  }
+
+  async function confirmReview() {
+    const box = reviewBox();
+    if (!box) return;
+    box.innerHTML = `<p class="muted small">${t('mockups.reviewing')}</p>`;
+    try {
+      const out = await api.reviewMockupScreen(ed.projectId, ed.slug, ed.axe?.violations || []);
+      box.innerHTML = findingsHtml(Array.isArray(out?.findings) ? out.findings : []);
+      if (Number(out?.costUsd) > 0) { ed.totalUsd += Number(out.costUsd); renderCost(); }
+    } catch (e) { box.innerHTML = ''; errorLine(errMsg(e)); }
+  }
+
+  const closeReview = () => { const box = reviewBox(); if (box) box.innerHTML = ''; };
+
+  // the current version frozen (mockups:freeze), then the main window's Start panel with the `mockup` input
+  async function startRun() {
+    const commit = ed.versions[0]?.commit;
+    if (!commit) return;
+    try {
+      const frozen = await api.freezeMockupVersion(ed.projectId, ed.slug, commit);
+      await api.navigateMainWindow?.({ name: 'mockups:start-run', target: { projectId: ed.projectId, inputs: { mockup: frozen?.dir || '' } } });
+      showToast(t('mockups.start_run_opened'), String(commit).slice(0, 7));
+    } catch (e) { errorLine(errMsg(e)); }
+  }
+
+  // the selected regions cropped (mockups:crops), then the main window's #258 commit dialog with them
+  async function prepareIssues() {
+    const commit = ed.versions[0]?.commit;
+    if (!commit) return;
+    if (!ed.selection.length) { errorLine(t('mockups.prepare_select_first')); return; }
+    try {
+      const regions = ed.selection.map((s) => ({ mid: s.mid, box: s.box || null }));
+      const crops = await api.saveMockupCrops(ed.projectId, ed.slug, commit, regions);
+      await api.navigateMainWindow?.({ name: 'mockups:prepare-issues', target: { projectId: ed.projectId, slug: ed.slug, commit, crops } });
+      errorLine('');
+    } catch (e) { errorLine(errMsg(e)); }
+  }
+
   function onClick(e) {
     const frame = e.target.closest('[data-mockup-frame]');
     if (frame) { ed.frame = frame.dataset.mockupFrame; applyFrame(); reloadCanvas(); return; }
@@ -489,6 +571,11 @@
       mockupLink: linkSelection,
       mockupNameCancel: () => closeModal('#mockup-name-dialog'),
       mockupAttachCancel: () => closeModal('#mockup-attach-dialog'),
+      mockupReviewScreen: openReview,
+      mockupReviewConfirm: confirmReview,
+      mockupReviewCancel: closeReview,
+      mockupStartRun: startRun,
+      mockupPrepareIssues: prepareIssues,
     };
     const hit = Object.keys(actions).find((k) => e.target.closest(`[data-${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}]`));
     if (hit) actions[hit]();

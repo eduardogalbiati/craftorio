@@ -12,15 +12,20 @@
 // source, a live preview: a sandboxed iframe on mockup://<id>/kit/components.html#c-<slug>), the tokens
 // (a swatch for a colour) and the inferred gaps (kit.json inferences, not a gate); Export .zip
 // (mockups:export, base64 → a Blob download).
+// #836: Recreate from the running app opens the same dialog in recreate mode (Title, an optional app page,
+// the recreate-screen estimate first) → mockups:recreate (refused without Run App / Local preview). In
+// the main window, the editor's handoff (AgentsWindow.onNavigate): 'mockups:start-run' opens the Start
+// panel (openDrawer) with the `mockup` input filled, never a run; 'mockups:prepare-issues' opens the #258
+// commit dialog (DiscoveryCommit.open) of the Discovery card the mockup is attached to, with the crops.
 // Test ids: mockups-view, mockups-empty, mockups-build-kit, mockups-new, mockups-gallery, mockups-card,
 // mockups-open, mockups-new-dialog, mockups-kit, mockups-gallery-tab, mockups-kit-tab, mockups-kit-panel,
-// mockups-kit-token, mockups-kit-component, mockups-kit-preview, mockups-export.
+// mockups-kit-token, mockups-kit-component, mockups-kit-preview, mockups-export, mockup-recreate-from-app.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, api, errMsg,
 // openModal, closeModal, showToast, showView), MockupModel (packages/shared/mockup-model.js), CurrentProject.
 (() => {
   // projectId: the header's; screens: mockups:list's rows; kit: mockups:kit (null before it is built)
-  // tab: 'gallery' or 'kit' (#835)
-  const mk = { projectId: null, screens: [], kit: null, seq: 0, busy: false, tab: 'gallery' };
+  // tab: 'gallery' or 'kit' (#835); dialog: what the New mockup dialog does, 'new' or 'recreate' (#836)
+  const mk = { projectId: null, screens: [], kit: null, seq: 0, busy: false, tab: 'gallery', dialog: 'new' };
   const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 8h18M8 21h8M12 18v3" /></svg>';
 
   const currentProjectId = async () => (await (window.CurrentProject?.resolve?.() ?? window.CurrentProject?.get?.())) || null;
@@ -178,11 +183,18 @@
     } catch (e) { errorLine(errMsg(e)); }
   }
 
-  async function openNew() {
+  // the New mockup dialog, or (#836) its recreate mode: a page of the running app, an optional url
+  async function openNew(mode = 'new') {
+    const recreate = mode === 'recreate';
+    mk.dialog = recreate ? 'recreate' : 'new';
+    $('#mockups-new-heading').textContent = recreate ? t('mockups.recreate_from_app') : t('mockups.new_mockup');
+    $('#mockups-new-prompt-field').classList.toggle('hidden', recreate);
+    $('#mockups-new-url-field').classList.toggle('hidden', !recreate);
     $('#mockups-new-title').value = '';
     $('#mockups-new-prompt').value = '';
+    $('#mockups-new-url').value = '';
     $('#mockups-new-error').textContent = '';
-    $('#mockups-new-estimate').textContent = estimateText(await estimate('generate-screen'));
+    $('#mockups-new-estimate').textContent = estimateText(await estimate(recreate ? 'recreate-screen' : 'generate-screen'));
     openModal('#mockups-new-dialog');
     $('#mockups-new-title').focus({ preventScroll: true });
   }
@@ -201,7 +213,11 @@
     if (!title) { $('#mockups-new-error').textContent = t('mockups.give_a_title'); return; }
     mk.busy = true;
     try {
-      await create({ projectId: mk.projectId || await currentProjectId(), title, prompt });
+      const projectId = mk.projectId || await currentProjectId();
+      if (mk.dialog === 'recreate') {
+        const out = await api.recreateMockupFromApp(projectId, title, $('#mockups-new-url').value.trim());
+        showToast(t('mockups.created', { title }), out?.runId ? t('mockups.designer_started') : '');
+      } else await create({ projectId, title, prompt });
       closeModal('#mockups-new-dialog');
       await refresh();
     } catch (x) { $('#mockups-new-error').textContent = errMsg(x); } finally { mk.busy = false; }
@@ -215,6 +231,29 @@
     const open = e.target.closest('[data-mockups-open]');
     if (open) return openEditor(open.dataset.mockupsOpen);
     return undefined;
+  }
+
+  // ---- #836 the editor window's handoff, run in the main window ------------------------------------
+  // Start a development run: the Start panel (openDrawer, read at call time) with the project and the
+  // `mockup` input filled; it never starts a run
+  function openStartRun(target) {
+    window.openDrawer?.({ project: target?.projectId || null, inputs: target?.inputs || {} });
+  }
+
+  // Prepare issues: the #258 commit dialog of the Discovery card the mockup is attached to, with the crops
+  async function openPrepareIssues(target) {
+    const { projectId, slug, commit, crops = [] } = target || {};
+    try {
+      const cards = await api.listDiscoveryCards(projectId);
+      const attachedTo = (c, exact) => (c.attachments || []).some((n) => {
+        const a = window.MockupModel?.parseAttachmentName?.(n);
+        return a && a.slug === slug && (!exact || String(commit || '').startsWith(a.commit));
+      });
+      const card = (cards || []).find((c) => attachedTo(c, true)) || (cards || []).find((c) => attachedTo(c, false));
+      if (!card) { showToast(t('mockups.prepare_needs_card'), slug || ''); return; }
+      showView('discovery');
+      window.DiscoveryCommit?.open?.({ projectId, card, crops, done() {} });
+    } catch (e) { showToast(errMsg(e), slug || ''); }
   }
 
   // D5: a Discovery card's "Mock this card" (views/discovery/discovery.js): a screen from its title and text
@@ -237,7 +276,10 @@
             <h1>${t('mockups.mockups')}</h1>
             <p class="muted small">${t('mockups.subtitle')}</p>
           </div>
-          <button type="button" id="btn-mockups-new" class="btn primary" data-testid="mockups-new">${t('mockups.new_mockup')}</button>
+          <div class="row">
+            <button type="button" id="btn-mockups-recreate" class="btn" data-testid="mockup-recreate-from-app">${t('mockups.recreate_from_app')}</button>
+            <button type="button" id="btn-mockups-new" class="btn primary" data-testid="mockups-new">${t('mockups.new_mockup')}</button>
+          </div>
         </div>
         <p id="mockups-error" class="error small" role="alert"></p>
         <div id="mockups-body" class="mockups-body"></div>
@@ -246,8 +288,15 @@
             <h3 id="mockups-new-heading">${t('mockups.new_mockup')}</h3>
             <label for="mockups-new-title">${t('mockups.title')}</label>
             <input id="mockups-new-title" type="text" maxlength="200" autocomplete="off" />
-            <label for="mockups-new-prompt">${t('mockups.prompt')}</label>
-            <textarea id="mockups-new-prompt" rows="5" maxlength="20000" placeholder="${t('mockups.prompt_placeholder')}"></textarea>
+            <div id="mockups-new-prompt-field" class="mockups-new-field">
+              <label for="mockups-new-prompt">${t('mockups.prompt')}</label>
+              <textarea id="mockups-new-prompt" rows="5" maxlength="20000" placeholder="${t('mockups.prompt_placeholder')}"></textarea>
+            </div>
+            <div id="mockups-new-url-field" class="mockups-new-field hidden">
+              <label for="mockups-new-url">${t('mockups.app_page')}</label>
+              <input id="mockups-new-url" type="text" maxlength="2000" autocomplete="off" placeholder="http://localhost:3000/orders" />
+              <p class="muted small">${t('mockups.recreate_needs_preview')}</p>
+            </div>
             <p id="mockups-new-estimate" class="muted small"></p>
             <p id="mockups-new-error" class="error small" role="alert"></p>
             <div class="modal-actions">
@@ -258,7 +307,10 @@
         </div>
       </section>`,
     mount() {
-      $('#btn-mockups-new').onclick = openNew;
+      $('#btn-mockups-new').onclick = () => openNew('new');
+      $('#btn-mockups-recreate').onclick = () => openNew('recreate');
+      window.AgentsWindow?.onNavigate?.('mockups:start-run', openStartRun);
+      window.AgentsWindow?.onNavigate?.('mockups:prepare-issues', openPrepareIssues);
       $('#mockups-body').onclick = onBodyClick;
       $('#mockups-new-form').onsubmit = submitNew;
       $('#btn-mockups-new-cancel').onclick = () => closeModal('#mockups-new-dialog');

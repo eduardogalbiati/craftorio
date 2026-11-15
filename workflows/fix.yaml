@@ -43,6 +43,12 @@ inputs:
     type: array
     default: []
     description: "URLs of the issues this run fixes together, in one branch (set by the Backlog screen; one per line)."
+  # #836: a frozen mockup version (the mockups editor's "Start a development run" fills it); optional.
+  mockup:
+    label: "Mockup"
+    type: string
+    default: ""
+    description: "Folder of a frozen mockup version (index.html and kit/) the fixed screen follows. Empty: no mockup."
   repo_path:
     label: "Repository"
     type: string
@@ -160,6 +166,11 @@ agents:
       You are the developer. You reproduce the bug, then fix its root cause on the run's branch with a
       small change that follows the project's conventions and a regression test that failed before
       the fix. Never write under docs/work/. Never push, except in the push main step.
+      {% if inputs.mockup %}
+      {# #836: a frozen mockup version #}
+      The fixed screen follows the frozen mockup version in `{{ inputs.mockup }}`: its `index.html`
+      is the screen and `kit/` the kit it uses; open both before you touch the markup.
+      {% endif %}
   reviewer:
     provider: claude
     model: claude-opus-5-5

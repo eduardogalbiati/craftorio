@@ -104,7 +104,10 @@ worst first | more ▸ caveats`). Check it against the checklist, the design rul
   folder (`evidence_dir`) as `<issue>-<screen>-<state>.original.png` / `.modified.png`. Look at
   each PNG once.
 - Review every UI screenshot against the Conventions, the readability checklist and the design
-  rules. Per screenshot, even on an approval (`screens` when the output has it): `message`, its
+  rules. **Matches the mockup**: when the run has a `mockup` input (a frozen mockup version, its
+  `index.html` and `kit/`), compare the screenshots of that screen with it and report each
+  difference (layout, controls, texts, order, states) as a blocking finding (`convention: mockup:
+  <folder>`); the item is pass or fail in the checklist. Per screenshot, even on an approval (`screens` when the output has it): `message`, its
   5-second message; `weakness`, its biggest weakness (there always is one); `checklist`, each
   checklist item and design rule (copy, motion, decoration, quality floor) pass or fail with one
   line of evidence. Only small data on a data-heavy screen: `small_data: true` and a non-blocking
