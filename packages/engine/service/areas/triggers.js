@@ -102,9 +102,7 @@ module.exports = (ctx) => {
     const repo = issues.parseRepoUrl(project.repo)?.path;
     return async ({ since }) => {
       if (simulation.simulationOnly() || !repo) return [];
-      return platform === 'gitlab'
-        ? platformEvents.readGitlabEvents({ project: repo, since, exec: issues.execCli })
-        : platformEvents.readGithubEvents({ repo, since, exec: issues.execCli });
+      return platformEvents.readEvents({ platform, repo, since, exec: issues.execCli });
     };
   }
 

@@ -13,7 +13,7 @@ and when the repository's copy runs (no edited copy, or the project's "Prefer th
 workflows" setting) your models still apply on top. This repository declares its
 four flows this way. Details: [`docs/agents/engine/repository-workflows.md`](docs/agents/engine/repository-workflows.md).
 
-## Triggers: runs started from the git platform
+### Triggers: runs started from the git platform
 
 The same `.multiagent/project.yaml` may list `triggers:`, rules that start one of its workflows
 from a platform event, GitHub or GitLab:

@@ -7,7 +7,11 @@
 // The id carries the platform's own id (`gh:labeled:<id>`), so the watcher's dedup survives a restart.
 // A rate limit (the CLI's stderr says HTTP 403 or 429) rejects with code 'RATE_LIMITED': the watcher
 // (triggers.js) backs off. The report back on the issue or PR is the platform adapters' (backlog.js
-// issueSaveCommand / prCommentCommand, areas/triggers.js).
+// issueSaveCommand / prCommentCommand, areas/triggers.js). The CLI of each reader is its platform
+// adapter's (packages/shared/platforms/); readEvents picks the reader by the adapter's id (#351).
+
+const github = require('@multiagent/shared/platforms/github');
+const gitlab = require('@multiagent/shared/platforms/gitlab');
 
 const RATE_LIMIT = /HTTP (403|429)/;
 // one page per endpoint and poll (the issue events: up to MAX_PAGES, they take no `since`)
@@ -42,7 +46,7 @@ function unique(events) {
 async function issueEventsSince(exec, base, since) {
   const out = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const items = list(await api(exec, 'gh', `${base}/issues/events?per_page=${PAGE}&page=${page}`));
+    const items = list(await api(exec, github.cli, `${base}/issues/events?per_page=${PAGE}&page=${page}`));
     out.push(...items);
     const oldest = items[items.length - 1]?.created_at;
     if (!since || items.length < PAGE || (oldest && !after(oldest, since))) break;
@@ -55,8 +59,8 @@ async function readGithubEvents({ repo, since = null, exec }) {
   const base = `repos/${repo}`;
   const sinceQ = since ? `&since=${encodeURIComponent(since)}` : '';
   const issueEvents = await issueEventsSince(exec, base, since);
-  const comments = list(await api(exec, 'gh', `${base}/issues/comments?per_page=${PAGE}&sort=created&direction=desc${sinceQ}`));
-  const runs = await api(exec, 'gh', `${base}/actions/runs?status=failure&per_page=${PAGE}`);
+  const comments = list(await api(exec, github.cli, `${base}/issues/comments?per_page=${PAGE}&sort=created&direction=desc${sinceQ}`));
+  const runs = await api(exec, github.cli, `${base}/actions/runs?status=failure&per_page=${PAGE}`);
   const events = [];
   for (const e of issueEvents) {
     if (e?.event !== 'labeled' || !e.label?.name || !e.issue || e.issue.pull_request || !after(e.created_at, since)) continue;
@@ -98,7 +102,19 @@ async function readGitlabEvents({ project, since = null, exec }) {
   return unique(events);
 }
 
+// the reader of each platform, by its adapter's id
+const READERS = {
+  [github.id]: ({ repo, since, exec }) => readGithubEvents({ repo, since, exec }),
+  [gitlab.id]: ({ repo, since, exec }) => readGitlabEvents({ project: repo, since, exec }),
+};
+
+/** The events of `repo` (its path on the platform) on the platform with the adapter id `platform` (default: GitHub's). */
+function readEvents({ platform, repo, since = null, exec }) {
+  return (READERS[platform] || READERS[github.id])({ repo, since, exec });
+}
+
 module.exports = {
+  readEvents,
   readGithubEvents,
   readGitlabEvents,
 };
