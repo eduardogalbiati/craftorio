@@ -290,6 +290,9 @@
                   <div class="s-ctrl">${window.Select.markup(`id="set-base-check-on-red" aria-label="${t('settings.base.on_red')}" data-testid="base-check-on-red"`, [['off', t('settings.off')], ['issue', t('settings.base.issue')], ['fix', t('settings.base.fix')]], 'fix')}</div>
                 </div>
               </div>
+              <!-- #568: platform triggers, one switch per project (settings.js renderTriggers) -->
+              <h3 class="s-subtitle">${t('settings.triggers.title')}</h3>
+              <div id="set-triggers" class="s-group" data-testid="settings-triggers"></div>
               <h3 class="s-subtitle">${t('settings.oracle.title')}</h3>
               <div id="set-oracle" class="s-group">
                 <div class="s-row" id="set-oracle-self-healing-row">${selfHealingHtml({}, null)}</div>

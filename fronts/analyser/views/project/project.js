@@ -249,6 +249,8 @@ function renderProjectView() {
   pv.openSettings = false;
   // #486: the project's workflow set and default, edited here (project-workflows.js)
   window.ProjectWorkflows?.showPage(p, $('#project-workflows'));
+  // #568: the repository's platform triggers, their switch, last event and runs (project-triggers.js)
+  window.ProjectTriggers?.show(p, $('#project-triggers'));
   renderRunList(pv, {
     prefix: 'project', box: '#project-runs', empty: t('project.no_workflows_have_run_in_this'),
     start: () => openDrawer({ project: pv.id }), rerender: renderProjectView,
@@ -299,6 +301,7 @@ registerView({
           <div id="project-info" class="pr-head-info"></div>
           <div id="project-settings-box"></div>
           <div id="project-workflows"></div>
+          <div id="project-triggers"></div>
           <div class="pr-toolbar">
             <div id="project-run-filters" class="chips"></div>
             <span class="spacer"></span>

@@ -94,6 +94,7 @@ async function renderSettings() {
   renderLiveSettings();
   renderBudgetSettings();
   renderOracleWake();
+  renderTriggers();
   refreshKeepAwake();
   refreshControlChannel();
   renderVoice();
@@ -459,6 +460,28 @@ async function saveOracleWake() {
   };
   state.settings = await api.setSettings({ oracle });
   renderOracleWake();
+}
+
+// Settings › Execution › Platform triggers (#568, packages/engine/service/areas/triggers.js): one switch per
+// project, settings.triggers.enabled[<id>]; off by default, saved on change. The rules are the repository's.
+async function renderTriggers() {
+  const box = $('#set-triggers');
+  if (!box) return;
+  let list = [];
+  try { list = (await api.listProjects()).filter((p) => !p.error); } catch { list = []; }
+  const enabled = state.settings.triggers?.enabled || {};
+  box.innerHTML = list.length ? list.map((p) => `
+    <div class="s-row" data-testid="settings-triggers-project">
+      <div class="s-label"><b>${esc(p.name || p.id)}</b><span>${t('settings.triggers.help')}</span></div>
+      <label class="switch"><input type="checkbox" data-trigger-project="${esc(p.id)}"${enabled[p.id] ? ' checked' : ''} aria-label="${esc(t('settings.triggers.project_label', { project: p.name || p.id }))}" /><span></span></label>
+    </div>`).join('') : `<div class="s-row"><div class="s-label"><span>${t('settings.triggers.none')}</span></div></div>`;
+  box.querySelectorAll('[data-trigger-project]').forEach((el) => (el.onchange = saveTriggers));
+}
+
+async function saveTriggers() {
+  const enabled = {};
+  $('#set-triggers').querySelectorAll('[data-trigger-project]').forEach((el) => { if (el.checked) enabled[el.dataset.triggerProject] = true; });
+  state.settings = await api.setSettings({ triggers: { ...(state.settings.triggers || {}), enabled } });
 }
 
 // Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (packages/engine/domains/chat/speech.js).

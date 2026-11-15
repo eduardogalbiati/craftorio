@@ -116,6 +116,11 @@
 #project-workflows .pj-wf { margin-bottom: 12px; max-width: 720px; }
 .pj-wf-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .pj-wf-title { font-size: 13px; font-weight: 600; }
+/* #568: the Platform triggers card (projects/project-triggers.js), framed like the Workflows block */
+#project-triggers .pj-wf { margin-bottom: 12px; max-width: 720px; }
+#project-triggers .badge.ok { color: var(--green); }
+.pj-trig-rules, .pj-trig-runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+#project-triggers .kv { margin: 0; }
 /* #791: the project's Feature and Fix workflows, two labelled selects and a help line */
 .pj-wf-kinds { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
 .pj-wf-kind { display: grid; gap: 2px; min-width: 0; }
