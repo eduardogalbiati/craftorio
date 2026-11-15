@@ -18,18 +18,21 @@ someone remembers to open it. ([factor 11](https://github.com/humanlayer/12-fact
   (chaining, #134); a `type: workflow` step starts a child run and waits for it.
 - **A repository can bring its own workflows.** `.multiagent/project.yaml` names the workflows a
   project is worked on with; opening the clone in the app shows them (#485).
+- **Platform events start runs** (#568). A `triggers:` rule in `.multiagent/project.yaml` ("an issue
+  labelled `ready` starts `feature`", "an `@orchestrator` comment on a pull request starts `fix`", "a
+  failed CI on `main` starts `fix`") is polled with `gh api` / `glab api` every 2 minutes once the owner
+  turns the project on in Settings; each new event starts one run, which comments back on the issue or
+  pull request with its id. Budgets, occupancy, the merge queue and the human gates hold: a trigger
+  starts work, never ships it (`packages/engine/domains/triggers/`, `docs/agents/engine/repository-workflows.md`).
 - **Answers come back where the question was.** A gate answered on the phone is recorded with
   `via: "mobile"` and the device; notifications and toasts carry the gate's headline; the Night watch
   writes a morning summary.
 
 ## Gaps
 
-- **Nothing starts from the platform.** A new issue label, an `@orchestrator` comment on a pull
-  request or a failed CI run on `main` does not start anything: the owner or the roadmap does. The
-  Night watch and the Backlog refresh *poll* the platform on their own schedule, which covers the
-  night, not the day. An inbound trigger (a webhook endpoint on the engine server, or a short
-  polling loop over `gh api` events mapped to workflows by a rule in `project.yaml`) would make the
-  app meet the team where it works. Tracked as #568 under the epic #565.
+- **Polling, not push.** Platform triggers poll (a delay of up to the interval, API calls on each
+  pass); a webhook receiver on the engine server (`POST /hooks/triggers/<project>?key=`) would feed
+  the same rules, but needs a reachable address and is not built (`docs/agents/decisions.md`).
 - **No chat or e-mail channel.** Gates and reports are in the app and on the phone only.
 
 ## References

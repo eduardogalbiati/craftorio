@@ -195,11 +195,11 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
 }
 
 module.exports = {
-  DEFAULT_INTERVAL_MS,
-  TRIGGER_KINDS,
   createTriggerWatcher,
+  DEFAULT_INTERVAL_MS,
   matchEvent,
   readTriggerState,
   renderTriggerInputs,
+  TRIGGER_KINDS,
   validateTriggers,
 };

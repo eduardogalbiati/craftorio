@@ -55,7 +55,7 @@ window.ProjectTriggers = (() => {
     const call = ++shown;
     if (!p?.id) { box.innerHTML = ''; return; }
     let s;
-    try { s = await api.triggersStatus({ projectId: p.id }); } catch { s = null; }
+    try { s = await api.triggersStatus(p.id); } catch { s = null; }
     if (call !== shown) return;
     box.innerHTML = s && (s.rules.length || (s.refused || []).length) ? cardHtml(s) : '';
   }

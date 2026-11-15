@@ -52,3 +52,19 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   `agents.<name>.provider` / `model` / `effort` are layered onto the repository copy (`ownerCopy`,
   `packages/engine/engine/run/setup.js` `applyOwnerCopy`), under the run's own choices (#262).
   `workflow.started.agents.<name>.from` says where each agent's model came from.
+- **Triggers** (#568, `packages/engine/domains/triggers/`): `triggers: [{ on, label | mention | branch,
+  workflow, inputs? }]`, `on` one of `issue_labeled` (with `label`), `pr_comment` (with `mention`, e.g.
+  `@orchestrator`) and `ci_failed` (with `branch`). `workflow` names one of the manifest's own entries;
+  `inputs` values may hold `{{ event.<path> }}` (`event.issue.number`, `event.pr.number`, `event.url`,
+  `event.branch`): a lone placeholder keeps the value's type, one inside text becomes text. A rule with
+  an unknown `on`, a missing field or a workflow outside the manifest is listed in `triggerErrors` /
+  `refusedTriggers`, shown on the project page as "ignored", and never started; it never voids the
+  manifest. The rules are read at HEAD like the workflows (accepted per commit). The service
+  (`packages/engine/service/areas/triggers.js`) polls a project only when Settings › Execution ›
+  Platform triggers has it on (`settings.triggers.enabled[<id>]`, interval `intervalMinutes`, default
+  2, 0 = off), reads the events with `gh api` / `glab api` (`platform-events.js`, no model call, backs
+  off on HTTP 403/429), starts one run per new event like a roadmap item (budget, occupancy, memory
+  guard, merge queue), writes `trigger: { kind, id, url }` into the run's `meta.json`, comments once on
+  the issue or PR and keeps the seen ids in `<workspace>/backlog/triggers/<id>.json`. A trigger never
+  answers a gate or merges; under `MULTIAGENT_SIMULATION_ONLY=1` it neither reads nor writes the
+  platform. Channel `triggers:status { projectId }` feeds the project page's Triggers card.

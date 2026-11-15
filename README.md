@@ -1190,6 +1190,28 @@ and when the repository's copy runs (no edited copy, or the project's "Prefer th
 workflows" setting) your models still apply on top. This repository declares its
 four flows this way. Details: [`docs/agents/engine/repository-workflows.md`](docs/agents/engine/repository-workflows.md).
 
+## Triggers: runs started from the git platform
+
+The same `.multiagent/project.yaml` may list `triggers:`, rules that start one of its workflows
+from a platform event, GitHub or GitLab:
+
+```yaml
+triggers:
+  - { on: issue_labeled, label: ready, workflow: feature, inputs: { issues: ["{{ event.issue.number }}"] } }
+  - { on: pr_comment, mention: "@orchestrator", workflow: fix }
+  - { on: ci_failed, branch: main, workflow: fix }
+```
+
+Nothing polls until you turn the project on in **Settings › Execution › Platform triggers**; the app
+then reads the events with `gh api` / `glab api` every 2 minutes (no model call, a longer wait on a
+rate limit) and starts one run per new event, never twice for the same one (restart or two apps).
+The run comments once on the issue or pull request with its id, counts in the day's and the night's
+budgets, waits for a free slot and the merge queue like a roadmap run, and its gates ask you: a
+trigger starts work, it never merges. A rule that names a workflow outside the manifest or misses a
+field is shown as "ignored" on the project's **Triggers** card, with the last event seen and the
+runs started. Under `MULTIAGENT_SIMULATION_ONLY=1` the platform is neither read nor written.
+Details: [`docs/agents/engine/repository-workflows.md`](docs/agents/engine/repository-workflows.md).
+
 ## Ways of working: an interview that writes your workflows
 
 On a project's page, **Ways of working** opens a drawer that proposes how to work on the

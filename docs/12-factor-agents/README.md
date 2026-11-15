@@ -28,7 +28,7 @@ built the way it is. It complements [`docs/agents/`](../agents/) (the implemente
 | 8 | [Own your control flow](factor-08-own-your-control-flow.md) | covered | the engine, transitions, `max_visits`, `on_exhausted`, probes |
 | 9 | [Compact errors into the context window](factor-09-compact-errors.md) | covered | previous-attempt summary, schema errors, `action_error`, stall detection |
 | 10 | [Small, focused agents](factor-10-small-focused-agents.md) | covered | one role per agent, skills per step, read-only agents, child workflows |
-| 11 | [Trigger from anywhere](factor-11-trigger-from-anywhere.md) | partial | app, CLI, browser, phone, roadmap, chaining; no inbound platform events |
+| 11 | [Trigger from anywhere](factor-11-trigger-from-anywhere.md) | partial | app, CLI, browser, phone, roadmap, chaining, platform triggers (polling, #568); no webhook, chat or e-mail |
 | 12 | [Make your agent a stateless reducer](factor-12-stateless-reducer.md) | covered | the run state is a pure function of `events.jsonl` (#606); a restart continues live runs from it, in their own folder (#607); a per-step reducer is a follow-up |
 | 13 | [Pre-fetch all the context you might need](factor-13-prefetch-context.md) (bonus) | covered | template filters, `wait:` probes, project map, dependency cache |
 
@@ -44,7 +44,8 @@ adherence, #565 (see the pages for the reasoning):
    without the owner.
 2. Factor 7, #567: done: an agent asks for a human as a structured output (`needs_human`) that the
    engine turns into a gate of its step.
-3. Factor 11, #568: start runs from platform events (an issue label, a pull request comment).
+3. Factor 11, #568: done: a `triggers:` rule in `project.yaml` starts a run from an issue label, a
+   pull request comment or a failed CI (polling; a webhook receiver is noted, not built).
 
 The repository's own structure for agents (rules files, topic docs, skills) has its page,
 [codebase-structure.md](codebase-structure.md), with the baseline of which docs the sessions read (#574).
