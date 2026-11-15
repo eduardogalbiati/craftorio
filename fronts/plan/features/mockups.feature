@@ -94,3 +94,30 @@ Feature: Project mockups in Plan & Design
     And I choose "Prepare issues" on the mockup's current version
     Then the commit dialog lists the proposed issues with 1 cropped region
     And no issue has been filed to the project's backlog
+
+  @issue-837
+  Scenario: Exporting the chosen mockups to the repository opens the Start panel on the export workflow and starts no run
+    Given the app is open
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    And the project has the mockup "Settings page" with a button "Save"
+    When I open "Mockups" in the sidebar
+    And I export only the mockup "Orders dashboard" to the repository, making the kit the official design system
+    Then the Start panel opens on the workflow "mockups-export.yaml" with the mockup "Orders dashboard" and without "Settings page"
+    And the run status shows "idle"
+
+  @issue-837
+  Scenario: The live link of a mockup is unavailable until the security review is done
+    Given the app is open
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    When I open "Mockups" in the sidebar
+    And I open the mockup "Orders dashboard" in its editor window
+    Then the mockup editor's "Share a live link" is unavailable and says it waits for the security review
+
+  @issue-837
+  Scenario: A project without Storybook keeps the static kit and the editor says so
+    Given the app is open
+    And the project has no Storybook
+    And the project has the mockup "Orders dashboard" with a button "Export"
+    When I open "Mockups" in the sidebar
+    And I open the mockup "Orders dashboard" in its editor window
+    Then the mockup editor says the screen uses the static kit because the project has no Storybook

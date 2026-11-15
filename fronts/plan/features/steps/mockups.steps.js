@@ -425,3 +425,84 @@ Then('no issue has been filed to the project\'s backlog', async ({ e2e }) => {
   await expect(win.getByTestId('discovery-commit-dialog').getByRole('button', { name: 'File the issues', exact: true })).toBeVisible();
   expect(backlogIssues(e2e)).toBe(e2e.backlogIssuesBefore ?? 0);
 });
+
+// ---- #837: export to the repository by PR, the live link, live components (Storybook) ------------
+// The developer adds these data-testids:
+//   mockups-export-repo          on the Mockups screen, the "Export to the repository" button (next to the
+//                                existing mockups-export zip export); it opens a dialog (role=dialog, named
+//                                "Export to the repository") with one checkbox per mockup (named by the
+//                                mockup's title), a checkbox "Make the kit the official design system" and
+//                                an "Export" / "Open the export" / "Continue" button. Confirming opens the
+//                                main window's Start panel on workflows/mockups-export.yaml with the chosen
+//                                screens in its `screens` input (data-wi-input="screens", the slugs) and
+//                                never starts a run on its own (the PR is made by that run)
+//   mockup-live-link             in the editor, the "Share a live link" button: disabled (or aria-disabled)
+//                                until the security review #466-#470 is done
+//   mockup-live-link-blocked     next to it, the message saying why (mentions the security review)
+//   mockup-components-source     in the editor, where the screen's components come from: the project's
+//                                Storybook ("live components") or the static kit, saying why
+// "No Storybook": the demo project's folder (when it has one) holds no .storybook/ folder and its
+// package.json has no storybook dependency or script.
+
+const EXPORT_CONFIRM = /^(export|open the export|continue)\b/i;
+const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const slugOf = (e2e, title) => {
+  const seeded = e2e.seededMockups?.[title];
+  expect(seeded, `the mockup "${title}" was seeded in this scenario`).toBeTruthy();
+  return seeded.slug;
+};
+
+When('I export only the mockup {string} to the repository, making the kit the official design system', async ({ e2e }, title) => {
+  const page = e2e.window;
+  await expect(card(page, title)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const open = view(page).getByTestId('mockups-export-repo');
+  await expect(open).toHaveAccessibleName(/export to the repository/i);
+  await open.click();
+  const dialog = page.getByRole('dialog', { name: /export to the repository/i });
+  await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // only the chosen mockup: every other mockup's checkbox is cleared
+  for (const other of Object.keys(e2e.seededMockups || {})) {
+    const box = dialog.getByRole('checkbox', { name: new RegExp(`^${escapeRe(other)}\\b`) });
+    await expect(box).toHaveCount(1);
+    await box.setChecked(other === title);
+  }
+  await dialog.getByRole('checkbox', { name: /official design system/i }).check();
+  await dialog.getByRole('button', { name: EXPORT_CONFIRM }).first().click();
+});
+
+Then('the Start panel opens on the workflow {string} with the mockup {string} and without {string}', async ({ e2e }, file, chosen, left) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('start-workflow')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole('combobox', { name: 'Workflow', exact: true })).toHaveValue(file);
+  const input = startInput(page, 'screens');
+  await expect(input).toHaveCount(1);
+  await expect(input).toHaveValue(new RegExp(escapeRe(slugOf(e2e, chosen))), { timeout: LOAD_TIMEOUT });
+  await expect(input).not.toHaveValue(new RegExp(escapeRe(slugOf(e2e, left))));
+});
+
+Then('the mockup editor\'s {string} is unavailable and says it waits for the security review', async ({ e2e }, label) => {
+  const win = mockupWindow(e2e);
+  const button = win.getByTestId('mockup-live-link');
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveAccessibleName(new RegExp(`^${escapeRe(label)}\\b`, 'i'));
+  // disabled, or aria-disabled: either way a click shares nothing
+  await expect.poll(() => button.evaluate((el) => el.disabled === true || el.getAttribute('aria-disabled') === 'true'), { message: `"${label}" is unavailable` }).toBe(true);
+  const why = win.getByTestId('mockup-live-link-blocked');
+  await expect(why).toBeVisible();
+  await expect(why).toContainText(/security review/i);
+});
+
+Given('the project has no Storybook', async ({ e2e }) => {
+  const folder = e2e.project?.folder;
+  if (!folder || !fs.existsSync(folder)) return;
+  expect(fs.existsSync(path.join(folder, '.storybook')), 'the project has no .storybook folder').toBe(false);
+  const pkgFile = path.join(folder, 'package.json');
+  if (fs.existsSync(pkgFile)) expect(fs.readFileSync(pkgFile, 'utf8'), 'the project\'s package.json names no Storybook').not.toMatch(/storybook/i);
+});
+
+Then('the mockup editor says the screen uses the static kit because the project has no Storybook', async ({ e2e }) => {
+  const source = mockupWindow(e2e).getByTestId('mockup-components-source');
+  await expect(source).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(source).toContainText(/static kit/i);
+  await expect(source).toContainText(/storybook/i);
+});
