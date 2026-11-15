@@ -73,11 +73,16 @@ The handoff only prepares work: no channel here starts a development run or file
   The editor's **Start a development run** freezes the current version and opens the main window's Start
   panel with `inputs.mockup` filled (`main-window:navigate` `mockups:start-run`); the owner starts the run.
 - `mockups:crops` (`saveCrops`) turns the regions selected in the editor (`data-mid`) into cropped images
-  saved by `saveRef` in `refs/` (`[{ mid, file, name }]`); a mid missing at that version is refused. The host
-  captures the pixels; simulated, a placeholder image. **Prepare issues** then opens the #258 commit dialog
-  of the Discovery card the mockup is attached to (`mockups:prepare-issues`); each crop goes into every
-  issue of the split (`discovery_commit.crops`, a section of the issue body with its `data-mid`), and
-  nothing is filed until the owner confirms in the dialog.
+  saved by `saveRef` in `refs/` (`[{ mid, file, name }]`); a mid missing at that version is refused. The
+  desktop host captures the pixels (`host.captureMockupRegion`: the editor window's `capturePage` inside the
+  region's box, translated to window coordinates by the editor); without a host or when the capture fails,
+  a placeholder image. **Prepare issues** then opens the #258 commit dialog of the Ready Discovery card the
+  mockup is attached to (`mockups:prepare-issues`, the exact version first; a card outside Ready is told in
+  a toast); each crop goes into every issue of the split (`discovery_commit.crops`, a section of the issue
+  body with its `data-mid`), nothing is filed until the owner confirms in the dialog, and the filed issues
+  are told like a commit from the board (`DiscoveryActions.committed`).
+  Limitation: the issue body names each crop and its local path (`refs/<sha>.png` in this workspace's
+  mockup folder); the image itself is not uploaded to GitHub or GitLab in this phase.
 - `mockups:review` (`reviewScreen`) is **Review this screen**: on demand only, its estimate
   (`review-screen`) shown first; kit findings from `MockupModel.lintMockup`, axe findings from the given
   violations, layout findings from the model turn. Simulated: $0, no workflow run. A designer turn never

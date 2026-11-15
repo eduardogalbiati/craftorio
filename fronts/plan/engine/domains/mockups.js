@@ -156,6 +156,9 @@ function fileAt(dir, sha, relPath) {
   return execFileSync('git', ['show', `${sha}:${relPath}`], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 }
 
+// the full sha of a version (checked by fileAt first)
+const fullSha = (dir, sha) => git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]);
+
 function restoreVersion(workspace, projectId, { slug, commit: sha } = {}) {
   const { dir, slug: s } = existingScreen(workspace, projectId, slug);
   const html = fileAt(dir, sha, rel('screens', s, 'index.html'));
@@ -180,8 +183,8 @@ function screenAt(workspace, projectId, { slug, commit: sha } = {}) {
 function attachment(workspace, projectId, { slug, commit: sha } = {}) {
   const { dir, slug: s } = existingScreen(workspace, projectId, slug);
   fileAt(dir, sha, rel('screens', s, 'index.html')); // a bad sha or a screen missing at that version throws
-  const full = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]);
-  const title = listScreens(workspace, projectId).find((x) => x.slug === s)?.title || s;
+  const full = fullSha(dir, sha);
+  const title =listScreens(workspace, projectId).find((x) => x.slug === s)?.title || s;
   return {
     projectId,
     slug: s,
@@ -198,8 +201,8 @@ function attachment(workspace, projectId, { slug, commit: sha } = {}) {
 function freezeVersion(workspace, projectId, { slug, commit: sha } = {}) {
   const { dir, slug: s } = existingScreen(workspace, projectId, slug);
   const html = fileAt(dir, sha, rel('screens', s, 'index.html'));
-  const full = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]);
-  const out = path.join(dir, 'frozen', `${s}@${full.slice(0, 7)}`);
+  const full = fullSha(dir, sha);
+  const out =path.join(dir, 'frozen', `${s}@${full.slice(0, 7)}`);
   fs.mkdirSync(path.join(out, 'kit'), { recursive: true });
   fs.writeFileSync(path.join(out, 'index.html'), html);
   for (const f of KIT_FILES) {
@@ -215,7 +218,7 @@ function freezeVersion(workspace, projectId, { slug, commit: sha } = {}) {
 function saveCrops(workspace, projectId, { slug, commit: sha, regions = [] } = {}) {
   const { dir, slug: s } = existingScreen(workspace, projectId, slug);
   const html = fileAt(dir, sha, rel('screens', s, 'index.html'));
-  const short = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]).slice(0, 7);
+  const short = fullSha(dir, sha).slice(0, 7);
   const list = Array.isArray(regions) ? regions : [];
   for (const r of list) if (!elementTag(html, r?.mid)) throw new Error(`No element ${r?.mid} in the screen ${s} at ${short}`);
   return list.map((r) => {

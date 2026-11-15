@@ -542,7 +542,10 @@
     if (!commit) return;
     if (!ed.selection.length) { errorLine(t('mockups.prepare_select_first')); return; }
     try {
-      const regions = ed.selection.map((s) => ({ mid: s.mid, box: s.box || null }));
+      // the inspector's box is in the canvas' coordinates: the host captures the window's
+      const at = q('#mockup-canvas')?.getBoundingClientRect?.() || { left: 0, top: 0 };
+      const inWindow = (b) => (Array.isArray(b) && b.length === 4 ? [b[0] + (at.left || 0), b[1] + (at.top || 0), b[2], b[3]] : null);
+      const regions = ed.selection.map((s) => ({ mid: s.mid, box: inWindow(s.box) }));
       const crops = await api.saveMockupCrops(ed.projectId, ed.slug, commit, regions);
       await api.navigateMainWindow?.({ name: 'mockups:prepare-issues', target: { projectId: ed.projectId, slug: ed.slug, commit, crops } });
       errorLine('');

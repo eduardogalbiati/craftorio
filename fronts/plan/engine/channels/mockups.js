@@ -121,18 +121,35 @@ module.exports = (ctx) => {
     });
   }
 
-  async function createScreen({ projectId, title, prompt = '', source = null }) {
-    const name = String(title || '').trim();
-    if (!name) throw clientError('Give the mockup a title.');
-    const origin = source && typeof source === 'object' ? source : { kind: 'prompt' };
+  // a new screen: the draft written at once, then the simulated designer's chat line or a designer run
+  // (create-screen and recreate); `simulated` and `inputs` take the screen's name
+  async function newScreen({ projectId, name, prompt, source, simulated, inputs }) {
     const draft = MockupModel.draftScreen({ title: name, prompt });
-    const { slug, commit } = mockups.createScreen(wsRoot(), projectId, { title: name, html: draft, source: { ...origin, prompt: String(prompt || '') } });
+    const { slug, commit } = mockups.createScreen(wsRoot(), projectId, { title: name, html: draft, source });
     if (simulation.simulationOnly()) {
-      mockups.appendChat(wsRoot(), projectId, slug, { role: 'assistant', text: `Simulated designer: drew "${name}" from the prompt.` });
+      mockups.appendChat(wsRoot(), projectId, slug, { role: 'assistant', text: simulated });
       return { slug, commit, runId: null };
     }
-    const started = await startDesigner(projectId, slug, { mode: 'generate', title: name, prompt: String(prompt || ''), message: `Generate ${name}` });
+    const started = await startDesigner(projectId, slug, { title: name, ...inputs });
     return { slug, commit, runId: started?.runId || null };
+  }
+  const titleOf = (title) => {
+    const name = String(title || '').trim();
+    if (!name) throw clientError('Give the mockup a title.');
+    return name;
+  };
+
+  async function createScreen({ projectId, title, prompt = '', source = null }) {
+    const name = titleOf(title);
+    const origin = source && typeof source === 'object' ? source : { kind: 'prompt' };
+    return newScreen({
+      projectId,
+      name,
+      prompt,
+      source: { ...origin, prompt: String(prompt || '') },
+      simulated: `Simulated designer: drew "${name}" from the prompt.`,
+      inputs: { mode: 'generate', prompt: String(prompt || ''), message: `Generate ${name}` },
+    });
   }
 
   // one designer turn in its persistent session (D8, ../domains/mockup-designer.js), no workflow run
@@ -154,12 +171,17 @@ module.exports = (ctx) => {
   }
 
   // #836 the selected regions as cropped images: a region without `data` is captured by the host
-  // (ctx.host.captureMockupRegion, desktop) or, without one (a browser, simulation), a placeholder image
+  // (ctx.host.captureMockupRegion, desktop: the editor window's pixels inside `box`, window coordinates) or,
+  // without one or when it fails (a browser, a region off screen), a placeholder image
   async function crops({ projectId, slug, commit, regions = [] }) {
     const capture = ctx.host?.captureMockupRegion;
+    const captured = async (r) => {
+      if (typeof capture !== 'function') return null;
+      try { return await capture({ projectId, slug, commit, mid: r?.mid, box: r?.box || null }); } catch { return null; }
+    };
     const filled = [];
     for (const r of Array.isArray(regions) ? regions : []) {
-      const data = r?.data || (typeof capture === 'function' ? await capture({ projectId, slug, commit, mid: r?.mid, box: r?.box || null }) : null) || PLACEHOLDER_PNG;
+      const data = r?.data || (await captured(r)) || PLACEHOLDER_PNG;
       filled.push({ mid: r?.mid, data });
     }
     return userError(() => mockups.saveCrops(wsRoot(), projectId, { slug, commit, regions: filled }));
@@ -183,21 +205,20 @@ module.exports = (ctx) => {
   // project's localPreview, else the repository's .multiagent/local-preview.yaml); simulated, a draft at
   // once; real, a mockup-generate run in mode 'recreate' with the app's url
   async function recreate({ projectId, title, url = '' }) {
-    const name = String(title || '').trim();
-    if (!name) throw clientError('Give the mockup a title.');
+    const name = titleOf(title);
     const project = projectOf(projectId);
     const repo = project?.folder ? localPreview.readRepoConfig(project.folder) : null;
     const config = localPreview.resolveConfig(project, null, repo?.error ? null : repo);
     if (!config) throw clientError('Set Run App (Projects › Local preview or .multiagent/local-preview.yaml) to recreate a screen of the running app.');
     const appUrl = String(url || '').trim() || String(config.url || '');
-    const draft = MockupModel.draftScreen({ title: name, prompt: `Recreated from the running app${appUrl ? ` (${appUrl})` : ''}.` });
-    const { slug, commit } = mockups.createScreen(wsRoot(), projectId, { title: name, html: draft, source: { kind: 'running-app', url: appUrl } });
-    if (simulation.simulationOnly()) {
-      mockups.appendChat(wsRoot(), projectId, slug, { role: 'assistant', text: `Simulated designer: recreated "${name}" from ${appUrl || 'the running app'}.` });
-      return { slug, commit, runId: null };
-    }
-    const started = await startDesigner(projectId, slug, { mode: 'recreate', title: name, app_url: appUrl, message: `Recreate ${name} from the running app` });
-    return { slug, commit, runId: started?.runId || null };
+    return newScreen({
+      projectId,
+      name,
+      prompt: `Recreated from the running app${appUrl ? ` (${appUrl})` : ''}.`,
+      source: { kind: 'running-app', url: appUrl },
+      simulated: `Simulated designer: recreated "${name}" from ${appUrl || 'the running app'}.`,
+      inputs: { mode: 'recreate', app_url: appUrl, message: `Recreate ${name} from the running app` },
+    });
   }
 
   async function buildKit({ projectId }) {

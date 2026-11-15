@@ -176,6 +176,16 @@ const service = createService({
     secrets: createSecrets({ file: path.join(app.getPath('userData'), 'secrets.bin'), safeStorage }),
     // #625: the mockup editor window (mockups:open-editor, fronts/plan/engine/channels/mockups.js)
     openMockupEditor: (a) => !!mockupsWindow?.open(a || {}),
+    // #836: a selected region of the editor window as a PNG data URL (mockups:crops), `box` [x, y, width,
+    // height] in the window's coordinates; null when there is nothing to capture
+    captureMockupRegion: async ({ box } = {}) => {
+      const w = mockupsWindow?.current();
+      if (!w || w.isDestroyed() || !Array.isArray(box) || box.length !== 4) return null;
+      const [x, y, width, height] = box.map((n) => Math.max(0, Math.round(Number(n) || 0)));
+      if (!width || !height) return null;
+      const image = await w.webContents.capturePage({ x, y, width, height });
+      return image.isEmpty() ? null : image.toDataURL();
+    },
   },
   // the fronts this app ships (apps/desktop/composition.js, phase 4 of the study, #590): their
   // engine-side channels and areas load with the kernel's

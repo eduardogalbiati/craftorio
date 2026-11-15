@@ -3070,6 +3070,7 @@
   "mockups.prepare_issues": "Prepare issues",
   "mockups.prepare_issues_help": "Crop the selected regions and open the commit dialog of the Discovery card this mockup is attached to; nothing is filed until you confirm there",
   "mockups.prepare_needs_card": "Attach this mockup to a Discovery card first, then prepare its issues",
+  "mockups.prepare_needs_ready": "The Discovery card this mockup is attached to is not in Ready: move it to Ready, then prepare its issues",
   "mockups.prepare_select_first": "Select the regions of the screen the issues need, then choose Prepare issues",
   "mockups.promote": "Promote to kit",
   "mockups.promote_help": "The element's colours become tokens and its style a kit component.",

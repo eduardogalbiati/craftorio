@@ -3070,6 +3070,7 @@
   "mockups.prepare_issues": "Preparar issues",
   "mockups.prepare_issues_help": "Recorta as regiões selecionadas e abre o diálogo de commit do card do Discovery a que este mockup está anexado; nada é arquivado até você confirmar lá",
   "mockups.prepare_needs_card": "Anexe este mockup a um card do Discovery primeiro e depois prepare as issues",
+  "mockups.prepare_needs_ready": "O card do Discovery a que este mockup está anexado não está em Ready: mova-o para Ready e depois prepare as issues",
   "mockups.prepare_select_first": "Selecione as regiões da tela de que as issues precisam e depois escolha Preparar issues",
   "mockups.promote": "Promover ao kit",
   "mockups.promote_help": "As cores do elemento viram tokens e o estilo vira um componente do kit.",

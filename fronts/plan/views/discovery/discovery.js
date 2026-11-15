@@ -1191,20 +1191,20 @@
     } catch (e) { detailError(errMsg(e)); }
   });
 
+  // the dialog's issues filed (#258): what was filed and what went wrong told, the card's panel closed, the
+  // board read again (also for the commit dialog a mockup opens, #836: window.DiscoveryActions.committed)
+  function committed(out, problems) {
+    const filed = (out.issues || []).map((i) => `#${i.number}`).join(', ');
+    const planned = out.roadmap && !problems.some((p) => /roadmap/.test(p));
+    showToast(t('discovery.committed_value_to_the_backlog', { value: out.card?.title || '' }), [`Filed ${filed}${out.simulated ? ' (simulated)' : ''}${planned ? ', planned in the roadmap' : ''}.`, ...problems].join(' '));
+    if (dv.open?.id === out.card?.id) closeCard();
+    refresh();
+  }
+
   // "Commit to the backlog" (#258): the dialog files the issues; then the card is in the Committed list.
   function openCommit() {
     if (editBlocks()) return;
-    commit().open({
-      projectId: dv.openProject,
-      card: dv.open,
-      done: (out, problems) => {
-        const filed = (out.issues || []).map((i) => `#${i.number}`).join(', ');
-        const planned = out.roadmap && !problems.some((p) => /roadmap/.test(p));
-        showToast(t('discovery.committed_value_to_the_backlog', { value: out.card?.title || '' }), [`Filed ${filed}${out.simulated ? ' (simulated)' : ''}${planned ? ', planned in the roadmap' : ''}.`, ...problems].join(' '));
-        if (dv.open?.id === out.card?.id) closeCard();
-        refresh();
-      },
-    });
+    commit().open({ projectId: dv.openProject, card: dv.open, done: committed });
   }
 
   // New learning from a committed card (#258): a new Inbox card linked to it, opened to be written.
@@ -1349,6 +1349,7 @@
   window.DiscoveryRuns = { started: runStarted };
   // the Backlog's badge of an issue's discovery card (#258): the board with that card's panel open
   window.DiscoveryActions = {
+    committed,
     openCard: (id) => { showView('discovery'); return openCard(id); },
   };
 

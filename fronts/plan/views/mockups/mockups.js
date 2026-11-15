@@ -236,8 +236,16 @@
   // ---- #836 the editor window's handoff, run in the main window ------------------------------------
   // Start a development run: the Start panel (openDrawer, read at call time) with the project and the
   // `mockup` input filled; it never starts a run
-  function openStartRun(target) {
-    window.openDrawer?.({ project: target?.projectId || null, inputs: target?.inputs || {} });
+  // with the remembered workflow when it declares `mockup`, else feature.yaml (the drawer drops an input
+  // its workflow does not declare)
+  async function openStartRun(target) {
+    let workflow = 'feature.yaml';
+    try {
+      const [settings, workflows] = await Promise.all([api.getSettings(), api.listWorkflows()]);
+      const last = (workflows || []).find((w) => w?.file === settings?.lastWorkflow);
+      if (last?.inputs?.mockup) workflow = last.file;
+    } catch { /* the default */ }
+    window.openDrawer?.({ project: target?.projectId || null, workflow, inputs: target?.inputs || {} });
   }
 
   // Prepare issues: the #258 commit dialog of the Discovery card the mockup is attached to, with the crops
@@ -249,10 +257,14 @@
         const a = window.MockupModel?.parseAttachmentName?.(n);
         return a && a.slug === slug && (!exact || String(commit || '').startsWith(a.commit));
       });
-      const card = (cards || []).find((c) => attachedTo(c, true)) || (cards || []).find((c) => attachedTo(c, false));
-      if (!card) { showToast(t('mockups.prepare_needs_card'), slug || ''); return; }
+      const attached = (cards || []).filter((c) => attachedTo(c, false));
+      if (!attached.length) { showToast(t('mockups.prepare_needs_card'), slug || ''); return; }
+      // only a Ready card can be committed (#258): the exact version first
+      const ready = attached.filter((c) => c.column === 'ready');
+      const card = ready.find((c) => attachedTo(c, true)) || ready[0];
+      if (!card) { showToast(t('mockups.prepare_needs_ready'), attached[0].title || slug || ''); return; }
       showView('discovery');
-      window.DiscoveryCommit?.open?.({ projectId, card, crops, done() {} });
+      window.DiscoveryCommit?.open?.({ projectId, card, crops, done: (out, problems) => window.DiscoveryActions?.committed?.(out, problems) });
     } catch (e) { showToast(errMsg(e), slug || ''); }
   }
 
