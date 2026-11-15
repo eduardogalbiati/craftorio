@@ -282,6 +282,16 @@ function issueSaveCommand({ platform, repo, number, mode, file, text }) {
   return { ...c, display: commandDisplay(c, text) };
 }
 
+/**
+ * #568: the CLI call that comments `text` on pull/merge request `number` (gh reads it from `file`, glab
+ * takes it as an argument): { cli, args, display }.
+ */
+function prCommentCommand({ platform, repo, number, file, text }) {
+  const target = cliTarget(platform, repo);
+  const c = adapterOf(platform).prCommentCommand({ target, n: String(Number(number)), file, text });
+  return { ...c, display: commandDisplay(c, text) };
+}
+
 /** The CLI call that closes issue `number` (a parent split into child issues, #124): { cli, args, display }. */
 function issueCloseCommand({ platform, repo, number }) {
   const target = cliTarget(platform, repo);
@@ -630,6 +640,7 @@ module.exports = {
   issueCreateCommand,
   issueSaveBody,
   issueSaveCommand,
+  prCommentCommand,
   readIssueSaves,
   recordedIssues,
   repoLabels,

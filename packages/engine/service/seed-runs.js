@@ -6,7 +6,7 @@
 // simulated under mock or MULTIAGENT_SIMULATION_ONLY; saved under <workspace>/architecture/. The
 // state lives per service context (a WeakMap on ctx), read at call time.
 // runDefaultsOf (#735): a project's run defaults over its last ways-of-working profile, for the run
-// dialog's hints, the Backlog's queue and the Roadmap.
+// dialog's hints, the Backlog's queue and the Roadmap; withProjectDefaults, a run's inputs over them.
 // productOwnerWorkflows (#790, #791): what the Product Owner may plan on for a project (the channel
 // po:ask, the chains, the live roadmap and the Oracle give it the same).
 
@@ -18,6 +18,7 @@ const oracleSeeds = require('../domains/oracle/oracle-seeds');
 const projects = require('../domains/project/projects');
 const runDefaults = require('../domains/project/project-run-defaults');
 const simulation = require('../engine/simulation');
+const { loadWorkflow } = require('../engine/workflow');
 const { clientError, requireId } = require('./common');
 
 const TOOL_TIMEOUT_MS = 10 * 60e3;
@@ -141,6 +142,28 @@ function runDefaultsNow(ctx, project) {
 }
 
 /**
+ * #735: the typed inputs over the project's run defaults (resolveRunInputs: typed > project), the
+ * workflow's own defaults left to the engine; the inputs unchanged without a project or a workflow.
+ * Synchronous (runDefaultsNow): run:start (channels/runs.js) and a platform trigger (#568,
+ * areas/triggers.js) reserve their run before they return.
+ */
+function withProjectDefaults(ctx, { file, inputs, projectId }) {
+  if (!projectId) return inputs;
+  let project = null;
+  let wf = null;
+  try {
+    project = projects.readProject(ctx.ws.projects, projectId);
+    wf = loadWorkflow(ctx.projectWorkflowFile(projectId, file));
+  } catch { return inputs; }
+  if (!project?.folder || !wf?.inputs) return inputs;
+  const typed = Object.fromEntries(Object.entries(inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  const { values, sources } = runDefaults.resolveRunInputs({ typed, project: runDefaultsNow(ctx, project), workflow: { inputs: wf.inputs } });
+  const out = { ...inputs };
+  for (const [k, v] of Object.entries(values)) if (sources[k] === 'project') out[k] = v;
+  return out;
+}
+
+/**
  * #790, #791: the usable workflows of a project: the workspace's and its repository's (#485), each file
  * once, as the Backlog lists them. A default or a kind may name a workflow only the repository declares:
  * without the project's listing DefaultWorkflow.resolve would fall back to feature.yaml.
@@ -183,4 +206,5 @@ module.exports = {
   runState,
   seedsRoot,
   toolOf,
+  withProjectDefaults,
 };

@@ -23,7 +23,8 @@ window.ProjectTriggers = (() => {
     if (!ev) return esc(t('project.triggers.no_event'));
     const what = esc(t(`project.triggers.kind_${ev.kind}`) || ev.kind);
     const link = ev.url ? `<span class="mono small text-cut" title="${esc(ev.url)}">${esc(ev.url)}</span>` : `<span class="mono small">${esc(ev.id)}</span>`;
-    return `${what} ${link} <span class="muted small">${esc(when(ev.at))}</span>`;
+    const failed = ev.error ? `<div class="warn-text small text-cut" data-testid="project-triggers-last-error" title="${esc(ev.error)}">${esc(t('project.triggers.start_failed', { problem: ev.error }))}</div>` : '';
+    return `${what} ${link} <span class="muted small">${esc(when(ev.at))}</span>${failed}`;
   }
 
   function runsHtml(runs) {

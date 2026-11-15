@@ -126,6 +126,8 @@
     issueViewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--json', ISSUE_FIELDS]),
     issueCreateCommand: ({ target, title, labels, file }) => cmd(['issue', 'create', '--repo', target, '--title', title, '--body-file', file, ...labels.flatMap((l) => ['--label', l])]),
     issueSaveCommand: ({ target, n, mode, file }) => cmd(['issue', mode === 'replace' ? 'edit' : 'comment', n, '--repo', target, '--body-file', file]),
+    // a comment on a pull request (#568: a trigger's report; `gh issue comment` may refuse a PR's number)
+    prCommentCommand: ({ target, n, file }) => cmd(['pr', 'comment', n, '--repo', target, '--body-file', file]),
     issueCloseCommand: (target, n) => cmd(['issue', 'close', n, '--repo', target, '--reason', github.closeReason]),
     issueReopenCommand: (target, n) => cmd(['issue', 'reopen', n, '--repo', target]),
     issueLabelCommand: ({ target, n, label, add }) => cmd(['issue', 'edit', n, '--repo', target, add ? '--add-label' : '--remove-label', label]),

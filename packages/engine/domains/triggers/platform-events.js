@@ -6,12 +6,13 @@
 //   { kind: 'ci_failed', id, url, branch }                          a failed Actions run / pipeline
 // The id carries the platform's own id (`gh:labeled:<id>`), so the watcher's dedup survives a restart.
 // A rate limit (the CLI's stderr says HTTP 403 or 429) rejects with code 'RATE_LIMITED': the watcher
-// (triggers.js) backs off. Also the one report back: commentCommand, the CLI call that comments on the
-// issue or PR a run was started from.
+// (triggers.js) backs off. The report back on the issue or PR is the platform adapters' (backlog.js
+// issueSaveCommand / prCommentCommand, areas/triggers.js).
 
 const RATE_LIMIT = /HTTP (403|429)/;
-// one page per endpoint and poll: a poll every few minutes never has more
+// one page per endpoint and poll (the issue events: up to MAX_PAGES, they take no `since`)
 const PAGE = 50;
+const MAX_PAGES = 5;
 
 // exec with a rate limit turned into a RATE_LIMITED error; the JSON answer parsed
 async function api(exec, cmd, endpoint) {
@@ -36,11 +37,24 @@ function unique(events) {
   return [...byId.values()];
 }
 
+// GitHub's issue events take no `since` and mix every kind (closed, assigned, mentioned...), newest first:
+// the pages up to the first event older than `since` (no since: the first page), MAX_PAGES at most
+async function issueEventsSince(exec, base, since) {
+  const out = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const items = list(await api(exec, 'gh', `${base}/issues/events?per_page=${PAGE}&page=${page}`));
+    out.push(...items);
+    const oldest = items[items.length - 1]?.created_at;
+    if (!since || items.length < PAGE || (oldest && !after(oldest, since))) break;
+  }
+  return out;
+}
+
 /** GitHub: labels added to issues, comments on pull requests, failed Actions runs since `since`. */
 async function readGithubEvents({ repo, since = null, exec }) {
   const base = `repos/${repo}`;
   const sinceQ = since ? `&since=${encodeURIComponent(since)}` : '';
-  const issueEvents = list(await api(exec, 'gh', `${base}/issues/events?per_page=${PAGE}`));
+  const issueEvents = await issueEventsSince(exec, base, since);
   const comments = list(await api(exec, 'gh', `${base}/issues/comments?per_page=${PAGE}&sort=created&direction=desc${sinceQ}`));
   const runs = await api(exec, 'gh', `${base}/actions/runs?status=failure&per_page=${PAGE}`);
   const events = [];
@@ -84,23 +98,7 @@ async function readGitlabEvents({ project, since = null, exec }) {
   return unique(events);
 }
 
-/**
- * The CLI call that comments `body` on the issue or pull/merge request an event came from, or null (a
- * failed CI run has neither): { cli, args }. `gh issue comment` serves an issue and a PR alike.
- */
-function commentCommand({ platform, repo, event, body }) {
-  const number = event?.kind === 'issue_labeled' ? event.issue?.number : event?.kind === 'pr_comment' ? event.pr?.number : null;
-  if (number == null || !repo) return null;
-  const n = String(Number(number));
-  if (platform === 'gitlab') {
-    const what = event.kind === 'pr_comment' ? 'mr' : 'issue';
-    return { cli: 'glab', args: [what, 'note', n, '--repo', repo, '--message', body] };
-  }
-  return { cli: 'gh', args: ['issue', 'comment', n, '--repo', repo, '--body', body] };
-}
-
 module.exports = {
-  commentCommand,
   readGithubEvents,
   readGitlabEvents,
 };

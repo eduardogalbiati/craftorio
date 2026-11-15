@@ -106,6 +106,8 @@
     issueViewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--output', 'json']),
     issueCreateCommand: ({ target, title, labels, text }) => cmd(['issue', 'create', '--repo', target, '--title', title, '--description', text, ...(labels.length ? ['--label', labels.join(',')] : []), '--yes']),
     issueSaveCommand: ({ target, n, mode, text }) => cmd(mode === 'replace' ? ['issue', 'update', n, '--repo', target, '--description', text] : ['issue', 'note', n, '--repo', target, '--message', text]),
+    // a note on a merge request (#568: a trigger's report)
+    prCommentCommand: ({ target, n, text }) => cmd(['mr', 'note', n, '--repo', target, '--message', text]),
     issueCloseCommand: (target, n) => cmd(['issue', 'close', n, '--repo', target]),
     issueReopenCommand: (target, n) => cmd(['issue', 'reopen', n, '--repo', target]),
     // a scoped label (epic::x) replaces the issue's other label of the same scope

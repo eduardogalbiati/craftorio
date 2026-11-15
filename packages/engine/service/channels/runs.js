@@ -4,10 +4,7 @@
 
 const fs = require('fs');
 const runs = require('../../domains/run/runs');
-const projects = require('../../domains/project/projects');
-const { loadWorkflow } = require('../../engine/workflow');
-const { resolveRunInputs } = require('../../domains/project/project-run-defaults');
-const { runDefaultsNow } = require('../seed-runs');
+const { withProjectDefaults } = require('../seed-runs');
 const {
   clientError,
   requireId,
@@ -76,26 +73,6 @@ function answeredBefore(ctx, runId, id) {
   try { events = runs.runEvents(ctx.runFolder(runId)); } catch { return false; }
   const ev = events.find((e) => e.type === 'approval.resolved' && e.approval_id === id);
   return ev ? { already_answered: true, answered_at: ev.ts } : false;
-}
-
-// #735: the dialog's inputs over the project's run defaults (resolveRunInputs: typed > project), the
-// workflow's own defaults left to the engine; the inputs unchanged without a project or a workflow.
-// Synchronous (runDefaultsNow): run:start reserves its run before it returns (prepareRestart); #805: only a
-// local run looks at its base first, and a restart meanwhile loses a start, never a run.
-function withProjectDefaults(ctx, { file, inputs, projectId }) {
-  if (!projectId) return inputs;
-  let project = null;
-  let wf = null;
-  try {
-    project = projects.readProject(ctx.ws.projects, projectId);
-    wf = loadWorkflow(ctx.projectWorkflowFile(projectId, file));
-  } catch { return inputs; }
-  if (!project?.folder || !wf?.inputs) return inputs;
-  const typed = Object.fromEntries(Object.entries(inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
-  const { values, sources } = resolveRunInputs({ typed, project: runDefaultsNow(ctx, project), workflow: { inputs: wf.inputs } });
-  const out = { ...inputs };
-  for (const [k, v] of Object.entries(values)) if (sources[k] === 'project') out[k] = v;
-  return out;
 }
 
 module.exports = (ctx) => [

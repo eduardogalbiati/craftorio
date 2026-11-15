@@ -11,7 +11,9 @@
 // 2 min, 0 = off), starts one run per new matching event through an injected `startRun` (the service's
 // roadmap channel: occupancy, budgets and the merge queue apply), comments once on the issue or PR, and
 // keeps the event ids it has seen in `<stateDir>/<project>.json` (the service: <workspace>/backlog/triggers),
-// so a restart or a second app never starts an event twice. A rate limit (HTTP 403/429) backs off. It
+// so a restart or a second app never starts an event twice (an exclusive claim file per event while its
+// run starts, claimEvent). A start that waits (budget, a busy slot) is tried on the next poll; one that
+// throws is logged, kept in the state's lastError and dropped after MAX_ATTEMPTS. A rate limit (HTTP 403/429) backs off. It
 // never answers a gate and never merges: a trigger starts work, never ships it. Off until the owner turns
 // it on in Settings; under MULTIAGENT_SIMULATION_ONLY=1 every run it starts is a mock run.
 //
@@ -36,6 +38,10 @@ const MAX_SEEN = 2000;
 const MAX_RUNS = 20;
 // how far back of the last poll's start the next one reads (clock skew, the platform's own delay)
 const SINCE_MARGIN_MS = 5 * 60 * 1000;
+// a run start that throws (a missing workflow file, a refused run) is tried this often, then the event is dropped
+const MAX_ATTEMPTS = 3;
+// a claim on an event older than this belongs to an app that died while starting it
+const CLAIM_STALE_MS = 10 * 60 * 1000;
 
 const str = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
 const isMapping = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
@@ -113,23 +119,56 @@ function renderTriggerInputs(inputs, event) {
 }
 
 const stateFile = (stateDir, project) => path.join(stateDir, `${project}.json`);
+const EMPTY_STATE = () => ({ seen: [], since: null, lastEvent: null, lastError: null, failures: {}, runs: [] });
 
 /**
- * A project's trigger state: { seen: [id], since, lastEvent, runs: [{ eventId, runId, workflow, at, url }] }.
+ * A project's trigger state: { seen: [id], since, lastEvent, lastError: { eventId, workflow, message, at },
+ * failures: { <event id>: attempts }, runs: [{ eventId, runId, workflow, at, url }] }.
  */
 function readTriggerState(stateDir, project) {
   try {
     const s = JSON.parse(fs.readFileSync(stateFile(stateDir, project), 'utf8'));
-    return { seen: Array.isArray(s.seen) ? s.seen : [], since: s.since || null, lastEvent: s.lastEvent || null, runs: Array.isArray(s.runs) ? s.runs : [] };
-  } catch { return { seen: [], since: null, lastEvent: null, runs: [] }; }
+    return {
+      seen: Array.isArray(s.seen) ? s.seen : [], since: s.since || null, lastEvent: s.lastEvent || null,
+      lastError: s.lastError || null, failures: isMapping(s.failures) ? s.failures : {}, runs: Array.isArray(s.runs) ? s.runs : [],
+    };
+  } catch { return EMPTY_STATE(); }
 }
 
+// writes the state over the file's current one: the seen ids and the runs another app wrote meanwhile are kept
 function writeTriggerState(stateDir, project, state) {
   fs.mkdirSync(stateDir, { recursive: true });
-  const out = { seen: state.seen.slice(-MAX_SEEN), since: state.since || null, lastEvent: state.lastEvent, runs: state.runs.slice(-MAX_RUNS) };
+  const disk = readTriggerState(stateDir, project);
+  const seen = [...new Set([...disk.seen, ...state.seen])];
+  const ids = new Set(state.runs.map((r) => r.eventId));
+  const runs = [...disk.runs.filter((r) => !ids.has(r.eventId)), ...state.runs].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const out = { seen: seen.slice(-MAX_SEEN), since: state.since || null, lastEvent: state.lastEvent, lastError: state.lastError || null, failures: state.failures || {}, runs: runs.slice(-MAX_RUNS) };
   const file = stateFile(stateDir, project);
-  fs.writeFileSync(`${file}.tmp`, JSON.stringify(out, null, 2));
-  fs.renameSync(`${file}.tmp`, file);
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(out, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+// A claim on one event while its run starts (`<stateDir>/<project>.claims/<id>`, created exclusively): a
+// second app polling at the same moment skips it. A claim older than CLAIM_STALE_MS (an app that died
+// mid-start) is taken over. Returns the release function, or null when another app holds it.
+function claimEvent(stateDir, project, id) {
+  const dir = path.join(stateDir, `${project}.claims`);
+  const file = path.join(dir, String(id).replace(/[^\w.-]/g, '_'));
+  fs.mkdirSync(dir, { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.closeSync(fs.openSync(file, 'wx'));
+      return () => { try { fs.unlinkSync(file); } catch { /* already gone */ } };
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      let stale = false;
+      try { stale = Date.now() - fs.statSync(file).mtimeMs > CLAIM_STALE_MS; } catch { stale = true; }
+      if (!stale) return null;
+      try { fs.unlinkSync(file); } catch { /* taken by another app meanwhile */ }
+    }
+  }
+  return null;
 }
 
 /**
@@ -159,7 +198,9 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
     const state = readTriggerState(stateDir, project);
     const seen = new Set(state.seen);
     const started = [];
+    const errors = [];
     const mock = process.env.MULTIAGENT_SIMULATION_ONLY === '1';
+    const markSeen = (id) => { seen.add(id); state.seen.push(id); delete state.failures[id]; };
     let dirty = false;
     let held = false;
     for (const event of events || []) {
@@ -167,18 +208,40 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
       const rule = rules.find((r) => matchEvent(r, event));
       state.lastEvent = { id: event.id, kind: event.kind, url: event.url || null, at: new Date(now()).toISOString(), matched: !!rule };
       dirty = true;
-      if (!rule) { seen.add(event.id); state.seen.push(event.id); continue; }
+      if (!rule) { markSeen(event.id); continue; }
+      // another app starts this event right now: its state write will say so
+      const release = claimEvent(stateDir, project, event.id);
+      if (!release) { held = true; continue; }
       const trigger = { kind: event.kind, id: event.id, url: event.url || null };
-      let res;
+      let res = null;
+      let failure = null;
       try {
-        res = await startRun({ project, workflow: rule.workflow, inputs: renderTriggerInputs(rule.inputs, event), trigger, mock });
-      } catch { res = null; }
+        // started by another app since this poll read the state
+        if (readTriggerState(stateDir, project).seen.includes(event.id)) { markSeen(event.id); continue; }
+        res = await startRun({ project, workflow: rule.workflow, inputs: renderTriggerInputs(rule.inputs, event), trigger, mock, event });
+      } catch (e) {
+        failure = String(e?.message || e);
+      } finally {
+        if (res?.runId) {
+          markSeen(event.id);
+          state.runs.push({ eventId: event.id, runId: res.runId, workflow: rule.workflow, url: trigger.url, at: new Date(now()).toISOString() });
+          writeTriggerState(stateDir, project, state);
+        }
+        release();
+      }
+      if (failure) {
+        // a real failure, not a wait: logged, shown on the card, tried MAX_ATTEMPTS times then dropped
+        const attempts = (Number(state.failures[event.id]) || 0) + 1;
+        console.error(`triggers ${project}: ${event.id} could not start ${rule.workflow} (attempt ${attempts}/${MAX_ATTEMPTS}): ${failure}`);
+        state.lastEvent.error = failure;
+        state.lastError = { eventId: event.id, workflow: rule.workflow, message: failure, at: new Date(now()).toISOString() };
+        errors.push({ eventId: event.id, error: failure });
+        if (attempts >= MAX_ATTEMPTS) markSeen(event.id);
+        else { state.failures[event.id] = attempts; held = true; }
+        continue;
+      }
       // not started (a busy slot, the budget): seen again on the next poll, so `since` stays put
       if (!res?.runId) { held = true; continue; }
-      seen.add(event.id);
-      state.seen.push(event.id);
-      state.runs.push({ eventId: event.id, runId: res.runId, workflow: rule.workflow, url: trigger.url, at: new Date(now()).toISOString() });
-      writeTriggerState(stateDir, project, state);
       started.push({ eventId: event.id, runId: res.runId, workflow: rule.workflow });
       if (comment) { try { await comment({ event, runId: res.runId, workflow: rule.workflow }); } catch { /* the report is best effort */ } }
     }
@@ -188,7 +251,7 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
       dirty = true;
     }
     if (dirty) writeTriggerState(stateDir, project, state);
-    return { polled: true, started, backoffMs: null };
+    return { polled: true, started, errors, backoffMs: null };
   }
 
   return { pollOnce, nextDelayMs: () => backoffMs ?? intervalMs };
