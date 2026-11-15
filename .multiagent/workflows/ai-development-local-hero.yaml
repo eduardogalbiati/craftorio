@@ -2441,7 +2441,7 @@ steps:
   # leaves as it was) and the developer resolves it on the run's branch; then only what the
   # resolution changed is reviewed, tested and verified (the build runs) before the next attempt.
   - id: resolve_merge
-    display: Merge & Resolve
+    display: Resolve conflicts
     agent: developer
     # a rebase replays the test writer's commits: resolving their conflicts is part of the job
     edits_tests: true

@@ -28,6 +28,14 @@ The full-screen 3D overlay of a run: what it draws, its model and how to capture
     colours passes `themed`, so it is freed when the theme is left). A state colour comes from
     `statusColor()` and always with its label. The top bar's sun / moon button
     (`[data-testid=run3d-theme]`) switches; the choice is in localStorage (`multiagent.run3d.theme`).
+  - **HUD cards** (`Kpis` in `run3d/hud.jsx`, `[data-testid=run3d-card-<name>]`), left to right:
+    step visits (with the agent turns), cost (with the effective `$/M tokens` under it,
+    `run3d-cost-per-m`, the same figure as Analytics › Run), tokens (the total, `run3d-tokens-total`,
+    with `69k output · 87% cache read` under it, `run3d-tokens-split`, and every kind in the card's
+    tooltip) and elapsed, always last (#833). The model keeps each finished turn's tokens by kind
+    from `session.message_received.usage` (`tokens(filter)`, `usdPerMTokens(filter)`, filtered like
+    `cost`; a kind the provider does not report counts 0). The four cards sit in a row on a window
+    over 1600px and wrap 2 × 2 under it; under 1180px Elapsed hides.
   - **Replay** (`run3d-replay.js`, a pure `Run3DPlayer`): it keeps every event, a `head` model (the
     run now) and a `past` model (the replayed moment: the state kept at the last step boundary, then
     the events up to it), and the views draw `view.model`, whichever is shown, with `nowMs()` /

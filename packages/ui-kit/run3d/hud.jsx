@@ -2,7 +2,8 @@
 // from the model (view.js), ported from poc/run-3d.html with its look (classes `r3d-*`, run3d.css):
 // - TopBar: the run, a search over steps / agents / events, its state (live, finished, interrupted,
 //   or a replay and its speed) with the clock, the theme's toggle (dark / light) and Close;
-// - Kpis: step visits, cost, elapsed time;
+// - Kpis: step visits, cost (with the effective $/M), tokens (total, output and cache read share, every
+//   kind in the tooltip), elapsed time last;
 // - Detail: the selected station, the supervisor or the work item; a station waiting for the owner
 //   shows the question and "Open the gate" (the view never answers a gate: the overlay closes and
 //   the gate opens where the app answers it);
@@ -27,6 +28,7 @@ const ICON = {
   plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', home: 'M4 11l8-7 8 7v9h-5v-6H9v6H4z', close: 'M6 6l12 12M18 6L6 18',
   follow: 'M12 3v3M12 18v3M3 12h3M18 12h3M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   check: 'M5 12l5 5 9-10', steps: 'M5 6h14M5 12h14M5 18h9', coin: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 7v10M14.5 9.5H11a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3H9.5',
+  tokens: 'M12 4l8 4-8 4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4',
   clock: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4l3 2', person: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0',
   box: 'M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8', bot: 'M6 9h12v10H6zM9 13v2M15 13v2M12 9V5M12 5h.01',
   gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1',
@@ -113,9 +115,12 @@ export function TopBar({ query, setQuery, onClose }) {
 export function Kpis() {
   useTick();
   const m = view.model, done = m.visits.filter((v) => v.t1 != null).length;
+  // #833: the run's tokens by kind (what Analytics › Run sums) and the effective $/M over them
+  const tok = m.tokens(), perM = m.usdPerMTokens();
+  const tokensTitle = t('run3d.tokens_title', { input: tokOf(tok.input), output: tokOf(tok.output), cache_read: tokOf(tok.cache_read), cache_write: tokOf(tok.cache_write) });
   return (
     <div className="r3d-kpis">
-      <div className="r3d-kpi r3d-card"><i><Icon name="steps" /></i><div><label><T k="run3d.step_visits" /></label>
+      <div className="r3d-kpi r3d-card" data-testid="run3d-card-visits"><i><Icon name="steps" /></i><div><label><T k="run3d.step_visits" /></label>
         <b>
           {done} <small>
             {`/ ${m.visits.length}`}
@@ -125,15 +130,23 @@ export function Kpis() {
           {t('run3d.agent_turns', { count: m.turns })}
         </em>
       </div></div>
-      <div className="r3d-kpi r3d-card"><i><Icon name="coin" /></i><div><label><T k="run3d.cost" /></label>
+      <div className="r3d-kpi r3d-card" data-testid="run3d-card-cost"><i><Icon name="coin" /></i><div><label><T k="run3d.cost" /></label>
         <b>
           {usd(m.cost())}
         </b>
-        <em>
-          {t('run3d.output_tokens', { tokens: tokOf(m.tokensOut()) })}
+        <em data-testid="run3d-cost-per-m">
+          {perM == null ? '—' : t('run3d.cost_per_m', { cost: usd(perM) })}
         </em>
       </div></div>
-      <div className="r3d-kpi r3d-card"><i><Icon name="clock" /></i><div><label><T k="run3d.elapsed" /></label>
+      <div className="r3d-kpi r3d-card" data-testid="run3d-card-tokens" title={tokensTitle}><i><Icon name="tokens" /></i><div><label><T k="run3d.tokens" /></label>
+        <b data-testid="run3d-tokens-total">
+          {tokOf(tok.total)}
+        </b>
+        <em data-testid="run3d-tokens-split">
+          {t('run3d.tokens_split', { output: tokOf(tok.output), share: Math.round(tok.cacheShare * 100) })}
+        </em>
+      </div></div>
+      <div className="r3d-kpi r3d-card" data-testid="run3d-card-elapsed"><i><Icon name="clock" /></i><div><label><T k="run3d.elapsed" /></label>
         <b>
           {clockOf(m.elapsed(nowMs()))}
         </b>

@@ -34,6 +34,9 @@
   const MAX_FEED = 80;
   const STATUS_LABELS = { pending: 'Queued', running: 'Running', done: 'Done', changes: 'Changes requested', failed: 'Failed', waiting: 'Waiting for you' };
   const WRITES = /^(Edit|MultiEdit|Write|NotebookEdit|file_change|apply_patch)$/;
+  // #833: the token kinds of a turn's usage, as Analytics reads them (engine's run-analysis.js TOKEN_KINDS); a missing kind counts 0
+  const TOKEN_KINDS = ['input', 'output', 'cache_read', 'cache_write'];
+  const tokensOf = (u) => Object.fromEntries(TOKEN_KINDS.map((k) => [k, Number(u?.[k]) || 0]));
 
   const one = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
   // no machine paths on the floor: a worktree file by its path in the repository, the rest by its name
@@ -172,7 +175,7 @@
       this.robots = {}; // "station:agent" or "supervisor" → { busy, act, tool, say, ctx, doneAt, seen }
       this.turnOf = {}; // session id → the robot its turn animates
       this.turns = 0;
-      this.spend = []; // a finished turn: { agent, step, cost, out }
+      this.spend = []; // a finished turn: { agent, step, cost, out, tokens: { input, output, cache_read, cache_write } }
       this.sup = { target: null, calls: 0, text: '' };
       this.gates = {}; // approval id → { id, step, text, resolved }
       this.feed = []; // newest first: { n, ts, kind, text, target }
@@ -352,6 +355,18 @@
     /** What the run spent: everything, or the turns `filter` keeps ({ agent, step, cost, out }). */
     cost(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.cost : 0), 0); }
     tokensOut(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.out : 0), 0); }
+    /** #833: the kept turns' tokens by kind, their total and the share of cache reads (0 with no tokens). */
+    tokens(filter) {
+      const t = tokensOf();
+      for (const x of this.spend) if (!filter || filter(x)) for (const k of TOKEN_KINDS) t[k] += x.tokens?.[k] || 0;
+      const total = TOKEN_KINDS.reduce((sum, k) => sum + t[k], 0);
+      return { ...t, total, cacheShare: total ? t.cache_read / total : 0 };
+    }
+    /** #833: the effective $/M over the four kinds (Analytics › Run's usdPerMTokens); null with no tokens yet. */
+    usdPerMTokens(filter) {
+      const { total } = this.tokens(filter);
+      return total ? this.cost(filter) / (total / 1e6) : null;
+    }
     stepCost(id) { return this.cost((x) => x.step === id); }
     agentCost(agent) { return this.cost((x) => x.agent === agent); }
 
@@ -446,7 +461,7 @@
       const s = this.sessions[ev.session_id];
       if (!s) return false;
       const u = ev.usage || {};
-      this.spend.push({ agent: isSupervisor(s.agent, ev.step_id) ? 'supervisor' : s.agent, step: baseOf(ev.step_id), cost: Number(ev.cost_usd) || 0, out: u.output || 0 });
+      this.spend.push({ agent: isSupervisor(s.agent, ev.step_id) ? 'supervisor' : s.agent, step: baseOf(ev.step_id), cost: Number(ev.cost_usd) || 0, out: u.output || 0, tokens: tokensOf(u) });
       const r = this.robot(this.turnOf[ev.session_id]);
       if (r) Object.assign(r, { busy: false, doneAt: this.now, say: short(ev.text, 240) || r.say, tool: '' });
       delete this.turnOf[ev.session_id];

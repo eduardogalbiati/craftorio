@@ -94,7 +94,9 @@
 .r3d button:focus-visible, .r3d-strip:focus-visible { outline: 2px solid var(--r3d-accent); outline-offset: 2px; }
 
 /* KPI tiles */
-.r3d-kpis { top: 82px; left: 14px; display: flex; gap: 10px; }
+/* four tiles (visits, cost, tokens, elapsed) in a row on a wide window, 2 × 2 before they would shrink or reach the hint (issue 833) */
+.r3d-kpis { top: 82px; left: 14px; display: grid; grid-template-columns: repeat(4, auto); gap: 10px; }
+@media (max-width: 1600px) { .r3d-kpis { grid-template-columns: repeat(2, auto); } }
 .r3d-kpi { padding: 11px 16px 11px 12px; display: flex; gap: 11px; align-items: center; min-width: 150px; }
 .r3d-kpi i { width: 34px; height: 34px; border-radius: 11px; background: var(--r3d-accent-soft); color: var(--r3d-accent); display: grid; place-items: center; flex: none; }
 .r3d-kpi label { display: block; font-size: 11px; color: var(--r3d-muted); font-weight: 600; }
@@ -219,6 +221,6 @@
 .r3d-hint { left: 50%; top: 82px; transform: translateX(-50%); padding: 5px 12px; border-radius: 999px; font-size: 11.5px; color: var(--r3d-muted); white-space: nowrap; }
 
 @media (max-width: 1280px) { .r3d-search { display: none; } }
-@media (max-width: 1180px) { .r3d-item, .r3d-hint { display: none; } .r3d-kpi:nth-child(3) { display: none; } .r3d-run b, .r3d-run small { max-width: 220px; } }
+@media (max-width: 1180px) { .r3d-item, .r3d-hint { display: none; } .r3d-kpi:last-child { display: none; } .r3d-run b, .r3d-run small { max-width: 220px; } }
 @media (max-width: 920px) { .r3d-pipe, .r3d-kpis { display: none; } .r3d-list { width: 340px; } }
 @media (prefers-reduced-motion: reduce) { .r3d-dot.live, .r3d-bar.open > i, .r3d-strip i.open { animation: none; } }
