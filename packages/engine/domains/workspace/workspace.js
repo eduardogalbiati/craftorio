@@ -196,6 +196,9 @@ const DEFAULT_SETTINGS = {
   // Memory guard (#276, packages/engine/engine/memory-guard.js): a real run's process over limitPercent of the RAM
   // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
   memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
+  // Platform triggers (#568, packages/engine/domains/triggers/triggers.js): the projects whose repository
+  // `triggers:` the app polls ({ <projectId>: true }; off by default) and the poll interval (0 = off)
+  triggers: { enabled: {}, intervalMinutes: 2 },
   // Main stays green (#405, packages/engine/domains/project/base-health.js): what a red test on the base files: 'off', 'issue'
   // (a bug issue only) or 'fix' (the issue and a fix item at the front of the roadmap)
   baseCheck: { onRed: 'fix' },

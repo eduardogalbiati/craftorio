@@ -557,6 +557,14 @@ function writeTitle(runDir, title) {
   return meta;
 }
 
+// #568: the platform event a run was started from ({ kind, id, url }), kept next to its title. Returns the meta.
+function writeTrigger(runDir, { kind, id, url } = {}) {
+  const meta = readMeta(runDir);
+  meta.trigger = { kind: String(kind || ''), id: String(id || ''), url: url ? String(url) : null };
+  fs.writeFileSync(path.join(runDir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
+  return meta;
+}
+
 // The title a run shows when the owner gave it none: its issue(s), or the first line of its task.
 function defaultTitle({ issues, task }) {
   if (Array.isArray(issues) && issues.length) {
@@ -594,4 +602,5 @@ module.exports = {
   replyToFixed,
   withRead,
   writeTitle,
+  writeTrigger,
 };

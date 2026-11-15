@@ -161,6 +161,8 @@ function createService({ host, fronts = null, installed = undefined }) {
       ctx.stopPrTimer();
       ctx.stopBacklogWatch();
       ctx.stopDispatchTimers();
+      // #568: the platform triggers' poll timer (areas/triggers.js)
+      ctx.stopTriggers();
       // #634: the Monitor's poll timer (fronts/ai/engine/areas/monitor.js; the ai front may not be served)
       ctx.stopMonitorWatch?.();
       ctx.waiting.closeAll();

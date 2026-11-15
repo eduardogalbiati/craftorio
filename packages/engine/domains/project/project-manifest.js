@@ -13,6 +13,10 @@
 // `file` named after that file: another name is an error naming it, and that value is ignored
 // (`default` null, the kind left out), as the other manifest problems are. Any error voids the whole
 // manifest: no workflows, so no default and no kinds either.
+// #568: an optional `triggers:` list, the platform events that start one of the manifest's workflows
+// (packages/engine/domains/triggers/triggers.js validateTriggers). A refused rule is a `triggerErrors`
+// entry (and a `refusedTriggers` one, for the project screen) and is ignored: it never voids the manifest
+// and never enters `errors`; a manifest voided by its errors has no triggers.
 
 const fs = require('fs');
 const path = require('path');
@@ -87,7 +91,14 @@ function requiresProblem(appVersion, range) {
 
 // #791: the kinds a manifest may map (packages/shared/default-workflow.js KIND_ENTRIES; a refactor uses the Feature entry)
 const { KIND_ENTRIES, label } = require('@multiagent/shared/default-workflow');
-const EMPTY = () => ({ version: null, requires: null, workflows: [], default: null, kinds: {}, errors: [] });
+const EMPTY = () => ({ version: null, requires: null, workflows: [], default: null, kinds: {}, errors: [], triggers: [], triggerErrors: [], refusedTriggers: [] });
+const { validateTriggers } = require('../triggers/triggers');
+
+// #568: the manifest's triggers, checked against its own workflows' names
+function parseTriggers(doc, list) {
+  const { triggers, problems, refused } = validateTriggers(doc.triggers, { workflows: list.map((w) => w.name).filter(Boolean) });
+  return { triggers, triggerErrors: problems.map((p) => `${MANIFEST_FILE}: ${p}`), refusedTriggers: refused };
+}
 
 // #790, #791: the file of a listed workflow whose file has another name than the entry, or null: the
 // listing and the default's resolution go by the file's name, so a default or a kind naming that entry
@@ -178,7 +189,7 @@ function parseManifest(text, { appVersion } = {}) {
   // that value and counts as a manifest error like any other
   out.default = parseDefault(doc, list, out.errors);
   out.kinds = parseKinds(doc, list, out.errors);
-  return out.errors.length ? { ...out, workflows: [], default: null, kinds: {} } : { ...out, workflows: list };
+  return out.errors.length ? { ...out, workflows: [], default: null, kinds: {} } : { ...out, workflows: list, ...parseTriggers(doc, list) };
 }
 
 /** The manifest of a project's folder; none: no workflows, no default, no kinds and no error. */

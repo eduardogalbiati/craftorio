@@ -46,6 +46,8 @@ module.exports = (ctx) => {
     ctx.openIndex({ recovering: recovering.map((r) => r.runId) });
     // the Backlog screen follows the backlog/ files live (#204, areas/backlog-watch.js)
     ctx.watchBacklog();
+    // #568: the platform triggers of the projects the owner turned them on for (areas/triggers.js)
+    ctx.watchTriggers();
     // the phone gates page (#226, areas/phone-gates.js), when the owner turned it on
     ctx.resumePhoneGates();
     // processes of finished runs that keep using CPU (#390, areas/runs.js)

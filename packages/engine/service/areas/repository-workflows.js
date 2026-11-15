@@ -115,6 +115,8 @@ module.exports = (ctx) => {
 
   return {
     acceptWorkflow,
+    // #568: the triggers are read from the same committed manifest (areas/triggers.js)
+    headManifest,
     isRepositoryCopy,
     projectWorkflowFile,
     repositoryWorkflow,

@@ -390,6 +390,8 @@ module.exports = {
   'supervisor:chatHistory': { arg: null },
   'supervisor:tools': { arg: null },
   'supervisor:watchState': onRun({ arg: ({ runId }) => runId, invalid: { arg: 42 } }),
+  // #568: the contract project has no manifest: no rule, triggers off
+  'triggers:status': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'usage:actions': { arg: { force: false }, invalid: { arg: { force: 'yes' } } },
   'usage:get': { arg: {}, invalid: { arg: { scope: 42 } } },
   'voice:mic-access': { arg: null },
