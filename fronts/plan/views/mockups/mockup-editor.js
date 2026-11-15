@@ -104,7 +104,7 @@
           <form id="mockup-attach-form" class="modal-card mockups-new-form">
             <h3 id="mockup-attach-heading">${t('mockups.attach_to_card')}</h3>
             <label for="mockup-attach-card">${t('mockups.attach_card')}</label>
-            <select id="mockup-attach-card"></select>
+            ${window.Select.markup('id="mockup-attach-card"')}
             <p class="muted small">${t('mockups.attach_help')}</p>
             <p id="mockup-attach-error" class="error small" role="alert"></p>
             <div class="modal-actions">
@@ -206,19 +206,14 @@
     box.innerHTML = `
       <div class="row mockup-flows-pick">
         <label class="sr-only" for="mockup-flow-select">${t('mockups.flows')}</label>
-        <select id="mockup-flow-select" data-testid="mockup-flow-select">
-          <option value="">${t('mockups.flow_none')}</option>
-          ${ed.flows.map((f) => `<option value="${esc(f.name)}"${ed.flow?.name === f.name ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}
-        </select>
+        ${window.Select.markup('id="mockup-flow-select" data-testid="mockup-flow-select"', [['', t('mockups.flow_none')], ...ed.flows.map((f) => [f.name, f.name])], ed.flow?.name ?? '')}
         <button type="button" class="btn sm ghost" data-testid="mockup-flow-new" data-mockup-flow-new>${t('mockups.flow_new')}</button>
       </div>
       ${ed.flow ? `
         <ul class="mockup-flow-links small">${links.length ? links.map((l) => `<li><span class="mono">${esc(l.from.mid)}</span> → ${esc(l.to)}</li>`).join('') : `<li class="muted">${t('mockups.flow_no_links')}</li>`}</ul>
         <div class="row mockup-flows-pick">
           <label class="sr-only" for="mockup-link-target">${t('mockups.link_to')}</label>
-          <select id="mockup-link-target" data-testid="mockup-link-target"${others.length ? '' : ' disabled'}>
-            ${others.map((s) => `<option value="${esc(s.slug)}">${esc(s.title || s.slug)}</option>`).join('')}
-          </select>
+          ${window.Select.markup(`id="mockup-link-target" data-testid="mockup-link-target"${others.length ? '' : ' disabled'}`, others.map((s) => [s.slug, s.title || s.slug]))}
           <button type="button" class="btn sm" data-testid="mockup-link" data-mockup-link${one && others.length ? '' : ' disabled'} title="${esc(t('mockups.link_help'))}">${t('mockups.link_selection')}</button>
         </div>` : `<p class="muted small">${t('mockups.flow_help')}</p>`}`;
   }
