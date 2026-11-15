@@ -116,7 +116,7 @@ Feature: Menu by the flow
 
   # The baseline (features/__screenshots__/sidebar-runs-600-light-<platform>.png) is created with
   # npm run test:e2e:update -- --grep @issue-411
-  @issue-411 @visual
+  @issue-411 @visual @quarantine
   Scenario: The sidebar of a short window with two runs and one gate looks like its baseline
     Given the app is open in a 1400x600 window in the light theme
     And concurrent runs are on

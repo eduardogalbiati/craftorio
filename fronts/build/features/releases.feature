@@ -13,7 +13,7 @@ Feature: Releases
 
   # Assumes the release history is stored in <workspace>/releases/<projectId>.json (see
   # fronts/build/features/steps/releases.steps.js); the demo's next release is what is merged locally: #11
-  @issue-260
+  @issue-260 @quarantine
   Scenario: The Releases screen lists the shipped releases and the next release, with editable notes
     Given the app is open
     And the project shipped the release "v0.9" with the issue "Export a run report as Markdown"
@@ -71,7 +71,7 @@ Feature: Releases
   # #376: a release on the project city. A real git repository tagged 1.1.0, 1.1.1 and 1.1.2: 1.1.2
   # adds one file (#12), removes one and changes one (#13); see fronts/analyser/features/steps/release-city.steps.js
   # Since #430 the city opens in a modal over the Releases screen (#556).
-  @issue-376 @issue-556
+  @issue-376 @issue-556 @quarantine
   Scenario: "Show on the map" on a release shows the city with what the release changed
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"

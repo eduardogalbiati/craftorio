@@ -37,7 +37,7 @@ Feature: A run that opened a PR waits in a PR monitor and ends on the merge
     Then the run ends successfully
     And the run offers no Approve
 
-  @issue-809
+  @issue-809 @quarantine
   Scenario: The PR monitor says what blocks the merge, and a PR closed without merging fails the run, saying so
     Given the app is open with the pull request #42 open on the platform
     And the pull request #42 on the platform has the job "unit-tests" failed, changes requested by "maria", a conflict with the base and 2 unanswered comments

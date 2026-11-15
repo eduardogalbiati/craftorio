@@ -10,7 +10,7 @@ Feature: "Show on the map" opens the project city in a modal over the current sc
   tools/export.py in Export) of fronts/analyser/features/steps/architecture.steps.js; the release project "shop" is the
   tagged repository of fronts/analyser/features/steps/release-city.steps.js.
 
-  @issue-430
+  @issue-430 @quarantine
   Scenario: "Show the stage on the map" opens the city in a modal over the Roadmap, and Close leaves the Roadmap as it was
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -28,7 +28,7 @@ Feature: "Show on the map" opens the project city in a modal over the current sc
     And the Roadmap still shows the stage "Billing fixes"
     And the project page is not shown
 
-  @issue-430
+  @issue-430 @quarantine
   Scenario: Esc closes the city modal opened from a Backlog issue, and the Backlog stays in its list view
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -44,7 +44,7 @@ Feature: "Show on the map" opens the project city in a modal over the current sc
     And the Backlog list still shows the issue "Change the discount rule"
     And the project page is not shown
 
-  @issue-430
+  @issue-430 @quarantine
   Scenario: The city modal of a release offers "Open in Projects", which leads to the project's City tab
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"

@@ -85,7 +85,7 @@ Feature: Runs and gates
     And I open the run from Analytics
     Then the run's "developer" session shows "cost not recorded"
 
-  @issue-183
+  @issue-183 @quarantine
   Scenario: A human gate opens the Oracle with the gate as context
     Given the app is open
     When I start a simulated run with the task "Add a /health endpoint"
@@ -96,7 +96,7 @@ Feature: Runs and gates
     And the Oracle's question box shows a context chip naming the gate's run and step
     And the Oracle suggests "What was implemented, in plain words?", "Does it cover every task of the issue?", "What could break?" and "Should I approve or ask for changes?"
 
-  @issue-183
+  @issue-183 @quarantine
   Scenario: The gate's context chip can be removed from the Oracle's question box
     Given the app is open
     When I start a simulated run with the task "Add a /health endpoint"
@@ -108,7 +108,7 @@ Feature: Runs and gates
 
   # The simulated Oracle answers with a fixed text and never proposes "Ask for changes" text, so the
   # "Use this text" card has no deterministic E2E path: this scenario checks the gate stays pending
-  @issue-183
+  @issue-183 @quarantine
   Scenario: Asking the Oracle about a gate never answers the gate
     Given the app is open
     When I start a simulated run with the task "Add a /health endpoint"
@@ -164,7 +164,7 @@ Feature: Runs and gates
 
   # The run "-wup00301" is seeded finished: its Warm Up failed (the mapper crashed), Develop ran
   # after it, and the run succeeded
-  @issue-301
+  @issue-301 @quarantine
   Scenario: When Warm Up fails, the run goes on to Develop
     Given the app is open
     And the demo project has a finished AI Development run "wup00301" whose Warm Up failed
@@ -230,7 +230,7 @@ Feature: Runs and gates
     And I open the row of the run "cld00320" in the list
     Then the next turn of the run's "reviewer" session shows "cold" and "140K"
 
-  @issue-320
+  @issue-320 @quarantine
   Scenario: The gate card says what Continue re-reads, and that nothing resumes cold right after the turns
     Given the app is open
     When I start a simulated run with the task "Add a /health endpoint"

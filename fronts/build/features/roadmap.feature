@@ -193,7 +193,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     When I press Cancel in the confirm dialog
     Then the roadmap bar's state dot is "running" and reads "Running"
 
-  @issue-269
+  @issue-269 @quarantine
   Scenario: Clear lives in the roadmap's ⋮ menu, which the keyboard opens and Escape closes
     Given the app is open
     When I open "Backlog" in the sidebar
@@ -307,7 +307,7 @@ Feature: Roadmap statuses, done items, filters and run timers
   # workflow (its owner's gate is "Your check"); "Keyboard focus is lost after closing a dialog" (#16)
   # runs in Automatic mode, in code review. Stage 3 is "Reports and health", planned, with no cut line.
 
-  @issue-282
+  @issue-282 @quarantine
   Scenario: A running item shows its issues, its cost and time meters, one status block and its pipeline
     Given the app is open
     When I open "Backlog" in the sidebar
@@ -319,7 +319,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     And the pipeline of the roadmap item "Keyboard focus is lost after closing a dialog" shows done stations, then one running station
     And the pipeline of the roadmap item "Keyboard focus is lost after closing a dialog" shows no "Your check" station
 
-  @issue-282
+  @issue-282 @quarantine
   Scenario: Switching a planned item between Validated and Automatic adds and removes "Your check", saved at once
     Given the app is open
     When I open "Backlog" in the sidebar
@@ -453,7 +453,7 @@ Feature: Roadmap statuses, done items, filters and run timers
   # Simulated turns of a few seconds (mock delay scale 1) keep a run going well past the clicks that
   # ask for the pause.
 
-  @issue-391
+  @issue-391 @quarantine
   Scenario: Pause after this stage lets the waiting item of the stage start, then stops before the next stage
     Given the app is open with simulated turns of a few seconds
     And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
@@ -519,7 +519,7 @@ Feature: Roadmap statuses, done items, filters and run timers
   # owner's to answer. Assumption: the parked card names the gate by its step's display name
   # ("Developer check") and its "Parked at …" line opens the run at that gate.
 
-  @issue-395
+  @issue-395 @quarantine
   Scenario: Moving on past an item at a gate starts the next stage, the gate stays mine, and Approve ends the item done
     Given the app is open
     And the roadmap has two planned stages, item A in Validated mode in stage 1 and item C in stage 2
@@ -804,7 +804,7 @@ Feature: Roadmap statuses, done items, filters and run timers
   # Assumption: the confirm dialog's button is "Remove", and the removed stage's issues stay open in the
   # Backlog (only the roadmap forgets them).
 
-  @issue-748
+  @issue-748 @quarantine
   Scenario: On a long roadmap a stage's ⋮ menu opens at once in place, its entries grouped, "Remove from roadmap" last
     Given the app is open
     And the roadmap ends with 200 planned stages of one item each

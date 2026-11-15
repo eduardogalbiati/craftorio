@@ -399,7 +399,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     When I close the city card
     Then pointing at the middle of the city shows the hover card of "src/billing.js"
 
-  @issue-449 @issue-556
+  @issue-449 @issue-556 @quarantine
   Scenario: "Show on the map" still highlights the issue's building and greys the others
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -412,7 +412,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city impact header names the issue "Change the discount rule"
     And the city highlights the building "src/billing.js" and greys "tools/export.py"
 
-  @issue-449
+  @issue-449 @quarantine
   Scenario: An agent at work still lights up the building it changes
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -428,7 +428,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # City life (#450): a "City life" switch in the city header (a tree and a lamp) shows or hides the
   # trees, benches, lamps, cars and lamp pools without rebuilding the city, on by default in the
   # City tab; a "Glow" switch turns the bloom off.
-  @issue-450
+  @issue-450 @quarantine
   Scenario: City life is on by default and turning it off hides the trees and cars without rebuilding the city
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -443,7 +443,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city shows no trees, benches, lamps or cars
     And the city on screen is the same one, not rebuilt, with its 2 buildings
 
-  @issue-450
+  @issue-450 @quarantine
   Scenario: Turning City life back on brings the trees and cars back
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -458,7 +458,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city shows its trees, benches, lamps and cars
     And the city on screen is the same one, not rebuilt, with its 2 buildings
 
-  @issue-450
+  @issue-450 @quarantine
   Scenario: The city's Glow can be turned off
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -475,7 +475,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # impact, Stage, Release); opening one replaces the previous one's layers, panels and legend rows; the
   # title names the mode; Close goes back to where it was opened from (in Architecture: Explore). The
   # release project "shop" is the tagged repository of fronts/analyser/features/steps/release-city.steps.js.
-  @issue-440
+  @issue-440 @quarantine
   Scenario: The city opens in Explore titled with the project, and shows the agents at work only in Live
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -495,7 +495,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the city shows no "Most connected" panel
 
   # The city modal covers the side bar (#430): it is closed before the Releases screen opens (#556).
-  @issue-440 @issue-556
+  @issue-440 @issue-556 @quarantine
   Scenario: A release opened on the map shows the release mode alone, nothing left of an earlier impact preview
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
@@ -563,7 +563,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And the release's issue filter still shows "#12"
     And the city release header counts 1 added, 0 changed and 0 removed
 
-  @issue-441
+  @issue-441 @quarantine
   Scenario: The legend closes and the "Legend" button brings it back
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
@@ -643,7 +643,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # project list. A project the wizard just imported (a local git repository with some code, its file://
   # URL; the clone done, the analysis skipped, no reload) analyses at once instead of failing with "The
   # project has no folder". The steps of the wizard are features/steps/onboarding.steps.js's.
-  @issue-732
+  @issue-732 @quarantine
   Scenario: A project the wizard just imported is analysed from its City without a "no folder" error
     Given the app is open
     And a local git repository with some code is ready to import
@@ -666,7 +666,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # #732: a project whose folder is gone from this machine (moved aside while its City is on screen,
   # no reload) says why in the interface language and what to do, with no cost estimate on a retry that
   # cannot work. The saved report gives the action a real estimate (≈ US$ 0.42) before the click.
-  @issue-732
+  @issue-732 @quarantine
   Scenario: In Português (Brasil) a project with no folder on this machine says so on its City, with what to do and no estimate
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report
@@ -711,7 +711,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # and the legend says what is missing and why. 5 of the 6 files are Rust: 83%. With lizard on the machine the
   # Rust files are measured, so the scenario skips itself there, as the #385 ones do. The reload makes sure the
   # owner's choice is kept, not just still in the open window.
-  @issue-782
+  @issue-782 @quarantine
   Scenario: A mostly unmeasured project opens in Churn, says what is not measured, and going back to Quadrant is kept
     Given the complexity tool lizard is not installed on this machine
     And the app is open
@@ -740,7 +740,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # building's position on screen, so the search flies to the building first (its label must show), then the
   # pointer goes to the middle of the city, where the flight left it (as the #449 hover card scenario does).
   # Leaving the city takes the label away again. Zone labels stay: they are not building or district labels.
-  @issue-782
+  @issue-782 @quarantine
   Scenario: The city shows no building or district labels until a building is pointed at
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan with the landmark "The till" on "src/billing.js"

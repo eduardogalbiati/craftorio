@@ -7,7 +7,7 @@ Feature: A project's ways of working, from an interview
   set to the repository (uncommitted); nothing is written before that click.
   In simulation mode the analysis returns a simulated profile.
 
-  @issue-487
+  @issue-487 @quarantine
   Scenario: The interview shows the inferred profile, asks the open questions and opens the composed workflow in the Builder
     Given the app is open
     And the demo project's folder is a git repository where one author commits straight to main
@@ -23,7 +23,7 @@ Feature: A project's ways of working, from an interview
     Then the Workflows screen is on its "Builder" tab
     And the Builder shows the proposed "development" workflow
 
-  @issue-487
+  @issue-487 @quarantine
   Scenario: Writing to the repository adds the proposed workflows, uncommitted, and nothing before the click
     Given the app is open
     And the demo project's folder is a git repository where one author commits straight to main

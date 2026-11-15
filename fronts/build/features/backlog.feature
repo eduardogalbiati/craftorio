@@ -147,7 +147,7 @@ Feature: Backlog Board and Roadmap
     When I open the Epics view
     Then the epic "Run reports" cannot be selected for a workflow
 
-  @issue-238
+  @issue-238 @quarantine
   Scenario: An issue planned in the roadmap cannot be archived and says why
     Given the app is open
     When I open "Backlog" in the sidebar

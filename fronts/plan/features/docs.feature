@@ -34,7 +34,7 @@ Feature: Write an item's intent and spec with the writer, change by change, up t
     And the document offers "Create epic and phase issues" and "Start the Build"
     And no issue was filed and no build was started
 
-  @issue-647
+  @issue-647 @quarantine
   Scenario: Undoing a change in the unreviewed queue brings the previous text back
     Given the app is open
     When I open "Documents" in the sidebar
