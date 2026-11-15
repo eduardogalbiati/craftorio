@@ -142,6 +142,52 @@ const setPageHidden = (page, hidden) => page.evaluate((h) => {
   document.dispatchEvent(new Event('visibilitychange'));
 }, hidden);
 
+// The HUD's cards (#833). Each card of the HUD (packages/ui-kit/run3d/hud.jsx, Kpis) carries
+// data-testid="run3d-card-<name>" (NEW): run3d-card-visits, run3d-card-cost, run3d-card-tokens (the
+// new card), run3d-card-elapsed. Inside them (NEW): run3d-cost-per-m, the line under the cost
+// ("$2.63/M tokens"); run3d-tokens-total, the total ("3.7M"); run3d-tokens-split, the line under it
+// ("69k output · 87% cache read"). Every kind of token is in the Tokens card's tooltip: the `title`
+// of the card or of an element inside it.
+const hudCard = (page, name) => overlay(page).getByTestId(`run3d-card-${name}`);
+const TOKENS = /^\d+(\.\d+)?[kM]?$/;
+
+Then('the 3D view\'s Cost card shows {string} with a price per million tokens under it', async ({ e2e }, cost) => {
+  const card = hudCard(e2e.window, 'cost');
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(cost);
+  await expect(card.getByTestId('run3d-cost-per-m')).toHaveText(/^\s*\$\d+(\.\d+)?\s*\/\s*M tokens\s*$/);
+  await expect(card, 'the output tokens moved to the Tokens card').not.toContainText(/output tokens/i);
+});
+
+Then('the 3D view\'s Tokens card shows a total with its output and cache read share under it', async ({ e2e }) => {
+  const card = hudCard(e2e.window, 'tokens');
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card.getByTestId('run3d-tokens-total')).toHaveText(TOKENS);
+  await expect(card.getByTestId('run3d-tokens-total')).not.toHaveText(/^0$/);
+  await expect(card.getByTestId('run3d-tokens-split')).toHaveText(/^\s*\d+(\.\d+)?[kM]? output\s*·\s*\d+% cache read\s*$/);
+});
+
+Then('the 3D view\'s Tokens card lists every kind of token in its tooltip', async ({ e2e }) => {
+  const card = hudCard(e2e.window, 'tokens');
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const tooltip = () => card.evaluate((el) => [el, ...el.querySelectorAll('[title]')]
+    .map((n) => n.getAttribute('title') || '').join(' ').replace(/\s+/g, ' '));
+  // The issue says "cache creation", Analytics says "cache write": either label is accepted.
+  for (const kind of [/input/i, /output/i, /cache read/i, /cache (write|creation)/i]) {
+    await expect.poll(tooltip, { message: `the Tokens card's tooltip names ${kind}`, timeout: LOAD_TIMEOUT })
+      .toMatch(kind);
+  }
+});
+
+Then('the 3D view\'s HUD cards are, in order, {string}', async ({ e2e }, list) => {
+  const want = list.split(',').map((s) => s.trim());
+  const cards = overlay(e2e.window).locator('[data-testid^="run3d-card-"]');
+  await expect(cards.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => cards.evaluateAll((els) => els.map((el) => el.dataset.testid.replace('run3d-card-', ''))), {
+    message: 'the HUD cards, left to right', timeout: LOAD_TIMEOUT,
+  }).toEqual(want);
+});
+
 When('I minimise the app\'s window', async ({ e2e }) => {
   await setWindow(e2e, 'minimize');
   await setPageHidden(e2e.window, true);

@@ -42,3 +42,32 @@ Feature: The run's 3D view
     Then the 3D view draws no frames for 2 seconds
     When I restore the app's window
     Then the 3D view keeps drawing frames
+
+  # The HUD's cards (#833): the Cost card shows the effective price per million tokens under the cost,
+  # a Tokens card shows the run's total with its output and its share of cache reads under it, and
+  # every kind of token in its tooltip. The seeded developer turn has 1,200 input, 3,400 output,
+  # 52,000 cache read and 8,000 cache creation tokens (fronts/build/features/steps/turn-costs.steps.js),
+  # so only the shapes of the figures are checked.
+  @issue-833
+  Scenario: The 3D view's HUD shows the run's tokens and the cost per million tokens
+    Given the app is open
+    And the demo project has a finished AI Development run "tok00833"
+    And its "developer" turn ran on the known model "claude-opus-5-5" at 1.37
+    When I open "Runs" in the sidebar
+    And I search the runs for "tok00833"
+    And I view the run "tok00833" from the list
+    And I open the run's 3D view
+    Then the 3D view's Cost card shows "$1.37" with a price per million tokens under it
+    And the 3D view's Tokens card shows a total with its output and cache read share under it
+    And the 3D view's Tokens card lists every kind of token in its tooltip
+
+  @issue-833
+  Scenario: The 3D view's Tokens card comes right after the Cost card and Elapsed stays last
+    Given the app is open
+    And the demo project has a finished AI Development run "ord00833"
+    And its "developer" turn ran on the known model "claude-opus-5-5" at 1.37
+    When I open "Runs" in the sidebar
+    And I search the runs for "ord00833"
+    And I view the run "ord00833" from the list
+    And I open the run's 3D view
+    Then the 3D view's HUD cards are, in order, "visits, cost, tokens, elapsed"
