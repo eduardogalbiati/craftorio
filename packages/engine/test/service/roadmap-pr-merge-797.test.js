@@ -48,6 +48,9 @@ const NEVER_MERGES = 'fixture-never-merges.yaml';
 let cliDir;
 let realPath;
 test.before(() => {
+  // the CLI lookup merges the login shell's PATH in front once per process (macOS: /usr/local/bin with the
+  // real gh): merge it now, so the fake folder put first below stays first
+  require('../../engine/providers').resolveCommand('sh');
   cliDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-cli-797-'));
   for (const cli of ['gh', 'glab']) {
     fs.writeFileSync(path.join(cliDir, cli), '#!/bin/sh\necho "[]"\n', { mode: 0o755 });

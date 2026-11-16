@@ -16,7 +16,8 @@ const slash = (p) => p.split(path.sep).join('/');
 
 // A temp folder holding the given test files; returns the folder.
 function fixtures(t, files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-report-'));
+  // realpath: macOS's tmpdir is a link (/var → /private/var) and the reporter names files by their real path
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-report-')));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
   for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text);
   return dir;
