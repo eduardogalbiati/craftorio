@@ -32,10 +32,20 @@ function templateRepo() {
 /** A fresh copy of the template repository for test context `t`, deleted after that test. */
 function repoFromTemplate(t) {
   const src = templateRepo();
-  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'git-repo-'));
-  fs.cpSync(src, dest, { recursive: true });
-  t.after(() => fs.rmSync(dest, { recursive: true, force: true, maxRetries: 5 }));
-  return dest;
+  // fs.cpSync now and then fails with ENOENT on a .git folder on the macOS release runners (v1.5.0
+  // Deploy, darwin arm64): a fresh folder and another try, three at most
+  for (let attempt = 1; ; attempt++) {
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'git-repo-'));
+    try {
+      fs.cpSync(src, dest, { recursive: true });
+    } catch (e) {
+      fs.rmSync(dest, { recursive: true, force: true, maxRetries: 5 });
+      if (e.code === 'ENOENT' && attempt < 3) continue;
+      throw e;
+    }
+    t.after(() => fs.rmSync(dest, { recursive: true, force: true, maxRetries: 5 }));
+    return dest;
+  }
 }
 
 module.exports = {
