@@ -30,7 +30,7 @@ jobs:
   build:
     name: build (${{ matrix.platform }} ${{ matrix.arch }})
     strategy:
-      fail-fast: true   # a failing OS stops the release: no release without all its downloads
+      fail-fast: false  # every OS runs to the end (no paid minutes thrown away); publish still needs all of them
       matrix:
         include:
           - os: windows-latest
@@ -72,7 +72,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb desktop-file-utils   # appimagetool 1.9.0 stops without desktop-file-validate
           curl -fsSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
           chmod +x "$RUNNER_TEMP/appimagetool"
       # apps/desktop/scripts/package.js builds the native sidecars (native/, #341) for this leg's target into resources/bin/
