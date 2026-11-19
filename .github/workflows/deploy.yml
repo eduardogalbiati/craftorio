@@ -52,7 +52,7 @@ jobs:
               MultiagentOrchestrator-linux-x64.AppImage
               MultiagentOrchestrator-linux-x64.tar.gz
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30   # a hung job must not eat the quota
+    timeout-minutes: 90   # a hung job must not eat the quota; the Windows `npm test` alone takes ~75 min
     defaults:
       run:
         shell: bash   # Git Bash on Windows: the same scripts on every OS
