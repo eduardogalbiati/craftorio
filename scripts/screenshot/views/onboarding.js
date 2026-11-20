@@ -13,6 +13,8 @@
 //   review        that repository analysed (simulated) and the review step
 // --review issues-off (with --mode review, #845): a repository with Issues turned off, its Backlog card says so,
 // no Retry (the simulation-only hook MULTIAGENT_E2E_ISSUES_FAIL answers the issue read as gh does)
+// --review running (with --mode review, #852): the project map still running, City and Findings with the same
+// running indicator, the languages bar's loading placeholder
 // Nothing reaches the network nor a model (MULTIAGENT_SIMULATION_ONLY).
 
 const fs = require('fs');
@@ -158,13 +160,21 @@ async function open({ args, click, js, pause, win }) {
   await click('[data-testid="wizard-next"]');
   await waitFor(js, '[data-testid="wizard-review"]', 5000);
   await pause(1500); // the review's reads (the backlog, the city, the facts, the proposals)
+  if (args.review === 'running') {
+    // #852: the project map still running (the real onboarding:changed channel, as the cloning mode does): the
+    // City and Findings cards show the same running indicator, the languages bar its loading placeholder
+    const projectId = await js('return document.querySelector(\'[data-testid="tray-item"]\')?.dataset.project || null;');
+    if (!projectId) throw new Error('the review left no project in the tray');
+    win.webContents.send('onboarding:changed', { projectId, status: 'analyzing', cli: null, jobs: { clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'running' }, ranking: { status: 'waiting' } } });
+    await waitFor(js, '[data-testid="wizard-review-city"][data-state="pending"]', 5000);
+  }
 }
 
 module.exports = {
   modes: MODES,
   open,
-  // #845: the review of a repository with Issues turned off
-  options: { review: ['issues-off'] },
+  // #845: the review of a repository with Issues turned off; #852: the review with the project map still running
+  options: { review: ['issues-off', 'running'] },
   sampleRepository,
   seed,
   typeIn,
