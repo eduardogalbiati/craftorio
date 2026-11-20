@@ -222,7 +222,7 @@
   const repoUrl = (name) => `https://${(platformById(pickedProvider()) || platformById(window.Platforms?.DEFAULT_PLATFORM))?.host}/${name}`;
   function repoList() {
     const typed = cur.model.repository.trim().replace(/\.git$/, '');
-    const query = (window.Platforms?.parseRepoUrl?.(typed)?.path || typed).toLowerCase();
+    const query = (window.Platforms?.parseRepoUrl?.(typed)?.path || typed.replace(/^(?:[a-z][\w+.-]*:\/\/[^/]+|[^@\s/]+@[^:\s/]+:)\/?/i, '')).toLowerCase(); // a partial URL: its host goes
     const repos = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).filter((r) => String(r.name || '').toLowerCase().includes(query)).slice(0, 5);
     const meta = (r) => [t(r.private ? 'onboarding.repo_private' : 'onboarding.repo_public'), updatedAgo(r.updatedAt)].filter(Boolean).join(' · ');
     const item = (r) => `<li><button type="button" class="wizard-repo-item" data-act="pick-repo" data-repo="${esc(r.name)}" data-testid="wizard-repo-option" aria-pressed="${typed === repoUrl(r.name)}">
