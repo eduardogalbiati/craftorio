@@ -134,6 +134,7 @@ function readBacklog(dir, projectId) {
  * #781: onProgress({ what: 'issues', read, total }): what is read so far (total null until known), with read === total
  * at the end. `followed`: a screen shows the count, so the list is read in steps and the count grows (issues.js
  * fetchIssues); the steps read more, so any other sync keeps the single read.
+ * #845: a repository with Issues turned off resolves with no issues and `issuesDisabled: true` (cached too).
  * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function, onProgress?: Function, followed?: boolean }} opts
  */
 async function syncBacklog({ dir, project, platform: asked, exec, onProgress, followed = false }) {
@@ -142,18 +143,26 @@ async function syncBacklog({ dir, project, platform: asked, exec, onProgress, fo
   const platform = platformOf(project, asked);
   // the issues are what the screen needs: PRs that cannot be read leave a note, not an error
   let pullRequestsError = null;
+  // #845: a repository with Issues turned off syncs with no issues and says so (issuesDisabled), not a failed read
+  let issuesDisabled = false;
   onProgress?.({ what: 'issues', read: 0, total: null });
   const [fetched, prs] = await Promise.all([
-    fetchIssues({ platform, repo: project.repo, exec, onProgress: followed ? onProgress : undefined }).then((issues) => {
-      onProgress?.({ what: 'issues', read: issues.length, total: issues.length });
-      return issues;
-    }),
+    fetchIssues({ platform, repo: project.repo, exec, onProgress: followed ? onProgress : undefined })
+      .catch((e) => {
+        if (!e.issuesDisabled) throw e;
+        issuesDisabled = true;
+        return [];
+      })
+      .then((issues) => {
+        onProgress?.({ what: 'issues', read: issues.length, total: issues.length });
+        return issues;
+      }),
     fetchOpenPullRequests({ platform, repo: project.repo, exec }).catch((e) => { pullRequestsError = e.message; return []; }),
   ]);
   // epics, like the PRs, never fail the sync: an error leaves a note (epicsError)
   const { issues, epics, epicsError } = await readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
   issues.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError };
+  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError, ...(issuesDisabled ? { issuesDisabled } : {}) };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(cacheFile(dir, project.id), JSON.stringify(data, null, 2));
   // the planned items not started yet show (and the Product Owner reads) the current text (#168);

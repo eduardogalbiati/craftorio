@@ -721,6 +721,7 @@ module.exports = (ctx) => {
 
 module.exports.cliAccounts = cliAccounts;
 module.exports.createOnboarding = createOnboarding;
+module.exports.E2E_LOGIN = E2E_LOGIN;
 module.exports.machinePlatformCli = machinePlatformCli;
 module.exports.machineRemote = machineRemote;
 module.exports.machineRepos = machineRepos;

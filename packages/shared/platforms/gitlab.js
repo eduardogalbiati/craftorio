@@ -87,6 +87,8 @@
     apiHostArgs: ({ host }) => (host === OWN_HOST ? [] : ['--hostname', host]),
     issuesUrl: ({ host, path }) => `https://${host}/${path}/-/issues/`,
     issueUrl: (base, number) => `${base}/-/issues/${number}`,
+    // #845: where the project's Issues are turned on again
+    settingsUrl: ({ host, path }) => `https://${host}/${path}/edit`,
     // a file of the default branch (#486): the repository files API (raw text), else a public raw read
     fileCommand: ({ host, path }, file) => cmd(['api', ...gitlab.apiHostArgs({ host }), `projects/${encodeURIComponent(path)}/repository/files/${encodeURIComponent(file)}/raw?ref=HEAD`]),
     rawFileUrl: ({ host, path }, file) => `https://${host}/${path}/-/raw/HEAD/${file}`,
@@ -136,6 +138,8 @@
     // ---- merge requests
     requestListCommand: (target) => cmd(['mr', 'list', '--repo', target, '--per-page', '100', '--output', 'json']),
     olderCli: () => false,
+    // #845: the project has Issues turned off (a setting, not a failed read)
+    issuesDisabled: (message) => /issues? feature is disabled|issues are disabled/i.test(String(message || '')),
     // → { number, title, url, draft, body, closing: issue numbers }
     parseRequests: (out) => JSON.parse(out || '[]').map((m) => ({
       number: m.iid, title: m.title, url: m.web_url, draft: !!(m.draft || m.work_in_progress), body: m.description, closing: [],

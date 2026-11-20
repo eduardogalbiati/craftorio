@@ -1,7 +1,8 @@
 // Issues as the git platform gives them (#345: moved down from packages/engine/domains/backlog/backlog.js so packages/engine/domains/backlog/epics.js and
 // packages/engine/domains/roadmap/roadmap.js no longer require the backlog, which requires them; packages/engine/domains/backlog/backlog.js re-exports all).
 // - PLATFORMS, parseRepoUrl, platformOfHost, cliTarget (cliTargetOrName: an owner/name too): a repository URL read for gh (GitHub) / glab (GitLab);
-// - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress);
+// - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress); a repository
+//   with Issues turned off rejects with `issuesDisabled: true` on the error (#845, the adapter's issuesDisabled);
 // - issueCreateCommand, repoLabels: filing an issue (the Product Owner's Create, the epics);
 // - issueFields, itemIssues, withSyncedText: the read-only copies queue and roadmap items keep (#168).
 // The commands and JSON of each platform come from its adapter (packages/shared/platforms/, #351):
@@ -106,9 +107,15 @@ async function fetchIssues({ platform, repo, exec = execCli, onProgress }) {
   const owner = platformOfHost(parsed.host);
   if (owner && owner !== p.id) throw new Error(`The project's repository is on ${parsed.host}; pick ${PLATFORMS[owner].label} to sync it.`);
 
-  if (onProgress) return normalize(p, await readIssueSteps(p, parsed, exec, onProgress));
-  const out = await runCommand(exec, p.issueListCommand(p.cliTarget(parsed), MAX_ISSUES));
-  return normalize(p, JSON.parse(out || '[]'));
+  try {
+    if (onProgress) return normalize(p, await readIssueSteps(p, parsed, exec, onProgress));
+    const out = await runCommand(exec, p.issueListCommand(p.cliTarget(parsed), MAX_ISSUES));
+    return normalize(p, JSON.parse(out || '[]'));
+  } catch (e) {
+    // #845: Issues turned off is a setting of the repository: the error says so (issuesDisabled), with its message
+    if (p.issuesDisabled(e.message)) e.issuesDisabled = true;
+    throw e;
+  }
 }
 
 // The --repo value of gh/glab for a repository URL (same rules as fetchIssues).

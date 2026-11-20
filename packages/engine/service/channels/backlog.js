@@ -1,6 +1,7 @@
 // Backlog screen: a project's issues (the last sync, instant, and a new sync with gh/glab, each
 // issue with the runs working on it), Assign into the roadmap (#446) and the local merges not pushed, and
 // saving a Write & Review document back to its issue, archiving and restoring issues (#238).
+// E2E hook (simulation only): MULTIAGENT_E2E_ISSUES_FAIL=disabled|network (#845, e2eIssuesFail).
 
 const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
@@ -56,6 +57,21 @@ module.exports = (ctx) => {
     };
   };
   const progress = new Map(); // #781: project id → the sync in progress: { source, what, read, total }
+  // #845 E2E hook, simulation only: MULTIAGENT_E2E_ISSUES_FAIL=disabled|network makes any project the GitHub repository
+  // e2e-owner/<its folder's name> whose issue reads fail as gh does (Issues turned off, or no network); null otherwise
+  const e2eIssuesFail = (proj) => {
+    const mode = process.env.MULTIAGENT_E2E_ISSUES_FAIL;
+    if (!simulation.simulationOnly() || !['disabled', 'network'].includes(mode) || !proj) return null;
+    const github = require('@multiagent/shared/platforms/github');
+    const { E2E_LOGIN } = require('../areas/project-onboarding'); // (lazy: only this hook needs it)
+    const repo = `${E2E_LOGIN}/${path.basename(String(proj.folder || proj.id))}`;
+    const reason = mode === 'disabled' ? `the '${repo}' repository has disabled issues` : `error connecting to api.${github.host}`;
+    const exec = async (cli, a) => {
+      if (a[0] === 'issue') throw new Error(`${cli} ${a.slice(0, 2).join(' ')} failed: ${reason}`);
+      return '[]';
+    };
+    return { project: { ...proj, repo: `https://${github.host}/${repo}` }, exec };
+  };
   return [
     // #797: never in `current`, which backlog:state polls: only an open reads the PRs the roadmap's items wait for
     {
@@ -107,7 +123,7 @@ module.exports = (ctx) => {
         progress.set(id, { source, what: 'issues', read: 0, total: null });
         try {
           const [data] = await Promise.all([
-            backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, followed: !!followed, onProgress: (p) => progress.set(id, { source, ...p }) }),
+            backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, followed: !!followed, onProgress: (p) => progress.set(id, { source, ...p }), ...e2eIssuesFail(proj) }),
             ctx.refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
           ]);
           await ctx.syncWaitingPrs(id); // #797

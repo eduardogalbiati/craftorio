@@ -4,7 +4,8 @@
 // - identity: id, short (workflow input `git_platform`, skill suffix `-gh`), cli, label, host;
 // - request: the terms of a pull request ("PR #12"); epics, readsLabels, closeReason, actionsQuota:
 //   what the platform offers (epics are issues whose sub-issues are their members, packages/engine/domains/backlog/epics.js);
-// - cliTarget / apiHostArgs / issuesUrl / issueUrl: a repository ({ host, path }) as the CLI and links want it;
+// - cliTarget / apiHostArgs / issuesUrl / issueUrl / settingsUrl: a repository ({ host, path }) as the CLI and links want it;
+// - olderCli / issuesDisabled: what a CLI error message means (an older CLI; Issues turned off, #845);
 //   fileCommand / rawFileUrl: one file of its default branch, through the CLI or a public raw read;
 // - *Command: the { cli, args } of each operation (issues, labels, pull requests, epics, the Oracle, probes);
 // - parse*: the CLI's JSON → the app's objects;
@@ -108,6 +109,8 @@
     apiHostArgs: ({ host }) => (host === OWN_HOST ? [] : ['--hostname', host]),
     issuesUrl: ({ host, path }) => `https://${host}/${path}/issues/`,
     issueUrl: (base, number) => `${base}/issues/${number}`,
+    // #845: where the repository's Issues are turned on again
+    settingsUrl: ({ host, path }) => `https://${host}/${path}/settings`,
     // a file of the default branch (#486): the contents API (JSON, base64 content), else a public raw read
     fileCommand: ({ host, path }, file) => cmd(['api', ...github.apiHostArgs({ host }), `repos/${path}/contents/${file}`]),
     rawFileUrl: ({ path }, file) => `https://raw.githubusercontent.com/${path}/HEAD/${file}`,
@@ -154,6 +157,8 @@
     // closing: false for gh versions that do not know closingIssuesReferences (see olderCli)
     requestListCommand: (target, limit, { closing = true } = {}) => cmd(['pr', 'list', '--repo', target, '--state', 'open', '--limit', String(limit), '--json', closing ? `${REQUEST_FIELDS},${CLOSING_FIELD}` : REQUEST_FIELDS]),
     olderCli: (message) => new RegExp(CLOSING_FIELD).test(String(message || '')),
+    // #845: the repository has Issues turned off (a setting, not a failed read)
+    issuesDisabled: (message) => /has disabled issues/i.test(String(message || '')),
     // → { number, title, url, draft, body, closing: issue numbers }
     parseRequests: (out) => JSON.parse(out || '[]').map((p) => ({
       number: p.number, title: p.title, url: p.url, draft: !!p.isDraft, body: p.body, closing: (p[CLOSING_FIELD] || []).map((i) => i.number),

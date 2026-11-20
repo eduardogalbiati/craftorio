@@ -6,7 +6,8 @@
 // - followAnalysis(): api.workflowInterviewState while the profile job runs: at each onboarding:changed and every
 //   second, one last read when it ended, none before nor after. A failed read changes nothing;
 // - backlogLine(): wizard-review-backlog-activity while the backlog is read (api.backlogProgress at the opening and
-//   every second, followBacklog), backlogBody(): its summary and issues or that it is empty, and backlogFailure(): the
+//   every second, followBacklog), backlogBody(): its summary and issues, that it is empty, or that the repository has
+//   Issues turned off (#845: wizard-review-backlog-issues-disabled, a link to its settings, no Retry), and backlogFailure(): the
 //   failed read's reason with wizard-review-backlog-retry (readBacklog(pid) reads it; onClick(e), before the wizard's: that Retry);
 // - stop(): the timers, when the wizard closes.
 // Each read draws the wizard only when a line changed; the Oracle's reading and its clock move in place, so a second's
@@ -112,8 +113,18 @@
       return reason ? Line().html({ state: 'failed', testid: 'wizard-review-backlog-activity', reason, retry: { label: t('onboarding.retry'), attrs: 'data-act="retry-backlog" data-testid="wizard-review-backlog-retry"' } }) : '';
     }
 
+    // #845: the repository has Issues turned off: a state, not a failure (no Retry), with a link to its settings
+    function issuesDisabledBody(data) {
+      const P = window.Platforms;
+      const parsed = P?.parseRepoUrl(data.repo);
+      const url = parsed ? P.findPlatform(data.platform)?.settingsUrl?.(parsed) : null;
+      const link = url ? `<a class="small" data-testid="wizard-review-backlog-settings-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(t('backlog.repository_settings'))}</a>` : '';
+      return `<div data-testid="wizard-review-backlog-issues-disabled">${Line().html({ state: 'done', testid: 'wizard-review-backlog-activity', text: t('backlog.issues_disabled') })}${link}</div>`;
+    }
+
     // the Backlog card once read: the summary and the issues, or that it is empty
     function backlogBody() {
+      if (cur().review.backlog?.issuesDisabled) return issuesDisabledBody(cur().review.backlog);
       const issues = cur().review.backlog?.issues || [];
       if (!issues.length) return backlogDone(0);
       return `${backlogDone(issues.length)}<ul class="wizard-review-list">${issues.map((i) => `<li class="fit-box"><span class="mono muted">#${esc(i.number)}</span> <span class="text-cut" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;

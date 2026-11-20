@@ -3,6 +3,8 @@
 // syncs again in the background each time the screen opens. The platform is the project's (#745,
 // window.Platforms.projectPlatform: its host or the platform stored on it), shown as a badge; the
 // select appears only for a host that can't tell it, and its pick is saved on the project.
+// A repository with Issues turned off (#845: the sync's issuesDisabled) shows that state with a
+// link to its settings (backlog-issues-disabled), not a sync error.
 // Selected To do issues can be assigned to a workflow: Add to roadmap plans them as a new last
 // roadmap stage (#446, no plain queue any more), as separate items or one item for all of them (one
 // branch, one PR/MR); its "Run now" starts that stage on its own (#141). Issues link to the runs
@@ -1187,6 +1189,25 @@
     }
   }
 
+  // #845: Issues turned off is a setting of the repository, not a sync error: where to turn them on
+  function issuesDisabledHtml(data) {
+    const parsed = window.Platforms.parseRepoUrl(data.repo);
+    const url = parsed ? platformOf(data.platform).settingsUrl(parsed) : '';
+    const link = url ? `<p class="muted"><a href="${esc(url)}" target="_blank" rel="noopener">${t('backlog.repository_settings')}</a></p>` : '';
+    return `<div class="empty-state" data-testid="backlog-issues-disabled"><b>${t('backlog.issues_disabled')}</b>${link}</div>`;
+  }
+
+  // the list's place when there is no list to draw (no project, no repository, nothing synced, Issues off), else ''
+  function listStateHtml(p) {
+    if (!bl.projects.length) return `<div class="empty-state"><b>${t('backlog.no_projects_yet')}</b><p class="muted">${t('backlog.create_a_project_with_a_repository')}</p></div>`;
+    if (!p?.repo) return `<div class="empty-state"><b>${t('backlog.this_project_has_no_repository')}</b><p class="muted">${t('backlog.add_a_repository_url_to_the')}</p></div>`;
+    if (PLATFORMS[bl.platform]?.soon) return `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} ${t('backlog.sync_is_not_available_yet')}</b><p class="muted">${t('backlog.pick_github_or_gitlab')}</p></div>`;
+    if (!bl.data) return bl.syncing ? `<p class="muted">${t('backlog.loading_issues')}</p>` : `<p class="muted">${t('backlog.not_synced_yet')}</p>`;
+    // (the Roadmap tab keeps its stages: its items need no issue read)
+    if (bl.data.issuesDisabled && bl.mode !== 'roadmap') return issuesDisabledHtml(bl.data);
+    return '';
+  }
+
   function render() {
     // #254: the Backlog screen (Board and Epics tabs) or the Roadmap screen, in the same section
     const roadmap = onRoadmapTab();
@@ -1268,14 +1289,9 @@
     renderLive();
 
     const list = $b('#bl-list');
-    if (!bl.projects.length) {
-      list.innerHTML = `<div class="empty-state"><b>${t('backlog.no_projects_yet')}</b><p class="muted">${t('backlog.create_a_project_with_a_repository')}</p></div>`;
-    } else if (!p?.repo) {
-      list.innerHTML = `<div class="empty-state"><b>${t('backlog.this_project_has_no_repository')}</b><p class="muted">${t('backlog.add_a_repository_url_to_the')}</p></div>`;
-    } else if (PLATFORMS[bl.platform]?.soon) {
-      list.innerHTML = `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} ${t('backlog.sync_is_not_available_yet')}</b><p class="muted">${t('backlog.pick_github_or_gitlab')}</p></div>`;
-    } else if (!bl.data) {
-      list.innerHTML = bl.syncing ? `<p class="muted">${t('backlog.loading_issues')}</p>` : `<p class="muted">${t('backlog.not_synced_yet')}</p>`;
+    const listState = listStateHtml(p);
+    if (listState) {
+      list.innerHTML = listState;
     } else {
       // (#491: the Roadmap keeps its item rows when only their content changed)
       if (bl.mode === 'roadmap') window.BacklogRoadmap.patch(list, window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }));
