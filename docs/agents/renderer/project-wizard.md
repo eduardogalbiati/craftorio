@@ -50,37 +50,31 @@ live (`wizard-work-model-files`: `docs/work/<item>/intent.md · spec.md · plan.
 run" line are left out on purpose (spec D16: Code & Build never writes `docs/work/`, the pre-flow
 write-doc and the post-flow `sdlc-*` workflows do).
 
-#851 (owner's decision, 2026-11-19): **Light is the default** (`DEFAULT_WORK_MODEL = 'light'`): a fresh
-import or new project opens on Light, a resumed wizard keeps its saved `workModel`, and Finish saves
-`light` when step 3 is untouched. "Where the files live" (`wizard-work-model-files`) shows only while
-Standard or Full is picked: Light writes nothing to `docs/work/`. A **Recommended** label
-(`wizard-recommended`, `.badge.wizard-recommended`, `onboarding.recommended`, `recommended()` of
-`project-wizard-workflows.js`) marks Light and the workflows column's **Analyze the repository**
-(`wizard-workflows-choice-analyze`, also in its inline form); no other choice carries it. Standard is
-described as Anthropic's [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook),
-simplified (intent → spec → plan → code), Full as the whole playbook (+ REVIEW.md and evals); the wizard's
-texts are plain (no links), the playbook is cited here and in
-`docs/first-project-onboarding-proposal-2026-10/README.md`.
+#851 (owner's decision, 2026-11-19): **Light is the default** (`DEFAULT_WORK_MODEL = 'light'`), a resumed
+wizard keeps its saved `workModel` and an untouched step 3 saves `light`. `wizard-work-model-files` shows
+only for Standard or Full (Light writes nothing to `docs/work/`). A **Recommended** badge
+(`wizard-recommended`, `onboarding.recommended`, `recommended()` of `project-wizard-workflows.js`) marks
+only Light and **Analyze the repository** (`wizard-workflows-choice-analyze`, inline form too). Standard is
+Anthropic's [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook) simplified
+(intent → spec → plan → code), Full the whole playbook (+ REVIEW.md and evals); the wizard's texts have no
+links, the playbook is cited here and in `docs/first-project-onboarding-proposal-2026-10/README.md`.
 
 ## A new project's step 3 and review (#850)
 
-A new project (source `new`) has nothing to analyse yet: `OnboardingModel.next()` from its repository step
-sets `analyzeLater: true` (the one source for step 3 and the review; an import keeps `false`). Step 3 shows
-the City and architecture row unticked with `onboarding.job_projectMap_later_new`
-(`wizard-job-later-projectMap`), no amount and no "Skip, analyze later"; its profile line says
-"from your answers" (`profileSourceKey()`, an import's "from the git history"). The review never says the
-analyses were skipped, and "How it is worked on" is the step 2 answer (`onboarding.new_mode_<mode>`). On the
-project page, the Next steps' release CI entry of a project whose workflows include `release` says
-`onboarding.next_steps_release_ci_reason_ready` (still disabled: the CI setup comes in a later version).
+A new project (source `new`): `OnboardingModel.next()` from its repository step sets `analyzeLater: true`
+(the one source for step 3 and the review; an import keeps `false`). Step 3 shows the City row unticked
+with `onboarding.job_projectMap_later_new` (`wizard-job-later-projectMap`), no amount, no "Skip"; the
+profile line says "from your answers" (`profileSourceKey()`). The review never says the analyses were
+skipped; "How it is worked on" is the step 2 answer (`onboarding.new_mode_<mode>`). The Next steps'
+release CI entry of a project with a `release` workflow says `onboarding.next_steps_release_ci_reason_ready`
+(still disabled).
 
 ## The review's loading state (#852)
 
-Every part of the review still loading looks the same: a card whose analysis runs shows
-`wizard-review-running` (the app's spinner + "running") in its header beside its action (Open the city
-stays), and the project card shows `wizard-review-languages-loading` (a skeleton bar and "Reading the
-languages…", `languagesBlock()` of `project-wizard-activity.js`) until the facts arrive, then the bar, or
-`wizard-review-languages-failed` when the facts read failed. Under `prefers-reduced-motion: reduce` neither
-the spinner nor the skeleton animates.
+A card whose analysis runs shows `wizard-review-running` (spinner + "running") in its header beside its
+action; the project card shows `wizard-review-languages-loading` (skeleton bar, `languagesBlock()` of
+`project-wizard-activity.js`) until the facts arrive, then the bar, or `wizard-review-languages-failed`.
+Under `prefers-reduced-motion: reduce` nothing animates.
 
 ## The steps
 
