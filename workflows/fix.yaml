@@ -8,7 +8,7 @@
 #   - code_review, suite, verify_change, verify_failed: fragments/dev-pipeline.yaml.
 #   - Local mode: the run's branch is merged into the local base (resolve_merge / merge_blocked on a
 #     conflict, fragments/local-merge-pipeline.yaml), then push_main pushes it (the project auto-push
-#     is gone, #617). Remote mode: fragments/pr-pipeline.yaml, the team merges the PR/MR.
+#     is gone, #617; the engine pushes, no agent, #861). Remote mode: fragments/pr-pipeline.yaml, the team merges the PR/MR.
 #   - Fork + PR mode (#738, no push access to the original): the same pr-pipeline, the branch pushed
 #     to the owner's fork (origin) and the PR opened against the original (upstream).
 #   - Hotfix mode (input `hotfix`): the urgent lane; the fix starts from the last release tag and ships
@@ -165,7 +165,7 @@ agents:
     system_prompt: |
       You are the developer. You reproduce the bug, then fix its root cause on the run's branch with a
       small change that follows the project's conventions and a regression test that failed before
-      the fix. Never write under docs/work/. Never push, except in the push main step.
+      the fix. Never write under docs/work/. Never push.
       {% if inputs.mockup %}
       {# #836: a frozen mockup version #}
       The fixed screen follows the frozen mockup version in `{{ inputs.mockup }}`: its `index.html`

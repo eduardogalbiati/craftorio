@@ -114,6 +114,27 @@ async function listWorktrees(repo) {
   });
 }
 
+/**
+ * #861: origin when it is the person's own non-bare repository on this machine (a project created from a
+ * local folder), and where <base> is checked out in it (git refuses a push to that branch). null when origin
+ * is a remote URL, a bare repository or missing: a normal push then.
+ * @returns {Promise<{ dir: string, checkout: { dir, branch, head }|null }|null>}
+ */
+async function localOrigin(root, base) {
+  const url = await tryGit(['remote', 'get-url', 'origin'], root);
+  if (!url) return null;
+  let dir = null;
+  if (/^file:\/\//i.test(url)) {
+    try { dir = require('url').fileURLToPath(url); } catch { return null; }
+  } else if (path.isAbsolute(url) || url.startsWith('.')) {
+    dir = path.resolve(root, url);
+  } else return null; // https://, ssh://, git@host:path
+  if (!fs.existsSync(dir) || (await tryGit(['rev-parse', '--is-bare-repository'], dir)) !== 'false') return null;
+  const top = await repoRoot(dir);
+  if (!top) return null;
+  return { dir: top, checkout: (await listWorktrees(top)).find((w) => w.branch === base) || null };
+}
+
 const isWorktree = async (repo, dir) => fs.existsSync(dir) && (await listWorktrees(repo)).some((w) => samePath(w.dir, dir));
 const refExists = async (repo, ref) => !!(await tryGit(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], repo));
 
@@ -834,6 +855,7 @@ module.exports = {
   compareWithOrigin,
   fastForwardBase,
   isUnder,
+  localOrigin,
   prepareBaseWorktree,
   removeRunTmp,
   removeScratch,

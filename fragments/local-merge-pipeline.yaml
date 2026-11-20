@@ -2,7 +2,7 @@
 # software-development-local-hero: the change lands with `merge: local` (on the transition the
 # composition writes after verify_change or the owner's approval); a merge that fails goes to
 # resolve_merge (the developer rebases and resolves on the run's branch), and merge_blocked asks the
-# owner when that cannot go on. Once merged, push_main pushes the local base (#630). A step `{ id, fragment: local-merge-pipeline }`
+# owner when that cannot go on. Once merged, push_main pushes the local base (#630; the engine, #861). A step `{ id, fragment: local-merge-pipeline }`
 # gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js, expandFragments).
 
 steps:
@@ -58,22 +58,14 @@ steps:
         status: failed
 
   # #630 (closes #617): Local mode's last step, once the change is merged: the local base is pushed by
-  # the workflow, not by the project's auto-push any more. A repository without a remote, or a push
-  # refused, ends the run all the same (merged locally); the summary says what to do.
+  # the workflow, not by the project's auto-push any more. #861: the engine pushes, no agent, no model
+  # call (packages/engine/engine/run/transitions.js pushLocalBase → domains/local/local-push.js pushBase);
+  # an origin that is the person's own folder with the base checked out is fast-forwarded there instead.
+  # A repository without a remote, or a push that cannot go, ends the run all the same (merged locally);
+  # the output (pushed, summary, reason, commands) and the run's chat say what to do.
   push_main:
+    type: push_base
     display: Push main
-    agent: developer
-    prompt: |
-      The run's branch is merged into the local `{{ inputs.base_branch }}`. Push it: in the repository
-      `{{ inputs.repo_path }}` run `git push origin {{ inputs.base_branch }}` (never force, never another
-      branch). No remote named origin, or a push refused (e.g. the remote moved): change nothing and
-      answer pushed: false with the reason.
-    output_schema:
-      type: object
-      required: [pushed, summary]
-      properties:
-        pushed:  { type: boolean }
-        summary: { type: string }
     transitions:
       - when: "true"
         goto: end

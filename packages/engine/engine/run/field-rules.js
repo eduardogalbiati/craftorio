@@ -59,6 +59,7 @@
     'human_edit',
     'pr_monitor',
     'project_map',
+    'push_base',
     'record_docs',
     'refactor_proposals',
     'release_version',
@@ -100,7 +101,7 @@
 
   // Where a step field applies: every step type, a list of types, or every type except some
   const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-  const NO_AGENT_TYPES = ['check', 'docs_check', 'pr_monitor', 'project_map', 'record_docs', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
+  const NO_AGENT_TYPES = ['check', 'docs_check', 'pr_monitor', 'project_map', 'push_base', 'record_docs', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
   // The protected gates: only the person ends them; human_edit (#647) also takes the person's edit
   // requests, each a turn of its named agent, while it waits
   const GATE = ['human_approval', 'human_edit'];

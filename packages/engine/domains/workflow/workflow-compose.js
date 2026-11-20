@@ -285,7 +285,7 @@ function changeAgents(s, facts, order) {
   const facts1 = factsText(s, facts);
   const build = toolsOf(s, facts, ['bash:git', 'edit', 'read', 'write']);
   return {
-    developer: agent({ effort: 'high', tools: build, skills: facts.skills, system: `You are the developer. You implement the task on the run's branch with small, cohesive changes that follow the project's conventions, with their tests. ${order} ${facts1} Never push, except in the push main step.` }),
+    developer: agent({ effort: 'high', tools: build, skills: facts.skills, system: `You are the developer. You implement the task on the run's branch with small, cohesive changes that follow the project's conventions, with their tests. ${order} ${facts1} Never push (#861: the engine pushes the local base).` }),
     reviewer: agent({ effort: review.effort, tools: ['bash:git', 'read'], system: `You are the code reviewer (${s.review} rigour). You read the change's diff and approve it or list what to change; you change nothing. ${facts1}` }),
     verifier: agent({ model: FAST_MODEL, effort: 'medium', tools: toolsOf(s, facts, ['bash:git', 'read']), skills: facts.skills, system: `You are the verifier. You check, with one command and its observed result, that the change does what the task asked. ${facts1}${s.screenshots ? ' Capture the screens the change touches (the project\'s screenshot command, else a short description of each state) and name them in your evidence.' : ''}` }),
     ...(local ? {} : { ci_pusher: agent({ model: FAST_MODEL, effort: 'medium', tools: ['bash:gh', 'bash:git', 'bash:glab', 'read'], system: s.mode === 'fork'

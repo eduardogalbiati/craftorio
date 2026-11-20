@@ -117,7 +117,7 @@ function areaOf(file) {
 // Requires the table does not allow, each with why it stays for now. Only remove entries: a new
 // direction moves the shared code down instead (docs/agents/code-map.md, "Where a new module goes").
 const EXCEPTIONS = [
-  { from: 'packages/engine/engine/machine-actions.js', to: 'packages/engine/domains/releases/releases.js', reason: 'the real machine adapter (#353) writes the release version (writeReleaseVersion) and pushes and tags the local base for a transition\'s `ship: { tag }` (shipRelease)' },
+  { from: 'packages/engine/engine/machine-actions.js', to: 'packages/engine/domains/releases/releases.js', reason: 'the real machine adapter (#353) writes the release version (writeReleaseVersion) and pushes and tags the local base for a transition\'s `ship: { tag }` (shipRelease), or only pushes it for a Local run\'s push_main (#861, pushBase re-exported there)' },
   { from: 'packages/engine/engine/run/costs.js', to: 'packages/engine/domains/night/night-limits.js', reason: 'the night\'s cost and run limits (#337) are checked at each turn; night-limits.js also reads the night watch\'s log and the run loader' },
   { from: 'packages/engine/engine/run/costs.js', to: 'packages/engine/domains/usage/usage.js', reason: 'the cost limits read the usage ledger of earlier runs (usage.js reads the runs list)' },
   { from: 'packages/engine/engine/run/machine-steps.js', to: 'packages/engine/domains/releases/release-city.js', reason: 'the release_version step names the release\'s previous tag (#378, release.yaml\'s previous_version) as the Release city tab does (previousTag)' },

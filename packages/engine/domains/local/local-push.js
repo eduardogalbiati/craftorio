@@ -4,7 +4,10 @@
 // pushes (see mergeLocally in packages/engine/engine/worktree.js). Its commits end with "Closes #n", so the
 // issues only close on GitHub/GitLab once <base> is pushed. This module tells what is waiting
 // (the commits on <base> that are not on origin/<base>, and the issues they close) and pushes it:
-//   - pushBase: `git push origin <base>:<base>`; never forced, never another branch;
+//   - pushBase: `git push origin <base>:<base>`; never forced, never another branch. #861: when origin is
+//     the person's own repository on this machine (a project created from a local folder) with <base>
+//     checked out, git refuses that push: <base> is fast-forwarded there instead (clean and behind only),
+//     else nothing changes and the result gives the reason and the commands to run;
 //   - updateAndPush: when the push is rejected (origin/<base> moved), `git pull --rebase origin
 //     <base>` where <base> is checked out (a temporary worktree when it is checked out nowhere),
 //     then the push. A conflict aborts the rebase: <base> is left exactly as it was, nothing is lost.
@@ -18,6 +21,7 @@ const {
   git,
   identityArgs,
   listWorktrees,
+  localOrigin,
   repoRoot,
 } = require('../../engine/worktree');
 const { referencedIssues } = require('../backlog/backlog');
@@ -68,23 +72,63 @@ async function localStatus({ repo, base = null, fetch = true }) {
 
 const REJECTED = /\[rejected\]|\[remote rejected\]|non-fast-forward|fetch first|stale info/i;
 
+// #861: the commands a person runs in their own repository to bring the clone's <base> over by hand.
+const syncCommands = (origin, clone, base, ffOnly = true) => [
+  `git -C "${origin}" fetch "${clone}" ${base}`,
+  ffOnly ? `git -C "${origin}" merge --ff-only FETCH_HEAD` : `git -C "${origin}" merge FETCH_HEAD`,
+];
+
 /**
- * Pushes the local <base> to origin/<base> (fetched first, to report what goes).
- * @returns {Promise<{ pushed: boolean, rejected?: boolean, error?: string, commits, issues, status }>}
- *   rejected: origin/<base> has commits the local <base> has not (see updateAndPush).
+ * #861: origin is the person's own non-bare repository with <base> checked out (a project created from a
+ * local folder): git refuses a push there, so <base> is fast-forwarded in that checkout instead (fetch from
+ * the clone, `merge --ff-only FETCH_HEAD`). Uncommitted changes to tracked files, or a <base> that diverged,
+ * leave it untouched: the result says why and gives the commands. Never a reset, never another branch.
+ */
+async function fastForwardLocalOrigin(before, origin) {
+  const { base, repo: clone, commits, issues } = before;
+  const target = origin.dir;
+  const keep = (reason, ffOnly = true) => {
+    const commands = syncCommands(target, clone, base, ffOnly);
+    return { pushed: false, how: 'fast-forward', target, reason: `${reason} Nothing changed in ${target}. To bring the commits over: ${commands.join(' && ')}`, commands, commits, issues, status: before };
+  };
+  if (await tryGit(['status', '--porcelain', '--untracked-files=no'], origin.checkout.dir)) {
+    return keep(`${origin.checkout.dir} has uncommitted changes on ${base}: commit or stash them first.`);
+  }
+  const ancestor = await git(['merge-base', '--is-ancestor', `refs/remotes/origin/${base}`, `refs/heads/${base}`], clone).then(() => true, () => false);
+  if (!ancestor) return keep(`${base} in ${target} has diverged from the merged ${base}: it has commits the run's ${base} has not.`, false);
+  try {
+    await git(['fetch', '--end-of-options', clone, `refs/heads/${base}`], origin.checkout.dir, { timeout: PUSH_TIMEOUT_MS });
+    await git(['merge', '--ff-only', '-q', 'FETCH_HEAD'], origin.checkout.dir);
+  } catch (e) {
+    return keep(`Could not fast-forward ${base} in ${target} (${e.message.split('\n')[0]}).`);
+  }
+  // origin is a folder on this machine: fetching it again is cheap and brings origin/<base> up to date
+  return { pushed: true, how: 'fast-forward', target, reason: `${base} in ${target} fast-forwarded to the merged ${base}.`, commits, issues, status: await localStatus({ repo: clone, base }) };
+}
+
+/**
+ * Pushes the local <base> to origin/<base> (fetched first, to report what goes). #861: when origin is the
+ * person's own repository on this machine with <base> checked out, fastForwardLocalOrigin moves it instead.
+ * @returns {Promise<{ pushed: boolean, rejected?: boolean, error?: string, how?: 'push'|'fast-forward',
+ *   target?: string, reason?: string, commands?: string[], commits, issues, status }>}
+ *   rejected: origin/<base> has commits the local <base> has not (see updateAndPush); target: origin's folder or URL;
+ *   commands: what to run by hand when nothing moved (local origin, dirty or diverged).
  */
 async function pushBase({ repo, base = null }) {
   const before = await localStatus({ repo, base });
   const { commits, issues } = before;
   if (before.error) throw new Error(before.error);
   if (!commits.length) return { pushed: false, commits, issues, status: before };
+  const origin = await localOrigin(before.repo, before.base);
+  if (origin?.checkout) return fastForwardLocalOrigin(before, origin);
+  const target = origin?.dir || await tryGit(['remote', 'get-url', 'origin'], before.repo);
   try {
     await git(['push', 'origin', `refs/heads/${before.base}:refs/heads/${before.base}`], before.repo, { timeout: PUSH_TIMEOUT_MS, auth: true });
   } catch (e) {
     if (!REJECTED.test(e.message)) throw e;
-    return { pushed: false, rejected: true, error: e.message, commits, issues, status: await localStatus({ repo, base: before.base, fetch: false }) };
+    return { pushed: false, rejected: true, how: 'push', target, error: e.message, reason: `origin/${before.base} moved: the push was rejected.`, commits, issues, status: await localStatus({ repo, base: before.base, fetch: false }) };
   }
-  return { pushed: true, commits, issues, status: await localStatus({ repo, base: before.base, fetch: false }) };
+  return { pushed: true, how: 'push', target, commits, issues, status: await localStatus({ repo, base: before.base, fetch: false }) };
 }
 
 /**

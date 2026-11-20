@@ -265,6 +265,8 @@ async function shipRelease({ repo, base = null, tag, expect = null }) {
   const tags = await tagsAt(root, name, commit);
   const result = await pushBase({ repo: root, base });
   if (result.rejected) throw new Error(`origin/${base} has commits the local ${base} has not: update the local ${base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
+  // #861: a local-folder origin left untouched (uncommitted changes or a diverged base there): no tag without the base
+  if (!result.pushed && result.commands?.length) throw new Error(`${result.reason} Nothing was tagged.`);
   await pushTag(root, name, commit, tags);
   return { tag: name, base, commit, pushed: !!result.pushed, commits: result.commits, issues: result.issues };
 }
@@ -517,6 +519,9 @@ module.exports = {
   mergesSinceStable,
   nextRelease,
   promoteRelease,
+  // #861: the push of the local base a ship does, for a Local run's push_main (the machine adapter's one
+  // way into the domains, scripts/layers.js EXCEPTIONS)
+  pushBase,
   rcTag,
   readReleases,
   recordCandidate,

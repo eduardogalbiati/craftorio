@@ -532,7 +532,7 @@ agents:
       worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
       this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local
       merges that were never pushed. Work on the run's branch: the test writer creates it with the
-      acceptance tests (if the worktree is still detached, create it: `git switch -c <branch>`). Never fetch, pull or branch from origin, and never push, except in the push main step: the
+      acceptance tests (if the worktree is still detached, create it: `git switch -c <branch>`). Never fetch, pull or branch from origin, and never push: the
       orchestrator merges your branch into the local {{ inputs.base_branch }} after approval.
       The engine gives the worktree its dependencies (linked from a shared cache, installed
       once per lockfile): never run `npm ci` and never delete `node_modules`. Adding a package
@@ -2632,10 +2632,10 @@ steps:
 
 # -----------------------------------------------------------------------------
 # What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
-  # #630 (closes #617): Local mode's last step pushes the local base (the project auto-push is gone)
+  # #630 (closes #617): Local mode's last step pushes the local base (the project auto-push is gone);
+  # #861: the engine pushes it (type: push_base in the fragment), no agent
   - id: push_main
     fragment: local-merge-pipeline
-    agent: developer
 
   # ============================ REMOTE MODE ==================================
   # #630: the pull request, its CI and the team's merge (fragments/pr-pipeline.yaml)

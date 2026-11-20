@@ -7,7 +7,7 @@
 // (`runDocsCheckStep`, the docs the issues expect against the diff, #757), `type: record_docs`
 // (`runRecordDocsStep`, a Code & Build run in its work item's docs, #702), `type:
 // workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
-// #325), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
+// #325), `type: push_base` (`runPushBaseStep`, #861), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
 // screenshots step emits step.log { step_id, path, command } when its command's log starts (its live
 // terminal follows it); a wait for memory or the suite slot is written to that log as it starts.
 // The steps' own logic is packages/engine/engine/suite-step.js, screenshot-step.js, test-ids.js, check-step.js and workflow-step.js;
@@ -546,6 +546,38 @@ const methods = {
     const change = r.written || (simulated && r.files.length) ?`package.json ${r.from || '(no version)'} → ${r.to}` : '';
     const output = { kind: 'release_version', status: r.written ? 'written' : 'unchanged', version, ...r, change, previous_version: await previousReleaseTag(dir, version), message: r.reason };
     this.emitEvent('log', { level: error ? 'warn' : 'info', kind: 'release_version', step_id: step.id, message: `${step.id}: ${r.reason}` });
+    return output;
+  },
+
+  // `type: push_base` (#861, a Local run's push_main): the engine pushes the local base the run merged
+  // (`merge: local`, ctx.local_merge) through the machine adapter (packages/engine/domains/local/local-push.js
+  // pushBase: a normal push, or a fast-forward of the person's own repository when origin is a local folder
+  // with the base checked out); no model call. Never fails the run: a push that cannot go (origin moved,
+  // uncommitted changes or a diverged base there, an error) leaves it merged locally, with the reason and the
+  // commands in the output and the run's chat (a warn log). → { kind, pushed, summary, target, how, reason,
+  // commands }: pushed and summary as the agent's output had them.
+  async runPushBaseStep(step) {
+    const wt = this.worktree;
+    const out = (pushed, summary, extra = {}) => ({ kind: 'push_base', pushed, summary, target: null, how: null, reason: summary, commands: [], ...extra });
+    if (!this.ctx.local_merge || !wt?.repo) {
+      const output = out(false, `Nothing pushed: ${this.machine.simulated ? 'a simulated run merges nothing locally' : 'the run did not merge into the local base'}.`);
+      this.emitEvent('action.executed', { command: 'push: local base', skipped: true, output: output.summary });
+      return output;
+    }
+    let output;
+    try {
+      const r = await this.machine.pushBase({ repo: wt.repo, base: wt.base });
+      const n = (r.commits || []).length;
+      const where = r.target ? ` to ${r.target}` : '';
+      const summary = r.pushed
+        ? `${r.how === 'fast-forward' ? 'Fast-forwarded' : 'Pushed'} ${n} commit${n === 1 ? '' : 's'} of ${wt.base}${where}.`
+        : r.reason || (n ? `Nothing pushed${where}.` : `Nothing to push: origin/${wt.base} already has the local ${wt.base}.`);
+      output = out(!!r.pushed, summary, { target: r.target || null, how: r.how || null, reason: r.reason || summary, commands: r.commands || [], rejected: !!r.rejected, issues: r.issues || [] });
+    } catch (e) {
+      output = out(false, `Could not push ${wt.base}: ${e.message.split('\n')[0]}. The run is merged locally; push it from the Backlog.`);
+    }
+    this.ctx.local_push = { pushed: output.pushed, target: output.target, how: output.how, reason: output.reason };
+    this.emitEvent('log', { level: output.pushed ? 'info' : 'warn', kind: 'push_base', step_id: step.id, message: [output.summary, ...output.commands].join('\n') });
     return output;
   },
 

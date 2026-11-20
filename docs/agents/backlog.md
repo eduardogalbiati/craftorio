@@ -19,7 +19,9 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
 - Local merges not pushed (#89, done): `packages/engine/domains/local/local-push.js` (`localStatus` / `pushBase` /
   `updateAndPush`), cached per project in `<workspace>/backlog/<id>.local.json`, column `local` in
   `linkRuns`. The project auto-push left with #630: in Local mode the feature and fix workflows push
-  the base as their last step (`push_main`). A conflict of Update and push goes to a
+  the base as their last step (`push_main`, an engine step since #861: `type: push_base`, no agent).
+  The Backlog's Push and that step share `pushBase`, so an origin that is a local folder is synced the
+  same way from both (see [worktrees.md](worktrees.md), Local workflows). A conflict of Update and push goes to a
   run (`backlog:resolve-push`, task from `conflictTask`) of the last local workflow of the project:
   its developer merges `origin/<base>` into the run's branch (a merge, so the local commits stay and
   the next push is a fast-forward), then review, tests and the local merge. Not done: if the local

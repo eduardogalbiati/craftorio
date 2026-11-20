@@ -1,5 +1,5 @@
 // The run's machine actions as an injected adapter (#353): what a run does on the machine besides
-// its agent turns (git, `merge: local`, `ship:`, the PR/MR and CI probes, transition actions, the
+// its agent turns (git, `merge: local`, the local base's push (#861), `ship:`, the PR/MR and CI probes, transition actions, the
 // suite's and the test requests' commands, screenshots, the release version, the provider an agent
 // turn starts). `real()` does it; `simulated({ sequences })` does what a mock run did before (#353:
 // the `this.mock` branches of packages/engine/engine/run/): nothing runs, merges, pushes or captures, probes
@@ -32,7 +32,11 @@ const {
   isTest,
   relatedTests,
 } = require('./affected-tests');
-const { shipRelease, writeReleaseVersion } = require('../domains/releases/releases');
+const {
+  pushBase,
+  shipRelease,
+  writeReleaseVersion,
+} = require('../domains/releases/releases');
 const {
   confirmedFailures,
   readStore,
@@ -78,6 +82,8 @@ function real() {
       return { ...(await mergeLocally({ repo, dir, base, log })), base_commit: baseCommit };
     },
     ship: ({ repo, base, tag, expect }) => shipRelease({ repo, base, tag, expect }),
+    // #861: a Local run's push_main pushes the local base (a local-folder origin: fast-forwarded there)
+    pushBase: ({ repo, base }) => pushBase({ repo, base }),
     // what a ship needs before it does anything (WorkflowRun.shipGuard): checked
     guardShip: (check) => check(),
     // a transition's action / merge / ship: no simulated failure
@@ -155,6 +161,7 @@ function simulated({ sequences = null } = {}) {
     git: () => Promise.resolve(''),
     mergeLocal: () => Promise.resolve({ skipped: true, output: '[mock] local merge not executed' }),
     ship: () => Promise.resolve({ skipped: true, output: '[mock] release not pushed, not tagged' }),
+    pushBase: () => Promise.resolve({ skipped: true, pushed: false, commits: [], output: '[mock] local base not pushed' }),
     // a simulated gate is never the owner's own answer, and nothing ships: no guard
     guardShip: () => {},
     // sequences.action_errors: { step: n } fails the first n actions/merges/ships of that step
