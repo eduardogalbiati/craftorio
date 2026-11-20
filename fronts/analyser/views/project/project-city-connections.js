@@ -11,6 +11,12 @@
 (() => {
   const base = (p) => String(p).split('/').pop();
   const dir = (p) => String(p).split('/').slice(0, -1).join('/') || '(root)';
+  // #847: one whole sentence per edgesState code, in the interface language
+  const emptyText = (state) => {
+    if (state.code === 'no_import') return t('project_city_connections.empty_no_import');
+    if (state.code === 'not_read') return t('project_city_connections.empty_not_read', { language: esc(state.language) });
+    return t('project_city_connections.no_connections_to_list_arcs_reason', { reason: esc(state.reason) });
+  };
 
   function attach(city) {
     const el = document.createElement('div');
@@ -36,7 +42,7 @@
       const title = t('project_city_connections.most_connected');
       const head = `<div class="pcc-head pc-panel-head"><b>${esc(title)}</b><span class="r3d-grow"></span>${pins.length ? `<button type="button" class="link-btn" data-pcc-clear data-testid="city-connections-clear">${t('project_city_connections.clear_pins_length', { length: pins.length })}</button>` : ''}${window.ProjectCityPanels?.chevron(title) || ''}</div>`;
       if (!state.ok) {
-        el.innerHTML = `${head}<div data-city-panel-body><p class="pcc-empty muted" data-testid="city-connections-empty">${t('project_city_connections.no_connections_to_list_arcs_reason', { reason: esc(state.reason) })}</p></div>`;
+        el.innerHTML = `${head}<div data-city-panel-body><p class="pcc-empty muted" data-testid="city-connections-empty">${emptyText(state)}</p></div>`;
         city.applyUi?.();
         return;
       }

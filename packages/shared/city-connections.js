@@ -5,8 +5,9 @@
 //   at least one edge, its outgoing (requires) and incoming (required by) counts, the most connected
 //   first (then the most required, then by path), the first `limit` (RANK_LIMIT), those whose path
 //   contains `query` (case-insensitive) when one is given.
-// - edgesState(model) → { ok: true } or { ok: false, reason }: whether the city has file edges at
-//   all (a language whose imports are not read has none: the panel says so instead of an empty list).
+// - edgesState(model) → { ok: true } or { ok: false, code, language, reason }: whether the city has file
+//   edges at all (a language whose imports are not read has none: the panel says so instead of an empty
+//   list). code (#847): 'no_import', 'not_read' (with language) or 'other' (reason, the model's text).
 // Browser: window.CityConnections; Node: module.exports.
 (function (root) {
   const RANK_LIMIT = 30;
@@ -33,8 +34,12 @@
   /** Whether the model has file edges to rank. */
   function edgesState(model) {
     const edges = model && model.edges;
-    if (typeof edges === 'string') return { ok: false, reason: edges };
-    if (!arr(edges).some((e) => e.kind === 'file')) return { ok: false, reason: 'no import between the drawn files was found' };
+    if (typeof edges === 'string') {
+      // #847: a code the panel turns into one sentence in the interface language; reason stays the model's text
+      const notRead = /^not read for (.+)$/.exec(edges);
+      return { ok: false, code: notRead ? 'not_read' : 'other', language: notRead ? notRead[1] : null, reason: edges };
+    }
+    if (!arr(edges).some((e) => e.kind === 'file')) return { ok: false, code: 'no_import', reason: '' };
     return { ok: true };
   }
 

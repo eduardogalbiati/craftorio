@@ -1,6 +1,6 @@
 // #487: a project's workflow set composed from its ways of working. The ways-of-working seed
 // (seeds/ways-of-working/seed.md) infers a profile from the repository (#630: the mode, local merge or
-// pull requests; the CI's triggers; unit or unit+E2E tests and the E2E command; the release style, the
+// pull requests; the CI's triggers; unit or unit+E2E tests and the E2E command, #844 or none; the release style, the
 // test and check commands, languages); the interview (packages/engine/service/areas/workflow-interview.js)
 // asks only what the profile leaves open (openQuestions), and the owner may override any inferred field
 // (answers named after the profile's fields, PROFILE_FIELDS). composeWorkflowSet builds the set from the
@@ -16,10 +16,13 @@
 
 const path = require('path');
 const yaml = require('js-yaml');
-const I18n = require('@multiagent/shared/i18n');
 const registry = require('@multiagent/shared/providers');
 const { PLATFORMS } = require('@multiagent/shared/platforms');
-const { PROFILE, PROFILE_LABELS } = require('@multiagent/shared/onboarding-model');
+const {
+  PROFILE,
+  PROFILE_LABELS,
+  suggestWorkflows,
+} = require('@multiagent/shared/onboarding-model');
 const { MANIFEST_FILE } = require('../project/project-manifest');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
@@ -29,10 +32,11 @@ const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
 // The values and their labels: the onboarding's profile (packages/shared/onboarding-model.js).
 const MODES = PROFILE.mode;
 const CI_STYLES = PROFILE.ci;
-const TEST_STYLES = PROFILE.tests;
-// a profile field's choices for a question: [{ value, label }]; #726: the model's label keys, in English
-// (Ways of working shows the engine's questions as they are)
-const profileChoices = (field) => Object.entries(PROFILE_LABELS[field]).map(([value, key]) => ({ value, label: I18n.t(key, undefined, 'en') }));
+// #844: 'none', a repository with no test command and no test file (no test style invented)
+const TEST_STYLES = [...PROFILE.tests, 'none'];
+// a profile field's choices for a question: [{ value, label }]; #847: the model's label keys, the
+// Ways of working drawer resolves them in the interface's language
+const profileChoices = (field) => Object.entries(PROFILE_LABELS[field]).map(([value, key]) => ({ value, label: key }));
 const RELEASE_STYLES = ['milestone', 'per-merge', 'train', 'rc-stable'];
 const REVIEW_LEVELS = ['light', 'standard', 'strict'];
 // review rounds before the change goes on to the escalation gate, and the reviewer's effort
@@ -100,27 +104,33 @@ const hasUi = (profile) => (profile?.languages || []).some((l) => LANGUAGE_KEYS[
  * issue, screenshots and the review rigour are always the owner's; the release style, the mode, the
  * CI and the tests only when the analysis could not settle them.
  */
+// #847: every label, question and option label is an i18n key (ways_of_working.q_*, *_hint, the onboarding's
+// labels), never English prose
 function openQuestions(profile) {
   const remote = isRemote(profile);
   const choice = (values) => values.map(([value, label]) => ({ value, label }));
+  const ask = (id, label, rest) => ({ id, label, question: `ways_of_working.q_${id}_hint`, ...rest });
   const out = [
-    { id: 'validate', label: 'Validation', question: 'Approve every change before it lands, or trust the automatic checks?', type: 'choice', options: choice([['validate', 'Validate every round'], ['auto', 'Trust auto']]), default: 'validate' },
-    { id: 'budget', label: 'Budget per issue', question: 'The most one issue may spend on models, in US$.', type: 'number', default: remote ? 30 : 20 },
-    { id: 'screenshots', label: 'Screenshots', question: 'Capture the screens a change touches as its evidence?', type: 'choice', options: choice([['on', 'On'], ['off', 'Off']]), default: hasUi(profile) ? 'on' : 'off' },
-    { id: 'review', label: 'Review rigour', question: 'How hard the code review is before the tests run.', type: 'choice', options: choice([['light', 'Light: one round'], ['standard', 'Standard: two rounds'], ['strict', 'Strict: three rounds']]), default: remote ? 'strict' : 'standard' },
+    ask('validate', 'ways_of_working.q_validate', { type: 'choice', options: choice([['validate', 'ways_of_working.validate_every_round'], ['auto', 'ways_of_working.trust_auto']]), default: 'validate' }),
+    ask('budget', 'ways_of_working.q_budget', { type: 'number', default: remote ? 30 : 20 }),
+    ask('screenshots', 'ways_of_working.q_screenshots', { type: 'choice', options: choice([['on', 'ways_of_working.screenshots_on'], ['off', 'ways_of_working.screenshots_off']]), default: hasUi(profile) ? 'on' : 'off' }),
+    ask('review', 'ways_of_working.q_review', { type: 'choice', options: choice(REVIEW_LEVELS.map((r) => [r, `ways_of_working.review_${r}`])), default: remote ? 'strict' : 'standard' }),
   ];
   if (!RELEASE_STYLES.includes(profile?.release)) {
-    out.push({ id: 'release', label: 'Release style', question: 'How the project releases: no tag history settles it.', type: 'choice', options: choice([['milestone', 'Milestone'], ['per-merge', 'Per merge'], ['train', 'Release train'], ['rc-stable', 'Release candidate, then stable']]), default: remote ? 'train' : 'milestone' });
+    // #844: the release style the wizard suggests for the same profile (one release style everywhere)
+    const release = suggestWorkflows(profile).suggestions.find((s) => s.id === 'release').value;
+    out.push(ask('release', 'ways_of_working.q_release', { type: 'choice', options: choice(RELEASE_STYLES.map((r) => [r, `onboarding.choice_release_${r.replace(/-/g, '_')}`])), default: release }));
   }
   if (!modeOf(profile)) {
     // #738: Fork + PR is the third way of working (the onboarding suggests it without push access)
-    out.push({ id: 'mode', label: 'Mode', question: 'How changes land: merged into the local base and pushed, through pull requests, or through pull requests from your fork.', type: 'choice', options: profileChoices('mode'), default: 'local' });
+    out.push(ask('mode', 'ways_of_working.q_mode', { type: 'choice', options: profileChoices('mode'), default: 'local' }));
   }
   if (!CI_STYLES.includes(profile?.ci)) {
-    out.push({ id: 'ci', label: 'CI', question: 'What the project\'s CI runs on: no CI file settles it.', type: 'choice', options: profileChoices('ci'), default: 'none' });
+    out.push(ask('ci', 'ways_of_working.f_ci', { type: 'choice', options: profileChoices('ci'), default: 'none' }));
   }
   if (!TEST_STYLES.includes(profile?.tests)) {
-    out.push({ id: 'tests', label: 'Tests', question: 'Does the project have an E2E suite the feature workflow writes first?', type: 'choice', options: profileChoices('tests'), default: 'unit' });
+    // #844: unit tests only with a test command; without one, no tests
+    out.push(ask('tests', 'ways_of_working.tests', { type: 'choice', options: profileChoices('tests'), default: str(profile?.testCommand) ? 'unit' : 'none' }));
   }
   return out;
 }
@@ -146,7 +156,7 @@ function settingsOf(profile = {}, answers = {}) {
   const p = profile || {};
   const a = answers || {};
   const mode = modeOf({ mode: a.mode, merge: a.merge }) || modeOf(p) || 'local';
-  const defaults = Object.fromEntries(openQuestions({ ...p, mode, release: null, ci: null, tests: null }).map((q) => [q.id, q.default]));
+  const defaults = Object.fromEntries(openQuestions({ ...p, mode, release: null, ci: null, tests: null, testCommand: str(a.testCommand) || p.testCommand }).map((q) => [q.id, q.default]));
   const pick = (id, allowed) => [a[id], p[id], defaults[id]].find((v) => allowed.includes(v));
   const budget = Number(a.budget);
   // a #487 profile's ci named the CI itself (GitHub Actions): the platform, not a trigger

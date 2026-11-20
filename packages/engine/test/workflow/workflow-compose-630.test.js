@@ -32,15 +32,17 @@ test('#630 openQuestions never asks solo or team', () => {
   }
 });
 
-// #726: the model's profile labels became i18n keys; the engine's questions still read in English
-// (Ways of working shows them as they are), never as a raw key
-test('#726 openQuestions\' mode, ci and tests options read in English, not as i18n keys', () => {
+// #726: the model's profile labels became i18n keys; #847: the engine's questions carry the keys and the
+// Ways of working drawer resolves them in the interface's language (they read in English in en)
+test('#726 openQuestions\' mode, ci and tests options are the model\'s i18n keys, English in en', () => {
+  const I18n = require('@multiagent/shared/i18n');
   const qs = load().openQuestions({});
-  const labels = (id) => qs.find((q) => q.id === id).options.map((o) => [o.value, o.label]);
+  const labels = (id) => qs.find((q) => q.id === id).options.map((o) => [o.value, I18n.t(o.label, undefined, 'en')]);
   // #738: the third way of working, Fork + PR
   assert.deepEqual(labels('mode'), [['local', 'Local: merge, then push main'], ['remote', 'Remote: pull requests'], ['fork', 'Fork + PR: pull requests from your fork']]);
   assert.deepEqual(labels('ci'), [['none', 'No CI: the local suite only'], ['release', 'On releases only'], ['pr+release', 'On pull requests and releases']]);
-  assert.deepEqual(labels('tests'), [['unit', 'Unit tests'], ['unit+e2e', 'Unit and E2E']]);
+  // #844: 'none', no tests found
+  assert.deepEqual(labels('tests'), [['unit', 'Unit tests'], ['unit+e2e', 'Unit and E2E'], ['none', 'No tests found']]);
 });
 
 test('#630 a local profile composes feature, fix and release, none named solo or team', () => {

@@ -36,7 +36,9 @@
   // #738: Fork + PR, pull requests from the owner's fork to the original repository
   const MODE_OPTIONS = [['local', 'ways_of_working.merge_local'], ['remote', 'ways_of_working.merge_pr'], ['fork', 'ways_of_working.merge_fork']];
   const CI_OPTIONS = [['none', 'ways_of_working.ci_none'], ['release', 'ways_of_working.ci_release'], ['pr+release', 'ways_of_working.ci_pr_release']];
-  const TESTS_OPTIONS = [['unit', 'ways_of_working.tests_unit'], ['unit+e2e', 'ways_of_working.tests_unit_e2e']];
+  // #844: 'none', a repository with no test command and no test file
+  const TESTS_OPTIONS = [['unit', 'ways_of_working.tests_unit'], ['unit+e2e', 'ways_of_working.tests_unit_e2e'], ['none', 'ways_of_working.tests_none']];
+  const RELEASE_STYLES = ['milestone', 'per-merge', 'train', 'rc-stable'];
   // #735: the project's kind (window.OnboardingModel KIND_LABELS, packages/shared/onboarding-model.js): a backend gets no UI step
   const kindOptions = () => Object.entries(window.OnboardingModel?.KIND_LABELS || {});
   // #735: the profile's fields saved as the project's run defaults (project.runDefaults, the run dialog's inputs)
@@ -53,7 +55,7 @@
   const PROFILE_EDIT = [
     { id: 'kind', label: 'ways_of_working.f_kind', get options() { return kindOptions(); } },
     { id: 'mode', label: 'ways_of_working.q_mode', options: MODE_OPTIONS },
-    { id: 'release', label: 'ways_of_working.q_release', options: [['milestone'], ['per-merge'], ['train'], ['rc-stable']] },
+    { id: 'release', label: 'ways_of_working.q_release', options: RELEASE_STYLES.map((r) => [r]) },
     { id: 'ci', label: 'ways_of_working.f_ci', options: CI_OPTIONS },
     { id: 'tests', label: 'ways_of_working.tests', options: TESTS_OPTIONS },
     { id: 'testCommand', label: 'ways_of_working.f_test_command' },
@@ -68,9 +70,20 @@
     : e?.costUsd != null ? t('ways_of_working.estimate_cost', { cost: Number(e.costUsd).toFixed(2) })
       : t('ways_of_working.no_estimate_yet'));
 
-  // the inferred profile with the owner's answers of the same name (as workflow-compose.js withOverrides)
+  // #844: what the saved project chose (the wizard's Finish, #729; its run defaults, #735): the mode from
+  // runDefaults.mode or the feature / fix variant's prefix, the release style from the release variant
+  function savedChoices(project) {
+    const wf = (name) => (project?.workflows || []).find((w) => w?.name === name)?.variant || '';
+    const modes = MODE_OPTIONS.map(([m]) => m);
+    const mode = [project?.runDefaults?.mode, wf('feature').split('-')[0], wf('fix').split('-')[0]].find((m) => modes.includes(m));
+    const release = RELEASE_STYLES.includes(wf('release')) ? wf('release') : null;
+    return { ...(mode ? { mode } : {}), ...(release ? { release } : {}) };
+  }
+
+  // the inferred profile under the saved project's choices (#844), with the owner's answers of the same
+  // name (as workflow-compose.js withOverrides)
   function effectiveProfile() {
-    const out = { ...(cur.result?.profile || {}) };
+    const out = { ...(cur.result?.profile || {}), ...savedChoices(cur.project) };
     if (cur.project?.kind) out.kind = cur.project.kind;
     for (const f of PROFILE_EDIT) {
       const v = cur.answers[f.id];
@@ -86,7 +99,8 @@
       `${t('ways_of_working.q_mode')}: ${optionText(MODE_OPTIONS, p.mode)}`,
       `${t('ways_of_working.release')}: ${p.release || t('ways_of_working.open')}`,
       `CI: ${optionText(CI_OPTIONS, p.ci)}`,
-      `${t('ways_of_working.tests')}: ${optionText(TESTS_OPTIONS, p.tests)}`,
+      // #844: no test command and the tests unset: no tests found, never unit tests
+      `${t('ways_of_working.tests')}: ${optionText(TESTS_OPTIONS, p.tests == null && !p.testCommand ? 'none' : p.tests)}`,
     ];
     if (p.testCommand) out.push(`${t('ways_of_working.f_test_command')}: ${p.testCommand}`);
     if (p.e2eCommand) out.push(`${t('ways_of_working.f_e2e_command')}: ${p.e2eCommand}`);
@@ -120,11 +134,12 @@
     const value = cur.answers[q.id];
     const control = q.type === 'number'
       ? `<input type="number" id="${id}" min="0" step="1" data-wow-answer="${esc(q.id)}" value="${esc(String(value))}" />`
-      : selectMarkup({ id, 'data-wow-answer': q.id }, (q.options || []).map((o) => [o.value, o.label]), value);
+      : selectMarkup({ id, 'data-wow-answer': q.id }, (q.options || []).map((o) => [o.value, t(o.label)]), value);
+    // #847: the engine's label, question and options are i18n keys (an older answer's text stays as it is)
     return `<div class="field" data-testid="ways-of-working-question">
-      <label for="${id}">${QUESTION_LABELS[q.id] ? t(QUESTION_LABELS[q.id]) : esc(q.label)}</label>
+      <label for="${id}">${esc(t(QUESTION_LABELS[q.id] || q.label))}</label>
       ${control}
-      <p class="hint">${esc(q.question)}</p>
+      <p class="hint">${esc(t(q.question))}</p>
     </div>`;
   }
 

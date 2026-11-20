@@ -264,20 +264,30 @@
   function complexityHtml(model) {
     const c = model.complexity;
     const line = esc(complexityText(model));
-    const title = esc(c.status === 'measured' ? `${c.metric} complexity from ${c.tool}` : `${c.reason || 'not measured'}: churn and size are shown meanwhile, never a guess`);
+    // #847: the title and the "how to measure" texts from i18n
+    const title = esc(c.status === 'measured' ? t('project_architecture.metric_complexity_from_tool', { metric: c.metric, tool: c.tool })
+      : t('project_architecture.complexity_not_measured_meanwhile', { reason: c.reason || t('project_architecture.not_measured') }));
     if (!c.unmeasured?.length) return `<p class="small muted" data-testid="architecture-complexity" title="${title}">${line}</p>`;
     const names = c.unmeasured.map((l) => `<span class="badge" data-testid="architecture-unmeasured-language">${esc(l)}</span>`).join(' ');
     const how = c.install
-      ? `To measure them, install lizard: <span class="mono">${esc(c.install)}</span> ${t('project_architecture.lizard_needs_python')}`
-      : `They need ${esc((c.needed || []).join(', ') || 'lizard')}${c.reason ? ` (${esc(c.reason)})` : ''}.`;
+      ? `${t('project_architecture.to_measure_install_lizard')} <span class="mono">${esc(c.install)}</span> ${t('project_architecture.lizard_needs_python')}`
+      : t('project_architecture.they_need_tools', { tools: esc((c.needed || []).join(', ') || 'lizard'), reason: c.reason ? ` (${esc(c.reason)})` : '' });
     return `<details class="small muted arch-measure" data-testid="architecture-measure-note"><summary title="${title}"><span data-testid="architecture-complexity">${line}</span> · <span class="link-btn">${t('project_architecture.how_to_measure')}</span></summary>
       <p>${t('project_architecture.complexity_not_measured_for_names_their', { names })} ${how}</p></details>`;
   }
 
-  const EXCLUDED_LABELS = { build: 'build output', generated: 'generated', lock: 'lock files', project: 'your patterns', tests: 'tests', vendored: 'vendored' };
+  // #847: the exclusion groups' labels, i18n keys
+  const EXCLUDED_LABELS = {
+    build: 'project_architecture.excluded_build',
+    generated: 'project_architecture.excluded_generated',
+    lock: 'project_architecture.excluded_lock',
+    project: 'project_architecture.excluded_project',
+    tests: 'project_architecture.excluded_tests',
+    vendored: 'project_architecture.excluded_vendored',
+  };
 
   function excludeHtml(model) {
-    const groups = Object.entries(model.excluded).filter(([, n]) => n).map(([g, n]) => `${esc(EXCLUDED_LABELS[g] || g)} ${fmtNum(n)}`).join(' · ') || 'nothing';
+    const groups = Object.entries(model.excluded).filter(([, n]) => n).map(([g, n]) => `${esc(EXCLUDED_LABELS[g] ? t(EXCLUDED_LABELS[g]) : g)} ${fmtNum(n)}`).join(' · ') || t('project_architecture.excluded_nothing');
     const list = cur.facts.exclude || [];
     if (cur.editing) {
       return `<div class="card arch-edit" data-testid="architecture-exclude-form"><label class="field">${t('project_architecture.excluded_paths_one_pattern_per_line')}<textarea rows="4" data-arch-exclude-text spellcheck="false">${esc(list.join('\n'))}</textarea></label>

@@ -18,6 +18,9 @@
 // phases: { git: { status, found: { commits, merges, tags, authors } }, files: { status, found: { languages,
 // testCommand, ci } }, oracle: { status, since, reading } }; status: pending | running | done | failed | not-needed
 // (oracle only: no model turn). Kept in this engine until the next interview; absent before the first one.
+// #844: the free profile tells the truth: authors are people (identities with one name or one e-mail merged),
+// the mode is weighed by who merges (outside pull requests merged by an owner who pushes straight to main are a
+// local flow), and a repository with no test command and no test file has tests 'none'.
 
 const fs = require('fs');
 const os = require('os');
@@ -36,6 +39,7 @@ const { detectTestCommand } = require('../../engine/suite-step');
 const { firstBuild } = require('@multiagent/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
 const { MANIFEST_FILE, readManifest } = require('../../domains/project/project-manifest');
+const { TESTS_PATHS, globMatcher } = require('@multiagent/shared/globs');
 const { clientError } = require('../common');
 
 const SEED_ID = 'ways-of-working';
@@ -55,41 +59,90 @@ function ciOf(folder) {
   return /pull_request|merge_request/.test(text) ? 'pr+release' : 'release';
 }
 
+const str = (v) => (v == null ? '' : String(v).trim());
+// `git shortlog -sne` lines ("  6\tName <e-mail>") → [{ identity, n }]
+const shortlogOf = (out) => String(out || '').split('\n').map((l) => /^\s*(\d+)\s+(.*)$/.exec(l)).filter(Boolean).map((m) => ({ identity: str(m[2]), n: Number(m[1]) }));
+
+// #844: the people behind git identities ("Name <e-mail>"): identities with the same name (any case) or the
+// same e-mail are one person → { personOf: Map(identity → person id), count, identities }
+function peopleOf(identities) {
+  const list = [...new Set(identities)];
+  const parent = list.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const seen = new Map(); // a name or an e-mail → its first identity
+  list.forEach((identity, i) => {
+    const m = /^(.*?)\s*<([^>]*)>$/.exec(identity) || [identity, identity, ''];
+    for (const k of [`n:${str(m[1]).toLowerCase()}`, `e:${str(m[2]).toLowerCase()}`]) {
+      if (k.length <= 2) continue;
+      if (seen.has(k)) parent[find(i)] = find(seen.get(k)); else seen.set(k, i);
+    }
+  });
+  const personOf = new Map(list.map((identity, i) => [identity, find(i)]));
+  return { personOf, count: new Set(personOf.values()).size, identities: list.length };
+}
+
+// #844: how changes land, weighed by who merges: merges whose mergers also push straight to main (first-parent
+// commits that are not merges, the root commit left out) at least as often as they merge are outside pull
+// requests on a local flow, not the owner's pull requests
+function landingOf({ merges, mergers, straight, root, personOf }) {
+  if (!merges) return { mode: 'local', ownerStraightCommits: 0 };
+  const mergedBy = new Set(mergers.map((x) => personOf.get(x.identity)));
+  const own = straight.filter((x) => mergedBy.has(personOf.get(x.identity))).reduce((sum, x) => sum + x.n, 0)
+    - (mergedBy.has(personOf.get(str(root))) ? 1 : 0);
+  return { mode: own >= merges ? 'local' : 'remote', ownerStraightCommits: Math.max(0, own) };
+}
+
+// #844: any tracked file a test pattern matches (packages/shared/globs.js TESTS_PATHS)
+const TEST_FILE = TESTS_PATHS.map(globMatcher);
+const hasTestFiles = (files) => String(files || '').split('\n').some((f) => f && TEST_FILE.some((m) => m.test(f)));
+
 // The profile of a simulated analysis: what git and the project's files tell without a model; no release style.
 // #781: onGit({ commits, merges, tags, authors }) once git answered, before the files are read
 async function simulatedProfile(project, onGit = null) {
   const folder = project.folder;
-  const [authors, merges, commits, tags, head] = await Promise.all([
+  const [authors, merges, commits, tags, head, mergers, straight, root, files] = await Promise.all([
     git(folder, ['shortlog', '-sne', 'HEAD']),
     git(folder, ['rev-list', '--merges', '--count', 'HEAD']),
     git(folder, ['rev-list', '--count', 'HEAD']),
     git(folder, ['tag', '--list']),
     git(folder, ['rev-parse', '--short', 'HEAD']),
+    git(folder, ['shortlog', '-sne', '--merges', 'HEAD']),
+    git(folder, ['shortlog', '-sne', '--first-parent', '--no-merges', 'HEAD']),
+    git(folder, ['log', '-1', '--max-parents=0', '--format=%aN <%aE>', 'HEAD']),
+    git(folder, ['ls-files']),
   ]);
-  const nAuthors = count(authors);
+  const authorList = shortlogOf(authors);
+  const team = peopleOf(authorList.map((x) => x.identity));
+  const nAuthors = team.count;
   const nMerges = Number(merges) || 0;
+  const landing = landingOf({ merges: nMerges, mergers: shortlogOf(mergers), straight: shortlogOf(straight), root, personOf: team.personOf });
   const shas = head ? [head] : [];
   onGit?.({ commits: Number(commits) || 0, merges: nMerges, tags: count(tags), authors: nAuthors });
   const e2eCommand = detectE2eCommand(folder);
+  const testCommand = detectTestCommand(folder);
+  // #844: no test command and no test file: no tests, never an invented unit style
+  // (a file list git could not give, null, is not taken as no test file)
+  const noTests = !testCommand && !e2eCommand && files != null && !hasTestFiles(files);
   return {
     // #630: the ways of working the set is composed from (mode, ci, tests, e2eCommand); who works on it
     // and how it merged stay in the evidence (`team`, `merge`), as the seed says
     profile: {
-      mode: nMerges > 0 ? 'remote' : 'local',
+      mode: landing.mode,
       release: null,
-      testCommand: detectTestCommand(folder),
+      testCommand,
       checkCommand: checkCommand(folder),
       ci: ciOf(folder),
-      tests: e2eCommand ? 'unit+e2e' : 'unit',
+      tests: e2eCommand ? 'unit+e2e' : noTests ? 'none' : 'unit',
       e2eCommand,
       languages: (detectLanguage(folder) || '').split(',').filter(Boolean),
       // #735: backend / frontend / full-stack, from the UI folders, web frameworks and servers found
       kind: projectFacts(folder).kind,
     },
     evidence: {
-      team: { numbers: { authors: nAuthors, commits: Number(commits) || 0 }, commits: shas },
+      // #844: authors are people, their git identities apart
+      team: { numbers: { authors: nAuthors, identities: team.identities, commits: Number(commits) || 0 }, commits: shas },
       merge: { numbers: { mergeCommits: nMerges }, commits: shas },
-      mode: { numbers: { authors: nAuthors, mergeCommits: nMerges }, commits: shas },
+      mode: { numbers: { authors: nAuthors, mergeCommits: nMerges, ownerStraightCommits: landing.ownerStraightCommits }, commits: shas },
       release: { numbers: { tags: count(tags) }, commits: [] },
     },
     simulated: true,

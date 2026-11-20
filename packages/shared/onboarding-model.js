@@ -8,7 +8,7 @@
 //   skipAnalysis ("Skip, analyze later") goes from analysis to review with analyzeLater: true;
 // - suggestWorkflows(profile): { suggestions: [{ id, reason, value, choices }], defaulted }: feature, fix
 //   and release (#630) for { mode: 'local' | 'remote' | 'fork' (#738), ci: 'none' | 'release' | 'pr+release', tests:
-//   'unit' | 'unit+e2e' }, each with its reason and its selector (the value the profile picks among
+//   'unit' | 'unit+e2e', #844 or 'none' / null with no test command: no unit tests promised }, each with its reason and its selector (the value the profile picks among
 //   choices [{ value, label }]); an empty or unknown profile gets the default profile's and
 //   defaulted: true; ciChoice(profile) is step 3's CI row, profileLine(profile) the profile in one line;
 //   PROFILE (each field's values) and PROFILE_LABELS (value → label) are the one list of the profile's
@@ -78,7 +78,10 @@
     return { ...s, step: 'review', analyzeLater: true };
   }
 
-  const validProfile = (p) => !!p && Object.keys(PROFILE).every((k) => PROFILE[k].includes(p[k]));
+  // #844: a repository with no test command and no test file has no test style: tests 'none', or left
+  // null by the analysis (an absent tests stays invalid)
+  const noTests = (p) => !!p && (p.tests === 'none' || (p.tests === null && !p.testCommand));
+  const validProfile = (p) => !!p && Object.keys(PROFILE).every((k) => PROFILE[k].includes(p[k]) || (k === 'tests' && noTests(p)));
 
   // #726: a value's i18n key, its '-' and '+' as '_' (onboarding.<area>_<value>)
   const keyOf = (area, value) => `onboarding.${area}_${String(value).replace(/[-+]/g, '_')}`;
@@ -89,7 +92,8 @@
   const PROFILE_LABELS = {
     mode: keysOf('profile_mode', PROFILE.mode),
     ci: keysOf('profile_ci', PROFILE.ci),
-    tests: keysOf('profile_tests', PROFILE.tests),
+    // #844: 'none' (no tests found) is a label, not a test style of PROFILE.tests
+    tests: keysOf('profile_tests', [...PROFILE.tests, 'none']),
   };
   // #735: the project's kind, value → label key (the wizard, the Ways of working drawer); PROJECT_KINDS
   // its values (packages/engine/domains/project/project-run-defaults.js): a backend gets no UI step
@@ -105,6 +109,8 @@
   const CHOICES = {
     feature: keysOf('choice_feature', VARIANTS),
     fix: keysOf('choice_fix', VARIANTS),
+    // #844: the fix's labels for a project without tests (no "Code + unit"), the same values
+    fix_notests: keysOf('choice_fix_notests', VARIANTS),
     release: keysOf('choice_release', ['milestone', 'per-merge', 'train', 'rc-stable']),
     ci: PROFILE_LABELS.ci,
   };
@@ -127,7 +133,9 @@
     const variant = `${p.mode}-${e2e ? 'e2e' : 'code'}`;
     const release = CHOICES.release[profile?.release] ? profile.release : 'milestone';
     // #726: each reason is { key, params }, a param a key or { key, params } itself (the interface resolves them)
-    const tests = e2e ? 'e2e' : 'unit';
+    // #844: a project without tests is not promised unit tests
+    const none = valid && noTests(p);
+    const tests = e2e ? 'e2e' : none ? 'none' : 'unit';
     const why = [
       ['feature', variant, { key: 'onboarding.why_feature', params: { lands: `onboarding.why_lands_${p.mode}`, tests: `onboarding.why_feature_${tests}` } }],
       ['fix', variant, { key: `onboarding.why_fix_${tests}`, params: { hotfix: 'onboarding.why_fix_hotfix' } }],
@@ -137,7 +145,7 @@
       id,
       reason: valid ? reason : { key: 'onboarding.why_no_profile', params: { reason } },
       value,
-      choices: id === 'release' ? choicesOf(id) : variantChoicesOf(id, p.mode),
+      choices: id === 'release' ? choicesOf(id) : variantChoicesOf(id === 'fix' && none ? 'fix_notests' : id, p.mode),
     }));
     return { suggestions, defaulted: !valid };
   }
@@ -153,7 +161,7 @@
   function profileLine(profile) {
     const p = validProfile(profile) ? profile : null;
     if (!p) return '';
-    return Object.keys(PROFILE).map((k) => PROFILE_LABELS[k][p[k]]);
+    return Object.keys(PROFILE).map((k) => PROFILE_LABELS[k][k === 'tests' && noTests(p) ? 'none' : p[k]]);
   }
 
   // #725: the state of step 3's "Suggested workflows" column from the owner's choice (mode: undefined |

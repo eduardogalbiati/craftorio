@@ -7,8 +7,11 @@
 // for the others) and languageShares (one decimal of the counted lines, "Other" for those under
 // 0.5%). complexityLine is the one-line complexity note, qualityGateRow the project's own gate as
 // three chips (complexity, coverage, duplication), firstSentence the one-line text of a paragraph.
+// #847: the complexity line and the gate chips in the interface's language (i18n keys project_architecture.*).
 // Browser: window.ArchitectureFactsView; Node: module.exports.
 (function (root) {
+  const node = typeof module === 'object' && module.exports;
+  const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
   const SEVERITY_BASE = { high: 60, medium: 35, low: 10 };
   const DANGER_SPAN = 40;
   const SCORE_FORMULA = 'Score = the severity (high 60, medium 35, low 10) + 40 × the Danger Zone score of the hottest target file ÷ √2 (0 outside the Danger Zone), rounded: the same facts give the same score.';
@@ -113,10 +116,11 @@
     return shares;
   }
 
-  // "Rust", "Rust and Go", "Rust and 3 more"
+  // "Rust", "Rust and Go", "Rust and 3 more"; #847 in the interface's language
   function names(list) {
-    if (list.length <= 2) return list.join(' and ');
-    return `${list[0]} and ${list.length - 1} more`;
+    if (list.length <= 1) return list.join('');
+    if (list.length === 2) return t('project_architecture.names_two', { first: list[0], second: list[1] });
+    return t('project_architecture.names_more', { first: list[0], count: list.length - 1 });
   }
 
   /** The complexity note in one short line: what is measured, what is not. `languages` are those the line may call measured. */
@@ -126,21 +130,26 @@
     if (c.status !== 'measured') {
       // 'missing' also means lizard is there but the checkout is off the analysed commit: name the reason's head
       const reason = String(c.reason || '').split(':')[0].trim();
-      const why = c.status === 'failed' ? "the tool's check failed"
-        : reason && reason.length <= 60 ? reason : 'no tool found';
-      return `Complexity: not measured${unmeasured.length ? ` for ${names(unmeasured)}` : ''} (${why})`;
+      const why = c.status === 'failed' ? t('project_architecture.complexity_why_check_failed')
+        : reason && reason.length <= 60 ? reason : t('project_architecture.complexity_why_no_tool');
+      return unmeasured.length ? t('project_architecture.complexity_line_not_measured_for', { names: names(unmeasured), why })
+        : t('project_architecture.complexity_line_not_measured', { why });
     }
     const measured = (languages || []).map((l) => l.language).filter((l) => l && !unmeasured.includes(l));
-    const head = measured.length ? `Complexity: measured for ${names(measured)}` : 'Complexity: measured';
-    return unmeasured.length ? `${head}; not measured for ${names(unmeasured)}` : head;
+    const head = measured.length ? t('project_architecture.complexity_line_measured_for', { names: names(measured) }) : t('project_architecture.complexity_line_measured');
+    return unmeasured.length ? `${head}${t('project_architecture.complexity_line_also_not_measured', { names: names(unmeasured) })}` : head;
   }
 
+  // #847: a gate aspect's name and state in the interface's language (the state itself stays the CSS class's)
+  const GATE_NAMES = { complexity: 'project_architecture.complexity', coverage: 'project_architecture.coverage', duplication: 'project_architecture.duplication' };
   function gateChip(name, g) {
     const state = g && ['measured', 'pending'].includes(g.state) ? g.state : 'missing';
-    const label = state === 'measured' ? `✓ ${capital(name)}${g.value ? ` ${g.value}` : ''}` : `${capital(name)} · ${state}`;
-    const title = state === 'measured' ? `Measured by ${g.source || 'the project'}`
-      : state === 'pending' ? `Configured in ${g.source || 'the project'}: no report yet`
-        : 'Not configured: no evidence, not clean';
+    const shown = GATE_NAMES[name] ? t(GATE_NAMES[name]) : capital(name);
+    const label = state === 'measured' ? `✓ ${shown}${g.value ? ` ${g.value}` : ''}` : `${shown} · ${t(`project_architecture.gate_${state}`)}`;
+    const source = g?.source || t('project_architecture.gate_the_project');
+    const title = state === 'measured' ? t('project_architecture.gate_measured_by', { source })
+      : state === 'pending' ? t('project_architecture.gate_configured_in', { source })
+        : t('project_architecture.gate_not_configured');
     return { name, state, label, title };
   }
 
