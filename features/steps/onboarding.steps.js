@@ -1502,7 +1502,7 @@ Then('the suggested {string} workflow has {string} picked', async ({ e2e }, kind
 //   <label> (Light) and inside wizard-workflows-choice-analyze; Light is picked by default and
 //   wizard-work-model-files is hidden until Standard (or Full) is picked.
 // - #852: a review card still running (data-state="pending") shows the "running" badge in its header, the City card
-//   next to its wizard-open-city; before the facts are read wizard-review-languages holds a placeholder (no bar).
+//   next to its wizard-open-city; before the facts are read wizard-review-languages-loading holds a placeholder (no bar).
 const REVIEW_CARD = { City: 'wizard-review-city', Findings: 'wizard-review-findings' };
 const reviewCard = (page, name) => {
   const id = REVIEW_CARD[name];
@@ -1566,7 +1566,7 @@ Then("the review's City card still offers {string}", async ({ e2e }, label) => {
 });
 
 Then("the review's project card shows a placeholder for the languages", async ({ e2e }) => {
-  const languages = review(e2e.window).getByTestId('wizard-review-languages');
+  const languages = review(e2e.window).getByTestId('wizard-review-languages-loading');
   await expect(languages).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(languages).toHaveText(/\S/);
   await expect(languages.getByTestId('architecture-languages-bar')).toHaveCount(0);
