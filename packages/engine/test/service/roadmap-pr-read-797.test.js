@@ -26,7 +26,12 @@ test.before(() => {
   fs.writeFileSync(path.join(cliDir, 'gh'), `#!/bin/sh\nif [ -f "${offline()}" ]; then echo "could not resolve host" >&2; exit 1; fi\necho "[]"\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(cliDir, 'gh.cmd'), `@if exist "${offline()}" exit /b 1\r\n@echo []\r\n`);
   realPath = process.env.PATH;
-  process.env.PATH = [cliDir, realPath].join(path.delimiter);
+  // Windows looks for gh.exe in every folder before any gh.cmd: the real gh.exe (unauthenticated on the
+  // release runner) would win over the fake, so its folder leaves PATH for this file
+  const realGh = process.platform === 'win32' ? resolveCommand('gh')?.file : null;
+  const realDir = realGh && /\.exe$/i.test(realGh) ? path.dirname(realGh).toLowerCase() : null;
+  const kept = realPath.split(path.delimiter).filter((d) => !realDir || d.replace(/[\\/]+$/, '').toLowerCase() !== realDir);
+  process.env.PATH = [cliDir, ...kept].join(path.delimiter);
 });
 test.after(() => {
   process.env.PATH = realPath;
