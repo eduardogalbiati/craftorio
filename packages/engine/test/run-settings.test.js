@@ -79,6 +79,37 @@ test('#862 a partial memoryGuard setting keeps the defaults for the keys it leav
   assert.equal(o.memoryGuard.floorBytes, pct(5));
 });
 
+// configureGuardFromSettings: the one place of the guard's Settings merge (the run service's
+// low-memory refusal uses it too, so the refusal and the run's guard follow the same settings)
+test('#862 configureGuardFromSettings returns null when the guard is off in Settings', (t) => {
+  restoreGuard(t);
+  const { configureGuardFromSettings } = load();
+  const guard = configureGuardFromSettings({ memoryGuard: { enabled: false } });
+  assert.equal(guard === null, true);
+  assert.equal(sharedMemoryGuard() === null, true);
+});
+
+test('#862 configureGuardFromSettings turns the guard back on with the defaults when Settings have no memoryGuard', (t) => {
+  restoreGuard(t);
+  configureMemoryGuard({ enabled: false, limitPercent: 70, floorPercent: 50 });
+  const { configureGuardFromSettings } = load();
+  for (const s of [{}, null, undefined]) {
+    configureMemoryGuard({ enabled: false, limitPercent: 70, floorPercent: 50 });
+    const guard = configureGuardFromSettings(s);
+    assert.equal(guard !== null, true, `guard on for ${JSON.stringify(s)}`);
+    assert.equal(guard.limitBytes, pct(25));
+    assert.equal(guard.floorBytes, pct(10));
+  }
+});
+
+test('#862 configureGuardFromSettings applies the percents and a floor of 0 means no hold', (t) => {
+  restoreGuard(t);
+  const { configureGuardFromSettings } = load();
+  const guard = configureGuardFromSettings({ memoryGuard: { limitPercent: 60, floorPercent: 0 } });
+  assert.equal(guard.limitBytes, pct(60));
+  assert.equal(guard.floorBytes, 0);
+});
+
 test('#862 a simulation run gets no memory guard, as today', (t) => {
   restoreGuard(t);
   const { runOptionsFromSettings } = load();
