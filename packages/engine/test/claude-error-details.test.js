@@ -75,6 +75,15 @@ test('#860 adapter: another error subtype keeps its details too', () => {
   assert.ok(msg.includes('Budget of US$ 1 reached'), `the error detail is in: ${msg}`);
 });
 
+test('#860 adapter: an errors entry that is an object gives its message, or its JSON when it has none', () => {
+  const acc = parseResult({ subtype: 'error_during_execution', is_error: true, result: '', errors: [{ message: 'Tool setup failed' }, { code: 'E_860' }, ''] });
+  const msg = String(acc.error || '');
+  assert.ok(msg.includes('Tool setup failed'), `the object's message is in: ${msg}`);
+  assert.ok(msg.includes('{"code":"E_860"}'), `an object with no message is in as JSON: ${msg}`);
+  assert.equal(msg.includes('[object Object]'), false);
+  assert.equal(msg.includes('undefined'), false);
+});
+
 test('#860 adapter: an error result with no details and no text gives today\'s message', () => {
   const acc = parseResult({ subtype: 'error_during_execution', is_error: true, result: '' });
   assert.equal(String(acc.error || '').trim(), TODAY);
@@ -128,6 +137,40 @@ test('#860 runTurn: a stderr of only whitespace adds nothing to the message', { 
   const err = await failedTurn(t, ['--no-details', '--blank-stderr']);
   assert.ok(err, 'the turn fails');
   assert.equal(String(err.message).trim(), TODAY);
+});
+
+// --- a workflow step on the fake CLI ---------------------------------------------------------------
+
+test('#860 workflow: a step whose Claude turn fails during execution records the subtype, the error details and the stderr line', { timeout: 60000 }, async (t) => {
+  const { WorkflowRun } = require('../engine/workflow');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-error-wf-860-'));
+  const saved = {};
+  for (const k of ['MULTIAGENT_SIMULATION_ONLY', 'MULTIAGENT_WORKSPACE', 'MULTIAGENT_USER_DATA']) { saved[k] = process.env[k]; delete process.env[k]; }
+  t.after(() => {
+    for (const [k, v] of Object.entries(saved)) { if (v !== undefined) process.env[k] = v; }
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  });
+  const fake = FAKE.replace(/\\/g, '/');
+  const file = path.join(dir, 'wf.yaml');
+  fs.writeFileSync(file, [
+    'providers:',
+    `  claude: { type: claude-code, command: node, args: ["${fake}", "-p"] }`,
+    'agents:',
+    '  dev: { provider: claude, model: fake, session: ephemeral }',
+    'steps:',
+    '  - { id: work, agent: dev, supervise: false, prompt: "Do it." }',
+  ].join('\n'));
+  const run = new WorkflowRun({ file, inputs: {}, runsDir: path.join(dir, 'runs') });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.ok(finished, 'the run finished');
+  assert.notEqual(finished.status, 'success');
+  const text = String(finished.error || '');
+  assert.match(text, /error_during_execution/);
+  const missing = [ERR1, ERR2, STDERR_LINE].filter((p) => !text.includes(p));
+  assert.deepEqual(missing, [], `missing from the run's error: ${text}`);
 });
 
 test('#860 runTurn: the message adds nothing from the engine\'s environment', { timeout: 60000 }, async (t) => {
