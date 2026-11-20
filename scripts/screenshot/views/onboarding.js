@@ -11,6 +11,8 @@
 //   access-error  a repository the app cannot reach: wizard-error data-error="no-access", its Retry and Edit
 //   analysis      a local git repository imported (file://, no network): the jobs and the cost, before the click
 //   review        that repository analysed (simulated) and the review step
+// --review issues-off (with --mode review, #845): a repository with Issues turned off, its Backlog card says so,
+// no Retry (the simulation-only hook MULTIAGENT_E2E_ISSUES_FAIL answers the issue read as gh does)
 // Nothing reaches the network nor a model (MULTIAGENT_SIMULATION_ONLY).
 
 const fs = require('fs');
@@ -72,6 +74,7 @@ function seed({ args, ws, project, projects, workspace }) {
   fs.rmSync(path.join(ws.backlog, `${project.id}.json`), { force: true });
   workspace.writeSettings(ws, { lastProject: null });
   reachableRepo = null;
+  if (args.review === 'issues-off') process.env.MULTIAGENT_E2E_ISSUES_FAIL = 'disabled';
   if (['analysis', 'review'].includes(args.mode)) {
     const folder = path.join(ws.root, 'onboarding-demo', 'billing-api');
     fs.rmSync(folder, { recursive: true, force: true });
@@ -160,6 +163,8 @@ async function open({ args, click, js, pause, win }) {
 module.exports = {
   modes: MODES,
   open,
+  // #845: the review of a repository with Issues turned off
+  options: { review: ['issues-off'] },
   sampleRepository,
   seed,
   typeIn,

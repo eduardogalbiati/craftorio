@@ -242,6 +242,16 @@ function seed({ args, ws, project, projects }) {
   writeDemoPackage(project.folder);
   // #735 #745: the project on GitLab, on a self-hosted host, or a Rust backend
   applyDemoProject({ which: args.project, projects, ws, project });
+  if (args.issues === 'disabled') demoIssuesDisabled(ws, project.id);
+}
+
+// --issues disabled (#845): the repository has Issues turned off: the last sync read no issue and says so
+// (issuesDisabled), and a new sync answers the same (the simulation-only hook MULTIAGENT_E2E_ISSUES_FAIL)
+function demoIssuesDisabled(ws, projectId) {
+  const file = path.join(ws.backlog, `${projectId}.json`);
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fs.writeFileSync(file, JSON.stringify({ ...data, issues: [], epics: [], issuesDisabled: true }, null, 2));
+  process.env.MULTIAGENT_E2E_ISSUES_FAIL = 'disabled';
 }
 
 // #254: the Roadmap screen has its own menu entry
@@ -263,10 +273,12 @@ module.exports = {
   afterOpen,
   demoConflictMap,
   demoEnrichRun,
+  demoIssuesDisabled,
   modes: ['list', 'kanban', 'roadmap', 'epics'],
   open,
   // the options only this view takes, and their values: the Live roadmap (#164), more states of the
   // roadmap card (#282, #284; #395: an item parked at its gate; #797: one waiting for its PR's merge), the Product Owner's drawer (#180)
-  options: { live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['merge', 'parked', 'states', 'test'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS, refresh: ['fresh', 'onboarded'] },
+  // (#845: --issues disabled, a repository with Issues turned off)
+  options: { issues: ['disabled'], live: ['off', 'on', 'refilling', 'empty', 'budget'], roadmap: ['merge', 'parked', 'states', 'test'], po: ['working', 'writing', 'stopped', 'failed'], project: DEMO_PROJECTS, refresh: ['fresh', 'onboarded'] },
   seed,
 };

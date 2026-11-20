@@ -211,6 +211,7 @@ function takeLang(argv, a) {
 const VALUE_OPTIONS = {
   '--agents-window': 'agentsWindow',
   '--budget': 'budget',
+  '--issues': 'issues',
   '--live': 'live',
   '--oracle': 'oracle',
   '--po': 'po',
@@ -218,6 +219,7 @@ const VALUE_OPTIONS = {
   '--refresh': 'refresh',
   '--release': 'release',
   '--release-filter': 'releaseFilter',
+  '--review': 'review',
   '--roadmap': 'roadmap',
 };
 
