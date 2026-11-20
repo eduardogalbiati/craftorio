@@ -12,8 +12,7 @@
 // - the notes under it (project-city-notes.js): no plan, a stale plan, commits since the analysis or a current plan
 //   (#782), with the tab's one action (#381: `onAnalyze`, its combined estimate next to it) and its state, the plan's problems;
 // - the hover card of a building, a district or a zone, the card a click pins (project-city-cards.js), the camera
-//   buttons (zoom 'in' | 'out', a fixed share of the distance a click, and home: #849 the whole city in the frame; the root's
-//   data-camera-distance, data-home-distance and data-city-framed tell where the camera rests); the states: the facts still loading, not a git repository, no commits, an error with Retry.
+//   buttons (zoom 'in' | 'out', home: #849 the whole city; the root's data-camera-distance, data-home-distance, data-city-framed); the states: the facts still loading, not a git repository, no commits, an error with Retry.
 // The overlay API, for the city epic's modules (they add their own files, not code here):
 //   ProjectCity.overlay(name, { highlight: { path: colour }, markers: [path | { path, colour, label }] } | null) sets or removes
 //     a named layer; the layers merge (later names win) and the buildings no layer highlights are greyed (city-layout.js applyOverlay);
@@ -166,10 +165,7 @@
           layout: c.layout, ...paint(), tests: c.tests, pins: c.pins, theme: c.theme, cityLife: c.cityLife, glow: c.glow, relationsOf,
           onHover: (t) => { c.hover = t; renderHover(); },
           onPick: (t) => { c.pinned = t; renderDetail(); },
-          // #849: where the camera rests, on the city's root (data-camera-distance, data-home-distance, data-city-framed)
-          onCamera: ({ distance, home, framed }) => {
-            Object.assign(el.dataset, { cameraDistance: distance.toFixed(2), homeDistance: home.toFixed(2), cityFramed: String(!!framed) });
-          },
+          onCamera: ({ distance, home, framed }) => Object.assign(el.dataset, { cameraDistance: distance.toFixed(2), homeDistance: home.toFixed(2), cityFramed: String(!!framed) }),
         });
         c.drawn = c.layout;
       } catch (e) {
