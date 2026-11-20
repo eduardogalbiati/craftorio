@@ -9,7 +9,7 @@
 //   documented", the subtitle "Each step leaves a file the next step reads, and a person approves it.",
 //   and three radios (input type="radio" or role="radio") data-testid="wizard-work-model-light",
 //   "wizard-work-model-standard", "wizard-work-model-full", in that order, labelled Light, Standard, Full
-//   with mock-5's descriptions; Standard is checked by default (`checked` or aria-checked="true");
+//   with mock-5's descriptions; Light is checked by default (#851) (`checked` or aria-checked="true");
 // - next to it, data-testid="wizard-work-model-files", "Where the files live": "In the repository", the
 //   path "docs/work/<item>/" with intent.md, spec.md, plan.md (no .html: D16, no HTML is committed), and
 //   the chips "fix: issue only", "feature: Standard", "release: notes";
@@ -31,8 +31,9 @@ const atStep = (projectId, step, picks) => ({ ...W.clone(W.READY), projectId, wi
 
 const MODELS = [
   { id: 'light', label: 'Light', text: 'An issue, then feature or fix. Nothing else is written.' },
-  { id: 'standard', label: 'Standard', text: 'intent.md → spec.md → plan.md → code. Recommended for features.' },
-  { id: 'full', label: 'Full', text: 'Standard + REVIEW.md + evals of the project\'s skills and workflows.' },
+  // #851: Standard and Full now name the Anthropic playbook; only their stable start is checked here
+  { id: 'standard', label: 'Standard', text: 'intent.md → spec.md → plan.md' },
+  { id: 'full', label: 'Full', text: 'REVIEW.md' },
 ];
 
 // the page with a fake engine that saves what the wizard sends
@@ -170,21 +171,22 @@ test('#633 each work model has the mockup\'s description, in the radios\' order'
   assert.deepEqual(missing, [], text);
 });
 
-test('#633 Standard is the work model checked by default', { timeout: 30000 }, async () => {
+test('#633 #851 Light is the work model checked by default', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
-  assert.deepEqual(checkedModels(app), ['standard']);
+  assert.deepEqual(checkedModels(app), ['light']);
 });
 
-test('#633 picking Light checks Light only', { timeout: 30000 }, async () => {
+test('#633 picking Standard checks Standard only', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
-  await pick(app, 'light');
-  assert.deepEqual(checkedModels(app), ['light']);
+  await pick(app, 'standard');
+  assert.deepEqual(checkedModels(app), ['standard']);
 });
 
 // ---- where the files live ---------------------------------------------------------------------------
 
 test('#633 "Where the files live" shows docs/work/<item>/ with intent.md, spec.md and plan.md in the repository', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
+  await pick(app, 'standard'); // #851: the panel is hidden while Light is picked
   const panel = W.byTestId(W.wizardMarkup(app), 'wizard-work-model-files');
   assert.ok(panel, 'step 3 shows data-testid="wizard-work-model-files"');
   const text = H.visibleText(panel.inner);
@@ -194,6 +196,7 @@ test('#633 "Where the files live" shows docs/work/<item>/ with intent.md, spec.m
 
 test('#633 "Where the files live" has the chips fix: issue only, feature: Standard, release: notes', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
+  await pick(app, 'standard'); // #851: the panel is hidden while Light is picked
   const panel = W.byTestId(W.wizardMarkup(app), 'wizard-work-model-files');
   assert.ok(panel, 'step 3 shows data-testid="wizard-work-model-files"');
   const text = H.visibleText(panel.inner);
@@ -202,17 +205,17 @@ test('#633 "Where the files live" has the chips fix: issue only, feature: Standa
 
 // ---- Finish saves the pick ----------------------------------------------------------------------------
 
-test('#633 Finish with the work model untouched saves workModel standard on the project', { timeout: 30000 }, async () => {
+test('#633 #851 Finish with the work model untouched saves workModel light on the project', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
-  await finish(app);
-  assert.equal(savedWorkModel(app), 'standard');
-});
-
-test('#633 Finish after picking Light saves workModel light on the project', { timeout: 30000 }, async () => {
-  const app = await atAnalysis();
-  await pick(app, 'light');
   await finish(app);
   assert.equal(savedWorkModel(app), 'light');
+});
+
+test('#633 Finish after picking Standard saves workModel standard on the project', { timeout: 30000 }, async () => {
+  const app = await atAnalysis();
+  await pick(app, 'standard');
+  await finish(app);
+  assert.equal(savedWorkModel(app), 'standard');
 });
 
 test('#633 Finish after picking Full saves workModel full on the project', { timeout: 30000 }, async () => {

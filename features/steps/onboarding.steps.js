@@ -616,7 +616,7 @@ Then("the workspace's {string} has no remote", async ({ e2e }, rel) => {
 //   so it ends `failed` with that error as its reason (a Retry fails again the same way).
 
 // the analyses in the owner's words → the onboarding's job ids
-const ONBOARDING_JOB = { 'ways of working': 'profile', 'project map': 'projectMap' };
+const ONBOARDING_JOB = { 'ways of working': 'profile', 'project map': 'projectMap', facts: 'facts' };
 const jobId = (words) => {
   const id = ONBOARDING_JOB[words];
   if (!id) throw new Error(`unknown analysis "${words}": one of ${Object.keys(ONBOARDING_JOB).join(', ')}`);
@@ -633,6 +633,11 @@ const jobRow = (page, words) => wizard(page).getByTestId('wizard-cost').locator(
 
 Given('the app is open while the {string} analysis keeps running', async ({ e2e }, words) => {
   await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_HOLD: jobId(words) } });
+});
+
+// #852: two jobs held at once (MULTIAGENT_E2E_ONBOARDING_HOLD takes a comma-separated list)
+Given('the app is open while the {string} and {string} analyses keep running', async ({ e2e }, a, b) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_HOLD: [jobId(a), jobId(b)].join(',') } });
 });
 
 Given('the app is open where the {string} analysis fails', async ({ e2e }, words) => {
@@ -1486,4 +1491,83 @@ Then('the suggested {string} workflow has {string} picked', async ({ e2e }, kind
   const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
   await expect(select).toBeVisible({ timeout: IMPORT_TIMEOUT });
   await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`), { timeout: IMPORT_TIMEOUT });
+});
+
+// ---- #850 #851 #852: step 3 and the review ------------------------------------------------------------------------
+// Acceptance tests, written before the code. What the screens expose:
+// - #850 (a new project): step 3's job row of an analysis left for later (wizard-cost's data-part="<job>") holds
+//   data-testid="wizard-job-later-<job>" (new), the reason in words; no wizard-skip ("Skip, analyze later"). The
+//   review's project card is data-testid="wizard-review-project" (new); it says the answer to "Where changes land".
+// - #851: data-testid="wizard-recommended" (new): the "Recommended" label, inside the recommended work model's
+//   <label> (Light) and inside wizard-workflows-choice-analyze; Light is picked by default and
+//   wizard-work-model-files is hidden until Standard (or Full) is picked.
+// - #852: a review card still running (data-state="pending") shows the "running" badge in its header, the City card
+//   next to its wizard-open-city; before the facts are read wizard-review-languages holds a placeholder (no bar).
+const REVIEW_CARD = { City: 'wizard-review-city', Findings: 'wizard-review-findings' };
+const reviewCard = (page, name) => {
+  const id = REVIEW_CARD[name];
+  if (!id) throw new Error(`unknown review card "${name}": one of ${Object.keys(REVIEW_CARD).join(', ')}`);
+  return review(page).getByTestId(id);
+};
+const workModelLabel = (page, model) => workModelRadio(page, model).locator('xpath=ancestor::label[1]');
+
+Then("the wizard's {string} analysis is left for later, saying why", async ({ e2e }, words) => {
+  const later = jobRow(e2e.window, words).getByTestId(`wizard-job-later-${jobId(words)}`);
+  await expect(later).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(later).toHaveText(/\S/);
+});
+
+Then('the wizard offers no {string} button', async ({ e2e }, label) => {
+  const w = wizard(e2e.window);
+  await expect(w.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+  if (label === 'Skip, analyze later') await expect(w.getByTestId('wizard-skip')).toHaveCount(0);
+});
+
+Then("the review's project card says {string}", async ({ e2e }, text) => {
+  const card = review(e2e.window).getByTestId('wizard-review-project');
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(text, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the review does not say {string}', async ({ e2e }, text) => {
+  await expect(review(e2e.window)).toBeVisible();
+  await expect(review(e2e.window).getByText(text)).toHaveCount(0);
+});
+
+Then('the {string} work model is labelled {string}', async ({ e2e }, model, label) => {
+  const tag = workModelLabel(e2e.window, model).getByTestId('wizard-recommended');
+  await expect(tag).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(tag).toHaveText(label);
+  await expect(workModel(e2e.window).getByTestId('wizard-recommended'), 'one work model is recommended').toHaveCount(1);
+});
+
+Then("the wizard's {string} choice is labelled {string}", async ({ e2e }, choice, label) => {
+  const tag = workflowsColumn(e2e.window).getByTestId(choiceTestid(choice)).getByTestId('wizard-recommended');
+  await expect(tag).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(tag).toHaveText(label);
+});
+
+Then('the wizard does not show where the files live', async ({ e2e }) => {
+  await expect(workModel(e2e.window)).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(workModelFiles(e2e.window)).toBeHidden();
+});
+
+Then("the review's {string} card shows it is still running", async ({ e2e }, name) => {
+  const card = reviewCard(e2e.window, name);
+  await expect(card).toHaveAttribute('data-state', 'pending', { timeout: LOAD_TIMEOUT });
+  await expect(card.locator('header').getByText('running', { exact: true })).toBeVisible();
+});
+
+Then("the review's City card still offers {string}", async ({ e2e }, label) => {
+  const open = reviewCard(e2e.window, 'City').getByTestId('wizard-open-city');
+  await expect(open).toBeVisible();
+  await expect(open).toBeEnabled();
+  await expect(open).toHaveText(label);
+});
+
+Then("the review's project card shows a placeholder for the languages", async ({ e2e }) => {
+  const languages = review(e2e.window).getByTestId('wizard-review-languages');
+  await expect(languages).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(languages).toHaveText(/\S/);
+  await expect(languages.getByTestId('architecture-languages-bar')).toHaveCount(0);
 });
