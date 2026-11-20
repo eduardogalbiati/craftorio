@@ -97,7 +97,8 @@ const run = (args, env = {}) => {
   }
 };
 
-const testFiles = (dir) => (fs.existsSync(path.join(root, dir)) ? fs.readdirSync(path.join(root, dir), { withFileTypes: true }) : []).flatMap((e) => {
+// resolve, not join: a --workspace on another drive than the root (Windows CI: repo on D:, temp on C:) is absolute
+const testFiles = (dir) => (fs.existsSync(path.resolve(root, dir)) ? fs.readdirSync(path.resolve(root, dir), { withFileTypes: true }) : []).flatMap((e) => {
   if (e.isDirectory()) return e.name === 'fixtures' ? [] : testFiles(path.join(dir, e.name));
   return e.name.endsWith('.test.js') ? [path.join(dir, e.name)] : [];
 }).sort();

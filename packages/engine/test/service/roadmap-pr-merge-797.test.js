@@ -50,14 +50,21 @@ let realPath;
 test.before(() => {
   // the CLI lookup merges the login shell's PATH in front once per process (macOS: /usr/local/bin with the
   // real gh): merge it now, so the fake folder put first below stays first
-  require('../../engine/providers').resolveCommand('sh');
+  const { resolveCommand } = require('../../engine/providers');
+  resolveCommand('sh');
   cliDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-cli-797-'));
   for (const cli of ['gh', 'glab']) {
     fs.writeFileSync(path.join(cliDir, cli), '#!/bin/sh\necho "[]"\n', { mode: 0o755 });
     fs.writeFileSync(path.join(cliDir, `${cli}.cmd`), '@echo []\r\n');
   }
   realPath = process.env.PATH;
-  process.env.PATH = [cliDir, realPath].join(path.delimiter);
+  // Windows looks for <cli>.exe in every folder before any .cmd: the real gh.exe / glab.exe would win over
+  // the fake .cmd, so their folders leave PATH for this file (the Windows release runner has an unauthenticated gh)
+  const realCliDirs = process.platform === 'win32'
+    ? ['gh', 'glab'].map((cli) => resolveCommand(cli)?.file).filter((f) => f && /\.exe$/i.test(f)).map((f) => path.dirname(f).toLowerCase())
+    : [];
+  const kept = realPath.split(path.delimiter).filter((d) => !realCliDirs.includes(d.replace(/[\\/]+$/, '').toLowerCase()));
+  process.env.PATH = [cliDir, ...kept].join(path.delimiter);
 });
 test.after(() => {
   process.env.PATH = realPath;
