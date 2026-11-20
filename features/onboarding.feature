@@ -729,3 +729,44 @@ Feature: Bring a project in with a guided wizard
     And the review's project card shows the language bar led by "JavaScript", its legend ordered by share
     And the review's Project type opens on "backend", marked as detected
     And the review's Backlog card ends with "No open issues."
+
+  # #846: Finish (pt-BR "Concluir") opened the project page with the Start panel open on analyze-project while
+  # the onboarding's own analysis was still running in the tray. Another holder of the machine's analysis slot
+  # keeps that analysis running (as in "Finish does not wait for an analysis that is still running").
+  @issue-846
+  Scenario: Finishing the onboarding opens the project page without the Start panel, the analysis still running in the tray
+    Given the app is open while another analysis holds the machine's analysis slot
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "finish-846"
+    And I go to the next step of the wizard
+    And I start the analysis in the wizard
+    And I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    When I finish the wizard
+    Then the project wizard closes right away
+    And the project page of "finish-846" is open
+    And the Start panel is not shown
+    And the progress tray shows the project "finish-846" as analyzing
+
+  # #846: while the onboarding's analysis runs, starting analyze-project on the same project says an analysis is
+  # already running and starts no second one (the Start panel stays open, no Run screen comes up).
+  @issue-846
+  Scenario: Starting analyze-project while the onboarding's analysis runs says one is already running and starts no second one
+    Given the app is open while another analysis holds the machine's analysis slot
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "busy-846"
+    And I go to the next step of the wizard
+    And I start the analysis in the wizard
+    And I go to the next step of the wizard
+    And I finish the wizard
+    Then the progress tray shows the project "busy-846" as analyzing
+    When I open "Projects" in the sidebar
+    And I choose Start workflow on the project "busy-846" in the Projects screen
+    And I choose the workflow "analyze-project" in the Start panel
+    And I start the chosen workflow from the Start panel
+    Then the app says an analysis of the project is already running
+    And no second run of the workflow "analyze-project" has started

@@ -1248,3 +1248,46 @@ Then("the review's Backlog card ends with {string}", async ({ e2e }, text) => {
   await expect(line).toHaveAttribute('data-state', 'done', { timeout: LOAD_TIMEOUT });
   await expect(line).toContainText(text);
 });
+
+// ---- #846: Finish opens the project page without the Start panel; no second analysis of the project -------------
+// The Start panel is the app's drawer (index.html #drawer): closed it is visibility:hidden, so its own Start button
+// (data-testid="start-workflow") is hidden. While the onboarding's analysis runs, a Start of analyze-project on the
+// project says an analysis is already running (in the panel or a notice) and starts no run of its own.
+// The settle time lets a Start panel opened late (after the project page) show up before it is checked.
+const START_PANEL_SETTLE = 1500;
+
+Then('the Start panel is not shown', async ({ e2e }) => {
+  const start = e2e.window.getByTestId('start-workflow');
+  await expect(start).toBeHidden({ timeout: LOAD_TIMEOUT });
+  await e2e.window.waitForTimeout(START_PANEL_SETTLE);
+  await expect(start).toBeHidden();
+});
+
+Then('the app says an analysis of the project is already running', async ({ e2e }) => {
+  await expect(e2e.window.getByText(/already running|j[áa] est[áa] (em execu[çc][ãa]o|rodando)|em andamento/i).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+// the workflow.started events of the scratch workspace's runs whose workflow is that one (a name or a file)
+function startedRunsOf(e2e, name) {
+  const runs = path.join(e2e.scratch, 'workspace', 'runs');
+  if (!fs.existsSync(runs)) return [];
+  const base = String(name).replace(/\.ya?ml$/i, '');
+  return fs.readdirSync(runs).filter((id) => {
+    const file = path.join(runs, id, 'events.jsonl');
+    if (!fs.existsSync(file)) return false;
+    return fs.readFileSync(file, 'utf8').split('\n').some((line) => {
+      try {
+        const ev = JSON.parse(line);
+        return ev.type === 'workflow.started' && String(ev.workflow || '').replace(/\.ya?ml$/i, '') === base;
+      } catch { return false; }
+    });
+  });
+}
+
+// no Run screen came up, and at most the onboarding's own run of the workflow exists
+Then('no second run of the workflow {string} has started', async ({ e2e }, name) => {
+  const page = e2e.window;
+  await page.waitForTimeout(START_PANEL_SETTLE);
+  await expect(page.getByTestId('run-screen-status').filter({ visible: true })).toHaveCount(0);
+  expect(startedRunsOf(e2e, name).length, `runs of ${name}`).toBeLessThanOrEqual(1);
+});

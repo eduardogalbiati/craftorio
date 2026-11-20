@@ -178,6 +178,14 @@ When('I choose Edit on the project {string} in the Projects screen', async ({ e2
   await card.getByRole('button', { name: 'Edit', exact: true }).click();
 });
 
+// #846: a card's "Start workflow" opens the Start panel on that project (its Start button data-testid="start-workflow")
+When('I choose Start workflow on the project {string} in the Projects screen', async ({ e2e }, name) => {
+  const card = projectCard(projectsScreen(e2e.window), name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await card.getByRole('button', { name: 'Start workflow', exact: true }).click();
+  await expect(e2e.window.getByTestId('start-workflow')).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
 Then('the settings of the project {string} are open', async ({ e2e }, name) => {
   const page = projectPage(e2e.window);
   await expect(page).toBeVisible({ timeout: LOAD_TIMEOUT });

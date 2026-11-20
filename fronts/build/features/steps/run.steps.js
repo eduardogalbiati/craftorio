@@ -220,6 +220,11 @@ When('I choose the workflow {string} in the Start panel', async ({ e2e }, name) 
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(fileOf(name));
 });
 
+// #846: the Start panel's own Start button, on the workflow and project already chosen
+When('I start the chosen workflow from the Start panel', async ({ e2e }) => {
+  await e2e.window.getByTestId('start-workflow').click();
+});
+
 // #378: the Start panel's inputs of the chosen workflow. A path input (project_path) is the
 // "Project" select, required when the label's "*" shows (its accessible name "Project *"); every
 // other input's control carries data-wi-input="<key>" (workflow-inputs.js), whether it is the main
