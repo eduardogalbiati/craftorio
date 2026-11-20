@@ -176,6 +176,8 @@
 
 /* ---------- the progress tray ---------- */
 .onboarding-tray:not([hidden]) { position: fixed; right: 16px; bottom: 16px; z-index: 61; width: 280px; max-height: 50vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+/* #846: an open drawer (Start, supervisor...) is modal: the tray steps under its backdrop instead of covering the drawer's foot */
+body:has(.drawer.open) .onboarding-tray:not([hidden]) { z-index: 4; }
 .tray-title { margin: 0; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
 .tray-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .tray-item { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
