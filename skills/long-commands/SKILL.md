@@ -25,9 +25,7 @@ tool's own timeout, although the suite had passed in 3.
 - Size the timeout above the expected duration. Size it from what you know: a previous run of the
   same command, the CI job's duration, the size of the project (this orchestrator: `timeout: 300000`
   for one focused test file, the suite's budget for the whole suite). When unknown, use the tool's
-  maximum (Claude Code's Bash tool: `timeout: 600000`). This is for commands that end (suites,
-  builds, installs), never for servers or watchers: they do not end, so the call just waits the
-  whole 10 minutes (section 3).
+  maximum (Claude Code's Bash tool: `timeout: 600000`). For commands that end, never for servers.
 - Longer than the tool's maximum: split it (test files, packages or modules in groups) and run
   each group in the foreground, or narrow the filter. The whole suite is the orchestrator's suite
   step when the workflow has one: never run it yourself to fit it into a timeout.
@@ -50,25 +48,9 @@ tool's own timeout, although the suite had passed in 3.
 
 ## 3. Servers and watchers
 
-A dev server or a watcher never ends by itself: `next dev`/`next start`, `vite`, `uvicorn`,
-`nodemon`, `npm|pnpm|yarn (run) dev|start|serve`, `rails s`, `flask run`, `php artisan serve`,
-`python -m http.server`, anything with `--watch`. Run in the foreground, the call returns only
-when it is killed (real case: `pnpm dev` in the foreground, the run showed Running for 10+ minutes
-at $0.00, twice in the same run).
-
-- **Never run a server or a watcher in the foreground**, whatever the `timeout`.
-- Prefer starting and stopping the server inside the test (the `unit-test-writer-js` skill, "UI
-  checks and long-running programs"): the test owns its process and ends with it.
-- When you really need one by hand (to see the screen working): start it with the Bash tool's
-  `run_in_background`, then check it with a short health check that has its own timeout, e.g.
-  `curl -sf --max-time 5 http://localhost:3000`, retried a few times up to a **deadline**
-  (about 60 s) with a failure branch: past the deadline, read the server's output and report
-  what it shows instead of waiting more.
-- **Stop it before you answer** (the background job's id, or the process you started): a server
-  left running holds ports and worktree files for the next step.
-- The engine guards against it: a server or watcher run in the foreground with no result after
-  90 s has its process tree stopped and the call returns with an error (warning
-  `server_in_foreground` in the run). Do not retry the same command in the foreground.
+`next dev`, `vite`, `--watch` never end: **never run them in the foreground**. Prefer starting
+them inside the test; by hand, `run_in_background`, `curl --max-time 5` up to a deadline, and
+stop it before you answer (the engine stops it after 90 s).
 
 ## 4. Keep the whole output, read the exit code
 
