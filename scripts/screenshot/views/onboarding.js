@@ -143,5 +143,8 @@ async function open({ args, click, js, pause, win }) {
 module.exports = {
   modes: MODES,
   open,
+  sampleRepository,
   seed,
+  typeIn,
+  waitFor,
 };
