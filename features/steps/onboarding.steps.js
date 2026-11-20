@@ -1278,3 +1278,42 @@ Then('no second run of the workflow {string} has started', async ({ e2e }, name)
   await expect(page.getByTestId('run-screen-status').filter({ visible: true })).toHaveCount(0);
   expect(startedRunsOf(e2e, name).length, `runs of ${name}`).toBeLessThanOrEqual(1);
 });
+
+// ---- #848: the Repository step's list filters while typing ----------------------------------------------------------
+// The list under wizard-repo (data-testid="wizard-repo-list", one data-testid="wizard-repo-option" with
+// data-repo="owner/name" each) shows the repositories whose owner/name holds what the field holds (any case), at most
+// 5; an empty field shows the 5 newest; no match shows no list (the typed URL is still imported by Next).
+//
+// E2E HOOK THE DEVELOPER MUST ADD, read only when MULTIAGENT_SIMULATION_ONLY=1 (the simulated onboarding,
+// packages/engine/service/areas/project-onboarding.js): MULTIAGENT_E2E_GITHUB_REPOS=<JSON array of { name:
+// 'owner/repo', private, updatedAt }>, newest first, stands for gh: onboardingAccounts answers GitHub installed and
+// signed in (account e2e-owner) and onboardingRepos('github') answers that array, without calling gh.
+const repoOptions = (page) => wizard(page).getByTestId('wizard-repo-list').getByTestId('wizard-repo-option');
+
+// a table | repository | updated |, newest first (updated: a date, YYYY-MM-DD)
+Given('the app is open where my GitHub account has the repositories:', async ({ e2e }, table) => {
+  const repos = table.hashes().map((r) => ({ name: String(r.repository).trim(), private: false, updatedAt: `${String(r.updated).trim()}T10:00:00Z` }));
+  await e2e.open({ env: { MULTIAGENT_E2E_GITHUB_REPOS: JSON.stringify(repos) } });
+});
+
+When('I clear the repository field in the wizard', async ({ e2e }) => {
+  const field = wizard(e2e.window).getByTestId('wizard-repo');
+  await field.click();
+  await field.press('ControlOrMeta+A');
+  await field.press('Backspace');
+  await expect(field).toHaveValue('');
+});
+
+// a table of one repository (owner/name) per row, no header, in the order shown
+Then("the wizard's repository list shows, in order:", async ({ e2e }, table) => {
+  const names = table.raw().map((r) => String(r[0] || '').trim()).filter(Boolean);
+  const options = repoOptions(e2e.window);
+  await expect(options).toHaveCount(names.length, { timeout: LOAD_TIMEOUT });
+  await expect(options.filter({ visible: true })).toHaveCount(names.length);
+  expect(await options.evaluateAll((els) => els.map((el) => el.getAttribute('data-repo')))).toEqual(names);
+});
+
+Then('the wizard shows no repository list', async ({ e2e }) => {
+  await expect(repoOptions(e2e.window)).toHaveCount(0);
+  await expect(wizard(e2e.window).getByTestId('wizard-repo-list').filter({ visible: true })).toHaveCount(0);
+});

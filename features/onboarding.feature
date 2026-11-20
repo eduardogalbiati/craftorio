@@ -770,3 +770,70 @@ Feature: Bring a project in with a guided wizard
     And I start the chosen workflow from the Start panel
     Then the app says an analysis of the project is already running
     And no second run of the workflow "analyze-project" has started
+
+  # #848: the list under the Repository step's field filters while typing: the repositories whose owner/name holds
+  # what was typed (any case), at most 5; an empty field lists the 5 newest; no match shows no list and Next still
+  # imports the typed URL. GitHub's repositories come from an E2E hook standing for gh (newest first).
+  @issue-848
+  Scenario: Typing part of a repository's name lists only the matching repository, even one older than the 5 newest
+    Given the app is open where my GitHub account has the repositories:
+      | repository             | updated    |
+      | e2e-owner/shop-api     | 2026-11-19 |
+      | e2e-owner/field-notes  | 2026-11-18 |
+      | e2e-owner/pharmaged    | 2026-11-17 |
+      | acme-labs/billing      | 2026-11-16 |
+      | e2e-owner/city-planner | 2026-11-15 |
+      | e2e-owner/docs-site    | 2026-11-14 |
+      | e2e-owner/legacy-shop  | 2026-11-13 |
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I type the repository "LEGACY" in the wizard
+    Then the wizard's repository list shows, in order:
+      | e2e-owner/legacy-shop |
+
+  @issue-848
+  Scenario: With the repository field emptied again the list shows the 5 newest repositories
+    Given the app is open where my GitHub account has the repositories:
+      | repository             | updated    |
+      | e2e-owner/shop-api     | 2026-11-19 |
+      | e2e-owner/field-notes  | 2026-11-18 |
+      | e2e-owner/pharmaged    | 2026-11-17 |
+      | acme-labs/billing      | 2026-11-16 |
+      | e2e-owner/city-planner | 2026-11-15 |
+      | e2e-owner/docs-site    | 2026-11-14 |
+      | e2e-owner/legacy-shop  | 2026-11-13 |
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I type the repository "acme" in the wizard
+    Then the wizard's repository list shows, in order:
+      | acme-labs/billing |
+    When I clear the repository field in the wizard
+    Then the wizard's repository list shows, in order:
+      | e2e-owner/shop-api     |
+      | e2e-owner/field-notes  |
+      | e2e-owner/pharmaged    |
+      | acme-labs/billing      |
+      | e2e-owner/city-planner |
+
+  @issue-848
+  Scenario: A repository URL that matches no repository shows no list and Next still imports it
+    Given the app is open where my GitHub account has the repositories:
+      | repository             | updated    |
+      | e2e-owner/shop-api     | 2026-11-19 |
+      | e2e-owner/field-notes  | 2026-11-18 |
+      | e2e-owner/pharmaged    | 2026-11-17 |
+      | acme-labs/billing      | 2026-11-16 |
+      | e2e-owner/city-planner | 2026-11-15 |
+      | e2e-owner/docs-site    | 2026-11-14 |
+      | e2e-owner/legacy-shop  | 2026-11-13 |
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I type the repository "shop" in the wizard
+    Then the wizard's repository list shows, in order:
+      | e2e-owner/shop-api    |
+      | e2e-owner/legacy-shop |
+    When I enter the local repository and the project name "nomatch-848"
+    Then the wizard shows no repository list
+    When I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
