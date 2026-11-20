@@ -23,11 +23,13 @@ const {
   worktreeRuns,
 } = require('../../engine/worktree');
 const {
-  configureMemoryGuard,
   memoryProblem,
   sharedMemoryGuard,
 } = require('../../engine/memory-guard');
-const { runOptionsFromSettings } = require('../../engine/run-settings');
+const {
+  configureGuardFromSettings,
+  runOptionsFromSettings,
+} = require('../../engine/run-settings');
 const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../domains/workspace/workspace');
 const projects = require('../../domains/project/projects');
@@ -78,10 +80,8 @@ module.exports = (ctx) => {
   // names the reason like slotProblem, and a timer dispatches the roadmaps again once
   // memory recovers (they only dispatch at app start, when a run ends and on a screen action).
   let memoryRetry = null;
-  function applyMemorySettings() {
-    configureMemoryGuard({ ...workspace.DEFAULT_SETTINGS.memoryGuard, ...(workspace.readSettings(ctx.ws).memoryGuard || {}) });
-    return sharedMemoryGuard();
-  }
+  // the same guard configuration a run's options take (engine/run-settings.js, #862)
+  const applyMemorySettings = () => configureGuardFromSettings(workspace.readSettings(ctx.ws));
   const memoryNow = async (guard) => {
     const m = guard ? await guard.freeMemory() : null;
     return m ? memoryProblem({ freeBytes: m.freeBytes, floorBytes: guard.floorBytes }) : '';

@@ -45,6 +45,7 @@ const ENGINE_ROOT_UTILITIES = [
   'packages/engine/domains/session/session-cache.js',
   'packages/engine/domains/workspace/app-root.js',
   'packages/engine/domains/workspace/json-schema.js',
+  'packages/engine/domains/workspace/settings.js',
   'packages/engine/domains/workspace/state-file.js',
 ];
 
@@ -118,7 +119,6 @@ function areaOf(file) {
 // direction moves the shared code down instead (docs/agents/code-map.md, "Where a new module goes").
 const EXCEPTIONS = [
   { from: 'packages/engine/engine/machine-actions.js', to: 'packages/engine/domains/releases/releases.js', reason: 'the real machine adapter (#353) writes the release version (writeReleaseVersion) and pushes and tags the local base for a transition\'s `ship: { tag }` (shipRelease), or only pushes it for a Local run\'s push_main (#861, pushBase re-exported there)' },
-  { from: 'packages/engine/engine/run-settings.js', to: 'packages/engine/domains/workspace/workspace.js', reason: 'the run options a run takes from Settings (#862, shared by the app\'s run service and scripts/run.js) lay the memory guard over DEFAULT_SETTINGS.memoryGuard and read Settings › Language at each turn (readSettings)' },
   { from: 'packages/engine/engine/run/costs.js', to: 'packages/engine/domains/night/night-limits.js', reason: 'the night\'s cost and run limits (#337) are checked at each turn; night-limits.js also reads the night watch\'s log and the run loader' },
   { from: 'packages/engine/engine/run/costs.js', to: 'packages/engine/domains/usage/usage.js', reason: 'the cost limits read the usage ledger of earlier runs (usage.js reads the runs list)' },
   { from: 'packages/engine/engine/run/machine-steps.js', to: 'packages/engine/domains/releases/release-city.js', reason: 'the release_version step names the release\'s previous tag (#378, release.yaml\'s previous_version) as the Release city tab does (previousTag)' },

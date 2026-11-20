@@ -5,10 +5,12 @@
 //
 //   runOptionsFromSettings({ settings, ws, mock }) -> { memoryGuard, idleWarnMs, models, fallbacks,
 //     accounts, accountCooldownMs, language, testWorkers }
+//   configureGuardFromSettings(settings) -> the shared memory guard (#276), or null when turned off
 //
-// It also configures the process's shared memory guard (#276) from settings.memoryGuard over
-// DEFAULT_SETTINGS.memoryGuard: always with the full defaults, since configureMemoryGuard merges over
-// the previous configuration.
+// configureGuardFromSettings configures the process's shared memory guard from settings.memoryGuard
+// over DEFAULT_SETTINGS.memoryGuard: always with the full defaults, since configureMemoryGuard merges
+// over the previous configuration. runOptionsFromSettings calls it, and the run service before the
+// waits for memory of a run start (runs.js applyMemorySettings).
 
 const {
   configureMemoryGuard,
@@ -17,7 +19,7 @@ const {
 const {
   DEFAULT_SETTINGS,
   readSettings,
-} = require('../domains/workspace/workspace');
+} = require('../domains/workspace/settings');
 const {
   readMachine,
   resolveLimits,
@@ -35,12 +37,17 @@ const settingsAccounts = (settings) => Object.fromEntries(Object.entries(setting
 // #312: Settings' accountCooldownMinutes (60 by default) as the WorkflowRun `accountCooldownMs` option
 const settingsAccountCooldownMs = (settings) => (settings.accountCooldownMinutes ?? 60) * 60e3;
 
+// #276: Settings › Execution › Memory guard configures the shared guard real runs use
+function configureGuardFromSettings(settings) {
+  configureMemoryGuard({ ...DEFAULT_SETTINGS.memoryGuard, ...(settings?.memoryGuard || {}) });
+  return sharedMemoryGuard();
+}
+
 function runOptionsFromSettings({ settings, ws, mock }) {
-  // #276: Settings › Execution › Memory guard configures the shared guard real runs use
-  configureMemoryGuard({ ...DEFAULT_SETTINGS.memoryGuard, ...(settings.memoryGuard || {}) });
+  const guard = configureGuardFromSettings(settings);
   return {
     // null when the owner turned the guard off, and for a simulation run
-    memoryGuard: mock ? null : sharedMemoryGuard(),
+    memoryGuard: mock ? null : guard,
     // Settings' idleWarningMinutes; the engine's own default when unset
     idleWarnMs: settings.idleWarningMinutes != null && Number.isFinite(+settings.idleWarningMinutes) ? +settings.idleWarningMinutes * 60e3 : undefined,
     // #262: limits per model and fallback chains per provider
@@ -57,5 +64,6 @@ function runOptionsFromSettings({ settings, ws, mock }) {
 }
 
 module.exports = {
+  configureGuardFromSettings,
   runOptionsFromSettings,
 };
