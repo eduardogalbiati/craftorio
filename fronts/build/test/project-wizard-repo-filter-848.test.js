@@ -112,6 +112,12 @@ test('#848 the repository\'s https URL lists that repository', async () => {
   assert.deepEqual(optionsOf(listMarkup()), [FREEMY]);
 });
 
+test('#848 a URL typed up to the owner (no slash after it) lists that owner\'s repositories', async () => {
+  const { app, listMarkup } = await atRepository();
+  await W.typeInto(app, '#wizard-repo', 'https://github.com/eduardogalbiati');
+  assert.deepEqual(optionsOf(listMarkup()), ['eduardogalbiati/multiagent', 'eduardogalbiati/pharmaged', 'eduardogalbiati/dotfiles', FREEMY]);
+});
+
 test('#848 at most 5 options when more repositories match', async () => {
   const { app, listMarkup } = await atRepository();
   await W.typeInto(app, '#wizard-repo', 'acme/'); // 6 repositories match
