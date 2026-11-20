@@ -1267,22 +1267,9 @@ Then('the app says an analysis of the project is already running', async ({ e2e 
   await expect(e2e.window.getByText(/already running|j[áa] est[áa] (em execu[çc][ãa]o|rodando)|em andamento/i).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
-// the workflow.started events of the scratch workspace's runs whose workflow is that one (a name or a file)
-function startedRunsOf(e2e, name) {
-  const runs = path.join(e2e.scratch, 'workspace', 'runs');
-  if (!fs.existsSync(runs)) return [];
-  const base = String(name).replace(/\.ya?ml$/i, '');
-  return fs.readdirSync(runs).filter((id) => {
-    const file = path.join(runs, id, 'events.jsonl');
-    if (!fs.existsSync(file)) return false;
-    return fs.readFileSync(file, 'utf8').split('\n').some((line) => {
-      try {
-        const ev = JSON.parse(line);
-        return ev.type === 'workflow.started' && String(ev.workflow || '').replace(/\.ya?ml$/i, '') === base;
-      } catch { return false; }
-    });
-  });
-}
+// the scratch workspace's started runs whose workflow is that one (a name or a file): features/support/started-runs.js
+const { startedRuns, workflowBase } = require('../support/started-runs');
+const startedRunsOf = (e2e, name) => startedRuns(e2e).filter((ev) => workflowBase(ev.workflow) === workflowBase(name));
 
 // no Run screen came up, and at most the onboarding's own run of the workflow exists
 Then('no second run of the workflow {string} has started', async ({ e2e }, name) => {

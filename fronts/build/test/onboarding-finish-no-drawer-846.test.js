@@ -17,6 +17,8 @@
 // - with the onboarding's analysis of a project running (onboarding:changed, status 'analyzing'), Start on
 //   analyze-project for that project in the drawer calls no api.startRun and says one already runs
 //   (#start-error or #start-info, /já está em execução|already running|em andamento|in progress/i).
+// Added after the fix: the refusal also while cloning, none once the analysis ended or with no onboarding, and the
+// Setup's Finish without an onboarding still opens the drawer (the fix must not drop it for every Setup).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -261,4 +263,50 @@ test('#846 with the onboarding\'s analysis running, Start on analyze-project for
   assert.equal(app.callsTo('startRun').length, 0, 'no second analysis started (api.startRun not called)');
   const said = `${String(app.el('#start-error').textContent || '')} ${String(app.el('#start-info').textContent || '')} ${String(app.el('#start-info').innerHTML || '')}`;
   assert.match(said, RUNNING, `the drawer says the analysis already runs: "${said.trim()}"`);
+});
+
+// Start on analyze-project for PID once the onboarding is in `state` (null: no onboarding event at all)
+async function startAnalysisAfter(state) {
+  const app = page();
+  await app.boot();
+  if (state) await emit(app, state);
+  await app.run(`openDrawer({ workflow: 'analyze-project.yaml', project: ${JSON.stringify(PID)} })`);
+  await app.settle(20);
+  assert.equal(drawer(app).workflow, 'analyze-project.yaml', 'on analyze-project');
+  assert.equal(drawer(app).project, PID, 'for the project');
+  await app.click('#btn-start');
+  await app.settle(20);
+  return app;
+}
+
+test('#846 while the onboarding still clones the project, Start on analyze-project for it is refused too', { timeout: 30000 }, async () => {
+  const app = await startAnalysisAfter(CLONING);
+  assert.equal(app.callsTo('startRun').length, 0, 'no analysis started while cloning (api.startRun not called)');
+  assert.match(String(app.el('#start-error').textContent || ''), RUNNING, 'the drawer says one already runs');
+});
+
+test('#846 once the onboarding\'s analysis has ended, Start on analyze-project for that project starts it', { timeout: 30000 }, async () => {
+  const analyzed = { ...clone(ANALYZING), status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'done' } }) };
+  const app = await startAnalysisAfter(analyzed);
+  assert.doesNotMatch(String(app.el('#start-error').textContent || ''), RUNNING, 'no "already running" refusal');
+  assert.equal(app.callsTo('startRun').length, 1, 'the analysis starts (api.startRun called once)');
+});
+
+test('#846 with no onboarding of the project, Start on analyze-project starts it', { timeout: 30000 }, async () => {
+  const app = await startAnalysisAfter(null);
+  assert.doesNotMatch(String(app.el('#start-error').textContent || ''), RUNNING, 'no "already running" refusal');
+  assert.equal(app.callsTo('startRun').length, 1, 'the analysis starts (api.startRun called once)');
+});
+
+test('#846 the Setup\'s Finish without an onboarding (a project already there) still opens the Start drawer', { timeout: 30000 }, async () => {
+  const app = page({ listProjects: async () => [clone(PROJECT)] }, { settings: { setupDone: false } });
+  await app.boot();
+  assert.equal(setupOpen(app), true, 'a first run opens the Setup');
+  for (let i = 0; i < 5 && setupOpen(app); i++) {
+    await app.click('#setup-modal #btn-setup-next');
+    await app.settle(20);
+  }
+  assert.equal(wizardOpen(app), false, 'no onboarding wizard opened (a project exists)');
+  assert.equal(setupOpen(app), false, 'the Setup finished');
+  assert.equal(drawer(app).open, true, 'the Start drawer opens after the Setup, as before #846');
 });

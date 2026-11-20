@@ -98,22 +98,8 @@ Given('the roadmap has the work item {string} with {int} of {int} Progress steps
 
 // ---- the runs of the scratch workspace ------------------------------------------------------------
 
-// the workflow.started event of each run in the scratch workspace
-function startedRuns(e2e) {
-  const runs = path.join(e2e.scratch, 'workspace', 'runs');
-  if (!fs.existsSync(runs)) return [];
-  return fs.readdirSync(runs).map((d) => {
-    const file = path.join(runs, d, 'events.jsonl');
-    if (!fs.existsSync(file)) return null;
-    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
-      try {
-        const ev = JSON.parse(line);
-        if (ev.type === 'workflow.started') return { dir: d, ...ev };
-      } catch { /* a line being written */ }
-    }
-    return null;
-  }).filter(Boolean);
-}
+// the workflow.started event of each run in the scratch workspace: features/support/started-runs.js
+const { startedRuns } = require('../../../../features/support/started-runs');
 
 Then('a run of the workflow {string} started for the work item {string}', async ({ e2e }, name, slug) => {
   await expect.poll(() => startedRuns(e2e).some((ev) => ev.workflow === name && ev.inputs?.item === slug), {
