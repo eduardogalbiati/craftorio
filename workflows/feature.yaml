@@ -1196,6 +1196,9 @@ steps:
       Never run `npm run screenshot` yourself: make the demo data cover the change (that is code)
       and list the states; the engine captures them and the evidence step judges them.
       {% endif %}
+      Never run a dev server or watcher (`next dev`, `vite`, `npm run dev`, `--watch`) in the foreground:
+      it never ends and the turn hangs; start it with run_in_background and stop it before you
+      answer (long-commands skill, Servers and watchers).
       In `left_out`, list each requirement of the task (its acceptance criteria, each task of the
       issue) that you did not implement, with the reason: never leave one only in prose; an empty
       list when everything was done. A list that is not empty sends you back here, not to the review.

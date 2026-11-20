@@ -24,6 +24,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { canonicalPath } = require('./worktree');
 const { caseInsensitive } = require('../domains/machine/platform-paths');
+const { isServerCommand } = require('./server-commands');
 
 const LIST_TIMEOUT_MS = 30e3;
 
@@ -202,10 +203,52 @@ async function processTreeCommands(pid) {
   return out;
 }
 
+/**
+ * #853: stops the tree of one dev server or watcher an agent runs in the foreground: under the agent
+ * CLI's `rootPid`, the highest descendant whose command line holds `command` (the Bash tool's shell)
+ * or is a server (server-commands.js), with its whole subtree. Never `rootPid` itself, never anything
+ * outside its tree; `protectChildren` (a .cmd/.bat shim whose child is the CLI, as the memory guard's)
+ * spares rootPid's direct children too: the CLI's own command line may quote the command (its system prompt).
+ * @param {number} rootPid
+ * @param {string} command
+ * @param {{ protectChildren?: boolean }} [o]
+ * @returns {Promise<{ listed: boolean, stopped: Array<{ pid: number, cmd: string | null }>, error?: string }>}
+ *   listed false when the processes could not be listed (nothing stopped, the caller says so)
+ */
+async function stopServerTree(rootPid, command, { protectChildren = false } = {}) {
+  let procs;
+  try { procs = await listProcesses(); } catch (e) { return { listed: false, stopped: [], error: e.message }; }
+  const children = new Map();
+  for (const p of procs) if (p.ppid !== p.pid) children.set(p.ppid, [...(children.get(p.ppid) || []), p]);
+  const subtree = (pid) => {
+    const out = [];
+    const seen = new Set([pid]);
+    for (let queue = [pid]; queue.length;) {
+      for (const c of children.get(queue.shift()) || []) if (!seen.has(c.pid)) { seen.add(c.pid); out.push(c); queue.push(c.pid); }
+    }
+    return out;
+  };
+  const wanted = String(command || '').trim();
+  // breadth first: the first match is the highest one (the shell running the command, before the server it started)
+  const below = subtree(rootPid).filter((p) => !(protectChildren && p.ppid === rootPid));
+  const top = below.find((p) => wanted && p.cmd?.includes(wanted)) || below.find((p) => isServerCommand(p.cmd));
+  if (!top) return { listed: true, stopped: [] };
+  const tree = [top, ...subtree(top.pid)];
+  if (process.platform === 'win32') {
+    await run('taskkill', ['/pid', String(top.pid), '/T', '/F']);
+  } else {
+    for (const p of tree) {
+      try { process.kill(p.pid, 'SIGKILL'); } catch { /* ESRCH: already gone with its parent */ }
+    }
+  }
+  return { listed: true, stopped: tree.map((p) => ({ pid: p.pid, cmd: p.cmd || null })) };
+}
+
 module.exports = {
   commandMentions,
   listProcesses,
   processTreeCommands,
   selectProcesses,
   stopProcessesIn,
+  stopServerTree,
 };

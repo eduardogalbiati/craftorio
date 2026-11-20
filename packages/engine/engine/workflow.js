@@ -60,8 +60,8 @@ const { goalLoopInstructions, methods: transitionsMethods } = require('./run/tra
 const {
   addUsage,
   attemptSummary,
-  IDLE_WARN_MS,
   methods: turnsMethods,
+  turnWatchLimits,
 } = require('./run/turns');
 const { methods: accountsMethods } = require('./run/accounts');
 const { childRunCost, methods: costsMethods } = require('./run/costs');
@@ -170,6 +170,8 @@ class WorkflowRun extends EventEmitter {
   //   those that finished after `budget` was computed): the per-turn budget check counts them too (concurrent runs).
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (packages/engine/engine/idle.js).
   //   Default 5 minutes; 0 disables it.
+  // serverForegroundMs: a dev server or watcher an agent runs in the foreground (no run_in_background) with no result
+  //   after this long is stopped under the agent CLI's pid (#853, `server_in_foreground`). Default 90 s; 0 disables it.
   // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
   // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129), checked here (refused
   //   before anything runs), copied into <run_dir>/attachments/<input>/ at start and given to every turn of a
@@ -210,7 +212,7 @@ class WorkflowRun extends EventEmitter {
   //   turn's [Language] line and the output instruction follow it (packages/shared/language.js); null = English.
   // recover (#607): { runId, events, worktree } a run the app died in, continued in its own folder with
   //   its own id at its last finished turn (packages/engine/engine/run/resume.js seedRecovery); not a resume
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, serverForegroundMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -257,7 +259,8 @@ class WorkflowRun extends EventEmitter {
     // #369: the models Claude Code did not know, warned once each
     this.unknownModelWarned = new Set();
     this.peerSessions = peerSessions || (() => []);
-    this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
+    // this.idleWarnMs, this.serverForegroundMs (#853)
+    Object.assign(this, turnWatchLimits({ idleWarnMs, serverForegroundMs }));
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
     this.then = startThen(this, then); // #631, #702
@@ -270,6 +273,7 @@ class WorkflowRun extends EventEmitter {
     this.wholeSuiteRun = null; // #553: { round, commit } of the run's last whole suite (scope: affected), pass or fail
     this.testsAutocommitted = []; // [{ step_id, files, commit }] (#209, summary.tests_autocommitted)
     this.toolTimeouts = 0; // tool results cut by the tool's timeout (#178, summary.tool_timeouts)
+    this.serversInForeground = 0; // foreground servers the guard stopped (#853, summary.servers_in_foreground)
     this.inputImages = this.checkInputAttachments(attachments || {});
     this.attachments = {}; // input -> [{ name, path }] the copies in the run folder (storeInputAttachments)
     this.gateImages = []; // images attached to the last gate's feedback, for the next agent step
@@ -848,7 +852,7 @@ class WorkflowRun extends EventEmitter {
       file: found, inputs, mock: this.mock, runsDir: this.ctx.runs_dir, skillsDirs: this.skillsDirs.filter((d) => d !== BUNDLED_SKILLS),
       budget: this.budget, prices: this.prices, projectId: this.projectId, worktreesDir: this.worktreesDir, parent,
       accounts: this.providerAccounts, accountCooldownMs: this.accountCooldownMs,
-      ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs, testWorkers: this.workers?.testWorkers,
+      ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs, serverForegroundMs: this.serverForegroundMs, testWorkers: this.workers?.testWorkers,
       notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
     });
     const finished = new Promise((resolve) => child.on('event', (ev) => {
@@ -901,7 +905,7 @@ class WorkflowRun extends EventEmitter {
       ...testedSummary(this.ctx),
       // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
       ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
-      ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
+      ...this.turnGuardCounts(),
       // step visits in order with their agents (runs list); this event's own update lands in it
       groups: this.progressGroups(), progress: this.trail.steps,
       ...(outputs ? { outputs } : {}),

@@ -20,6 +20,8 @@ const { sessionCost } = require('../../domains/usage/usage');
 const capabilities = require('../capabilities');
 const suiteStep = require('../suite-step');
 const { IdleWatch } = require('../idle');
+const { stopServerTree } = require('../processes');
+const { isServerCommand } = require('../server-commands');
 const chain = require('@multiagent/shared/chain-model');
 const I18n = require('@multiagent/shared/i18n');
 const { render } = require('./templates');
@@ -34,6 +36,14 @@ const DENIAL_WARN = 5;
 
 // Silence with a command waiting that is worth a warning (an agent polling for text that never shows up).
 const IDLE_WARN_MS = 5 * 60e3;
+// #853: a dev server or watcher run in the foreground (no run_in_background) with no result this long
+// never ends by itself: the guard stops its process tree so the tool call returns and the turn goes on.
+const SERVER_FOREGROUND_MS = 90e3;
+// The run's options for both turn watches, with their defaults (0 turns one off)
+const turnWatchLimits = ({ idleWarnMs, serverForegroundMs }) => ({
+  idleWarnMs: idleWarnMs ?? IDLE_WARN_MS,
+  serverForegroundMs: serverForegroundMs ?? SERVER_FOREGROUND_MS,
+});
 // bytes in GB (binary, like Task Manager), one decimal: the memory guard's messages (#276)
 const gib = (bytes) => (bytes / 1024 ** 3).toFixed(1);
 
@@ -185,6 +195,25 @@ const methods = {
       const calls = new Map();
       // `full_suite: warn` (#177): the engine's suite step runs the whole suite; the agent's own run is noted
       const suiteWarn = this.wf.steps.find((s) => s.id === stepId)?.full_suite === 'warn' ? this.suiteCommand() : null;
+      // #853: the agent CLI's process (onSpawn) and the server-in-foreground guard's timers, by tool call id
+      /** @type {{ pid: number | null, shim: boolean }} */
+      const cli = { pid: null, shim: false };
+      /** @type {Map<string, ReturnType<typeof setTimeout>>} */
+      const servers = new Map();
+      const guardServer = (item) => {
+        if (item.kind === 'tool_result' && servers.has(item.id)) {
+          clearTimeout(servers.get(item.id));
+          servers.delete(item.id);
+        }
+        if (item.kind !== 'tool_call' || item.name !== 'Bash' || item.input?.run_in_background || !(this.serverForegroundMs > 0) || !isServerCommand(item.input?.command)) return;
+        const timer = setTimeout(() => {
+          servers.delete(item.id);
+          this.stopForegroundServer({ cli, command: String(item.input.command), afterMs: this.serverForegroundMs, stepId, agentName })
+            .catch((e) => this.emitEvent('log', { level: 'error', message: `[${agentName}] could not stop a foreground server: ${e.message}` }));
+        }, this.serverForegroundMs);
+        timer.unref?.();
+        servers.set(item.id, timer);
+      };
       const track = (item) => {
         if (item.kind === 'context') {
           context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); cache.last = item.tokens;
@@ -192,6 +221,7 @@ const methods = {
           return;
         }
         noteToolCall(calls, item);
+        guardServer(item);
         if (suiteWarn !== null && item.kind === 'tool_call' && suiteStep.isFullSuiteCommand(item.input?.command, suiteWarn)) {
           this.suiteRuns.agents++;
           this.emitEvent('log', { level: 'warn', kind: 'full_suite_by_agent', step_id: stepId, agent: agentName, command: String(item.input.command).slice(0, 200), message: `[${agentName}] started the whole test suite in ${stepId} (\`${String(item.input.command).slice(0, 120)}\`): the orchestrator runs it once per round after the step; agents run only the focused tests of the change.` });
@@ -242,12 +272,16 @@ const methods = {
       // #276: the memory guard watches the CLI's process tree while the turn runs (a mock turn has none)
       let memWatch = this.machine.simulated ? this.watchMemory({ stepId, session: session.id, agentName }) : null;
       const onSpawn = ({ pid, shim }) => {
+        cli.pid = pid;
+        cli.shim = !!shim;
         memWatch?.stop();
         memWatch = this.watchMemory({ rootPid: pid, protectChildren: shim, stepId, session: session.id, agentName });
       };
       const timing = () => {
         if (timed) return timed;
         memWatch?.stop();
+        for (const timer of servers.values()) clearTimeout(timer);
+        servers.clear();
         this.abort.signal.removeEventListener('abort', cancel);
         live?.delete(stopSlow);
         clearInterval(idleTimer);
@@ -388,6 +422,36 @@ const methods = {
     if (step) this.superviseIdle(step, stall, { agentName, interrupt }).catch((e) => this.emitEvent('log', { level: 'error', message: `Supervisor could not decide on ${stepId}: ${e.message}` }));
   },
 
+  // #853: a dev server or watcher run in the foreground with no result after `afterMs`: stops only its
+  // process tree under the agent CLI's pid, so the tool call returns with an error and the agent goes on
+  // in the same turn (no interrupt, no retry, no supervisor). Each stop is a `server_in_foreground`
+  // warning counted in the summary; without the CLI's pid or a process list it says it could not stop
+  // it (stopped: false, not counted) and the idle watch keeps its own behaviour.
+  /** @param {{ cli: { pid: number | null, shim: boolean }, command: string, afterMs: number, stepId: string | null, agentName: string }} o */
+  async stopForegroundServer({ cli, command, afterMs, stepId, agentName }) {
+    const shown = command.slice(0, 120);
+    const seconds = Math.round(afterMs / 100) / 10;
+    const where = stepId || 'a delegated turn';
+    const res = cli.pid ? await stopServerTree(cli.pid, command, { protectChildren: cli.shim }) : { listed: false, stopped: [], error: 'no agent CLI process' };
+    const base = { level: 'warn', kind: 'server_in_foreground', step_id: stepId, agent: agentName, command: command.slice(0, 200), after_ms: afterMs };
+    if (res.stopped.length) {
+      this.serversInForeground++;
+      this.emitEvent('log', { ...base, stopped: true, pids: res.stopped.map((p) => p.pid), message: `[${agentName}] ran a dev server or watcher in the foreground in ${where} (\`${shown}\`): stopped after ${seconds} s without a result, the agent goes on. Start servers with run_in_background and stop them before answering (long-commands skill, Servers and watchers).` });
+      return;
+    }
+    const why = res.listed ? 'its process was not found under the agent CLI' : `the processes could not be listed (${res.error || 'unknown error'})`;
+    this.emitEvent('log', { ...base, stopped: false, message: `[${agentName}] a dev server or watcher runs in the foreground in ${where} (\`${shown}\`) with no result after ${seconds} s: could not stop it, ${why}.` });
+  },
+
+  // The run summary's counts of the turn guards: commands cut by the tool's timeout (#178), servers
+  // stopped in the foreground (#853); each key only when > 0
+  turnGuardCounts() {
+    return {
+      ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
+      ...(this.serversInForeground ? { servers_in_foreground: this.serversInForeground } : {}),
+    };
+  },
+
   // Without a working_dir (workflow with no repository), the agent runs in the run folder.
   workingDir(agent) {
     const dir = render(agent.working_dir, this.ctx).trim();
@@ -405,4 +469,6 @@ module.exports = {
   IDLE_WARN_MS,
   methods,
   noteToolCall,
+  SERVER_FOREGROUND_MS,
+  turnWatchLimits,
 };

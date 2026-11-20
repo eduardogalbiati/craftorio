@@ -114,5 +114,19 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   stops it, `log kind: agent_interrupted`, and the step runs again with the instruction as the
   supervisor note, without a second supervisor call). Idle checks count against `max_total` only.
   Simulate with `mockSequences.slow_tools: { step: ms }` and `action: ['interrupt', 'wait']`.
+- Servers in the foreground (#853, `stopForegroundServer` in `run/turns.js`): a `Bash` tool call
+  without `run_in_background` whose command is a dev server or watcher (`isServerCommand`,
+  `packages/engine/engine/server-commands.js`: `next dev`, `vite`, `pnpm dev`, `--watch`...) and that
+  has no `tool_result` after `serverForegroundMs` (`SERVER_FOREGROUND_MS` = 90 s, next to
+  `IDLE_WARN_MS`; 0 = off) has only that server's process tree stopped: `stopServerTree`
+  (`processes.js`) looks under the agent CLI's pid (`onSpawn`) for the highest descendant whose command
+  line holds the command (or is a server), never the CLI itself nor anything outside its tree. The
+  Bash call returns with an error and the agent goes on in the same turn: no interrupt, no step
+  retry, no supervisor call, so it fires well before the idle watch. Each stop is a `log` warn
+  `kind: server_in_foreground` (`step_id`, `agent`, `command`, `after_ms`, `stopped: true`; run log
+  and run chat) counted in `summary.servers_in_foreground`. Without the CLI's pid or a process list
+  (or with no such process found) the same warning says it could not stop it (`stopped: false`, not
+  counted) and the idle watch keeps its behaviour. A server started with `run_in_background` is left
+  to the end-of-step `stopWorktreeProcesses`. Codex reports a command only when it ends: not guarded.
 - The supervisor's decision prompt and `runReport` include the latest note per agent;
   `resumeSpec` returns `handoffs` and the resumed run starts from them.

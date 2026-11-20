@@ -101,6 +101,7 @@
  * @property {{ engine: number, agents: number }} [suite_runs]
  * @property {{ step_id: string, files: string[], commit: string }[]} [tests_autocommitted]
  * @property {number} [tool_timeouts]
+ * @property {number} [servers_in_foreground]
  * @property {Record<string, any>} [outputs]
  * @property {object} [then]
  * @property {{ run_id: string, workflow?: string, pipeline?: string }} [from]
