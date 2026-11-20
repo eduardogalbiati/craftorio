@@ -34,6 +34,8 @@ const fs = require('fs');
 const path = require('path');
 const OnboardingModel = require('@multiagent/shared/onboarding-model');
 const Platforms = require('@multiagent/shared/platforms');
+// #848: the platform the gh E2E hook stands for, the GitHub adapter's own id (#351: no platform literal here)
+const { id: E2E_REPOS_PLATFORM } = require('@multiagent/shared/platforms/github');
 const agents = require('../../domains/agents/agents');
 const issues = require('../../domains/backlog/issues');
 const { identityArgs } = require('../../engine/worktree');
@@ -155,7 +157,7 @@ function e2eGithubRepos() {
     return Array.isArray(repos) ? repos : null;
   } catch { return null; }
 }
-const accountsCli = (provider) => (provider === 'github' && e2eGithubRepos()
+const accountsCli = (provider) => (provider === E2E_REPOS_PLATFORM && e2eGithubRepos()
   ? { installed: true, signedIn: true, account: E2E_LOGIN }
   : machineCli(provider));
 
@@ -166,7 +168,7 @@ const accountsCli = (provider) => (provider === 'github' && e2eGithubRepos()
 async function machineRepos(provider) {
   const platform = Platforms.findPlatform(provider);
   if (!platform?.cli || typeof platform.repoListCommand !== 'function') return [];
-  const e2e = provider === 'github' ? e2eGithubRepos() : null;
+  const e2e = provider === E2E_REPOS_PLATFORM ? e2eGithubRepos() : null;
   if (e2e) return e2e;
   const { cli, args } = platform.repoListCommand(100);
   const r = await resolveCommandAsync(cli);
